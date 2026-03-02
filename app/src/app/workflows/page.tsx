@@ -1,28 +1,59 @@
 "use client";
 
-import { Loader2, Plus, Pencil, Trash2, Play, CheckCircle2, XCircle } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Loader2, ArrowUp, CheckCircle2, XCircle, Plus } from "lucide-react";
+import Image from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { IntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import { WORKFLOW_AVAILABLE_INTEGRATION_TYPES, INTEGRATION_LOGOS } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { getWorkflowRunStatusLabel } from "@/lib/workflow-status";
-import {
-  useWorkflowList,
-  useCreateWorkflow,
-  useUpdateWorkflow,
-  useDeleteWorkflow,
-  useTriggerWorkflow,
-} from "@/orpc/hooks";
+import { useWorkflowList, useCreateWorkflow } from "@/orpc/hooks";
+
+type WorkflowItem = {
+  id: string;
+  name?: string | null;
+  status: "on" | "off";
+  triggerType: string;
+  recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
+};
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatDate(value?: Date | string | null) {
   if (!value) {
-    return "—";
+    return null;
   }
   const date = typeof value === "string" ? new Date(value) : value;
-  return date.toLocaleString();
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffH = Math.floor(diffMin / 60);
+  const diffD = Math.floor(diffH / 24);
+
+  if (diffMin < 1) {
+    return "just now";
+  }
+  if (diffMin < 60) {
+    return `${diffMin}m ago`;
+  }
+  if (diffH < 24) {
+    return `${diffH}h ago`;
+  }
+  if (diffD < 7) {
+    return `${diffD}d ago`;
+  }
+  return date.toLocaleDateString();
+}
+
+function getTriggerLabel(triggerType: string) {
+  const map: Record<string, string> = {
+    manual: "Manual",
+    schedule: "Scheduled",
+    email: "Email",
+    webhook: "Webhook",
+  };
+  return map[triggerType] ?? triggerType;
 }
 
 function getWorkflowDisplayName(name?: string | null) {
@@ -30,122 +61,199 @@ function getWorkflowDisplayName(name?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : "New Workflow";
 }
 
-function WorkflowStatusSwitch({
-  checked,
-  workflowId,
-  onToggle,
-}: {
-  checked: boolean;
-  workflowId: string;
-  onToggle: (id: string, status: "on" | "off") => Promise<void>;
-}) {
-  const handleCheckedChange = useCallback(
-    (value: boolean) => {
-      void onToggle(workflowId, value ? "on" : "off");
-    },
-    [onToggle, workflowId],
-  );
+// ─── Templates ──────────────────────────────────────────────────────────────
 
-  return <Switch checked={checked} onCheckedChange={handleCheckedChange} />;
-}
-
-function WorkflowRunButton({
-  workflowId,
-  disabled,
-  onRun,
-}: {
-  workflowId: string;
-  disabled: boolean;
-  onRun: (id: string) => Promise<void>;
-}) {
-  const handleClick = useCallback(() => {
-    void onRun(workflowId);
-  }, [onRun, workflowId]);
-
-  return (
-    <Button variant="secondary" size="sm" onClick={handleClick} disabled={disabled}>
-      <Play className="mr-2 h-4 w-4" />
-      Run
-    </Button>
-  );
-}
-
-function WorkflowDeleteButton({
-  workflowId,
-  name,
-  onRequestDelete,
-}: {
-  workflowId: string;
+type WorkflowTemplate = {
+  id: string;
   name: string;
-  onRequestDelete: (item: { id: string; name: string }) => void;
-}) {
-  const handleClick = useCallback(() => {
-    onRequestDelete({ id: workflowId, name });
-  }, [name, onRequestDelete, workflowId]);
+  description: string;
+  triggerType: "manual" | "schedule" | "email" | "webhook";
+  integrations: IntegrationType[];
+  prompt: string;
+};
 
+const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: "daily-email-digest",
+    name: "Daily Email Digest",
+    description: "Summarize unread emails every morning into a clean briefing",
+    triggerType: "schedule",
+    integrations: ["gmail"],
+    prompt:
+      "Every morning at 8am, read my unread emails from the last 24 hours, summarize the most important ones, and send me a digest email with key action items.",
+  },
+  {
+    id: "github-pr-slack",
+    name: "PR Alert to Slack",
+    description: "Post new GitHub pull requests to a Slack channel automatically",
+    triggerType: "webhook",
+    integrations: ["github", "slack"],
+    prompt:
+      "When a new pull request is opened in my repository, post a summary to the #engineering Slack channel including the PR title, author, and description.",
+  },
+  {
+    id: "meeting-notes-notion",
+    name: "Meeting Notes to Notion",
+    description: "After calendar events, create structured notes pages in Notion",
+    triggerType: "schedule",
+    integrations: ["google_calendar", "notion"],
+    prompt:
+      "After each calendar event ends, create a Notion page with the meeting title, attendees, and a template for notes and action items.",
+  },
+  {
+    id: "lead-to-hubspot",
+    name: "Email Lead to HubSpot",
+    description: "Capture leads from email and create HubSpot contacts automatically",
+    triggerType: "email",
+    integrations: ["gmail", "hubspot"],
+    prompt:
+      "When I receive an email from a potential lead, extract their contact information and create a new contact in HubSpot with relevant notes.",
+  },
+  {
+    id: "weekly-report",
+    name: "Weekly Sheets Report",
+    description: "Generate and email a weekly report from your spreadsheet data",
+    triggerType: "schedule",
+    integrations: ["google_sheets", "gmail"],
+    prompt:
+      "Every Friday at 5pm, read the weekly metrics from my Google Sheets, generate a summary report, and email it to my team.",
+  },
+  {
+    id: "slack-digest",
+    name: "Slack Channel Digest",
+    description: "Daily summary of key Slack conversations sent to your inbox",
+    triggerType: "schedule",
+    integrations: ["slack", "gmail"],
+    prompt:
+      "Every evening, summarize the most important conversations and decisions from my Slack channels and send me a digest email.",
+  },
+];
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function IntegrationLogos({ integrations }: { integrations: IntegrationType[] }) {
   return (
-    <Button variant="ghost" size="icon" onClick={handleClick}>
-      <Trash2 className="h-4 w-4" />
-    </Button>
+    <div className="flex items-center gap-1">
+      {integrations.map((key) => {
+        const logo = INTEGRATION_LOGOS[key];
+        if (!logo) {
+          return null;
+        }
+        return (
+          <Image
+            key={key}
+            src={logo}
+            alt={key}
+            width={16}
+            height={16}
+            className="size-4 shrink-0"
+          />
+        );
+      })}
+    </div>
   );
 }
 
-function WorkflowExpandButton({
-  workflowId,
-  expanded,
-  hiddenCount,
-  onSetExpanded,
+function TemplateCard({
+  template,
+  onSelect,
+  loading,
 }: {
-  workflowId: string;
-  expanded: boolean;
-  hiddenCount: number;
-  onSetExpanded: (id: string, expanded: boolean) => void;
+  template: WorkflowTemplate;
+  onSelect: (t: WorkflowTemplate) => void;
+  loading: boolean;
 }) {
-  const handleExpand = useCallback(() => {
-    onSetExpanded(workflowId, true);
-  }, [onSetExpanded, workflowId]);
+  const handleClick = useCallback(() => {
+    onSelect(template);
+  }, [onSelect, template]);
 
-  const handleCollapse = useCallback(() => {
-    onSetExpanded(workflowId, false);
-  }, [onSetExpanded, workflowId]);
-
-  if (hiddenCount > 0 && !expanded) {
-    return (
-      <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={handleExpand}>
-        Show {hiddenCount} more
-      </Button>
-    );
-  }
-
-  if (expanded) {
-    return (
-      <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={handleCollapse}>
-        Show less
-      </Button>
-    );
-  }
-
-  return null;
+  return (
+    <button
+      className={cn(
+        "group border-border/40 bg-card hover:border-border hover:bg-muted/30 relative flex w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150",
+        loading && "pointer-events-none opacity-60",
+      )}
+      onClick={handleClick}
+      disabled={loading}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm leading-tight font-medium">{template.name}</p>
+          <span className="bg-muted text-muted-foreground mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+            {getTriggerLabel(template.triggerType)}
+          </span>
+        </div>
+        <ArrowUp className="text-muted-foreground/40 group-hover:text-muted-foreground mt-0.5 size-3.5 shrink-0 rotate-45 transition-colors" />
+      </div>
+      <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
+        {template.description}
+      </p>
+      <div className="mt-auto pt-1">
+        <IntegrationLogos integrations={template.integrations} />
+      </div>
+    </button>
+  );
 }
+
+function WorkflowCard({ workflow }: { workflow: WorkflowItem }) {
+  const isOn = workflow.status === "on";
+  const recentRun = Array.isArray(workflow.recentRuns) ? workflow.recentRuns[0] : null;
+
+  return (
+    <a
+      href={`/workflows/${workflow.id}`}
+      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition-all duration-150"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm leading-tight font-medium">{getWorkflowDisplayName(workflow.name)}</p>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "mt-0.5 size-2 rounded-full",
+              isOn ? "bg-green-500" : "bg-muted-foreground/30",
+            )}
+          />
+          <span className="text-muted-foreground text-xs">{isOn ? "On" : "Off"}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {getTriggerLabel(workflow.triggerType)}
+        </span>
+      </div>
+
+      <div className="text-muted-foreground/70 mt-auto text-xs">
+        {recentRun ? (
+          <span>
+            Last run:{" "}
+            <span className="text-muted-foreground">
+              {getWorkflowRunStatusLabel(recentRun.status)}
+            </span>{" "}
+            · {formatDate(recentRun.startedAt) ?? "—"}
+          </span>
+        ) : (
+          <span>No runs yet</span>
+        )}
+      </div>
+    </a>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function WorkflowsPage() {
-  const router = useRouter();
-  const { data: workflows, isLoading, refetch } = useWorkflowList();
+  const { data: workflows, isLoading } = useWorkflowList();
   const createWorkflow = useCreateWorkflow();
-  const updateWorkflow = useUpdateWorkflow();
-  const deleteWorkflow = useDeleteWorkflow();
-  const triggerWorkflow = useTriggerWorkflow();
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [prompt, setPrompt] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const [workflowToDelete, setWorkflowToDelete] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-  const [expandedRunsByWorkflow, setExpandedRunsByWorkflow] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!notification) {
@@ -155,158 +263,79 @@ export default function WorkflowsPage() {
     return () => clearTimeout(timer);
   }, [notification]);
 
-  const handleCreate = useCallback(async () => {
+  // Auto-resize textarea
+  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPrompt(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const doCreate = useCallback(
+    async (opts: { prompt: string; triggerType?: string }) => {
+      try {
+        const result = await createWorkflow.mutateAsync({
+          name: "",
+          triggerType:
+            (opts.triggerType as "manual" | "schedule" | "email" | "webhook") ?? "manual",
+          prompt: opts.prompt,
+          allowedIntegrations: WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
+        });
+        window.location.href = `/workflows/${result.id}`;
+      } catch {
+        setNotification({ type: "error", message: "Failed to create workflow. Please try again." });
+        return false;
+      }
+      return true;
+    },
+    [createWorkflow],
+  );
+
+  const handlePromptSubmit = useCallback(async () => {
+    const text = prompt.trim();
+    if (!text || isCreating) {
+      return;
+    }
     setIsCreating(true);
-    try {
-      const result = await createWorkflow.mutateAsync({
-        name: "",
-        triggerType: "manual",
-        prompt: "",
-        allowedIntegrations: WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
-      });
-      window.location.href = `/workflows/${result.id}`;
-    } catch (error) {
-      console.error("Failed to create workflow:", error);
-      setNotification({
-        type: "error",
-        message: "Failed to create workflow. Please try again.",
-      });
-      setIsCreating(false);
-    }
-  }, [createWorkflow]);
+    await doCreate({ prompt: text });
+    setIsCreating(false);
+  }, [doCreate, isCreating, prompt]);
 
-  const handleToggle = useCallback(
-    async (id: string, status: "on" | "off") => {
-      try {
-        await updateWorkflow.mutateAsync({ id, status });
-        refetch();
-      } catch (error) {
-        console.error("Failed to toggle workflow:", error);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void handlePromptSubmit();
       }
     },
-    [refetch, updateWorkflow],
+    [handlePromptSubmit],
   );
 
-  const handleDelete = useCallback(async () => {
-    if (!workflowToDelete) {
+  const handleTemplateSelect = useCallback(
+    async (template: WorkflowTemplate) => {
+      if (creatingTemplateId) {
+        return;
+      }
+      setCreatingTemplateId(template.id);
+      await doCreate({ prompt: template.prompt, triggerType: template.triggerType });
+      setCreatingTemplateId(null);
+    },
+    [creatingTemplateId, doCreate],
+  );
+
+  const handleCreateBlank = useCallback(async () => {
+    if (isCreating) {
       return;
     }
-    try {
-      await deleteWorkflow.mutateAsync(workflowToDelete.id);
-      setNotification({
-        type: "success",
-        message: `Workflow "${workflowToDelete.name}" deleted.`,
-      });
-      setWorkflowToDelete(null);
-      refetch();
-    } catch (error) {
-      console.error("Failed to delete workflow:", error);
-      setNotification({
-        type: "error",
-        message: "Failed to delete workflow.",
-      });
-    }
-  }, [deleteWorkflow, refetch, workflowToDelete]);
-
-  const handleRun = useCallback(
-    async (id: string) => {
-      try {
-        await triggerWorkflow.mutateAsync({ id, payload: {} });
-        setNotification({
-          type: "success",
-          message: "Workflow run started.",
-        });
-        refetch();
-      } catch (error) {
-        console.error("Failed to run workflow:", error);
-        setNotification({
-          type: "error",
-          message: "Failed to run workflow. Check rate limit or status.",
-        });
-      }
-    },
-    [refetch, triggerWorkflow],
-  );
-
-  const handleSetWorkflowToDelete = useCallback((item: { id: string; name: string } | null) => {
-    setWorkflowToDelete(item);
-  }, []);
-
-  const handleSetExpandedRuns = useCallback((id: string, expanded: boolean) => {
-    setExpandedRunsByWorkflow((prev) => ({
-      ...prev,
-      [id]: expanded,
-    }));
-  }, []);
-
-  const handleCardClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      const workflowId = event.currentTarget.dataset.workflowId;
-      if (!workflowId) {
-        return;
-      }
-
-      const target = event.target;
-      if (target instanceof HTMLElement) {
-        const interactiveElement = target.closest(
-          "a,button,input,textarea,select,label,[role='button'],[role='switch']",
-        );
-        if (interactiveElement) {
-          return;
-        }
-      }
-
-      router.push(`/workflows/${workflowId}`);
-    },
-    [router],
-  );
-
-  const handleModalOverlayClick = useCallback(() => {
-    setWorkflowToDelete(null);
-  }, []);
-
-  const handleModalContentClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-  }, []);
-
-  useEffect(() => {
-    if (!workflowToDelete) {
-      return;
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (deleteWorkflow.isPending) {
-        return;
-      }
-      if (event.key !== "Enter" && event.key !== "NumpadEnter") {
-        return;
-      }
-      event.preventDefault();
-      void handleDelete();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [deleteWorkflow.isPending, handleDelete, workflowToDelete]);
+    setIsCreating(true);
+    await doCreate({ prompt: "", triggerType: "manual" });
+    setIsCreating(false);
+  }, [doCreate, isCreating]);
 
   const workflowList = Array.isArray(workflows) ? workflows : [];
+
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold">Workflows</h2>
-          <p className="text-muted-foreground mt-1 text-sm sm:max-w-prose">
-            Automate agent runs based on external triggers.
-          </p>
-        </div>
-        <Button onClick={handleCreate} disabled={isCreating} className="self-start">
-          {isCreating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="mr-2 h-4 w-4" />
-          )}
-          New Workflow
-        </Button>
-      </div>
-
       {notification && (
         <div
           className={cn(
@@ -317,169 +346,122 @@ export default function WorkflowsPage() {
           )}
         >
           {notification.type === "success" ? (
-            <CheckCircle2 className="h-5 w-5" />
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
           ) : (
-            <XCircle className="h-5 w-5" />
+            <XCircle className="h-5 w-5 shrink-0" />
           )}
           {notification.message}
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      ) : workflowList.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <h3 className="text-lg font-medium">No workflows yet</h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Create your first workflow to run agents automatically.
+      {/* ── Prompt area — centered hero ── */}
+      <div className="px-4 pt-16 pb-12">
+        <div className="mx-auto max-w-2xl">
+          <h1 className="text-foreground mb-2 text-center text-xl font-semibold tracking-tight">
+            What do you want to automate?
+          </h1>
+          <p className="text-muted-foreground mb-6 text-center text-sm">
+            Describe a task and we'll build it step by step
           </p>
-          <Button className="mt-4" onClick={handleCreate} disabled={isCreating}>
-            {isCreating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="mr-2 h-4 w-4" />
-            )}
-            New Workflow
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-7">
-          {workflowList.map((wf) => (
-            <div
-              key={wf.id}
-              className="border-border/30 bg-background/70 hover:bg-muted/20 cursor-pointer rounded-md border px-5 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors"
-              data-workflow-id={wf.id}
-              onClick={handleCardClick}
-            >
-              {(() => {
-                const recentRuns = Array.isArray(wf.recentRuns) ? wf.recentRuns : [];
-                const isExpanded = !!expandedRunsByWorkflow[wf.id];
-                const visibleRuns = isExpanded ? recentRuns : recentRuns.slice(0, 1);
-                const hiddenCount = Math.max(0, recentRuns.length - visibleRuns.length);
-
-                return (
-                  <>
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-medium">{getWorkflowDisplayName(wf.name)}</h3>
-                          <span className="bg-muted/60 text-muted-foreground rounded-full px-2 py-0.5 text-xs">
-                            {wf.triggerType}
-                          </span>
-                        </div>
-                        <div className="text-muted-foreground mt-1.5 text-xs">
-                          Last run:{" "}
-                          {wf.lastRunStatus ? getWorkflowRunStatusLabel(wf.lastRunStatus) : "—"} ·{" "}
-                          {formatDate(wf.lastRunAt)}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="bg-muted/50 flex items-center gap-2 rounded-full px-2.5 py-1">
-                          <WorkflowStatusSwitch
-                            checked={wf.status === "on"}
-                            workflowId={wf.id}
-                            onToggle={handleToggle}
-                          />
-                          <span className="text-sm">{wf.status === "on" ? "On" : "Off"}</span>
-                        </div>
-                        <WorkflowRunButton
-                          workflowId={wf.id}
-                          disabled={wf.status !== "on"}
-                          onRun={handleRun}
-                        />
-                        <Button variant="ghost" size="icon" asChild>
-                          <Link href={`/workflows/${wf.id}`}>
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <WorkflowDeleteButton
-                          workflowId={wf.id}
-                          name={getWorkflowDisplayName(wf.name)}
-                          onRequestDelete={handleSetWorkflowToDelete}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <div className="text-muted-foreground/80 text-[10px] font-medium tracking-[0.14em] uppercase">
-                        Recent runs
-                      </div>
-                      {recentRuns.length > 0 ? (
-                        <div className="space-y-2">
-                          {visibleRuns.map((run) => (
-                            <Link
-                              key={run.id}
-                              href={`/workflows/runs/${run.id}`}
-                              className="text-muted-foreground hover:bg-muted/45 hover:text-foreground flex items-center justify-between rounded-md px-2 py-1 text-sm transition-colors"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground text-xs capitalize">
-                                  {run.source}
-                                </span>
-                                <span>{getWorkflowRunStatusLabel(run.status)}</span>
-                              </div>
-                              <span className="text-muted-foreground text-xs">
-                                {formatDate(run.startedAt)}
-                              </span>
-                            </Link>
-                          ))}
-                          <WorkflowExpandButton
-                            workflowId={wf.id}
-                            expanded={isExpanded && recentRuns.length > 1}
-                            hiddenCount={hiddenCount}
-                            onSetExpanded={handleSetExpandedRuns}
-                          />
-                        </div>
-                      ) : (
-                        <div className="text-muted-foreground text-sm">No runs yet.</div>
-                      )}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {workflowToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-          onClick={handleModalOverlayClick}
-        >
-          <div
-            className="bg-background w-full max-w-md rounded-lg border p-6 shadow-xl"
-            onClick={handleModalContentClick}
-          >
-            <h3 className="text-lg font-semibold">Delete workflow?</h3>
-            <p className="text-muted-foreground mt-2 text-sm">
-              This will permanently delete &quot;{workflowToDelete.name}&quot; and cannot be undone.
-            </p>
-            <div className="mt-6 flex items-center justify-end gap-2">
+          <div className="border-border/50 bg-card rounded-2xl border p-4 shadow-sm">
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={handlePromptChange}
+              onKeyDown={handleKeyDown}
+              placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+              rows={2}
+              className="placeholder:text-muted-foreground/50 min-h-12 w-full resize-none bg-transparent text-sm leading-relaxed outline-none"
+            />
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-muted-foreground/40 text-xs">⌘ Enter to send</p>
               <Button
-                variant="ghost"
-                onClick={handleModalOverlayClick}
-                disabled={deleteWorkflow.isPending}
+                size="sm"
+                onClick={handlePromptSubmit}
+                disabled={!prompt.trim() || isCreating}
+                className="gap-1.5 rounded-lg px-3"
               >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteWorkflow.isPending}
-              >
-                {deleteWorkflow.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Delete
+                {isCreating ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-3.5" />
+                )}
+                Send
               </Button>
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="space-y-10">
+        {/* ── My Workflows ── */}
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">My Workflows</h2>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                {workflowList.length === 0
+                  ? "No workflows yet"
+                  : `${workflowList.length} workflow${workflowList.length === 1 ? "" : "s"}`}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCreateBlank}
+              disabled={isCreating}
+              className="gap-1.5"
+            >
+              {isCreating ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Plus className="size-3.5" />
+              )}
+              New
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="text-muted-foreground size-5 animate-spin" />
+            </div>
+          ) : workflowList.length === 0 ? (
+            <div className="border-border/40 rounded-xl border border-dashed p-10 text-center">
+              <p className="text-muted-foreground text-sm">
+                Describe a workflow above or pick a template to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {workflowList.map((wf) => (
+                <WorkflowCard key={wf.id} workflow={wf} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── Templates ── */}
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">Templates</h2>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Start from a pre-built workflow
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {WORKFLOW_TEMPLATES.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                onSelect={handleTemplateSelect}
+                loading={creatingTemplateId === template.id}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

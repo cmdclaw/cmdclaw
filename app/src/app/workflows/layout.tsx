@@ -17,8 +17,8 @@ export default function WorkflowsLayout({ children }: { children: React.ReactNod
         </div>
       ) : (
         <div className="bg-background min-h-screen">
-          <div className="container px-4 py-6">
-            <main className="mx-auto w-full max-w-[1500px]">{children}</main>
+          <div className="mx-auto w-full max-w-[1500px] px-6 py-6">
+            <main>{children}</main>
           </div>
         </div>
       )}
