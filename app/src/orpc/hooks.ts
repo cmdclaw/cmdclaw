@@ -687,6 +687,55 @@ export function useUpdateWorkflow() {
   });
 }
 
+export function useApplyWorkflowBuilderPatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      workflowId: string;
+      conversationId: string;
+      baseUpdatedAt: string;
+      patch: {
+        prompt?: string;
+        allowedIntegrations?: string[];
+        triggerType?:
+          | "manual"
+          | "schedule"
+          | "email.forwarded"
+          | "gmail.new_email"
+          | "twitter.new_dm";
+        schedule?:
+          | {
+              type: "interval";
+              intervalMinutes: number;
+            }
+          | {
+              type: "daily";
+              time: string;
+              timezone?: string;
+            }
+          | {
+              type: "weekly";
+              time: string;
+              daysOfWeek: number[];
+              timezone?: string;
+            }
+          | {
+              type: "monthly";
+              time: string;
+              dayOfMonth: number;
+              timezone?: string;
+            }
+          | null;
+      };
+    }) => client.workflow.applyBuilderPatch(input),
+    onSuccess: (_, input) => {
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow", "get", input.workflowId] });
+    },
+  });
+}
+
 export function useDeleteWorkflow() {
   const queryClient = useQueryClient();
 

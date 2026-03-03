@@ -18,8 +18,9 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, type Transition } from "motion/react";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { IntegrationType } from "@/lib/integration-icons";
 import {
   getIntegrationLogo,
@@ -81,6 +82,7 @@ const TOOL_DETAILS_INITIAL = { height: 0, opacity: 0, y: -2 };
 const TOOL_DETAILS_ANIMATE = { height: "auto", opacity: 1, y: 0 };
 const TOOL_DETAILS_EXIT = { height: 0, opacity: 0, y: -2 };
 const TOOL_DETAILS_TRANSITION: Transition = { duration: 0.2, ease: "easeInOut" };
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm];
 
 function formatValue(value: unknown): string {
   if (value === undefined || value === null) {
@@ -131,6 +133,29 @@ export function ActivityItem({ item }: Props) {
   const handleToggleDetails = useCallback(() => {
     setShowDetails((prev) => !prev);
   }, []);
+  const markdownComponents = useMemo(
+    () => ({
+      table: ({ children }: { children?: ReactNode }) => (
+        <div className="my-2 overflow-x-auto">
+          <table className="w-full min-w-max border-collapse text-left text-xs">{children}</table>
+        </div>
+      ),
+      thead: ({ children }: { children?: ReactNode }) => (
+        <thead className="border-border border-b">{children}</thead>
+      ),
+      tbody: ({ children }: { children?: ReactNode }) => <tbody>{children}</tbody>,
+      tr: ({ children }: { children?: ReactNode }) => (
+        <tr className="border-border border-b last:border-b-0">{children}</tr>
+      ),
+      th: ({ children }: { children?: ReactNode }) => (
+        <th className="px-2 py-1 text-left font-semibold whitespace-nowrap">{children}</th>
+      ),
+      td: ({ children }: { children?: ReactNode }) => (
+        <td className="px-2 py-1 align-top whitespace-nowrap">{children}</td>
+      ),
+    }),
+    [],
+  );
 
   // Get icon for tool calls only
   const getIcon = () => {
@@ -186,7 +211,9 @@ export function ActivityItem({ item }: Props) {
   if (type === "text") {
     return (
       <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 text-foreground max-w-none py-0.5 text-xs">
-        <ReactMarkdown>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={markdownComponents}>
+          {content}
+        </ReactMarkdown>
       </div>
     );
   }

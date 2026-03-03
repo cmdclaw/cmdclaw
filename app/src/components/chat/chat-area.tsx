@@ -87,6 +87,7 @@ type ActivitySegment = Omit<RuntimeActivitySegment, "items"> & {
 
 type Props = {
   conversationId?: string;
+  forceWorkflowQuerySync?: boolean;
 };
 
 type QueuedMessage = {
@@ -351,7 +352,7 @@ function getAgentInitLabel(status: string | null): string {
   }
 }
 
-export function ChatArea({ conversationId }: Props) {
+export function ChatArea({ conversationId, forceWorkflowQuerySync = false }: Props) {
   const queryClient = useQueryClient();
   const posthog = usePostHog();
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
@@ -947,6 +948,17 @@ export function ChatArea({ conversationId }: Props) {
           runtime.handleText(text);
           syncFromRuntime(runtime);
         },
+        onSystem: (data) => {
+          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            return;
+          }
+          runtime.handleSystem(data.content);
+          syncFromRuntime(runtime);
+          if (forceWorkflowQuerySync && data.workflowId) {
+            queryClient.invalidateQueries({ queryKey: ["workflow"] });
+            queryClient.invalidateQueries({ queryKey: ["workflow", "get", data.workflowId] });
+          }
+        },
         onThinking: (data) => {
           if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
             return;
@@ -1177,10 +1189,12 @@ export function ChatArea({ conversationId }: Props) {
     autoApproveEnabled,
     beginInitTracking,
     conversationId,
+    forceWorkflowQuerySync,
     handleInitStatusChange,
     markInitMissingAtEnd,
     markInitSignal,
     persistInterruptedRuntimeMessage,
+    queryClient,
     resetInitTracking,
     submitApproval,
     subscribeToGeneration,
@@ -1368,6 +1382,17 @@ export function ChatArea({ conversationId }: Props) {
             markInitSignal("text");
             runtime.handleText(text);
             syncFromRuntime(runtime);
+          },
+          onSystem: (data) => {
+            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+              return;
+            }
+            runtime.handleSystem(data.content);
+            syncFromRuntime(runtime);
+            if (forceWorkflowQuerySync && data.workflowId) {
+              queryClient.invalidateQueries({ queryKey: ["workflow"] });
+              queryClient.invalidateQueries({ queryKey: ["workflow", "get", data.workflowId] });
+            }
           },
           onThinking: (data) => {
             if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
@@ -1609,6 +1634,7 @@ export function ChatArea({ conversationId }: Props) {
       beginInitTracking,
       autoApproveEnabled,
       conversationId,
+      forceWorkflowQuerySync,
       handleInitStatusChange,
       markInitMissingAtEnd,
       markInitSignal,

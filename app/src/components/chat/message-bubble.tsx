@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { Children, useCallback, useMemo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import type { SandboxFileData } from "./message-list";
 
@@ -16,6 +17,7 @@ type Props = {
 
 // Regex to match file paths like /app/file.txt or /home/user/file.pdf
 const FILE_PATH_REGEX = /(?<!\S)(\/(?:app|home\/user)\/[^\s\])"']+\.[a-zA-Z0-9]+)(?!\S)/g;
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm];
 
 function MarkdownFileButton({
   file,
@@ -137,6 +139,24 @@ export function MessageBubble({ role, content, className, sandboxFiles, onFileCl
         }
         return <code className={codeClassName}>{children}</code>;
       },
+      table: ({ children }: { children?: ReactNode }) => (
+        <div className="my-2 overflow-x-auto">
+          <table className="w-full min-w-max border-collapse text-left text-sm">{children}</table>
+        </div>
+      ),
+      thead: ({ children }: { children?: ReactNode }) => (
+        <thead className="border-border border-b">{children}</thead>
+      ),
+      tbody: ({ children }: { children?: ReactNode }) => <tbody>{children}</tbody>,
+      tr: ({ children }: { children?: ReactNode }) => (
+        <tr className="border-border border-b last:border-b-0">{children}</tr>
+      ),
+      th: ({ children }: { children?: ReactNode }) => (
+        <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">{children}</th>
+      ),
+      td: ({ children }: { children?: ReactNode }) => (
+        <td className="px-3 py-2 align-top whitespace-nowrap">{children}</td>
+      ),
     }),
     [fileMap, onFileClick, renderTextWithPaths],
   );
@@ -154,7 +174,9 @@ export function MessageBubble({ role, content, className, sandboxFiles, onFileCl
   return (
     <div data-testid="chat-bubble-assistant" className={className}>
       <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 max-w-none">
-        <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={markdownComponents}>
+          {content}
+        </ReactMarkdown>
       </div>
     </div>
   );

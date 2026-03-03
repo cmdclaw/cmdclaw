@@ -202,6 +202,7 @@ type GenerationManagerTestHarness = {
   handleSessionReset: (ctx: GenerationCtx) => Promise<void>;
   runOpenCodeGeneration: (ctx: GenerationCtx) => Promise<void>;
   buildWorkflowPrompt: (ctx: GenerationCtx) => string | null;
+  buildWorkflowBuilderPrompt: (ctx: GenerationCtx) => string | null;
   processOpencodeEvent: (...args: unknown[]) => Promise<void>;
   handleOpenCodeActionableEvent: (...args: unknown[]) => Promise<unknown>;
   handleOpenCodePermissionAsked: (...args: unknown[]) => Promise<void>;
@@ -1629,6 +1630,26 @@ describe("generationManager transitions", () => {
     expect(prompt).toContain("## Do");
     expect(prompt).toContain("## Don't");
     expect(prompt).toContain("## Trigger Payload");
+  });
+
+  it("builds workflow builder context prompt when builder context is present", () => {
+    const mgr = asTestManager();
+    const prompt = mgr.buildWorkflowBuilderPrompt(
+      createCtx({
+        builderWorkflowContext: {
+          workflowId: "wf-1",
+          updatedAt: "2026-03-03T12:00:00.000Z",
+          prompt: "Current workflow prompt",
+          triggerType: "manual",
+          schedule: null,
+          allowedIntegrations: ["github"],
+        },
+      }),
+    );
+
+    expect(prompt).toContain("Workflow Builder Context");
+    expect(prompt).toContain("workflow_builder_patch");
+    expect(prompt).toContain('"workflowId": "wf-1"');
   });
 
   it("runs OpenCode generation happy path and completes", async () => {

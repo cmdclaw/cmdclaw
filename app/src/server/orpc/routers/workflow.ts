@@ -16,6 +16,10 @@ import {
   workflowRunEvent,
 } from "@/server/db/schema";
 import {
+  applyWorkflowBuilderPatch,
+  workflowBuilderPatchSchema,
+} from "@/server/services/workflow-builder-service";
+import {
   removeWorkflowScheduleJob,
   syncWorkflowScheduleJob,
 } from "@/server/services/workflow-scheduler";
@@ -386,6 +390,34 @@ const del = protectedProcedure
     }
 
     return { success: true };
+  });
+
+const applyBuilderPatch = protectedProcedure
+  .input(
+    z.object({
+      workflowId: z.string(),
+      conversationId: z.string(),
+      baseUpdatedAt: z.string().datetime({ offset: true }),
+      patch: workflowBuilderPatchSchema,
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const dbUser = await context.db.query.user.findFirst({
+      where: eq(user.id, context.user.id),
+      columns: { role: true },
+    });
+
+    const result = await applyWorkflowBuilderPatch({
+      database: context.db,
+      userId: context.user.id,
+      userRole: dbUser?.role ?? null,
+      workflowId: input.workflowId,
+      conversationId: input.conversationId,
+      baseUpdatedAt: input.baseUpdatedAt,
+      patch: input.patch,
+    });
+
+    return result;
   });
 
 const trigger = protectedProcedure
@@ -839,6 +871,7 @@ export const workflowRouter = {
   get,
   create,
   update,
+  applyBuilderPatch,
   delete: del,
   trigger,
   getRun,

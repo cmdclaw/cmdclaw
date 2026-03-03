@@ -114,6 +114,7 @@ export type RuntimeDoneData = {
 
 export type RuntimeServerEvent =
   | { type: "text"; content: string }
+  | { type: "system"; content: string; workflowId?: string }
   | { type: "thinking"; content: string; thinkingId: string }
   | {
       type: "tool_use";
@@ -574,6 +575,16 @@ export class GenerationRuntime {
     this.sandboxFiles.push(file);
   }
 
+  handleSystem(content: string): void {
+    this.parts.push({ type: "system", content });
+    this.getCurrentSegment().items.push({
+      id: `activity-${this.activityCounter++}`,
+      timestamp: Date.now(),
+      type: "system",
+      content,
+    });
+  }
+
   handleDone(data: RuntimeDoneData): void {
     this.currentGenerationId = data.generationId;
     this.currentConversationId = data.conversationId;
@@ -628,6 +639,9 @@ export class GenerationRuntime {
     switch (event.type) {
       case "text":
         this.handleText(event.content);
+        return;
+      case "system":
+        this.handleSystem(event.content);
         return;
       case "thinking":
         this.handleThinking({

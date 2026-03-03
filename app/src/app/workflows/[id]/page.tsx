@@ -170,7 +170,7 @@ function WorkflowChatPanel({ conversationId }: { conversationId: string | null }
       </div>
     );
   }
-  return <ChatArea conversationId={conversationId} />;
+  return <ChatArea conversationId={conversationId} forceWorkflowQuerySync />;
 }
 
 export default function WorkflowEditorPage() {

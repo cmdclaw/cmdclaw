@@ -44,4 +44,17 @@ describe("MessageBubble", () => {
     expect(onFileClick).toHaveBeenCalledTimes(1);
     expect(onFileClick).toHaveBeenCalledWith(sandboxFileFixture);
   });
+
+  it("renders GFM tables for assistant messages", () => {
+    render(
+      <MessageBubble
+        role="assistant"
+        content={`| Name | Age |\n| --- | --- |\n| Alice | 28 |\n| Bob | 34 |`}
+      />,
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Alice" })).toBeInTheDocument();
+  });
 });

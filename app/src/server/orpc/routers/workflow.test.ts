@@ -16,11 +16,13 @@ const {
   syncWorkflowScheduleJobMock,
   removeWorkflowScheduleJobMock,
   generateWorkflowNameMock,
+  applyWorkflowBuilderPatchMock,
 } = vi.hoisted(() => ({
   triggerWorkflowRunMock: vi.fn(),
   syncWorkflowScheduleJobMock: vi.fn(),
   removeWorkflowScheduleJobMock: vi.fn(),
   generateWorkflowNameMock: vi.fn(),
+  applyWorkflowBuilderPatchMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -39,6 +41,16 @@ vi.mock("@/server/services/workflow-scheduler", () => ({
 vi.mock("@/server/utils/generate-workflow-name", () => ({
   generateWorkflowName: generateWorkflowNameMock,
 }));
+
+vi.mock("@/server/services/workflow-builder-service", async () => {
+  const actual = await vi.importActual<typeof import("@/server/services/workflow-builder-service")>(
+    "@/server/services/workflow-builder-service",
+  );
+  return {
+    ...actual,
+    applyWorkflowBuilderPatch: applyWorkflowBuilderPatchMock,
+  };
+});
 
 import { workflowRouter } from "./workflow";
 const workflowRouterAny = workflowRouter as unknown as Record<
@@ -109,6 +121,18 @@ describe("workflowRouter", () => {
       runId: "run-1",
       generationId: "gen-1",
       conversationId: "conv-1",
+    });
+    applyWorkflowBuilderPatchMock.mockResolvedValue({
+      status: "applied",
+      workflow: {
+        workflowId: "wf-1",
+        updatedAt: "2026-03-03T12:01:00.000Z",
+        prompt: "updated",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+      },
+      appliedChanges: ["prompt"],
     });
   });
 
@@ -817,6 +841,41 @@ describe("workflowRouter", () => {
       userId: "user-1",
       userRole: null,
     });
+  });
+
+  it("applies workflow builder patch with user role context", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
+
+    const result = await workflowRouterAny.applyBuilderPatch({
+      input: {
+        workflowId: "wf-1",
+        conversationId: "conv-builder",
+        baseUpdatedAt: "2026-03-03T12:00:00.000Z",
+        patch: { prompt: "new prompt" },
+      },
+      context,
+    });
+
+    expect(result).toEqual({
+      status: "applied",
+      workflow: {
+        workflowId: "wf-1",
+        updatedAt: "2026-03-03T12:01:00.000Z",
+        prompt: "updated",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+      },
+      appliedChanges: ["prompt"],
+    });
+    expect(applyWorkflowBuilderPatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userRole: "admin",
+        workflowId: "wf-1",
+        conversationId: "conv-builder",
+      }),
+    );
   });
 
   it("returns NOT_FOUND when getting a missing run", async () => {

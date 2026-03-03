@@ -7,6 +7,8 @@ type ParsedArgs = {
   serverUrl?: string;
   command?: string;
   positionals: string[];
+  message?: string;
+  list?: boolean;
   // Generic command flags
   payload?: string;
   watch: boolean;
@@ -26,6 +28,7 @@ type ParsedArgs = {
   scheduleTime?: string;
   scheduleDays?: number[];
   scheduleDayOfMonth?: number;
+  model?: string;
 };
 
 type WorkflowIntegrationType =
@@ -72,6 +75,7 @@ type WorkflowSchedule =
   | { type: "monthly"; time: string; dayOfMonth: number; timezone?: string };
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "error", "success", "failed"]);
+const DEFAULT_WORKFLOW_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
 
 function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
@@ -173,10 +177,25 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.scheduleDayOfMonth = Number(argv[i + 1]);
         i += 1;
         break;
+      case "--message":
+      case "-m":
+      case "--goal":
+      case "--instruction":
+        args.message = argv[i + 1];
+        i += 1;
+        break;
+      case "--model":
+      case "-M":
+        args.model = argv[i + 1];
+        i += 1;
+        break;
       case "--help":
       case "-h":
         printHelp();
         process.exit(0);
+      case "--list":
+        args.list = true;
+        break;
       default:
         if (arg?.startsWith("-")) {
           throw new Error(`Unknown flag: ${arg}`);
@@ -282,9 +301,15 @@ function buildSchedule(args: ParsedArgs): WorkflowSchedule | undefined {
 }
 
 function printHelp(): void {
-  console.log("\nUsage: bun run workflow [options] <command>\n");
+  console.log("\nUsage: bun run workflow --message <text> [options]");
+  console.log("   or: bun run workflow [options] <command>\n");
   console.log("Options:");
   console.log("  -s, --server <url>                Server URL (default http://localhost:3000)");
+  console.log(
+    "  -m, --message <text>              Build/update a workflow from one message (default mode)",
+  );
+  console.log("  --list                            List workflows (shortcut)");
+  console.log("  -M, --model <provider/model>      Optional model override for builder agent");
   console.log("  -h, --help                        Show help");
   console.log("\nCommands:");
   console.log("  list                              List workflows");
@@ -292,6 +317,13 @@ function printHelp(): void {
   console.log("  run <workflow-id>                 Trigger a workflow run");
   console.log("  logs <run-id>                     Show run events and transcript");
   console.log("  approve <run-id> <tool-use-id> <approve|deny>  Submit pending approval");
+  console.log(
+    "  builder <workflow-id>               Run workflow builder agent on an existing workflow",
+  );
+  console.log(
+    "  close-loop                          Create a draft workflow and let builder agent configure it",
+  );
+  console.log("  close-loop-example                  Example: hourly post in #bap-experiments");
   console.log("\nAliases:");
   console.log("  trigger <workflow-id>             Alias of run");
   console.log("  show-run <run-id>                 Alias of logs");
@@ -320,6 +352,11 @@ function printHelp(): void {
   console.log("  --schedule-time <HH:MM>           Used by daily/weekly/monthly schedules");
   console.log("  --schedule-days <0,1,..6>         Used by weekly schedules");
   console.log("  --schedule-day-of-month <1-31>    Used by monthly schedules\n");
+  console.log("Builder flags:");
+  console.log("  --message <text>                  Natural-language workflow objective");
+  console.log("  -M, --model <provider/model>      Optional generation model override");
+  console.log("\nExample:");
+  console.log('  bun run workflow --message "send message in #bap-experiments every hour"\n');
 }
 
 async function listWorkflows(client: RouterClient<AppRouter>): Promise<void> {
@@ -555,6 +592,162 @@ async function approveWorkflowRun(
   console.log(`Submitted ${decision} for ${toolUseId} on run ${runId}.`);
 }
 
+async function streamGenerationUntilTerminal(
+  client: RouterClient<AppRouter>,
+  generationId: string,
+): Promise<"done" | "error" | "cancelled"> {
+  const iterator = await client.generation.subscribeGeneration({ generationId });
+  let printedText = false;
+
+  for await (const event of iterator) {
+    switch (event.type) {
+      case "text":
+        process.stdout.write(event.content);
+        printedText = true;
+        break;
+      case "system":
+        if (printedText) {
+          process.stdout.write("\n");
+          printedText = false;
+        }
+        console.log(`[system] ${event.content}`);
+        break;
+      case "error":
+        if (printedText) {
+          process.stdout.write("\n");
+        }
+        console.error(`Builder generation error: ${event.message}`);
+        return "error";
+      case "cancelled":
+        if (printedText) {
+          process.stdout.write("\n");
+        }
+        console.log("Builder generation cancelled.");
+        return "cancelled";
+      case "done":
+        if (printedText) {
+          process.stdout.write("\n");
+        }
+        return "done";
+      default:
+        break;
+    }
+  }
+
+  if (printedText) {
+    process.stdout.write("\n");
+  }
+  return "done";
+}
+
+async function startBuilderAgent(
+  client: RouterClient<AppRouter>,
+  params: {
+    workflowId: string;
+    goal: string;
+    model?: string;
+  },
+): Promise<void> {
+  const { workflowId, goal, model } = params;
+  const resolvedModel = model?.trim() || DEFAULT_WORKFLOW_BUILDER_MODEL;
+  const { conversationId } = await client.workflow.getOrCreateBuilderConversation({
+    id: workflowId,
+  });
+  const started = await client.generation.startGeneration({
+    conversationId,
+    content: goal,
+    model: resolvedModel,
+    autoApprove: true,
+  });
+
+  console.log(`Builder started for workflow ${workflowId}`);
+  console.log(`  conversation id: ${started.conversationId}`);
+  console.log(`  generation id: ${started.generationId}`);
+  console.log(`  model: ${resolvedModel}`);
+  console.log("\nBuilder output:\n");
+  await streamGenerationUntilTerminal(client, started.generationId);
+
+  const updated = await client.workflow.get({ id: workflowId });
+  console.log("\nWorkflow after builder run:");
+  console.log(`  id: ${updated.id}`);
+  console.log(`  name: ${updated.name}`);
+  console.log(`  trigger: ${updated.triggerType}`);
+  console.log(`  prompt: ${updated.prompt ? "(set)" : "(empty)"}`);
+  console.log(`  integrations: ${(updated.allowedIntegrations ?? []).join(", ") || "-"}`);
+  if (updated.schedule) {
+    console.log(`  schedule: ${JSON.stringify(updated.schedule)}`);
+  }
+}
+
+function getCloseLoopExampleGoal(): string {
+  return [
+    "Create a workflow that sends a message in Slack channel #bap-experiments every hour.",
+    "Use schedule trigger with hourly cadence.",
+    "Keep integrations minimal and include slack.",
+    "Set workflow prompt so it posts a concise experiment update message.",
+  ].join(" ");
+}
+
+async function runBuilderCommand(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
+  const workflowId = args.positionals[0];
+  if (!workflowId) {
+    throw new Error("Usage: bun run workflow builder <workflow-id> --message <text>");
+  }
+  if (!args.message?.trim()) {
+    throw new Error("builder requires --message");
+  }
+
+  await startBuilderAgent(client, {
+    workflowId,
+    goal: args.message.trim(),
+    model: args.model,
+  });
+}
+
+async function runCloseLoopCommand(
+  client: RouterClient<AppRouter>,
+  args: ParsedArgs,
+  options?: { useExampleGoal?: boolean },
+): Promise<void> {
+  const rawIntegrations = args.integrations ?? [];
+  const allowedIntegrations =
+    rawIntegrations.length > 0
+      ? rawIntegrations.filter(isWorkflowIntegrationType)
+      : (["slack"] as WorkflowIntegrationType[]);
+
+  const invalidIntegrations = rawIntegrations.filter((item) => !isWorkflowIntegrationType(item));
+  if (invalidIntegrations.length > 0) {
+    console.log(`Ignoring unknown integrations: ${invalidIntegrations.join(", ")}`);
+  }
+
+  const draftName = args.name?.trim() || "Close Loop Draft";
+  const created = await client.workflow.create({
+    name: draftName,
+    triggerType: "manual",
+    prompt: "",
+    autoApprove: true,
+    allowedIntegrations,
+    allowedCustomIntegrations: args.customIntegrations ?? [],
+    schedule: null,
+  });
+
+  const goal =
+    options?.useExampleGoal === true
+      ? getCloseLoopExampleGoal()
+      : (args.message?.trim() ?? getCloseLoopExampleGoal());
+
+  console.log(`Created draft workflow ${created.name}`);
+  console.log(`  id: ${created.id}`);
+  console.log(`  goal: ${goal}`);
+  console.log("");
+
+  await startBuilderAgent(client, {
+    workflowId: created.id,
+    goal,
+    model: args.model,
+  });
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -570,11 +763,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (!parsed.command) {
-    printHelp();
-    process.exit(1);
-  }
-
   const serverUrl = parsed.serverUrl || process.env.CMDCLAW_SERVER_URL || DEFAULT_SERVER_URL;
   const config = loadConfig(serverUrl);
   if (!config?.token) {
@@ -586,6 +774,19 @@ async function main(): Promise<void> {
   const client = createRpcClient(serverUrl, config.token);
 
   try {
+    if (!parsed.command && parsed.list) {
+      await listWorkflows(client);
+      return;
+    }
+    if (!parsed.command && parsed.message?.trim()) {
+      await runCloseLoopCommand(client, parsed);
+      return;
+    }
+    if (!parsed.command) {
+      printHelp();
+      process.exit(1);
+    }
+
     switch (parsed.command) {
       case "list":
       case "ls":
@@ -609,6 +810,15 @@ async function main(): Promise<void> {
         break;
       case "runs":
         await listRuns(client, parsed);
+        break;
+      case "builder":
+        await runBuilderCommand(client, parsed);
+        break;
+      case "close-loop":
+        await runCloseLoopCommand(client, parsed);
+        break;
+      case "close-loop-example":
+        await runCloseLoopCommand(client, parsed, { useExampleGoal: true });
         break;
       default:
         throw new Error(`Unknown command: ${parsed.command}`);

@@ -19,7 +19,22 @@ const toolCallFixture: ActivityItemData = {
   result: "done",
 };
 
+const textTableFixture: ActivityItemData = {
+  id: "text-1",
+  timestamp: 1,
+  type: "text",
+  content: `| City | Country |\n| --- | --- |\n| Dublin | Ireland |`,
+};
+
 describe("ActivityItem", () => {
+  it("renders GFM table content for text activity items", () => {
+    render(<ActivityItem item={textTableFixture} />);
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "City" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Dublin" })).toBeInTheDocument();
+  });
+
   it("uses tool input description as the visible label", () => {
     render(<ActivityItem item={toolCallFixture} />);
 
