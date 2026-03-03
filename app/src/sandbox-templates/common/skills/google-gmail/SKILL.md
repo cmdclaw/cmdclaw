@@ -10,6 +10,7 @@ Read inbox, get email content, count unread, fetch latest email, draft emails, a
 ## Environment Variables
 
 - `GMAIL_ACCESS_TOKEN` - Google OAuth2 access token with Gmail scope
+- `CMDCLAW_USER_TIMEZONE` - IANA timezone (for plain local date output, e.g. `Europe/Dublin`)
 
 ## Commands
 
@@ -45,6 +46,6 @@ JSON arrays. Example for `list`:
 
 ```json
 [
-  { "id": "18d3f...", "subject": "Meeting Tomorrow", "from": "John <john@example.com>", "date": "Mon, 15 Jan 2024 10:00:00", "snippet": "Preview text..." }
+  { "id": "18d3f...", "subject": "Meeting Tomorrow", "from": "John <john@example.com>", "date": "2024-01-15 10:00:00", "snippet": "Preview text..." }
 ]
 ```

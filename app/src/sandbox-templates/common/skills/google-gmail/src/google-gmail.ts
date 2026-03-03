@@ -1,4 +1,5 @@
 import { parseArgs } from "util";
+import { formatEmailDate } from "./format-email-date";
 
 const CLI_ARGS = process.argv.slice(2);
 const IS_HELP_REQUEST = CLI_ARGS.includes("--help") || CLI_ARGS.includes("-h");
@@ -9,6 +10,7 @@ if (!TOKEN && !IS_HELP_REQUEST) {
 }
 
 const headers = { Authorization: `Bearer ${TOKEN}` };
+const USER_TIMEZONE = process.env.CMDCLAW_USER_TIMEZONE?.trim();
 
 const { positionals, values } = parseArgs({
   args: CLI_ARGS,
@@ -102,7 +104,7 @@ async function fetchMessageDetails(messages: Array<{ id: string }>) {
       id: msg.id,
       subject: getHeader("Subject"),
       from: getHeader("From"),
-      date: getHeader("Date"),
+      date: formatEmailDate(getHeader("Date"), USER_TIMEZONE),
       snippet: msg.snippet,
     };
   });
@@ -153,7 +155,7 @@ async function getEmail(messageId: string) {
         subject: getHeader("Subject"),
         from: getHeader("From"),
         to: getHeader("To"),
-        date: getHeader("Date"),
+        date: formatEmailDate(getHeader("Date"), USER_TIMEZONE),
         body: extractBody(email.payload ?? {}).slice(0, 10000),
       },
       null,

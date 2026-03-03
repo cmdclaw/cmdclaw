@@ -927,6 +927,17 @@ export function useSetDefaultForwardedWorkflow() {
   });
 }
 
+export function useSetUserTimezone() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (timezone: string) => client.user.setTimezone({ timezone }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
+    },
+  });
+}
+
 // ========== PROVIDER AUTH HOOKS ==========
 
 type SubscriptionProvider = "openai" | "google" | "kimi";

@@ -21,6 +21,7 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   phoneNumber: text("phone_number"),
+  timezone: text("timezone"),
   defaultForwardedWorkflowId: text("default_forwarded_workflow_id"),
   role: text("role").default("user"),
   banned: boolean("banned").default(false),

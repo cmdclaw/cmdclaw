@@ -1,12 +1,13 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 
@@ -21,6 +22,15 @@ function getPhoneNumber(user: unknown): string {
   return "";
 }
 
+function isValidIanaTimezone(value: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function SettingsPage() {
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -29,10 +39,23 @@ export default function SettingsPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [removingPhone, setRemovingPhone] = useState(false);
+  const [timezoneInput, setTimezoneInput] = useState("");
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const { data: currentUser } = useCurrentUser();
+  const setUserTimezone = useSetUserTimezone();
+  const browserTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "", []);
+  const supportedTimezones = useMemo(() => {
+    const intlWithSupportedValues = Intl as typeof Intl & {
+      supportedValuesOf?: (key: "timeZone") => string[];
+    };
+    if (typeof intlWithSupportedValues.supportedValuesOf !== "function") {
+      return [];
+    }
+    return intlWithSupportedValues.supportedValuesOf("timeZone");
+  }, []);
 
   useEffect(() => {
     authClient
@@ -59,6 +82,16 @@ export default function SettingsPage() {
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  useEffect(() => {
+    if (currentUser?.timezone) {
+      setTimezoneInput(currentUser.timezone);
+      return;
+    }
+    if (browserTimezone) {
+      setTimezoneInput(browserTimezone);
+    }
+  }, [currentUser?.timezone, browserTimezone]);
 
   const handleSave = useCallback(
     async (e: React.FormEvent) => {
@@ -127,7 +160,44 @@ export default function SettingsPage() {
     setPhoneNumber(value ?? "");
   }, []);
 
+  const handleTimezoneInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setTimezoneInput(event.target.value);
+  }, []);
+
+  const handleSaveTimezone = useCallback(async () => {
+    const timezone = timezoneInput.trim();
+    if (!timezone || !isValidIanaTimezone(timezone)) {
+      setNotification({ type: "error", message: "Enter a valid IANA timezone" });
+      return;
+    }
+
+    try {
+      await setUserTimezone.mutateAsync(timezone);
+      setNotification({ type: "success", message: "Timezone updated" });
+    } catch (error) {
+      console.error("Failed to update timezone:", error);
+      setNotification({ type: "error", message: "Failed to update timezone" });
+    }
+  }, [setUserTimezone, timezoneInput]);
+
+  const handleUseBrowserTimezone = useCallback(() => {
+    if (!browserTimezone) {
+      return;
+    }
+    setTimezoneInput(browserTimezone);
+    void setUserTimezone
+      .mutateAsync(browserTimezone)
+      .then(() => setNotification({ type: "success", message: "Timezone updated" }))
+      .catch((error) => {
+        console.error("Failed to update timezone:", error);
+        setNotification({ type: "error", message: "Failed to update timezone" });
+      });
+  }, [browserTimezone, setUserTimezone]);
+
   const user = sessionData?.user;
+  const savedTimezone = currentUser?.timezone ?? "";
+  const timezoneDiffers =
+    Boolean(savedTimezone) && Boolean(browserTimezone) && savedTimezone !== browserTimezone;
 
   if (status === "loading") {
     return (
@@ -224,6 +294,53 @@ export default function SettingsPage() {
                   "Remove phone number"
                 )}
               </Button>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border p-4">
+            <label className="mb-2 block text-sm font-medium">Timezone</label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Input
+                value={timezoneInput}
+                onChange={handleTimezoneInputChange}
+                list="timezone-options"
+                placeholder="Europe/Dublin"
+                className="sm:flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSaveTimezone}
+                disabled={setUserTimezone.isPending}
+              >
+                {setUserTimezone.isPending ? "Saving..." : "Save timezone"}
+              </Button>
+            </div>
+            <datalist id="timezone-options">
+              {supportedTimezones.map((timezone) => (
+                <option key={timezone} value={timezone} />
+              ))}
+            </datalist>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Used for integration date/time formatting in sandbox tools.
+            </p>
+            {timezoneDiffers ? (
+              <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <p className="text-amber-900 dark:text-amber-200">
+                  Browser timezone is <strong>{browserTimezone}</strong>, but your saved timezone is{" "}
+                  <strong>{savedTimezone}</strong>.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={handleUseBrowserTimezone}
+                  disabled={setUserTimezone.isPending}
+                >
+                  Use browser timezone
+                </Button>
+              </div>
             ) : null}
           </div>
 

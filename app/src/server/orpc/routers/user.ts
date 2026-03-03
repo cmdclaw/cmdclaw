@@ -5,6 +5,15 @@ import { buildUserForwardingAddress, EMAIL_FORWARDED_TRIGGER_TYPE } from "@/lib/
 import { user, workflow } from "@/server/db/schema";
 import { protectedProcedure } from "../middleware";
 
+function isValidIanaTimezone(timezone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Get current user with onboardedAt status
 const me = protectedProcedure.handler(async ({ context }) => {
   const dbUser = await context.db.query.user.findFirst({
@@ -17,6 +26,7 @@ const me = protectedProcedure.handler(async ({ context }) => {
     email: context.user.email,
     image: context.user.image,
     onboardedAt: dbUser?.onboardedAt ?? null,
+    timezone: dbUser?.timezone ?? null,
   };
 });
 
@@ -98,9 +108,30 @@ const setDefaultForwardedWorkflow = protectedProcedure
     return { success: true };
   });
 
+const setTimezone = protectedProcedure
+  .input(
+    z.object({
+      timezone: z
+        .string()
+        .trim()
+        .min(1)
+        .max(128)
+        .refine((value) => isValidIanaTimezone(value), "Invalid IANA timezone"),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await context.db
+      .update(user)
+      .set({ timezone: input.timezone })
+      .where(eq(user.id, context.user.id));
+
+    return { success: true, timezone: input.timezone };
+  });
+
 export const userRouter = {
   me,
   completeOnboarding,
   forwarding,
   setDefaultForwardedWorkflow,
+  setTimezone,
 };

@@ -2,7 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   SidebarProvider,
   SidebarInset,
@@ -14,7 +14,7 @@ import { ChatShareControls } from "@/components/chat/chat-share-controls";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useCurrentUser } from "@/orpc/hooks";
+import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
 
 const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
 
@@ -27,6 +27,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   );
   const router = useRouter();
   const { data: user, isLoading: userLoading } = useCurrentUser();
+  const setTimezoneMutation = useSetUserTimezone();
+  const lastTimezoneSyncRef = useRef<string | null>(null);
   const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -65,6 +67,28 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       setIsSidebarOpen(true);
     }
   }, [isMobile, isSidebarOpen]);
+
+  useEffect(() => {
+    if (userLoading || !user) {
+      return;
+    }
+
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!browserTimezone || user.timezone) {
+      return;
+    }
+
+    if (setTimezoneMutation.isPending || lastTimezoneSyncRef.current === browserTimezone) {
+      return;
+    }
+
+    lastTimezoneSyncRef.current = browserTimezone;
+    setTimezoneMutation.mutate(browserTimezone, {
+      onError: () => {
+        lastTimezoneSyncRef.current = null;
+      },
+    });
+  }, [userLoading, user, setTimezoneMutation]);
 
   // Show loading while checking onboarding status
   if (userLoading || (user && !user.onboardedAt)) {

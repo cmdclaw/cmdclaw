@@ -3178,9 +3178,13 @@ class GenerationManager {
       }
 
       // Get user's CLI environment and integrations
-      const [cliEnv, enabledIntegrations] = await Promise.all([
+      const [cliEnv, enabledIntegrations, dbUser] = await Promise.all([
         getCliEnvForUser(ctx.userId),
         getEnabledIntegrationTypes(ctx.userId),
+        db.query.user.findFirst({
+          where: eq(user.id, ctx.userId),
+          columns: { timezone: true },
+        }),
       ]);
 
       const allowedIntegrations = ctx.allowedIntegrations ?? enabledIntegrations;
@@ -3219,6 +3223,9 @@ class GenerationManager {
 
       if (ctx.allowedIntegrations !== undefined) {
         filteredCliEnv.ALLOWED_INTEGRATIONS = ctx.allowedIntegrations.join(",");
+      }
+      if (dbUser?.timezone) {
+        filteredCliEnv.CMDCLAW_USER_TIMEZONE = dbUser.timezone;
       }
 
       // Get conversation for existing session info
