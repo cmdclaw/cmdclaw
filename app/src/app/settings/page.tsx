@@ -1,7 +1,9 @@
 "use client";
 
+import type { ITimezone } from "react-timezone-select";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import TimezoneSelect from "react-timezone-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -31,6 +33,93 @@ function isValidIanaTimezone(value: string): boolean {
   }
 }
 
+function useTimezoneSelectStyles() {
+  return useMemo(
+    () => ({
+      control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
+        ...base,
+        backgroundColor: "transparent",
+        borderColor: state.isFocused ? "var(--color-ring)" : "var(--color-input)",
+        borderRadius: "var(--radius-md)",
+        minHeight: "36px",
+        boxShadow: state.isFocused
+          ? "0 0 0 3px color-mix(in oklab, var(--color-ring) 50%, transparent)"
+          : "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        fontSize: "14px",
+        "&:hover": {
+          borderColor: state.isFocused ? "var(--color-ring)" : "var(--color-input)",
+        },
+      }),
+      menu: (base: Record<string, unknown>) => ({
+        ...base,
+        backgroundColor: "var(--color-popover)",
+        color: "var(--color-popover-foreground)",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--color-border)",
+        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        zIndex: 50,
+        overflow: "hidden",
+      }),
+      menuList: (base: Record<string, unknown>) => ({
+        ...base,
+        padding: "4px",
+      }),
+      option: (
+        base: Record<string, unknown>,
+        state: { isFocused: boolean; isSelected: boolean },
+      ) => ({
+        ...base,
+        backgroundColor: state.isSelected
+          ? "var(--color-accent)"
+          : state.isFocused
+            ? "var(--color-accent)"
+            : "transparent",
+        color: state.isSelected
+          ? "var(--color-accent-foreground)"
+          : state.isFocused
+            ? "var(--color-accent-foreground)"
+            : "var(--color-popover-foreground)",
+        borderRadius: "var(--radius-sm)",
+        fontSize: "14px",
+        padding: "6px 8px",
+        cursor: "pointer",
+        "&:active": {
+          backgroundColor: "var(--color-accent)",
+        },
+      }),
+      singleValue: (base: Record<string, unknown>) => ({
+        ...base,
+        color: "var(--color-foreground)",
+      }),
+      input: (base: Record<string, unknown>) => ({
+        ...base,
+        color: "var(--color-foreground)",
+      }),
+      placeholder: (base: Record<string, unknown>) => ({
+        ...base,
+        color: "var(--color-muted-foreground)",
+      }),
+      indicatorSeparator: () => ({
+        display: "none",
+      }),
+      dropdownIndicator: (base: Record<string, unknown>) => ({
+        ...base,
+        color: "var(--color-muted-foreground)",
+        padding: "0 8px",
+        "&:hover": {
+          color: "var(--color-foreground)",
+        },
+      }),
+      noOptionsMessage: (base: Record<string, unknown>) => ({
+        ...base,
+        color: "var(--color-muted-foreground)",
+        fontSize: "14px",
+      }),
+    }),
+    [],
+  );
+}
+
 export default function SettingsPage() {
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -47,15 +136,7 @@ export default function SettingsPage() {
   const { data: currentUser } = useCurrentUser();
   const setUserTimezone = useSetUserTimezone();
   const browserTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "", []);
-  const supportedTimezones = useMemo(() => {
-    const intlWithSupportedValues = Intl as typeof Intl & {
-      supportedValuesOf?: (key: "timeZone") => string[];
-    };
-    if (typeof intlWithSupportedValues.supportedValuesOf !== "function") {
-      return [];
-    }
-    return intlWithSupportedValues.supportedValuesOf("timeZone");
-  }, []);
+  const timezoneSelectStyles = useTimezoneSelectStyles();
 
   useEffect(() => {
     authClient
@@ -160,25 +241,23 @@ export default function SettingsPage() {
     setPhoneNumber(value ?? "");
   }, []);
 
-  const handleTimezoneInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setTimezoneInput(event.target.value);
-  }, []);
-
-  const handleSaveTimezone = useCallback(async () => {
-    const timezone = timezoneInput.trim();
-    if (!timezone || !isValidIanaTimezone(timezone)) {
-      setNotification({ type: "error", message: "Enter a valid IANA timezone" });
-      return;
-    }
-
-    try {
-      await setUserTimezone.mutateAsync(timezone);
-      setNotification({ type: "success", message: "Timezone updated" });
-    } catch (error) {
-      console.error("Failed to update timezone:", error);
-      setNotification({ type: "error", message: "Failed to update timezone" });
-    }
-  }, [setUserTimezone, timezoneInput]);
+  const handleTimezoneChange = useCallback(
+    (tz: ITimezone) => {
+      const value = typeof tz === "string" ? tz : tz.value;
+      setTimezoneInput(value);
+      if (!value || !isValidIanaTimezone(value)) {
+        return;
+      }
+      void setUserTimezone
+        .mutateAsync(value)
+        .then(() => setNotification({ type: "success", message: "Timezone updated" }))
+        .catch((error) => {
+          console.error("Failed to update timezone:", error);
+          setNotification({ type: "error", message: "Failed to update timezone" });
+        });
+    },
+    [setUserTimezone],
+  );
 
   const handleUseBrowserTimezone = useCallback(() => {
     if (!browserTimezone) {
@@ -297,44 +376,28 @@ export default function SettingsPage() {
             ) : null}
           </div>
 
-          <div className="rounded-lg border p-4">
+          <div>
             <label className="mb-2 block text-sm font-medium">Timezone</label>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Input
-                value={timezoneInput}
-                onChange={handleTimezoneInputChange}
-                list="timezone-options"
-                placeholder="Europe/Dublin"
-                className="sm:flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSaveTimezone}
-                disabled={setUserTimezone.isPending}
-              >
-                {setUserTimezone.isPending ? "Saving..." : "Save timezone"}
-              </Button>
-            </div>
-            <datalist id="timezone-options">
-              {supportedTimezones.map((timezone) => (
-                <option key={timezone} value={timezone} />
-              ))}
-            </datalist>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Used for integration date/time formatting in sandbox tools.
-            </p>
+            <TimezoneSelect
+              value={timezoneInput}
+              onChange={handleTimezoneChange}
+              styles={timezoneSelectStyles}
+              placeholder="Select your timezone..."
+            />
+            {setUserTimezone.isPending && (
+              <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
+                <Loader2 className="inline h-3 w-3 animate-spin" /> Saving...
+              </p>
+            )}
             {timezoneDiffers ? (
-              <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                <p className="text-amber-900 dark:text-amber-200">
-                  Browser timezone is <strong>{browserTimezone}</strong>, but your saved timezone is{" "}
-                  <strong>{savedTimezone}</strong>.
+              <div className="mt-3 flex items-center gap-3 text-sm">
+                <p className="text-muted-foreground">
+                  Browser detects <strong className="text-foreground">{browserTimezone}</strong>
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="mt-2"
                   onClick={handleUseBrowserTimezone}
                   disabled={setUserTimezone.isPending}
                 >
