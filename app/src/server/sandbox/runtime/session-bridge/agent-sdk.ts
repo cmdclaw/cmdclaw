@@ -4,8 +4,11 @@ import { createSandboxAgentSessionWithFallback } from "../agent-sdk/session-help
 
 export const sandboxAgentSessionBridgeImplementation: SandboxSessionBridgeImplementation = {
   createSessionBridge: async (options: SandboxRuntimeAdapterOptions) => {
+    console.info(
+      `[SandboxRuntime] agentsdk session bridge connecting to ${options.sandboxAgentBaseUrl}`,
+    );
     const sandboxAgent = await SandboxAgent.connect({
-      baseUrl: options.serverUrl,
+      baseUrl: options.sandboxAgentBaseUrl,
       ...(options.fetch ? { fetch: options.fetch } : {}),
     });
 

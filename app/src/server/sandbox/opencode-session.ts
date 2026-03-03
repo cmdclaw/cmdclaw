@@ -16,9 +16,9 @@ import {
 } from "@/server/services/session-constants";
 import { downloadFromS3 } from "@/server/storage/s3-client";
 import {
-  OPENCODE_PORT,
   createSandboxRuntimeClient,
   getSandboxReadinessUrl,
+  getSandboxServerPort,
   getSandboxServerBackgroundStartCommand,
 } from "./opencode-runtime";
 
@@ -274,7 +274,7 @@ async function getOrCreateDaytonaSandbox(
     : null;
 
   if (fromConversation) {
-    const preview = await fromConversation.getPreviewLink(OPENCODE_PORT);
+    const preview = await fromConversation.getPreviewLink(getSandboxServerPort());
     const baseUrl = preview.url;
     const health = await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl), preview.token), {
       method: "GET",
@@ -323,7 +323,7 @@ async function getOrCreateDaytonaSandbox(
     : null;
 
   if (fromGeneration) {
-    const preview = await fromGeneration.getPreviewLink(OPENCODE_PORT);
+    const preview = await fromGeneration.getPreviewLink(getSandboxServerPort());
     const baseUrl = preview.url;
     const health = await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl), preview.token), {
       method: "GET",
@@ -368,7 +368,7 @@ async function getOrCreateDaytonaSandbox(
   onLifecycle?.("opencode_starting", {
     conversationId: config.conversationId,
     sandboxId: created.id,
-    port: OPENCODE_PORT,
+    port: getSandboxServerPort(),
   });
 
   await created.process.executeCommand(
@@ -378,7 +378,7 @@ async function getOrCreateDaytonaSandbox(
     10,
   );
 
-  const preview = await created.getPreviewLink(OPENCODE_PORT);
+  const preview = await created.getPreviewLink(getSandboxServerPort());
   const baseUrl = preview.url;
 
   onLifecycle?.("opencode_waiting_ready", {

@@ -2,7 +2,7 @@ import { SandboxAgent } from "sandbox-agent";
 
 async function listSandboxAgentCandidates(client: SandboxAgent): Promise<string[]> {
   const listed = await client.listAgents();
-  const preferred = ["claude", "opencode"] as const;
+  const preferred = ["claude"] as const;
   const selected: string[] = [];
 
   for (const candidate of preferred) {

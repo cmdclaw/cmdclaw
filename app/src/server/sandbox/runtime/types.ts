@@ -9,6 +9,7 @@ export interface SandboxSessionBridge {
 
 export interface SandboxRuntimeAdapterOptions {
   serverUrl: string;
+  sandboxAgentBaseUrl: string;
   opencodeBaseUrl: string;
   fetch?: typeof fetch;
 }

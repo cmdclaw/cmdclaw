@@ -5,7 +5,7 @@ import { SandboxAgent } from "sandbox-agent";
 void dotenvConfig;
 
 const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
-const PORT = Number(process.env.SANDBOX_AGENT_PORT || "4096");
+const PORT = Number(process.env.SANDBOX_AGENT_PORT || "2468");
 const agent = process.env.SANDBOX_AGENT_ID || "opencode";
 const promptText =
   process.env.SANDBOX_AGENT_PROMPT ||

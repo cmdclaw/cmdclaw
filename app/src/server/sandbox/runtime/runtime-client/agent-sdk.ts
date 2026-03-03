@@ -275,8 +275,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
 async function createSandboxAgentRuntimeClient(
   options: SandboxRuntimeAdapterOptions,
 ): Promise<OpencodeClient> {
+  console.info(
+    `[SandboxRuntime] agentsdk client connecting to ${options.sandboxAgentBaseUrl} (opencode via ${options.opencodeBaseUrl})`,
+  );
   const sandboxAgent = await SandboxAgent.connect({
-    baseUrl: options.serverUrl,
+    baseUrl: options.sandboxAgentBaseUrl,
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
   const bus = createAsyncEventBus();
@@ -306,7 +309,7 @@ async function createSandboxAgentRuntimeClient(
     result: Record<string, unknown>;
   }): Promise<void> {
     const url = new URL(
-      `${options.serverUrl.replace(/\/+$/, "")}/v1/acp/${encodeURIComponent(input.serverId)}`,
+      `${options.sandboxAgentBaseUrl.replace(/\/+$/, "")}/v1/acp/${encodeURIComponent(input.serverId)}`,
     );
     url.searchParams.set("agent", input.agent);
     console.info(

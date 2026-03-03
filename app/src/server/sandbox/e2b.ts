@@ -14,10 +14,10 @@ import { decrypt } from "@/server/utils/encryption";
 import { logServerEvent, type ObservabilityContext } from "@/server/utils/observability";
 import type { SandboxBackend, ExecuteResult } from "./types";
 import {
-  OPENCODE_PORT,
   createSandboxRuntimeClient,
   getSandboxAgentRuntime,
   getSandboxReadinessUrl,
+  getSandboxServerPort,
   getSandboxServerStartCommand,
 } from "./opencode-runtime";
 
@@ -163,7 +163,8 @@ export async function getOrCreateSandbox(
   if (conv?.opencodeSandboxId) {
     const connected = await connectSandboxById(conv.opencodeSandboxId);
     if (connected) {
-      const serverUrl = `https://${connected.getHost(OPENCODE_PORT)}`;
+      const serverPort = getSandboxServerPort();
+      const serverUrl = `https://${connected.getHost(serverPort)}`;
       const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
         () => null,
       );
@@ -210,7 +211,8 @@ export async function getOrCreateSandbox(
   if (persistedGeneration?.sandboxId) {
     const connected = await connectSandboxById(persistedGeneration.sandboxId);
     if (connected) {
-      const serverUrl = `https://${connected.getHost(OPENCODE_PORT)}`;
+      const serverPort = getSandboxServerPort();
+      const serverUrl = `https://${connected.getHost(serverPort)}`;
       const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
         () => null,
       );
@@ -317,7 +319,7 @@ export async function getOrCreateSandbox(
     {
       conversationId: config.conversationId,
       sandboxId: sandbox.sandboxId,
-      port: OPENCODE_PORT,
+      port: getSandboxServerPort(),
       runtime: getSandboxAgentRuntime(),
     },
     { ...telemetryContext, sandboxId: sandbox.sandboxId },
@@ -325,7 +327,7 @@ export async function getOrCreateSandbox(
   onLifecycle?.("opencode_starting", {
     conversationId: config.conversationId,
     sandboxId: sandbox.sandboxId,
-    port: OPENCODE_PORT,
+    port: getSandboxServerPort(),
   });
   const stderrBuffer: string[] = [];
   try {
@@ -367,7 +369,8 @@ export async function getOrCreateSandbox(
   }
 
   // Get the public URL for the sandbox port
-  const serverUrl = `https://${sandbox.getHost(OPENCODE_PORT)}`;
+  const serverPort = getSandboxServerPort();
+  const serverUrl = `https://${sandbox.getHost(serverPort)}`;
   const serverReadyStart = Date.now();
   onLifecycle?.("opencode_waiting_ready", {
     conversationId: config.conversationId,
@@ -428,7 +431,8 @@ export async function getSandboxStateDurable(
   if (conv?.opencodeSandboxId) {
     const connectedByConversation = await connectSandboxById(conv.opencodeSandboxId);
     if (connectedByConversation) {
-      const serverUrl = `https://${connectedByConversation.getHost(OPENCODE_PORT)}`;
+      const serverPort = getSandboxServerPort();
+      const serverUrl = `https://${connectedByConversation.getHost(serverPort)}`;
       const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
         () => null,
       );
@@ -474,7 +478,8 @@ export async function getSandboxStateDurable(
   if (!connected) {
     return undefined;
   }
-  const serverUrl = `https://${connected.getHost(OPENCODE_PORT)}`;
+  const serverPort = getSandboxServerPort();
+  const serverUrl = `https://${connected.getHost(serverPort)}`;
   const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
     () => null,
   );
@@ -837,9 +842,9 @@ export async function killSandbox(conversationId: string): Promise<void> {
   const state: SandboxState = {
     sandbox,
     client: await createSandboxRuntimeClient({
-      serverUrl: `https://${sandbox.getHost(OPENCODE_PORT)}`,
+      serverUrl: `https://${sandbox.getHost(getSandboxServerPort())}`,
     }),
-    serverUrl: `https://${sandbox.getHost(OPENCODE_PORT)}`,
+    serverUrl: `https://${sandbox.getHost(getSandboxServerPort())}`,
     reused: true,
   };
   try {
