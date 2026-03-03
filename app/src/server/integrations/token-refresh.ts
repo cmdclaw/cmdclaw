@@ -234,8 +234,13 @@ async function refreshAccessToken(token: TokenWithMetadata): Promise<string> {
       "Content-Type": "application/x-www-form-urlencoded",
     };
 
-    // Notion, Airtable, and Reddit require Basic auth header for token refresh
-    if (token.type === "notion" || token.type === "airtable" || token.type === "reddit") {
+    // Notion, Airtable, Reddit, and Twitter require Basic auth header for token refresh
+    if (
+      token.type === "notion" ||
+      token.type === "airtable" ||
+      token.type === "reddit" ||
+      token.type === "twitter"
+    ) {
       headers["Authorization"] = `Basic ${Buffer.from(
         `${config.clientId}:${config.clientSecret}`,
       ).toString("base64")}`;

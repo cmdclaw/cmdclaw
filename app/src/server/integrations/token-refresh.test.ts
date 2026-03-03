@@ -243,7 +243,7 @@ describe("token-refresh", () => {
     );
   });
 
-  it("uses provider-specific refresh headers for notion, airtable, and reddit", async () => {
+  it("uses provider-specific refresh headers for notion, airtable, reddit, and twitter", async () => {
     const captured: Array<{ headers: Headers; body: URLSearchParams }> = [];
     mswServer.use(
       http.post("https://oauth.example.com/token", async ({ request }) => {
@@ -279,7 +279,15 @@ describe("token-refresh", () => {
       type: "reddit",
     });
 
-    for (const [index] of ["notion", "airtable", "reddit"].entries()) {
+    await getValidAccessToken({
+      accessToken: "old-twitter",
+      refreshToken: "refresh-twitter",
+      expiresAt: new Date(Date.now() - 1),
+      integrationId: "int-twitter",
+      type: "twitter",
+    });
+
+    for (const [index] of ["notion", "airtable", "reddit", "twitter"].entries()) {
       const request = captured[index];
       expect(request).toBeDefined();
       expect(request!.headers.get("authorization")).toMatch(/^Basic /);
