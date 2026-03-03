@@ -47,8 +47,10 @@ export const template = Template({
     'bash -lc \'set -euo pipefail; sandbox-agent server --no-token --host 127.0.0.1 --port 4096 > /tmp/sandbox-agent-prewarm.log 2>&1 & pid=$!; ok=0; for i in $(seq 1 120); do if curl -fsS http://127.0.0.1:4096/v1/health >/dev/null 2>&1; then ok=1; break; fi; sleep 0.25; done; kill $pid || true; wait $pid || true; test "$ok" = "1"\'',
   )
   // Copy skills into .claude/skills
-  .runCmd("mkdir -p /app/.claude")
-  .copy(`${COMMON_ROOT}/skills`, "/app/.claude/skills")
+  .runCmd("mkdir -p /app/.agents")
+  .copy(`${COMMON_ROOT}/skills`, "/app/.agents/skills")
+  // symlink for claude
+  .runCmd("ln -s /app/.agents/skills /app/.claude/skills")
   // Copy setup script
   .copy(`${COMMON_ROOT}/setup.sh`, "/app/setup.sh")
   // allow to install packages from pip

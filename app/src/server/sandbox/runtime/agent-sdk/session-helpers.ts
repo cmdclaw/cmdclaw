@@ -2,44 +2,32 @@ import { SandboxAgent } from "sandbox-agent";
 
 async function listSandboxAgentCandidates(client: SandboxAgent): Promise<string[]> {
   const listed = await client.listAgents();
-  const preferredAgentOrder = ["codex", "claude", "opencode", "amp", "pi", "cursor"] as const;
-  let installedIds = new Set(
-    listed.agents.filter((agent) => agent.installed).map((agent) => agent.id),
-  );
+  const preferred = ["claude", "opencode"] as const;
   const selected: string[] = [];
 
-  for (let index = 0; index < preferredAgentOrder.length; index += 1) {
-    const candidate = preferredAgentOrder[index];
-    if (installedIds.has(candidate)) {
+  for (const candidate of preferred) {
+    if (listed.agents.some((agent) => agent.id === candidate && agent.installed)) {
       selected.push(candidate);
       continue;
     }
     try {
-      // eslint-disable-next-line no-await-in-loop -- installation order follows preference order
+      // eslint-disable-next-line no-await-in-loop -- ordered install attempts
       await client.installAgent(candidate);
-      // eslint-disable-next-line no-await-in-loop -- refresh installed list after install attempt
+      // eslint-disable-next-line no-await-in-loop -- refresh list after install attempt
       const refreshed = await client.listAgents();
-      installedIds = new Set(
-        refreshed.agents.filter((agent) => agent.installed).map((agent) => agent.id),
-      );
-      if (installedIds.has(candidate)) {
+      if (refreshed.agents.some((agent) => agent.id === candidate && agent.installed)) {
         selected.push(candidate);
       }
-    } catch {
-      // Try next candidate.
+    } catch (error) {
+      console.warn(`[SandboxRuntime] Failed to install ${candidate} agent: ${String(error)}`);
     }
   }
 
-  const fallback = listed.agents.find((agent) => agent.installed && agent.id !== "mock");
-  if (fallback && !selected.includes(fallback.id)) {
-    selected.push(fallback.id);
+  if (selected.length > 0) {
+    return selected;
   }
 
-  if (selected.length === 0) {
-    throw new Error("sandbox-agent has no installed non-mock agent.");
-  }
-
-  return selected;
+  throw new Error("sandbox-agent requires at least one installed agent: claude or opencode.");
 }
 
 export async function createSandboxAgentSessionWithFallback(input: {

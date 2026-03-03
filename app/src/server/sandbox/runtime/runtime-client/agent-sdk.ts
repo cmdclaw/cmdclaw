@@ -2,7 +2,6 @@ import { type Event as OpencodeEvent, type OpencodeClient } from "@opencode-ai/s
 import { SandboxAgent } from "sandbox-agent";
 import type { SandboxRuntimeAdapterOptions, SandboxRuntimeClientImplementation } from "../types";
 import { createSandboxAgentSessionWithFallback } from "../agent-sdk/session-helpers";
-import { createSandboxOpencodeClient } from "./opencode";
 
 const SANDBOX_AGENT_PROMPT_TIMEOUT_MS = 180_000;
 
@@ -33,6 +32,22 @@ type SessionUpdatePayload = {
   rawOutput?: unknown;
 };
 
+type PermissionOptionPayload = {
+  optionId?: string;
+  kind?: string;
+  name?: string;
+};
+
+type SessionPermissionRequestPayload = {
+  sessionId?: string;
+  toolCall?: {
+    toolCallId?: string;
+    title?: string;
+    rawInput?: Record<string, unknown>;
+  };
+  options?: PermissionOptionPayload[];
+};
+
 function extractSessionUpdatePayload(payload: unknown): SessionUpdatePayload | undefined {
   if (!payload || typeof payload !== "object") {
     return undefined;
@@ -59,6 +74,20 @@ function extractSessionUpdatePayload(payload: unknown): SessionUpdatePayload | u
   return undefined;
 }
 
+function extractPermissionRequestPayload(
+  payload: unknown,
+): SessionPermissionRequestPayload | undefined {
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const parsed = payload as Record<string, unknown>;
+  const params = parsed.params;
+  if (!params || typeof params !== "object") {
+    return undefined;
+  }
+  return params as SessionPermissionRequestPayload;
+}
+
 function resolveModelId(model: unknown): string | null {
   if (!model || typeof model !== "object") {
     return null;
@@ -75,17 +104,37 @@ function resolveModelId(model: unknown): string | null {
   return null;
 }
 
-function resolveModelRef(model: unknown): { providerID: string; modelID: string } | null {
-  if (!model || typeof model !== "object") {
+function selectPermissionOptionId(input: {
+  reply: "always" | "reject";
+  optionIds: string[];
+}): string | null {
+  const normalized = new Set(input.optionIds.map((option) => option.toLowerCase()));
+  if (input.reply === "always") {
+    if (normalized.has("allow_always")) {
+      return "allow_always";
+    }
+    if (normalized.has("allow")) {
+      return "allow";
+    }
+    if (normalized.has("allow_once")) {
+      return "allow_once";
+    }
     return null;
   }
-  const parsed = model as Record<string, unknown>;
-  const provider = parsed.providerID;
-  const modelId = parsed.modelID;
-  if (typeof provider === "string" && typeof modelId === "string") {
-    return { providerID: provider, modelID: modelId };
+  if (normalized.has("reject")) {
+    return "reject";
+  }
+  if (normalized.has("reject_once")) {
+    return "reject_once";
+  }
+  if (normalized.has("reject_always")) {
+    return "reject_always";
   }
   return null;
+}
+
+function toPermissionRequestId(sessionId: string, requestId: number | string): string {
+  return `perm:${sessionId}:${String(requestId)}`;
 }
 
 function isAssistantFacingUpdate(update: SessionUpdatePayload | undefined): boolean {
@@ -207,93 +256,6 @@ function toPromptText(parts: OpenCodePromptPart[]): string {
     .join("\n\n");
 }
 
-function pickContentText(value: unknown): string | null {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-  const chunks = value
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return "";
-      }
-      const part = item as Record<string, unknown>;
-      if (typeof part.text === "string") {
-        return part.text;
-      }
-      const inner = part.content;
-      if (inner && typeof inner === "object") {
-        const innerPart = inner as Record<string, unknown>;
-        if (typeof innerPart.text === "string") {
-          return innerPart.text;
-        }
-      }
-      return "";
-    })
-    .filter(Boolean);
-  return chunks.length > 0 ? chunks.join("") : null;
-}
-
-function extractPromptResponseText(response: unknown): string | null {
-  if (!response || typeof response !== "object") {
-    return null;
-  }
-  const record = response as Record<string, unknown>;
-
-  if (typeof record.text === "string" && record.text.trim()) {
-    return record.text;
-  }
-  if (typeof record.output_text === "string" && record.output_text.trim()) {
-    return record.output_text;
-  }
-  if (typeof record.message === "string" && record.message.trim()) {
-    return record.message;
-  }
-
-  return pickContentText(record.content) ?? pickContentText(record.output) ?? null;
-}
-
-function extractAssistantTextFromSessionMessages(payload: unknown): string | null {
-  if (!Array.isArray(payload)) {
-    return null;
-  }
-
-  for (let i = payload.length - 1; i >= 0; i -= 1) {
-    const item = payload[i];
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-    const info = (item as Record<string, unknown>).info as Record<string, unknown> | undefined;
-    const role = info?.role;
-    if (role !== "assistant") {
-      continue;
-    }
-
-    const parts = (item as Record<string, unknown>).parts;
-    if (!Array.isArray(parts)) {
-      continue;
-    }
-    const text = parts
-      .map((part) => {
-        if (!part || typeof part !== "object") {
-          return "";
-        }
-        const entry = part as Record<string, unknown>;
-        if (entry.type === "text" && typeof entry.text === "string") {
-          return entry.text;
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("");
-
-    if (text.trim()) {
-      return text;
-    }
-  }
-
-  return null;
-}
-
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -317,10 +279,6 @@ async function createSandboxAgentRuntimeClient(
     baseUrl: options.serverUrl,
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
-  const fallbackClient = createSandboxOpencodeClient({
-    baseUrl: options.opencodeBaseUrl,
-    fetch: options.fetch,
-  });
   const bus = createAsyncEventBus();
   const sessionStates = new Map<string, SessionState>();
   const sessionHandles = new Map<string, Awaited<ReturnType<SandboxAgent["createSession"]>>>();
@@ -329,7 +287,61 @@ async function createSandboxAgentRuntimeClient(
   const localSessionIdByCanonical = new Map<string, string>();
   const lastSeenEventIndexBySession = new Map<string, number>();
   const attachedSessionListeners = new Map<string, () => void>();
+  const pendingPermissionRequests = new Map<
+    string,
+    {
+      agent: string;
+      requestId: number | string;
+      optionIds: string[];
+    }
+  >();
+  const acpServerIdByAgent = new Map<string, string>();
   let serverConnectedEmitted = false;
+  const fetcher = options.fetch ?? fetch;
+
+  async function postAcpResult(input: {
+    agent: string;
+    serverId: string;
+    requestId: number | string;
+    result: Record<string, unknown>;
+  }): Promise<void> {
+    const url = new URL(
+      `${options.serverUrl.replace(/\/+$/, "")}/v1/acp/${encodeURIComponent(input.serverId)}`,
+    );
+    url.searchParams.set("agent", input.agent);
+    console.info(
+      `[SandboxRuntime] Posting ACP response serverId=${input.serverId} agent=${input.agent} requestId=${String(input.requestId)} url=${url.toString()}`,
+    );
+    const response = await fetcher(url.toString(), {
+      method: "POST",
+      headers: new Headers({ "content-type": "application/json" }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: input.requestId,
+        result: input.result,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Failed posting ACP response status=${response.status} serverId=${input.serverId} body=${body.slice(0, 300)}`,
+      );
+    }
+  }
+
+  async function resolveAcpServerId(agent: string): Promise<string> {
+    const cached = acpServerIdByAgent.get(agent);
+    if (cached) {
+      return cached;
+    }
+    const listed = await sandboxAgent.listAcpServers();
+    const matched = listed.servers.find((server) => server.agent === agent);
+    if (!matched) {
+      throw new Error(`No ACP server found for agent=${agent}`);
+    }
+    acpServerIdByAgent.set(agent, matched.serverId);
+    return matched.serverId;
+  }
 
   const resolveCanonicalSessionId = (sessionId: string): string =>
     canonicalSessionIdByAlias.get(sessionId) ?? sessionId;
@@ -470,6 +482,39 @@ async function createSandboxAgentRuntimeClient(
     }
   };
 
+  const applyPermissionRequest = (input: {
+    agent: string;
+    canonicalSessionId: string;
+    requestId: number | string;
+    payload: SessionPermissionRequestPayload | undefined;
+  }) => {
+    if (!input.payload) {
+      return;
+    }
+    const requestId = toPermissionRequestId(input.canonicalSessionId, input.requestId);
+    const optionIds = Array.isArray(input.payload.options)
+      ? input.payload.options
+          .map((option) => (typeof option.optionId === "string" ? option.optionId : ""))
+          .filter(Boolean)
+      : [];
+    pendingPermissionRequests.set(requestId, {
+      agent: input.agent,
+      requestId: input.requestId,
+      optionIds,
+    });
+
+    const rawInput = input.payload.toolCall?.rawInput;
+    const command = rawInput && typeof rawInput.command === "string" ? rawInput.command : undefined;
+    bus.emit({
+      type: "permission.asked",
+      properties: {
+        id: requestId,
+        permission: input.payload.toolCall?.title || "tool_call",
+        ...(command ? { patterns: [command] } : {}),
+      },
+    } as OpencodeEvent);
+  };
+
   const ensureSessionListener = (sessionId: string) => {
     const canonicalSessionId = resolveCanonicalSessionId(sessionId);
     const localSessionId = localSessionIdByCanonical.get(canonicalSessionId) ?? canonicalSessionId;
@@ -480,54 +525,102 @@ async function createSandboxAgentRuntimeClient(
     const unsubscribe = existingHandle
       ? existingHandle.onEvent((event) => {
           const payload = event.payload as {
+            id?: number | string;
             method?: string;
-            params?: {
-              sessionId?: string;
-              update?: Record<string, unknown>;
-            };
+            params?: unknown;
           };
-          if (payload?.method !== "session/update") {
+          if (payload?.method === "session/update") {
+            const update = extractSessionUpdatePayload(payload);
+            if (!update) {
+              console.warn(
+                `[SandboxRuntime] session/update missing payload canonical=${canonicalSessionId}`,
+              );
+              return;
+            }
+            applySessionUpdate(canonicalSessionId, update);
+            if (typeof event.eventIndex === "number") {
+              lastSeenEventIndexBySession.set(
+                canonicalSessionId,
+                Math.max(
+                  event.eventIndex,
+                  lastSeenEventIndexBySession.get(canonicalSessionId) ?? 0,
+                ),
+              );
+            }
             return;
           }
-          const update = extractSessionUpdatePayload(payload);
-          if (!update) {
-            console.warn(
-              `[SandboxRuntime] session/update missing payload canonical=${canonicalSessionId}`,
-            );
-            return;
-          }
-          applySessionUpdate(canonicalSessionId, update);
-          if (typeof event.eventIndex === "number") {
-            lastSeenEventIndexBySession.set(
+          if (payload?.method === "session/request_permission") {
+            if (typeof payload.id !== "number" && typeof payload.id !== "string") {
+              return;
+            }
+            applyPermissionRequest({
+              agent: existingHandle.agent,
               canonicalSessionId,
-              Math.max(event.eventIndex, lastSeenEventIndexBySession.get(canonicalSessionId) ?? 0),
-            );
+              requestId: payload.id,
+              payload: extractPermissionRequestPayload(payload),
+            });
+            if (typeof event.eventIndex === "number") {
+              lastSeenEventIndexBySession.set(
+                canonicalSessionId,
+                Math.max(
+                  event.eventIndex,
+                  lastSeenEventIndexBySession.get(canonicalSessionId) ?? 0,
+                ),
+              );
+            }
+            return;
           }
         })
       : sandboxAgent.onSessionEvent(localSessionId, (event) => {
           const payload = event.payload as {
+            id?: number | string;
             method?: string;
-            params?: {
-              sessionId?: string;
-              update?: Record<string, unknown>;
-            };
+            params?: unknown;
           };
-          if (payload?.method !== "session/update") {
+          if (payload?.method === "session/update") {
+            const update = extractSessionUpdatePayload(payload);
+            if (!update) {
+              console.warn(
+                `[SandboxRuntime] onSessionEvent session/update missing payload canonical=${canonicalSessionId} local=${localSessionId}`,
+              );
+              return;
+            }
+            applySessionUpdate(canonicalSessionId, update);
+            if (typeof event.eventIndex === "number") {
+              lastSeenEventIndexBySession.set(
+                canonicalSessionId,
+                Math.max(
+                  event.eventIndex,
+                  lastSeenEventIndexBySession.get(canonicalSessionId) ?? 0,
+                ),
+              );
+            }
             return;
           }
-          const update = extractSessionUpdatePayload(payload);
-          if (!update) {
-            console.warn(
-              `[SandboxRuntime] onSessionEvent session/update missing payload canonical=${canonicalSessionId} local=${localSessionId}`,
-            );
-            return;
-          }
-          applySessionUpdate(canonicalSessionId, update);
-          if (typeof event.eventIndex === "number") {
-            lastSeenEventIndexBySession.set(
+          if (payload?.method === "session/request_permission") {
+            if (typeof payload.id !== "number" && typeof payload.id !== "string") {
+              return;
+            }
+            const knownHandle = sessionHandles.get(canonicalSessionId);
+            if (!knownHandle) {
+              return;
+            }
+            applyPermissionRequest({
+              agent: knownHandle.agent,
               canonicalSessionId,
-              Math.max(event.eventIndex, lastSeenEventIndexBySession.get(canonicalSessionId) ?? 0),
-            );
+              requestId: payload.id,
+              payload: extractPermissionRequestPayload(payload),
+            });
+            if (typeof event.eventIndex === "number") {
+              lastSeenEventIndexBySession.set(
+                canonicalSessionId,
+                Math.max(
+                  event.eventIndex,
+                  lastSeenEventIndexBySession.get(canonicalSessionId) ?? 0,
+                ),
+              );
+            }
+            return;
           }
         });
     attachedSessionListeners.set(canonicalSessionId, unsubscribe);
@@ -622,7 +715,7 @@ async function createSandboxAgentRuntimeClient(
       prompt: async ({
         sessionID,
         parts,
-        system,
+        system: _system,
         model,
         noReply,
       }: {
@@ -734,6 +827,16 @@ async function createSandboxAgentRuntimeClient(
                   foundAgentUpdates = true;
                 }
                 applySessionUpdate(canonicalSessionId, update);
+              } else if (payload.method === "session/request_permission") {
+                const requestId = (event.payload as { id?: unknown }).id;
+                if (typeof requestId === "number" || typeof requestId === "string") {
+                  applyPermissionRequest({
+                    agent: handle.agent,
+                    canonicalSessionId,
+                    requestId,
+                    payload: extractPermissionRequestPayload(event.payload),
+                  });
+                }
               }
               lastSeenEventIndexBySession.set(
                 canonicalSessionId,
@@ -749,76 +852,10 @@ async function createSandboxAgentRuntimeClient(
             `[SandboxRuntime] Replay scan session=${canonicalSessionId} local=${localSessionId} updates=${updateEventsSeen} assistantUpdates=${assistantUpdatesSeen} found=${foundAgentUpdates}`,
           );
 
-          // If no streamed updates were observed, synthesize a final text update when possible.
           if (!foundAgentUpdates && !noReply) {
-            console.info(
-              `[SandboxRuntime] No assistant updates detected for session=${canonicalSessionId}`,
+            console.warn(
+              `[SandboxRuntime] No assistant updates detected for session=${canonicalSessionId}; direct SDK response may have no stream-compatible updates.`,
             );
-            const fallbackSessionId =
-              remoteSessionIdByCanonical.get(canonicalSessionId) ?? canonicalSessionId;
-            const modelRef = resolveModelRef(model);
-            const shouldPassFallbackModel =
-              modelRef && !`${modelRef.providerID}/${modelRef.modelID}`.startsWith("openai/");
-            try {
-              await (
-                fallbackClient.session.prompt as (
-                  input: Record<string, unknown>,
-                ) => Promise<unknown>
-              )({
-                sessionID: fallbackSessionId,
-                parts,
-                ...(system ? { system } : {}),
-                ...(shouldPassFallbackModel ? { model: modelRef } : {}),
-              });
-            } catch (error) {
-              console.warn(
-                `[SandboxRuntime] Fallback /opencode prompt failed session=${canonicalSessionId} remote=${fallbackSessionId}: ${String(error)}`,
-              );
-            }
-
-            let fallbackText = extractPromptResponseText(response);
-            if (!fallbackText) {
-              try {
-                const messagesResult = await fallbackClient.session.messages({
-                  sessionID: fallbackSessionId,
-                  limit: 20,
-                });
-                if (!messagesResult.error) {
-                  const count = Array.isArray(messagesResult.data) ? messagesResult.data.length : 0;
-                  console.info(
-                    `[SandboxRuntime] Fallback messages fetched session=${canonicalSessionId} remote=${fallbackSessionId} count=${count}`,
-                  );
-                  fallbackText = extractAssistantTextFromSessionMessages(messagesResult.data);
-                } else {
-                  console.warn(
-                    `[SandboxRuntime] Fallback /opencode messages returned error session=${canonicalSessionId} remote=${fallbackSessionId}: ${JSON.stringify(messagesResult.error)}`,
-                  );
-                }
-              } catch (error) {
-                console.warn(
-                  `[SandboxRuntime] Fallback /opencode messages failed session=${canonicalSessionId} remote=${fallbackSessionId}: ${String(error)}`,
-                );
-              }
-            }
-            if (fallbackText) {
-              console.info(
-                `[SandboxRuntime] Emitting synthetic assistant text session=${canonicalSessionId} chars=${fallbackText.length}`,
-              );
-              const state = ensureSessionState(canonicalSessionId);
-              emitAssistantMessageHeader(canonicalSessionId, state);
-              state.text = fallbackText;
-              bus.emit({
-                type: "message.part.updated",
-                properties: {
-                  part: {
-                    type: "text",
-                    id: state.textPartId,
-                    messageID: state.assistantMessageId,
-                    text: state.text,
-                  },
-                },
-              } as OpencodeEvent);
-            }
           }
 
           // Small grace window for delayed onSessionEvent callbacks.
@@ -850,9 +887,61 @@ async function createSandboxAgentRuntimeClient(
         }
       },
     },
-    auth: fallbackClient.auth,
-    permission: fallbackClient.permission,
-    question: fallbackClient.question,
+    auth: {
+      set: async (_input: Record<string, unknown>) => {
+        console.warn("[SandboxRuntime] auth.set is not implemented for agentsdk runtime");
+        return { data: null, error: null };
+      },
+    },
+    permission: {
+      reply: async (input: Record<string, unknown>) => {
+        const requestID = typeof input.requestID === "string" ? input.requestID : null;
+        const reply =
+          input.reply === "always" || input.reply === "reject"
+            ? (input.reply as "always" | "reject")
+            : null;
+        if (!requestID || !reply) {
+          throw new Error("Invalid permission.reply payload for agentsdk runtime");
+        }
+        const pending = pendingPermissionRequests.get(requestID);
+        if (!pending) {
+          throw new Error(`Unknown permission request id: ${requestID}`);
+        }
+        const selectedOptionId = selectPermissionOptionId({
+          reply,
+          optionIds: pending.optionIds,
+        });
+        if (!selectedOptionId) {
+          throw new Error(
+            `No compatible permission option found for request=${requestID} reply=${reply} options=${pending.optionIds.join(",")}`,
+          );
+        }
+        const serverId = await resolveAcpServerId(pending.agent);
+        await postAcpResult({
+          agent: pending.agent,
+          serverId,
+          requestId: pending.requestId,
+          result: {
+            outcome: {
+              outcome: "selected",
+              optionId: selectedOptionId,
+            },
+          },
+        });
+        pendingPermissionRequests.delete(requestID);
+        return { data: null, error: null };
+      },
+    },
+    question: {
+      reply: async (_input: Record<string, unknown>) => {
+        console.warn("[SandboxRuntime] question.reply is not implemented for agentsdk runtime");
+        return { data: null, error: null };
+      },
+      reject: async (_input: Record<string, unknown>) => {
+        console.warn("[SandboxRuntime] question.reject is not implemented for agentsdk runtime");
+        return { data: null, error: null };
+      },
+    },
   } as unknown as OpencodeClient;
 
   return runtimeClient;

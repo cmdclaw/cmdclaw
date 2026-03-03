@@ -57,7 +57,11 @@
     "chat:e2b": "SANDBOX_DEFAULT=e2b bun run chat",
     "chat:daytona": "SANDBOX_DEFAULT=daytona bun run chat",
     "workflow": "bun scripts/workflow.ts",
-    "auth:inspect": "bun scripts/auth-inspect.ts"
+    "auth:inspect": "bun scripts/auth-inspect.ts",
+    "experiment:sandbox-agent:quickstart": "bun experiments/sandbox-agent-quickstart.ts",
+    "experiment:sandbox-agent:sdk-overview": "bun experiments/sandbox-agent-sdk-overview.ts",
+    "experiment:sandbox-agent:skills-config": "bun experiments/sandbox-agent-skills-config.ts",
+    "experiment:sandbox-agent:e2b-trace": "bun experiments/sandbox-agent-e2b-trace.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

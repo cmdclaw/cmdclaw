@@ -3,6 +3,8 @@
 .vercel
 .env*.local
 
-experiments/    
+experiments/
+!app/experiments/
+!app/experiments/**
 
 .agents
