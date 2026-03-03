@@ -53,6 +53,91 @@ const { positionals, values } = parseArgs({
 
 const [command, subcommand, ...args] = positionals;
 
+type UserSummary = {
+  id: string | null;
+  name: string | null;
+  username: string | null;
+  headline: string | null;
+  profileUrl: string | null;
+};
+
+const userSummaryCache = new Map<string, Promise<UserSummary | null>>();
+
+function normalizeUsername(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length === 0) {
+    return null;
+  }
+
+  const value = raw.trim();
+  if (value.length === 0) {
+    return null;
+  }
+
+  const linkedinPathMatch = value.match(/linkedin\.com\/in\/([^/?#]+)/i);
+  if (linkedinPathMatch?.[1]) {
+    return linkedinPathMatch[1];
+  }
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return null;
+  }
+
+  return value;
+}
+
+async function getUserSummary(providerId: unknown): Promise<UserSummary | null> {
+  if (typeof providerId !== "string" || providerId.length === 0) {
+    return null;
+  }
+
+  const cached = userSummaryCache.get(providerId);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    try {
+      const profile = await api<Record<string, JsonValue>>(
+        `/users/${encodeURIComponent(providerId)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+      );
+      const firstName = typeof profile.first_name === "string" ? profile.first_name : "";
+      const lastName = typeof profile.last_name === "string" ? profile.last_name : "";
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      return {
+        id: typeof profile.provider_id === "string" ? profile.provider_id : null,
+        name:
+          (typeof profile.display_name === "string" ? profile.display_name : null) ||
+          (fullName.length > 0 ? fullName : null),
+        username: normalizeUsername(profile.public_identifier),
+        headline: typeof profile.headline === "string" ? profile.headline : null,
+        profileUrl: normalizeUsername(profile.public_identifier),
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  userSummaryCache.set(providerId, promise);
+  return promise;
+}
+
+async function getLatestMessage(chatId: string): Promise<Record<string, JsonValue> | null> {
+  const params = new URLSearchParams({
+    account_id: LINKEDIN_ACCOUNT_ID!,
+    limit: "1",
+  });
+  const response = await api<Record<string, JsonValue>>(`/chats/${chatId}/messages?${params}`);
+  const items = Array.isArray(response.items) ? response.items : [];
+  const firstItem = items[0];
+
+  if (!firstItem || typeof firstItem !== "object") {
+    return null;
+  }
+
+  return firstItem as Record<string, JsonValue>;
+}
+
 // ========== MESSAGING ==========
 
 async function listChats() {
@@ -66,35 +151,49 @@ async function listChats() {
   }
 
   const data = await api(`/chats?${params}`);
-  const chats =
-    data.items?.map((c: Record<string, JsonValue>) => ({
-      id: c.id,
-      attendees: c.attendees?.map((a: Record<string, JsonValue>) => ({
-        id: a.provider_id,
-        name: a.display_name,
-      })),
-      lastMessage: c.last_message?.text?.substring(0, 100),
-      unreadCount: c.unread_count,
-      updatedAt: c.updated_at,
-    })) || [];
+  const items = Array.isArray(data.items) ? (data.items as Record<string, JsonValue>[]) : [];
+  const chats = await Promise.all(
+    items.map(async (c) => {
+      const participant = await getUserSummary(c.attendee_provider_id);
+      const latestMessage = await getLatestMessage(String(c.id));
+      const latestMessageSender = await getUserSummary(latestMessage?.sender_id);
+      const latestText =
+        typeof latestMessage?.text === "string" ? latestMessage.text.slice(0, 100) : null;
+
+      return {
+        id: c.id,
+        participant,
+        lastMessage: latestText,
+        lastMessageSenderUsername: latestMessageSender?.username ?? null,
+        lastMessageSenderName: latestMessageSender?.name ?? null,
+        unreadCount: c.unread_count,
+        updatedAt: c.updated_at ?? c.timestamp ?? null,
+      };
+    }),
+  );
 
   console.log(JSON.stringify({ items: chats, cursor: data.cursor }, null, 2));
 }
 
 async function getChat(chatId: string) {
-  const data = await api(`/chats/${chatId}?account_id=${LINKEDIN_ACCOUNT_ID}`);
+  const data = await api<Record<string, JsonValue>>(
+    `/chats/${chatId}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+  );
+  const participant = await getUserSummary(data.attendee_provider_id);
+  const latestMessage = await getLatestMessage(chatId);
+  const latestMessageSender = await getUserSummary(latestMessage?.sender_id);
+
   console.log(
     JSON.stringify(
       {
         id: data.id,
-        attendees: data.attendees?.map((a: Record<string, JsonValue>) => ({
-          id: a.provider_id,
-          name: a.display_name,
-          headline: a.headline,
-        })),
+        participant,
+        lastMessage: typeof latestMessage?.text === "string" ? latestMessage.text : null,
+        lastMessageSenderUsername: latestMessageSender?.username ?? null,
+        lastMessageSenderName: latestMessageSender?.name ?? null,
         unreadCount: data.unread_count,
         createdAt: data.created_at,
-        updatedAt: data.updated_at,
+        updatedAt: data.updated_at ?? data.timestamp ?? null,
       },
       null,
       2,
@@ -113,15 +212,20 @@ async function listMessages(chatId: string) {
   }
 
   const data = await api(`/chats/${chatId}/messages?${params}`);
-  const messages =
-    data.items?.map((m: Record<string, JsonValue>) => ({
-      id: m.id,
-      text: m.text,
-      sender: m.sender?.display_name,
-      senderId: m.sender?.provider_id,
-      timestamp: m.timestamp,
-      isFromMe: m.is_from_me,
-    })) || [];
+  const items = Array.isArray(data.items) ? (data.items as Record<string, JsonValue>[]) : [];
+  const messages = await Promise.all(
+    items.map(async (m) => {
+      const sender = await getUserSummary(m.sender_id ?? m.sender?.provider_id);
+      return {
+        id: m.id,
+        text: m.text,
+        senderName: sender?.name ?? null,
+        senderUsername: sender?.username ?? null,
+        timestamp: m.timestamp,
+        isFromMe: Boolean(m.is_from_me ?? m.is_sender),
+      };
+    }),
+  );
 
   console.log(JSON.stringify({ items: messages, cursor: data.cursor }, null, 2));
 }
