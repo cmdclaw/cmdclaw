@@ -1,5 +1,6 @@
 import { parseArgs } from "util";
 import { prepareEmailHtmlBody } from "../../_shared/email-body-format";
+import { encodeRfc2047HeaderValue } from "./encode-rfc2047-header";
 import { formatEmailDate } from "./format-email-date";
 
 const CLI_ARGS = process.argv.slice(2);
@@ -208,10 +209,11 @@ function buildRawEmail() {
   }
 
   const { html } = prepareEmailHtmlBody(values.body);
+  const subject = encodeRfc2047HeaderValue(values.subject);
   const emailLines = [
     `To: ${values.to}`,
     values.cc ? `Cc: ${values.cc}` : "",
-    `Subject: ${values.subject}`,
+    `Subject: ${subject}`,
     "Content-Type: text/html; charset=utf-8",
     "",
     html,
