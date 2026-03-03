@@ -182,6 +182,10 @@ export const conversation = pgTable(
     opencodeSessionId: text("opencode_session_id"),
     // OpenCode sandbox ID bound to this conversation
     opencodeSandboxId: text("opencode_sandbox_id"),
+    // Last resolved sandbox provider used for this conversation
+    lastSandboxProvider: text("last_sandbox_provider"),
+    // Last resolved runtime harness used for this conversation
+    lastRuntimeHarness: text("last_runtime_harness"),
     model: text("model").default("claude-sonnet-4-6"),
     // Generation tracking
     generationStatus: generationStatusEnum("generation_status").default("idle").notNull(),
@@ -354,6 +358,10 @@ export const generation = pgTable(
     executionPolicy: jsonb("execution_policy").$type<GenerationExecutionPolicy>(),
     // E2B state
     sandboxId: text("sandbox_id"),
+    // Resolved execution metadata for deterministic resume/debugging
+    sandboxProvider: text("sandbox_provider"),
+    runtimeHarness: text("runtime_harness"),
+    runtimeProtocolVersion: text("runtime_protocol_version"),
     isPaused: boolean("is_paused").default(false).notNull(),
     // Metadata
     errorMessage: text("error_message"),
@@ -479,6 +487,10 @@ export const workflow = pgTable(
     allowedCustomIntegrations: text("allowed_custom_integrations").array().notNull().default([]),
     // Schedule configuration for time-based triggers (JSON object)
     schedule: jsonb("schedule"),
+    // Builder conversation for the workflow editor chat panel
+    builderConversationId: text("builder_conversation_id").references(() => conversation.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -1054,7 +1066,7 @@ export const sessionTranscript = pgTable(
   (table) => [
     index("session_transcript_user_id_idx").on(table.userId),
     index("session_transcript_conversation_id_idx").on(table.conversationId),
-    unique("session_transcript_user_path_idx").on(table.userId, table.path),
+    unique("session_transcript_user_path_idx").on(table.path, table.userId),
   ],
 );
 

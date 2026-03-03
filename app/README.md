@@ -7,6 +7,40 @@ bun install
 bun run dev
 ```
 
+Optional sandbox runtime selector:
+
+- `SANDBOX_AGENT_RUNTIME=agentsdk` (default): run `sandbox-agent` and connect via OpenCode-compatible `/opencode` endpoints.
+- `SANDBOX_AGENT_RUNTIME=opencode`: run the legacy `opencode serve` server.
+
+### Sandbox Architecture
+
+The sandbox stack now uses a two-axis architecture:
+
+- sandbox provider facade (`e2b`, `daytona`, future providers)
+- runtime harness facade (`opencode`, `agent-sdk`, future harnesses)
+
+Core modules live in `src/server/sandbox/`:
+
+- `core/` canonical types + orchestration
+- `selection/` policy resolution + persistence
+- `providers/` provider registry
+- `harness/` harness registry
+- `adapters/` runtime event adapters
+- `prep/` sandbox pre-prompt services
+- `compat/` bridge layers for legacy clients
+
+Add a new sandbox provider in 3 files:
+
+1. implement provider in `providers/<name>.ts`
+2. register it in `providers/registry.ts`
+3. add tests for provider contract behavior
+
+Add a new runtime harness in 3 files:
+
+1. implement harness in `harness/<name>.ts`
+2. add adapter mapping in `adapters/`
+3. register harness in `harness/registry.ts` and add contract tests
+
 ### Testing
 
 ```bash

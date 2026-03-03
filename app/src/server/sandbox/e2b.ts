@@ -1,4 +1,4 @@
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { eq, and, asc, isNotNull } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { env } from "@/env";
@@ -13,11 +13,17 @@ import { downloadFromS3 } from "@/server/storage/s3-client";
 import { decrypt } from "@/server/utils/encryption";
 import { logServerEvent, type ObservabilityContext } from "@/server/utils/observability";
 import type { SandboxBackend, ExecuteResult } from "./types";
+import {
+  OPENCODE_PORT,
+  createSandboxRuntimeClient,
+  getSandboxAgentRuntime,
+  getSandboxReadinessUrl,
+  getSandboxServerStartCommand,
+} from "./opencode-runtime";
 
 // Use custom template with OpenCode pre-installed
 const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
 const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const OPENCODE_PORT = 4096;
 
 function resolveSandboxAppUrl(): string {
   const configuredUrl = env.E2B_CALLBACK_BASE_URL ?? env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
@@ -103,20 +109,21 @@ function formatErrorMessage(error: unknown): string {
  * Wait for OpenCode server to be ready
  */
 async function waitForServer(url: string, maxWait = 30000): Promise<void> {
+  const readinessUrl = getSandboxReadinessUrl(url);
   const start = Date.now();
   let attempts = 0;
   let lastError: string | null = null;
   while (true) {
     if (Date.now() - start >= maxWait) {
       throw new Error(
-        `OpenCode server in sandbox failed to start (url=${url}, attempts=${attempts}, waitedMs=${Date.now() - start}, lastError=${lastError || "unknown"})`,
+        `OpenCode server in sandbox failed to start (url=${readinessUrl}, attempts=${attempts}, waitedMs=${Date.now() - start}, lastError=${lastError || "unknown"})`,
       );
     }
 
     attempts += 1;
     try {
       // eslint-disable-next-line no-await-in-loop -- readiness polling is intentional
-      const res = await fetch(`${url}/doc`, { method: "GET" });
+      const res = await fetch(readinessUrl, { method: "GET" });
       if (res.ok) {
         return;
       }
@@ -157,13 +164,15 @@ export async function getOrCreateSandbox(
     const connected = await connectSandboxById(conv.opencodeSandboxId);
     if (connected) {
       const serverUrl = `https://${connected.getHost(OPENCODE_PORT)}`;
-      const health = await fetch(`${serverUrl}/doc`, { method: "GET" }).catch(() => null);
+      const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
+        () => null,
+      );
       if (health?.ok) {
         onLifecycle?.("sandbox_reused", {
           conversationId: config.conversationId,
           sandboxId: connected.sandboxId,
         });
-        const client = createOpencodeClient({ baseUrl: serverUrl });
+        const client = await createSandboxRuntimeClient({ serverUrl });
         return {
           sandbox: connected,
           client,
@@ -202,13 +211,15 @@ export async function getOrCreateSandbox(
     const connected = await connectSandboxById(persistedGeneration.sandboxId);
     if (connected) {
       const serverUrl = `https://${connected.getHost(OPENCODE_PORT)}`;
-      const health = await fetch(`${serverUrl}/doc`, { method: "GET" }).catch(() => null);
+      const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
+        () => null,
+      );
       if (health?.ok) {
         onLifecycle?.("sandbox_reused", {
           conversationId: config.conversationId,
           sandboxId: connected.sandboxId,
         });
-        const client = createOpencodeClient({ baseUrl: serverUrl });
+        const client = await createSandboxRuntimeClient({ serverUrl });
         return {
           sandbox: connected,
           client,
@@ -307,6 +318,7 @@ export async function getOrCreateSandbox(
       conversationId: config.conversationId,
       sandboxId: sandbox.sandboxId,
       port: OPENCODE_PORT,
+      runtime: getSandboxAgentRuntime(),
     },
     { ...telemetryContext, sandboxId: sandbox.sandboxId },
   );
@@ -317,32 +329,29 @@ export async function getOrCreateSandbox(
   });
   const stderrBuffer: string[] = [];
   try {
-    await sandbox.commands.run(
-      `export SANDBOX_ID=${sandbox.sandboxId} && cd /app && opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0`,
-      {
-        background: true,
-        onStderr: (data) => {
-          const line = data.trim();
-          if (!line) {
-            return;
-          }
-          if (stderrBuffer.length >= 20) {
-            stderrBuffer.shift();
-          }
-          stderrBuffer.push(line);
-          logServerEvent(
-            "warn",
-            "OPENCODE_SERVER_STDERR",
-            {
-              conversationId: config.conversationId,
-              sandboxId: sandbox.sandboxId,
-              stderr: line,
-            },
-            { ...telemetryContext, sandboxId: sandbox.sandboxId },
-          );
-        },
+    await sandbox.commands.run(getSandboxServerStartCommand(sandbox.sandboxId), {
+      background: true,
+      onStderr: (data) => {
+        const line = data.trim();
+        if (!line) {
+          return;
+        }
+        if (stderrBuffer.length >= 20) {
+          stderrBuffer.shift();
+        }
+        stderrBuffer.push(line);
+        logServerEvent(
+          "warn",
+          "OPENCODE_SERVER_STDERR",
+          {
+            conversationId: config.conversationId,
+            sandboxId: sandbox.sandboxId,
+            stderr: line,
+          },
+          { ...telemetryContext, sandboxId: sandbox.sandboxId },
+        );
       },
-    );
+    });
   } catch (error) {
     logServerEvent(
       "error",
@@ -385,9 +394,7 @@ export async function getOrCreateSandbox(
   }
 
   // Create SDK client pointing to sandbox's OpenCode server
-  const client = createOpencodeClient({
-    baseUrl: serverUrl,
-  });
+  const client = await createSandboxRuntimeClient({ serverUrl });
 
   logLifecycle(
     "OPENCODE_SERVER_READY",
@@ -422,11 +429,13 @@ export async function getSandboxStateDurable(
     const connectedByConversation = await connectSandboxById(conv.opencodeSandboxId);
     if (connectedByConversation) {
       const serverUrl = `https://${connectedByConversation.getHost(OPENCODE_PORT)}`;
-      const health = await fetch(`${serverUrl}/doc`, { method: "GET" }).catch(() => null);
+      const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
+        () => null,
+      );
       if (health?.ok) {
         return {
           sandbox: connectedByConversation,
-          client: createOpencodeClient({ baseUrl: serverUrl }),
+          client: await createSandboxRuntimeClient({ serverUrl }),
           serverUrl,
           reused: true,
         };
@@ -466,14 +475,16 @@ export async function getSandboxStateDurable(
     return undefined;
   }
   const serverUrl = `https://${connected.getHost(OPENCODE_PORT)}`;
-  const health = await fetch(`${serverUrl}/doc`, { method: "GET" }).catch(() => null);
+  const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
+    () => null,
+  );
   if (!health?.ok) {
     return undefined;
   }
 
   const hydrated: SandboxState = {
     sandbox: connected,
-    client: createOpencodeClient({ baseUrl: serverUrl }),
+    client: await createSandboxRuntimeClient({ serverUrl }),
     serverUrl,
     reused: true,
   };
@@ -601,11 +612,9 @@ export async function getOrCreateSession(
   const sessionResult = await state.client.session.create({
     title: options?.title || "Conversation",
   });
-
   if (sessionResult.error || !sessionResult.data) {
     throw new Error("Failed to create OpenCode session");
   }
-
   const sessionId = sessionResult.data.id;
   logLifecycle(
     "SESSION_CREATED",
@@ -827,7 +836,9 @@ export async function killSandbox(conversationId: string): Promise<void> {
   }
   const state: SandboxState = {
     sandbox,
-    client: createOpencodeClient({ baseUrl: `https://${sandbox.getHost(OPENCODE_PORT)}` }),
+    client: await createSandboxRuntimeClient({
+      serverUrl: `https://${sandbox.getHost(OPENCODE_PORT)}`,
+    }),
     serverUrl: `https://${sandbox.getHost(OPENCODE_PORT)}`,
     reused: true,
   };

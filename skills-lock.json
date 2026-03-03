@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "sandbox-agent": {
+      "source": "rivet-dev/skills",
+      "sourceType": "github",
+      "computedHash": "09a3132191dc09a44b5568f00f2d5fedd5d1e7ccc3b4242aea26e4e5d9e1af16"
+    }
+  }
+}

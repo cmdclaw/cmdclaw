@@ -1,15 +1,15 @@
-import type {
-  Event as OpencodeEvent,
-  OpencodeClient,
-  Part as OpencodePart,
-  PermissionRequest,
-  QuestionRequest,
-  ToolPart,
-} from "@opencode-ai/sdk/v2/client";
 import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
 import IORedis from "ioredis";
 import path from "path";
 import type { IntegrationType } from "@/server/oauth/config";
+import type {
+  RuntimeEvent,
+  RuntimeHarnessClient,
+  RuntimePart,
+  RuntimePermissionRequest,
+  RuntimePromptPart,
+  RuntimeQuestionRequest,
+} from "@/server/sandbox/core/types";
 import type { SandboxBackend } from "@/server/sandbox/types";
 import { env } from "@/env";
 import { parseModelReference } from "@/lib/model-reference";
@@ -56,19 +56,19 @@ import {
   getQueue,
 } from "@/server/queues";
 import { buildRedisOptions } from "@/server/redis/connection-options";
-import {
-  getOrCreateSession,
-  writeSkillsToSandbox,
-  getSkillsSystemPrompt,
-  writeResolvedIntegrationSkillsToSandbox,
-  getIntegrationSkillsSystemPrompt,
-} from "@/server/sandbox/opencode-session";
-import { createCommunityIntegrationSkill } from "@/server/services/integration-skill-service";
+import { getOrCreateConversationRuntime } from "@/server/sandbox/core/orchestrator";
 import {
   buildMemorySystemPrompt,
-  syncMemoryToSandbox,
-  writeSessionTranscriptFromConversation,
-} from "@/server/services/memory-service";
+  syncMemoryFilesToSandbox,
+} from "@/server/sandbox/prep/memory-prep";
+import {
+  getIntegrationSkillsSystemPrompt,
+  getSkillsSystemPrompt,
+  writeResolvedIntegrationSkillsToSandbox,
+  writeSkillsToSandbox,
+} from "@/server/sandbox/prep/skills-prep";
+import { createCommunityIntegrationSkill } from "@/server/services/integration-skill-service";
+import { writeSessionTranscriptFromConversation } from "@/server/services/memory-service";
 import { resolveSelectedPlatformSkillSlugs } from "@/server/services/platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "@/server/services/sandbox-file-service";
 import { SESSION_BOUNDARY_PREFIX } from "@/server/services/session-constants";
@@ -205,15 +205,26 @@ interface Subscriber {
 
 type BackendType = "opencode";
 type OpenCodeTrackedEvent = Extract<
-  OpencodeEvent,
+  RuntimeEvent,
   {
     type: "message.updated" | "message.part.updated" | "session.updated" | "session.status";
   }
 >;
 type OpenCodeActionableEvent = Extract<
-  OpencodeEvent,
+  RuntimeEvent,
   { type: "message.part.updated" | "permission.asked" | "question.asked" }
 >;
+type ApprovalCapableClient =
+  | RuntimeHarnessClient
+  | {
+      permission: {
+        reply: (input: { requestID: string; reply: "always" | "reject" }) => Promise<void>;
+      };
+      question: {
+        reply: (input: { requestID: string; answers: string[][] }) => Promise<void>;
+        reject: (input: { requestID: string }) => Promise<void>;
+      };
+    };
 
 interface GenerationContext {
   id: string;
@@ -250,7 +261,7 @@ interface GenerationContext {
     string,
     {
       firstQueuedAtMs: number;
-      parts: OpencodePart[];
+      parts: RuntimePart[];
     }
   >;
   // BYOC fields
@@ -439,6 +450,46 @@ function filterAutoCollectedFilesMentionedInAnswer(
   });
 }
 
+function extractAssistantTextFromSessionMessagesPayload(payload: unknown): string | null {
+  if (!Array.isArray(payload)) {
+    return null;
+  }
+
+  for (let i = payload.length - 1; i >= 0; i -= 1) {
+    const item = payload[i];
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const info = (item as Record<string, unknown>).info as Record<string, unknown> | undefined;
+    if (info?.role !== "assistant") {
+      continue;
+    }
+    const parts = (item as Record<string, unknown>).parts;
+    if (!Array.isArray(parts)) {
+      continue;
+    }
+    const text = parts
+      .map((part) => {
+        if (!part || typeof part !== "object") {
+          return "";
+        }
+        const entry = part as Record<string, unknown>;
+        if (entry.type === "text" && typeof entry.text === "string") {
+          return entry.text;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("");
+
+    if (text.trim()) {
+      return text;
+    }
+  }
+
+  return null;
+}
+
 function buildExecutionPolicy(params: {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
@@ -527,7 +578,7 @@ function assertNever(x: never): never {
   throw new Error(`Unhandled case: ${JSON.stringify(x)}`);
 }
 
-function isOpenCodeTrackedEvent(event: OpencodeEvent): event is OpenCodeTrackedEvent {
+function isOpenCodeTrackedEvent(event: RuntimeEvent): event is OpenCodeTrackedEvent {
   return (
     event.type === "message.updated" ||
     event.type === "message.part.updated" ||
@@ -536,7 +587,7 @@ function isOpenCodeTrackedEvent(event: OpencodeEvent): event is OpenCodeTrackedE
   );
 }
 
-function isOpenCodeActionableEvent(event: OpencodeEvent): event is OpenCodeActionableEvent {
+function isOpenCodeActionableEvent(event: RuntimeEvent): event is OpenCodeActionableEvent {
   return (
     event.type === "message.part.updated" ||
     event.type === "permission.asked" ||
@@ -544,27 +595,18 @@ function isOpenCodeActionableEvent(event: OpencodeEvent): event is OpenCodeActio
   );
 }
 
-function buildDefaultQuestionAnswers(request: QuestionRequest): string[][] {
-  return request.questions.map((question) => {
-    const firstOptionLabel = question.options[0]?.label;
-    if (firstOptionLabel) {
-      return [firstOptionLabel];
-    }
-    if (question.custom === false) {
-      return [];
-    }
-    return ["default answer"];
-  });
+function buildDefaultQuestionAnswers(request: RuntimeQuestionRequest): string[][] {
+  const firstOptionLabel = request.options?.[0]?.label;
+  if (firstOptionLabel) {
+    return [[firstOptionLabel]];
+  }
+  return [["default answer"]];
 }
 
-function buildQuestionCommand(request: QuestionRequest): string {
-  return request.questions
-    .map((question) => {
-      const options = question.options.map((option) => option.label).filter(Boolean);
-      const optionsText = options.length > 0 ? ` [${options.join(" | ")}]` : "";
-      return `${question.header}: ${question.question}${optionsText}`;
-    })
-    .join(" || ");
+function buildQuestionCommand(request: RuntimeQuestionRequest): string {
+  const options = (request.options ?? []).map((option) => option.label).filter(Boolean);
+  const optionsText = options.length > 0 ? ` [${options.join(" | ")}]` : "";
+  return `Question: ${request.question}${optionsText}`;
 }
 
 type UserFileAttachment = { name: string; mimeType: string; dataUrl: string };
@@ -3179,12 +3221,12 @@ class GenerationManager {
         );
       }, agentInitWarnAfterMs);
 
-      let client: Awaited<ReturnType<typeof getOrCreateSession>>["client"];
+      let client: RuntimeHarnessClient;
       let sessionId: string;
-      let sandbox: Awaited<ReturnType<typeof getOrCreateSession>>["sandbox"];
+      let runtimeSandbox: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["sandbox"];
       try {
         const session = await withTimeout(
-          getOrCreateSession(
+          getOrCreateConversationRuntime(
             {
               conversationId: ctx.conversationId,
               generationId: ctx.id,
@@ -3229,9 +3271,9 @@ class GenerationManager {
           AGENT_PREPARING_TIMEOUT_MS,
           `Agent preparation timed out after ${Math.round(AGENT_PREPARING_TIMEOUT_MS / 1000)} seconds.`,
         );
-        client = session.client;
-        sessionId = session.sessionId;
-        sandbox = session.sandbox;
+        client = session.harnessClient;
+        sessionId = session.session.id;
+        runtimeSandbox = session.sandbox;
         ctx.agentInitReadyAt = Date.now();
         this.markPhase(ctx, "agent_init_ready");
         this.broadcast(ctx, {
@@ -3250,7 +3292,7 @@ class GenerationManager {
             conversationId: ctx.conversationId,
             userId: ctx.userId,
             sessionId,
-            sandboxId: sandbox.sandboxId,
+            sandboxId: runtimeSandbox.sandboxId,
           },
         );
       } catch (error) {
@@ -3283,11 +3325,11 @@ class GenerationManager {
 
       // Store session ID
       ctx.sessionId = sessionId;
-      ctx.sandboxId = sandbox.sandboxId;
+      ctx.sandboxId = runtimeSandbox.sandboxId;
 
       await db
         .update(generation)
-        .set({ sandboxId: sandbox.sandboxId })
+        .set({ sandboxId: runtimeSandbox.sandboxId })
         .where(eq(generation.id, ctx.id));
 
       // Persist reusable IDs immediately so follow-up turns can reuse session/sandbox
@@ -3307,9 +3349,9 @@ class GenerationManager {
       ctx.sandbox = {
         setup: async () => undefined,
         execute: async (command, opts) => {
-          const result = await sandbox.commands.run(command, {
+          const result = await runtimeSandbox.exec(command, {
             timeoutMs: opts?.timeout,
-            envs: opts?.env,
+            env: opts?.env,
           });
           return {
             exitCode: result.exitCode,
@@ -3319,11 +3361,11 @@ class GenerationManager {
         },
         writeFile: async (filePath, content) => {
           if (typeof content === "string") {
-            await sandbox.files.write(filePath, content);
+            await runtimeSandbox.writeFile(filePath, content);
             return;
           }
           const buffer = Buffer.from(content);
-          await sandbox.files.write(
+          await runtimeSandbox.writeFile(
             filePath,
             buffer.buffer.slice(
               buffer.byteOffset,
@@ -3331,7 +3373,7 @@ class GenerationManager {
             ) as ArrayBuffer,
           );
         },
-        readFile: async (filePath) => sandbox.files.read(filePath),
+        readFile: async (filePath) => runtimeSandbox.readFile(filePath),
         teardown: async () => undefined,
         isAvailable: () => true,
       };
@@ -3340,15 +3382,7 @@ class GenerationManager {
       // Write memory files to sandbox
       let memoryInstructions = buildMemorySystemPrompt();
       try {
-        await syncMemoryToSandbox(
-          ctx.userId,
-          async (path, content) => {
-            await sandbox.files.write(path, content);
-          },
-          async (dir) => {
-            await sandbox.commands.run(`mkdir -p "${dir}"`);
-          },
-        );
+        await syncMemoryFilesToSandbox(ctx.userId, runtimeSandbox);
       } catch (err) {
         console.error("[GenerationManager] Failed to sync memory to sandbox:", err);
         memoryInstructions = buildMemorySystemPrompt();
@@ -3399,7 +3433,7 @@ class GenerationManager {
 
       if (ctx.agentSandboxMode === "reused") {
         try {
-          const rawCache = await sandbox.files.read(PRE_PROMPT_CACHE_PATH);
+          const rawCache = await runtimeSandbox.readFile(PRE_PROMPT_CACHE_PATH);
           const parsed = JSON.parse(String(rawCache)) as Partial<PrePromptCacheRecord>;
           if (parsed.cacheKey === prePromptCacheKey) {
             prePromptCacheHit = true;
@@ -3426,7 +3460,7 @@ class GenerationManager {
                 generationId: ctx.id,
                 conversationId: ctx.conversationId,
                 userId: ctx.userId,
-                sandboxId: sandbox.sandboxId,
+                sandboxId: runtimeSandbox.sandboxId,
                 sessionId: ctx.sessionId,
               },
             );
@@ -3439,13 +3473,13 @@ class GenerationManager {
       // Write custom skills/integration assets only when cache is stale.
       try {
         if (!prePromptCacheHit) {
-          writtenSkills = await writeSkillsToSandbox(sandbox, ctx.userId);
+          writtenSkills = await writeSkillsToSandbox(runtimeSandbox, ctx.userId);
 
           await Promise.all(
             eligibleCustomCreds.map(async (cred) => {
               const integ = cred.customIntegration;
               const cliPath = `/app/cli/custom-${integ.slug}.ts`;
-              await sandbox.files.write(cliPath, integ.cliCode);
+              await runtimeSandbox.writeFile(cliPath, integ.cliCode);
             }),
           );
 
@@ -3460,7 +3494,7 @@ class GenerationManager {
 
           if (Object.keys(customPerms).length > 0) {
             // Set the permissions env var on the sandbox
-            await sandbox.commands.run(
+            await runtimeSandbox.exec(
               `echo 'export CUSTOM_INTEGRATION_PERMISSIONS=${JSON.stringify(JSON.stringify(customPerms)).slice(1, -1)}' >> ~/.bashrc`,
             );
           }
@@ -3471,12 +3505,12 @@ class GenerationManager {
           }
 
           writtenIntegrationSkills = await writeResolvedIntegrationSkillsToSandbox(
-            sandbox,
+            runtimeSandbox,
             ctx.userId,
             Array.from(allowedSkillSlugs),
           );
 
-          await sandbox.commands.run(`mkdir -p "${path.dirname(PRE_PROMPT_CACHE_PATH)}"`);
+          await runtimeSandbox.ensureDir(path.dirname(PRE_PROMPT_CACHE_PATH));
           const nextCacheRecord: PrePromptCacheRecord = {
             version: 1,
             cacheKey: prePromptCacheKey,
@@ -3484,7 +3518,7 @@ class GenerationManager {
             writtenIntegrationSkills,
             updatedAt: new Date().toISOString(),
           };
-          await sandbox.files.write(
+          await runtimeSandbox.writeFile(
             PRE_PROMPT_CACHE_PATH,
             JSON.stringify(nextCacheRecord, null, 2),
           );
@@ -3540,10 +3574,7 @@ class GenerationManager {
 
       // Subscribe to SSE events BEFORE sending the prompt
       const promptTimeoutController = new AbortController();
-      const eventResult = await client.event.subscribe(
-        {},
-        { signal: promptTimeoutController.signal },
-      );
+      const eventResult = await client.subscribe({}, { signal: promptTimeoutController.signal });
       const eventStream = eventResult.stream;
 
       const parsedModel = parseModelReference(ctx.model);
@@ -3557,9 +3588,7 @@ class GenerationManager {
       // Build prompt parts (text + file attachments)
       // For non-image files, write them to the sandbox so the LLM can process them
       // via sandbox tools, rather than passing unsupported media types directly.
-      const promptParts: NonNullable<Parameters<typeof client.session.prompt>[0]["parts"]> = [
-        { type: "text", text: ctx.userMessageContent },
-      ];
+      const promptParts: RuntimePromptPart[] = [{ type: "text", text: ctx.userMessageContent }];
       if (ctx.attachments && ctx.attachments.length > 0) {
         await Promise.all(
           ctx.attachments.map(async (a) => {
@@ -3578,7 +3607,7 @@ class GenerationManager {
             try {
               const base64Data = a.dataUrl.split(",")[1] || "";
               const buffer = Buffer.from(base64Data, "base64");
-              await sandbox.files.write(
+              await runtimeSandbox.writeFile(
                 sandboxPath,
                 buffer.buffer.slice(
                   buffer.byteOffset,
@@ -3653,7 +3682,7 @@ class GenerationManager {
             sessionId,
           },
         );
-        void client.session.abort({ sessionID: sessionId }).catch((err) => {
+        void client.abort({ sessionID: sessionId }).catch((err) => {
           console.error("[GenerationManager] Failed to abort timed out OpenCode session:", err);
         });
       }, OPENCODE_PROMPT_TIMEOUT_MS);
@@ -3661,7 +3690,7 @@ class GenerationManager {
         clearTimeout(promptTimeoutId);
         clearPromptTimeout = undefined;
       };
-      const promptPromise = client.session.prompt({
+      const promptPromise = client.prompt({
         sessionID: sessionId,
         parts: promptParts,
         system: systemPrompt,
@@ -3673,7 +3702,7 @@ class GenerationManager {
         if (!ctx.phaseMarks?.first_event_received) {
           this.markPhase(ctx, "first_event_received");
         }
-        const event = rawEvent as OpencodeEvent;
+        const event = rawEvent as RuntimeEvent;
         if (await this.refreshCancellationSignal(ctx)) {
           break;
         }
@@ -3781,6 +3810,42 @@ class GenerationManager {
         );
       }
       this.markPhase(ctx, "prompt_completed");
+
+      if (!ctx.assistantContent.trim()) {
+        try {
+          const messagesResult = await client.messages({
+            sessionID: sessionId,
+            limit: 20,
+          });
+          if (!messagesResult.error) {
+            const fallbackText = extractAssistantTextFromSessionMessagesPayload(
+              messagesResult.data,
+            );
+            if (fallbackText) {
+              ctx.assistantContent = fallbackText;
+              ctx.contentParts.push({ type: "text", text: fallbackText });
+              this.broadcast(ctx, { type: "text", content: fallbackText });
+              this.scheduleSave(ctx);
+              logServerEvent(
+                "info",
+                "OPENCODE_FALLBACK_ASSISTANT_APPLIED",
+                { chars: fallbackText.length },
+                {
+                  source: "generation-manager",
+                  traceId: ctx.traceId,
+                  generationId: ctx.id,
+                  conversationId: ctx.conversationId,
+                  userId: ctx.userId,
+                  sessionId,
+                },
+              );
+            }
+          }
+        } catch (error) {
+          console.warn("[GenerationManager] Failed fallback session.messages fetch:", error);
+        }
+      }
+
       await this.refreshCancellationSignal(ctx, { force: true });
       this.markPhase(ctx, "post_processing_started");
 
@@ -3885,9 +3950,42 @@ class GenerationManager {
   /**
    * Handle actionable OpenCode events that require explicit responses.
    */
+  private async replyPermissionRequest(
+    client: ApprovalCapableClient,
+    input: { requestID: string; reply: "always" | "reject" },
+  ): Promise<void> {
+    if ("replyPermission" in client) {
+      await client.replyPermission(input);
+      return;
+    }
+    await client.permission.reply(input);
+  }
+
+  private async replyQuestionRequest(
+    client: ApprovalCapableClient,
+    input: { requestID: string; answers: string[][] },
+  ): Promise<void> {
+    if ("replyQuestion" in client) {
+      await client.replyQuestion(input);
+      return;
+    }
+    await client.question.reply(input);
+  }
+
+  private async rejectQuestionRequest(
+    client: ApprovalCapableClient,
+    input: { requestID: string },
+  ): Promise<void> {
+    if ("rejectQuestion" in client) {
+      await client.rejectQuestion(input);
+      return;
+    }
+    await client.question.reject(input);
+  }
+
   private async handleOpenCodeActionableEvent(
     ctx: GenerationContext,
-    client: OpencodeClient,
+    client: ApprovalCapableClient,
     event: OpenCodeActionableEvent,
   ): Promise<{ type: "none" | "permission" | "question" }> {
     switch (event.type) {
@@ -3910,7 +4008,7 @@ class GenerationManager {
     }
   }
 
-  private handleOpenCodeToolStateCoverage(part: ToolPart): void {
+  private handleOpenCodeToolStateCoverage(part: Extract<RuntimePart, { type: "tool" }>): void {
     switch (part.state.status) {
       case "pending":
         return;
@@ -3927,8 +4025,8 @@ class GenerationManager {
 
   private async handleOpenCodePermissionAsked(
     ctx: GenerationContext,
-    client: OpencodeClient,
-    request: PermissionRequest,
+    client: ApprovalCapableClient,
+    request: RuntimePermissionRequest,
   ): Promise<void> {
     const permissionType = request.permission || "file access";
     const patterns = request.patterns;
@@ -3943,7 +4041,7 @@ class GenerationManager {
         ctx.autoApprove ? "(conversation auto-approve enabled)" : "(allowlisted path)",
       );
       try {
-        await client.permission.reply({
+        await this.replyPermissionRequest(client, {
           requestID: request.id,
           reply: "always",
         });
@@ -3984,14 +4082,14 @@ class GenerationManager {
 
   private async handleOpenCodeQuestionAsked(
     ctx: GenerationContext,
-    client: OpencodeClient,
-    request: QuestionRequest,
+    client: ApprovalCapableClient,
+    request: RuntimeQuestionRequest,
   ): Promise<void> {
     const defaultAnswers = buildDefaultQuestionAnswers(request);
 
     if (ctx.autoApprove) {
       try {
-        await client.question.reply({
+        await this.replyQuestionRequest(client, {
           requestID: request.id,
           answers: defaultAnswers,
         });
@@ -4026,10 +4124,10 @@ class GenerationManager {
 
   private async queueOpenCodeApprovalRequest(
     ctx: GenerationContext,
-    client: OpencodeClient,
+    client: ApprovalCapableClient,
     openCodeRequest:
-      | { kind: "permission"; request: PermissionRequest }
-      | { kind: "question"; request: QuestionRequest; defaultAnswers: string[][] },
+      | { kind: "permission"; request: RuntimePermissionRequest }
+      | { kind: "question"; request: RuntimeQuestionRequest; defaultAnswers: string[][] },
     pendingApproval: PendingApproval,
   ): Promise<void> {
     const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
@@ -4097,7 +4195,7 @@ class GenerationManager {
 
   private async rejectOpenCodePendingApprovalRequest(
     ctx: GenerationContext,
-    liveClient?: OpencodeClient,
+    liveClient?: ApprovalCapableClient,
   ): Promise<void> {
     const pendingApproval = ctx.pendingApproval;
     const requestKind = pendingApproval?.opencodeRequestKind;
@@ -4112,7 +4210,7 @@ class GenerationManager {
         where: eq(conversation.id, ctx.conversationId),
         columns: { title: true },
       });
-      const resumedSession = await getOrCreateSession(
+      const resumedSession = await getOrCreateConversationRuntime(
         {
           conversationId: ctx.conversationId,
           generationId: ctx.id,
@@ -4125,17 +4223,17 @@ class GenerationManager {
           replayHistory: false,
         },
       );
-      opencodeClient = resumedSession.client;
+      opencodeClient = resumedSession.harnessClient;
     }
 
     if (requestKind === "permission") {
-      await opencodeClient.permission.reply({
+      await this.replyPermissionRequest(opencodeClient, {
         requestID: requestId,
         reply: "reject",
       });
       return;
     }
-    await opencodeClient.question.reject({
+    await this.rejectQuestionRequest(opencodeClient, {
       requestID: requestId,
     });
   }
@@ -4192,7 +4290,7 @@ class GenerationManager {
     ctx: GenerationContext,
     decision: "allow" | "deny",
     questionAnswers?: string[][],
-    liveClient?: OpencodeClient,
+    liveClient?: ApprovalCapableClient,
   ): Promise<void> {
     const pendingApproval = ctx.pendingApproval;
     const toolUseId = pendingApproval?.toolUseId ?? `opencode-${ctx.id}`;
@@ -4209,7 +4307,7 @@ class GenerationManager {
         where: eq(conversation.id, ctx.conversationId),
         columns: { title: true },
       });
-      const resumedSession = await getOrCreateSession(
+      const resumedSession = await getOrCreateConversationRuntime(
         {
           conversationId: ctx.conversationId,
           generationId: ctx.id,
@@ -4222,22 +4320,22 @@ class GenerationManager {
           replayHistory: false,
         },
       );
-      opencodeClient = resumedSession.client;
+      opencodeClient = resumedSession.harnessClient;
     }
 
     if (requestKind === "permission") {
-      await opencodeClient.permission.reply({
+      await this.replyPermissionRequest(opencodeClient, {
         requestID: requestId,
         reply: decision === "allow" ? "always" : "reject",
       });
     } else if (requestKind === "question") {
       if (decision === "allow") {
-        await opencodeClient.question.reply({
+        await this.replyQuestionRequest(opencodeClient, {
           requestID: requestId,
           answers: questionAnswers && questionAnswers.length > 0 ? questionAnswers : defaultAnswers,
         });
       } else {
-        await opencodeClient.question.reject({
+        await this.rejectQuestionRequest(opencodeClient, {
           requestID: requestId,
         });
       }
@@ -4429,7 +4527,7 @@ class GenerationManager {
     }
   }
 
-  private shouldProcessUnknownMessagePart(ctx: GenerationContext, part: OpencodePart): boolean {
+  private shouldProcessUnknownMessagePart(ctx: GenerationContext, part: RuntimePart): boolean {
     if (part.type === "tool") {
       return true;
     }
@@ -4454,7 +4552,7 @@ class GenerationManager {
 
   private async processOpencodeMessagePart(
     ctx: GenerationContext,
-    part: OpencodePart,
+    part: RuntimePart,
     currentTextPart: { type: "text"; text: string } | null,
     currentTextPartId: string | null,
     setCurrentTextPart: (
@@ -4472,10 +4570,33 @@ class GenerationManager {
       if (fullText) {
         // Check if this is a new text part (different part ID)
         const isNewPart = partId !== currentTextPartId;
+        const userText = ctx.userMessageContent.trim();
+        const normalizedUserText = userText.trim().replace(/\s+/g, " ");
+        let effectiveFullText = fullText;
+
+        const dropEchoPrefix = (value: string): string => {
+          let next = value;
+          // Common wrappers seen in compatibility streams.
+          next = next.replace(/^\s*(?:user|human)\s*:\s*/i, "");
+          next = next.replace(/^\s*["'`]+/, "");
+          if (userText && next.startsWith(userText)) {
+            return next.slice(userText.length).trimStart();
+          }
+          return value;
+        };
+
+        if (isNewPart && userText) {
+          const normalizedFullText = fullText.trim().replace(/\s+/g, " ");
+          // Ignore pure user-echo parts.
+          if (normalizedFullText === normalizedUserText) {
+            return;
+          }
+          effectiveFullText = dropEchoPrefix(fullText);
+        }
 
         // Calculate delta from the previous text
         const previousLength = isNewPart ? 0 : (currentTextPart?.text.length ?? 0);
-        const delta = fullText.slice(previousLength);
+        const delta = effectiveFullText.slice(previousLength);
 
         // Only process if there's new content
         if (delta) {
@@ -4484,10 +4605,10 @@ class GenerationManager {
 
           if (currentTextPart && !isNewPart) {
             // Update to the full cumulative text
-            currentTextPart.text = fullText;
+            currentTextPart.text = effectiveFullText;
           } else {
             // New text part - create a new entry
-            const newPart = { type: "text" as const, text: fullText };
+            const newPart = { type: "text" as const, text: effectiveFullText };
             ctx.contentParts.push(newPart);
             setCurrentTextPart(newPart, partId);
           }

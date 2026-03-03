@@ -1,25 +1,28 @@
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import type { ObservabilityContext } from "@/server/utils/observability";
 import { env } from "@/env";
 import { db } from "@/server/db/client";
-import { conversation, generation, message, type ContentPart } from "@/server/db/schema";
+import { conversation, generation, message, skill, type ContentPart } from "@/server/db/schema";
 import {
   getOrCreateSession as getOrCreateE2BSession,
   injectProviderAuth,
-  getSkillsSystemPrompt,
-  getIntegrationSkillsSystemPrompt,
-  writeResolvedIntegrationSkillsToSandbox as writeResolvedIntegrationSkillsToE2B,
-  writeSkillsToSandbox as writeSkillsToE2B,
 } from "@/server/sandbox/e2b";
 import { getPreferredCloudSandboxProvider } from "@/server/sandbox/factory";
+import { resolvePreferredCommunitySkillsForUser } from "@/server/services/integration-skill-service";
 import {
   COMPACTION_SUMMARY_PREFIX,
   SESSION_BOUNDARY_PREFIX,
 } from "@/server/services/session-constants";
+import { downloadFromS3 } from "@/server/storage/s3-client";
+import {
+  OPENCODE_PORT,
+  createSandboxRuntimeClient,
+  getSandboxReadinessUrl,
+  getSandboxServerBackgroundStartCommand,
+} from "./opencode-runtime";
 
 const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
-const OPENCODE_PORT = 4096;
 
 type SessionInitStage =
   | "sandbox_checking_cache"
@@ -40,6 +43,13 @@ type SessionInitLifecycleCallback = (
   stage: SessionInitStage,
   details?: Record<string, unknown>,
 ) => void;
+
+type OpenCodeSessionOptions = {
+  title?: string;
+  replayHistory?: boolean;
+  onLifecycle?: SessionInitLifecycleCallback;
+  telemetry?: ObservabilityContext;
+};
 
 export type OpenCodeCommandResult = {
   exitCode: number;
@@ -73,6 +83,19 @@ export interface OpenCodeSessionConfig {
   userId?: string;
   anthropicApiKey: string;
   integrationEnvs?: Record<string, string>;
+}
+
+type OpenCodeSessionResult = {
+  client: OpencodeClient;
+  sessionId: string;
+  sandbox: OpenCodeSandbox;
+};
+
+interface OpenCodeSessionProvider {
+  getOrCreateSession(
+    config: OpenCodeSessionConfig,
+    options?: OpenCodeSessionOptions,
+  ): Promise<OpenCodeSessionResult>;
 }
 
 type DaytonaSandboxLike = {
@@ -115,21 +138,13 @@ function appendDaytonaAuth(url: string, token?: string): string {
   return parsed.toString();
 }
 
-function withPath(url: string, path: string): string {
-  const parsed = new URL(url);
-  const normalizedBasePath = parsed.pathname.endsWith("/")
-    ? parsed.pathname.slice(0, -1)
-    : parsed.pathname;
-  const normalizedNextPath = path.startsWith("/") ? path : `/${path}`;
-  parsed.pathname = `${normalizedBasePath}${normalizedNextPath}`;
-  return parsed.toString();
-}
-
-function createDaytonaOpencodeClient(baseUrl: string, token?: string): OpencodeClient {
+async function createDaytonaOpencodeClient(
+  baseUrl: string,
+  token?: string,
+): Promise<OpencodeClient> {
   if (!token) {
-    return createOpencodeClient({ baseUrl });
+    return createSandboxRuntimeClient({ serverUrl: baseUrl });
   }
-
   const authedFetch = (
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1],
@@ -143,14 +158,14 @@ function createDaytonaOpencodeClient(baseUrl: string, token?: string): OpencodeC
     return fetch(authedUrl, init);
   };
 
-  return createOpencodeClient({
-    baseUrl,
+  return createSandboxRuntimeClient({
+    serverUrl: baseUrl,
     fetch: authedFetch as typeof fetch,
   });
 }
 
 async function waitForServer(url: string, token?: string, maxWait = 30_000): Promise<void> {
-  const readinessUrl = appendDaytonaAuth(withPath(url, "/doc"), token);
+  const readinessUrl = appendDaytonaAuth(getSandboxReadinessUrl(url), token);
   const startedAt = Date.now();
   while (Date.now() - startedAt < maxWait) {
     try {
@@ -242,7 +257,11 @@ async function connectDaytonaSandboxById(sandboxId: string): Promise<DaytonaSand
 async function getOrCreateDaytonaSandbox(
   config: OpenCodeSessionConfig,
   onLifecycle?: SessionInitLifecycleCallback,
-): Promise<{ sandbox: OpenCodeSandbox; client: OpencodeClient; reused: boolean }> {
+): Promise<{
+  sandbox: OpenCodeSandbox;
+  client: OpencodeClient;
+  reused: boolean;
+}> {
   onLifecycle?.("sandbox_checking_cache", { conversationId: config.conversationId });
 
   const conv = await db.query.conversation.findFirst({
@@ -257,7 +276,7 @@ async function getOrCreateDaytonaSandbox(
   if (fromConversation) {
     const preview = await fromConversation.getPreviewLink(OPENCODE_PORT);
     const baseUrl = preview.url;
-    const health = await fetch(appendDaytonaAuth(withPath(baseUrl, "/doc"), preview.token), {
+    const health = await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl), preview.token), {
       method: "GET",
     }).catch(() => null);
     if (health?.ok) {
@@ -267,7 +286,7 @@ async function getOrCreateDaytonaSandbox(
       });
       return {
         sandbox: wrapDaytonaSandbox(fromConversation),
-        client: createDaytonaOpencodeClient(baseUrl, preview.token),
+        client: await createDaytonaOpencodeClient(baseUrl, preview.token),
         reused: true,
       };
     }
@@ -306,7 +325,7 @@ async function getOrCreateDaytonaSandbox(
   if (fromGeneration) {
     const preview = await fromGeneration.getPreviewLink(OPENCODE_PORT);
     const baseUrl = preview.url;
-    const health = await fetch(appendDaytonaAuth(withPath(baseUrl, "/doc"), preview.token), {
+    const health = await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl), preview.token), {
       method: "GET",
     }).catch(() => null);
     if (health?.ok) {
@@ -316,7 +335,7 @@ async function getOrCreateDaytonaSandbox(
       });
       return {
         sandbox: wrapDaytonaSandbox(fromGeneration),
-        client: createDaytonaOpencodeClient(baseUrl, preview.token),
+        client: await createDaytonaOpencodeClient(baseUrl, preview.token),
         reused: true,
       };
     }
@@ -353,7 +372,7 @@ async function getOrCreateDaytonaSandbox(
   });
 
   await created.process.executeCommand(
-    `sh -lc ${escapeShell(`export SANDBOX_ID=${created.id} && cd /app && nohup opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0 >/tmp/opencode.log 2>&1 &`)}`,
+    `sh -lc ${escapeShell(getSandboxServerBackgroundStartCommand(created.id))}`,
     "/app",
     undefined,
     10,
@@ -378,20 +397,15 @@ async function getOrCreateDaytonaSandbox(
 
   return {
     sandbox: wrapDaytonaSandbox(created),
-    client: createDaytonaOpencodeClient(baseUrl, preview.token),
+    client: await createDaytonaOpencodeClient(baseUrl, preview.token),
     reused: false,
   };
 }
 
 async function getOrCreateDaytonaSession(
   config: OpenCodeSessionConfig,
-  options?: {
-    title?: string;
-    replayHistory?: boolean;
-    onLifecycle?: SessionInitLifecycleCallback;
-    telemetry?: ObservabilityContext;
-  },
-): Promise<{ client: OpencodeClient; sessionId: string; sandbox: OpenCodeSandbox }> {
+  options?: OpenCodeSessionOptions,
+): Promise<OpenCodeSessionResult> {
   const state = await getOrCreateDaytonaSandbox(config, options?.onLifecycle);
   const conv = await db.query.conversation.findFirst({
     where: eq(conversation.id, config.conversationId),
@@ -433,12 +447,10 @@ async function getOrCreateDaytonaSession(
   const sessionResult = await state.client.session.create({
     title: options?.title || "Conversation",
   });
-
   if (sessionResult.error || !sessionResult.data) {
     const details = sessionResult.error ? JSON.stringify(sessionResult.error) : "missing_data";
     throw new Error(`Failed to create OpenCode session: ${details}`);
   }
-
   const sessionId = sessionResult.data.id;
   options?.onLifecycle?.("session_created", {
     conversationId: config.conversationId,
@@ -552,28 +564,168 @@ async function replayConversationHistory(
 
 export async function getOrCreateSession(
   config: OpenCodeSessionConfig,
-  options?: {
-    title?: string;
-    replayHistory?: boolean;
-    onLifecycle?: SessionInitLifecycleCallback;
-    telemetry?: ObservabilityContext;
-  },
-): Promise<{ client: OpencodeClient; sessionId: string; sandbox: OpenCodeSandbox }> {
-  const provider = getPreferredCloudSandboxProvider();
-  if (provider === "daytona") {
-    return getOrCreateDaytonaSession(config, options);
+  options?: OpenCodeSessionOptions,
+): Promise<OpenCodeSessionResult> {
+  return getOrCreateSessionForCloudProvider(getPreferredCloudSandboxProvider(), config, options);
+}
+
+export async function getOrCreateSessionForCloudProvider(
+  provider: "e2b" | "daytona",
+  config: OpenCodeSessionConfig,
+  options?: OpenCodeSessionOptions,
+): Promise<OpenCodeSessionResult> {
+  return getOpenCodeSessionProvider(provider).getOrCreateSession(config, options);
+}
+
+export async function writeSkillsToSandbox(
+  sandbox: OpenCodeSandbox,
+  userId: string,
+): Promise<string[]> {
+  const skills = await db.query.skill.findMany({
+    where: and(eq(skill.userId, userId), eq(skill.enabled, true)),
+    with: {
+      files: true,
+      documents: true,
+    },
+  });
+
+  if (skills.length === 0) {
+    return [];
   }
 
-  const e2bSession = await getOrCreateE2BSession(config, options);
+  await sandbox.commands.run("mkdir -p /app/.opencode/skills");
+
+  const writtenSkills: string[] = [];
+  let agentsContent = "# Custom Skills\n\n";
+
+  await skills.reduce<Promise<void>>(async (prev, s) => {
+    await prev;
+    const skillDir = `/app/.opencode/skills/${s.name}`;
+    await sandbox.commands.run(`mkdir -p "${skillDir}"`);
+
+    agentsContent += `## ${s.displayName}\n\n`;
+    agentsContent += `${s.description}\n\n`;
+    agentsContent += `Files available in: /app/.opencode/skills/${s.name}/\n\n`;
+
+    await Promise.all(
+      s.files.map(async (file) => {
+        const filePath = `${skillDir}/${file.path}`;
+        const lastSlash = filePath.lastIndexOf("/");
+        const parentDir = filePath.substring(0, lastSlash);
+        if (parentDir !== skillDir) {
+          await sandbox.commands.run(`mkdir -p "${parentDir}"`);
+        }
+        await sandbox.files.write(filePath, file.content);
+      }),
+    );
+
+    await Promise.all(
+      s.documents.map(async (doc) => {
+        try {
+          const buffer = await downloadFromS3(doc.storageKey);
+          const docPath = `${skillDir}/${doc.filename}`;
+          const arrayBuffer = new Uint8Array(buffer).buffer;
+          await sandbox.files.write(docPath, arrayBuffer);
+        } catch (error) {
+          console.error(`[OpenCodeSession] Failed to write document ${doc.filename}:`, error);
+        }
+      }),
+    );
+
+    writtenSkills.push(s.name);
+  }, Promise.resolve());
+
+  await sandbox.files.write("/app/.opencode/AGENTS.md", agentsContent);
+
+  return writtenSkills;
+}
+
+export async function writeResolvedIntegrationSkillsToSandbox(
+  sandbox: OpenCodeSandbox,
+  userId: string,
+  allowedSlugs?: string[],
+): Promise<string[]> {
+  const resolved = await resolvePreferredCommunitySkillsForUser(userId, allowedSlugs);
+  if (resolved.length === 0) {
+    return [];
+  }
+
+  await sandbox.commands.run("mkdir -p /app/.opencode/integration-skills");
+  const written: string[] = [];
+
+  await Promise.all(
+    resolved.map(async (entry) => {
+      const skillDir = `/app/.opencode/integration-skills/${entry.slug}`;
+      await sandbox.commands.run(`mkdir -p "${skillDir}"`);
+
+      await Promise.all(
+        entry.files.map(async (file) => {
+          const filePath = `${skillDir}/${file.path}`;
+          const lastSlash = filePath.lastIndexOf("/");
+          const parentDir = filePath.substring(0, lastSlash);
+          if (parentDir !== skillDir) {
+            await sandbox.commands.run(`mkdir -p "${parentDir}"`);
+          }
+          await sandbox.files.write(filePath, file.content);
+        }),
+      );
+
+      written.push(entry.slug);
+    }),
+  );
+
+  return written;
+}
+
+export function getSkillsSystemPrompt(skillNames: string[]): string {
+  if (skillNames.length === 0) {
+    return "";
+  }
+
+  return `
+# Custom Skills
+
+You have access to custom skills in /app/.opencode/skills/. Each skill directory contains:
+- A SKILL.md file with instructions
+- Any associated documents (PDFs, images, etc.) at the same level
+
+Available skills:
+${skillNames.map((name) => `- ${name}`).join("\n")}
+
+Read the SKILL.md file in each skill directory when relevant to the user's request.
+`;
+}
+
+export function getIntegrationSkillsSystemPrompt(skillSlugs: string[]): string {
+  if (skillSlugs.length === 0) {
+    return "";
+  }
+
+  return `
+# Community Integration Skills
+
+Use community integration skills for these slugs (preferred over official skill variants):
+${skillSlugs.map((slug) => `- ${slug}`).join("\n")}
+
+Community files are available in:
+/app/.opencode/integration-skills/<slug>/
+
+When a slug is listed above, prioritize that community skill's SKILL.md and resources for that integration.
+`;
+}
+
+function wrapE2BSession(
+  session: Awaited<ReturnType<typeof getOrCreateE2BSession>>,
+): OpenCodeSessionResult {
   return {
-    client: e2bSession.client,
-    sessionId: e2bSession.sessionId,
+    client: session.client,
+    sessionId: session.sessionId,
     sandbox: {
       provider: "e2b",
-      sandboxId: e2bSession.sandbox.sandboxId,
+      sandboxId: session.sandbox.sandboxId,
       commands: {
         run: async (command, opts) => {
-          const result = await e2bSession.sandbox.commands.run(command, {
+          const result = await session.sandbox.commands.run(command, {
             timeoutMs: opts?.timeoutMs,
             envs: opts?.envs,
             background: opts?.background,
@@ -588,27 +740,25 @@ export async function getOrCreateSession(
       },
       files: {
         write: async (path, content) => {
-          await e2bSession.sandbox.files.write(path, content);
+          await session.sandbox.files.write(path, content);
         },
-        read: async (path) => e2bSession.sandbox.files.read(path),
+        read: async (path) => session.sandbox.files.read(path),
       },
     },
   };
 }
 
-export async function writeSkillsToSandbox(
-  sandbox: OpenCodeSandbox,
-  userId: string,
-): Promise<string[]> {
-  return writeSkillsToE2B(sandbox as never, userId);
-}
+const e2bSessionProvider: OpenCodeSessionProvider = {
+  async getOrCreateSession(config, options) {
+    const session = await getOrCreateE2BSession(config, options);
+    return wrapE2BSession(session);
+  },
+};
 
-export async function writeResolvedIntegrationSkillsToSandbox(
-  sandbox: OpenCodeSandbox,
-  userId: string,
-  allowedSlugs?: string[],
-): Promise<string[]> {
-  return writeResolvedIntegrationSkillsToE2B(sandbox as never, userId, allowedSlugs);
-}
+const daytonaSessionProvider: OpenCodeSessionProvider = {
+  getOrCreateSession: getOrCreateDaytonaSession,
+};
 
-export { getIntegrationSkillsSystemPrompt, getSkillsSystemPrompt };
+function getOpenCodeSessionProvider(provider: "e2b" | "daytona"): OpenCodeSessionProvider {
+  return provider === "daytona" ? daytonaSessionProvider : e2bSessionProvider;
+}

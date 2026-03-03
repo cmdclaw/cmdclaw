@@ -767,6 +767,12 @@ export function useRotateWorkflowForwardingAlias() {
   });
 }
 
+export function useGetOrCreateBuilderConversation() {
+  return useMutation({
+    mutationFn: (id: string) => client.workflow.getOrCreateBuilderConversation({ id }),
+  });
+}
+
 // Hook for deleting a file
 export function useDeleteSkillFile() {
   const queryClient = useQueryClient();

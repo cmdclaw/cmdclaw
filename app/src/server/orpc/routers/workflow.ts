@@ -7,6 +7,7 @@ import {
   generateWorkflowAliasLocalPart,
 } from "@/lib/email-forwarding";
 import {
+  conversation,
   generation,
   user,
   workflow,
@@ -787,6 +788,52 @@ const rotateForwardingAlias = protectedProcedure
     };
   });
 
+const getOrCreateBuilderConversation = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const wf = await context.db.query.workflow.findFirst({
+      where: and(eq(workflow.id, input.id), eq(workflow.ownerId, context.user.id)),
+      columns: { id: true, name: true, builderConversationId: true },
+    });
+
+    if (!wf) {
+      throw new ORPCError("NOT_FOUND", { message: "Workflow not found" });
+    }
+
+    // Return existing conversation if it still exists
+    if (wf.builderConversationId) {
+      const existing = await context.db.query.conversation.findFirst({
+        where: eq(conversation.id, wf.builderConversationId),
+        columns: { id: true },
+      });
+      if (existing) {
+        return { conversationId: existing.id };
+      }
+    }
+
+    // Create a new builder conversation
+    const [created] = await context.db
+      .insert(conversation)
+      .values({
+        userId: context.user.id,
+        type: "workflow",
+        title: `${wf.name || "Workflow"} – Chat`,
+        autoApprove: true,
+      })
+      .returning({ id: conversation.id });
+
+    if (!created) {
+      throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Failed to create conversation" });
+    }
+
+    await context.db
+      .update(workflow)
+      .set({ builderConversationId: created.id })
+      .where(eq(workflow.id, wf.id));
+
+    return { conversationId: created.id };
+  });
+
 export const workflowRouter = {
   list,
   get,
@@ -800,4 +847,5 @@ export const workflowRouter = {
   createForwardingAlias,
   disableForwardingAlias,
   rotateForwardingAlias,
+  getOrCreateBuilderConversation,
 };

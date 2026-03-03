@@ -20,21 +20,31 @@ export const template = Template({
   // Install bun and create symlinks in /usr/local/bin for PATH availability
   .runCmd("curl -fsSL https://bun.sh/install | bash")
   .runCmd("sudo ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
-  // OpenCode server and tsx for running TypeScript CLI tools
-  .runCmd("$HOME/.bun/bin/bun install -g opencode-ai tsx")
-  .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
+  // Legacy OpenCode runtime install (kept for quick rollback)
+  // .runCmd("$HOME/.bun/bin/bun install -g opencode-ai tsx")
+  // .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
+  // .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
+  // tsx for running TypeScript CLI tools
+  .runCmd("$HOME/.bun/bin/bun install -g tsx")
   .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
+  // Agent Sandbox SDK runtime (OpenCode compatibility at /opencode)
+  .runCmd("sudo npm install -g @sandbox-agent/cli@0.2.x")
+  .runCmd("sandbox-agent install-agent opencode")
   .setWorkdir("/app")
   // Copy OpenCode config, plugins, and custom tools
   .copy(`${COMMON_ROOT}/opencode.json`, "/app/opencode.json")
   .runCmd("mkdir -p /app/.opencode/plugins /app/.opencode/tools")
   .copy(`${COMMON_ROOT}/plugins`, "/app/.opencode/plugins")
   .copy(`${COMMON_ROOT}/tools`, "/app/.opencode/tools")
-  // Prewarm OpenCode runtime/plugin deps to avoid 3-5s lazy install on first health request
+  // Prewarm Agent Sandbox runtime to avoid first-request overhead
   .runCmd("mkdir -p $HOME/.config/opencode /app/.opencode $HOME/.cache/opencode")
   .runCmd("cp /app/opencode.json /app/.opencode/opencode.json")
+  // Legacy OpenCode prewarm (kept commented for fallback)
+  // .runCmd(
+  //   'bash -lc \'set -euo pipefail; opencode serve --hostname 127.0.0.1 --port 4096 > /tmp/opencode-prewarm.log 2>&1 & pid=$!; ok=0; for i in $(seq 1 120); do if curl -fsS http://127.0.0.1:4096/health >/dev/null 2>&1; then ok=1; break; fi; sleep 0.25; done; kill $pid || true; wait $pid || true; test "$ok" = "1"\'',
+  // )
   .runCmd(
-    'bash -lc \'set -euo pipefail; opencode serve --hostname 127.0.0.1 --port 4096 > /tmp/opencode-prewarm.log 2>&1 & pid=$!; ok=0; for i in $(seq 1 120); do if curl -fsS http://127.0.0.1:4096/health >/dev/null 2>&1; then ok=1; break; fi; sleep 0.25; done; kill $pid || true; wait $pid || true; test "$ok" = "1"\'',
+    'bash -lc \'set -euo pipefail; sandbox-agent server --no-token --host 127.0.0.1 --port 4096 > /tmp/sandbox-agent-prewarm.log 2>&1 & pid=$!; ok=0; for i in $(seq 1 120); do if curl -fsS http://127.0.0.1:4096/v1/health >/dev/null 2>&1; then ok=1; break; fi; sleep 0.25; done; kill $pid || true; wait $pid || true; test "$ok" = "1"\'',
   )
   // Copy skills into .claude/skills
   .runCmd("mkdir -p /app/.claude")
