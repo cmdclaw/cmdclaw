@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { WORKFLOW_AVAILABLE_INTEGRATION_TYPES, INTEGRATION_LOGOS } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { getWorkflowRunStatusLabel } from "@/lib/workflow-status";
+import { client } from "@/orpc/client";
 import { useWorkflowList, useCreateWorkflow } from "@/orpc/hooks";
 
 type WorkflowItem = {
@@ -17,6 +18,8 @@ type WorkflowItem = {
   triggerType: string;
   recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
 };
+
+const DEFAULT_WORKFLOW_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -272,7 +275,7 @@ export default function WorkflowsPage() {
   }, []);
 
   const doCreate = useCallback(
-    async (opts: { prompt: string; triggerType?: string }) => {
+    async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
       try {
         const result = await createWorkflow.mutateAsync({
           name: "",
@@ -281,6 +284,24 @@ export default function WorkflowsPage() {
           prompt: opts.prompt,
           allowedIntegrations: WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
         });
+
+        const initialMessage = opts.initialMessage?.trim();
+        if (initialMessage) {
+          try {
+            const { conversationId } = await client.workflow.getOrCreateBuilderConversation({
+              id: result.id,
+            });
+            await client.generation.startGeneration({
+              conversationId,
+              content: initialMessage,
+              model: DEFAULT_WORKFLOW_BUILDER_MODEL,
+              autoApprove: true,
+            });
+          } catch (error) {
+            console.error("Failed to start workflow builder generation:", error);
+          }
+        }
+
         window.location.href = `/workflows/${result.id}`;
       } catch {
         setNotification({ type: "error", message: "Failed to create workflow. Please try again." });
@@ -297,7 +318,7 @@ export default function WorkflowsPage() {
       return;
     }
     setIsCreating(true);
-    await doCreate({ prompt: text });
+    await doCreate({ prompt: "", initialMessage: text });
     setIsCreating(false);
   }, [doCreate, isCreating, prompt]);
 
