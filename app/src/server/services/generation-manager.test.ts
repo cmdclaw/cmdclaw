@@ -149,6 +149,7 @@ import {
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
 } from "@/server/integrations/cli-env";
+import { getChatSystemBehaviorPrompt } from "@/server/prompts/chat-system-behavior-prompt";
 import { getWorkflowSystemBehaviorPrompt } from "@/server/prompts/workflow-system-behavior-prompt";
 import { getPreferredCloudSandboxProvider } from "@/server/sandbox/factory";
 import {
@@ -1745,6 +1746,7 @@ describe("generationManager transitions", () => {
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { system?: string };
     expect(promptArg.system).not.toContain(getWorkflowSystemBehaviorPrompt());
+    expect(promptArg.system).toContain(getChatSystemBehaviorPrompt() || "");
     expect(vi.mocked(collectNewSandboxFiles)).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(Number),

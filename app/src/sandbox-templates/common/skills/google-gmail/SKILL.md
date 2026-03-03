@@ -34,6 +34,14 @@ google-gmail draft --to "user@example.com" --subject "Hello" --body "Message tex
 google-gmail send --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"]
 ```
 
+## Email Body Formatting
+
+- Email body is sent as HTML.
+- Allowed tags: `<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<br>`, `<p>`.
+- Unsupported tags cause command failure.
+- Attributes on allowed tags are not allowed.
+- Markdown remains literal text (no Markdown-to-HTML conversion).
+
 ## Scope behavior
 
 - `--scope inbox` (default): only messages in `INBOX`

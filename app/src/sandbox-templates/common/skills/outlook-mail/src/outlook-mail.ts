@@ -1,4 +1,5 @@
 import { parseArgs } from "util";
+import { prepareEmailHtmlBody } from "../../_shared/email-body-format";
 
 const CLI_ARGS = process.argv.slice(2);
 const IS_HELP_REQUEST = CLI_ARGS.includes("--help") || CLI_ARGS.includes("-h");
@@ -201,11 +202,12 @@ async function sendEmail() {
     process.exit(1);
   }
 
+  const { html } = prepareEmailHtmlBody(values.body);
   const message = {
     subject: values.subject,
     body: {
-      contentType: "Text",
-      content: values.body,
+      contentType: "HTML",
+      content: html,
     },
     toRecipients: [
       {

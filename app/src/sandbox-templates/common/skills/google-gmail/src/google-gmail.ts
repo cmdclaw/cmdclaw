@@ -1,4 +1,5 @@
 import { parseArgs } from "util";
+import { prepareEmailHtmlBody } from "../../_shared/email-body-format";
 import { formatEmailDate } from "./format-email-date";
 
 const CLI_ARGS = process.argv.slice(2);
@@ -206,13 +207,14 @@ function buildRawEmail() {
     process.exit(1);
   }
 
+  const { html } = prepareEmailHtmlBody(values.body);
   const emailLines = [
     `To: ${values.to}`,
     values.cc ? `Cc: ${values.cc}` : "",
     `Subject: ${values.subject}`,
-    "Content-Type: text/plain; charset=utf-8",
+    "Content-Type: text/html; charset=utf-8",
     "",
-    values.body,
+    html,
   ]
     .filter(Boolean)
     .join("\r\n");
