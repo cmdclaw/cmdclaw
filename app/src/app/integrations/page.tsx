@@ -6,7 +6,6 @@ import {
   XCircle,
   Loader2,
   Search,
-  ChevronDown,
   Plus,
   Trash2,
   Puzzle,
@@ -18,6 +17,8 @@ import { Suspense, useCallback, useMemo, useRef } from "react";
 import { useEffect, useState } from "react";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogHeader,
@@ -208,6 +209,14 @@ function isGoogleIntegrationType(type: OAuthIntegrationType): type is GoogleInte
   return googleIntegrationTypes.has(type as GoogleIntegrationType);
 }
 type CustomAuthType = "oauth2" | "api_key" | "bearer_token";
+type NangoProvider = {
+  name: string;
+  displayName: string;
+  logoUrl: string | null;
+  authMode: string | null;
+  categories: string[];
+  docs: string | null;
+};
 type DynamicsInstanceOption = {
   id: string;
   friendlyName: string;
@@ -409,13 +418,16 @@ function IntegrationsPageContent() {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
-  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [selectedCard, setSelectedCard] = useState<IntegrationType | null>(null);
   const linkedInLinkingRef = useRef(false);
   const [whatsAppBridgeStatus, setWhatsAppBridgeStatus] = useState<
     "disconnected" | "connecting" | "connected" | null
   >(null);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [customForm, setCustomForm] = useState<CustomFormState>(defaultCustomForm);
+  const [nangoProviders, setNangoProviders] = useState<NangoProvider[]>([]);
+  const [isNangoLoading, setIsNangoLoading] = useState(true);
+  const [nangoError, setNangoError] = useState<string | null>(null);
   const [dynamicsInstances, setDynamicsInstances] = useState<DynamicsInstanceOption[]>([]);
   const [dynamicsPickerOpen, setDynamicsPickerOpen] = useState(false);
   const [dynamicsPickerLoading, setDynamicsPickerLoading] = useState(false);
@@ -659,23 +671,6 @@ function IntegrationsPageContent() {
     [requestGoogleAccess],
   );
 
-  const handleRequestGoogleIntegrationAccessClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      const integrationType = event.currentTarget.dataset.integrationType;
-      if (!integrationType) {
-        return;
-      }
-
-      const integration = integrationType as OAuthIntegrationType;
-      if (!isGoogleIntegrationType(integration)) {
-        return;
-      }
-
-      void handleRequestGoogleIntegrationAccess(integration);
-    },
-    [handleRequestGoogleIntegrationAccess],
-  );
-
   const handleToggleCustom = useCallback(
     async (customIntegrationId: string, enabled: boolean) => {
       await toggleCustom.mutateAsync({ customIntegrationId, enabled });
@@ -751,6 +746,52 @@ function IntegrationsPageContent() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadNangoProviders = async () => {
+      setIsNangoLoading(true);
+      setNangoError(null);
+
+      try {
+        const response = await fetch("/api/integrations/nango/providers");
+        const payload = (await response.json()) as {
+          providers?: NangoProvider[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Failed to load providers");
+        }
+
+        if (!active) {
+          return;
+        }
+
+        setNangoProviders(Array.isArray(payload.providers) ? payload.providers : []);
+        if (payload.error) {
+          setNangoError(payload.error);
+        }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setNangoProviders([]);
+        setNangoError(toErrorMessage(error, "Failed to load providers"));
+      } finally {
+        if (active) {
+          setIsNangoLoading(false);
+        }
+      }
+    };
+
+    void loadNangoProviders();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const integrationsList = useMemo(
     () => (Array.isArray(integrations) ? integrations : []),
     [integrations],
@@ -797,6 +838,21 @@ function IntegrationsPageContent() {
     return true;
   });
 
+  const filteredNangoProviders = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return nangoProviders;
+    }
+
+    return nangoProviders.filter((provider) => {
+      return (
+        provider.displayName.toLowerCase().includes(normalizedSearch) ||
+        provider.name.toLowerCase().includes(normalizedSearch) ||
+        provider.categories.some((category) => category.toLowerCase().includes(normalizedSearch))
+      );
+    });
+  }, [nangoProviders, searchQuery]);
+
   const connectedCount = visibleIntegrations.reduce((count, [type]) => {
     const integration = connectedIntegrations.get(type);
     const isWhatsAppConnected = type === "whatsapp" && whatsAppBridgeStatus === "connected";
@@ -826,26 +882,39 @@ function IntegrationsPageContent() {
     setSearchQuery(event.target.value);
   }, []);
 
-  const handleStopPropagation = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
-  }, []);
-
-  const handleToggleExpandedCard = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    const type = event.currentTarget.dataset.integrationType;
-    if (!type) {
-      return;
+  const handleCardClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    const type = event.currentTarget.dataset.integrationType as IntegrationType | undefined;
+    if (type) {
+      setSelectedCard(type);
     }
-    setExpandedCard((current) => (current === type ? null : type));
   }, []);
 
-  const handleOpenWhatsAppIntegration = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      window.location.assign("/integrations/whatsapp");
+  const handleCloseCard = useCallback(() => {
+    setSelectedCard(null);
+  }, []);
+
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        handleCloseCard();
+      }
     },
-    [],
+    [handleCloseCard],
   );
+
+  const handleOpenWhatsAppFromModal = useCallback(() => {
+    window.location.assign("/integrations/whatsapp");
+  }, []);
+
+  const handleRequestGoogleAccessFromModal = useCallback(() => {
+    if (selectedCard && isGoogleIntegrationType(selectedCard as OAuthIntegrationType)) {
+      void handleRequestGoogleIntegrationAccess(selectedCard as GoogleIntegrationType);
+    }
+  }, [selectedCard, handleRequestGoogleIntegrationAccess]);
+
+  const handleCapabilitiesTooltipClick = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+  }, []);
 
   const handleShowAddCustom = useCallback(() => {
     setShowAddCustom(true);
@@ -1080,213 +1149,405 @@ function IntegrationsPageContent() {
               : "All integrations are connected."}
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredIntegrations.map(([type, config]) => {
-            const isPreviewOnly = adminPreviewOnlyIntegrations.has(type);
-            const integration = connectedIntegrations.get(type);
-            const isConnecting = connectingType === type;
-            const isExpanded = expandedCard === type;
-            const isWhatsApp = type === "whatsapp";
-            const isWhatsAppConnected = isWhatsApp && whatsAppBridgeStatus === "connected";
-            const actions = isWhatsApp ? [] : getIntegrationActions(type);
-            const connectError = !integration
-              ? integrationConnectErrors[type as OAuthIntegrationType]
-              : undefined;
-            const isGoogleIntegration =
-              !isWhatsApp && isGoogleIntegrationType(type as OAuthIntegrationType);
-            const shouldShowGoogleAccessRequest =
-              !integration && isGoogleIntegration && lacksGoogleAccess;
+        <>
+          {/* Integration detail modal */}
+          {selectedCard &&
+            (() => {
+              const type = selectedCard;
+              const config = integrationConfig[type];
+              const integration = connectedIntegrations.get(type);
+              const isConnecting = connectingType === type;
+              const isWhatsApp = type === "whatsapp";
+              const isWhatsAppConnected = isWhatsApp && whatsAppBridgeStatus === "connected";
+              const actions = isWhatsApp ? [] : getIntegrationActions(type);
+              const connectError = !integration
+                ? integrationConnectErrors[type as OAuthIntegrationType]
+                : undefined;
+              const isGoogleIntegration =
+                !isWhatsApp && isGoogleIntegrationType(type as OAuthIntegrationType);
+              const shouldShowGoogleAccessRequest =
+                !integration && isGoogleIntegration && lacksGoogleAccess;
 
-            return (
-              <div key={type} className="relative overflow-hidden rounded-lg border">
-                {isPreviewOnly && (
-                  <span className="bg-muted text-muted-foreground absolute top-2 right-2 z-10 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
-                    Coming soon
-                  </span>
-                )}
-                {connectError && (
-                  <div className="flex items-center gap-2 border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-700 dark:text-red-400">
-                    <XCircle className="h-4 w-4 shrink-0" />
-                    {connectError}
-                  </div>
-                )}
-                <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                    {/* Keep all integration icon containers fixed square size; logos must stay object-contain to preserve aspect ratio. */}
-                    <div
-                      className={cn(
-                        "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border p-2 shadow-sm",
-                        config.bgColor,
-                      )}
-                    >
-                      <Image
-                        src={config.icon}
-                        alt={config.name}
-                        width={32}
-                        height={32}
-                        className="h-auto max-h-8 w-auto max-w-8 object-contain"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-medium">{config.name}</h3>
-                      {integration?.setupRequired ? (
-                        <p className="text-muted-foreground truncate text-sm">
-                          Finish environment selection to complete connection.
-                        </p>
-                      ) : integration ? (
-                        <div className="text-muted-foreground text-sm">
-                          <p className="truncate">
-                            Connected as{" "}
-                            <span className="font-medium">{integration.displayName}</span>
-                          </p>
-                          {type === "dynamics" &&
-                            (integration.instanceName || integration.instanceUrl) && (
-                              <p className="inline-flex max-w-full items-center gap-1 truncate">
-                                <span className="shrink-0">Environment:</span>
-                                <span className="min-w-0 truncate font-medium">
-                                  {integration.instanceName ?? integration.instanceUrl}
-                                </span>
-                                {integration.instanceUrl && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center"
-                                        aria-label="Show Dynamics environment URL"
-                                      >
-                                        <Info className="h-3.5 w-3.5" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{integration.instanceUrl}</TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </p>
-                            )}
-                        </div>
-                      ) : isWhatsAppConnected ? (
-                        <p className="text-muted-foreground text-sm">
-                          Bridge is connected. Open to manage QR/linking.
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground text-sm">{config.description}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                    {actions.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-between sm:w-auto"
-                        data-integration-type={type}
-                        onClick={handleToggleExpandedCard}
+              return (
+                <AlertDialog open onOpenChange={handleDialogOpenChange}>
+                  <AlertDialogContent className="max-w-sm overflow-hidden p-0">
+                    {/* Header with logo */}
+                    <div className="flex items-center gap-3 border-b px-5 pt-5 pb-4">
+                      <div
+                        className={cn(
+                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border p-2 shadow-sm",
+                          config.bgColor,
+                        )}
                       >
-                        {isExpanded ? "Hide" : "Show"} Capabilities
-                        <ChevronDown
-                          className={cn(
-                            "ml-1 h-4 w-4 transition-transform duration-200",
-                            isExpanded && "rotate-180",
-                          )}
+                        <Image
+                          src={config.icon}
+                          alt={config.name}
+                          width={28}
+                          height={28}
+                          className="h-auto max-h-7 w-auto max-w-7 object-contain"
                         />
-                      </Button>
-                    )}
-                    {isWhatsApp ? (
-                      <Button className="w-full sm:w-auto" onClick={handleOpenWhatsAppIntegration}>
-                        {isWhatsAppConnected ? "Manage" : "Connect"}
-                        <ExternalLink className="ml-2 h-4 w-4" />
-                      </Button>
-                    ) : integration ? (
-                      <>
-                        {type === "dynamics" && integration.setupRequired ? (
-                          <>
-                            <Button
-                              onClick={handleOpenDynamicsSetup}
-                              disabled={dynamicsPickerLoading}
-                            >
-                              Complete setup
-                            </Button>
-                            <IntegrationDisconnectButton
-                              integrationId={integration.id}
-                              onDisconnect={handleDisconnect}
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <label
-                              className="flex cursor-pointer items-center gap-2 whitespace-nowrap"
-                              onClick={handleStopPropagation}
-                            >
-                              <IntegrationEnabledSwitch
-                                checked={integration.enabled}
-                                integrationId={integration.id}
-                                onToggle={handleToggle}
-                              />
-                              <span className="inline-block w-8 text-sm">
-                                {integration.enabled ? "On" : "Off"}
-                              </span>
-                            </label>
-                            <IntegrationDisconnectButton
-                              integrationId={integration.id}
-                              onDisconnect={handleDisconnect}
-                            />
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {shouldShowGoogleAccessRequest ? (
-                          <Button
-                            onClick={handleRequestGoogleIntegrationAccessClick}
-                            data-integration-type={type}
-                            disabled={requestGoogleAccess.isPending}
-                            variant={connectError ? "destructive" : "default"}
-                          >
-                            {requestGoogleAccess.isPending ? "Requesting..." : "Request access"}
-                          </Button>
-                        ) : (
-                          <IntegrationConnectButton
-                            integrationType={type as OAuthIntegrationType}
-                            isConnecting={isConnecting}
-                            hasError={Boolean(connectError)}
-                            onConnect={handleConnect}
-                          />
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
+                      </div>
+                      <div className="min-w-0">
+                        <AlertDialogTitle className="text-base leading-tight">
+                          {config.name}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="mt-0.5 text-xs">
+                          {integration?.setupRequired
+                            ? "Finish environment selection to complete connection."
+                            : integration
+                              ? `Connected as ${integration.displayName}`
+                              : isWhatsAppConnected
+                                ? "Bridge is connected."
+                                : config.description}
+                        </AlertDialogDescription>
+                      </div>
+                    </div>
 
-                {/* Expandable actions section */}
-                <div
-                  className={cn(
-                    "grid transition-all duration-200 ease-in-out",
-                    isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                  )}
-                >
-                  <div className="overflow-hidden">
-                    {actions.length > 0 && (
-                      <div className="bg-muted/30 border-t px-4 py-3">
-                        <p className="text-muted-foreground mb-2 text-xs">Available actions:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {actions.map((action) => (
-                            <span
-                              key={action.key}
-                              className="bg-muted text-muted-foreground rounded-md px-2 py-1 text-xs"
-                            >
-                              {action.label}
+                    <div className="space-y-4 px-5 py-4">
+                      {/* Dynamics environment info */}
+                      {integration &&
+                        type === "dynamics" &&
+                        (integration.instanceName || integration.instanceUrl) && (
+                          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                            <span className="shrink-0 text-xs">Environment:</span>
+                            <span className="truncate text-xs font-medium">
+                              {integration.instanceName ?? integration.instanceUrl}
                             </span>
-                          ))}
+                            {integration.instanceUrl && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center"
+                                    aria-label="Show Dynamics environment URL"
+                                  >
+                                    <Info className="h-3 w-3" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>{integration.instanceUrl}</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        )}
+
+                      {/* Error banner */}
+                      {connectError && (
+                        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+                          <XCircle className="h-3.5 w-3.5 shrink-0" />
+                          {connectError}
+                        </div>
+                      )}
+
+                      {/* Capabilities */}
+                      {actions.length > 0 && (
+                        <div>
+                          <p className="text-muted-foreground mb-2 text-[11px] font-medium tracking-wide uppercase">
+                            Capabilities
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {actions.map((action) => (
+                              <span
+                                key={action.key}
+                                className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs"
+                              >
+                                {action.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <AlertDialogCancel onClick={handleCloseCard} className="h-8 text-xs">
+                          Close
+                        </AlertDialogCancel>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isWhatsApp ? (
+                            <AlertDialogAction onClick={handleOpenWhatsAppFromModal}>
+                              {isWhatsAppConnected ? "Manage" : "Connect"}
+                              <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                            </AlertDialogAction>
+                          ) : integration ? (
+                            <>
+                              {type === "dynamics" && integration.setupRequired ? (
+                                <>
+                                  <AlertDialogAction
+                                    onClick={handleOpenDynamicsSetup}
+                                    disabled={dynamicsPickerLoading}
+                                  >
+                                    Complete setup
+                                  </AlertDialogAction>
+                                  <IntegrationDisconnectButton
+                                    integrationId={integration.id}
+                                    onDisconnect={handleDisconnect}
+                                  />
+                                </>
+                              ) : (
+                                <>
+                                  <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap">
+                                    <IntegrationEnabledSwitch
+                                      checked={integration.enabled}
+                                      integrationId={integration.id}
+                                      onToggle={handleToggle}
+                                    />
+                                    <span className="inline-block w-8 text-sm">
+                                      {integration.enabled ? "On" : "Off"}
+                                    </span>
+                                  </label>
+                                  <IntegrationDisconnectButton
+                                    integrationId={integration.id}
+                                    onDisconnect={handleDisconnect}
+                                  />
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {shouldShowGoogleAccessRequest ? (
+                                <AlertDialogAction
+                                  onClick={handleRequestGoogleAccessFromModal}
+                                  disabled={requestGoogleAccess.isPending}
+                                  className={
+                                    connectError ? "bg-destructive hover:bg-destructive/90" : ""
+                                  }
+                                >
+                                  {requestGoogleAccess.isPending
+                                    ? "Requesting..."
+                                    : "Request access"}
+                                </AlertDialogAction>
+                              ) : (
+                                <IntegrationConnectButton
+                                  integrationType={type as OAuthIntegrationType}
+                                  isConnecting={isConnecting}
+                                  hasError={Boolean(connectError)}
+                                  onConnect={handleConnect}
+                                />
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
-                    )}
+                    </div>
+                  </AlertDialogContent>
+                </AlertDialog>
+              );
+            })()}
+
+          {/* Compact grid */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5">
+            {filteredIntegrations.map(([type, config]) => {
+              const isPreviewOnly = adminPreviewOnlyIntegrations.has(type);
+              const integration = connectedIntegrations.get(type);
+              const isWhatsApp = type === "whatsapp";
+              const isWhatsAppConnected = isWhatsApp && whatsAppBridgeStatus === "connected";
+              const actions = isWhatsApp ? [] : getIntegrationActions(type);
+              const connectError = !integration
+                ? integrationConnectErrors[type as OAuthIntegrationType]
+                : undefined;
+              const isConnected = !!integration || isWhatsAppConnected;
+              const isEnabled = integration?.enabled ?? (isWhatsApp ? isWhatsAppConnected : false);
+              const hasError = !integration && !!connectError;
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  data-integration-type={type}
+                  onClick={handleCardClick}
+                  className={cn(
+                    "group relative flex flex-col items-center rounded-xl border bg-card p-3 pb-2.5 text-center transition-all duration-150",
+                    "hover:border-foreground/25 hover:shadow-md hover:-translate-y-px",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    isPreviewOnly && "opacity-60",
+                    hasError && "border-red-500/40 bg-red-500/5",
+                  )}
+                >
+                  {/* Status dot — top-right */}
+                  <div className="absolute top-2.5 right-2.5">
+                    {isConnected ? (
+                      <div
+                        className={cn(
+                          "h-2 w-2 rounded-full shadow-sm",
+                          isEnabled ? "bg-green-500" : "bg-yellow-500",
+                        )}
+                      />
+                    ) : hasError ? (
+                      <div className="h-2 w-2 rounded-full bg-red-500" />
+                    ) : null}
                   </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+
+                  {/* Capabilities tooltip — bottom-right, stops propagation */}
+                  {actions.length > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-muted-foreground/40 hover:text-muted-foreground absolute right-2 bottom-2 rounded p-0.5 transition-colors"
+                          onClick={handleCapabilitiesTooltipClick}
+                        >
+                          <Info className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="end" className="max-w-[200px] p-2.5">
+                        <p className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">
+                          Capabilities
+                        </p>
+                        <ul className="space-y-0.5">
+                          {actions.slice(0, 10).map((action) => (
+                            <li key={action.key} className="text-xs">
+                              {action.label}
+                            </li>
+                          ))}
+                          {actions.length > 10 && (
+                            <li className="text-muted-foreground text-xs">
+                              +{actions.length - 10} more
+                            </li>
+                          )}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  {/* Logo */}
+                  <div
+                    className={cn(
+                      "mb-2.5 flex h-12 w-12 items-center justify-center rounded-lg border p-2 shadow-sm transition-transform duration-150 group-hover:scale-105",
+                      config.bgColor,
+                    )}
+                  >
+                    <Image
+                      src={config.icon}
+                      alt={config.name}
+                      width={28}
+                      height={28}
+                      className="h-auto max-h-7 w-auto max-w-7 object-contain"
+                    />
+                  </div>
+
+                  {/* Name */}
+                  <p className="line-clamp-2 text-xs leading-tight font-medium">{config.name}</p>
+
+                  {/* Status label */}
+                  <p
+                    className={cn(
+                      "mt-1 text-[10px] leading-none",
+                      isConnected
+                        ? isEnabled
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-yellow-600 dark:text-yellow-400"
+                        : hasError
+                          ? "text-red-500"
+                          : isPreviewOnly
+                            ? "text-muted-foreground/60"
+                            : "text-muted-foreground",
+                    )}
+                  >
+                    {isConnected
+                      ? isEnabled
+                        ? "Connected"
+                        : "Disabled"
+                      : hasError
+                        ? "Error"
+                        : isPreviewOnly
+                          ? "Coming soon"
+                          : "Not connected"}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
+
+      <div className="mt-10">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Nango Catalog</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Browse providers from Nango and add the ones you need to CmdClaw.
+            </p>
+          </div>
+          <Button variant="outline" asChild>
+            <a
+              href="https://app.nango.dev/dev/integrations/create"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Nango
+              <ExternalLink className="ml-2 h-4 w-4" />
+            </a>
+          </Button>
+        </div>
+
+        {isNangoLoading ? (
+          <div className="text-muted-foreground text-sm">Loading Nango providers...</div>
+        ) : nangoError ? (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+            {nangoError}
+          </div>
+        ) : filteredNangoProviders.length === 0 ? (
+          <div className="text-muted-foreground rounded-lg border py-8 text-center text-sm">
+            {searchQuery
+              ? "No Nango providers found for this search."
+              : "No Nango providers available."}
+          </div>
+        ) : (
+          <>
+            <div className="text-muted-foreground mb-2 text-xs">
+              Showing {filteredNangoProviders.length.toLocaleString()} of{" "}
+              {nangoProviders.length.toLocaleString()} providers.
+            </div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5">
+              {filteredNangoProviders.map((provider) => {
+                const providerUrl =
+                  provider.docs ?? "https://app.nango.dev/dev/integrations/create";
+                const authLabel = provider.authMode ?? "provider-managed";
+
+                return (
+                  <a
+                    key={provider.name}
+                    href={providerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(
+                      "group relative flex flex-col items-center rounded-xl border bg-card p-3 pb-2.5 text-center transition-all duration-150",
+                      "hover:border-foreground/25 hover:shadow-md hover:-translate-y-px",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    )}
+                  >
+                    <div className="absolute top-2.5 right-2.5">
+                      <ExternalLink className="text-muted-foreground/50 h-3.5 w-3.5" />
+                    </div>
+
+                    <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-lg border bg-white p-2 shadow-sm transition-transform duration-150 group-hover:scale-105 dark:bg-gray-800">
+                      {provider.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={provider.logoUrl}
+                          alt={provider.displayName}
+                          className="h-auto max-h-7 w-auto max-w-7 object-contain"
+                        />
+                      ) : (
+                        <Puzzle className="text-muted-foreground h-5 w-5" />
+                      )}
+                    </div>
+
+                    <p className="line-clamp-2 text-xs leading-tight font-medium">
+                      {provider.displayName}
+                    </p>
+
+                    <p className="text-muted-foreground mt-1 line-clamp-1 text-[10px] leading-none">
+                      {authLabel}
+                    </p>
+                  </a>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Custom integrations are intentionally hidden until the feature is ready. */}
       {showCustomIntegrations && (
