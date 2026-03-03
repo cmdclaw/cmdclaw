@@ -206,6 +206,7 @@ If you don't want BYOC:
 
 - Set `E2B_API_KEY` and `E2B_DAYTONA_SANDBOX_NAME` to use E2B cloud sandboxes.
 - Or set `DAYTONA_API_KEY` (plus optional `DAYTONA_SERVER_URL` / `DAYTONA_TARGET`) to use Daytona sandboxes.
+- Or set `SANDBOX_DEFAULT=docker` to use local Docker-based sandboxes.
 
 ## Background worker
 
@@ -249,4 +250,4 @@ bun ws:dev
 | AI | Anthropic Claude, OpenAI, Google Gemini |
 | Queue | BullMQ, Redis |
 | Storage | S3 / MinIO |
-| Sandbox | E2B, Daytona |
+| Sandbox | E2B, Daytona, Docker |

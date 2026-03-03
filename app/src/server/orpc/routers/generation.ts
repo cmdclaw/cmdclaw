@@ -17,6 +17,11 @@ const generationEventSchema = z.discriminatedUnion("type", [
     content: z.string(),
   }),
   z.object({
+    type: z.literal("system"),
+    content: z.string(),
+    workflowId: z.string().optional(),
+  }),
+  z.object({
     type: z.literal("tool_use"),
     toolName: z.string(),
     toolInput: z.unknown(),
@@ -185,6 +190,7 @@ const startGeneration = protectedProcedure
       content: z.string().min(1).max(100000),
       model: modelReferenceSchema.optional(),
       autoApprove: z.boolean().optional(),
+      sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
       deviceId: z.string().optional(),
       selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
       fileAttachments: z
@@ -220,6 +226,7 @@ const startGeneration = protectedProcedure
         model: input.model,
         userId: context.user.id,
         autoApprove: input.autoApprove,
+        sandboxProvider: input.sandboxProvider,
         deviceId: input.deviceId,
         selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
         fileAttachments: input.fileAttachments,

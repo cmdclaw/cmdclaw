@@ -25,7 +25,7 @@ export const env = createEnv({
     E2B_API_KEY: z.string().optional(),
     E2B_DAYTONA_SANDBOX_NAME: z.string().optional(),
     SANDBOX_AGENT_RUNTIME: z.enum(["opencode", "agentsdk"]).default("agentsdk"),
-    SANDBOX_DEFAULT: z.enum(["daytona", "e2b"]),
+    SANDBOX_DEFAULT: z.enum(["daytona", "e2b", "docker"]),
     DAYTONA_API_KEY: z.string().optional(),
     ANVIL_API_KEY: z.string().optional(),
     // OAuth credentials

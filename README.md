@@ -32,7 +32,7 @@ CmdClaw is an open-source, multi-platform AI assistant that lets you interact wi
 - **Voice Input** — Native speech-to-text on macOS and iOS via Whisper
 - **Custom Skills** — Create and manage reusable skills with a built-in editor
 - **Approval Workflow** — Review and approve sensitive actions before they execute
-- **Code Execution** — Sandboxed code running via E2B or Daytona
+- **Code Execution** — Sandboxed code running via E2B, Daytona, or Docker
 - **Cross-Platform** — Web (Next.js), macOS (SwiftUI), iOS (SwiftUI)
 
 ## Tech Stack
@@ -45,7 +45,7 @@ CmdClaw is an open-source, multi-platform AI assistant that lets you interact wi
 | AI | Anthropic Claude, OpenAI, Google Gemini |
 | Queue | BullMQ, Redis |
 | Storage | S3 / MinIO |
-| Sandbox | E2B, Daytona |
+| Sandbox | E2B, Daytona, Docker |
 | Native | SwiftUI (macOS & iOS) |
 
 ## Project Structure

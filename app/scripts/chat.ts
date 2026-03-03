@@ -31,6 +31,7 @@ type Args = {
   conversationId?: string;
   message?: string;
   model?: string;
+  sandboxProvider?: "e2b" | "daytona" | "docker";
   token?: string;
   files: string[];
   autoApprove: boolean;
@@ -97,6 +98,16 @@ function parseArgs(argv: string[]): Args {
         args.model = argv[i + 1];
         i += 1;
         break;
+      case "--sandbox": {
+        const value = argv[i + 1];
+        if (value !== "e2b" && value !== "daytona" && value !== "docker") {
+          console.error("Invalid --sandbox value. Use one of: e2b, daytona, docker");
+          process.exit(1);
+        }
+        args.sandboxProvider = value;
+        i += 1;
+        break;
+      }
       case "--list-models":
         args.listModels = true;
         break;
@@ -152,6 +163,7 @@ function printHelp(): void {
   console.log(
     "  -M, --model <provider/model> Model reference (default prefers ChatGPT when connected)",
   );
+  console.log("  --sandbox <e2b|daytona|docker> Override sandbox provider for this generation");
   console.log("  --list-models             List free model ids and exit");
   console.log("  --auto-approve            Auto-approve tool calls");
   console.log("  --no-validate             Skip persisted message validation");
@@ -526,6 +538,7 @@ async function runGeneration(
         conversationId,
         content,
         model: options.model,
+        sandboxProvider: options.sandboxProvider,
         autoApprove: options.autoApprove,
         fileAttachments: attachments?.length ? attachments : undefined,
       },

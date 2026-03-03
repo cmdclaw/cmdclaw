@@ -320,6 +320,7 @@ export type GenerationExecutionPolicy = {
   allowedIntegrations?: string[];
   allowedCustomIntegrations?: string[];
   autoApprove?: boolean;
+  sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   queuedFileAttachments?: Array<{
     name: string;

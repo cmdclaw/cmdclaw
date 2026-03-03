@@ -7,8 +7,10 @@ import {
 } from "@/server/sandbox/opencode-session";
 
 function toLegacySandbox(sandbox: SandboxHandle) {
+  const legacyProvider = sandbox.provider === "daytona" ? "daytona" : "e2b";
+
   return {
-    provider: sandbox.provider === "byoc" ? "e2b" : sandbox.provider,
+    provider: legacyProvider,
     sandboxId: sandbox.sandboxId,
     commands: {
       run: async (command: string, opts?: { timeoutMs?: number; envs?: Record<string, string> }) =>

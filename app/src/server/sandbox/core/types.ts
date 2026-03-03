@@ -1,4 +1,4 @@
-export type SandboxProviderId = "e2b" | "daytona" | "byoc";
+export type SandboxProviderId = "e2b" | "daytona" | "docker" | "byoc";
 
 export type RuntimeHarnessId = "opencode" | "agent-sdk";
 
@@ -173,6 +173,7 @@ export interface ConversationRuntimeOptions {
   replayHistory?: boolean;
   onLifecycle?: SessionLifecycleCallback;
   telemetry?: Record<string, unknown>;
+  sandboxProviderOverride?: "e2b" | "daytona" | "docker";
 }
 
 export interface ConversationRuntimeSession {

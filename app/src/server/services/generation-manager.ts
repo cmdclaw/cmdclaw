@@ -27,6 +27,7 @@ import {
   message,
   messageAttachment,
   skill,
+  user,
   workflow,
   workflowRun,
   workflowRunEvent,
@@ -72,6 +73,12 @@ import { writeSessionTranscriptFromConversation } from "@/server/services/memory
 import { resolveSelectedPlatformSkillSlugs } from "@/server/services/platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "@/server/services/sandbox-file-service";
 import { SESSION_BOUNDARY_PREFIX } from "@/server/services/session-constants";
+import {
+  applyWorkflowBuilderPatch,
+  extractWorkflowBuilderPatch,
+  resolveWorkflowBuilderContextByConversation,
+  type WorkflowBuilderContext,
+} from "@/server/services/workflow-builder-service";
 import { generateConversationTitle } from "@/server/utils/generate-title";
 import { createTraceId, logServerEvent } from "@/server/utils/observability";
 
@@ -94,6 +101,7 @@ async function resolveWorkflowModel(model?: string): Promise<string> {
 // Event types for generation stream
 export type GenerationEvent =
   | { type: "text"; content: string }
+  | { type: "system"; content: string; workflowId?: string }
   | {
       type: "tool_use";
       toolName: string;
@@ -267,6 +275,7 @@ interface GenerationContext {
   // BYOC fields
   backendType: BackendType;
   deviceId?: string;
+  sandboxProviderOverride?: "e2b" | "daytona" | "docker";
   // Workflow fields
   workflowRunId?: string;
   allowedIntegrations?: IntegrationType[];
@@ -276,6 +285,7 @@ interface GenerationContext {
   workflowPromptDo?: string;
   workflowPromptDont?: string;
   triggerPayload?: unknown;
+  builderWorkflowContext?: WorkflowBuilderContext | null;
   selectedPlatformSkillSlugs?: string[];
   // Sandbox file collection
   generationMarkerTime?: number;
@@ -322,6 +332,7 @@ type PrePromptCacheRecord = {
 
 const PRE_PROMPT_CACHE_PATH = "/app/.opencode/pre-prompt-cache.json";
 const DEFAULT_MODEL_REFERENCE = "anthropic/claude-sonnet-4-6";
+const WORKFLOW_BUILDER_AUTO_APPLY_ENABLED = process.env.WORKFLOW_BUILDER_AUTO_APPLY !== "0";
 
 async function getDoneArtifacts(messageId: string): Promise<
   | {
@@ -494,6 +505,7 @@ function buildExecutionPolicy(params: {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
   autoApprove: boolean;
+  sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   queuedFileAttachments?: UserFileAttachment[];
 }): GenerationExecutionPolicy {
@@ -501,6 +513,7 @@ function buildExecutionPolicy(params: {
     allowedIntegrations: params.allowedIntegrations,
     allowedCustomIntegrations: params.allowedCustomIntegrations,
     autoApprove: params.autoApprove,
+    sandboxProvider: params.sandboxProvider,
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
     queuedFileAttachments: params.queuedFileAttachments,
   };
@@ -1122,6 +1135,7 @@ class GenerationManager {
     allowedIntegrations?: IntegrationType[];
     allowedCustomIntegrations?: string[];
     autoApprove?: boolean;
+    sandboxProvider?: "e2b" | "daytona" | "docker";
     selectedPlatformSkillSlugs?: string[];
     queuedFileAttachments?: UserFileAttachment[];
   } {
@@ -1136,6 +1150,12 @@ class GenerationManager {
       allowedIntegrations,
       allowedCustomIntegrations: policy?.allowedCustomIntegrations,
       autoApprove: policy?.autoApprove ?? fallbackAutoApprove,
+      sandboxProvider:
+        policy?.sandboxProvider === "e2b" ||
+        policy?.sandboxProvider === "daytona" ||
+        policy?.sandboxProvider === "docker"
+          ? policy.sandboxProvider
+          : undefined,
       selectedPlatformSkillSlugs: Array.isArray(policy?.selectedPlatformSkillSlugs)
         ? policy.selectedPlatformSkillSlugs.filter(
             (entry): entry is string => typeof entry === "string",
@@ -1359,6 +1379,7 @@ class GenerationManager {
     model?: string;
     userId: string;
     autoApprove?: boolean;
+    sandboxProvider?: "e2b" | "daytona" | "docker";
     allowedIntegrations?: IntegrationType[];
     deviceId?: string;
     fileAttachments?: UserFileAttachment[];
@@ -1386,6 +1407,7 @@ class GenerationManager {
         requestedModel: requestedModel ?? null,
         hasDeviceId: Boolean(params.deviceId),
         hasAllowedIntegrations: params.allowedIntegrations !== undefined,
+        sandboxProviderOverride: params.sandboxProvider ?? null,
         fileAttachmentsCount: fileAttachments?.length ?? 0,
         selectedPlatformSkillCount: params.selectedPlatformSkillSlugs?.length ?? 0,
       },
@@ -1503,6 +1525,14 @@ class GenerationManager {
     const selectedPlatformSkillSlugs = await resolveSelectedPlatformSkillSlugs(
       params.selectedPlatformSkillSlugs,
     );
+    const builderWorkflowContext =
+      conv.type === "workflow"
+        ? await resolveWorkflowBuilderContextByConversation({
+            database: db,
+            userId,
+            conversationId: conv.id,
+          })
+        : null;
 
     // Save user message
     const [userMsg] = await db
@@ -1577,6 +1607,7 @@ class GenerationManager {
         executionPolicy: buildExecutionPolicy({
           allowedIntegrations: params.allowedIntegrations,
           autoApprove: conv.autoApprove,
+          sandboxProvider: params.sandboxProvider,
           selectedPlatformSkillSlugs,
           queuedFileAttachments: fileAttachments,
         }),
@@ -1665,9 +1696,11 @@ class GenerationManager {
       pendingMessageParts: new Map(),
       backendType,
       deviceId: params.deviceId,
+      sandboxProviderOverride: params.sandboxProvider,
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: conv.autoApprove,
       attachments: fileAttachments,
+      builderWorkflowContext,
       selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
@@ -1729,6 +1762,7 @@ class GenerationManager {
     model?: string;
     userId: string;
     autoApprove: boolean;
+    sandboxProvider?: "e2b" | "daytona" | "docker";
     allowedIntegrations: IntegrationType[];
     allowedCustomIntegrations?: string[];
   }): Promise<{ generationId: string; conversationId: string }> {
@@ -1762,6 +1796,7 @@ class GenerationManager {
           allowedIntegrations: params.allowedIntegrations,
           allowedCustomIntegrations: params.allowedCustomIntegrations,
           autoApprove: params.autoApprove,
+          sandboxProvider: params.sandboxProvider,
           selectedPlatformSkillSlugs: undefined,
         }),
         contentParts: [],
@@ -1820,6 +1855,7 @@ class GenerationManager {
       messageRoles: new Map(),
       pendingMessageParts: new Map(),
       backendType: "opencode",
+      sandboxProviderOverride: params.sandboxProvider,
       workflowRunId: params.workflowRunId,
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: params.autoApprove,
@@ -1828,6 +1864,7 @@ class GenerationManager {
       workflowPromptDo: undefined,
       workflowPromptDont: undefined,
       triggerPayload: undefined,
+      builderWorkflowContext: null,
       selectedPlatformSkillSlugs: undefined,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
@@ -1909,6 +1946,14 @@ class GenerationManager {
       genRecord,
       linkedWorkflow?.autoApprove ?? genRecord.conversation.autoApprove,
     );
+    const builderWorkflowContext =
+      genRecord.conversation.type === "workflow"
+        ? await resolveWorkflowBuilderContextByConversation({
+            database: db,
+            userId: genRecord.conversation.userId,
+            conversationId: genRecord.conversationId,
+          })
+        : null;
 
     const ctx: GenerationContext = {
       id: genRecord.id,
@@ -1937,6 +1982,7 @@ class GenerationManager {
       messageRoles: new Map(),
       pendingMessageParts: new Map(),
       backendType: "opencode",
+      sandboxProviderOverride: executionPolicy.sandboxProvider,
       workflowRunId: linkedWorkflowRun?.id,
       allowedIntegrations:
         executionPolicy.allowedIntegrations ??
@@ -1954,6 +2000,7 @@ class GenerationManager {
       workflowPromptDo: undefined,
       workflowPromptDont: undefined,
       triggerPayload: undefined,
+      builderWorkflowContext,
       selectedPlatformSkillSlugs: executionPolicy.selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
@@ -3235,6 +3282,7 @@ class GenerationManager {
               integrationEnvs: filteredCliEnv,
             },
             {
+              sandboxProviderOverride: ctx.sandboxProviderOverride,
               title: conv?.title || "Conversation",
               replayHistory: hasExistingMessages,
               telemetry: {
@@ -3544,6 +3592,7 @@ class GenerationManager {
         "be made available for download in the chat interface.",
       ].join("");
       const workflowPrompt = this.buildWorkflowPrompt(ctx);
+      const workflowBuilderPrompt = this.buildWorkflowBuilderPrompt(ctx);
       const integrationSkillDraftInstructions = this.getIntegrationSkillDraftInstructions();
       const selectedPlatformSkillInstructions = getSelectedPlatformSkillPrompt(
         ctx.selectedPlatformSkillSlugs,
@@ -3559,6 +3608,7 @@ class GenerationManager {
         integrationSkillDraftInstructions,
         memoryInstructions,
         workflowPrompt,
+        workflowBuilderPrompt,
       ].filter(Boolean);
       const systemPrompt = systemPromptParts.join("\n\n");
 
@@ -3856,6 +3906,7 @@ class GenerationManager {
           console.error("[GenerationManager] Failed to import integration skill drafts:", error);
         }
       }
+      await this.tryAutoApplyWorkflowBuilderPatch(ctx);
 
       // Collect new files created in the sandbox during generation
       let uploadedSandboxFileCount = 0;
@@ -4219,6 +4270,7 @@ class GenerationManager {
           integrationEnvs: {},
         },
         {
+          sandboxProviderOverride: ctx.sandboxProviderOverride,
           title: conv?.title || "Conversation",
           replayHistory: false,
         },
@@ -4316,6 +4368,7 @@ class GenerationManager {
           integrationEnvs: {},
         },
         {
+          sandboxProviderOverride: ctx.sandboxProviderOverride,
           title: conv?.title || "Conversation",
           replayHistory: false,
         },
@@ -5672,6 +5725,198 @@ class GenerationManager {
     return sections.join("\n\n");
   }
 
+  private buildWorkflowBuilderPrompt(ctx: GenerationContext): string | null {
+    if (!ctx.builderWorkflowContext) {
+      return null;
+    }
+
+    const snapshot = JSON.stringify(
+      {
+        workflowId: ctx.builderWorkflowContext.workflowId,
+        updatedAt: ctx.builderWorkflowContext.updatedAt,
+        editable: {
+          prompt: ctx.builderWorkflowContext.prompt,
+          triggerType: ctx.builderWorkflowContext.triggerType,
+          schedule: ctx.builderWorkflowContext.schedule,
+          allowedIntegrations: ctx.builderWorkflowContext.allowedIntegrations,
+        },
+      },
+      null,
+      2,
+    );
+
+    return [
+      "## Workflow Builder Context (System)",
+      "You are in workflow builder mode.",
+      "The workflow snapshot below is the latest server state. Only edit these fields: prompt, allowedIntegrations, triggerType, schedule.",
+      "If the user asks to change editable workflow fields, emit exactly one patch block in this format:",
+      "```workflow_builder_patch",
+      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
+      "```",
+      "Rules:",
+      "- Use baseUpdatedAt exactly from the snapshot below.",
+      "- Include only fields that should change.",
+      "- Do not include any extra top-level keys.",
+      "- If no editable workflow change is requested, do not emit a patch block.",
+      "Snapshot:",
+      snapshot,
+    ].join("\n");
+  }
+
+  private sanitizeContentPartsAfterWorkflowPatchExtraction(ctx: GenerationContext): void {
+    ctx.contentParts = ctx.contentParts
+      .map((part) => {
+        if (part.type !== "text") {
+          return part;
+        }
+        const extracted = extractWorkflowBuilderPatch(part.text);
+        return { ...part, text: extracted.sanitizedText };
+      })
+      .filter((part) => part.type !== "text" || part.text.trim().length > 0);
+  }
+
+  private appendSystemEvent(
+    ctx: GenerationContext,
+    event: { content: string; workflowId?: string },
+  ): void {
+    ctx.contentParts.push({
+      type: "system",
+      content: event.content,
+    });
+    this.broadcast(ctx, {
+      type: "system",
+      content: event.content,
+      workflowId: event.workflowId,
+    });
+  }
+
+  private async tryAutoApplyWorkflowBuilderPatch(ctx: GenerationContext): Promise<void> {
+    if (!ctx.builderWorkflowContext) {
+      return;
+    }
+
+    const extraction = extractWorkflowBuilderPatch(ctx.assistantContent);
+    ctx.assistantContent = extraction.sanitizedText;
+    this.sanitizeContentPartsAfterWorkflowPatchExtraction(ctx);
+
+    if (extraction.status === "none") {
+      return;
+    }
+
+    const workflowId = ctx.builderWorkflowContext.workflowId;
+
+    if (!WORKFLOW_BUILDER_AUTO_APPLY_ENABLED) {
+      const content =
+        "Workflow patch detected, but auto-apply is currently disabled by feature flag.";
+      this.appendSystemEvent(ctx, { content, workflowId });
+      logServerEvent(
+        "warn",
+        "WORKFLOW_PATCH_APPLY_SKIPPED",
+        { reason: "feature_flag_disabled", workflowId },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
+      return;
+    }
+
+    if (extraction.status === "invalid") {
+      const content = `Workflow patch failed: ${extraction.message}`;
+      this.appendSystemEvent(ctx, { content, workflowId });
+      logServerEvent(
+        "warn",
+        "WORKFLOW_PATCH_PARSE_FAILED",
+        { workflowId, error: extraction.message },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
+      return;
+    }
+
+    const dbUser = await db.query.user.findFirst({
+      where: eq(user.id, ctx.userId),
+      columns: { role: true },
+    });
+
+    const applyResult = await applyWorkflowBuilderPatch({
+      database: db,
+      userId: ctx.userId,
+      userRole: dbUser?.role ?? null,
+      workflowId,
+      conversationId: ctx.conversationId,
+      baseUpdatedAt: extraction.envelope.baseUpdatedAt,
+      patch: extraction.envelope.patch,
+    });
+
+    if (applyResult.status === "applied") {
+      ctx.builderWorkflowContext = applyResult.workflow;
+      const changed =
+        applyResult.appliedChanges.length > 0 ? applyResult.appliedChanges.join(", ") : "none";
+      const content = `Workflow updated by chat (${changed}).`;
+      this.appendSystemEvent(ctx, { content, workflowId });
+      logServerEvent(
+        "info",
+        "WORKFLOW_PATCH_APPLIED",
+        {
+          workflowId,
+          changedFields: applyResult.appliedChanges,
+        },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
+      return;
+    }
+
+    if (applyResult.status === "conflict") {
+      ctx.builderWorkflowContext = applyResult.workflow;
+      const content =
+        "Workflow patch was not applied because the workflow changed. Please retry with latest state.";
+      this.appendSystemEvent(ctx, { content, workflowId });
+      logServerEvent(
+        "warn",
+        "WORKFLOW_PATCH_CONFLICT",
+        { workflowId },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
+      return;
+    }
+
+    const content = `Workflow patch validation failed: ${applyResult.details.join("; ")}`;
+    this.appendSystemEvent(ctx, { content, workflowId });
+    logServerEvent(
+      "warn",
+      "WORKFLOW_PATCH_VALIDATION_FAILED",
+      { workflowId, details: applyResult.details },
+      {
+        source: "generation-manager",
+        traceId: ctx.traceId,
+        generationId: ctx.id,
+        conversationId: ctx.conversationId,
+        userId: ctx.userId,
+      },
+    );
+  }
+
   private buildModeBehaviorPrompt(ctx: GenerationContext): string | null {
     if (ctx.workflowRunId) {
       return getWorkflowSystemBehaviorPrompt();
@@ -5697,6 +5942,7 @@ class GenerationManager {
       "error",
       "cancelled",
       "status_change",
+      "system",
     ]);
 
     if (!loggableEvents.has(event.type)) {

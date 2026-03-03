@@ -16,7 +16,7 @@ Optional sandbox runtime selector:
 
 The sandbox stack now uses a two-axis architecture:
 
-- sandbox provider facade (`e2b`, `daytona`, future providers)
+- sandbox provider facade (`e2b`, `daytona`, `docker`, future providers)
 - runtime harness facade (`opencode`, `agent-sdk`, future harnesses)
 
 Core modules live in `src/server/sandbox/`:

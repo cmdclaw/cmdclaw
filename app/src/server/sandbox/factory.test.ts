@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type MockState = {
-  sandboxDefault: "e2b" | "daytona";
+  sandboxDefault: "e2b" | "daytona" | "docker";
   isE2BConfigured: boolean;
   isDaytonaConfigured: boolean;
+  isDockerConfigured: boolean;
   isDeviceOnline: boolean;
 };
 
@@ -16,6 +17,7 @@ function getState(): MockState {
   sandboxDefault: "e2b",
   isE2BConfigured: true,
   isDaytonaConfigured: false,
+  isDockerConfigured: false,
   isDeviceOnline: false,
 };
 
@@ -57,6 +59,13 @@ vi.mock("./byoc", () => ({
   },
 }));
 
+vi.mock("./docker", () => ({
+  DockerSandboxBackend: class DockerSandboxBackend {
+    readonly provider = "docker";
+  },
+  isDockerConfigured: () => getState().isDockerConfigured,
+}));
+
 import { getPreferredCloudSandboxProvider, getSandboxBackend } from "@/server/sandbox/factory";
 
 describe("sandbox factory", () => {
@@ -65,6 +74,7 @@ describe("sandbox factory", () => {
     state.sandboxDefault = "e2b";
     state.isE2BConfigured = true;
     state.isDaytonaConfigured = false;
+    state.isDockerConfigured = false;
     state.isDeviceOnline = false;
   });
 
@@ -109,5 +119,23 @@ describe("sandbox factory", () => {
       deviceId?: string;
     };
     expect(backend.deviceId).toBe("device-1");
+  });
+
+  it("uses Docker when SANDBOX_DEFAULT=docker and Docker is configured", () => {
+    const state = getState();
+    state.sandboxDefault = "docker";
+    state.isDockerConfigured = true;
+
+    expect(getPreferredCloudSandboxProvider()).toBe("docker");
+  });
+
+  it("throws when SANDBOX_DEFAULT=docker but Docker is not configured", () => {
+    const state = getState();
+    state.sandboxDefault = "docker";
+    state.isDockerConfigured = false;
+
+    expect(() => getPreferredCloudSandboxProvider()).toThrow(
+      "SANDBOX_DEFAULT is set to 'docker' but Docker is not configured",
+    );
   });
 });

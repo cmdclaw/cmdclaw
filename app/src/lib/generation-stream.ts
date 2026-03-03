@@ -88,6 +88,7 @@ export type GenerationStartInput = {
   content: string;
   model?: string;
   autoApprove?: boolean;
+  sandboxProvider?: "e2b" | "daytona" | "docker";
   deviceId?: string;
   selectedPlatformSkillSlugs?: string[];
   fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
@@ -95,6 +96,7 @@ export type GenerationStartInput = {
 
 export type GenerationCallbacks = {
   onText?: (content: string) => void | Promise<void>;
+  onSystem?: (data: { content: string; workflowId?: string }) => void | Promise<void>;
   onThinking?: (data: ThinkingData) => void | Promise<void>;
   onToolUse?: (data: ToolUseData) => void | Promise<void>;
   onToolResult?: (toolName: string, result: unknown, toolUseId?: string) => void | Promise<void>;
@@ -164,6 +166,12 @@ export async function runGenerationStream(
     switch (event.type) {
       case "text":
         await callbacks.onText?.(event.content);
+        break;
+      case "system":
+        await callbacks.onSystem?.({
+          content: event.content,
+          workflowId: event.workflowId,
+        });
         break;
       case "thinking":
         await callbacks.onThinking?.({

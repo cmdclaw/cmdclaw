@@ -7,10 +7,11 @@ import { isDeviceOnline } from "@/server/ws/server";
 import type { SandboxBackend } from "./types";
 import { BYOCSandboxBackend } from "./byoc";
 import { DaytonaSandboxBackend, isDaytonaConfigured } from "./daytona";
+import { DockerSandboxBackend, isDockerConfigured } from "./docker";
 import { E2BSandboxBackend } from "./e2b";
 import { isE2BConfigured } from "./e2b";
 
-export type CloudSandboxProvider = "e2b" | "daytona";
+export type CloudSandboxProvider = "e2b" | "daytona" | "docker";
 
 /**
  * Resolve which cloud sandbox provider should be used when no BYOC device is active.
@@ -33,6 +34,15 @@ export function getPreferredCloudSandboxProvider(): CloudSandboxProvider {
       throw new Error("SANDBOX_DEFAULT is set to 'daytona' but DAYTONA_API_KEY is not configured");
     }
     return "daytona";
+  }
+
+  if (configuredDefault === "docker") {
+    if (!isDockerConfigured()) {
+      throw new Error(
+        "SANDBOX_DEFAULT is set to 'docker' but Docker is not configured (missing Docker socket/DOCKER_HOST)",
+      );
+    }
+    return "docker";
   }
 
   throw new Error(`Unsupported SANDBOX_DEFAULT value: ${configuredDefault}`);
@@ -61,5 +71,8 @@ export function getSandboxBackend(
   if (provider === "e2b") {
     return new E2BSandboxBackend();
   }
-  return new DaytonaSandboxBackend();
+  if (provider === "daytona") {
+    return new DaytonaSandboxBackend();
+  }
+  return new DockerSandboxBackend();
 }

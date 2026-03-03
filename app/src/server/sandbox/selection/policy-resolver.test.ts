@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const state = {
-  SANDBOX_DEFAULT: "e2b" as "e2b" | "daytona",
+  SANDBOX_DEFAULT: "e2b" as "e2b" | "daytona" | "docker",
   SANDBOX_AGENT_RUNTIME: "opencode" as "opencode" | "agentsdk",
 };
 
@@ -44,6 +44,17 @@ describe("resolveRuntimeSelection", () => {
       sandboxProvider: "daytona",
       runtimeHarness: "agent-sdk",
       runtimeProtocolVersion: "sandbox-agent-v1",
+    });
+  });
+
+  it("maps docker provider", () => {
+    state.SANDBOX_DEFAULT = "docker";
+    state.SANDBOX_AGENT_RUNTIME = "opencode";
+
+    expect(resolveRuntimeSelection()).toEqual({
+      sandboxProvider: "docker",
+      runtimeHarness: "opencode",
+      runtimeProtocolVersion: "opencode-v2",
     });
   });
 });
