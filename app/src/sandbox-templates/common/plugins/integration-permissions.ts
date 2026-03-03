@@ -396,6 +396,8 @@ async function requestApproval(params: {
   command: string;
   toolInput: unknown;
 }): Promise<{ decision?: "allow" | "deny"; error?: string }> {
+  const APPROVAL_POLL_INTERVAL_MS = 1000;
+  const APPROVAL_FALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
   const serverSecret = process.env.CMDCLAW_SERVER_SECRET;
   const conversationId = process.env.CONVERSATION_ID;
@@ -411,10 +413,15 @@ async function requestApproval(params: {
     return { error: reason };
   }
 
-  const attempt = async (
+  const attemptCreate = async (
     index: number,
     lastError?: string,
-  ): Promise<{ decision?: "allow" | "deny"; error?: string }> => {
+  ): Promise<{
+    decision?: "allow" | "deny" | "pending";
+    toolUseId?: string;
+    expiresAt?: string;
+    error?: string;
+  }> => {
     if (index >= serverUrls.length) {
       return {
         error:
@@ -448,19 +455,89 @@ async function requestApproval(params: {
         const bodyPreview = (await response.text()).slice(0, 200);
         const errorMessage = `Approval request failed via ${serverUrl}: ${response.status} ${bodyPreview}`;
         console.error(`[Plugin] ${errorMessage}`);
-        return attempt(index + 1, errorMessage);
+        return attemptCreate(index + 1, errorMessage);
       }
 
       const result = await response.json();
-      return { decision: result.decision || "deny" };
+      return {
+        decision: result.decision || "deny",
+        toolUseId: typeof result.toolUseId === "string" ? result.toolUseId : undefined,
+        expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : undefined,
+      };
     } catch (error) {
       const errorMessage = `Approval request error via ${serverUrl}: ${error instanceof Error ? error.message : String(error)}`;
       console.error(`[Plugin] ${errorMessage}`);
-      return attempt(index + 1, errorMessage);
+      return attemptCreate(index + 1, errorMessage);
     }
   };
 
-  return attempt(0);
+  const created = await attemptCreate(0);
+  if (created.error) {
+    return { error: created.error };
+  }
+  if (created.decision === "allow" || created.decision === "deny") {
+    return { decision: created.decision };
+  }
+  if (created.decision !== "pending" || !created.toolUseId) {
+    return { error: "Approval callback returned an invalid response" };
+  }
+
+  const start = Date.now();
+  const expiryMs = created.expiresAt ? Date.parse(created.expiresAt) : Number.NaN;
+  const pollUntilMs = Number.isFinite(expiryMs)
+    ? Math.max(expiryMs + 2_000, start + APPROVAL_POLL_INTERVAL_MS)
+    : start + APPROVAL_FALLBACK_TIMEOUT_MS;
+
+  while (Date.now() <= pollUntilMs) {
+    // eslint-disable-next-line no-await-in-loop -- polling by design
+    const pollResults = await Promise.all(
+      serverUrls.map(async (serverUrl) => {
+        try {
+          const response = await fetch(`${serverUrl}/api/internal/approval-status`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              generationId,
+              sandboxId: sandboxId || undefined,
+              conversationId,
+              toolUseId: created.toolUseId,
+              authHeader: serverSecret ? `Bearer ${serverSecret}` : undefined,
+            }),
+          });
+
+          if (!response.ok) {
+            const bodyPreview = (await response.text()).slice(0, 200);
+            console.error(
+              `[Plugin] Approval status failed via ${serverUrl}: ${response.status} ${bodyPreview}`,
+            );
+            return "pending" as const;
+          }
+
+          const result = await response.json();
+          return result.decision === "allow" || result.decision === "deny"
+            ? (result.decision as "allow" | "deny")
+            : ("pending" as const);
+        } catch (error) {
+          console.error(
+            `[Plugin] Approval status error via ${serverUrl}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return "pending" as const;
+        }
+      }),
+    );
+    const terminalDecision = pollResults.find(
+      (decision): decision is "allow" | "deny" => decision === "allow" || decision === "deny",
+    );
+    if (terminalDecision) {
+      return { decision: terminalDecision };
+    }
+    // eslint-disable-next-line no-await-in-loop -- polling by design
+    await new Promise((resolve) => setTimeout(resolve, APPROVAL_POLL_INTERVAL_MS));
+  }
+
+  return { error: "Approval timed out while waiting for user decision" };
 }
 
 /**

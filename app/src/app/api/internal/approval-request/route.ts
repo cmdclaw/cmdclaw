@@ -99,14 +99,14 @@ export async function POST(request: Request) {
       return Response.json({ decision: "deny" });
     }
 
-    const decision = await generationManager.waitForApproval(genId, {
+    const result = await generationManager.requestPluginApproval(genId, {
       toolInput: input.toolInput ?? {},
       integration: input.integration,
       operation: input.operation,
       command: input.command ?? "",
     });
 
-    return Response.json({ decision });
+    return Response.json(result);
   } catch (error) {
     console.error("[Internal] approvalRequest error:", error);
     return Response.json({ decision: "deny" }, { status: 500 });

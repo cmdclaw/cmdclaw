@@ -4939,17 +4939,57 @@ class GenerationManager {
       command: string;
     },
   ): Promise<"allow" | "deny"> {
+    const approvalRequest = await this.requestPluginApproval(generationId, request);
+    if (approvalRequest.decision !== "pending") {
+      return approvalRequest.decision;
+    }
+    if (!approvalRequest.toolUseId) {
+      return "deny";
+    }
+
+    let resolved: "allow" | "deny" | null = null;
+    const approvalExpiryMs = approvalRequest.expiresAt
+      ? Date.parse(approvalRequest.expiresAt)
+      : Date.now() + APPROVAL_TIMEOUT_MS;
+    while (resolved === null) {
+      if (Date.now() >= approvalExpiryMs) {
+        break;
+      }
+      // eslint-disable-next-line no-await-in-loop -- polling by design
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      // eslint-disable-next-line no-await-in-loop -- polling by design
+      const status = await this.getPluginApprovalStatus(generationId, approvalRequest.toolUseId);
+      if (status !== "pending") {
+        resolved = status;
+      }
+    }
+
+    if (resolved) {
+      return resolved;
+    }
+    await this.processGenerationTimeout(generationId, "approval");
+    return "deny";
+  }
+
+  async requestPluginApproval(
+    generationId: string,
+    request: {
+      toolInput: Record<string, unknown>;
+      integration: string;
+      operation: string;
+      command: string;
+    },
+  ): Promise<{ decision: "allow" | "deny" | "pending"; toolUseId?: string; expiresAt?: string }> {
     const genRecord = await db.query.generation.findFirst({
       where: eq(generation.id, generationId),
       with: { conversation: true },
     });
     if (!genRecord) {
-      return "deny";
+      return { decision: "deny" };
     }
 
-    const autoApprove = genRecord.conversation.autoApprove;
-    if (autoApprove) {
-      return "allow";
+    if (genRecord.conversation.autoApprove) {
+      return { decision: "allow" };
     }
 
     const toolUseId = `plugin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -4977,123 +5017,123 @@ class GenerationManager {
       .update(conversation)
       .set({ generationStatus: "awaiting_approval" })
       .where(eq(conversation.id, genRecord.conversationId));
+
     await this.enqueueGenerationTimeout(generationId, "approval", expiresAt);
 
-    let resolved: "allow" | "deny" | null = null;
-    while (resolved === null) {
-      if (Date.now() >= Date.parse(expiresAt)) {
-        break;
+    return { decision: "pending", toolUseId, expiresAt };
+  }
+
+  async getPluginApprovalStatus(
+    generationId: string,
+    toolUseId: string,
+  ): Promise<"pending" | "allow" | "deny"> {
+    const genRecord = await db.query.generation.findFirst({
+      where: eq(generation.id, generationId),
+      with: { conversation: true },
+    });
+    if (!genRecord) {
+      return "deny";
+    }
+
+    const latestApproval = genRecord.pendingApproval as PendingApproval | null;
+    if (!latestApproval || latestApproval.toolUseId !== toolUseId) {
+      const approvalFromParts = ((genRecord.contentParts as ContentPart[] | null) ?? []).find(
+        (part): part is ContentPart & { type: "approval" } =>
+          part.type === "approval" && part.tool_use_id === toolUseId,
+      );
+      if (approvalFromParts?.status === "approved") {
+        return "allow";
       }
-      // eslint-disable-next-line no-await-in-loop -- polling by design
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      // eslint-disable-next-line no-await-in-loop -- polling by design
-      const latest = await db.query.generation.findFirst({
-        where: eq(generation.id, generationId),
+      if (approvalFromParts?.status === "denied") {
+        return "deny";
+      }
+      if (
+        genRecord.status === "cancelled" ||
+        genRecord.status === "error" ||
+        genRecord.status === "paused"
+      ) {
+        return "deny";
+      }
+      return "pending";
+    }
+
+    if (!latestApproval.decision) {
+      const expiresAtMs = resolveExpiryMs(
+        latestApproval.expiresAt,
+        latestApproval.requestedAt,
+        APPROVAL_TIMEOUT_MS,
+      );
+      if (Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs) {
+        await this.processGenerationTimeout(generationId, "approval");
+        return "deny";
+      }
+      return "pending";
+    }
+
+    const resolvedDecision = latestApproval.decision;
+    const approvalPart: ContentPart = {
+      type: "approval",
+      tool_use_id: latestApproval.toolUseId,
+      tool_name: latestApproval.toolName,
+      tool_input: latestApproval.toolInput,
+      integration: latestApproval.integration,
+      operation: latestApproval.operation,
+      command: latestApproval.command,
+      status: resolvedDecision === "allow" ? "approved" : "denied",
+      question_answers: latestApproval.questionAnswers,
+    };
+
+    const activeCtx = this.activeGenerations.get(generationId);
+    const baseContentParts =
+      activeCtx?.contentParts ?? (genRecord.contentParts as ContentPart[] | null) ?? [];
+    const nextContentParts = [...baseContentParts];
+    const existingApprovalIndex = nextContentParts.findIndex(
+      (part): part is ContentPart & { type: "approval" } =>
+        part.type === "approval" && part.tool_use_id === latestApproval.toolUseId,
+    );
+    if (existingApprovalIndex >= 0) {
+      nextContentParts[existingApprovalIndex] = approvalPart;
+    } else {
+      nextContentParts.push(approvalPart);
+    }
+    if (activeCtx) {
+      activeCtx.contentParts = nextContentParts;
+    }
+
+    await db
+      .update(generation)
+      .set({
+        status: "running",
+        pendingApproval: null,
+        contentParts: nextContentParts.length > 0 ? nextContentParts : null,
+      })
+      .where(eq(generation.id, generationId));
+
+    await db
+      .update(conversation)
+      .set({ generationStatus: "generating" })
+      .where(eq(conversation.id, genRecord.conversationId));
+
+    if (activeCtx) {
+      this.broadcast(activeCtx, {
+        type: "approval_result",
+        toolUseId: latestApproval.toolUseId,
+        decision: resolvedDecision === "allow" ? "approved" : "denied",
       });
-      if (!latest) {
-        resolved = "deny";
-        break;
-      }
-
-      const latestApproval = latest.pendingApproval as PendingApproval | null;
-      if (!latestApproval || latestApproval.toolUseId !== toolUseId) {
-        if (latest.status !== "awaiting_approval") {
-          if (latest.status === "running" || latest.status === "completed") {
-            console.warn(
-              `[GenerationManager] approval_reconciled generation=${generationId} toolUseId=${toolUseId} status=${latest.status}`,
-            );
-            resolved = "allow";
-            break;
-          }
-          if (
-            latest.status === "cancelled" ||
-            latest.status === "error" ||
-            latest.status === "paused"
-          ) {
-            resolved = "deny";
-            break;
-          }
-        }
-        continue;
-      }
-
-      if (latestApproval.decision) {
-        const resolvedDecision = latestApproval.decision;
-        const approvalPart: ContentPart = {
-          type: "approval",
-          tool_use_id: latestApproval.toolUseId,
-          tool_name: latestApproval.toolName,
-          tool_input: latestApproval.toolInput,
-          integration: latestApproval.integration,
-          operation: latestApproval.operation,
-          command: latestApproval.command,
-          status: resolvedDecision === "allow" ? "approved" : "denied",
-          question_answers: latestApproval.questionAnswers,
-        };
-        const activeCtx = this.activeGenerations.get(generationId);
-        const baseContentParts =
-          activeCtx?.contentParts ?? (latest.contentParts as ContentPart[] | null) ?? [];
-        const nextContentParts = [...baseContentParts];
-        const existingApprovalIndex = nextContentParts.findIndex(
-          (part): part is ContentPart & { type: "approval" } =>
-            part.type === "approval" && part.tool_use_id === latestApproval.toolUseId,
-        );
-        if (existingApprovalIndex >= 0) {
-          nextContentParts[existingApprovalIndex] = approvalPart;
-        } else {
-          nextContentParts.push(approvalPart);
-        }
-        if (activeCtx) {
-          activeCtx.contentParts = nextContentParts;
-        }
-
-        // eslint-disable-next-line no-await-in-loop -- decision must be persisted before returning
-        await db
-          .update(generation)
-          .set({
-            status: "running",
-            pendingApproval: null,
-            contentParts: nextContentParts.length > 0 ? nextContentParts : null,
-          })
-          .where(eq(generation.id, generationId));
-        // eslint-disable-next-line no-await-in-loop -- decision must be persisted before returning
-        await db
-          .update(conversation)
-          .set({ generationStatus: "generating" })
-          .where(eq(conversation.id, genRecord.conversationId));
-        if (activeCtx) {
-          this.broadcast(activeCtx, {
-            type: "approval_result",
-            toolUseId: latestApproval.toolUseId,
-            decision: resolvedDecision === "allow" ? "approved" : "denied",
-          });
-          this.broadcast(activeCtx, {
-            type: "approval",
-            toolUseId: latestApproval.toolUseId,
-            toolName: latestApproval.toolName,
-            toolInput: latestApproval.toolInput,
-            integration: latestApproval.integration,
-            operation: latestApproval.operation,
-            command: latestApproval.command,
-            status: resolvedDecision === "allow" ? "approved" : "denied",
-            questionAnswers: latestApproval.questionAnswers,
-          });
-        }
-        resolved = resolvedDecision;
-        break;
-      }
-
-      if (latest.cancelRequestedAt || latest.status === "cancelled" || latest.status === "error") {
-        resolved = "deny";
-        break;
-      }
+      this.broadcast(activeCtx, {
+        type: "approval",
+        toolUseId: latestApproval.toolUseId,
+        toolName: latestApproval.toolName,
+        toolInput: latestApproval.toolInput,
+        integration: latestApproval.integration,
+        operation: latestApproval.operation,
+        command: latestApproval.command,
+        status: resolvedDecision === "allow" ? "approved" : "denied",
+        questionAnswers: latestApproval.questionAnswers,
+      });
     }
 
-    if (resolved) {
-      return resolved;
-    }
-    await this.processGenerationTimeout(generationId, "approval");
-    return "deny";
+    return resolvedDecision;
   }
 
   /**
@@ -5385,6 +5425,8 @@ class GenerationManager {
           status,
           messageId,
           cancelRequestedAt: null,
+          pendingApproval: null,
+          pendingAuth: null,
           contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
           errorMessage: ctx.errorMessage,
           inputTokens: ctx.usage.inputTokens,
