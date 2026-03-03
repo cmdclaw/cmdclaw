@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -22,6 +23,11 @@ type DualPanelWorkspaceProps = {
   minRightWidth?: number;
   storageKey?: string;
   className?: string;
+  collapsible?: boolean;
+  defaultRightCollapsed?: boolean;
+  showTitles?: boolean;
+  leftPanelClassName?: string;
+  rightPanelClassName?: string;
 };
 
 const DEFAULT_RIGHT_WIDTH = 48;
@@ -38,10 +44,17 @@ export function DualPanelWorkspace({
   minRightWidth = DEFAULT_MIN_RIGHT,
   storageKey,
   className,
+  collapsible = false,
+  defaultRightCollapsed = false,
+  showTitles = true,
+  leftPanelClassName,
+  rightPanelClassName,
 }: DualPanelWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mobilePanel, setMobilePanel] = useState<"left" | "right">("right");
   const [isDragging, setIsDragging] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(defaultRightCollapsed);
+  const savedWidthRef = useRef<number | null>(null);
   const [rightWidth, setRightWidth] = useState(() => {
     if (!storageKey || typeof window === "undefined") {
       return defaultRightWidth;
@@ -118,7 +131,21 @@ export function DualPanelWorkspace({
     };
   }, [isDragging, onPointerMove, stopDrag]);
 
-  const leftWidth = 100 - rightWidth;
+  const handleCollapseToggle = useCallback(() => {
+    if (isCollapsed) {
+      // Restore saved width
+      const restoreWidth = savedWidthRef.current ?? defaultRightWidth;
+      setWidthWithinBounds(restoreWidth);
+      setIsCollapsed(false);
+    } else {
+      // Save current width and collapse
+      savedWidthRef.current = rightWidth;
+      setIsCollapsed(true);
+    }
+  }, [isCollapsed, rightWidth, defaultRightWidth, setWidthWithinBounds]);
+
+  const effectiveRightWidth = isCollapsed ? 0 : rightWidth;
+  const leftWidth = 100 - effectiveRightWidth;
   const switchToLeftPanel = useCallback(() => {
     setMobilePanel("left");
   }, []);
@@ -126,7 +153,10 @@ export function DualPanelWorkspace({
     setMobilePanel("right");
   }, []);
   const leftPanelStyle = useMemo(() => ({ width: `${leftWidth}%` }), [leftWidth]);
-  const rightPanelStyle = useMemo(() => ({ width: `${rightWidth}%` }), [rightWidth]);
+  const rightPanelStyle = useMemo(
+    () => ({ width: `${effectiveRightWidth}%` }),
+    [effectiveRightWidth],
+  );
   const handleSeparatorKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "ArrowLeft") {
@@ -140,7 +170,7 @@ export function DualPanelWorkspace({
   );
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+    <div className={cn("flex min-h-0 w-full flex-1 flex-col", className)}>
       <div className="mb-3 flex items-center gap-2 md:hidden">
         <Button
           type="button"
@@ -162,54 +192,105 @@ export function DualPanelWorkspace({
 
       <div className="flex min-h-0 flex-1 md:hidden">
         {mobilePanel === "left" ? (
-          <section className="bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
-            <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-              {leftTitle}
-            </div>
-            <div className="min-h-0 flex-1">{left}</div>
+          <section
+            className={cn(
+              "bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border",
+              leftPanelClassName,
+            )}
+          >
+            {showTitles && (
+              <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+                {leftTitle}
+              </div>
+            )}
+            <div className="flex min-h-0 flex-1 flex-col">{left}</div>
           </section>
         ) : (
-          <section className="bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
-            <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-              {rightTitle}
-            </div>
-            <div className="min-h-0 flex-1">{right}</div>
+          <section
+            className={cn(
+              "bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border",
+              rightPanelClassName,
+            )}
+          >
+            {showTitles && (
+              <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+                {rightTitle}
+              </div>
+            )}
+            <div className="flex min-h-0 flex-1 flex-col">{right}</div>
           </section>
         )}
       </div>
 
       <div ref={containerRef} className="hidden min-h-0 flex-1 md:flex">
         <section
-          className="bg-background flex min-h-0 flex-col overflow-hidden rounded-l-xl border"
+          className={cn(
+            "bg-background flex min-h-0 flex-col overflow-hidden rounded-l-xl border transition-[width] duration-200 ease-out",
+            leftPanelClassName,
+          )}
           style={leftPanelStyle}
         >
-          <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-            {leftTitle}
-          </div>
-          <div className="min-h-0 flex-1">{left}</div>
+          {showTitles && (
+            <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+              {leftTitle}
+            </div>
+          )}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{left}</div>
         </section>
 
         <div
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize panels"
-          tabIndex={0}
-          onPointerDown={startDrag}
-          onKeyDown={handleSeparatorKeyDown}
-          className="group relative w-3 cursor-col-resize"
+          tabIndex={collapsible ? -1 : 0}
+          onPointerDown={isCollapsed ? undefined : startDrag}
+          onKeyDown={isCollapsed ? undefined : handleSeparatorKeyDown}
+          className={cn(
+            "group relative shrink-0 transition-[width] duration-200 ease-out",
+            isCollapsed ? "w-8" : "w-3",
+            !isCollapsed && "cursor-col-resize",
+          )}
         >
-          <div className="bg-border group-hover:bg-foreground/40 absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors" />
-          <div className="bg-border/80 group-hover:bg-foreground/40 absolute top-1/2 left-1/2 h-12 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors" />
+          {!isCollapsed && (
+            <>
+              <div className="bg-border group-hover:bg-foreground/40 absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors" />
+              <div className="bg-border/80 group-hover:bg-foreground/40 absolute top-1/2 left-1/2 h-12 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors" />
+            </>
+          )}
+          {collapsible && (
+            <button
+              type="button"
+              onClick={handleCollapseToggle}
+              className="hover:bg-muted bg-background absolute top-3 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border shadow-sm transition-colors"
+              aria-label={isCollapsed ? "Expand right panel" : "Collapse right panel"}
+            >
+              {isCollapsed ? (
+                <ChevronLeft className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </button>
+          )}
         </div>
 
         <section
-          className="bg-background flex min-h-0 flex-col overflow-hidden rounded-r-xl border"
+          className={cn(
+            "bg-background flex min-h-0 flex-col overflow-hidden rounded-r-xl border transition-[width] duration-200 ease-out",
+            isCollapsed && "border-0",
+            rightPanelClassName,
+          )}
           style={rightPanelStyle}
         >
-          <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-            {rightTitle}
-          </div>
-          <div className="min-h-0 flex-1">{right}</div>
+          {!isCollapsed && (
+            <>
+              {showTitles && (
+                <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+                  {rightTitle}
+                </div>
+              )}
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{right}</div>
+            </>
+          )}
         </section>
       </div>
     </div>

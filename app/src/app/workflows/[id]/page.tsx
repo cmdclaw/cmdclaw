@@ -1,25 +1,13 @@
 "use client";
 
 import { formatDistanceToNowStrict } from "date-fns";
-import {
-  Loader2,
-  Play,
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  Square,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
-} from "lucide-react";
+import { Loader2, Play, ArrowLeft, ChevronDown, ChevronUp, Circle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
-import { ChatCopyButton } from "@/components/chat/chat-copy-button";
-import { ChatShareControls } from "@/components/chat/chat-share-controls";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { DualPanelWorkspace } from "@/components/ui/dual-panel-workspace";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -40,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@/lib/email-forwarding";
 import {
   INTEGRATION_DISPLAY_NAMES,
@@ -58,21 +48,16 @@ import {
   useWorkflowForwardingAlias,
   useUpdateWorkflow,
   useWorkflowRuns,
-  useWorkflowRun,
-  useCancelGeneration,
-  useSubmitApproval,
   useTriggerWorkflow,
+  useGetOrCreateBuilderConversation,
   type WorkflowSchedule,
 } from "@/orpc/hooks";
 
-const TRIGGERS = [
+const BASE_TRIGGERS = [
   { value: "manual", label: "Manual only" },
   { value: "schedule", label: "Run on a schedule" },
   { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: "Email forwarded to CmdClaw" },
   { value: "gmail.new_email", label: "New Gmail email" },
-  ...(isComingSoonIntegration("twitter")
-    ? []
-    : ([{ value: "twitter.new_dm", label: "New X (Twitter) DM" }] as const)),
 ];
 
 const scheduleMotionInitial = { opacity: 0, y: -8, height: 0 } as const;
@@ -80,61 +65,10 @@ const scheduleMotionAnimate = { opacity: 1, y: 0, height: "auto" } as const;
 const scheduleMotionExit = { opacity: 0, y: -8, height: 0 } as const;
 const scheduleMotionTransition = { duration: 0.22, ease: "easeOut" } as const;
 const scheduleMotionStyle = { overflow: "hidden" } as const;
-const testPanelDockCollapsed = { width: "3.5rem" } as const;
-const testPanelDockExpanded = { width: "44rem" } as const;
-const testPanelDockTransition = { duration: 0.28, ease: "easeOut" } as const;
-const mobileTestPanelInitial = { opacity: 0, y: 24 } as const;
-const mobileTestPanelAnimate = { opacity: 1, y: 0 } as const;
-const mobileTestPanelExit = { opacity: 0, y: 16 } as const;
-const mobileTestPanelTransition = { duration: 0.2, ease: "easeOut" } as const;
-const ACTIVE_TEST_RUN_STATUSES = new Set(["running", "awaiting_approval", "awaiting_auth"]);
-
-type PendingApprovalSummary = {
-  toolUseId: string;
-  integration: string;
-  operation: string;
-  command?: string;
-};
-
-function getPendingApprovalSummaryFromRun(run: {
-  status: string;
-  events: Array<{ type: string; payload: unknown }>;
-}): PendingApprovalSummary | null {
-  if (run.status !== "awaiting_approval") {
-    return null;
-  }
-
-  for (let i = run.events.length - 1; i >= 0; i -= 1) {
-    const event = run.events[i];
-    if (
-      !event ||
-      event.type !== "pending_approval" ||
-      !event.payload ||
-      typeof event.payload !== "object"
-    ) {
-      continue;
-    }
-
-    const payload = event.payload as Record<string, unknown>;
-    const toolUseId = typeof payload.toolUseId === "string" ? payload.toolUseId : null;
-    const integration = typeof payload.integration === "string" ? payload.integration : null;
-    const operation = typeof payload.operation === "string" ? payload.operation : null;
-    const command = typeof payload.command === "string" ? payload.command : undefined;
-
-    if (!toolUseId || !integration || !operation) {
-      continue;
-    }
-
-    return {
-      toolUseId,
-      integration,
-      operation,
-      command,
-    };
-  }
-
-  return null;
-}
+const sectionMotionInitial = { height: 0, opacity: 0 } as const;
+const sectionMotionAnimate = { height: "auto" as const, opacity: 1 } as const;
+const sectionMotionExit = { height: 0, opacity: 0 } as const;
+const sectionMotionTransition = { duration: 0.2 } as const;
 
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
@@ -185,9 +119,64 @@ function IntegrationToggleSwitch({
   return <Switch checked={checked} onCheckedChange={handleCheckedChange} />;
 }
 
+function Section({
+  title,
+  open,
+  onToggle,
+  children,
+  renderAction,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  renderAction?: () => React.ReactNode;
+}) {
+  return (
+    <div className="border-b">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="hover:bg-muted/30 flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium"
+      >
+        <span>{title}</span>
+        <div className="flex items-center gap-2">
+          {renderAction?.()}
+          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </div>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={sectionMotionInitial}
+            animate={sectionMotionAnimate}
+            exit={sectionMotionExit}
+            transition={sectionMotionTransition}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-3">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function WorkflowChatPanel({ conversationId }: { conversationId: string | null }) {
+  if (!conversationId) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+  return <ChatArea conversationId={conversationId} />;
+}
+
 export default function WorkflowEditorPage() {
   const params = useParams<{ id: string }>();
   const workflowId = params?.id;
+  const { isAdmin } = useIsAdmin();
   const { data: workflow, isLoading } = useWorkflow(workflowId);
   const { data: workflowForwardingAlias } = useWorkflowForwardingAlias(workflowId);
   const { data: runs, refetch: refetchRuns } = useWorkflowRuns(workflowId);
@@ -196,11 +185,10 @@ export default function WorkflowEditorPage() {
   const disableForwardingAlias = useDisableWorkflowForwardingAlias();
   const rotateForwardingAlias = useRotateWorkflowForwardingAlias();
   const triggerWorkflow = useTriggerWorkflow();
-  const cancelGeneration = useCancelGeneration();
-  const submitApproval = useSubmitApproval();
+  const getOrCreateBuilderConversation = useGetOrCreateBuilderConversation();
 
   const [name, setName] = useState("");
-  const [triggerType, setTriggerType] = useState(TRIGGERS[0].value);
+  const [triggerType, setTriggerType] = useState("manual");
   const [prompt, setPrompt] = useState("");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
   const [restrictTools, setRestrictTools] = useState(false);
@@ -214,18 +202,20 @@ export default function WorkflowEditorPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const [testRunId, setTestRunId] = useState<string | null>(null);
-  const [isTestPanelExpanded, setIsTestPanelExpanded] = useState(false);
   const [copiedForwardingField, setCopiedForwardingField] = useState<"workflowAlias" | null>(null);
-  const {
-    data: selectedRun,
-    isLoading: isSelectedRunLoading,
-    refetch: refetchSelectedRun,
-  } = useWorkflowRun(testRunId ?? undefined);
+  const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState({
+    instructions: true,
+    tools: true,
+    triggers: true,
+    runs: true,
+  });
+
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedEditorRef = useRef(false);
   const initializedWorkflowIdRef = useRef<string | null>(null);
   const lastSavedPayloadRef = useRef<string | null>(null);
+  const builderConversationInitializedRef = useRef(false);
 
   // Schedule state (only used when triggerType is "schedule")
   const [scheduleType, setScheduleType] = useState<"interval" | "daily" | "weekly" | "monthly">(
@@ -255,15 +245,15 @@ export default function WorkflowEditorPage() {
     () => integrationEntries.map((entry) => entry.key),
     [integrationEntries],
   );
-  const activeRun = useMemo(
-    () => runs?.find((run) => ACTIVE_TEST_RUN_STATUSES.has(run.status)) ?? null,
-    [runs],
+  const triggers = useMemo(
+    () => [
+      ...BASE_TRIGGERS,
+      ...(isAdmin || !isComingSoonIntegration("twitter")
+        ? ([{ value: "twitter.new_dm", label: "New X (Twitter) DM" }] as const)
+        : []),
+    ],
+    [isAdmin],
   );
-  const {
-    data: activeRunDetails,
-    refetch: refetchActiveRunDetails,
-    isLoading: isActiveRunDetailsLoading,
-  } = useWorkflowRun(activeRun?.id);
 
   const buildSchedule = useCallback((): WorkflowSchedule | null => {
     if (triggerType !== "schedule") {
@@ -443,6 +433,19 @@ export default function WorkflowEditorPage() {
     lastSavedPayloadRef.current = getWorkflowPayloadSignature(payloadFromWorkflow);
   }, [getWorkflowPayloadSignature, workflow]);
 
+  // Get or create builder conversation once workflow loads
+  useEffect(() => {
+    if (!workflow || builderConversationInitializedRef.current) {
+      return;
+    }
+    builderConversationInitializedRef.current = true;
+    getOrCreateBuilderConversation.mutate(workflow.id, {
+      onSuccess: (result) => {
+        setBuilderConversationId(result.conversationId);
+      },
+    });
+  }, [workflow, getOrCreateBuilderConversation]);
+
   useEffect(() => {
     if (!notification) {
       return;
@@ -533,14 +536,6 @@ export default function WorkflowEditorPage() {
     setShowDisableAutoApproveDialog(false);
   }, []);
 
-  const handleSelectTestRun = useCallback((runId: string) => {
-    setTestRunId(runId);
-  }, []);
-
-  const handleToggleTestPanel = useCallback(() => {
-    setIsTestPanelExpanded((prev) => !prev);
-  }, []);
-
   const handleCopyForwardingAddress = useCallback(async (value: string, field: "workflowAlias") => {
     try {
       await navigator.clipboard.writeText(value);
@@ -550,6 +545,7 @@ export default function WorkflowEditorPage() {
       console.error("Failed to copy forwarding address:", error);
     }
   }, []);
+
   const handleCopyWorkflowAlias = useCallback(() => {
     if (!workflowForwardingAddress) {
       return;
@@ -599,16 +595,6 @@ export default function WorkflowEditorPage() {
     }
   }, [disableForwardingAlias, workflowId]);
 
-  const cancelTargetRunId = activeRun?.id ?? testRunId ?? null;
-  const { data: cancelTargetRun } = useWorkflowRun(cancelTargetRunId ?? undefined);
-
-  const isTestingLocked = Boolean(activeRun);
-  const canCancelRun = Boolean(
-    cancelTargetRun?.generationId && ACTIVE_TEST_RUN_STATUSES.has(cancelTargetRun.status),
-  );
-  const pendingApprovalSummary = selectedRun ? getPendingApprovalSummaryFromRun(selectedRun) : null;
-  const hasAgentInstructions = prompt.trim().length > 0;
-
   useEffect(() => {
     if (!hasInitializedEditorRef.current) {
       return;
@@ -646,60 +632,6 @@ export default function WorkflowEditorPage() {
     workflowId,
   ]);
 
-  useEffect(() => {
-    if (!runs || runs.length === 0) {
-      setTestRunId(null);
-      return;
-    }
-
-    if (testRunId) {
-      const selectedRunStillExists = runs.some((run) => run.id === testRunId);
-      if (selectedRunStillExists) {
-        return;
-      }
-
-      // Keep the newly created run selected while runs list catches up.
-      if (
-        selectedRun?.id === testRunId ||
-        isSelectedRunLoading ||
-        isStartingRun ||
-        triggerWorkflow.isPending
-      ) {
-        return;
-      }
-    }
-
-    if (activeRun) {
-      setTestRunId(activeRun.id);
-      return;
-    }
-
-    setTestRunId(runs[0]!.id);
-  }, [
-    activeRun,
-    isSelectedRunLoading,
-    isStartingRun,
-    runs,
-    selectedRun,
-    testRunId,
-    triggerWorkflow.isPending,
-  ]);
-
-  useEffect(() => {
-    if (!activeRun) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      void refetchRuns();
-      if (testRunId) {
-        void refetchSelectedRun();
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [activeRun, refetchRuns, refetchSelectedRun, testRunId]);
-
   const handleRun = useCallback(async () => {
     if (!workflowId || isStartingRun) {
       return;
@@ -716,34 +648,8 @@ export default function WorkflowEditorPage() {
         return;
       }
 
-      if (activeRun) {
-        const currentActiveRun =
-          activeRunDetails?.id === activeRun.id
-            ? activeRunDetails
-            : (await refetchActiveRunDetails()).data;
-
-        if (!currentActiveRun?.generationId) {
-          setNotification({
-            type: "error",
-            message: "Could not cancel the previous active run.",
-          });
-          return;
-        }
-
-        const cancelResult = await cancelGeneration.mutateAsync(currentActiveRun.generationId);
-        if (!cancelResult.success) {
-          setNotification({
-            type: "error",
-            message: "Previous run could not be cancelled. Please try again.",
-          });
-          return;
-        }
-      }
-
-      const result = await triggerWorkflow.mutateAsync({ id: workflowId, payload: {} });
-      setTestRunId(result.runId);
-      setIsTestPanelExpanded(true);
-      setNotification({ type: "success", message: "Test run started." });
+      await triggerWorkflow.mutateAsync({ id: workflowId, payload: {} });
+      setNotification({ type: "success", message: "Run started." });
       void refetchRuns();
     } catch (error) {
       console.error("Failed to run workflow:", error);
@@ -751,97 +657,170 @@ export default function WorkflowEditorPage() {
     } finally {
       setIsStartingRun(false);
     }
-  }, [
-    activeRun,
-    activeRunDetails,
-    cancelGeneration,
-    isStartingRun,
-    persistWorkflow,
-    refetchActiveRunDetails,
-    refetchRuns,
-    triggerWorkflow,
-    workflowId,
-  ]);
+  }, [isStartingRun, persistWorkflow, refetchRuns, triggerWorkflow, workflowId]);
 
-  const handleCancelRun = useCallback(async () => {
-    if (!cancelTargetRun?.generationId) {
-      setNotification({
-        type: "error",
-        message: "This run cannot be cancelled right now.",
-      });
-      return;
-    }
+  const toggleSection = useCallback((section: keyof typeof openSections) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  }, []);
 
-    try {
-      const result = await cancelGeneration.mutateAsync(cancelTargetRun.generationId);
-      if (!result.success) {
-        setNotification({
-          type: "error",
-          message: "Run could not be cancelled (it may already be finished).",
-        });
-        return;
-      }
+  const toggleInstructions = useCallback(() => toggleSection("instructions"), [toggleSection]);
+  const toggleTools = useCallback(() => toggleSection("tools"), [toggleSection]);
+  const toggleTriggers = useCallback(() => toggleSection("triggers"), [toggleSection]);
+  const toggleRuns = useCallback(() => toggleSection("runs"), [toggleSection]);
 
-      setNotification({ type: "success", message: "Run cancelled." });
-      await Promise.all([refetchRuns(), refetchSelectedRun()]);
-    } catch (error) {
-      console.error("Failed to cancel run:", error);
-      setNotification({ type: "error", message: "Failed to cancel run." });
-    }
-  }, [cancelGeneration, cancelTargetRun?.generationId, refetchRuns, refetchSelectedRun]);
+  const hasAgentInstructions = prompt.trim().length > 0;
+  const workflowDisplayName = workflow?.name?.trim().length ? workflow.name : "New Workflow";
 
-  const handleSubmitRunApproval = useCallback(
-    async (decision: "approve" | "deny") => {
-      if (!selectedRun?.generationId || !pendingApprovalSummary?.toolUseId) {
-        setNotification({
-          type: "error",
-          message: "No pending approval found for this run.",
-        });
-        return;
-      }
-
-      try {
-        const result = await submitApproval.mutateAsync({
-          generationId: selectedRun.generationId,
-          toolUseId: pendingApprovalSummary.toolUseId,
-          decision,
-        });
-
-        if (!result.success) {
-          setNotification({
-            type: "error",
-            message: "Approval was not applied. The request may have expired.",
-          });
-          return;
-        }
-
-        setNotification({
-          type: "success",
-          message: decision === "approve" ? "Action approved." : "Action denied.",
-        });
-        await Promise.all([refetchRuns(), refetchSelectedRun()]);
-      } catch (error) {
-        console.error("Failed to submit workflow approval:", error);
-        setNotification({
-          type: "error",
-          message: "Failed to submit approval.",
-        });
-      }
+  const handleRunClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      void handleRun();
     },
+    [handleRun],
+  );
+
+  const renderRunsAction = useCallback(
+    () => (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:text-foreground h-6 gap-1.5 px-2 text-xs"
+        onClick={handleRunClick}
+        disabled={
+          !hasAgentInstructions || status !== "on" || triggerWorkflow.isPending || isStartingRun
+        }
+      >
+        {triggerWorkflow.isPending || isStartingRun ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Play className="h-3 w-3" />
+        )}
+        Run now
+      </Button>
+    ),
+    [handleRunClick, hasAgentInstructions, isStartingRun, status, triggerWorkflow.isPending],
+  );
+
+  const chatPanel = useMemo(
+    () => <WorkflowChatPanel conversationId={builderConversationId} />,
+    [builderConversationId],
+  );
+
+  const settingsPanel = useMemo(
+    () => (
+      <WorkflowSettingsPanel
+        name={name}
+        isSaving={isSaving}
+        notification={notification}
+        status={status}
+        autoApprove={autoApprove}
+        prompt={prompt}
+        restrictTools={restrictTools}
+        allowedIntegrations={allowedIntegrations}
+        allIntegrationTypes={allIntegrationTypes}
+        integrationEntries={integrationEntries}
+        showAllIntegrations={showAllIntegrations}
+        triggerType={triggerType}
+        triggers={triggers}
+        scheduleType={scheduleType}
+        intervalMinutes={intervalMinutes}
+        scheduleTime={scheduleTime}
+        scheduleDaysOfWeek={scheduleDaysOfWeek}
+        scheduleDayOfMonth={scheduleDayOfMonth}
+        localTimezone={localTimezone}
+        hasActiveForwardingAlias={hasActiveForwardingAlias}
+        workflowForwardingAddress={workflowForwardingAddress}
+        workflowForwardingAlias={workflowForwardingAlias}
+        isEmailTriggerPersisted={isEmailTriggerPersisted}
+        copiedForwardingField={copiedForwardingField}
+        runs={runs}
+        openSections={openSections}
+        createForwardingAlias={createForwardingAlias}
+        disableForwardingAlias={disableForwardingAlias}
+        rotateForwardingAlias={rotateForwardingAlias}
+        onNameChange={handleNameChange}
+        onStatusChange={handleStatusChange}
+        onAutoApproveChange={handleAutoApproveChange}
+        onPromptChange={handlePromptChange}
+        onRestrictToolsChange={handleRestrictToolsChange}
+        onSelectAllIntegrations={handleSelectAllIntegrations}
+        onClearIntegrations={handleClearIntegrations}
+        onToggleShowAllIntegrations={handleToggleShowAllIntegrations}
+        onToggleIntegrationChecked={handleToggleIntegrationChecked}
+        onTriggerTypeChange={setTriggerType}
+        onScheduleTypeChange={handleScheduleTypeChange}
+        onIntervalHoursChange={handleIntervalHoursChange}
+        onScheduleTimeChange={handleScheduleTimeChange}
+        onToggleWeekDay={handleToggleWeekDay}
+        onScheduleDayOfMonthChange={handleScheduleDayOfMonthChange}
+        onCopyWorkflowAlias={handleCopyWorkflowAlias}
+        onRotateWorkflowAlias={handleRotateWorkflowAlias}
+        onDisableWorkflowAlias={handleDisableWorkflowAlias}
+        onCreateWorkflowAlias={handleCreateWorkflowAlias}
+        onToggleInstructions={toggleInstructions}
+        onToggleTools={toggleTools}
+        onToggleTriggers={toggleTriggers}
+        onToggleRuns={toggleRuns}
+        renderRunsAction={renderRunsAction}
+      />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dep list tracks all panel props
     [
-      pendingApprovalSummary?.toolUseId,
-      refetchRuns,
-      refetchSelectedRun,
-      selectedRun?.generationId,
-      submitApproval,
+      name,
+      isSaving,
+      notification,
+      status,
+      autoApprove,
+      prompt,
+      restrictTools,
+      allowedIntegrations,
+      allIntegrationTypes,
+      integrationEntries,
+      showAllIntegrations,
+      triggerType,
+      triggers,
+      scheduleType,
+      intervalMinutes,
+      scheduleTime,
+      scheduleDaysOfWeek,
+      scheduleDayOfMonth,
+      localTimezone,
+      hasActiveForwardingAlias,
+      workflowForwardingAddress,
+      workflowForwardingAlias,
+      isEmailTriggerPersisted,
+      copiedForwardingField,
+      runs,
+      openSections,
+      createForwardingAlias,
+      disableForwardingAlias,
+      rotateForwardingAlias,
+      handleNameChange,
+      handleStatusChange,
+      handleAutoApproveChange,
+      handlePromptChange,
+      handleRestrictToolsChange,
+      handleSelectAllIntegrations,
+      handleClearIntegrations,
+      handleToggleShowAllIntegrations,
+      handleToggleIntegrationChecked,
+      setTriggerType,
+      handleScheduleTypeChange,
+      handleIntervalHoursChange,
+      handleScheduleTimeChange,
+      handleToggleWeekDay,
+      handleScheduleDayOfMonthChange,
+      handleCopyWorkflowAlias,
+      handleRotateWorkflowAlias,
+      handleDisableWorkflowAlias,
+      handleCreateWorkflowAlias,
+      toggleInstructions,
+      toggleTools,
+      toggleTriggers,
+      toggleRuns,
+      renderRunsAction,
     ],
   );
-  const handleApproveRun = useCallback(() => {
-    void handleSubmitRunApproval("approve");
-  }, [handleSubmitRunApproval]);
-  const handleDenyRun = useCallback(() => {
-    void handleSubmitRunApproval("deny");
-  }, [handleSubmitRunApproval]);
 
   if (isLoading || !workflow) {
     return (
@@ -851,618 +830,20 @@ export default function WorkflowEditorPage() {
     );
   }
 
-  const workflowDisplayName = workflow.name.trim().length > 0 ? workflow.name : "New Workflow";
-  const selectedRunSummary =
-    runs?.find((run) => run.id === testRunId) ??
-    (selectedRun && selectedRun.id === testRunId
-      ? { id: selectedRun.id, status: selectedRun.status, startedAt: selectedRun.startedAt }
-      : null);
-  const testRunPanelContent = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="border-b px-4 py-3">
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold">Test run</h3>
-            <p className="text-muted-foreground text-xs">Live output for this workflow test.</p>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
-            <Select
-              value={testRunId ?? undefined}
-              onValueChange={handleSelectTestRun}
-              disabled={!runs || runs.length === 0}
-            >
-              <SelectTrigger className="h-8 max-w-[17rem] min-w-0 text-xs">
-                <SelectValue
-                  placeholder={
-                    selectedRunSummary
-                      ? `${formatRelativeTime(selectedRunSummary.startedAt)} • ${getWorkflowRunStatusLabel(selectedRunSummary.status)}`
-                      : "Load a previous run"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent align="end" position="popper" className="max-w-[17rem]">
-                {(runs ?? []).map((run) => (
-                  <SelectItem key={run.id} value={run.id}>
-                    <span className="truncate text-xs">
-                      {formatRelativeTime(run.startedAt)} • {getWorkflowRunStatusLabel(run.status)}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedRun?.conversationId ? (
-              <div className="flex items-center gap-2">
-                <ChatCopyButton conversationId={selectedRun.conversationId} />
-                <ChatShareControls conversationId={selectedRun.conversationId} />
-              </div>
-            ) : null}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleCancelRun}
-              disabled={!canCancelRun || cancelGeneration.isPending}
-            >
-              {cancelGeneration.isPending ? (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Square className="mr-2 h-3.5 w-3.5" />
-              )}
-              Cancel run
-            </Button>
-          </div>
-        </div>
-        {isTestingLocked ? (
-          <p className="text-muted-foreground mt-2 text-xs">
-            Starting a new test run will cancel the currently active one.
-          </p>
-        ) : null}
-        {pendingApprovalSummary ? (
-          <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-            <p className="text-sm font-medium">Approval required</p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              {pendingApprovalSummary.integration} {pendingApprovalSummary.operation}
-            </p>
-            {pendingApprovalSummary.command ? (
-              <code className="bg-background/80 mt-2 block overflow-x-auto rounded px-2 py-1 text-xs">
-                {pendingApprovalSummary.command}
-              </code>
-            ) : null}
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" onClick={handleApproveRun} disabled={submitApproval.isPending}>
-                {submitApproval.isPending ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : null}
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDenyRun}
-                disabled={submitApproval.isPending}
-              >
-                Deny
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="bg-background flex min-h-0 flex-1 overflow-hidden">
-        {isSelectedRunLoading ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        ) : selectedRun?.conversationId ? (
-          <ChatArea conversationId={selectedRun.conversationId} />
-        ) : selectedRun ? (
-          <div className="space-y-2 p-4">
-            <p className="text-sm font-medium">Run details unavailable in chat view</p>
-            <p className="text-muted-foreground text-sm">
-              This run does not have a linked conversation.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 p-4">
-            <p className="text-sm font-medium">No test run selected</p>
-            <p className="text-muted-foreground text-sm">
-              Click <span className="font-medium">Test now</span> to run this workflow.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
   return (
-    <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden">
-      <div
-        className={cn(
-          "h-full overflow-y-auto px-4 py-5 pb-24 transition-[padding-right] duration-300 sm:px-6 xl:pb-6",
-          isTestPanelExpanded ? "xl:pr-[44rem]" : "xl:pr-14",
-        )}
-      >
-        <div className="space-y-5 pb-6">
-          <div className="space-y-3">
-            <div className="flex items-start gap-3 sm:items-center">
-              <Button variant="ghost" size="icon" asChild>
-                <Link href="/workflows">
-                  <ArrowLeft className="h-4 w-4" />
-                </Link>
-              </Button>
-              <div className="min-w-0">
-                <h2 className="text-xl font-semibold">{workflowDisplayName}</h2>
-                <p className="text-muted-foreground text-sm">
-                  Configure trigger, agent instructions, and allowed tools.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <div className="bg-muted/50 flex w-full items-center justify-between gap-2 rounded-full px-3 py-1.5 sm:w-auto sm:justify-start">
-                <span className="text-muted-foreground text-sm">
-                  {status === "on" ? "Workflow is on" : "Workflow is off"}
-                </span>
-                <Switch checked={status === "on"} onCheckedChange={handleStatusChange} />
-              </div>
-              <div className="bg-muted/50 flex w-full items-center justify-between gap-2 rounded-full px-3 py-1.5 sm:w-auto sm:justify-start">
-                <span className="text-muted-foreground text-sm">
-                  {autoApprove ? "Auto-approve on" : "Auto-approve off"}
-                </span>
-                <Switch checked={autoApprove} onCheckedChange={handleAutoApproveChange} />
-              </div>
-              <Button
-                variant="secondary"
-                className="w-full sm:w-auto"
-                onClick={handleRun}
-                disabled={
-                  !hasAgentInstructions ||
-                  (!activeRun && status !== "on") ||
-                  triggerWorkflow.isPending ||
-                  isStartingRun ||
-                  isActiveRunDetailsLoading
-                }
-              >
-                {triggerWorkflow.isPending || isStartingRun ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="mr-2 h-4 w-4" />
-                )}
-                <span className="inline-flex items-center gap-1.5">
-                  Test now
-                  {isTestingLocked ? (
-                    <span
-                      className="h-2 w-2 animate-pulse rounded-full bg-emerald-500"
-                      aria-label="Test run in progress"
-                    />
-                  ) : null}
-                </span>
-              </Button>
-              <span
-                className={cn(
-                  "text-xs transition-opacity",
-                  isSaving
-                    ? "text-muted-foreground opacity-100"
-                    : notification?.type === "error"
-                      ? "text-red-600 opacity-100 dark:text-red-400"
-                      : "text-muted-foreground opacity-0",
-                )}
-              >
-                {isSaving ? "Saving..." : notification?.type === "error" ? "Save failed" : "Saved"}
-              </span>
-            </div>
-          </div>
-
-          {notification && (
-            <div
-              className={cn(
-                "rounded-lg border px-4 py-3 text-sm",
-                notification.type === "success"
-                  ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
-                  : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400",
-              )}
-            >
-              {notification.message}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-5">
-            <section className="bg-card/20 w-full min-w-0 flex-1 rounded-xl p-5 md:p-6">
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Name</label>
-                      <input
-                        className="h-10 w-full rounded-md border bg-transparent px-3 text-sm"
-                        value={name}
-                        onChange={handleNameChange}
-                        placeholder="Leave blank to auto generate"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Trigger</label>
-                      <Select value={triggerType} onValueChange={setTriggerType}>
-                        <SelectTrigger className="h-10 w-full bg-transparent">
-                          <SelectValue placeholder="Select a trigger" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TRIGGERS.map((trigger) => (
-                            <SelectItem key={trigger.value} value={trigger.value}>
-                              {trigger.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <AnimatePresence initial={false} mode="wait">
-                    {triggerType === "schedule" && (
-                      <motion.div
-                        key="schedule-settings"
-                        className="space-y-4"
-                        initial={scheduleMotionInitial}
-                        animate={scheduleMotionAnimate}
-                        exit={scheduleMotionExit}
-                        transition={scheduleMotionTransition}
-                        style={scheduleMotionStyle}
-                      >
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Frequency</label>
-                          <Select value={scheduleType} onValueChange={handleScheduleTypeChange}>
-                            <SelectTrigger className="bg-background h-10 w-full">
-                              <SelectValue placeholder="Select frequency" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="interval">Every X hours</SelectItem>
-                              <SelectItem value="daily">Daily</SelectItem>
-                              <SelectItem value="weekly">Weekly</SelectItem>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {scheduleType === "interval" && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Run every</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min={1}
-                                max={168}
-                                className="bg-background h-10 w-24 rounded-md border px-3 text-sm"
-                                value={Math.max(1, Math.round(intervalMinutes / 60))}
-                                onChange={handleIntervalHoursChange}
-                              />
-                              <span className="text-muted-foreground text-sm">hours</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {(scheduleType === "daily" ||
-                          scheduleType === "weekly" ||
-                          scheduleType === "monthly") && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Time ({localTimezone})</label>
-                            <Input
-                              type="time"
-                              step={60}
-                              value={scheduleTime}
-                              onChange={handleScheduleTimeChange}
-                              className="bg-background h-10 w-36 appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
-                            />
-                          </div>
-                        )}
-
-                        {scheduleType === "weekly" && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Days of the week</label>
-                            <div className="flex flex-wrap gap-2">
-                              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                                (day, index) => (
-                                  <button
-                                    key={day}
-                                    type="button"
-                                    data-day-index={index}
-                                    className={cn(
-                                      "h-9 w-12 rounded-md border text-sm font-medium transition-colors",
-                                      scheduleDaysOfWeek.includes(index)
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "bg-background hover:bg-muted",
-                                    )}
-                                    onClick={handleToggleWeekDay}
-                                  >
-                                    {day}
-                                  </button>
-                                ),
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {scheduleType === "monthly" && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Day of the month</label>
-                            <Select
-                              value={String(scheduleDayOfMonth)}
-                              onValueChange={handleScheduleDayOfMonthChange}
-                            >
-                              <SelectTrigger className="bg-background h-10 w-24">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                                  <SelectItem key={day} value={String(day)}>
-                                    {day}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
-                    <div className="bg-muted/20 mt-4 space-y-4 rounded-lg border p-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Workflow forwarding address</label>
-                        {hasActiveForwardingAlias ? (
-                          <div className="flex flex-col gap-2 sm:flex-row">
-                            <Input
-                              type="text"
-                              value={workflowForwardingAddress ?? ""}
-                              disabled
-                              className="bg-background/60 font-mono text-xs"
-                              placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleCopyWorkflowAlias}
-                                disabled={!workflowForwardingAddress}
-                              >
-                                {copiedForwardingField === "workflowAlias" ? "Copied" : "Copy"}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleRotateWorkflowAlias}
-                                disabled={rotateForwardingAlias.isPending}
-                              >
-                                Rotate
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleDisableWorkflowAlias}
-                                disabled={disableForwardingAlias.isPending}
-                              >
-                                Disable
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <Input
-                              type="text"
-                              value=""
-                              disabled
-                              className="bg-background/60 font-mono text-xs"
-                              placeholder="No forwarding address yet"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleCreateWorkflowAlias}
-                              disabled={
-                                createForwardingAlias.isPending ||
-                                !workflowForwardingAlias?.receivingDomain ||
-                                !isEmailTriggerPersisted
-                              }
-                            >
-                              Create email
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Personal forwarding alias intentionally hidden for now. */}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Agent instructions</label>
-                  <textarea
-                    className="min-h-[180px] w-full rounded-md border bg-transparent px-3 py-2 text-sm"
-                    value={prompt}
-                    onChange={handlePromptChange}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <label className="text-sm font-medium">Allowed tools</label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground text-sm">All tools allowed</span>
-                      <Switch
-                        checked={!restrictTools}
-                        onCheckedChange={handleRestrictToolsChange}
-                      />
-                    </div>
-                  </div>
-                  {!restrictTools ? (
-                    <p className="text-muted-foreground text-sm">All tools are allowed.</p>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-muted-foreground text-xs">
-                          {allowedIntegrations.length}/{allIntegrationTypes.length} selected
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            disabled={allowedIntegrations.length === allIntegrationTypes.length}
-                            onClick={handleSelectAllIntegrations}
-                          >
-                            Select all
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            disabled={allowedIntegrations.length === 0}
-                            onClick={handleClearIntegrations}
-                          >
-                            Clear
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {(showAllIntegrations
-                          ? integrationEntries
-                          : integrationEntries.slice(0, 4)
-                        ).map(({ key, name: label, logo }) => (
-                          <label
-                            key={key}
-                            className={cn(
-                              "flex items-center gap-3 rounded-md bg-muted/30 p-3 text-sm transition-colors hover:bg-muted/50",
-                            )}
-                          >
-                            <IntegrationToggleSwitch
-                              integrationType={key}
-                              checked={allowedIntegrations.includes(key)}
-                              onToggle={handleToggleIntegrationChecked}
-                            />
-                            <Image
-                              src={logo}
-                              alt={label}
-                              width={16}
-                              height={16}
-                              className="h-4 w-4"
-                            />
-                            <span>{label}</span>
-                          </label>
-                        ))}
-                      </div>
-                      {integrationEntries.length > 4 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleToggleShowAllIntegrations}
-                          className="text-muted-foreground"
-                        >
-                          {showAllIntegrations ? (
-                            <>
-                              <ChevronUp className="mr-1 h-4 w-4" />
-                              Show less
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="mr-1 h-4 w-4" />
-                              Show more ({integrationEntries.length - 4} more)
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {isTestPanelExpanded ? (
-          <motion.section
-            initial={mobileTestPanelInitial}
-            animate={mobileTestPanelAnimate}
-            exit={mobileTestPanelExit}
-            transition={mobileTestPanelTransition}
-            className="bg-card/95 absolute inset-0 z-40 flex min-h-0 flex-col border-l backdrop-blur-sm xl:hidden"
-          >
-            <div className="border-b px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">Test run panel</p>
-                <Button variant="ghost" size="sm" onClick={handleToggleTestPanel}>
-                  Close
-                </Button>
-              </div>
-            </div>
-            {testRunPanelContent}
-          </motion.section>
-        ) : null}
-      </AnimatePresence>
-
-      <div className="bg-background/95 border-border/50 absolute inset-x-0 bottom-0 z-30 border-t backdrop-blur-sm xl:hidden">
-        <button
-          type="button"
-          onClick={handleToggleTestPanel}
-          className="flex w-full items-center justify-between px-4 py-3 text-left"
-        >
-          <div className="flex items-center gap-2">
-            <Circle
-              className={cn(
-                "h-2.5 w-2.5 fill-current",
-                isTestingLocked ? "text-emerald-500" : "text-muted-foreground/70",
-              )}
-            />
-            <span className="text-sm font-medium">Test run</span>
-          </div>
-          <div className="text-muted-foreground flex items-center gap-2 text-xs">
-            {isTestPanelExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronUp className="h-4 w-4" />
-            )}
-          </div>
-        </button>
-      </div>
-
-      <motion.aside
-        initial={false}
-        animate={isTestPanelExpanded ? testPanelDockExpanded : testPanelDockCollapsed}
-        transition={testPanelDockTransition}
-        className="bg-card/55 border-border/40 absolute inset-y-0 right-0 z-30 hidden overflow-hidden border-l backdrop-blur-sm xl:block"
-      >
-        <div className="flex h-full min-h-0">
-          <div className="bg-background/60 border-border/40 flex w-14 shrink-0 flex-col items-center justify-between border-r py-3">
-            <button
-              type="button"
-              onClick={handleToggleTestPanel}
-              className="hover:bg-muted/80 rounded-md p-1.5 transition-colors"
-              aria-label={isTestPanelExpanded ? "Collapse test sidebar" : "Expand test sidebar"}
-            >
-              {isTestPanelExpanded ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronLeft className="h-4 w-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={handleToggleTestPanel}
-              className="hover:bg-muted/80 flex w-full items-center justify-center rounded-md py-3 transition-colors"
-              aria-label="Toggle test run panel"
-            >
-              <Circle
-                className={cn(
-                  "h-2.5 w-2.5 fill-current",
-                  isTestingLocked ? "text-emerald-500" : "text-muted-foreground/70",
-                )}
-              />
-            </button>
-          </div>
-
-          {isTestPanelExpanded ? testRunPanelContent : null}
-        </div>
-      </motion.aside>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <DualPanelWorkspace
+        storageKey="workflow-editor-panels-v2"
+        defaultRightWidth={45}
+        collapsible
+        showTitles={false}
+        leftTitle="Chat"
+        rightTitle={workflowDisplayName}
+        leftPanelClassName="border-0 rounded-none"
+        rightPanelClassName="border-0 rounded-none bg-muted/30"
+        left={chatPanel}
+        right={settingsPanel}
+      />
       <AlertDialog
         open={showDisableAutoApproveDialog}
         onOpenChange={setShowDisableAutoApproveDialog}
@@ -1481,6 +862,524 @@ export default function WorkflowEditorPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+type WorkflowSettingsPanelProps = {
+  name: string;
+  isSaving: boolean;
+  notification: { type: "success" | "error"; message: string } | null;
+  status: "on" | "off";
+  autoApprove: boolean;
+  prompt: string;
+  restrictTools: boolean;
+  allowedIntegrations: IntegrationType[];
+  allIntegrationTypes: IntegrationType[];
+  integrationEntries: { key: IntegrationType; name: string; logo: string }[];
+  showAllIntegrations: boolean;
+  triggerType: string;
+  triggers: readonly { value: string; label: string }[];
+  scheduleType: "interval" | "daily" | "weekly" | "monthly";
+  intervalMinutes: number;
+  scheduleTime: string;
+  scheduleDaysOfWeek: number[];
+  scheduleDayOfMonth: number;
+  localTimezone: string;
+  hasActiveForwardingAlias: boolean;
+  workflowForwardingAddress: string | null;
+  workflowForwardingAlias:
+    | {
+        receivingDomain: string | null;
+        activeAlias: unknown | null;
+        forwardingAddress: string | null;
+      }
+    | undefined;
+  isEmailTriggerPersisted: boolean;
+  copiedForwardingField: "workflowAlias" | null;
+  runs:
+    | Array<{
+        id: string;
+        status: string;
+        startedAt: Date;
+        finishedAt: Date | null;
+        errorMessage: string | null;
+      }>
+    | undefined;
+  openSections: { instructions: boolean; tools: boolean; triggers: boolean; runs: boolean };
+  createForwardingAlias: { isPending: boolean };
+  disableForwardingAlias: { isPending: boolean };
+  rotateForwardingAlias: { isPending: boolean };
+  onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onStatusChange: (checked: boolean) => void;
+  onAutoApproveChange: (checked: boolean) => void;
+  onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onRestrictToolsChange: (checked: boolean) => void;
+  onSelectAllIntegrations: () => void;
+  onClearIntegrations: () => void;
+  onToggleShowAllIntegrations: () => void;
+  onToggleIntegrationChecked: (type: IntegrationType) => void;
+  onTriggerTypeChange: (value: string) => void;
+  onScheduleTypeChange: (value: string) => void;
+  onIntervalHoursChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onScheduleTimeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onToggleWeekDay: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onScheduleDayOfMonthChange: (value: string) => void;
+  onCopyWorkflowAlias: () => void;
+  onRotateWorkflowAlias: () => void;
+  onDisableWorkflowAlias: () => void;
+  onCreateWorkflowAlias: () => void;
+  onToggleInstructions: () => void;
+  onToggleTools: () => void;
+  onToggleTriggers: () => void;
+  onToggleRuns: () => void;
+  renderRunsAction: () => React.ReactNode;
+};
+
+function WorkflowSettingsPanel({
+  name,
+  isSaving,
+  notification,
+  status,
+  autoApprove,
+  prompt,
+  restrictTools,
+  allowedIntegrations,
+  allIntegrationTypes,
+  integrationEntries,
+  showAllIntegrations,
+  triggerType,
+  triggers,
+  scheduleType,
+  intervalMinutes,
+  scheduleTime,
+  scheduleDaysOfWeek,
+  scheduleDayOfMonth,
+  localTimezone,
+  hasActiveForwardingAlias,
+  workflowForwardingAddress,
+  workflowForwardingAlias,
+  isEmailTriggerPersisted,
+  copiedForwardingField,
+  runs,
+  openSections,
+  createForwardingAlias,
+  disableForwardingAlias,
+  rotateForwardingAlias,
+  onNameChange,
+  onStatusChange,
+  onAutoApproveChange,
+  onPromptChange,
+  onRestrictToolsChange,
+  onSelectAllIntegrations,
+  onClearIntegrations,
+  onToggleShowAllIntegrations,
+  onToggleIntegrationChecked,
+  onTriggerTypeChange,
+  onScheduleTypeChange,
+  onIntervalHoursChange,
+  onScheduleTimeChange,
+  onToggleWeekDay,
+  onScheduleDayOfMonthChange,
+  onCopyWorkflowAlias,
+  onRotateWorkflowAlias,
+  onDisableWorkflowAlias,
+  onCreateWorkflowAlias,
+  onToggleInstructions,
+  onToggleTools,
+  onToggleTriggers,
+  onToggleRuns,
+  renderRunsAction,
+}: WorkflowSettingsPanelProps) {
+  return (
+    <div className="flex flex-col">
+      {/* Header */}
+      <div className="border-b px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" asChild>
+            <Link href="/workflows">
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+          <input
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold focus:outline-none"
+            value={name}
+            onChange={onNameChange}
+            placeholder="New Workflow"
+          />
+          <span
+            className={cn(
+              "shrink-0 text-xs transition-opacity",
+              isSaving
+                ? "text-muted-foreground opacity-100"
+                : notification?.type === "error"
+                  ? "text-red-600 opacity-100 dark:text-red-400"
+                  : "text-muted-foreground opacity-0",
+            )}
+          >
+            {isSaving ? "Saving…" : "Save failed"}
+          </span>
+          <div className="border-border ml-1 flex shrink-0 items-center gap-1.5 border-l pl-2">
+            <span className="text-muted-foreground text-xs">{status === "on" ? "On" : "Off"}</span>
+            <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="text-muted-foreground text-xs">Auto-approve</span>
+            <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
+          </div>
+        </div>
+        {notification && (
+          <p
+            className={cn(
+              "mt-1.5 text-xs",
+              notification.type === "success"
+                ? "text-green-700 dark:text-green-400"
+                : "text-red-600 dark:text-red-400",
+            )}
+          >
+            {notification.message}
+          </p>
+        )}
+      </div>
+
+      {/* Instructions section */}
+      <Section
+        title="Instructions"
+        open={openSections.instructions}
+        onToggle={onToggleInstructions}
+      >
+        <textarea
+          className="text-foreground placeholder:text-muted-foreground/60 min-h-[140px] w-full resize-none rounded-lg border-0 bg-transparent px-0 py-0 text-sm leading-relaxed focus:outline-none"
+          value={prompt}
+          onChange={onPromptChange}
+          placeholder="Describe what this agent should do…"
+        />
+      </Section>
+
+      {/* Tools section */}
+      <Section title="Tools" open={openSections.tools} onToggle={onToggleTools}>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground text-xs">All tools allowed</span>
+            <Switch checked={!restrictTools} onCheckedChange={onRestrictToolsChange} />
+          </div>
+          {restrictTools && (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground text-xs">
+                  {allowedIntegrations.length}/{allIntegrationTypes.length} selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={allowedIntegrations.length === allIntegrationTypes.length}
+                    onClick={onSelectAllIntegrations}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={allowedIntegrations.length === 0}
+                    onClick={onClearIntegrations}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="-mx-1 grid grid-cols-1">
+                {(showAllIntegrations ? integrationEntries : integrationEntries.slice(0, 4)).map(
+                  ({ key, name: label, logo }) => (
+                    <label
+                      key={key}
+                      className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
+                    >
+                      <IntegrationToggleSwitch
+                        integrationType={key}
+                        checked={allowedIntegrations.includes(key)}
+                        onToggle={onToggleIntegrationChecked}
+                      />
+                      <Image
+                        src={logo}
+                        alt={label}
+                        width={14}
+                        height={14}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span className="text-xs">{label}</span>
+                    </label>
+                  ),
+                )}
+              </div>
+              {integrationEntries.length > 4 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleShowAllIntegrations}
+                  className="text-muted-foreground h-7 text-xs"
+                >
+                  {showAllIntegrations ? (
+                    <>
+                      <ChevronUp className="mr-1 h-3 w-3" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="mr-1 h-3 w-3" />
+                      {integrationEntries.length - 4} more
+                    </>
+                  )}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </Section>
+
+      {/* Triggers section */}
+      <Section title="Trigger" open={openSections.triggers} onToggle={onToggleTriggers}>
+        <div className="space-y-3">
+          <Select value={triggerType} onValueChange={onTriggerTypeChange}>
+            <SelectTrigger className="h-9 w-full bg-transparent text-sm">
+              <SelectValue placeholder="Select a trigger" />
+            </SelectTrigger>
+            <SelectContent>
+              {triggers.map((trigger) => (
+                <SelectItem key={trigger.value} value={trigger.value}>
+                  {trigger.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <AnimatePresence initial={false} mode="wait">
+            {triggerType === "schedule" && (
+              <motion.div
+                key="schedule-settings"
+                className="space-y-3"
+                initial={scheduleMotionInitial}
+                animate={scheduleMotionAnimate}
+                exit={scheduleMotionExit}
+                transition={scheduleMotionTransition}
+                style={scheduleMotionStyle}
+              >
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">Frequency</label>
+                  <Select value={scheduleType} onValueChange={onScheduleTypeChange}>
+                    <SelectTrigger className="bg-background h-9 w-full text-sm">
+                      <SelectValue placeholder="Select frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="interval">Every X hours</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {scheduleType === "interval" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Run every</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={168}
+                        className="bg-background h-9 w-20 rounded-md border px-3 text-sm"
+                        value={Math.max(1, Math.round(intervalMinutes / 60))}
+                        onChange={onIntervalHoursChange}
+                      />
+                      <span className="text-muted-foreground text-xs">hours</span>
+                    </div>
+                  </div>
+                )}
+
+                {(scheduleType === "daily" ||
+                  scheduleType === "weekly" ||
+                  scheduleType === "monthly") && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Time ({localTimezone})</label>
+                    <Input
+                      type="time"
+                      step={60}
+                      value={scheduleTime}
+                      onChange={onScheduleTimeChange}
+                      className="bg-background h-9 w-32 appearance-none text-sm [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                    />
+                  </div>
+                )}
+
+                {scheduleType === "weekly" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Days of the week</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, index) => (
+                        <button
+                          key={day}
+                          type="button"
+                          data-day-index={index}
+                          className={cn(
+                            "h-8 w-10 rounded-md border text-xs font-medium transition-colors",
+                            scheduleDaysOfWeek.includes(index)
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "bg-background hover:bg-muted",
+                          )}
+                          onClick={onToggleWeekDay}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {scheduleType === "monthly" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Day of the month</label>
+                    <Select
+                      value={String(scheduleDayOfMonth)}
+                      onValueChange={onScheduleDayOfMonthChange}
+                    >
+                      <SelectTrigger className="bg-background h-9 w-20 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                          <SelectItem key={day} value={String(day)}>
+                            {day}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
+            <div className="bg-muted/20 space-y-3 rounded-lg border p-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium">Forwarding address</label>
+                {hasActiveForwardingAlias ? (
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      type="text"
+                      value={workflowForwardingAddress ?? ""}
+                      disabled
+                      className="bg-background/60 font-mono text-xs"
+                      placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
+                    />
+                    <div className="flex gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={onCopyWorkflowAlias}
+                        disabled={!workflowForwardingAddress}
+                      >
+                        {copiedForwardingField === "workflowAlias" ? "Copied" : "Copy"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={onRotateWorkflowAlias}
+                        disabled={rotateForwardingAlias.isPending}
+                      >
+                        Rotate
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={onDisableWorkflowAlias}
+                        disabled={disableForwardingAlias.isPending}
+                      >
+                        Disable
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      type="text"
+                      value=""
+                      disabled
+                      className="bg-background/60 font-mono text-xs"
+                      placeholder="No forwarding address yet"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={onCreateWorkflowAlias}
+                      disabled={
+                        createForwardingAlias.isPending ||
+                        !workflowForwardingAlias?.receivingDomain ||
+                        !isEmailTriggerPersisted
+                      }
+                    >
+                      Create email
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Runs section */}
+      <Section
+        title="Runs"
+        open={openSections.runs}
+        onToggle={onToggleRuns}
+        renderAction={renderRunsAction}
+      >
+        {runs && runs.length > 0 ? (
+          <div className="-mx-1">
+            {runs.map((run) => (
+              <Link
+                key={run.id}
+                href={`/workflows/runs/${run.id}`}
+                className="hover:bg-muted/40 flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors"
+              >
+                <Circle
+                  className={cn(
+                    "h-1.5 w-1.5 shrink-0 fill-current",
+                    run.status === "completed"
+                      ? "text-emerald-500"
+                      : run.status === "running" ||
+                          run.status === "awaiting_approval" ||
+                          run.status === "awaiting_auth"
+                        ? "text-blue-500"
+                        : run.status === "error" || run.status === "cancelled"
+                          ? "text-red-500"
+                          : "text-muted-foreground",
+                  )}
+                />
+                <span className="text-foreground/70 text-xs">
+                  {getWorkflowRunStatusLabel(run.status)}
+                </span>
+                <span className="text-muted-foreground ml-auto text-xs">
+                  {formatRelativeTime(run.startedAt)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-xs">No runs yet.</p>
+        )}
+      </Section>
     </div>
   );
 }
