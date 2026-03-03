@@ -56,6 +56,7 @@
     "chat": "bun run chat:auth && bun scripts/chat.ts",
     "chat:e2b": "SANDBOX_DEFAULT=e2b bun run chat",
     "chat:daytona": "SANDBOX_DEFAULT=daytona bun run chat",
+    "tool": "bun run chat:auth && bun scripts/tool.ts",
     "workflow": "bun scripts/workflow.ts",
     "auth:inspect": "bun scripts/auth-inspect.ts",
     "experiment:sandbox-agent:quickstart": "bun experiments/sandbox-agent-quickstart.ts",
