@@ -22,7 +22,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { SkillEditor, parseSkillContent, serializeSkillContent } from "@/components/skill-editor";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
+import { parseSkillContent, serializeSkillContent } from "@/lib/skill-markdown";
 import { cn } from "@/lib/utils";
 import {
   useSkill,
@@ -45,7 +47,8 @@ import {
   useGetDocumentUrl,
 } from "@/orpc/hooks";
 
-type EditorMode = "rich" | "markdown";
+type SkillMarkdownViewMode = "preview" | "source";
+const markdownRemarkPlugins = [remarkGfm];
 
 function generateSlug(displayName: string): string {
   return displayName
@@ -105,7 +108,8 @@ function SkillEditorPageContent() {
 
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState<EditorMode>("rich");
+  const [skillMarkdownViewMode, setSkillMarkdownViewMode] =
+    useState<SkillMarkdownViewMode>("preview");
   const [isSaving, setIsSaving] = useState(false);
   const [showAddFile, setShowAddFile] = useState(false);
   const [newFilePath, setNewFilePath] = useState("");
@@ -272,6 +276,7 @@ function SkillEditorPageContent() {
         if (file.path === "SKILL.md") {
           const parsed = parseSkillContent(file.content);
           setSkillBody(parsed.body);
+          setSkillMarkdownViewMode("preview");
         } else {
           setEditedContent(file.content);
         }
@@ -625,12 +630,12 @@ function SkillEditorPageContent() {
     fileInputRef.current?.click();
   }, []);
 
-  const handleSetEditorModeRich = useCallback(() => {
-    setEditorMode("rich");
+  const handleSetMarkdownViewPreview = useCallback(() => {
+    setSkillMarkdownViewMode("preview");
   }, []);
 
-  const handleSetEditorModeMarkdown = useCallback(() => {
-    setEditorMode("markdown");
+  const handleSetMarkdownViewSource = useCallback(() => {
+    setSkillMarkdownViewMode("source");
   }, []);
 
   const handleNewFilePathChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -654,7 +659,7 @@ function SkillEditorPageContent() {
     [handleAddFile, handleCancelAddFile],
   );
 
-  const handleMarkdownChange = useCallback(
+  const handleMarkdownSourceChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const parsed = parseSkillContent(event.target.value);
       setSkillSlug(parsed.name);
@@ -665,6 +670,13 @@ function SkillEditorPageContent() {
       }
     },
     [skillSlug],
+  );
+
+  const handleNonSkillFileContentChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setEditedContent(event.target.value);
+    },
+    [],
   );
 
   const handleCancelDeleteDocument = useCallback(() => {
@@ -704,7 +716,7 @@ function SkillEditorPageContent() {
   const isSkillMd = selectedFile?.path === "SKILL.md";
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
+    <div className="h-[calc(100dvh-5rem)]">
       {/* Skill copilot dual panel is disabled until it is ready. */}
       <div className="flex h-full min-h-0 flex-col p-4 md:p-6">
         {/* Header with back button and delete */}
@@ -938,26 +950,26 @@ function SkillEditorPageContent() {
           {isSkillMd && (
             <div className="ml-auto flex items-center gap-0.5">
               <button
-                onClick={handleSetEditorModeRich}
+                onClick={handleSetMarkdownViewPreview}
                 className={cn(
                   "rounded p-1.5 transition-colors",
-                  editorMode === "rich"
+                  skillMarkdownViewMode === "preview"
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="Rich editor"
+                title="Preview"
               >
                 <Eye className="h-3.5 w-3.5" />
               </button>
               <button
-                onClick={handleSetEditorModeMarkdown}
+                onClick={handleSetMarkdownViewSource}
                 className={cn(
                   "rounded p-1.5 transition-colors",
-                  editorMode === "markdown"
+                  skillMarkdownViewMode === "source"
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="Markdown"
+                title="Source"
               >
                 <Code2 className="h-3.5 w-3.5" />
               </button>
@@ -989,17 +1001,16 @@ function SkillEditorPageContent() {
         <div className="min-h-0 flex-1">
           {selectedFile && !selectedDocumentId && (
             <>
-              {isSkillMd && editorMode === "rich" ? (
-                <SkillEditor
-                  content={skillBody}
-                  onChange={setSkillBody}
-                  editorKey={`${selectedFileId}-body`}
-                  className="h-full"
-                />
-              ) : isSkillMd && editorMode === "markdown" ? (
+              {isSkillMd && skillMarkdownViewMode === "preview" ? (
+                <div className="h-full overflow-y-auto rounded-lg border p-4">
+                  <article className="prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={markdownRemarkPlugins}>{skillBody}</ReactMarkdown>
+                  </article>
+                </div>
+              ) : isSkillMd && skillMarkdownViewMode === "source" ? (
                 <textarea
                   value={serializeSkillContent(skillSlug, skillDescription, skillBody)}
-                  onChange={handleMarkdownChange}
+                  onChange={handleMarkdownSourceChange}
                   className="bg-background focus:ring-ring h-full w-full resize-none rounded-lg border p-4 font-mono text-sm focus:ring-2 focus:outline-none"
                   placeholder="---
 name: skill-name
@@ -1011,11 +1022,10 @@ description: What this skill does
 Add your skill instructions here..."
                 />
               ) : (
-                <SkillEditor
-                  content={editedContent}
-                  onChange={setEditedContent}
-                  editorKey={selectedFileId || ""}
-                  className="h-full"
+                <textarea
+                  value={editedContent}
+                  onChange={handleNonSkillFileContentChange}
+                  className="bg-background focus:ring-ring h-full w-full resize-none rounded-lg border p-4 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               )}
             </>
