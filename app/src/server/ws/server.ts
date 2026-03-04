@@ -79,7 +79,7 @@ export function waitForResponse(
   if (IS_STATELESS_RUNTIME) {
     return Promise.reject(
       new Error(
-        "Device request/response routing requires a dedicated WebSocket service and is not supported inside Vercel functions.",
+        "Device request/response routing requires a dedicated WebSocket service and is not supported in stateless runtimes.",
       ),
     );
   }
@@ -252,7 +252,7 @@ function startHeartbeat(): void {
 export function startWebSocketServer(port: number = 4097): void {
   if (IS_STATELESS_RUNTIME) {
     throw new Error(
-      "WebSocket server must run in a dedicated stateful process and cannot be started in Vercel runtime.",
+      "WebSocket server must run in a dedicated stateful process and cannot be started in stateless runtimes.",
     );
   }
   Bun.serve<WebSocketData>({

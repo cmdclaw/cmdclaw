@@ -67,6 +67,10 @@ const {
   };
 });
 
+const { isStatelessServerlessRuntimeMock } = vi.hoisted(() => ({
+  isStatelessServerlessRuntimeMock: vi.fn(() => false),
+}));
+
 vi.mock("@/env", () => ({
   env: {},
 }));
@@ -141,6 +145,10 @@ vi.mock("@/server/queues", () => ({
   getQueue: () => ({
     add: queueAddMock,
   }),
+}));
+
+vi.mock("@/server/utils/runtime-platform", () => ({
+  isStatelessServerlessRuntime: isStatelessServerlessRuntimeMock,
 }));
 
 import { env } from "@/env";
@@ -281,8 +289,8 @@ describe("generationManager transitions", () => {
     workflowFindFirstMock.mockResolvedValue(null);
     providerAuthFindFirstMock.mockResolvedValue(null);
     vi.mocked(getPreferredCloudSandboxProvider).mockReturnValue("e2b");
+    isStatelessServerlessRuntimeMock.mockReturnValue(false);
     queueAddMock.mockReset();
-    delete process.env.VERCEL;
     delete process.env.KUMA_PUSH_URL;
 
     const mgr = asTestManager();
@@ -833,7 +841,7 @@ describe("generationManager transitions", () => {
   });
 
   it("enqueues run and preparing-stuck check jobs when deferred to worker", async () => {
-    process.env.VERCEL = "1";
+    isStatelessServerlessRuntimeMock.mockReturnValue(true);
     const mgr = asTestManager();
     const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
     const pdfAttachment = {

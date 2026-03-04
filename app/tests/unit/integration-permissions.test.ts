@@ -6,7 +6,7 @@ describe("getCallbackBaseUrls", () => {
     vi.unstubAllEnvs();
   });
 
-  it("prefers public non-vercel URLs and excludes localcan in production", () => {
+  it("prefers public URLs and excludes localcan in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("APP_URL", "http://localhost:3000");
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.cmdclaw.ai");

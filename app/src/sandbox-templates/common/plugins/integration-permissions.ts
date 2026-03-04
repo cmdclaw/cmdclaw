@@ -323,10 +323,6 @@ function isWriteOperation(integration: string, operation: string): boolean {
   return false;
 }
 
-function isVercelHost(hostname: string): boolean {
-  return hostname === "vercel.app" || hostname.endsWith(".vercel.app");
-}
-
 function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
@@ -360,18 +356,9 @@ export function getCallbackBaseUrls(): string[] {
     hostname: meta.hostname,
   }));
 
-  const publicNonVercel = urls
-    .filter(({ hostname }) => !isLoopbackHost(hostname) && !isVercelHost(hostname))
-    .map(({ url }) => url);
-  if (publicNonVercel.length > 0) {
-    return publicNonVercel;
-  }
-
-  const publicVercel = urls
-    .filter(({ hostname }) => !isLoopbackHost(hostname) && isVercelHost(hostname))
-    .map(({ url }) => url);
-  if (publicVercel.length > 0) {
-    return publicVercel;
+  const publicUrls = urls.filter(({ hostname }) => !isLoopbackHost(hostname)).map(({ url }) => url);
+  if (publicUrls.length > 0) {
+    return publicUrls;
   }
 
   const loopbackUrls = urls

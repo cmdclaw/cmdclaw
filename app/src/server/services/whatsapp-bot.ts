@@ -360,12 +360,6 @@ async function handleIncomingMessage(waJid: string, text: string, displayName: s
 }
 
 export async function ensureWhatsAppSocket(): Promise<void> {
-  if (process.env.VERCEL === "1") {
-    state.status = "disconnected";
-    state.lastError =
-      "WhatsApp connector must run in a dedicated stateful worker and is disabled in Vercel runtime.";
-    return;
-  }
   if (state.status === "connected" || isConnecting) {
     return;
   }
