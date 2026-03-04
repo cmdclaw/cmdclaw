@@ -523,6 +523,12 @@ async function runGeneration(
 ): Promise<{ generationId: string; conversationId: string } | null> {
   let outputStarted = false;
   const generationStartedAtMs = Date.now();
+  let firstVisibleOutputAtMs: number | undefined;
+  const markFirstVisibleOutput = () => {
+    if (firstVisibleOutputAtMs === undefined) {
+      firstVisibleOutputAtMs = Date.now();
+    }
+  };
   const statusTimeline: Array<{ status: string; atMs: number; elapsedMs: number }> = [];
   const runtime = createGenerationRuntime();
   const streamedSandboxFileIds = new Set<string>();
@@ -544,11 +550,13 @@ async function runGeneration(
       },
       callbacks: {
         onText: (text) => {
+          markFirstVisibleOutput();
           process.stdout.write(text);
           runtime.handleText(text);
           outputStarted = true;
         },
         onThinking: (thinking) => {
+          markFirstVisibleOutput();
           runtime.handleThinking(thinking);
           process.stdout.write(`\n[thinking] ${thinking.content}\n`);
         },
@@ -817,6 +825,13 @@ async function runGeneration(
                 ["pre_prompt_setup", phaseDurations.prePromptSetupMs],
                 ["agent_ready_to_prompt", phaseDurations.agentReadyToPromptMs],
                 ["wait_for_first_event", phaseDurations.waitForFirstEventMs],
+                ["prompt_to_first_token", phaseDurations.promptToFirstTokenMs],
+                ["generation_to_first_token", phaseDurations.generationToFirstTokenMs],
+                ["prompt_to_first_visible_output", phaseDurations.promptToFirstVisibleOutputMs],
+                [
+                  "generation_to_first_visible_output",
+                  phaseDurations.generationToFirstVisibleOutputMs,
+                ],
                 ["model_stream", phaseDurations.modelStreamMs],
                 ["post_processing", phaseDurations.postProcessingMs],
               ];
@@ -843,6 +858,13 @@ async function runGeneration(
                 `  - ${entry.status}: ${formatClockTime(entry.atMs)} (+${formatDurationMs(entry.elapsedMs)})\n`,
               );
             }
+          }
+          if (firstVisibleOutputAtMs !== undefined) {
+            process.stdout.write(
+              `[timing] client_generation_to_first_visible_output: ${formatDurationMs(
+                Math.max(0, firstVisibleOutputAtMs - generationStartedAtMs),
+              )}\n`,
+            );
           }
           if (outputStarted) {
             process.stdout.write("\n");

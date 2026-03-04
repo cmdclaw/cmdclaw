@@ -81,6 +81,7 @@ import {
 } from "@/server/services/workflow-builder-service";
 import { generateConversationTitle } from "@/server/utils/generate-title";
 import { createTraceId, logServerEvent } from "@/server/utils/observability";
+import { isStatelessServerlessRuntime } from "@/server/utils/runtime-platform";
 
 let cachedDefaultWorkflowModelPromise: Promise<string> | undefined;
 
@@ -690,7 +691,7 @@ class GenerationManager {
   };
 
   private shouldDeferGenerationToWorker(): boolean {
-    return process.env.VERCEL === "1";
+    return isStatelessServerlessRuntime();
   }
 
   private getSubscriptionKey(generationId: string, userId: string): string {
@@ -1333,6 +1334,25 @@ class GenerationManager {
       phaseMarks.prompt_sent !== undefined && phaseMarks.first_event_received !== undefined
         ? Math.max(0, phaseMarks.first_event_received - phaseMarks.prompt_sent)
         : undefined;
+    const firstTokenAtMs = phaseMarks.first_token_emitted;
+    const firstVisibleOutputAtMs =
+      phaseMarks.first_visible_output_emitted ?? phaseMarks.first_token_emitted;
+    const promptToFirstTokenMs =
+      phaseMarks.prompt_sent !== undefined && firstTokenAtMs !== undefined
+        ? Math.max(0, firstTokenAtMs - phaseMarks.prompt_sent)
+        : undefined;
+    const generationToFirstTokenMs =
+      phaseMarks.generation_started !== undefined && firstTokenAtMs !== undefined
+        ? Math.max(0, firstTokenAtMs - phaseMarks.generation_started)
+        : undefined;
+    const promptToFirstVisibleOutputMs =
+      phaseMarks.prompt_sent !== undefined && firstVisibleOutputAtMs !== undefined
+        ? Math.max(0, firstVisibleOutputAtMs - phaseMarks.prompt_sent)
+        : undefined;
+    const generationToFirstVisibleOutputMs =
+      phaseMarks.generation_started !== undefined && firstVisibleOutputAtMs !== undefined
+        ? Math.max(0, firstVisibleOutputAtMs - phaseMarks.generation_started)
+        : undefined;
     const streamFinishedAt = phaseMarks.session_idle ?? phaseMarks.prompt_completed;
     const modelStreamMs =
       phaseMarks.first_event_received !== undefined && streamFinishedAt !== undefined
@@ -1352,6 +1372,10 @@ class GenerationManager {
       prePromptSetupMs,
       agentReadyToPromptMs,
       waitForFirstEventMs,
+      promptToFirstTokenMs,
+      generationToFirstTokenMs,
+      promptToFirstVisibleOutputMs,
+      generationToFirstVisibleOutputMs,
       modelStreamMs,
       postProcessingMs,
     };
@@ -2188,7 +2212,7 @@ class GenerationManager {
     this.streamCounters.opened += 1;
 
     const basePollIntervalMs = 500;
-    const maxPollIntervalMs = initial.conversation.type === "workflow" ? 5_000 : 3_000;
+    const maxPollIntervalMs = initial.conversation.type === "workflow" ? 5_000 : 1_000;
     const awaitingPollFloorMs = 2_000;
     const heartbeatIntervalMs = 10_000;
     const maxWaitMs = initial.conversation.type === "workflow" ? 10 * 60 * 1000 : 3 * 60 * 1000;
@@ -3433,31 +3457,46 @@ class GenerationManager {
         isAvailable: () => true,
       };
       this.markPhase(ctx, "pre_prompt_setup_started");
+      const prePromptStartedAt = Date.now();
+      const prePromptBreakdown: Record<string, number> = {};
+      const markPrePromptStep = (step: string, startedAt: number) => {
+        prePromptBreakdown[step] = Date.now() - startedAt;
+      };
 
       // Write memory files to sandbox
       let memoryInstructions = buildMemorySystemPrompt();
+      let enabledSkillRows: Array<{ name: string; updatedAt: Date }> = [];
+      let writtenSkills: string[] = [];
+      let writtenIntegrationSkills: string[] = [];
+      let prePromptCacheHit = false;
       try {
+        const memorySyncStartedAt = Date.now();
         await syncMemoryFilesToSandbox(ctx.userId, runtimeSandbox);
+        markPrePromptStep("syncMemoryFilesToSandboxMs", memorySyncStartedAt);
       } catch (err) {
         console.error("[GenerationManager] Failed to sync memory to sandbox:", err);
         memoryInstructions = buildMemorySystemPrompt();
       }
 
-      const enabledSkillRows = await db.query.skill.findMany({
-        where: and(eq(skill.userId, ctx.userId), eq(skill.enabled, true)),
-        columns: {
-          name: true,
-          updatedAt: true,
-        },
-      });
-
-      const customCreds = await db.query.customIntegrationCredential.findMany({
-        where: and(
-          eq(customIntegrationCredential.userId, ctx.userId),
-          eq(customIntegrationCredential.enabled, true),
-        ),
-        with: { customIntegration: true },
-      });
+      const metadataQueryStartedAt = Date.now();
+      const [loadedSkillRows, customCreds] = await Promise.all([
+        db.query.skill.findMany({
+          where: and(eq(skill.userId, ctx.userId), eq(skill.enabled, true)),
+          columns: {
+            name: true,
+            updatedAt: true,
+          },
+        }),
+        db.query.customIntegrationCredential.findMany({
+          where: and(
+            eq(customIntegrationCredential.userId, ctx.userId),
+            eq(customIntegrationCredential.enabled, true),
+          ),
+          with: { customIntegration: true },
+        }),
+      ]);
+      enabledSkillRows = loadedSkillRows;
+      markPrePromptStep("loadSkillsAndCredsMs", metadataQueryStartedAt);
 
       const eligibleCustomCreds = customCreds.filter((cred) => {
         if (!ctx.allowedCustomIntegrations) {
@@ -3482,14 +3521,12 @@ class GenerationManager {
           .toSorted(),
       });
 
-      let writtenSkills: string[] = [];
-      let writtenIntegrationSkills: string[] = [];
-      let prePromptCacheHit = false;
-
       if (ctx.agentSandboxMode === "reused") {
         try {
+          const cacheReadStartedAt = Date.now();
           const rawCache = await runtimeSandbox.readFile(PRE_PROMPT_CACHE_PATH);
           const parsed = JSON.parse(String(rawCache)) as Partial<PrePromptCacheRecord>;
+          markPrePromptStep("readPrePromptCacheMs", cacheReadStartedAt);
           if (parsed.cacheKey === prePromptCacheKey) {
             prePromptCacheHit = true;
             if (Array.isArray(parsed.writtenSkills)) {
@@ -3528,8 +3565,11 @@ class GenerationManager {
       // Write custom skills/integration assets only when cache is stale.
       try {
         if (!prePromptCacheHit) {
+          const writeSkillsStartedAt = Date.now();
           writtenSkills = await writeSkillsToSandbox(runtimeSandbox, ctx.userId);
+          markPrePromptStep("writeSkillsToSandboxMs", writeSkillsStartedAt);
 
+          const writeCustomCliStartedAt = Date.now();
           await Promise.all(
             eligibleCustomCreds.map(async (cred) => {
               const integ = cred.customIntegration;
@@ -3537,6 +3577,7 @@ class GenerationManager {
               await runtimeSandbox.writeFile(cliPath, integ.cliCode);
             }),
           );
+          markPrePromptStep("writeCustomIntegrationCliMs", writeCustomCliStartedAt);
 
           const customPerms: Record<string, { read: string[]; write: string[] }> = {};
           for (const cred of eligibleCustomCreds) {
@@ -3549,9 +3590,11 @@ class GenerationManager {
 
           if (Object.keys(customPerms).length > 0) {
             // Set the permissions env var on the sandbox
+            const writePermsStartedAt = Date.now();
             await runtimeSandbox.exec(
               `echo 'export CUSTOM_INTEGRATION_PERMISSIONS=${JSON.stringify(JSON.stringify(customPerms)).slice(1, -1)}' >> ~/.bashrc`,
             );
+            markPrePromptStep("writeCustomIntegrationPermissionsMs", writePermsStartedAt);
           }
 
           const allowedSkillSlugs = new Set<string>(allowedIntegrations);
@@ -3559,12 +3602,15 @@ class GenerationManager {
             allowedSkillSlugs.add(cred.customIntegration.slug);
           }
 
+          const writeIntegrationSkillsStartedAt = Date.now();
           writtenIntegrationSkills = await writeResolvedIntegrationSkillsToSandbox(
             runtimeSandbox,
             ctx.userId,
             Array.from(allowedSkillSlugs),
           );
+          markPrePromptStep("writeIntegrationSkillsMs", writeIntegrationSkillsStartedAt);
 
+          const writePrePromptCacheStartedAt = Date.now();
           await runtimeSandbox.ensureDir(path.dirname(PRE_PROMPT_CACHE_PATH));
           const nextCacheRecord: PrePromptCacheRecord = {
             version: 1,
@@ -3577,10 +3623,30 @@ class GenerationManager {
             PRE_PROMPT_CACHE_PATH,
             JSON.stringify(nextCacheRecord, null, 2),
           );
+          markPrePromptStep("writePrePromptCacheMs", writePrePromptCacheStartedAt);
         }
       } catch (e) {
         console.error("[Generation] Failed to write custom integration CLI code:", e);
       }
+      markPrePromptStep("prePromptSetupTotalMs", prePromptStartedAt);
+      logServerEvent(
+        "info",
+        "PRE_PROMPT_BREAKDOWN",
+        {
+          cacheHit: prePromptCacheHit,
+          sandboxMode: ctx.agentSandboxMode ?? "unknown",
+          ...prePromptBreakdown,
+        },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+          sandboxId: runtimeSandbox.sandboxId,
+          sessionId: ctx.sessionId,
+        },
+      );
 
       if (writtenSkills.length === 0) {
         writtenSkills = enabledSkillRows.map((entry) => entry.name);
@@ -3879,6 +3945,12 @@ class GenerationManager {
               messagesResult.data,
             );
             if (fallbackText) {
+              if (!ctx.phaseMarks?.first_visible_output_emitted) {
+                this.markPhase(ctx, "first_visible_output_emitted");
+              }
+              if (!ctx.phaseMarks?.first_token_emitted) {
+                this.markPhase(ctx, "first_token_emitted");
+              }
               ctx.assistantContent = fallbackText;
               ctx.contentParts.push({ type: "text", text: fallbackText });
               this.broadcast(ctx, { type: "text", content: fallbackText });
@@ -3917,7 +3989,8 @@ class GenerationManager {
 
       // Collect new files created in the sandbox during generation
       let uploadedSandboxFileCount = 0;
-      if (ctx.sandbox && ctx.generationMarkerTime) {
+      const shouldCollectSandboxFiles = opencodeToolCallCount > 0 || stagedUploadCount > 0;
+      if (ctx.sandbox && ctx.generationMarkerTime && shouldCollectSandboxFiles) {
         try {
           const newFiles = await collectNewSandboxFiles(
             ctx.sandbox,
@@ -4660,6 +4733,12 @@ class GenerationManager {
 
         // Only process if there's new content
         if (delta) {
+          if (!ctx.phaseMarks?.first_visible_output_emitted) {
+            this.markPhase(ctx, "first_visible_output_emitted");
+          }
+          if (!ctx.phaseMarks?.first_token_emitted) {
+            this.markPhase(ctx, "first_token_emitted");
+          }
           ctx.assistantContent += delta;
           this.broadcast(ctx, { type: "text", content: delta });
 
@@ -4703,6 +4782,9 @@ class GenerationManager {
       }
 
       if (delta) {
+        if (!ctx.phaseMarks?.first_visible_output_emitted) {
+          this.markPhase(ctx, "first_visible_output_emitted");
+        }
         this.broadcast(ctx, {
           type: "thinking",
           content: delta,

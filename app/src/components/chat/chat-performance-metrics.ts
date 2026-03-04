@@ -11,6 +11,10 @@ export type MessageTiming = {
     prePromptSetupMs?: number;
     agentReadyToPromptMs?: number;
     waitForFirstEventMs?: number;
+    promptToFirstTokenMs?: number;
+    generationToFirstTokenMs?: number;
+    promptToFirstVisibleOutputMs?: number;
+    generationToFirstVisibleOutputMs?: number;
     modelStreamMs?: number;
     postProcessingMs?: number;
   };
@@ -38,6 +42,10 @@ export type TimingMetric = {
     | "agent_init"
     | "pre_prompt"
     | "first_event_wait"
+    | "prompt_to_first_token"
+    | "generation_to_first_token"
+    | "prompt_to_first_visible_output"
+    | "generation_to_first_visible_output"
     | "model_stream"
     | "post_processing"
     | "tool_calls_total"
@@ -132,6 +140,38 @@ export function getTimingMetrics(timing?: MessageTiming): TimingMetric[] {
       key: "first_event_wait",
       label: "First event wait",
       value: formatDuration(timing.phaseDurationsMs.waitForFirstEventMs),
+    });
+  }
+
+  if (timing.phaseDurationsMs?.promptToFirstTokenMs !== undefined) {
+    metrics.push({
+      key: "prompt_to_first_token",
+      label: "Prompt to first token",
+      value: formatDuration(timing.phaseDurationsMs.promptToFirstTokenMs),
+    });
+  }
+
+  if (timing.phaseDurationsMs?.generationToFirstTokenMs !== undefined) {
+    metrics.push({
+      key: "generation_to_first_token",
+      label: "Generation to first token",
+      value: formatDuration(timing.phaseDurationsMs.generationToFirstTokenMs),
+    });
+  }
+
+  if (timing.phaseDurationsMs?.promptToFirstVisibleOutputMs !== undefined) {
+    metrics.push({
+      key: "prompt_to_first_visible_output",
+      label: "Prompt to first visible output",
+      value: formatDuration(timing.phaseDurationsMs.promptToFirstVisibleOutputMs),
+    });
+  }
+
+  if (timing.phaseDurationsMs?.generationToFirstVisibleOutputMs !== undefined) {
+    metrics.push({
+      key: "generation_to_first_visible_output",
+      label: "Generation to first visible output",
+      value: formatDuration(timing.phaseDurationsMs.generationToFirstVisibleOutputMs),
     });
   }
 

@@ -111,6 +111,10 @@ const generationEventSchema = z.discriminatedUnion("type", [
                 prePromptSetupMs: z.number().optional(),
                 agentReadyToPromptMs: z.number().optional(),
                 waitForFirstEventMs: z.number().optional(),
+                promptToFirstTokenMs: z.number().optional(),
+                generationToFirstTokenMs: z.number().optional(),
+                promptToFirstVisibleOutputMs: z.number().optional(),
+                generationToFirstVisibleOutputMs: z.number().optional(),
                 modelStreamMs: z.number().optional(),
                 postProcessingMs: z.number().optional(),
               })

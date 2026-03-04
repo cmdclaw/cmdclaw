@@ -65,6 +65,10 @@ export type DoneArtifactsData = {
       prePromptSetupMs?: number;
       agentReadyToPromptMs?: number;
       waitForFirstEventMs?: number;
+      promptToFirstTokenMs?: number;
+      generationToFirstTokenMs?: number;
+      promptToFirstVisibleOutputMs?: number;
+      generationToFirstVisibleOutputMs?: number;
       modelStreamMs?: number;
       postProcessingMs?: number;
     };

@@ -14,6 +14,7 @@ import type { DaemonMessage, DaemonResponse } from "@/server/sandbox/types";
 import { db } from "@/server/db/client";
 import { device } from "@/server/db/schema";
 import { verifyDeviceToken } from "@/server/services/device-auth";
+import { isStatelessServerlessRuntime } from "@/server/utils/runtime-platform";
 
 interface DeviceConnection {
   ws: ServerWebSocket<WebSocketData>;
@@ -45,13 +46,13 @@ const pendingRequests = new Map<
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_TIMEOUT_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes for command execution
-const IS_VERCEL_RUNTIME = process.env.VERCEL === "1";
+const IS_STATELESS_RUNTIME = isStatelessServerlessRuntime();
 
 /**
  * Send a message to a connected device.
  */
 export function sendToDevice(deviceId: string, message: DaemonMessage): boolean {
-  if (IS_VERCEL_RUNTIME) {
+  if (IS_STATELESS_RUNTIME) {
     return false;
   }
   const conn = connections.get(deviceId);
@@ -75,7 +76,7 @@ export function waitForResponse(
   message: DaemonMessage & { id: string },
   timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<DaemonResponse> {
-  if (IS_VERCEL_RUNTIME) {
+  if (IS_STATELESS_RUNTIME) {
     return Promise.reject(
       new Error(
         "Device request/response routing requires a dedicated WebSocket service and is not supported inside Vercel functions.",
@@ -103,7 +104,7 @@ export function waitForResponse(
  * Check if a device is currently connected.
  */
 export function isDeviceOnline(deviceId: string): boolean {
-  if (IS_VERCEL_RUNTIME) {
+  if (IS_STATELESS_RUNTIME) {
     return false;
   }
   return connections.has(deviceId);
@@ -113,7 +114,7 @@ export function isDeviceOnline(deviceId: string): boolean {
  * Get the WebSocket for a connected device.
  */
 export function getDeviceSocket(deviceId: string): ServerWebSocket<WebSocketData> | undefined {
-  if (IS_VERCEL_RUNTIME) {
+  if (IS_STATELESS_RUNTIME) {
     return undefined;
   }
   return connections.get(deviceId)?.ws;
@@ -123,7 +124,7 @@ export function getDeviceSocket(deviceId: string): ServerWebSocket<WebSocketData
  * Get all connected device IDs for a user.
  */
 export function getOnlineDevicesForUser(userId: string): string[] {
-  if (IS_VERCEL_RUNTIME) {
+  if (IS_STATELESS_RUNTIME) {
     return [];
   }
   const result: string[] = [];
@@ -249,7 +250,7 @@ function startHeartbeat(): void {
  * Start the WebSocket server.
  */
 export function startWebSocketServer(port: number = 4097): void {
-  if (IS_VERCEL_RUNTIME) {
+  if (IS_STATELESS_RUNTIME) {
     throw new Error(
       "WebSocket server must run in a dedicated stateful process and cannot be started in Vercel runtime.",
     );

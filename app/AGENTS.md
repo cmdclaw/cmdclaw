@@ -12,10 +12,10 @@
 -  Don't forget to always typecheck and lint via `bun run check`.
 -  After a large codebase change, run `bun run test`.
 -  When creating a test, always run it to check if it is correct. Maybe the test uncovers a bug, so stop if you think this is the case and report it to the user.
--  Keep runtime behavior compatible with Vercel serverless: do not rely on in-memory state for correctness (execution, approvals, auth, routing, locks, or dedupe). Use durable storage/queue/locks (DB/Redis/BullMQ) as the source of truth.
--  `bun run dev` behavior should stay functionally compatible with Vercel serverless architecture (no hidden in-memory-only correctness path in dev).
+-  Keep runtime behavior compatible with stateless architecture: do not rely on in-memory state for correctness (execution, approvals, auth, routing, locks, or dedupe). Use durable storage/queue/locks (DB/Redis/BullMQ) as the source of truth.
+-  `bun run dev` behavior should stay functionally compatible with stateless architecture (no hidden in-memory-only correctness path in dev).
 
--  My infra is BullMQ queues on Railway and Next.js on Vercel, so serverless.
+-  My infra is BullMQ queues and Next.js is on Railway
 
 ## Tmux
 Both the worker and the server are always on in tmux; you can use tmux to look at the logs. They are hot reloaded, so no need to restart them; they will pick the latest changes.

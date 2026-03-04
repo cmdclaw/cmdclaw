@@ -34,6 +34,13 @@ const ENV_VAR_MAP: Record<IntegrationType, string> = {
   airtable: "AIRTABLE_ACCESS_TOKEN",
 };
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  return `${(ms / 1000).toFixed(2)}s (${ms}ms)`;
+}
+
 function shouldUsePty(cmd: string): boolean {
   const firstToken = cmd.trim().split(/\s+/)[0]?.toLowerCase();
   return firstToken === "opencode" || firstToken === "claude";
@@ -309,12 +316,15 @@ async function main() {
 
   console.log(`\nCreating sandbox from template: ${TEMPLATE_NAME}...`);
 
+  const bootStart = Date.now();
   const sandbox = await Sandbox.create(TEMPLATE_NAME, {
     envs,
     timeoutMs: SANDBOX_TIMEOUT_MS,
   });
+  const bootDurationMs = Date.now() - bootStart;
 
   console.log(`✓ Sandbox created: ${sandbox.sandboxId}`);
+  console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
   console.log("\nAvailable CLI commands in sandbox:");
   console.log("  google-gmail list|get|unread|send  - Gmail operations");
   console.log("  slack channels|history|send|search|users - Slack operations");

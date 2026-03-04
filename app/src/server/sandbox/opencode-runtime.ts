@@ -51,7 +51,8 @@ export function getSandboxReadinessUrl(serverUrl: string): string {
   if (runtime === "agentsdk") {
     return joinUrlPath(serverUrl, "/v1/health");
   }
-  return joinUrlPath(serverUrl, "/doc");
+  // /health becomes ready earlier than /doc for OpenCode and reduces cold-start wait time.
+  return joinUrlPath(serverUrl, "/health");
 }
 
 export function getOpencodeClientBaseUrl(serverUrl: string): string {

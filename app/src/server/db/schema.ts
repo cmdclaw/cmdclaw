@@ -244,14 +244,31 @@ export type MessageTiming = {
   sandboxStartupMode?: "created" | "reused" | "unknown";
   generationDurationMs?: number;
   phaseDurationsMs?: {
+    // Time spent connecting to a reusable sandbox or creating a new sandbox.
     sandboxConnectOrCreateMs?: number;
+    // Time from starting the runtime server inside sandbox to runtime readiness.
     opencodeReadyMs?: number;
+    // Time to reuse/create an OpenCode session after sandbox is ready.
     sessionReadyMs?: number;
+    // Total agent initialization time (sandbox + runtime + session setup).
     agentInitMs?: number;
+    // Time spent in pre-prompt setup before prompt dispatch (skills/memory/instructions prep).
     prePromptSetupMs?: number;
+    // Time from agent ready to prompt dispatch (subset focused on prompt preparation path).
     agentReadyToPromptMs?: number;
+    // Time from prompt dispatch to first received generation stream event.
     waitForFirstEventMs?: number;
+    // Time from prompt dispatch to first emitted assistant text token.
+    promptToFirstTokenMs?: number;
+    // Time from generation start to first emitted assistant text token.
+    generationToFirstTokenMs?: number;
+    // Time from prompt dispatch to first user-visible output (thinking or text).
+    promptToFirstVisibleOutputMs?: number;
+    // Time from generation start to first user-visible output (thinking or text).
+    generationToFirstVisibleOutputMs?: number;
+    // Time spent streaming model output after first event until session becomes idle.
     modelStreamMs?: number;
+    // Time spent after model output completes (file collection, persistence, cleanup).
     postProcessingMs?: number;
   };
   phaseTimestamps?: Array<{
