@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import { AppShell } from "@/components/app-shell";
+import { WorkflowLanding } from "@/components/landing/workflow-landing";
 
 export default function Home() {
-  redirect("/chat");
+  return (
+    <AppShell>
+      <WorkflowLanding />
+    </AppShell>
+  );
 }
