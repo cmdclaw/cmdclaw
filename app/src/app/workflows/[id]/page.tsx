@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
+import { useChatSkillStore } from "@/components/chat/chat-skill-store";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +51,8 @@ import {
   useWorkflowRuns,
   useTriggerWorkflow,
   useGetOrCreateBuilderConversation,
+  usePlatformSkillList,
+  useSkillList,
   type WorkflowSchedule,
 } from "@/orpc/hooks";
 
@@ -69,6 +72,7 @@ const sectionMotionInitial = { height: 0, opacity: 0 } as const;
 const sectionMotionAnimate = { height: "auto" as const, opacity: 1 } as const;
 const sectionMotionExit = { height: 0, opacity: 0 } as const;
 const sectionMotionTransition = { duration: 0.2 } as const;
+const EMPTY_SELECTED_SKILL_KEYS: string[] = [];
 
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
@@ -162,7 +166,13 @@ function Section({
   );
 }
 
-function WorkflowChatPanel({ conversationId }: { conversationId: string | null }) {
+function WorkflowChatPanel({
+  conversationId,
+  skillSelectionScopeKey,
+}: {
+  conversationId: string | null;
+  skillSelectionScopeKey: string;
+}) {
   if (!conversationId) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -170,7 +180,13 @@ function WorkflowChatPanel({ conversationId }: { conversationId: string | null }
       </div>
     );
   }
-  return <ChatArea conversationId={conversationId} forceWorkflowQuerySync />;
+  return (
+    <ChatArea
+      conversationId={conversationId}
+      forceWorkflowQuerySync
+      skillSelectionScopeKey={skillSelectionScopeKey}
+    />
+  );
 }
 
 export default function WorkflowEditorPage() {
@@ -178,6 +194,8 @@ export default function WorkflowEditorPage() {
   const workflowId = params?.id;
   const { isAdmin } = useIsAdmin();
   const { data: workflow, isLoading } = useWorkflow(workflowId);
+  const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
+  const { data: personalSkills, isLoading: isPersonalSkillsLoading } = useSkillList();
   const { data: workflowForwardingAlias } = useWorkflowForwardingAlias(workflowId);
   const { data: runs, refetch: refetchRuns } = useWorkflowRuns(workflowId);
   const updateWorkflow = useUpdateWorkflow();
@@ -198,6 +216,7 @@ export default function WorkflowEditorPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
   const [showAllIntegrations, setShowAllIntegrations] = useState(false);
+  const [showAllSkills, setShowAllSkills] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -206,6 +225,7 @@ export default function WorkflowEditorPage() {
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState({
     instructions: true,
+    skills: true,
     tools: true,
     triggers: true,
     runs: true,
@@ -253,6 +273,33 @@ export default function WorkflowEditorPage() {
         : []),
     ],
     [isAdmin],
+  );
+  const skillSelectionScopeKey = useMemo(
+    () => (workflowId ? `workflow-builder:${workflowId}` : "workflow-builder"),
+    [workflowId],
+  );
+  const selectedSkillSlugsByScope = useChatSkillStore((state) => state.selectedSkillSlugsByScope);
+  const setSelectedSkillSlugs = useChatSkillStore((state) => state.setSelectedSkillSlugs);
+  const selectedSkillKeys = useMemo(
+    () => selectedSkillSlugsByScope[skillSelectionScopeKey] ?? EMPTY_SELECTED_SKILL_KEYS,
+    [selectedSkillSlugsByScope, skillSelectionScopeKey],
+  );
+  const availableSkills = useMemo(
+    () => [
+      ...(platformSkills ?? []).map((skill) => ({
+        key: skill.slug,
+        title: skill.title,
+        source: "Platform" as const,
+      })),
+      ...((personalSkills ?? [])
+        .filter((skill) => skill.enabled)
+        .map((skill) => ({
+          key: `custom:${skill.name}`,
+          title: skill.displayName,
+          source: "Custom" as const,
+        })) ?? []),
+    ],
+    [personalSkills, platformSkills],
   );
 
   const buildSchedule = useCallback((): WorkflowSchedule | null => {
@@ -524,12 +571,27 @@ export default function WorkflowEditorPage() {
   const handleToggleShowAllIntegrations = useCallback(() => {
     setShowAllIntegrations((prev) => !prev);
   }, []);
+  const handleToggleShowAllSkills = useCallback(() => {
+    setShowAllSkills((prev) => !prev);
+  }, []);
 
   const handleToggleIntegrationChecked = useCallback((type: IntegrationType) => {
     setAllowedIntegrations((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
     );
   }, []);
+  const handleToggleSkillChecked = useCallback(
+    (skillKey: string) => {
+      const next = selectedSkillKeys.includes(skillKey)
+        ? selectedSkillKeys.filter((key) => key !== skillKey)
+        : [...selectedSkillKeys, skillKey];
+      setSelectedSkillSlugs(skillSelectionScopeKey, next);
+    },
+    [selectedSkillKeys, setSelectedSkillSlugs, skillSelectionScopeKey],
+  );
+  const handleClearSkills = useCallback(() => {
+    setSelectedSkillSlugs(skillSelectionScopeKey, []);
+  }, [setSelectedSkillSlugs, skillSelectionScopeKey]);
 
   const handleDisableAutoApprove = useCallback(() => {
     setAutoApprove(false);
@@ -664,6 +726,7 @@ export default function WorkflowEditorPage() {
   }, []);
 
   const toggleInstructions = useCallback(() => toggleSection("instructions"), [toggleSection]);
+  const toggleSkills = useCallback(() => toggleSection("skills"), [toggleSection]);
   const toggleTools = useCallback(() => toggleSection("tools"), [toggleSection]);
   const toggleTriggers = useCallback(() => toggleSection("triggers"), [toggleSection]);
   const toggleRuns = useCallback(() => toggleSection("runs"), [toggleSection]);
@@ -702,8 +765,13 @@ export default function WorkflowEditorPage() {
   );
 
   const chatPanel = useMemo(
-    () => <WorkflowChatPanel conversationId={builderConversationId} />,
-    [builderConversationId],
+    () => (
+      <WorkflowChatPanel
+        conversationId={builderConversationId}
+        skillSelectionScopeKey={skillSelectionScopeKey}
+      />
+    ),
+    [builderConversationId, skillSelectionScopeKey],
   );
 
   const settingsPanel = useMemo(
@@ -715,6 +783,10 @@ export default function WorkflowEditorPage() {
         status={status}
         autoApprove={autoApprove}
         prompt={prompt}
+        availableSkills={availableSkills}
+        selectedSkillKeys={selectedSkillKeys}
+        isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
+        showAllSkills={showAllSkills}
         restrictTools={restrictTools}
         allowedIntegrations={allowedIntegrations}
         allIntegrationTypes={allIntegrationTypes}
@@ -742,6 +814,9 @@ export default function WorkflowEditorPage() {
         onStatusChange={handleStatusChange}
         onAutoApproveChange={handleAutoApproveChange}
         onPromptChange={handlePromptChange}
+        onClearSkills={handleClearSkills}
+        onToggleSkillChecked={handleToggleSkillChecked}
+        onToggleShowAllSkills={handleToggleShowAllSkills}
         onRestrictToolsChange={handleRestrictToolsChange}
         onSelectAllIntegrations={handleSelectAllIntegrations}
         onClearIntegrations={handleClearIntegrations}
@@ -758,6 +833,7 @@ export default function WorkflowEditorPage() {
         onDisableWorkflowAlias={handleDisableWorkflowAlias}
         onCreateWorkflowAlias={handleCreateWorkflowAlias}
         onToggleInstructions={toggleInstructions}
+        onToggleSkills={toggleSkills}
         onToggleTools={toggleTools}
         onToggleTriggers={toggleTriggers}
         onToggleRuns={toggleRuns}
@@ -772,6 +848,11 @@ export default function WorkflowEditorPage() {
       status,
       autoApprove,
       prompt,
+      availableSkills,
+      selectedSkillKeys,
+      isPlatformSkillsLoading,
+      isPersonalSkillsLoading,
+      showAllSkills,
       restrictTools,
       allowedIntegrations,
       allIntegrationTypes,
@@ -799,6 +880,9 @@ export default function WorkflowEditorPage() {
       handleStatusChange,
       handleAutoApproveChange,
       handlePromptChange,
+      handleClearSkills,
+      handleToggleSkillChecked,
+      handleToggleShowAllSkills,
       handleRestrictToolsChange,
       handleSelectAllIntegrations,
       handleClearIntegrations,
@@ -815,6 +899,7 @@ export default function WorkflowEditorPage() {
       handleDisableWorkflowAlias,
       handleCreateWorkflowAlias,
       toggleInstructions,
+      toggleSkills,
       toggleTools,
       toggleTriggers,
       toggleRuns,
@@ -873,6 +958,10 @@ type WorkflowSettingsPanelProps = {
   status: "on" | "off";
   autoApprove: boolean;
   prompt: string;
+  availableSkills: { key: string; title: string; source: "Platform" | "Custom" }[];
+  selectedSkillKeys: string[];
+  isSkillsLoading: boolean;
+  showAllSkills: boolean;
   restrictTools: boolean;
   allowedIntegrations: IntegrationType[];
   allIntegrationTypes: IntegrationType[];
@@ -906,7 +995,13 @@ type WorkflowSettingsPanelProps = {
         errorMessage: string | null;
       }>
     | undefined;
-  openSections: { instructions: boolean; tools: boolean; triggers: boolean; runs: boolean };
+  openSections: {
+    instructions: boolean;
+    skills: boolean;
+    tools: boolean;
+    triggers: boolean;
+    runs: boolean;
+  };
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
@@ -914,6 +1009,9 @@ type WorkflowSettingsPanelProps = {
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
   onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onClearSkills: () => void;
+  onToggleSkillChecked: (skillKey: string) => void;
+  onToggleShowAllSkills: () => void;
   onRestrictToolsChange: (checked: boolean) => void;
   onSelectAllIntegrations: () => void;
   onClearIntegrations: () => void;
@@ -930,6 +1028,7 @@ type WorkflowSettingsPanelProps = {
   onDisableWorkflowAlias: () => void;
   onCreateWorkflowAlias: () => void;
   onToggleInstructions: () => void;
+  onToggleSkills: () => void;
   onToggleTools: () => void;
   onToggleTriggers: () => void;
   onToggleRuns: () => void;
@@ -943,6 +1042,10 @@ function WorkflowSettingsPanel({
   status,
   autoApprove,
   prompt,
+  availableSkills,
+  selectedSkillKeys,
+  isSkillsLoading,
+  showAllSkills,
   restrictTools,
   allowedIntegrations,
   allIntegrationTypes,
@@ -970,6 +1073,9 @@ function WorkflowSettingsPanel({
   onStatusChange,
   onAutoApproveChange,
   onPromptChange,
+  onClearSkills,
+  onToggleSkillChecked,
+  onToggleShowAllSkills,
   onRestrictToolsChange,
   onSelectAllIntegrations,
   onClearIntegrations,
@@ -986,11 +1092,23 @@ function WorkflowSettingsPanel({
   onDisableWorkflowAlias,
   onCreateWorkflowAlias,
   onToggleInstructions,
+  onToggleSkills,
   onToggleTools,
   onToggleTriggers,
   onToggleRuns,
   renderRunsAction,
 }: WorkflowSettingsPanelProps) {
+  const handleSkillInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const skillKey = event.currentTarget.dataset.skillKey;
+      if (!skillKey) {
+        return;
+      }
+      onToggleSkillChecked(skillKey);
+    },
+    [onToggleSkillChecked],
+  );
+
   return (
     <div className="flex flex-col">
       {/* Header */}
@@ -1054,6 +1172,73 @@ function WorkflowSettingsPanel({
           onChange={onPromptChange}
           placeholder="Describe what this agent should do…"
         />
+      </Section>
+
+      <Section title="Skills" open={openSections.skills} onToggle={onToggleSkills}>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-muted-foreground text-xs">
+              {selectedSkillKeys.length}/{availableSkills.length} selected
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={selectedSkillKeys.length === 0}
+              onClick={onClearSkills}
+            >
+              Clear
+            </Button>
+          </div>
+          {isSkillsLoading ? (
+            <p className="text-muted-foreground text-xs">Loading skills…</p>
+          ) : availableSkills.length === 0 ? (
+            <p className="text-muted-foreground text-xs">No skills available.</p>
+          ) : (
+            <>
+              <div className="-mx-1 grid grid-cols-1">
+                {(showAllSkills ? availableSkills : availableSkills.slice(0, 6)).map((skill) => (
+                  <label
+                    key={skill.key}
+                    className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      data-skill-key={skill.key}
+                      className="h-4 w-4"
+                      checked={selectedSkillKeys.includes(skill.key)}
+                      onChange={handleSkillInputChange}
+                    />
+                    <span className="text-xs">{skill.title}</span>
+                    <span className="text-muted-foreground ml-auto text-[10px] uppercase">
+                      {skill.source}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {availableSkills.length > 6 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleShowAllSkills}
+                  className="text-muted-foreground h-7 text-xs"
+                >
+                  {showAllSkills ? (
+                    <>
+                      <ChevronUp className="mr-1 h-3 w-3" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="mr-1 h-3 w-3" />
+                      {availableSkills.length - 6} more
+                    </>
+                  )}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </Section>
 
       {/* Tools section */}

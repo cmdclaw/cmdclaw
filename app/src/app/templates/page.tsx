@@ -354,20 +354,22 @@ export default function TemplatesPage() {
     });
   }, [search, activeIndustry, activeUseCase, activeIntegration]);
 
+  const hasActiveFilter = activeIndustry || activeUseCase || activeIntegration;
+
   return (
     <AppShell>
       <div className="bg-background min-h-screen">
-        <div className="mx-auto w-full max-w-[1500px] px-6 py-6">
+        <div className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">
           {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-foreground text-xl font-semibold tracking-tight">Templates</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
+          <div className="mb-10">
+            <h1 className="text-foreground text-2xl font-semibold tracking-tight">Templates</h1>
+            <p className="text-muted-foreground mt-2 text-sm">
               Pre-built workflows ready to deploy
             </p>
           </div>
 
           {/* Search */}
-          <div className="border-border/50 bg-card mb-5 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 shadow-sm">
+          <div className="border-border/50 bg-card mb-8 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm">
             <Search className="text-muted-foreground/50 size-4 shrink-0" />
             <input
               type="text"
@@ -378,72 +380,84 @@ export default function TemplatesPage() {
             />
           </div>
 
-          {/* Industry pills */}
-          <div className="mb-2 flex flex-wrap items-center gap-1">
-            <span className="text-muted-foreground/50 mr-1.5 text-[11px] font-medium tracking-wider uppercase">
-              Industry
-            </span>
-            {INDUSTRIES.map((industry) => (
-              <FilterPill
-                key={industry}
-                label={industry}
-                active={activeIndustry === industry}
-                onClick={() => toggleIndustry(industry)}
-                groupId="industry"
-              />
-            ))}
+          {/* Filters */}
+          <div className="mb-10 space-y-4">
+            {/* Industry pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
+                Industry
+              </span>
+              {INDUSTRIES.map((industry) => (
+                <FilterPill
+                  key={industry}
+                  label={industry}
+                  active={activeIndustry === industry}
+                  onClick={() => toggleIndustry(industry)}
+                  groupId="industry"
+                />
+              ))}
+            </div>
+
+            {/* Use case pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
+                Use case
+              </span>
+              {USE_CASES.map((useCase) => (
+                <FilterPill
+                  key={useCase}
+                  label={useCase}
+                  active={activeUseCase === useCase}
+                  onClick={() => toggleUseCase(useCase)}
+                  groupId="usecase"
+                />
+              ))}
+            </div>
+
+            {/* Integration pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
+                App
+              </span>
+              {INTEGRATIONS_FILTER.map((integration) => (
+                <FilterPill
+                  key={integration}
+                  label={INTEGRATION_DISPLAY_NAMES[integration]}
+                  active={activeIntegration === integration}
+                  onClick={() => toggleIntegration(integration)}
+                  groupId="integration"
+                  icon={
+                    <Image
+                      src={INTEGRATION_LOGOS[integration]}
+                      alt={integration}
+                      width={14}
+                      height={14}
+                      className="size-3.5"
+                    />
+                  }
+                />
+              ))}
+            </div>
           </div>
 
-          {/* Use case pills */}
-          <div className="mb-2 flex flex-wrap items-center gap-1">
-            <span className="text-muted-foreground/50 mr-1.5 text-[11px] font-medium tracking-wider uppercase">
-              Use case
-            </span>
-            {USE_CASES.map((useCase) => (
-              <FilterPill
-                key={useCase}
-                label={useCase}
-                active={activeUseCase === useCase}
-                onClick={() => toggleUseCase(useCase)}
-                groupId="usecase"
-              />
-            ))}
-          </div>
-
-          {/* Integration pills */}
-          <div className="mb-8 flex flex-wrap items-center gap-1">
-            <span className="text-muted-foreground/50 mr-1.5 text-[11px] font-medium tracking-wider uppercase">
-              App
-            </span>
-            {INTEGRATIONS_FILTER.map((integration) => (
-              <FilterPill
-                key={integration}
-                label={INTEGRATION_DISPLAY_NAMES[integration]}
-                active={activeIntegration === integration}
-                onClick={() => toggleIntegration(integration)}
-                groupId="integration"
-                icon={
-                  <Image
-                    src={INTEGRATION_LOGOS[integration]}
-                    alt={integration}
-                    width={14}
-                    height={14}
-                    className="size-3.5"
-                  />
-                }
-              />
-            ))}
-          </div>
-
-          {/* Results count */}
-          <div className="mb-4">
+          {/* Results count & clear */}
+          <div className="mb-5 flex items-center justify-between">
             <p className="text-muted-foreground text-xs">
               {filtered.length} template{filtered.length !== 1 ? "s" : ""}
             </p>
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
 
           {/* Grid */}
-          <motion.div layout className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <motion.div layout className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             <AnimatePresence mode="popLayout">
               {filtered.map((template) => (
                 <motion.div
@@ -456,21 +470,22 @@ export default function TemplatesPage() {
                 >
                   <Link
                     href={`/template/${template.id}`}
-                    className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group relative flex w-full flex-col gap-3 rounded-xl border p-4 shadow-sm transition-all duration-150"
+                    className="border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm leading-tight font-medium">{template.title}</p>
-                        <span className="bg-muted text-muted-foreground mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-                          {getTriggerLabel(template.triggerType)}
-                        </span>
-                      </div>
-                      <ArrowUp className="text-muted-foreground/40 group-hover:text-muted-foreground mt-0.5 size-3.5 shrink-0 rotate-45 transition-colors" />
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-[13px] leading-snug font-medium">{template.title}</p>
+                      <ArrowUp className="text-muted-foreground/30 group-hover:text-muted-foreground mt-0.5 size-3.5 shrink-0 rotate-45 transition-colors" />
                     </div>
-                    <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
+
+                    <span className="bg-muted text-muted-foreground mt-2.5 inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+                      {getTriggerLabel(template.triggerType)}
+                    </span>
+
+                    <p className="text-muted-foreground mt-3 line-clamp-2 text-xs leading-relaxed">
                       {template.description}
                     </p>
-                    <div className="mt-auto pt-1">
+
+                    <div className="mt-auto pt-4">
                       <IntegrationLogos integrations={template.integrations} />
                     </div>
                   </Link>
@@ -484,9 +499,16 @@ export default function TemplatesPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="py-16 text-center"
+              className="py-20 text-center"
             >
               <p className="text-muted-foreground text-sm">No templates match your filters.</p>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-muted-foreground hover:text-foreground mt-2 text-xs underline transition-colors"
+              >
+                Clear all filters
+              </button>
             </motion.div>
           )}
         </div>

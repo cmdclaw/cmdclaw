@@ -17,6 +17,9 @@ type TemplateContent = {
   category: string;
   title: string;
   description: string;
+  triggerTitle: string;
+  triggerDescription: string;
+  agentInstructions: string[];
   heroCta: string;
   summaryBlocks: {
     title: string;
@@ -34,6 +37,20 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
     title: "Send polished follow-ups right after every call",
     description:
       "As soon as a transcript arrives, this workflow builds a short recap, drafts the email, and creates the matching CRM follow-up task.",
+    triggerTitle: "Call Transcription Ready",
+    triggerDescription: "When an Aircall call transcription becomes available.",
+    agentInstructions: [
+      "Get call details with aircall_get_call using your Aircall connection ID.",
+      "Get transcription with aircall_get_transcription using your Aircall connection ID.",
+      "Extract the external participant phone number from number.raw_digits.",
+      "Search HubSpot contacts by phone with hubspot_search_contacts and request properties: email, firstname, lastname.",
+      "If contact payload is incomplete, call hubspot_get_contact to fill missing fields.",
+      "Generate a 2-3 sentence call summary and explicit action items for both parties.",
+      "If contact email exists, create a Gmail draft with friendly greeting, short summary, bullet action items, and professional closing.",
+      "Create a HubSpot task with subject 'Follow up on call with [Contact Name]', include summary + actions, and schedule for tomorrow at 9 AM.",
+      "If contact exists, associate task to contact using HUBSPOT_DEFINED association type 204.",
+      "If no contact is found, skip Gmail draft and still create the HubSpot task with the phone number in the body.",
+    ],
     heroCta: "Deploy this template",
     summaryBlocks: [
       {
@@ -113,9 +130,9 @@ export default async function TemplatePage({ params }: PageProps) {
 
   return (
     <div>
-      {/* ── Two-column hero ── */}
-      <div className="grid grid-cols-1 gap-8 pt-6 pb-10 md:grid-cols-[1fr_1.4fr] md:gap-10">
-        {/* Left: info */}
+      {/* ── Top content ── */}
+      <div className="grid grid-cols-1 gap-8 pt-6 pb-10 md:grid-cols-[1fr_1.25fr] md:gap-10">
+        {/* Intro */}
         <div className="flex flex-col">
           <Link
             href="/template"
@@ -200,76 +217,109 @@ export default async function TemplatePage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Right: workflow diagram preview */}
-        <div className="border-border/40 bg-card overflow-hidden rounded-2xl border shadow-sm">
-          <div className="p-5">
-            <Image
-              src={mermaidImage}
-              alt="Mermaid diagram for workflow"
-              width={1100}
-              height={740}
-              className="h-auto w-full rounded-lg object-contain"
-              unoptimized
-            />
+        <div className="space-y-8">
+          {/* Workflow summary */}
+          <section>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold">What this workflow does</h2>
+                <p className="text-muted-foreground mt-0.5 text-xs">Step-by-step breakdown</p>
+              </div>
+              <div className="border-border/50 bg-muted/50 inline-flex rounded-lg border p-0.5 text-xs">
+                <span className="bg-card text-foreground rounded-md px-2.5 py-1 font-medium shadow-sm">
+                  Summary
+                </span>
+                <span className="text-muted-foreground px-2.5 py-1">Preview</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {template.summaryBlocks.map((block) => (
+                <div
+                  key={block.title}
+                  className="border-border/40 bg-card flex flex-col gap-3 rounded-xl border p-4 shadow-sm"
+                >
+                  <div className="flex items-center gap-1">
+                    {block.integrations.map((integration) => (
+                      <span
+                        key={`${block.title}-${integration}`}
+                        className="bg-muted inline-flex size-7 items-center justify-center rounded-lg"
+                      >
+                        <Image
+                          src={INTEGRATION_LOGOS[integration]}
+                          alt={integration}
+                          width={14}
+                          height={14}
+                          className="size-3.5"
+                        />
+                      </span>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="text-sm leading-tight font-medium">{block.title}</p>
+                    <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
+                      {block.body}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Workflow diagram preview */}
+          <div className="border-border/40 bg-card overflow-hidden rounded-2xl border shadow-sm">
+            <div className="p-5">
+              <Image
+                src={mermaidImage}
+                alt="Mermaid diagram for workflow"
+                width={1100}
+                height={740}
+                className="h-auto w-full rounded-lg object-contain"
+                unoptimized
+              />
+            </div>
+            <details className="border-border/40 border-t px-5 py-3">
+              <summary className="text-muted-foreground cursor-pointer text-xs font-medium">
+                Show Mermaid source
+              </summary>
+              <pre className="bg-muted mt-3 overflow-x-auto rounded-md p-3 text-xs">
+                <code>{template.mermaid}</code>
+              </pre>
+            </details>
           </div>
-          <details className="border-border/40 border-t px-5 py-3">
-            <summary className="text-muted-foreground cursor-pointer text-xs font-medium">
-              Show Mermaid source
-            </summary>
-            <pre className="bg-muted mt-3 overflow-x-auto rounded-md p-3 text-xs">
-              <code>{template.mermaid}</code>
-            </pre>
-          </details>
         </div>
       </div>
 
       {/* ── Below hero: single-column content ── */}
       <div className="space-y-10 pb-6">
-        {/* ── What this workflow does ── */}
+        {/* ── Agent instructions ── */}
         <section>
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold">What this workflow does</h2>
-              <p className="text-muted-foreground mt-0.5 text-xs">Step-by-step breakdown</p>
-            </div>
-            <div className="border-border/50 bg-muted/50 inline-flex rounded-lg border p-0.5 text-xs">
-              <span className="bg-card text-foreground rounded-md px-2.5 py-1 font-medium shadow-sm">
-                Summary
-              </span>
-              <span className="text-muted-foreground px-2.5 py-1">Preview</span>
-            </div>
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold">Agent Instructions</h2>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              Trigger details and execution steps
+            </p>
           </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {template.summaryBlocks.map((block) => (
-              <div
-                key={block.title}
-                className="border-border/40 bg-card flex flex-col gap-3 rounded-xl border p-4 shadow-sm"
-              >
-                <div className="flex items-center gap-1">
-                  {block.integrations.map((integration) => (
-                    <span
-                      key={`${block.title}-${integration}`}
-                      className="bg-muted inline-flex size-7 items-center justify-center rounded-lg"
-                    >
-                      <Image
-                        src={INTEGRATION_LOGOS[integration]}
-                        alt={integration}
-                        width={14}
-                        height={14}
-                        className="size-3.5"
-                      />
-                    </span>
-                  ))}
-                </div>
-                <div>
-                  <p className="text-sm leading-tight font-medium">{block.title}</p>
-                  <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
-                    {block.body}
-                  </p>
-                </div>
-              </div>
-            ))}
+          <div className="border-border/40 bg-card space-y-5 rounded-xl border p-5 shadow-sm">
+            <div>
+              <p className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
+                Trigger
+              </p>
+              <p className="mt-2 text-base font-semibold">{template.triggerTitle}</p>
+              <p className="text-muted-foreground mt-1 text-sm">{template.triggerDescription}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
+                Instructions
+              </p>
+              <ol className="mt-2 space-y-2 pl-4 text-sm">
+                {template.agentInstructions.map((instruction) => (
+                  <li key={instruction} className="list-decimal">
+                    {instruction}
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         </section>
 

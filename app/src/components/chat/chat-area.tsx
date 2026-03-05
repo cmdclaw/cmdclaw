@@ -88,6 +88,8 @@ type ActivitySegment = Omit<RuntimeActivitySegment, "items"> & {
 type Props = {
   conversationId?: string;
   forceWorkflowQuerySync?: boolean;
+  skillSelectionScopeKey?: string;
+  initialPrefillText?: string | null;
 };
 
 type QueuedMessage = {
@@ -352,7 +354,12 @@ function getAgentInitLabel(status: string | null): string {
   }
 }
 
-export function ChatArea({ conversationId, forceWorkflowQuerySync = false }: Props) {
+export function ChatArea({
+  conversationId,
+  forceWorkflowQuerySync = false,
+  skillSelectionScopeKey: skillSelectionScopeKeyOverride,
+  initialPrefillText,
+}: Props) {
   const queryClient = useQueryClient();
   const posthog = usePostHog();
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
@@ -387,12 +394,13 @@ export function ChatArea({ conversationId, forceWorkflowQuerySync = false }: Pro
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
   const [skillSearchQuery, setSkillSearchQuery] = useState("");
   const [inputPrefillRequest, setInputPrefillRequest] = useState<InputPrefillRequest | null>(null);
+  const initialPrefillAppliedRef = useRef(false);
   const [draftConversationId, setDraftConversationId] = useState<string | undefined>(
     conversationId,
   );
   const skillSelectionScopeKey = useMemo(
-    () => draftConversationId ?? conversationId ?? "new-chat",
-    [conversationId, draftConversationId],
+    () => skillSelectionScopeKeyOverride ?? draftConversationId ?? conversationId ?? "new-chat",
+    [conversationId, draftConversationId, skillSelectionScopeKeyOverride],
   );
   const selectedSkillSlugsByScope = useChatSkillStore((state) => state.selectedSkillSlugsByScope);
   const selectedSkillKeys =
@@ -458,6 +466,21 @@ export function ChatArea({ conversationId, forceWorkflowQuerySync = false }: Pro
   useEffect(() => {
     viewedConversationIdRef.current = conversationId;
   }, [conversationId]);
+
+  useEffect(() => {
+    if (initialPrefillAppliedRef.current) {
+      return;
+    }
+    const text = initialPrefillText?.trim();
+    if (!text) {
+      return;
+    }
+    initialPrefillAppliedRef.current = true;
+    setInputPrefillRequest({
+      id: `initial-prefill-${Date.now()}`,
+      text,
+    });
+  }, [initialPrefillText]);
 
   useEffect(() => {
     if (conversationId) {

@@ -2,15 +2,22 @@
 
 import {
   BarChart3,
+  Check,
   ChevronDown,
   Flag,
   Home,
+  LoaderCircle,
   LogOut,
   MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
   Plug,
   Settings,
   Shield,
   Sparkles,
+  Trash2,
   Workflow,
   LayoutTemplate,
 } from "lucide-react";
@@ -26,6 +33,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/animate-ui/components/radix/sheet";
+import { useChatDraftStore } from "@/components/chat/chat-draft-store";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -35,9 +51,66 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { useWorkflowList } from "@/orpc/hooks";
+import {
+  useConversationList,
+  useDeleteConversation,
+  useUpdateConversationPinned,
+  useUpdateConversationTitle,
+  useWorkflowList,
+} from "@/orpc/hooks";
+
+type ConversationListData = {
+  conversations: Array<{
+    id: string;
+    title: string | null;
+    isPinned: boolean;
+    generationStatus:
+      | "idle"
+      | "generating"
+      | "awaiting_approval"
+      | "awaiting_auth"
+      | "paused"
+      | "complete"
+      | "error";
+    updatedAt: Date;
+    messageCount: number;
+    seenMessageCount: number;
+  }>;
+};
+
+const RUNNING_CONVERSATION_STATUSES = new Set([
+  "generating",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+]);
+
+function formatRelativeShort(date: Date) {
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (diffSeconds < 60) {
+    return "now";
+  }
+
+  const units: Array<[label: string, seconds: number]> = [
+    ["y", 31_536_000],
+    ["mo", 2_592_000],
+    ["w", 604_800],
+    ["d", 86_400],
+    ["h", 3_600],
+    ["m", 60],
+  ];
+
+  for (const [label, seconds] of units) {
+    if (diffSeconds >= seconds) {
+      return `${Math.floor(diffSeconds / seconds)}${label}`;
+    }
+  }
+
+  return "now";
+}
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 
@@ -105,9 +178,17 @@ export function AppSidebar() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: workflows } = useWorkflowList();
+  const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
+  const conversationData = rawConversationData as ConversationListData | undefined;
+  const deleteConversation = useDeleteConversation();
+  const updateConversationPinned = useUpdateConversationPinned();
+  const updateConversationTitle = useUpdateConversationTitle();
 
   useEffect(() => {
     let mounted = true;
@@ -132,7 +213,7 @@ export function AppSidebar() {
 
   // Auto-expand admin section when on admin routes
   useEffect(() => {
-    if (pathname?.startsWith("/admin") || pathname?.startsWith("/chat")) {
+    if (pathname?.startsWith("/admin")) {
       setAdminOpen(true);
     }
   }, [pathname]);
@@ -174,6 +255,7 @@ export function AppSidebar() {
     }
     return pathname === href || pathname.startsWith(href + "/");
   };
+  const isChatPage = pathname === "/chat" || pathname.startsWith("/chat/");
 
   const mainNavItems: NavItem[] = [
     { icon: Home, label: "Home", href: "/" },
@@ -181,17 +263,97 @@ export function AppSidebar() {
   ];
 
   const coworkerNavItems: NavItem[] = [
+    { icon: MessageSquare, label: "Chat", href: "/chat" },
     { icon: Workflow, label: "Workflows", href: "/workflows" },
     { icon: Plug, label: "Integrations", href: "/integrations" },
     { icon: Sparkles, label: "Skills", href: "/skills" },
   ];
 
-  const adminNavItems: NavItem[] = [
-    { icon: Shield, label: "Admin", href: "/admin" },
-    { icon: MessageSquare, label: "Chat", href: "/chat" },
-  ];
+  const adminNavItems: NavItem[] = [{ icon: Shield, label: "Admin", href: "/admin" }];
 
   const recentWorkflows = workflows?.slice(0, 5) ?? [];
+  const recentConversations = conversationData?.conversations ?? [];
+
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      await deleteConversation.mutateAsync(id);
+      useChatDraftStore.getState().clearDraft(id);
+      if (pathname === `/chat/${id}`) {
+        router.push("/chat");
+      }
+    },
+    [deleteConversation, pathname, router],
+  );
+
+  const handleDeleteMenuClick = useCallback(
+    async (event: React.MouseEvent<HTMLDivElement>) => {
+      const id = event.currentTarget.dataset.conversationId;
+      if (!id) {
+        return;
+      }
+      await handleDeleteConversation(id);
+    },
+    [handleDeleteConversation],
+  );
+
+  const handlePinMenuClick = useCallback(
+    async (event: React.MouseEvent<HTMLDivElement>) => {
+      const id = event.currentTarget.dataset.conversationId;
+      if (!id) {
+        return;
+      }
+      const isPinned = event.currentTarget.dataset.conversationPinned === "true";
+      await updateConversationPinned.mutateAsync({
+        id,
+        isPinned: !isPinned,
+      });
+    },
+    [updateConversationPinned],
+  );
+
+  const handleRenameMenuClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const id = event.currentTarget.dataset.conversationId;
+    if (!id) {
+      return;
+    }
+    setRenameConversationId(id);
+    setRenameTitle(event.currentTarget.dataset.conversationTitle ?? "");
+    setIsRenameModalOpen(true);
+  }, []);
+
+  const handleRenameModalOpenChange = useCallback((open: boolean) => {
+    setIsRenameModalOpen(open);
+    if (!open) {
+      setRenameConversationId(null);
+      setRenameTitle("");
+    }
+  }, []);
+
+  const handleRenameSubmit = useCallback(async () => {
+    const trimmedTitle = renameTitle.trim();
+    if (!renameConversationId || trimmedTitle.length === 0) {
+      return;
+    }
+    await updateConversationTitle.mutateAsync({
+      id: renameConversationId,
+      title: trimmedTitle,
+    });
+    setIsRenameModalOpen(false);
+    setRenameConversationId(null);
+    setRenameTitle("");
+  }, [renameConversationId, renameTitle, updateConversationTitle]);
+
+  const handleRenameInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setRenameTitle(event.target.value);
+  }, []);
+
+  const handleRenameFormSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void handleRenameSubmit();
+    },
+    [handleRenameSubmit],
+  );
 
   const handleSubmitReport = useCallback(async () => {
     const message = reportMessage.trim();
@@ -327,6 +489,44 @@ export function AppSidebar() {
         </SheetContent>
       </Sheet>
 
+      <AlertDialog open={isRenameModalOpen} onOpenChange={handleRenameModalOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rename chat</AlertDialogTitle>
+          </AlertDialogHeader>
+          <form className="space-y-4" onSubmit={handleRenameFormSubmit}>
+            <Input
+              value={renameTitle}
+              onChange={handleRenameInputChange}
+              placeholder="Chat title"
+              autoFocus
+              maxLength={200}
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button" disabled={updateConversationTitle.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="submit"
+                disabled={updateConversationTitle.isPending || renameTitle.trim().length === 0}
+              >
+                {updateConversationTitle.isPending ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    Renaming...
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" />
+                    Rename
+                  </span>
+                )}
+              </Button>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <aside className="bg-sidebar flex h-screen w-[220px] shrink-0 flex-col border-r">
         {/* Logo */}
         <div className="flex h-14 items-center gap-2.5 px-4">
@@ -390,27 +590,141 @@ export function AppSidebar() {
             </div>
           )}
 
-          {/* Recent workflows */}
-          {recentWorkflows.length > 0 && (
+          {/* Recent */}
+          {(isChatPage
+            ? conversationsLoading || recentConversations.length > 0
+            : recentWorkflows.length > 0) && (
             <div className="flex flex-col gap-1.5">
               <SectionLabel>Recent</SectionLabel>
               <div className="flex flex-col gap-0.5">
-                {recentWorkflows.map((wf) => (
-                  <Link
-                    key={wf.id}
-                    href={`/workflows/${wf.id}`}
-                    prefetch={false}
-                    className={cn(
-                      "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
-                      isActive(`/workflows/${wf.id}`)
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                    )}
-                  >
-                    <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                    <span className="truncate">{wf.name || "Untitled"}</span>
-                  </Link>
-                ))}
+                {isChatPage ? (
+                  conversationsLoading ? (
+                    <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
+                      Loading...
+                    </span>
+                  ) : (
+                    recentConversations.map((conversation) => {
+                      const isConversationActive = isActive(`/chat/${conversation.id}`);
+                      const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
+                        conversation.generationStatus,
+                      );
+                      const hasUnreadResults =
+                        !isConversationRunning &&
+                        !isConversationActive &&
+                        conversation.messageCount > (conversation.seenMessageCount ?? 0);
+                      const showConversationIndicator = isConversationRunning || hasUnreadResults;
+
+                      return (
+                        <div
+                          key={conversation.id}
+                          className={cn(
+                            "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
+                            isConversationActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                          )}
+                        >
+                          <Link
+                            href={`/chat/${conversation.id}`}
+                            prefetch={false}
+                            className="flex min-w-0 flex-1 items-center"
+                          >
+                            {isConversationRunning ? (
+                              <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                            ) : hasUnreadResults ? (
+                              <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
+                                aria-label="New unread results"
+                              />
+                            ) : null}
+                            <span
+                              className={cn(
+                                "min-w-0 flex-1 truncate",
+                                showConversationIndicator && "ml-2",
+                              )}
+                            >
+                              {conversation.title || "Untitled"}
+                            </span>
+                            <span
+                              className={cn(
+                                "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
+                                "group-hover:opacity-0 group-focus-within:opacity-0",
+                              )}
+                            >
+                              {formatRelativeShort(new Date(conversation.updatedAt))}
+                            </span>
+                          </Link>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
+                                  "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
+                                  "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                                  "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
+                                  isConversationActive
+                                    ? "before:from-sidebar-accent"
+                                    : "before:from-sidebar",
+                                )}
+                                aria-label="Conversation actions"
+                              >
+                                <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" side="right">
+                              <DropdownMenuItem
+                                data-conversation-id={conversation.id}
+                                data-conversation-pinned={conversation.isPinned ? "true" : "false"}
+                                onClick={handlePinMenuClick}
+                              >
+                                {conversation.isPinned ? (
+                                  <PinOff className="h-4 w-4" />
+                                ) : (
+                                  <Pin className="h-4 w-4" />
+                                )}
+                                <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                data-conversation-id={conversation.id}
+                                data-conversation-title={conversation.title ?? ""}
+                                onClick={handleRenameMenuClick}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                <span>Rename</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                data-conversation-id={conversation.id}
+                                onClick={handleDeleteMenuClick}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span>Delete</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      );
+                    })
+                  )
+                ) : (
+                  recentWorkflows.map((workflow) => (
+                    <Link
+                      key={workflow.id}
+                      href={`/workflows/${workflow.id}`}
+                      prefetch={false}
+                      className={cn(
+                        "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
+                        isActive(`/workflows/${workflow.id}`)
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                      )}
+                    >
+                      <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                      <span className="truncate">{workflow.name || "Untitled"}</span>
+                    </Link>
+                  ))
+                )}
               </div>
             </div>
           )}

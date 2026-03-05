@@ -1,7 +1,11 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { ChatArea } from "@/components/chat/chat-area";
 
 export default function NewChatPage() {
-  return <ChatArea />;
+  const searchParams = useSearchParams();
+  const initialPrefillText = searchParams.get("prefill");
+
+  return <ChatArea initialPrefillText={initialPrefillText} />;
 }

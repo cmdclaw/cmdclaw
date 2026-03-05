@@ -2,18 +2,11 @@
 
 import { Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/animate-ui/components/radix/sidebar";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
-import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { useIsAdmin } from "@/hooks/use-is-admin";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
 
 const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
@@ -29,15 +22,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const setTimezoneMutation = useSetUserTimezone();
   const lastTimezoneSyncRef = useRef<string | null>(null);
-  const isMobile = useIsMobile();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  const handleSidebarOpenChange = useCallback(
-    (open: boolean) => {
-      setIsSidebarOpen(isMobile ? open : true);
-    },
-    [isMobile],
-  );
 
   useEffect(() => {
     setLiveConversationId(routeConversationId);
@@ -61,12 +45,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       router.replace("/onboarding/integrations");
     }
   }, [user, userLoading, router]);
-
-  useEffect(() => {
-    if (!isMobile && !isSidebarOpen) {
-      setIsSidebarOpen(true);
-    }
-  }, [isMobile, isSidebarOpen]);
 
   useEffect(() => {
     if (userLoading || !user) {
@@ -101,27 +79,15 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <AppShell>
-      <SidebarProvider
-        className="bg-background text-foreground"
-        open={isSidebarOpen}
-        onOpenChange={handleSidebarOpenChange}
-      >
-        <ChatSidebar />
-        <SidebarInset>
-          <header className="flex h-14 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="md:hidden" />
-            <span className="text-sm font-medium">Chat</span>
-            {isAdmin && liveConversationId && (
-              <span className="text-muted-foreground font-mono text-xs">
-                ID: {liveConversationId}
-              </span>
-            )}
-            <ChatCopyButton conversationId={liveConversationId} className="ml-auto" />
-            <ChatShareControls conversationId={liveConversationId} />
-          </header>
-          <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">{children}</div>
-        </SidebarInset>
-      </SidebarProvider>
+      <header className="flex h-14 items-center gap-2 border-b px-4">
+        <span className="text-sm font-medium">Chat</span>
+        {isAdmin && liveConversationId && (
+          <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
+        )}
+        <ChatCopyButton conversationId={liveConversationId} className="ml-auto" />
+        <ChatShareControls conversationId={liveConversationId} />
+      </header>
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">{children}</div>
     </AppShell>
   );
 }

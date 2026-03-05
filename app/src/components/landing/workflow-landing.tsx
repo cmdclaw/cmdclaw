@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUp, Loader2 } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { PromptComposer } from "@/components/prompt-composer";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS, WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
@@ -126,7 +127,9 @@ function IntegrationLogos({ integrations }: { integrations: IntegrationType[] })
     <div className="flex items-center gap-1">
       {integrations.map((key) => {
         const logo = INTEGRATION_LOGOS[key];
-        if (!logo) return null;
+        if (!logo) {
+          return null;
+        }
         return (
           <Image
             key={key}
@@ -158,7 +161,7 @@ function TemplateCard({
   return (
     <button
       className={cn(
-        "group border-border/60 bg-card hover:border-slate-300 hover:bg-slate-100 relative flex w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150",
+        "group border-border/60 bg-card hover:border-slate-300 hover:bg-slate-100 relative flex min-h-[170px] w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150",
         loading && "pointer-events-none",
       )}
       onClick={handleClick}
@@ -185,17 +188,8 @@ function TemplateCard({
 
 export function WorkflowLanding() {
   const createWorkflow = useCreateWorkflow();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [prompt, setPrompt] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
-
-  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPrompt(e.target.value);
-    const el = e.target;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, []);
 
   const doCreate = useCallback(
     async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
@@ -234,27 +228,23 @@ export function WorkflowLanding() {
     [createWorkflow],
   );
 
-  const handlePromptSubmit = useCallback(async () => {
-    const text = prompt.trim();
-    if (!text || isCreating) return;
-    setIsCreating(true);
-    await doCreate({ prompt: "", initialMessage: text });
-    setIsCreating(false);
-  }, [doCreate, isCreating, prompt]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        void handlePromptSubmit();
+  const handlePromptComposerSubmit = useCallback(
+    async (text: string) => {
+      if (isCreating) {
+        return;
       }
+      setIsCreating(true);
+      await doCreate({ prompt: "", initialMessage: text });
+      setIsCreating(false);
     },
-    [handlePromptSubmit],
+    [doCreate, isCreating],
   );
 
   const handleTemplateSelect = useCallback(
     async (template: TemplateItem) => {
-      if (creatingTemplateId) return;
+      if (creatingTemplateId) {
+        return;
+      }
       setCreatingTemplateId(template.id);
       await doCreate({ prompt: template.prompt, triggerType: template.triggerType });
       setCreatingTemplateId(null);
@@ -263,7 +253,7 @@ export function WorkflowLanding() {
   );
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950">
+    <div className="relative min-h-screen overflow-x-hidden bg-slate-950">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
         <Image
@@ -276,48 +266,30 @@ export function WorkflowLanding() {
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,8,23,0.24)_0%,rgba(3,8,23,0.5)_45%,rgba(3,8,23,0.76)_100%)]" />
       </div>
-      <div className="relative z-10 mx-auto w-full max-w-[1500px] px-6 py-6">
+
+      <div className="pointer-events-none absolute right-0 bottom-0 left-0 z-20 h-20 bg-gradient-to-b from-transparent to-slate-950/70 sm:hidden" />
+
+      <div className="relative z-10 mx-auto w-full max-w-[1500px] px-6 pb-10">
         {/* ── Prompt area — centered hero ── */}
-        <div className="pt-10 pb-12">
-          <div className="mx-auto max-w-2xl">
+        <section className="flex min-h-[62vh] items-center justify-center pt-8 md:min-h-[max(22rem,calc(100dvh-21rem))] md:pt-10 lg:min-h-[max(23rem,calc(100dvh-22rem))] lg:pt-12">
+          <div className="mx-auto w-full max-w-2xl">
             <h1 className="mb-2 text-center text-xl font-semibold tracking-tight text-white">
               What do you want to automate?
             </h1>
             <p className="mb-6 text-center text-sm text-slate-100/90">
-              Describe a task and we'll build it step by step
+              Describe a task and we&apos;ll build it step by step
             </p>
-            <div className="rounded-2xl border border-white/25 bg-white/88 p-4 shadow-[0_15px_45px_-22px_rgba(15,23,42,0.9)]">
-              <textarea
-                ref={textareaRef}
-                value={prompt}
-                onChange={handlePromptChange}
-                onKeyDown={handleKeyDown}
-                placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
-                rows={2}
-                className="placeholder:text-muted-foreground/50 min-h-12 w-full resize-none bg-transparent text-sm leading-relaxed outline-none"
-              />
-              <div className="mt-3 flex items-center justify-between">
-                <p className="text-xs text-slate-700/75">⌘ Enter to send</p>
-                <Button
-                  size="sm"
-                  onClick={handlePromptSubmit}
-                  disabled={!prompt.trim() || isCreating}
-                  className="gap-1.5 rounded-lg px-3"
-                >
-                  {isCreating ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <ArrowUp className="size-3.5" />
-                  )}
-                  Send
-                </Button>
-              </div>
-            </div>
+            <PromptComposer
+              onSubmit={handlePromptComposerSubmit}
+              isSubmitting={isCreating}
+              variant="hero"
+              placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+            />
           </div>
-        </div>
+        </section>
 
         {/* ── Templates ── */}
-        <section>
+        <section className="mt-6 md:mt-8 lg:mt-10">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-white">Templates</h2>

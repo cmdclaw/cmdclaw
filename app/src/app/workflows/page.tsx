@@ -1,21 +1,98 @@
 "use client";
 
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, PenLine, Play } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { IntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
-import { WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { getWorkflowRunStatusLabel } from "@/lib/workflow-status";
-import { useCreateWorkflow, useWorkflowList } from "@/orpc/hooks";
+import { useWorkflowList } from "@/orpc/hooks";
 
 type WorkflowItem = {
   id: string;
   name?: string | null;
+  username?: string | null;
+  description?: string | null;
   status: "on" | "off";
   triggerType: string;
+  integrations?: IntegrationType[];
   recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
 };
+
+// ─── Mock workflows (for development) ────────────────────────────────────────
+
+const MOCK_WORKFLOWS: WorkflowItem[] = [
+  {
+    id: "mock-daily-digest",
+    name: "Morning email digest",
+    username: "daily_digest",
+    description:
+      "Summarizes unread emails from the last 24 hours and sends a clean digest with action items every morning at 8am.",
+    status: "on",
+    triggerType: "schedule",
+    integrations: ["gmail"],
+    recentRuns: [{ id: "r1", status: "completed", startedAt: new Date(Date.now() - 3600000) }],
+  },
+  {
+    id: "mock-lead-enrichment",
+    name: "Lead enrichment pipeline",
+    username: "lead_enricher",
+    description:
+      "Processes new rows from Google Sheets, finds decision-makers on LinkedIn, enriches contact data, and pushes to HubSpot.",
+    status: "on",
+    triggerType: "manual",
+    integrations: ["google_sheets", "linkedin", "hubspot"],
+    recentRuns: [{ id: "r2", status: "completed", startedAt: new Date(Date.now() - 86400000) }],
+  },
+  {
+    id: "mock-meeting-prep",
+    name: "Pre-meeting briefing",
+    username: "meeting_brief_bot",
+    description:
+      "When a new meeting is booked, researches the person and company on LinkedIn, checks HubSpot for history, and posts a briefing to Slack.",
+    status: "on",
+    triggerType: "webhook",
+    integrations: ["google_calendar", "linkedin", "hubspot", "slack"],
+    recentRuns: [{ id: "r3", status: "running", startedAt: new Date(Date.now() - 300000) }],
+  },
+  {
+    id: "mock-incident-alert",
+    name: "GitHub incident alerts",
+    username: "incident_watch",
+    description:
+      "When a critical issue is opened on GitHub, gathers related PRs and recent commits, then posts a rich summary to the #incidents Slack channel.",
+    status: "off",
+    triggerType: "webhook",
+    integrations: ["github", "slack"],
+    recentRuns: [],
+  },
+  {
+    id: "mock-campaign-report",
+    name: "Weekly campaign report",
+    username: "campaign_reporter",
+    description:
+      "Every Monday, pulls campaign metrics from HubSpot and Google Sheets, generates a performance summary, and posts to Slack.",
+    status: "on",
+    triggerType: "schedule",
+    integrations: ["hubspot", "google_sheets", "slack"],
+    recentRuns: [{ id: "r4", status: "completed", startedAt: new Date(Date.now() - 604800000) }],
+  },
+  {
+    id: "mock-churn-detection",
+    name: "Churn risk monitor",
+    username: "churn_sentinel",
+    description:
+      "Monitors usage data and support tickets daily. When churn risk is detected, notifies the CS team in Slack with full context and suggested actions.",
+    status: "on",
+    triggerType: "schedule",
+    integrations: ["hubspot", "slack", "gmail"],
+    recentRuns: [{ id: "r5", status: "completed", startedAt: new Date(Date.now() - 172800000) }],
+  },
+];
 
 function formatDate(value?: Date | string | null) {
   if (!value) {
@@ -58,17 +135,61 @@ function getWorkflowDisplayName(name?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : "New Workflow";
 }
 
-function WorkflowCard({ workflow }: { workflow: WorkflowItem }) {
+function WorkflowCard({
+  workflow,
+  onRun,
+  onOpen,
+}: {
+  workflow: WorkflowItem;
+  onRun: (workflow: WorkflowItem) => void;
+  onOpen: (id: string) => void;
+}) {
   const isOn = workflow.status === "on";
   const recentRun = Array.isArray(workflow.recentRuns) ? workflow.recentRuns[0] : null;
 
+  const handleRun = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onRun(workflow);
+    },
+    [onRun, workflow],
+  );
+  const handleOpen = useCallback(() => {
+    onOpen(workflow.id);
+  }, [onOpen, workflow.id]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== "Enter" && e.key !== " ") {
+        return;
+      }
+      e.preventDefault();
+      onOpen(workflow.id);
+    },
+    [onOpen, workflow.id],
+  );
+
+  const integrations = workflow.integrations ?? [];
+
   return (
-    <a
-      href={`/workflows/${workflow.id}`}
-      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition-all duration-150"
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={handleKeyDown}
+      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-2.5 rounded-xl border p-4 shadow-sm transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm leading-tight font-medium">{getWorkflowDisplayName(workflow.name)}</p>
+        <div className="space-y-1">
+          <p className="text-sm leading-tight font-medium">
+            {getWorkflowDisplayName(workflow.name)}
+          </p>
+          {workflow.username ? (
+            <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
+              @{workflow.username}
+            </p>
+          ) : null}
+        </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <span
             className={cn(
@@ -80,13 +201,40 @@ function WorkflowCard({ workflow }: { workflow: WorkflowItem }) {
         </div>
       </div>
 
+      {workflow.description && (
+        <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
+          {workflow.description}
+        </p>
+      )}
+
       <div className="flex items-center gap-2">
         <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
           {getTriggerLabel(workflow.triggerType)}
         </span>
+        {integrations.length > 0 && (
+          <div className="flex items-center gap-1">
+            {integrations.map((key) => {
+              const logo = INTEGRATION_LOGOS[key];
+              if (!logo) {
+                return null;
+              }
+              return (
+                <Image
+                  key={key}
+                  src={logo}
+                  alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                  width={14}
+                  height={14}
+                  className="size-3.5 shrink-0"
+                  title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div className="text-muted-foreground/70 mt-auto text-xs">
+      <div className="text-muted-foreground/70 text-xs">
         {recentRun ? (
           <span>
             Last run:{" "}
@@ -99,39 +247,66 @@ function WorkflowCard({ workflow }: { workflow: WorkflowItem }) {
           <span>No runs yet</span>
         )}
       </div>
-    </a>
+
+      <div className="mt-auto flex items-center gap-1.5 pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleRun}
+          disabled={!workflow.username}
+        >
+          <Play className="size-3" />
+          Run
+        </Button>
+        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" asChild>
+          <Link href={`/workflows/${workflow.id}`}>
+            <PenLine className="size-3" />
+            Edit
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
 export default function WorkflowsPage() {
+  const router = useRouter();
   const { data: workflows, isLoading } = useWorkflowList();
-  const createWorkflow = useCreateWorkflow();
-  const [isCreatingBuilder, setIsCreatingBuilder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const workflowList = useMemo(() => (Array.isArray(workflows) ? workflows : []), [workflows]);
+  const workflowList = useMemo(() => {
+    const real = Array.isArray(workflows) ? workflows : [];
+    // Merge mock data with real workflows for development
+    return [...real, ...MOCK_WORKFLOWS];
+  }, [workflows]);
 
-  const handleOpenBuilderAgent = useCallback(async () => {
-    if (isCreatingBuilder) {
+  useEffect(() => {
+    if (!error) {
       return;
     }
-    setIsCreatingBuilder(true);
-    setError(null);
+    const timer = setTimeout(() => setError(null), 5000);
+    return () => clearTimeout(timer);
+  }, [error]);
 
-    try {
-      const result = await createWorkflow.mutateAsync({
-        name: "",
-        triggerType: "manual",
-        prompt: "",
-        allowedIntegrations: WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
-      });
-      window.location.href = `/workflows/${result.id}`;
-    } catch {
-      setError("Failed to open workflow builder. Please try again.");
-      setIsCreatingBuilder(false);
-    }
-  }, [createWorkflow, isCreatingBuilder]);
-
+  const handleRunWorkflow = useCallback(
+    (workflow: WorkflowItem) => {
+      const username = workflow.username?.trim();
+      if (!username) {
+        setError("Missing workflow username.");
+        return;
+      }
+      const query = new URLSearchParams({ prefill: `run @workflow-${username}` });
+      router.push(`/chat?${query.toString()}`);
+    },
+    [router],
+  );
+  const handleOpenWorkflow = useCallback(
+    (id: string) => {
+      router.push(`/workflows/${id}`);
+    },
+    [router],
+  );
   return (
     <div className="space-y-6">
       {error ? (
@@ -149,20 +324,6 @@ export default function WorkflowsPage() {
               : `${workflowList.length} workflow${workflowList.length === 1 ? "" : "s"}`}
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild className="gap-1.5">
-            <Link href="/workflows/grid">Grid View</Link>
-          </Button>
-          <Button onClick={handleOpenBuilderAgent} disabled={isCreatingBuilder} className="gap-1.5">
-            {isCreatingBuilder ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Plus className="size-3.5" />
-            )}
-            Workflow Builder Agent
-          </Button>
-        </div>
       </div>
 
       {isLoading ? (
@@ -171,14 +332,17 @@ export default function WorkflowsPage() {
         </div>
       ) : workflowList.length === 0 ? (
         <div className="border-border/40 rounded-xl border border-dashed p-10 text-center">
-          <p className="text-muted-foreground text-sm">
-            No workflows yet. Use "Workflow Builder Agent" to create one.
-          </p>
+          <p className="text-muted-foreground text-sm">No workflows yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {workflowList.map((wf) => (
-            <WorkflowCard key={wf.id} workflow={wf} />
+            <WorkflowCard
+              key={wf.id}
+              workflow={wf}
+              onRun={handleRunWorkflow}
+              onOpen={handleOpenWorkflow}
+            />
           ))}
         </div>
       )}

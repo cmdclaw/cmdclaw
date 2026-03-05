@@ -121,12 +121,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-@keyframes landing-ocean-drift {
-  0% {
-    transform: scale(1.06) translate3d(-1.5%, -1%, 0);
-  }
-  100% {
-    transform: scale(1.12) translate3d(1.5%, 1.5%, 0);
-  }
-}
