@@ -11,7 +11,7 @@ import { createTraceId, logServerEvent } from "@/server/utils/observability";
 import { protectedProcedure } from "../middleware";
 
 // Schema for generation events (same structure as GenerationEvent type)
-const generationEventSchema = z.discriminatedUnion("type", [
+const generationEventPayloadSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("text"),
     content: z.string(),
@@ -173,6 +173,12 @@ const generationEventSchema = z.discriminatedUnion("type", [
     sizeBytes: z.number().nullable(),
   }),
 ]);
+const generationEventSchema = z.intersection(
+  z.object({
+    cursor: z.string().optional(),
+  }),
+  generationEventPayloadSchema,
+);
 
 // Start a new generation (returns immediately with generationId)
 const modelReferenceSchema = z
@@ -401,6 +407,7 @@ const subscribeGeneration = protectedProcedure
   .input(
     z.object({
       generationId: z.string(),
+      cursor: z.string().optional(),
     }),
   )
   .output(eventIterator(generationEventSchema))
@@ -422,7 +429,9 @@ const subscribeGeneration = protectedProcedure
       logContext,
     );
 
-    const stream = generationManager.subscribeToGeneration(input.generationId, context.user.id);
+    const stream = generationManager.subscribeToGeneration(input.generationId, context.user.id, {
+      cursor: input.cursor,
+    });
 
     try {
       for await (const event of stream) {

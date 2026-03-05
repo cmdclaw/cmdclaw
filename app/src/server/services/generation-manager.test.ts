@@ -67,6 +67,20 @@ const {
   };
 });
 
+const {
+  publishGenerationStreamEventMock,
+  readGenerationStreamAfterMock,
+  generationStreamExistsMock,
+  getLatestGenerationStreamCursorMock,
+  getLatestGenerationStreamEnvelopeMock,
+} = vi.hoisted(() => ({
+  publishGenerationStreamEventMock: vi.fn(async () => "1-1"),
+  readGenerationStreamAfterMock: vi.fn(async () => []),
+  generationStreamExistsMock: vi.fn(async () => false),
+  getLatestGenerationStreamCursorMock: vi.fn(async () => null),
+  getLatestGenerationStreamEnvelopeMock: vi.fn(async () => null),
+}));
+
 const { isStatelessServerlessRuntimeMock } = vi.hoisted(() => ({
   isStatelessServerlessRuntimeMock: vi.fn(() => false),
 }));
@@ -151,6 +165,14 @@ vi.mock("@/server/utils/runtime-platform", () => ({
   isStatelessServerlessRuntime: isStatelessServerlessRuntimeMock,
 }));
 
+vi.mock("@/server/redis/generation-event-bus", () => ({
+  publishGenerationStreamEvent: publishGenerationStreamEventMock,
+  readGenerationStreamAfter: readGenerationStreamAfterMock,
+  generationStreamExists: generationStreamExistsMock,
+  getLatestGenerationStreamCursor: getLatestGenerationStreamCursorMock,
+  getLatestGenerationStreamEnvelope: getLatestGenerationStreamEnvelopeMock,
+}));
+
 import { env } from "@/env";
 import {
   getCliEnvForUser,
@@ -180,7 +202,6 @@ type GenerationCtx = {
   status: string;
   contentParts: unknown[];
   assistantContent: string;
-  subscribers: Map<string, { id: string; callback: (event: unknown) => void }>;
   abortController: AbortController;
   pendingApproval: unknown;
   pendingAuth: {
@@ -233,7 +254,6 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
     status: "running",
     contentParts: [],
     assistantContent: "",
-    subscribers: new Map(),
     abortController: new AbortController(),
     pendingApproval: null,
     pendingAuth: null,
@@ -284,6 +304,16 @@ describe("generationManager transitions", () => {
     generationFindManyMock.mockResolvedValue([]);
     messageFindFirstMock.mockResolvedValue(null);
     conversationFindFirstMock.mockResolvedValue(null);
+    publishGenerationStreamEventMock.mockReset();
+    publishGenerationStreamEventMock.mockResolvedValue("1-1");
+    readGenerationStreamAfterMock.mockReset();
+    readGenerationStreamAfterMock.mockResolvedValue([]);
+    generationStreamExistsMock.mockReset();
+    generationStreamExistsMock.mockResolvedValue(false);
+    getLatestGenerationStreamCursorMock.mockReset();
+    getLatestGenerationStreamCursorMock.mockResolvedValue(null);
+    getLatestGenerationStreamEnvelopeMock.mockReset();
+    getLatestGenerationStreamEnvelopeMock.mockResolvedValue(null);
     conversationQueuedMessageFindManyMock.mockResolvedValue([]);
     workflowRunFindFirstMock.mockResolvedValue(null);
     workflowFindFirstMock.mockResolvedValue(null);
@@ -1304,14 +1334,12 @@ describe("generationManager transitions", () => {
   it("finishes completed generation, emits done, and cleans up in-memory state", async () => {
     insertReturningMock.mockResolvedValueOnce([{ id: "msg-assistant-1" }]);
 
-    const callback = vi.fn();
     const ctx = createCtx({
       assistantContent: "Final answer",
       contentParts: [{ type: "text", text: "Final answer" }],
       sessionId: "session-1",
       uploadedSandboxFileIds: new Set(),
     });
-    ctx.subscribers.set("sub-1", { id: "sub-1", callback });
 
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
@@ -1319,13 +1347,7 @@ describe("generationManager transitions", () => {
     await mgr.finishGeneration(ctx, "completed");
 
     expect(ctx.status).toBe("completed");
-    expect(callback).toHaveBeenCalledWith({
-      type: "done",
-      generationId: ctx.id,
-      conversationId: ctx.conversationId,
-      messageId: "msg-assistant-1",
-      usage: ctx.usage,
-    });
+    expect(publishGenerationStreamEventMock).toHaveBeenCalled();
     expect(mgr.activeGenerations.has(ctx.id)).toBe(false);
   });
 
@@ -1394,13 +1416,11 @@ describe("generationManager transitions", () => {
   it("finishes cancelled generation with interruption marker and emits cancelled", async () => {
     insertReturningMock.mockResolvedValueOnce([{ id: "msg-assistant-2" }]);
 
-    const callback = vi.fn();
     const ctx = createCtx({
       assistantContent: "",
       contentParts: [{ type: "text", text: "partial" }],
       uploadedSandboxFileIds: new Set(),
     });
-    ctx.subscribers.set("sub-1", { id: "sub-1", callback });
 
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
@@ -1417,12 +1437,7 @@ describe("generationManager transitions", () => {
           (p as { content?: unknown }).content === "Interrupted by user",
       ),
     ).toBe(true);
-    expect(callback).toHaveBeenCalledWith({
-      type: "cancelled",
-      generationId: ctx.id,
-      conversationId: ctx.conversationId,
-      messageId: "msg-assistant-2",
-    });
+    expect(publishGenerationStreamEventMock).toHaveBeenCalled();
   });
 
   it("handles submitApproval guard paths (missing context, access denied, mismatched toolUseId)", async () => {
@@ -1907,29 +1922,25 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
     const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
 
-    const streamedEvents: unknown[] = [];
     const ctx = createCtx({
       id: "gen-reasoning",
       conversationId: "conv-reasoning",
       backendType: "opencode",
       model: "openai/gpt-5.2-codex",
-      subscribers: new Map([
-        [
-          "sub-1",
-          {
-            id: "sub-1",
-            callback: (event: unknown) => {
-              streamedEvents.push(event);
-            },
-          },
-        ],
-      ]),
     });
 
     await mgr.runOpenCodeGeneration(ctx);
 
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
-    expect(streamedEvents).toEqual(
+    const publishedThinkingEvents = (publishGenerationStreamEventMock.mock.calls as unknown[][])
+      .map((call) => call[1] as { payload?: unknown } | undefined)
+      .filter((entry): entry is { payload?: unknown } => !!entry)
+      .map((entry) => entry.payload)
+      .filter(
+        (event): event is { type: "thinking"; content: string; thinkingId: string } =>
+          !!event && typeof event === "object" && (event as { type?: unknown }).type === "thinking",
+      );
+    expect(publishedThinkingEvents).toEqual(
       expect.arrayContaining([
         { type: "thinking", content: "plan", thinkingId: "reason-1" },
         { type: "thinking", content: " more", thinkingId: "reason-1" },

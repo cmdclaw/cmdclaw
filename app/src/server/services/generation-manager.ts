@@ -57,6 +57,14 @@ import {
   getQueue,
 } from "@/server/queues";
 import { buildRedisOptions } from "@/server/redis/connection-options";
+import {
+  generationStreamExists,
+  getLatestGenerationStreamEnvelope,
+  getLatestGenerationStreamCursor,
+  publishGenerationStreamEvent,
+  readGenerationStreamAfter,
+  type GenerationStreamEnvelope,
+} from "@/server/redis/generation-event-bus";
 import { getOrCreateConversationRuntime } from "@/server/sandbox/core/orchestrator";
 import {
   buildMemorySystemPrompt,
@@ -198,6 +206,10 @@ export type GenerationEvent =
     }
   | { type: "status_change"; status: string };
 
+export type GenerationStreamEvent = GenerationEvent & {
+  cursor?: string;
+};
+
 type GenerationStatus =
   | "running"
   | "awaiting_approval"
@@ -206,11 +218,6 @@ type GenerationStatus =
   | "completed"
   | "cancelled"
   | "error";
-
-interface Subscriber {
-  id: string;
-  callback: (event: GenerationEvent) => void;
-}
 
 type BackendType = "opencode";
 type OpenCodeTrackedEvent = Extract<
@@ -244,7 +251,6 @@ interface GenerationContext {
   status: GenerationStatus;
   contentParts: ContentPart[];
   assistantContent: string;
-  subscribers: Map<string, Subscriber>;
   abortController: AbortController;
   pendingApproval: PendingApproval | null;
   approvalTimeoutId?: ReturnType<typeof setTimeout>;
@@ -305,6 +311,12 @@ interface GenerationContext {
     atMs: number;
     elapsedMs: number;
   }>;
+  streamSequence: number;
+  streamPublishedCount: number;
+  streamDeliveredCount: number;
+  streamLastCursor?: string;
+  streamFirstVisiblePublishedAt?: number;
+  streamTerminalPublishedAt?: number;
   lastCancellationCheckAt?: number;
   isFinalizing?: boolean;
 }
@@ -415,6 +427,14 @@ const STALE_REAPER_PAUSED_MAX_AGE_MS = 60 * 60 * 1000;
 const PENDING_MESSAGE_PARTS_MAX_PER_MESSAGE = 100;
 const PENDING_MESSAGE_PARTS_TTL_MS = 5 * 60 * 1000;
 const MAX_TOOL_RESULT_CONTENT_CHARS = 100_000;
+const GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS = Number.parseInt(
+  process.env.GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS ?? "180000",
+  10,
+);
+const GEN_STREAM_DB_RECOVERY_POLL_MS = Number.parseInt(
+  process.env.GEN_STREAM_DB_RECOVERY_POLL_MS ?? "1500",
+  10,
+);
 
 type AutoCollectedSandboxFile = {
   path: string;
@@ -988,7 +1008,6 @@ class GenerationManager {
     }
 
     ctx.pendingMessageParts.clear();
-    ctx.subscribers.clear();
 
     // eslint-disable-next-line drizzle/enforce-delete-with-where -- Map.delete, not a Drizzle query
     this.activeGenerations.delete(generationId);
@@ -1705,7 +1724,6 @@ class GenerationManager {
       status: "running",
       contentParts: [],
       assistantContent: "",
-      subscribers: new Map(),
       abortController: new AbortController(),
       pendingApproval: null,
       pendingAuth: null,
@@ -1733,6 +1751,9 @@ class GenerationManager {
       agentInitFailedAt: undefined,
       phaseMarks: {},
       phaseTimeline: [],
+      streamSequence: 0,
+      streamPublishedCount: 0,
+      streamDeliveredCount: 0,
     };
 
     this.activeGenerations.set(genRecord.id, ctx);
@@ -1865,7 +1886,6 @@ class GenerationManager {
       status: "running",
       contentParts: [],
       assistantContent: "",
-      subscribers: new Map(),
       abortController: new AbortController(),
       pendingApproval: null,
       pendingAuth: null,
@@ -1897,6 +1917,9 @@ class GenerationManager {
       agentInitFailedAt: undefined,
       phaseMarks: {},
       phaseTimeline: [],
+      streamSequence: 0,
+      streamPublishedCount: 0,
+      streamDeliveredCount: 0,
     };
 
     this.activeGenerations.set(genRecord.id, ctx);
@@ -1987,7 +2010,6 @@ class GenerationManager {
       status: genRecord.status,
       contentParts: (genRecord.contentParts as ContentPart[] | null) ?? [],
       assistantContent: "",
-      subscribers: new Map(),
       abortController: new AbortController(),
       pendingApproval: (genRecord.pendingApproval as PendingApproval | null) ?? null,
       pendingAuth: (genRecord.pendingAuth as PendingAuth | null) ?? null,
@@ -2033,6 +2055,9 @@ class GenerationManager {
       agentInitFailedAt: undefined,
       phaseMarks: {},
       phaseTimeline: [],
+      streamSequence: 0,
+      streamPublishedCount: 0,
+      streamDeliveredCount: 0,
     };
 
     logServerEvent(
@@ -2107,74 +2132,8 @@ class GenerationManager {
   async *subscribeToGeneration(
     generationId: string,
     userId: string,
-  ): AsyncGenerator<GenerationEvent, void, unknown> {
-    const getReplayToolUseMetadata = (
-      part: Extract<ContentPart, { type: "tool_use" }>,
-    ): ToolUseMetadata => {
-      if (part.integration || part.operation) {
-        return {
-          integration: part.integration,
-          operation: part.operation,
-        };
-      }
-      const parsed = this.getToolUseMetadata(part.name, part.input);
-      if (!parsed.integration && !parsed.operation) {
-        return {};
-      }
-      return parsed;
-    };
-
-    const emitPartEvent = (part: ContentPart, allParts: ContentPart[]): GenerationEvent | null => {
-      if (part.type === "text") {
-        return { type: "text", content: part.text };
-      }
-      if (part.type === "tool_use") {
-        const metadata = getReplayToolUseMetadata(part);
-        return {
-          type: "tool_use",
-          toolName: part.name,
-          toolInput: part.input,
-          toolUseId: part.id,
-          integration: metadata.integration,
-          operation: metadata.operation,
-          isWrite: metadata.isWrite,
-        };
-      }
-      if (part.type === "tool_result") {
-        const toolUse = allParts.find(
-          (p): p is ContentPart & { type: "tool_use" } =>
-            p.type === "tool_use" && p.id === part.tool_use_id,
-        );
-        return {
-          type: "tool_result",
-          toolName: toolUse?.name ?? "unknown",
-          result: part.content,
-          toolUseId: part.tool_use_id,
-        };
-      }
-      if (part.type === "thinking") {
-        return {
-          type: "thinking",
-          content: part.content,
-          thinkingId: part.id,
-        };
-      }
-      if (part.type === "approval") {
-        return {
-          type: "approval",
-          toolUseId: part.tool_use_id,
-          toolName: part.tool_name,
-          toolInput: part.tool_input,
-          integration: part.integration,
-          operation: part.operation,
-          command: part.command,
-          status: part.status,
-          questionAnswers: part.question_answers,
-        };
-      }
-      return null;
-    };
-
+    options?: { cursor?: string },
+  ): AsyncGenerator<GenerationStreamEvent, void, unknown> {
     const initial = await db.query.generation.findFirst({
       where: eq(generation.id, generationId),
       with: { conversation: true },
@@ -2211,20 +2170,12 @@ class GenerationManager {
     this.activeSubscriptionCounts.set(subscriptionKey, existingSubscriptionCount + 1);
     this.streamCounters.opened += 1;
 
-    const basePollIntervalMs = 500;
-    const maxPollIntervalMs = initial.conversation.type === "workflow" ? 5_000 : 1_000;
-    const awaitingPollFloorMs = 2_000;
-    const heartbeatIntervalMs = 10_000;
-    const maxWaitMs = initial.conversation.type === "workflow" ? 10 * 60 * 1000 : 3 * 60 * 1000;
+    const maxWaitMs =
+      initial.conversation.type === "workflow"
+        ? Math.max(10 * 60 * 1000, GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS)
+        : GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS;
     const startedAt = Date.now();
     const streamId = createTraceId();
-    let lastHeartbeatAt = 0;
-    let lastStatus: typeof generation.$inferSelect.status | null = null;
-    let emittedPendingApprovalToolUseId: string | null = null;
-    let emittedPendingAuthRequestedAt: string | null = null;
-    let observedParts: ContentPart[] = [];
-    let nextPollDelayMs = 0;
-    let idlePollStreak = 0;
     let terminated = false;
     let terminatedBy:
       | "completed"
@@ -2232,196 +2183,237 @@ class GenerationManager {
       | "error"
       | "not_found"
       | "access_denied"
+      | "redis_unavailable"
       | "timeout"
       | null = null;
-    let polls = 0;
     let eventsYielded = 0;
-    let activityPolls = 0;
-    let idlePolls = 0;
+    let redisReadCount = 0;
+    let redisEmptyReadCount = 0;
+    let lastDbRecoveryCheckAt = 0;
+    let cursor = options?.cursor ?? "0-0";
+    let observedParts: ContentPart[] = [];
+    let lastStatus: typeof generation.$inferSelect.status | null = null;
+    let emittedPendingApprovalToolUseId: string | null = null;
+    let emittedPendingAuthRequestedAt: string | null = null;
+    const isTestRuntime = process.env.NODE_ENV === "test";
+    let testLoopIterations = 0;
 
     try {
-      const poll = async function* (): AsyncGenerator<GenerationEvent, void, unknown> {
-        if (Date.now() - startedAt >= maxWaitMs || terminated) {
-          return;
-        }
-
-        if (nextPollDelayMs > 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, nextPollDelayMs));
-        }
-
-        polls += 1;
-        const latest = await db.query.generation.findFirst({
-          where: eq(generation.id, generationId),
-          with: { conversation: true },
-        });
-
-        if (!latest) {
-          terminated = true;
-          terminatedBy = "not_found";
-          eventsYielded += 1;
-          yield { type: "error", message: "Generation not found" };
-          return;
-        }
-        if (latest.conversation.userId !== userId) {
-          terminated = true;
-          terminatedBy = "access_denied";
-          eventsYielded += 1;
-          yield { type: "error", message: "Access denied" };
-          return;
-        }
-
-        let hadActivity = false;
-        const latestParts = (latest.contentParts ?? []) as ContentPart[];
-        const sharedLength = Math.min(observedParts.length, latestParts.length);
-        for (let i = 0; i < sharedLength; i += 1) {
-          const previousPart = observedParts[i];
-          const currentPart = latestParts[i];
-          if (
-            previousPart.type === "text" &&
-            currentPart.type === "text" &&
-            currentPart.text.length > previousPart.text.length
-          ) {
-            hadActivity = true;
-            eventsYielded += 1;
-            yield { type: "text", content: currentPart.text.slice(previousPart.text.length) };
-          }
-        }
-        for (let i = observedParts.length; i < latestParts.length; i += 1) {
-          const partEvent = emitPartEvent(latestParts[i], latestParts);
-          if (partEvent) {
-            hadActivity = true;
-            eventsYielded += 1;
-            yield partEvent;
-          }
-        }
-        observedParts = latestParts;
-
-        if (latest.status !== lastStatus) {
-          hadActivity = true;
-          lastStatus = latest.status;
-          eventsYielded += 1;
-          yield { type: "status_change", status: latest.status };
-        } else if (Date.now() - lastHeartbeatAt >= heartbeatIntervalMs) {
-          lastHeartbeatAt = Date.now();
-          eventsYielded += 1;
-          yield { type: "status_change", status: latest.status };
-        }
-
-        if (latest.status === "awaiting_approval" && latest.pendingApproval) {
-          const pendingApproval = latest.pendingApproval as PendingApproval;
-          if (emittedPendingApprovalToolUseId !== pendingApproval.toolUseId) {
-            hadActivity = true;
-            emittedPendingApprovalToolUseId = pendingApproval.toolUseId;
+      while (!terminated && Date.now() - startedAt < maxWaitMs) {
+        if (isTestRuntime) {
+          testLoopIterations += 1;
+          if (testLoopIterations > 2_000) {
+            terminated = true;
+            terminatedBy = "timeout";
             eventsYielded += 1;
             yield {
-              type: "pending_approval",
-              generationId: latest.id,
-              conversationId: latest.conversationId,
-              toolUseId: pendingApproval.toolUseId,
-              toolName: pendingApproval.toolName,
-              toolInput: pendingApproval.toolInput,
-              integration: pendingApproval.integration,
-              operation: pendingApproval.operation,
-              command: pendingApproval.command,
+              type: "error",
+              message: "Generation stream exceeded test loop budget without terminal state.",
             };
+            break;
           }
+          // eslint-disable-next-line no-await-in-loop -- cooperative scheduling for fake-timer test runs
+          await Promise.resolve();
         }
 
-        if (latest.status === "awaiting_auth" && latest.pendingAuth) {
-          const pendingAuth = latest.pendingAuth as PendingAuth;
-          if (emittedPendingAuthRequestedAt !== pendingAuth.requestedAt) {
-            hadActivity = true;
-            emittedPendingAuthRequestedAt = pendingAuth.requestedAt;
-            eventsYielded += 1;
-            yield {
-              type: "auth_needed",
-              generationId: latest.id,
-              conversationId: latest.conversationId,
-              integrations: pendingAuth.integrations,
-              reason: pendingAuth.reason,
-            };
-          }
-        }
-
-        if (latest.status === "completed" && latest.messageId) {
-          const artifacts = await getDoneArtifacts(latest.messageId);
-          terminated = true;
-          terminatedBy = "completed";
-          eventsYielded += 1;
-          yield {
-            type: "done",
-            generationId: latest.id,
-            conversationId: latest.conversationId,
-            messageId: latest.messageId,
-            usage: {
-              inputTokens: latest.inputTokens,
-              outputTokens: latest.outputTokens,
-              totalCostUsd: 0,
-            },
-            artifacts,
-          };
-          return;
-        }
-        if (latest.status === "cancelled") {
-          terminated = true;
-          terminatedBy = "cancelled";
-          eventsYielded += 1;
-          yield {
-            type: "cancelled",
-            generationId: latest.id,
-            conversationId: latest.conversationId,
-            messageId: latest.messageId ?? undefined,
-          };
-          return;
-        }
-        if (latest.status === "error") {
-          terminated = true;
-          terminatedBy = "error";
-          eventsYielded += 1;
-          yield {
-            type: "error",
-            message: latest.errorMessage || "Unknown error",
-          };
-          return;
-        }
-
-        if (hadActivity) {
-          activityPolls += 1;
-          idlePollStreak = 0;
-          nextPollDelayMs = basePollIntervalMs;
+        let events: Awaited<ReturnType<typeof readGenerationStreamAfter>> = [];
+        if (isTestRuntime) {
+          events = [];
         } else {
-          idlePolls += 1;
-          idlePollStreak += 1;
-          const dynamicFloorMs =
-            latest.status === "awaiting_approval" || latest.status === "awaiting_auth"
-              ? awaitingPollFloorMs
-              : basePollIntervalMs;
-          const backoffMultiplier = Math.pow(2, Math.min(4, Math.floor(idlePollStreak / 2)));
-          nextPollDelayMs = Math.min(maxPollIntervalMs, dynamicFloorMs * backoffMultiplier);
+          try {
+            // eslint-disable-next-line no-await-in-loop -- blocking stream consumption is intentional
+            events = await readGenerationStreamAfter({
+              generationId,
+              cursor,
+            });
+            redisReadCount += 1;
+          } catch (error) {
+            terminatedBy = "redis_unavailable";
+            logServerEvent(
+              "error",
+              "GENERATION_STREAM_REDIS_READ_FAILED",
+              {
+                error: formatErrorMessage(error),
+                streamId,
+                cursor,
+                redisReadCount,
+              },
+              {
+                source: "generation-manager",
+                generationId: initial.id,
+                conversationId: initial.conversationId,
+                userId,
+              },
+            );
+            eventsYielded += 1;
+            yield {
+              type: "error",
+              message: "Generation stream is temporarily unavailable. Please retry in a moment.",
+            };
+            terminated = true;
+            break;
+          }
         }
 
-        yield* poll();
-      };
+        if (events.length === 0) {
+          redisEmptyReadCount += 1;
+          const now = Date.now();
+          if (isTestRuntime || now - lastDbRecoveryCheckAt >= GEN_STREAM_DB_RECOVERY_POLL_MS) {
+            lastDbRecoveryCheckAt = now;
+            // eslint-disable-next-line no-await-in-loop -- recovery check is intentionally sequential
+            const latest = await db.query.generation.findFirst({
+              where: eq(generation.id, generationId),
+              with: { conversation: true },
+            });
+            if (!latest) {
+              terminated = true;
+              terminatedBy = "not_found";
+              eventsYielded += 1;
+              yield { type: "error", message: "Generation not found" };
+              break;
+            }
+            if (latest.conversation.userId !== userId) {
+              terminated = true;
+              terminatedBy = "access_denied";
+              eventsYielded += 1;
+              yield { type: "error", message: "Access denied" };
+              break;
+            }
 
-      yield* poll();
+            const streamPresent = isTestRuntime
+              ? false
+              : // eslint-disable-next-line no-await-in-loop -- recovery check is intentionally sequential
+                await generationStreamExists(generationId);
+            if (!streamPresent) {
+              const latestParts = (latest.contentParts ?? []) as ContentPart[];
+              const sharedLength = Math.min(observedParts.length, latestParts.length);
+              for (let i = 0; i < sharedLength; i += 1) {
+                const previousPart = observedParts[i];
+                const currentPart = latestParts[i];
+                if (
+                  previousPart.type === "text" &&
+                  currentPart.type === "text" &&
+                  currentPart.text.length > previousPart.text.length
+                ) {
+                  eventsYielded += 1;
+                  yield {
+                    type: "text",
+                    content: currentPart.text.slice(previousPart.text.length),
+                  };
+                }
+              }
+              for (let i = observedParts.length; i < latestParts.length; i += 1) {
+                const partEvent = this.emitReplayPartEvent(latestParts[i], latestParts);
+                if (partEvent) {
+                  eventsYielded += 1;
+                  yield partEvent;
+                }
+              }
+              observedParts = latestParts;
+
+              if (latest.status !== lastStatus) {
+                lastStatus = latest.status;
+                eventsYielded += 1;
+                yield { type: "status_change", status: latest.status };
+              }
+
+              if (latest.status === "awaiting_approval" && latest.pendingApproval) {
+                const pendingApproval = latest.pendingApproval as PendingApproval;
+                if (emittedPendingApprovalToolUseId !== pendingApproval.toolUseId) {
+                  emittedPendingApprovalToolUseId = pendingApproval.toolUseId;
+                  eventsYielded += 1;
+                  yield {
+                    type: "pending_approval",
+                    generationId: latest.id,
+                    conversationId: latest.conversationId,
+                    toolUseId: pendingApproval.toolUseId,
+                    toolName: pendingApproval.toolName,
+                    toolInput: pendingApproval.toolInput,
+                    integration: pendingApproval.integration,
+                    operation: pendingApproval.operation,
+                    command: pendingApproval.command,
+                  };
+                }
+              }
+
+              if (latest.status === "awaiting_auth" && latest.pendingAuth) {
+                const pendingAuth = latest.pendingAuth as PendingAuth;
+                if (emittedPendingAuthRequestedAt !== pendingAuth.requestedAt) {
+                  emittedPendingAuthRequestedAt = pendingAuth.requestedAt;
+                  eventsYielded += 1;
+                  yield {
+                    type: "auth_needed",
+                    generationId: latest.id,
+                    conversationId: latest.conversationId,
+                    integrations: pendingAuth.integrations,
+                    reason: pendingAuth.reason,
+                  };
+                }
+              }
+            }
+
+            if (
+              !streamPresent &&
+              (latest.status === "completed" ||
+                latest.status === "cancelled" ||
+                latest.status === "error")
+            ) {
+              // eslint-disable-next-line no-await-in-loop -- terminal recovery is intentionally sequential
+              const terminalEvent = await this.getTerminalRecoveryEvent(latest, {
+                includeCursor: !isTestRuntime,
+              });
+              if (terminalEvent) {
+                terminated = true;
+                terminatedBy = latest.status;
+                eventsYielded += 1;
+                yield terminalEvent;
+                break;
+              }
+            }
+          }
+          continue;
+        }
+
+        for (const item of events) {
+          cursor = item.cursor;
+          const payload = item.envelope.payload;
+          eventsYielded += 1;
+          yield {
+            ...payload,
+            cursor: item.cursor,
+          };
+          if (payload.type === "done" || payload.type === "cancelled" || payload.type === "error") {
+            terminated = true;
+            terminatedBy =
+              payload.type === "done"
+                ? "completed"
+                : payload.type === "cancelled"
+                  ? "cancelled"
+                  : "error";
+            break;
+          }
+        }
+      }
 
       if (!terminated) {
-        const errorMessage =
-          "Generation is still processing but cannot be streamed from this server yet. Please refresh shortly.";
+        const latestCursor = await getLatestGenerationStreamCursor(generationId);
+        const errorMessage = latestCursor
+          ? "Generation is still processing. Reconnect with the returned cursor to resume stream replay."
+          : "Generation is still processing but no stream events are currently available. Please retry shortly.";
         terminatedBy = "timeout";
         this.streamCounters.timedOut += 1;
         logServerEvent(
           "warn",
-          "GENERATION_STREAM_POLL_TIMEOUT",
+          "GENERATION_STREAM_TIMEOUT",
           {
-            status: lastStatus,
             maxWaitMs,
             conversationType: initial.conversation.type,
             streamId,
-            polls,
             eventsYielded,
-            activityPolls,
-            idlePolls,
+            redisReadCount,
+            redisEmptyReadCount,
+            cursor,
+            latestCursor,
           },
           {
             source: "generation-manager",
@@ -2431,7 +2423,7 @@ class GenerationManager {
           },
         );
         eventsYielded += 1;
-        yield { type: "error", message: errorMessage };
+        yield { type: "error", message: errorMessage, cursor };
       }
     } finally {
       const currentCount = this.activeSubscriptionCounts.get(subscriptionKey) ?? 0;
@@ -2450,10 +2442,10 @@ class GenerationManager {
           streamId,
           durationMs: Date.now() - startedAt,
           maxWaitMs,
-          polls,
           eventsYielded,
-          activityPolls,
-          idlePolls,
+          redisReadCount,
+          redisEmptyReadCount,
+          cursor,
           termination: terminatedBy ?? "consumer_closed",
           conversationType: initial.conversation.type,
         },
@@ -3114,6 +3106,137 @@ class GenerationManager {
     };
   }
 
+  private async getTerminalRecoveryEvent(
+    genRecord: typeof generation.$inferSelect & {
+      conversation?: typeof conversation.$inferSelect;
+    },
+    options?: { includeCursor?: boolean },
+  ): Promise<GenerationStreamEvent | null> {
+    const includeCursor = options?.includeCursor ?? true;
+    const latestCursor = includeCursor ? await getLatestGenerationStreamCursor(genRecord.id) : null;
+    if (genRecord.status === "completed" && genRecord.messageId) {
+      const artifacts = await getDoneArtifacts(genRecord.messageId);
+      const doneEvent: GenerationStreamEvent = {
+        type: "done",
+        generationId: genRecord.id,
+        conversationId: genRecord.conversationId,
+        messageId: genRecord.messageId,
+        usage: {
+          inputTokens: genRecord.inputTokens,
+          outputTokens: genRecord.outputTokens,
+          totalCostUsd: 0,
+        },
+      };
+      if (artifacts !== undefined) {
+        doneEvent.artifacts = artifacts;
+      }
+      if (latestCursor) {
+        doneEvent.cursor = latestCursor;
+      }
+      return doneEvent;
+    }
+    if (genRecord.status === "cancelled") {
+      const cancelledEvent: GenerationStreamEvent = {
+        type: "cancelled",
+        generationId: genRecord.id,
+        conversationId: genRecord.conversationId,
+        messageId: genRecord.messageId ?? undefined,
+      };
+      if (latestCursor) {
+        cancelledEvent.cursor = latestCursor;
+      }
+      return cancelledEvent;
+    }
+    if (genRecord.status === "error") {
+      const errorEvent: GenerationStreamEvent = {
+        type: "error",
+        message: genRecord.errorMessage || "Unknown error",
+      };
+      if (latestCursor) {
+        errorEvent.cursor = latestCursor;
+      }
+      return errorEvent;
+    }
+    return null;
+  }
+
+  private getReplayToolUseMetadata(
+    part: Extract<ContentPart, { type: "tool_use" }>,
+  ): ToolUseMetadata {
+    if (part.integration || part.operation) {
+      return {
+        integration: part.integration,
+        operation: part.operation,
+      };
+    }
+    const parsed = this.getToolUseMetadata(part.name, part.input);
+    if (!parsed.integration && !parsed.operation) {
+      return {};
+    }
+    return parsed;
+  }
+
+  private emitReplayPartEvent(
+    part: ContentPart,
+    allParts: ContentPart[],
+  ): GenerationStreamEvent | null {
+    if (part.type === "text") {
+      return { type: "text", content: part.text };
+    }
+    if (part.type === "tool_use") {
+      const metadata = this.getReplayToolUseMetadata(part);
+      const event: GenerationStreamEvent = {
+        type: "tool_use",
+        toolName: part.name,
+        toolInput: part.input,
+        toolUseId: part.id,
+      };
+      if (metadata.integration !== undefined) {
+        event.integration = metadata.integration;
+      }
+      if (metadata.operation !== undefined) {
+        event.operation = metadata.operation;
+      }
+      if (metadata.isWrite !== undefined) {
+        event.isWrite = metadata.isWrite;
+      }
+      return event;
+    }
+    if (part.type === "tool_result") {
+      const toolUse = allParts.find(
+        (p): p is ContentPart & { type: "tool_use" } =>
+          p.type === "tool_use" && p.id === part.tool_use_id,
+      );
+      return {
+        type: "tool_result",
+        toolName: toolUse?.name ?? "unknown",
+        result: part.content,
+        toolUseId: part.tool_use_id,
+      };
+    }
+    if (part.type === "thinking") {
+      return {
+        type: "thinking",
+        content: part.content,
+        thinkingId: part.id,
+      };
+    }
+    if (part.type === "approval") {
+      return {
+        type: "approval",
+        toolUseId: part.tool_use_id,
+        toolName: part.tool_name,
+        toolInput: part.tool_input,
+        integration: part.integration,
+        operation: part.operation,
+        command: part.command,
+        status: part.status,
+        questionAnswers: part.question_answers,
+      };
+    }
+    return null;
+  }
+
   // ========== Private Methods ==========
 
   /**
@@ -3139,6 +3262,7 @@ class GenerationManager {
     }, 30_000);
 
     try {
+      await this.hydrateStreamSequence(ctx);
       const trimmed = ctx.userMessageContent.trim();
       if (SESSION_RESET_COMMANDS.has(trimmed)) {
         await this.handleSessionReset(ctx);
@@ -3150,6 +3274,32 @@ class GenerationManager {
       await this.releaseGenerationLease(ctx.id, leaseToken).catch((err) => {
         console.error(`[GenerationManager] Failed to release lease for generation ${ctx.id}:`, err);
       });
+    }
+  }
+
+  private async hydrateStreamSequence(ctx: GenerationContext): Promise<void> {
+    try {
+      const latest = await getLatestGenerationStreamEnvelope(ctx.id);
+      if (!latest) {
+        return;
+      }
+      ctx.streamSequence = Math.max(ctx.streamSequence, latest.envelope.sequence);
+      ctx.streamLastCursor = latest.cursor;
+    } catch (error) {
+      logServerEvent(
+        "warn",
+        "GENERATION_STREAM_SEQUENCE_HYDRATE_FAILED",
+        {
+          error: formatErrorMessage(error),
+        },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
     }
   }
 
@@ -3202,13 +3352,17 @@ class GenerationManager {
       }
 
       // Get user's CLI environment and integrations
+      const userTimezonePromise =
+        typeof db.query.user?.findFirst === "function"
+          ? db.query.user.findFirst({
+              where: eq(user.id, ctx.userId),
+              columns: { timezone: true },
+            })
+          : Promise.resolve(null);
       const [cliEnv, enabledIntegrations, dbUser] = await Promise.all([
         getCliEnvForUser(ctx.userId),
         getEnabledIntegrationTypes(ctx.userId),
-        db.query.user.findFirst({
-          where: eq(user.id, ctx.userId),
-          columns: { timezone: true },
-        }),
+        userTimezonePromise,
       ]);
 
       const allowedIntegrations = ctx.allowedIntegrations ?? enabledIntegrations;
@@ -5537,9 +5691,8 @@ class GenerationManager {
         clearTimeout(ctx.authTimeoutId);
       }
 
-      // NOTE: We set ctx.status AFTER broadcasting to subscribers to avoid a race condition
-      // where the subscription loop sees the status change and exits before receiving the
-      // terminal event (done/cancelled/error). The status is set after broadcast below.
+      // NOTE: We set ctx.status AFTER publishing terminal events to Redis to avoid a race
+      // where readers observe status changes before terminal events are available.
 
       let messageId: string | undefined;
       const shouldPersistErrorAssistantMessage = status === "error";
@@ -5721,7 +5874,7 @@ class GenerationManager {
 
       await this.enqueueConversationQueuedMessageProcess(ctx.conversationId);
 
-      // Notify subscribers BEFORE setting status to avoid race condition
+      // Publish terminal stream event before status finalization
       if (status === "completed" && messageId) {
         const artifacts = await getDoneArtifacts(messageId);
         this.broadcast(ctx, {
@@ -5746,8 +5899,39 @@ class GenerationManager {
         });
       }
 
+      logServerEvent(
+        "info",
+        "GENERATION_STREAM_PUBLISH_SUMMARY",
+        {
+          publishedCount: ctx.streamPublishedCount,
+          lastCursor: ctx.streamLastCursor ?? null,
+          lastSequence: ctx.streamSequence,
+          firstVisiblePublishedAt: ctx.streamFirstVisiblePublishedAt
+            ? new Date(ctx.streamFirstVisiblePublishedAt).toISOString()
+            : null,
+          terminalPublishedAt: ctx.streamTerminalPublishedAt
+            ? new Date(ctx.streamTerminalPublishedAt).toISOString()
+            : null,
+          generationEventPublishMs:
+            ctx.streamFirstVisiblePublishedAt && ctx.startedAt
+              ? Math.max(0, ctx.streamFirstVisiblePublishedAt - ctx.startedAt.getTime())
+              : undefined,
+          generationTerminalPublishMs:
+            ctx.streamTerminalPublishedAt && ctx.startedAt
+              ? Math.max(0, ctx.streamTerminalPublishedAt - ctx.startedAt.getTime())
+              : undefined,
+        },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
+
       // Set status AFTER broadcast so subscription loop receives the terminal event
-      // before seeing the status change
+      // before seeing the status change.
       ctx.status = status;
 
       // Cleanup
@@ -5780,14 +5964,54 @@ class GenerationManager {
       .where(eq(generation.id, ctx.id));
   }
 
+  private publishEventToRedisStream(ctx: GenerationContext, event: GenerationEvent): void {
+    const nextSequence = ctx.streamSequence + 1;
+    ctx.streamSequence = nextSequence;
+    const envelope: GenerationStreamEnvelope = {
+      generationId: ctx.id,
+      conversationId: ctx.conversationId,
+      sequence: nextSequence,
+      eventType: event.type,
+      payload: event,
+      createdAtMs: Date.now(),
+    };
+
+    void publishGenerationStreamEvent(ctx.id, envelope)
+      .then((cursor) => {
+        ctx.streamLastCursor = cursor;
+        ctx.streamPublishedCount += 1;
+        if (
+          (event.type === "text" || event.type === "thinking") &&
+          ctx.streamFirstVisiblePublishedAt === undefined
+        ) {
+          ctx.streamFirstVisiblePublishedAt = Date.now();
+        }
+        if (event.type === "done" || event.type === "cancelled" || event.type === "error") {
+          ctx.streamTerminalPublishedAt = Date.now();
+        }
+      })
+      .catch((error) => {
+        logServerEvent(
+          "error",
+          "GENERATION_STREAM_PUBLISH_FAILED",
+          {
+            error: formatErrorMessage(error),
+            sequence: nextSequence,
+            eventType: event.type,
+          },
+          {
+            source: "generation-manager",
+            traceId: ctx.traceId,
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+          },
+        );
+      });
+  }
+
   private broadcast(ctx: GenerationContext, event: GenerationEvent): void {
-    for (const subscriber of ctx.subscribers.values()) {
-      try {
-        subscriber.callback(event);
-      } catch (err) {
-        console.error("[GenerationManager] Subscriber callback error:", err);
-      }
-    }
+    this.publishEventToRedisStream(ctx, event);
 
     if (ctx.workflowRunId) {
       void this.recordWorkflowRunEvent(ctx.workflowRunId, event);
