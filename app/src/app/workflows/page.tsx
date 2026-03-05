@@ -1,16 +1,21 @@
 "use client";
 
-import { Loader2, PenLine, Play } from "lucide-react";
+import { ArrowUp, Loader2, PenLine, Play } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
-import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES } from "@/lib/integration-icons";
+import {
+  INTEGRATION_LOGOS,
+  INTEGRATION_DISPLAY_NAMES,
+  WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
+} from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { getWorkflowRunStatusLabel } from "@/lib/workflow-status";
-import { useWorkflowList } from "@/orpc/hooks";
+import { client } from "@/orpc/client";
+import { useCreateWorkflow, useWorkflowList } from "@/orpc/hooks";
 
 type WorkflowItem = {
   id: string;
@@ -22,6 +27,8 @@ type WorkflowItem = {
   integrations?: IntegrationType[];
   recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
 };
+
+const DEFAULT_WORKFLOW_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
 
 // ─── Mock workflows (for development) ────────────────────────────────────────
 
@@ -177,7 +184,7 @@ function WorkflowCard({
       tabIndex={0}
       onClick={handleOpen}
       onKeyDown={handleKeyDown}
-      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-2.5 rounded-xl border p-4 shadow-sm transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 shadow-sm transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
@@ -273,6 +280,10 @@ function WorkflowCard({
 export default function WorkflowsPage() {
   const router = useRouter();
   const { data: workflows, isLoading } = useWorkflowList();
+  const createWorkflow = useCreateWorkflow();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [prompt, setPrompt] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const workflowList = useMemo(() => {
@@ -307,22 +318,113 @@ export default function WorkflowsPage() {
     },
     [router],
   );
+
+  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPrompt(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const doCreate = useCallback(
+    async (initialMessage: string) => {
+      const result = await createWorkflow.mutateAsync({
+        name: "",
+        triggerType: "manual",
+        prompt: "",
+        allowedIntegrations: WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
+      });
+
+      const text = initialMessage.trim();
+      if (text) {
+        try {
+          const { conversationId } = await client.workflow.getOrCreateBuilderConversation({
+            id: result.id,
+          });
+          await client.generation.startGeneration({
+            conversationId,
+            content: text,
+            model: DEFAULT_WORKFLOW_BUILDER_MODEL,
+            autoApprove: true,
+          });
+        } catch (builderError) {
+          console.error("Failed to start workflow builder generation:", builderError);
+        }
+      }
+
+      window.location.href = `/workflows/${result.id}`;
+    },
+    [createWorkflow],
+  );
+
+  const handlePromptSubmit = useCallback(async () => {
+    const text = prompt.trim();
+    if (!text || isCreating) {
+      return;
+    }
+    setIsCreating(true);
+    setError(null);
+    try {
+      await doCreate(text);
+    } catch {
+      setError("Failed to create workflow. Please try again.");
+      setIsCreating(false);
+    }
+  }, [doCreate, isCreating, prompt]);
+
+  const handlePromptKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void handlePromptSubmit();
+      }
+    },
+    [handlePromptSubmit],
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       {error ? (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400">
           {error}
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-sm font-semibold">My Workflows</h1>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            {workflowList.length === 0
-              ? "No workflows yet"
-              : `${workflowList.length} workflow${workflowList.length === 1 ? "" : "s"}`}
+      <div className="px-4 pt-[12vh] pb-8">
+        <div className="mx-auto max-w-xl">
+          <h1 className="text-foreground mb-2 text-center text-xl font-semibold tracking-tight">
+            What do you want to automate?
+          </h1>
+          <p className="text-muted-foreground mb-6 text-center text-sm">
+            Describe a task and we&apos;ll build it step by step
           </p>
+          <div className="border-border/50 bg-card rounded-2xl border p-4 shadow-sm">
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={handlePromptChange}
+              onKeyDown={handlePromptKeyDown}
+              placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+              rows={2}
+              className="placeholder:text-muted-foreground/80 text-foreground min-h-12 w-full resize-none bg-transparent text-sm leading-relaxed outline-none"
+            />
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-muted-foreground/40 text-xs">⌘ Enter to send</p>
+              <Button
+                size="sm"
+                onClick={handlePromptSubmit}
+                disabled={!prompt.trim() || isCreating}
+                className="gap-1.5 rounded-lg px-3"
+              >
+                {isCreating ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-3.5" />
+                )}
+                Send
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -335,7 +437,7 @@ export default function WorkflowsPage() {
           <p className="text-muted-foreground text-sm">No workflows yet.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 px-4 sm:grid-cols-2 lg:grid-cols-3">
           {workflowList.map((wf) => (
             <WorkflowCard
               key={wf.id}

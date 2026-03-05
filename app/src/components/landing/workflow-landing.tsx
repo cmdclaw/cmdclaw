@@ -1,11 +1,11 @@
 "use client";
 
 import { ArrowUp } from "lucide-react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
-import { PromptComposer } from "@/components/prompt-composer";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS, WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,38 @@ type TemplateItem = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_WORKFLOW_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+const HERO_PROMPT_EXAMPLES = [
+  {
+    department: "Sales",
+    prompt:
+      "When a deal in Salesforce moves to Proposal Sent, draft follow-ups in Outreach and schedule reminders in Google Calendar.",
+  },
+  {
+    department: "Marketing",
+    prompt:
+      "Every morning, compare Meta Ads and Google Ads CAC vs yesterday and send a performance digest to Slack.",
+  },
+  {
+    department: "HR",
+    prompt:
+      "When a candidate is marked Hired in Greenhouse, create onboarding tasks in BambooHR, Jira, and Google Workspace.",
+  },
+  {
+    department: "Legal",
+    prompt:
+      "When a new MSA is uploaded to Ironclad, extract renewal and termination dates and add reminders to Google Calendar.",
+  },
+  {
+    department: "Finance",
+    prompt:
+      "Every business day, reconcile Stripe and Brex transactions in QuickBooks and send mismatch reports to Slack.",
+  },
+  {
+    department: "Support",
+    prompt:
+      "Every hour, triage new Zendesk tickets by sentiment, auto-tag priority, and route critical ones to on-call in Slack.",
+  },
+] as const;
 
 function getTriggerLabel(triggerType: string) {
   const map: Record<string, string> = {
@@ -184,12 +216,19 @@ function TemplateCard({
   );
 }
 
-// ─── Landing ──────────────────────────────────────────────────────────────────
+// Landing
+
+const PromptComposer = dynamic(
+  () => import("@/components/prompt-composer").then((mod) => mod.PromptComposer),
+  { ssr: false },
+);
 
 export function WorkflowLanding() {
   const createWorkflow = useCreateWorkflow();
   const [isCreating, setIsCreating] = useState(false);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
+  const [activePromptIndex, setActivePromptIndex] = useState(0);
+  const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
 
   const doCreate = useCallback(
     async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
@@ -252,6 +291,10 @@ export function WorkflowLanding() {
     [creatingTemplateId, doCreate],
   );
 
+  const activeDepartment =
+    HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length]?.department ??
+    "your team";
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-slate-950">
       <div className="pointer-events-none absolute inset-0">
@@ -274,7 +317,7 @@ export function WorkflowLanding() {
         <section className="flex min-h-[62vh] items-center justify-center pt-8 md:min-h-[max(22rem,calc(100dvh-21rem))] md:pt-10 lg:min-h-[max(23rem,calc(100dvh-22rem))] lg:pt-12">
           <div className="mx-auto w-full max-w-2xl">
             <h1 className="mb-2 text-center text-xl font-semibold tracking-tight text-white">
-              What do you want to automate?
+              What do you want to automate in {activeDepartment}?
             </h1>
             <p className="mb-6 text-center text-sm text-slate-100/90">
               Describe a task and we&apos;ll build it step by step
@@ -284,6 +327,8 @@ export function WorkflowLanding() {
               isSubmitting={isCreating}
               variant="hero"
               placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+              animatedPlaceholders={heroAnimatedPrompts}
+              onAnimatedPlaceholderIndexChange={setActivePromptIndex}
             />
           </div>
         </section>
