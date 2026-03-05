@@ -1,227 +1,345 @@
-import type { ComponentType } from "react";
-import {
-  Blocks,
-  ChevronDown,
-  ChevronRight,
-  Gamepad2,
-  Gauge,
-  Image,
-  LayoutTemplate,
-  Mail,
-  Mic,
-  RefreshCcw,
-  Sparkles,
-  TrendingUp,
-  Users,
-} from "lucide-react";
-import { DM_Sans, Playfair_Display } from "next/font/google";
+"use client";
+
+import { ArrowUp, Loader2 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useRef, useState } from "react";
+import type { IntegrationType } from "@/lib/integration-icons";
+import { Button } from "@/components/ui/button";
+import { INTEGRATION_LOGOS, WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import { cn } from "@/lib/utils";
+import { client } from "@/orpc/client";
+import { useCreateWorkflow } from "@/orpc/hooks";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm-sans",
-});
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const playfairDisplay = Playfair_Display({
-  subsets: ["latin"],
-  variable: "--font-playfair-display",
-});
-
-type QuickAction = {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-};
-
-type TemplateCard = {
+type TemplateItem = {
+  id: string;
   title: string;
-  creator: string;
-  runs: string;
-  likes: string;
-  cost: string;
-  previewClassName: string;
+  description: string;
+  triggerType: "manual" | "schedule" | "email" | "webhook";
+  integrations: IntegrationType[];
+  prompt: string;
 };
 
-const quickActions: QuickAction[] = [
-  { icon: Mail, label: "Contact Form" },
-  { icon: Image, label: "Image Editor" },
-  { icon: Gamepad2, label: "Mini Game" },
-  { icon: TrendingUp, label: "Finance Calculator" },
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DEFAULT_WORKFLOW_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+
+function getTriggerLabel(triggerType: string) {
+  const map: Record<string, string> = {
+    manual: "Manual",
+    schedule: "Scheduled",
+    email: "Email",
+    webhook: "Webhook",
+  };
+  return map[triggerType] ?? triggerType;
+}
+
+const FEATURED_TEMPLATES: TemplateItem[] = [
+  {
+    id: "call-follow-up",
+    title: "Send polished follow-ups right after every call",
+    description:
+      "As soon as a call transcript is ready, draft a personalized follow-up email and create the matching CRM entry.",
+    triggerType: "schedule",
+    integrations: ["gmail", "hubspot"],
+    prompt:
+      "When a call transcript is ready, draft a personalized follow-up email summarizing key points and next steps, then log it in HubSpot.",
+  },
+  {
+    id: "company-list-finance-leads",
+    title: "Turn your company list into finance leads ready to call",
+    description:
+      "Process rows from Google Sheets, find decision-makers, enrich contact data, and push to CRM.",
+    triggerType: "manual",
+    integrations: ["google_sheets", "linkedin", "hubspot"],
+    prompt:
+      "Process one row at a time from Google Sheets, find the best finance decision-maker, enrich contact data via LinkedIn, and push to HubSpot.",
+  },
+  {
+    id: "calendly-qualify",
+    title: "Qualify every new booking before the meeting",
+    description:
+      "When a meeting is booked, research the person and company then send a concise briefing.",
+    triggerType: "webhook",
+    integrations: ["google_calendar", "linkedin", "hubspot", "slack"],
+    prompt:
+      "When a new meeting is booked, research the person and company on LinkedIn, enrich in HubSpot, and send a briefing to Slack.",
+  },
+  {
+    id: "daily-email-digest",
+    title: "Summarize unread emails into a morning briefing",
+    description:
+      "Every morning, read unread emails from the last 24 hours and send a clean digest with action items.",
+    triggerType: "schedule",
+    integrations: ["gmail"],
+    prompt:
+      "Every morning at 8am, read my unread emails from the last 24 hours, summarize the most important ones, and send me a digest email with key action items.",
+  },
+  {
+    id: "incident-slack-notify",
+    title: "Post GitHub incident alerts to Slack with full context",
+    description:
+      "When a critical issue is opened on GitHub, gather related PRs and commits, then post a summary to Slack.",
+    triggerType: "webhook",
+    integrations: ["github", "slack"],
+    prompt:
+      "When a critical issue is opened on GitHub, gather related PRs and recent commits, then post a rich summary to the #incidents Slack channel.",
+  },
+  {
+    id: "weekly-campaign-report",
+    title: "Generate weekly campaign performance reports",
+    description:
+      "Every Monday, pull campaign metrics from HubSpot and Sheets, generate a summary, and post to Slack.",
+    triggerType: "schedule",
+    integrations: ["hubspot", "google_sheets", "slack"],
+    prompt:
+      "Every Monday, pull campaign metrics from HubSpot and Google Sheets, generate a performance summary, and post to Slack.",
+  },
+  {
+    id: "churn-alert",
+    title: "Alert your team the moment a customer shows churn signals",
+    description:
+      "Monitor usage data and support tickets to detect churn risk, then notify the CS team in Slack.",
+    triggerType: "schedule",
+    integrations: ["hubspot", "slack", "gmail"],
+    prompt:
+      "Monitor usage data and support tickets daily. When churn risk is detected, notify the CS team in Slack with full context and suggested actions.",
+  },
+  {
+    id: "gmail-to-hubspot-contacts",
+    title: "Turn labeled Gmail threads into clean HubSpot contacts",
+    description:
+      "Apply one Gmail label and this workflow extracts contact details, upserts people in HubSpot, and logs the interaction.",
+    triggerType: "email",
+    integrations: ["gmail", "hubspot"],
+    prompt:
+      "When a Gmail thread is labeled, extract contact details from the latest message, upsert the person in HubSpot, and log the interaction.",
+  },
 ];
 
-const templateCards: TemplateCard[] = [
-  {
-    title: "Nano Banana Pro Playground",
-    creator: "NB",
-    runs: "4.9K",
-    likes: "587",
-    cost: "Free",
-    previewClassName:
-      "bg-[radial-gradient(circle_at_20%_30%,rgba(255,212,120,0.45),transparent_55%),linear-gradient(145deg,#040404,#131313_42%,#1c3d3f)]",
-  },
-  {
-    title: "Brillance SaaS Landing Page",
-    creator: "BL",
-    runs: "11.2K",
-    likes: "1.7K",
-    cost: "Free",
-    previewClassName:
-      "bg-[linear-gradient(180deg,#fbfaf7_0%,#f3eee4_55%,#ece2d4_100%)] text-zinc-900",
-  },
-  {
-    title: "3D Gallery Photography Template",
-    creator: "HS",
-    runs: "2.9K",
-    likes: "734",
-    cost: "1 Credit",
-    previewClassName:
-      "bg-[radial-gradient(circle_at_70%_75%,rgba(230,230,230,0.16),transparent_38%),linear-gradient(160deg,#010101,#101010_52%,#050505)]",
-  },
-  {
-    title: "Command Center UI Kit",
-    creator: "CC",
-    runs: "8.6K",
-    likes: "1.2K",
-    cost: "Free",
-    previewClassName:
-      "bg-[radial-gradient(circle_at_16%_18%,rgba(94,234,212,0.35),transparent_38%),linear-gradient(130deg,#0d1f27,#1f4e53)]",
-  },
-  {
-    title: "SaaS Analytics Console",
-    creator: "AN",
-    runs: "7.1K",
-    likes: "802",
-    cost: "Free",
-    previewClassName:
-      "bg-[radial-gradient(circle_at_80%_20%,rgba(253,224,71,0.4),transparent_30%),linear-gradient(120deg,#171717,#2f2f2f_65%,#3f3f46)]",
-  },
-  {
-    title: "Dark Product Reveal Grid",
-    creator: "DR",
-    runs: "5.3K",
-    likes: "690",
-    cost: "1 Credit",
-    previewClassName:
-      "bg-[radial-gradient(circle_at_25%_75%,rgba(148,163,184,0.35),transparent_42%),linear-gradient(132deg,#05080e,#111827_45%,#0f172a)]",
-  },
-];
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-const templateCategories = ["Apps and Games", "Landing Pages", "Components", "Dashboards"];
+function IntegrationLogos({ integrations }: { integrations: IntegrationType[] }) {
+  return (
+    <div className="flex items-center gap-1">
+      {integrations.map((key) => {
+        const logo = INTEGRATION_LOGOS[key];
+        if (!logo) return null;
+        return (
+          <Image
+            key={key}
+            src={logo}
+            alt={key}
+            width={16}
+            height={16}
+            className="size-4 shrink-0"
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function TemplateCard({
+  template,
+  onSelect,
+  loading,
+}: {
+  template: TemplateItem;
+  onSelect: (t: TemplateItem) => void;
+  loading: boolean;
+}) {
+  const handleClick = useCallback(() => {
+    onSelect(template);
+  }, [onSelect, template]);
+
+  return (
+    <button
+      className={cn(
+        "group border-border/60 bg-card hover:border-slate-300 hover:bg-slate-100 relative flex w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150",
+        loading && "pointer-events-none",
+      )}
+      onClick={handleClick}
+      disabled={loading}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm leading-tight font-medium text-slate-900">{template.title}</p>
+          <span className="mt-1 inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+            {getTriggerLabel(template.triggerType)}
+          </span>
+        </div>
+        <ArrowUp className="mt-0.5 size-3.5 shrink-0 rotate-45 text-slate-500 transition-colors group-hover:text-slate-700" />
+      </div>
+      <p className="line-clamp-2 text-xs leading-relaxed text-slate-700">{template.description}</p>
+      <div className="mt-auto pt-1">
+        <IntegrationLogos integrations={template.integrations} />
+      </div>
+    </button>
+  );
+}
+
+// ─── Landing ──────────────────────────────────────────────────────────────────
 
 export function WorkflowLanding() {
+  const createWorkflow = useCreateWorkflow();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [prompt, setPrompt] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
+
+  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPrompt(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const doCreate = useCallback(
+    async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
+      try {
+        const result = await createWorkflow.mutateAsync({
+          name: "",
+          triggerType:
+            (opts.triggerType as "manual" | "schedule" | "email" | "webhook") ?? "manual",
+          prompt: opts.prompt,
+          allowedIntegrations: WORKFLOW_AVAILABLE_INTEGRATION_TYPES,
+        });
+
+        const initialMessage = opts.initialMessage?.trim();
+        if (initialMessage) {
+          try {
+            const { conversationId } = await client.workflow.getOrCreateBuilderConversation({
+              id: result.id,
+            });
+            await client.generation.startGeneration({
+              conversationId,
+              content: initialMessage,
+              model: DEFAULT_WORKFLOW_BUILDER_MODEL,
+              autoApprove: true,
+            });
+          } catch (error) {
+            console.error("Failed to start workflow builder generation:", error);
+          }
+        }
+
+        window.location.href = `/workflows/${result.id}`;
+      } catch {
+        return false;
+      }
+      return true;
+    },
+    [createWorkflow],
+  );
+
+  const handlePromptSubmit = useCallback(async () => {
+    const text = prompt.trim();
+    if (!text || isCreating) return;
+    setIsCreating(true);
+    await doCreate({ prompt: "", initialMessage: text });
+    setIsCreating(false);
+  }, [doCreate, isCreating, prompt]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void handlePromptSubmit();
+      }
+    },
+    [handlePromptSubmit],
+  );
+
+  const handleTemplateSelect = useCallback(
+    async (template: TemplateItem) => {
+      if (creatingTemplateId) return;
+      setCreatingTemplateId(template.id);
+      await doCreate({ prompt: template.prompt, triggerType: template.triggerType });
+      setCreatingTemplateId(null);
+    },
+    [creatingTemplateId, doCreate],
+  );
+
   return (
-    <div
-      className={`${dmSans.variable} ${playfairDisplay.variable} min-h-screen bg-[#ececeb] [font-family:var(--font-dm-sans)] text-zinc-900`}
-    >
-      <div className="mx-auto max-w-7xl px-6 pt-24 pb-20 sm:px-10 lg:px-16">
-        <section className="mx-auto flex w-full max-w-3xl flex-col items-center">
-          <h1 className="text-center text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl">
-            What do you want to create?
-          </h1>
-
-          <Link
-            href="/chat"
-            className="mt-8 block w-full rounded-2xl border border-zinc-300/90 bg-white/60 px-5 pt-4 pb-3 shadow-[0_1px_0_rgba(0,0,0,0.04)] transition duration-300 hover:bg-white"
-          >
-            <p className="text-lg text-zinc-500">Ask v0 to build...</p>
-            <div className="mt-16 flex items-center justify-between text-zinc-600">
-              <span className="inline-flex items-center gap-2 text-base">
-                <Sparkles className="h-4 w-4" />
-                v0 Max
-                <ChevronDown className="h-4 w-4" />
-              </span>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-                <Mic className="h-4 w-4" />
-              </span>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
+        <Image
+          src="/landing/ocean-bg.jpg"
+          alt=""
+          fill
+          priority
+          aria-hidden
+          className="animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover opacity-80 saturate-110"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,8,23,0.24)_0%,rgba(3,8,23,0.5)_45%,rgba(3,8,23,0.76)_100%)]" />
+      </div>
+      <div className="relative z-10 mx-auto w-full max-w-[1500px] px-6 py-6">
+        {/* ── Prompt area — centered hero ── */}
+        <div className="pt-10 pb-12">
+          <div className="mx-auto max-w-2xl">
+            <h1 className="mb-2 text-center text-xl font-semibold tracking-tight text-white">
+              What do you want to automate?
+            </h1>
+            <p className="mb-6 text-center text-sm text-slate-100/90">
+              Describe a task and we'll build it step by step
+            </p>
+            <div className="rounded-2xl border border-white/25 bg-white/88 p-4 shadow-[0_15px_45px_-22px_rgba(15,23,42,0.9)]">
+              <textarea
+                ref={textareaRef}
+                value={prompt}
+                onChange={handlePromptChange}
+                onKeyDown={handleKeyDown}
+                placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+                rows={2}
+                className="placeholder:text-muted-foreground/50 min-h-12 w-full resize-none bg-transparent text-sm leading-relaxed outline-none"
+              />
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-xs text-slate-700/75">⌘ Enter to send</p>
+                <Button
+                  size="sm"
+                  onClick={handlePromptSubmit}
+                  disabled={!prompt.trim() || isCreating}
+                  className="gap-1.5 rounded-lg px-3"
+                >
+                  {isCreating ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUp className="size-3.5" />
+                  )}
+                  Send
+                </Button>
+              </div>
             </div>
-          </Link>
+          </div>
+        </div>
 
-          <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-2">
-            {quickActions.map(({ icon: Icon, label }) => (
-              <Link
-                key={label}
-                href="/chat"
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-[#efefee] px-4 py-2 text-sm text-zinc-600 transition duration-300 hover:border-zinc-400 hover:text-zinc-800"
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </Link>
-            ))}
-            <Link
-              href="/chat"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-[#efefee] text-zinc-600 transition duration-300 hover:border-zinc-400 hover:text-zinc-800"
-              aria-label="Refresh ideas"
+        {/* ── Templates ── */}
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Templates</h2>
+              <p className="mt-0.5 text-xs text-slate-100/85">Start from a pre-built workflow</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="gap-1.5 border-white/45 bg-white/80 hover:bg-white"
             >
-              <RefreshCcw className="h-4 w-4" />
-            </Link>
+              <Link href="/templates">Browse all</Link>
+            </Button>
           </div>
-        </section>
-
-        <section className="mt-28">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="text-3xl font-semibold tracking-tight text-zinc-900">
-              Start with a template
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {templateCategories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-[#efefee] px-4 py-2 text-sm text-zinc-700"
-                >
-                  {category === "Apps and Games" ? <Gamepad2 className="h-4 w-4" /> : null}
-                  {category === "Landing Pages" ? <LayoutTemplate className="h-4 w-4" /> : null}
-                  {category === "Components" ? <Blocks className="h-4 w-4" /> : null}
-                  {category === "Dashboards" ? <Gauge className="h-4 w-4" /> : null}
-                  {category}
-                </button>
-              ))}
-              <Link
-                href="/chat"
-                className="inline-flex items-center gap-1 px-2 py-2 text-sm font-medium text-zinc-900"
-              >
-                Browse all
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {templateCards.map((template) => (
-              <Link
-                key={template.title}
-                href="/chat"
-                className="group rounded-2xl border border-zinc-300/80 bg-white/55 p-3 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_38px_rgba(15,23,42,0.1)]"
-              >
-                <div
-                  className={`relative h-52 overflow-hidden rounded-xl border border-zinc-200/70 ${template.previewClassName}`}
-                >
-                  <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.16),transparent)] opacity-0 transition duration-300 group-hover:opacity-100" />
-                  <div className="absolute right-4 bottom-4 left-4 text-white">
-                    <p className="[font-family:var(--font-playfair-display)] text-2xl leading-tight">
-                      {template.title.split(" ").slice(0, 3).join(" ")}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
-                      {template.creator}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-medium text-zinc-900">
-                        {template.title}
-                      </p>
-                      <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-zinc-500">
-                        <Users className="h-3.5 w-3.5" />
-                        {template.runs}
-                        <span className="mx-1">·</span>
-                        {template.likes} likes
-                      </p>
-                    </div>
-                  </div>
-                  <p className="shrink-0 text-sm text-zinc-500">{template.cost}</p>
-                </div>
-              </Link>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {FEATURED_TEMPLATES.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                onSelect={handleTemplateSelect}
+                loading={creatingTemplateId === template.id}
+              />
             ))}
           </div>
         </section>

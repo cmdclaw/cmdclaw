@@ -1,9 +1,12 @@
 "use client";
 
-import { Loader2, Trash2 } from "lucide-react";
+import { CircleHelp, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useChatAdvancedSettingsStore } from "@/components/chat/chat-advanced-settings-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   useAddGoogleAccessAllowlistEntry,
   useGoogleAccessAllowlist,
@@ -21,6 +24,12 @@ export default function AdminPage() {
   const { data, isLoading, error } = useGoogleAccessAllowlist();
   const addEntry = useAddGoogleAccessAllowlistEntry();
   const removeEntry = useRemoveGoogleAccessAllowlistEntry();
+  const displayAdvancedMetrics = useChatAdvancedSettingsStore(
+    (state) => state.displayAdvancedMetrics,
+  );
+  const setDisplayAdvancedMetrics = useChatAdvancedSettingsStore(
+    (state) => state.setDisplayAdvancedMetrics,
+  );
 
   const [email, setEmail] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -169,6 +178,48 @@ export default function AdminPage() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="bg-card mt-6 rounded-lg border p-6">
+        <h3 className="text-base font-semibold">Advanced Settings</h3>
+        <p className="text-muted-foreground mt-2 text-sm">
+          Configure optional diagnostics and power-user controls.
+        </p>
+
+        <div className="mt-4 rounded-lg border p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="display-advanced-metrics" className="text-sm font-medium">
+                  Nerd mode
+                </label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="What advanced metrics show"
+                      className="text-muted-foreground hover:text-foreground inline-flex"
+                    >
+                      <CircleHelp className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Shows generation timing chips in chat and includes those metrics when you copy a
+                    chat transcript.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Enable to show performance timings like generation and first-event wait.
+              </p>
+            </div>
+            <Switch
+              id="display-advanced-metrics"
+              checked={displayAdvancedMetrics}
+              onCheckedChange={setDisplayAdvancedMetrics}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

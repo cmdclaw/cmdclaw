@@ -6,8 +6,12 @@ import { AppShell } from "@/components/app-shell";
 export default function WorkflowsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isRunsRoute = pathname?.startsWith("/workflows/runs");
+  const isGridRoute = pathname === "/workflows/grid";
   const isWorkflowEditorRoute =
-    pathname?.startsWith("/workflows/") && pathname !== "/workflows" && !isRunsRoute;
+    pathname?.startsWith("/workflows/") &&
+    pathname !== "/workflows" &&
+    !isRunsRoute &&
+    !isGridRoute;
 
   return (
     <AppShell>

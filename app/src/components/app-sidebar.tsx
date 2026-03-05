@@ -1,13 +1,13 @@
 "use client";
 
 import {
+  BarChart3,
   ChevronDown,
   Flag,
   Home,
   LogOut,
   MessageSquare,
   Plug,
-  Search,
   Settings,
   Shield,
   Sparkles,
@@ -177,7 +177,6 @@ export function AppSidebar() {
 
   const mainNavItems: NavItem[] = [
     { icon: Home, label: "Home", href: "/" },
-    { icon: Search, label: "Search", href: "/search" },
     { icon: LayoutTemplate, label: "Templates", href: "/templates" },
   ];
 
@@ -371,15 +370,15 @@ export function AppSidebar() {
               <button
                 type="button"
                 onClick={toggleAdmin}
-                className="text-sidebar-foreground/40 hover:text-sidebar-foreground/60 flex items-center gap-1 px-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors"
+                className="text-sidebar-foreground/40 hover:text-sidebar-foreground/60 flex w-full items-center justify-between px-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors"
               >
+                <span>Admin</span>
                 <ChevronDown
                   className={cn(
                     "h-3 w-3 transition-transform duration-200",
                     !adminOpen && "-rotate-90",
                   )}
                 />
-                Admin
               </button>
               {adminOpen && (
                 <div className="flex flex-col gap-0.5">
@@ -417,22 +416,8 @@ export function AppSidebar() {
           )}
         </nav>
 
-        {/* Footer: user + settings */}
+        {/* Footer: user */}
         <div className="border-t px-2.5 py-2.5">
-          <Link
-            href="/settings"
-            prefetch={false}
-            className={cn(
-              "mb-1 flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors",
-              isActive("/settings")
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-            )}
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            <span>Settings</span>
-          </Link>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -460,6 +445,12 @@ export function AppSidebar() {
                 <Link href="/settings" prefetch={false} className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
                   <span>Settings</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings/usage" prefetch={false} className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  <span>Usage</span>
                 </Link>
               </DropdownMenuItem>
               {isImpersonating && (
