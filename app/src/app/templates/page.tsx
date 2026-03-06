@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { AppShell } from "@/components/app-shell";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
@@ -308,7 +308,7 @@ function FilterPill({
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default function TemplatesPage() {
+function TemplatesPageContent() {
   const searchParams = useSearchParams();
   const previewId = searchParams.get("preview");
 
@@ -522,5 +522,13 @@ export default function TemplatesPage() {
 
       <TemplatePreviewModal templateId={previewId} />
     </AppShell>
+  );
+}
+
+export default function TemplatesPage() {
+  return (
+    <Suspense fallback={null}>
+      <TemplatesPageContent />
+    </Suspense>
   );
 }

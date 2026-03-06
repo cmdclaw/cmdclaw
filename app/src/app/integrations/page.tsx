@@ -1109,8 +1109,8 @@ function IntegrationsPageContent() {
                 className={cn(
                   "ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:ml-1.5 sm:text-xs",
                   activeTab === tab.id
-                    ? "bg-muted text-muted-foreground"
-                    : "bg-muted-foreground/20 text-muted-foreground",
+                    ? "bg-foreground/10 text-foreground/70"
+                    : "bg-muted-foreground/15 text-muted-foreground",
                 )}
               >
                 {tab.count}

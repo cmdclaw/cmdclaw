@@ -23,7 +23,7 @@ function AnimatedTabs({ activeKey, onTabChange, children, className }: AnimatedT
   return (
     <div
       role="tablist"
-      className={cn("bg-muted inline-flex items-center gap-0.5 rounded-lg p-1", className)}
+      className={cn("inline-flex items-center gap-0.5 rounded-lg p-1", className)}
     >
       {React.Children.map(children, (child) => {
         if (!React.isValidElement<AnimatedTabProps>(child)) return child;
@@ -64,7 +64,7 @@ function AnimatedTab({
       {_active && (
         <motion.span
           layoutId={_layoutId}
-          className="bg-background absolute inset-0 rounded-md shadow-sm"
+          className="bg-muted absolute inset-0 rounded-md"
           transition={{ type: "spring", stiffness: 400, damping: 30 }}
         />
       )}
