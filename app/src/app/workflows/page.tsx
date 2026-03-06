@@ -437,7 +437,7 @@ export default function WorkflowsPage() {
           <p className="text-muted-foreground text-sm">No workflows yet.</p>
         </div>
       ) : (
-        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 px-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {workflowList.map((wf) => (
             <WorkflowCard
               key={wf.id}

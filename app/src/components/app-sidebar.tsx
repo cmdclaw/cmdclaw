@@ -14,15 +14,13 @@ import {
   Pin,
   PinOff,
   Play,
-  Plug,
   Settings,
   Shield,
-  Sparkles,
+  Toolbox,
   Trash2,
   Workflow,
   LayoutTemplate,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -260,6 +258,22 @@ export function AppSidebar() {
   const isChatPage = pathname === "/chat" || pathname.startsWith("/chat/");
   const isWorkflowPage = pathname === "/workflows" || pathname.startsWith("/workflows/");
 
+  // Only animate the recent section when navigating to/from workflows, not on first load/reload.
+  const recentDirection = isWorkflowPage ? 1 : -1;
+  const [recentAnimState, setRecentAnimState] = useState<"idle" | "animating">(() => {
+    if (typeof window === "undefined") return "idle";
+    const prev = sessionStorage.getItem("sidebar-recent");
+    const curr = isWorkflowPage ? "workflows" : "chats";
+    sessionStorage.setItem("sidebar-recent", curr);
+    return prev !== null && prev !== curr ? "animating" : "idle";
+  });
+  useEffect(() => {
+    if (recentAnimState === "animating") {
+      // Trigger animation on next frame so CSS transition picks up the change
+      requestAnimationFrame(() => setRecentAnimState("idle"));
+    }
+  }, [recentAnimState]);
+
   const mainNavItems: NavItem[] = [
     { icon: Home, label: "Home", href: "/" },
     { icon: LayoutTemplate, label: "Templates", href: "/templates" },
@@ -268,8 +282,7 @@ export function AppSidebar() {
   const coworkerNavItems: NavItem[] = [
     { icon: MessageSquare, label: "Chat", href: "/chat" },
     { icon: Workflow, label: "Workflows", href: "/workflows" },
-    { icon: Plug, label: "Integrations", href: "/integrations" },
-    { icon: Sparkles, label: "Skills", href: "/skills" },
+    { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
   ];
 
   const adminNavItems: NavItem[] = [{ icon: Shield, label: "Admin", href: "/admin" }];
@@ -594,184 +607,171 @@ export function AppSidebar() {
               </div>
             )}
 
-            {/* Recent — contextual: chats vs runs */}
-            {(isChatPage || isWorkflowPage) && (
-              <div className="flex flex-col gap-1.5">
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.span
-                    key={isChatPage ? "chats-label" : "runs-label"}
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-sidebar-foreground/40 px-2.5 text-[11px] font-semibold tracking-wider uppercase"
-                  >
-                    {isChatPage ? "Recent Chats" : "Recent Runs"}
-                  </motion.span>
-                </AnimatePresence>
-
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div
-                    key={isChatPage ? "chats-list" : "runs-list"}
-                    initial={{ opacity: 0, x: isChatPage ? -8 : 8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: isChatPage ? 8 : -8 }}
-                    transition={{ duration: 0.2, ease: "easeInOut" }}
-                    className="flex flex-col gap-0.5"
-                  >
-                    {isChatPage ? (
-                      conversationsLoading ? (
-                        <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
-                          Loading...
-                        </span>
-                      ) : recentConversations.length === 0 ? (
-                        <div className="flex flex-col items-center gap-2 px-2.5 py-4 text-center">
-                          <MessageSquare className="text-sidebar-foreground/25 h-5 w-5" />
-                          <span className="text-sidebar-foreground/40 text-[12px] leading-relaxed">
-                            Start a conversation
-                            <br />
-                            to see it here
-                          </span>
-                        </div>
-                      ) : (
-                        recentConversations.map((conversation) => {
-                          const isConversationActive = isActive(`/chat/${conversation.id}`);
-                          const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
-                            conversation.generationStatus,
-                          );
-                          const hasUnreadResults =
-                            !isConversationRunning &&
-                            !isConversationActive &&
-                            conversation.messageCount > (conversation.seenMessageCount ?? 0);
-                          const showConversationIndicator =
-                            isConversationRunning || hasUnreadResults;
-
-                          return (
-                            <div
-                              key={conversation.id}
-                              className={cn(
-                                "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
-                                isConversationActive
-                                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                  : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                              )}
-                            >
-                              <Link
-                                href={`/chat/${conversation.id}`}
-                                prefetch={false}
-                                className="flex min-w-0 flex-1 items-center"
-                              >
-                                {isConversationRunning ? (
-                                  <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                                ) : hasUnreadResults ? (
-                                  <span
-                                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
-                                    aria-label="New unread results"
-                                  />
-                                ) : null}
-                                <span
-                                  className={cn(
-                                    "min-w-0 flex-1 truncate",
-                                    showConversationIndicator && "ml-2",
-                                  )}
-                                >
-                                  {conversation.title || "Untitled"}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
-                                    "group-hover:opacity-0 group-focus-within:opacity-0",
-                                  )}
-                                >
-                                  {formatRelativeShort(new Date(conversation.updatedAt))}
-                                </span>
-                              </Link>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className={cn(
-                                      "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
-                                      "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
-                                      "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
-                                      "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
-                                      isConversationActive
-                                        ? "before:from-sidebar-accent"
-                                        : "before:from-sidebar",
-                                    )}
-                                    aria-label="Conversation actions"
-                                  >
-                                    <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" side="right">
-                                  <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    data-conversation-pinned={
-                                      conversation.isPinned ? "true" : "false"
-                                    }
-                                    onClick={handlePinMenuClick}
-                                  >
-                                    {conversation.isPinned ? (
-                                      <PinOff className="h-4 w-4" />
-                                    ) : (
-                                      <Pin className="h-4 w-4" />
-                                    )}
-                                    <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    data-conversation-title={conversation.title ?? ""}
-                                    onClick={handleRenameMenuClick}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                    <span>Rename</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    onClick={handleDeleteMenuClick}
-                                    className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                    <span>Delete</span>
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          );
-                        })
-                      )
-                    ) : recentWorkflows.length === 0 ? (
+            {/* Recent — contextual: chats on all pages, runs on workflow page */}
+            <div className="flex flex-col gap-1.5 overflow-hidden">
+              <div
+                className="flex flex-col gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                style={
+                  recentAnimState === "animating"
+                    ? { opacity: 0, transform: `translateX(${recentDirection * 40}px)` }
+                    : { opacity: 1, transform: "translateX(0)" }
+                }
+              >
+                <span className="text-sidebar-foreground/40 px-2.5 text-[11px] font-semibold tracking-wider uppercase">
+                  {isWorkflowPage ? "Recent Runs" : "Recent Chats"}
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  {!isWorkflowPage ? (
+                    conversationsLoading ? (
+                      <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
+                        Loading...
+                      </span>
+                    ) : recentConversations.length === 0 ? (
                       <div className="flex flex-col items-center gap-2 px-2.5 py-4 text-center">
-                        <Play className="text-sidebar-foreground/25 h-5 w-5" />
+                        <MessageSquare className="text-sidebar-foreground/25 h-5 w-5" />
                         <span className="text-sidebar-foreground/40 text-[12px] leading-relaxed">
-                          Run a workflow
+                          Start a conversation
                           <br />
-                          to see results here
+                          to see it here
                         </span>
                       </div>
                     ) : (
-                      recentWorkflows.map((workflow) => (
-                        <Link
-                          key={workflow.id}
-                          href={`/workflows/${workflow.id}`}
-                          prefetch={false}
-                          className={cn(
-                            "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
-                            isActive(`/workflows/${workflow.id}`)
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                          )}
-                        >
-                          <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                          <span className="truncate">{workflow.name || "Untitled"}</span>
-                        </Link>
-                      ))
-                    )}
-                  </motion.div>
-                </AnimatePresence>
+                      recentConversations.map((conversation) => {
+                        const isConversationActive = isActive(`/chat/${conversation.id}`);
+                        const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
+                          conversation.generationStatus,
+                        );
+                        const hasUnreadResults =
+                          !isConversationRunning &&
+                          !isConversationActive &&
+                          conversation.messageCount > (conversation.seenMessageCount ?? 0);
+                        const showConversationIndicator = isConversationRunning || hasUnreadResults;
+
+                        return (
+                          <div
+                            key={conversation.id}
+                            className={cn(
+                              "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
+                              isConversationActive
+                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                            )}
+                          >
+                            <Link
+                              href={`/chat/${conversation.id}`}
+                              prefetch={false}
+                              className="flex min-w-0 flex-1 items-center"
+                            >
+                              {isConversationRunning ? (
+                                <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                              ) : hasUnreadResults ? (
+                                <span
+                                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
+                                  aria-label="New unread results"
+                                />
+                              ) : null}
+                              <span
+                                className={cn(
+                                  "min-w-0 flex-1 truncate",
+                                  showConversationIndicator && "ml-2",
+                                )}
+                              >
+                                {conversation.title || "Untitled"}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
+                                  "group-hover:opacity-0 group-focus-within:opacity-0",
+                                )}
+                              >
+                                {formatRelativeShort(new Date(conversation.updatedAt))}
+                              </span>
+                            </Link>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
+                                    "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
+                                    "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                                    "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
+                                    isConversationActive
+                                      ? "before:from-sidebar-accent"
+                                      : "before:from-sidebar",
+                                  )}
+                                  aria-label="Conversation actions"
+                                >
+                                  <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" side="right">
+                                <DropdownMenuItem
+                                  data-conversation-id={conversation.id}
+                                  data-conversation-pinned={
+                                    conversation.isPinned ? "true" : "false"
+                                  }
+                                  onClick={handlePinMenuClick}
+                                >
+                                  {conversation.isPinned ? (
+                                    <PinOff className="h-4 w-4" />
+                                  ) : (
+                                    <Pin className="h-4 w-4" />
+                                  )}
+                                  <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  data-conversation-id={conversation.id}
+                                  data-conversation-title={conversation.title ?? ""}
+                                  onClick={handleRenameMenuClick}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  <span>Rename</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  data-conversation-id={conversation.id}
+                                  onClick={handleDeleteMenuClick}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span>Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        );
+                      })
+                    )
+                  ) : recentWorkflows.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 px-2.5 py-4 text-center">
+                      <Play className="text-sidebar-foreground/25 h-5 w-5" />
+                      <span className="text-sidebar-foreground/40 text-[12px] leading-relaxed">
+                        Run a workflow
+                        <br />
+                        to see results here
+                      </span>
+                    </div>
+                  ) : (
+                    recentWorkflows.map((workflow) => (
+                      <Link
+                        key={workflow.id}
+                        href={`/workflows/${workflow.id}`}
+                        prefetch={false}
+                        className={cn(
+                          "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
+                          isActive(`/workflows/${workflow.id}`)
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                        <span className="truncate">{workflow.name || "Untitled"}</span>
+                      </Link>
+                    ))
+                  )}
+                </div>
               </div>
-            )}
+            </div>
           </nav>
           {/* Fade overlay at bottom of nav */}
           <div className="from-sidebar pointer-events-none absolute right-0 bottom-0 left-0 h-14 bg-gradient-to-t to-transparent" />

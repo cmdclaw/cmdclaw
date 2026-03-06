@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNowStrict } from "date-fns";
-import { Loader2, Play, ArrowLeft, ChevronDown, ChevronUp, Circle } from "lucide-react";
+import { Loader2, Play, ChevronDown, ChevronUp, Circle, Upload, FileText } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
 import { useChatSkillStore } from "@/components/chat/chat-skill-store";
+import { ModelSelector } from "@/components/chat/model-selector";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@/lib/email-forwarding";
 import {
@@ -137,7 +139,7 @@ function Section({
   renderAction?: () => React.ReactNode;
 }) {
   return (
-    <div className="border-b">
+    <div>
       <button
         type="button"
         onClick={onToggle}
@@ -206,6 +208,7 @@ export default function WorkflowEditorPage() {
   const getOrCreateBuilderConversation = useGetOrCreateBuilderConversation();
 
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("manual");
   const [prompt, setPrompt] = useState("");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
@@ -223,12 +226,16 @@ export default function WorkflowEditorPage() {
   } | null>(null);
   const [copiedForwardingField, setCopiedForwardingField] = useState<"workflowAlias" | null>(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"instruction" | "runs" | "docs" | "details">(
+    "instruction",
+  );
   const [openSections, setOpenSections] = useState({
     instructions: true,
     skills: true,
     tools: true,
     triggers: true,
-    runs: true,
+    approval: false,
+    model: false,
   });
 
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -517,6 +524,10 @@ export default function WorkflowEditorPage() {
     setName(event.target.value);
   }, []);
 
+  const handleDescriptionChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setDescription(event.target.value);
+  }, []);
+
   const handleScheduleTypeChange = useCallback((value: string) => {
     setScheduleType(value as "interval" | "daily" | "weekly" | "monthly");
   }, []);
@@ -729,7 +740,8 @@ export default function WorkflowEditorPage() {
   const toggleSkills = useCallback(() => toggleSection("skills"), [toggleSection]);
   const toggleTools = useCallback(() => toggleSection("tools"), [toggleSection]);
   const toggleTriggers = useCallback(() => toggleSection("triggers"), [toggleSection]);
-  const toggleRuns = useCallback(() => toggleSection("runs"), [toggleSection]);
+  const toggleApproval = useCallback(() => toggleSection("approval"), [toggleSection]);
+  const toggleModel = useCallback(() => toggleSection("model"), [toggleSection]);
 
   const hasAgentInstructions = prompt.trim().length > 0;
   const workflowDisplayName = workflow?.name?.trim().length ? workflow.name : "New Workflow";
@@ -742,27 +754,9 @@ export default function WorkflowEditorPage() {
     [handleRun],
   );
 
-  const renderRunsAction = useCallback(
-    () => (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground hover:text-foreground h-6 gap-1.5 px-2 text-xs"
-        onClick={handleRunClick}
-        disabled={
-          !hasAgentInstructions || status !== "on" || triggerWorkflow.isPending || isStartingRun
-        }
-      >
-        {triggerWorkflow.isPending || isStartingRun ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : (
-          <Play className="h-3 w-3" />
-        )}
-        Run now
-      </Button>
-    ),
-    [handleRunClick, hasAgentInstructions, isStartingRun, status, triggerWorkflow.isPending],
-  );
+  const isRunDisabled =
+    !hasAgentInstructions || status !== "on" || triggerWorkflow.isPending || isStartingRun;
+  const isRunning = triggerWorkflow.isPending || isStartingRun;
 
   const chatPanel = useMemo(
     () => (
@@ -778,6 +772,7 @@ export default function WorkflowEditorPage() {
     () => (
       <WorkflowSettingsPanel
         name={name}
+        description={description}
         isSaving={isSaving}
         notification={notification}
         status={status}
@@ -807,10 +802,16 @@ export default function WorkflowEditorPage() {
         copiedForwardingField={copiedForwardingField}
         runs={runs}
         openSections={openSections}
+        activeTab={activeTab}
+        isRunDisabled={isRunDisabled}
+        isRunning={isRunning}
         createForwardingAlias={createForwardingAlias}
         disableForwardingAlias={disableForwardingAlias}
         rotateForwardingAlias={rotateForwardingAlias}
+        onTabChange={setActiveTab}
+        onRun={handleRunClick}
         onNameChange={handleNameChange}
+        onDescriptionChange={handleDescriptionChange}
         onStatusChange={handleStatusChange}
         onAutoApproveChange={handleAutoApproveChange}
         onPromptChange={handlePromptChange}
@@ -836,13 +837,14 @@ export default function WorkflowEditorPage() {
         onToggleSkills={toggleSkills}
         onToggleTools={toggleTools}
         onToggleTriggers={toggleTriggers}
-        onToggleRuns={toggleRuns}
-        renderRunsAction={renderRunsAction}
+        onToggleApproval={toggleApproval}
+        onToggleModel={toggleModel}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dep list tracks all panel props
     [
       name,
+      description,
       isSaving,
       notification,
       status,
@@ -873,10 +875,16 @@ export default function WorkflowEditorPage() {
       copiedForwardingField,
       runs,
       openSections,
+      activeTab,
+      isRunDisabled,
+      isRunning,
       createForwardingAlias,
       disableForwardingAlias,
       rotateForwardingAlias,
+      setActiveTab,
+      handleRunClick,
       handleNameChange,
+      handleDescriptionChange,
       handleStatusChange,
       handleAutoApproveChange,
       handlePromptChange,
@@ -902,8 +910,8 @@ export default function WorkflowEditorPage() {
       toggleSkills,
       toggleTools,
       toggleTriggers,
-      toggleRuns,
-      renderRunsAction,
+      toggleApproval,
+      toggleModel,
     ],
   );
 
@@ -953,6 +961,7 @@ export default function WorkflowEditorPage() {
 
 type WorkflowSettingsPanelProps = {
   name: string;
+  description: string;
   isSaving: boolean;
   notification: { type: "success" | "error"; message: string } | null;
   status: "on" | "off";
@@ -1000,12 +1009,19 @@ type WorkflowSettingsPanelProps = {
     skills: boolean;
     tools: boolean;
     triggers: boolean;
-    runs: boolean;
+    approval: boolean;
+    model: boolean;
   };
+  activeTab: "instruction" | "runs" | "docs" | "details";
+  isRunDisabled: boolean;
+  isRunning: boolean;
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
+  onTabChange: (tab: "instruction" | "runs" | "docs" | "details") => void;
+  onRun: (e: React.MouseEvent) => void;
   onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
   onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -1031,12 +1047,15 @@ type WorkflowSettingsPanelProps = {
   onToggleSkills: () => void;
   onToggleTools: () => void;
   onToggleTriggers: () => void;
-  onToggleRuns: () => void;
-  renderRunsAction: () => React.ReactNode;
+  onToggleApproval: () => void;
+  onToggleModel: () => void;
 };
+
+const DEFAULT_WORKFLOW_MODEL = "anthropic/claude-sonnet-4-6";
 
 function WorkflowSettingsPanel({
   name,
+  description,
   isSaving,
   notification,
   status,
@@ -1066,10 +1085,16 @@ function WorkflowSettingsPanel({
   copiedForwardingField,
   runs,
   openSections,
+  activeTab,
+  isRunDisabled,
+  isRunning,
   createForwardingAlias,
   disableForwardingAlias,
   rotateForwardingAlias,
+  onTabChange,
+  onRun,
   onNameChange,
+  onDescriptionChange,
   onStatusChange,
   onAutoApproveChange,
   onPromptChange,
@@ -1095,9 +1120,11 @@ function WorkflowSettingsPanel({
   onToggleSkills,
   onToggleTools,
   onToggleTriggers,
-  onToggleRuns,
-  renderRunsAction,
+  onToggleApproval,
+  onToggleModel,
 }: WorkflowSettingsPanelProps) {
+  const [workflowModel, setWorkflowModel] = useState(DEFAULT_WORKFLOW_MODEL);
+
   const handleSkillInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const skillKey = event.currentTarget.dataset.skillKey;
@@ -1109,22 +1136,26 @@ function WorkflowSettingsPanel({
     [onToggleSkillChecked],
   );
 
+  const handleTabChange = useCallback(
+    (key: string) => {
+      onTabChange(key as "instruction" | "runs" | "docs" | "details");
+    },
+    [onTabChange],
+  );
+
   return (
-    <div className="flex flex-col">
-      {/* Header */}
-      <div className="border-b px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" asChild>
-            <Link href="/workflows">
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-          <input
-            className="min-w-0 flex-1 bg-transparent text-sm font-semibold focus:outline-none"
-            value={name}
-            onChange={onNameChange}
-            placeholder="New Workflow"
-          />
+    <div className="flex h-full flex-col">
+      {/* Tab bar */}
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <div className="flex items-center">
+          <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange}>
+            <AnimatedTab value="details">Details</AnimatedTab>
+            <AnimatedTab value="instruction">Instruction</AnimatedTab>
+            <AnimatedTab value="runs">Runs</AnimatedTab>
+            <AnimatedTab value="docs">Docs</AnimatedTab>
+          </AnimatedTabs>
+        </div>
+        <div className="flex items-center gap-2">
           <span
             className={cn(
               "shrink-0 text-xs transition-opacity",
@@ -1137,19 +1168,28 @@ function WorkflowSettingsPanel({
           >
             {isSaving ? "Saving…" : "Save failed"}
           </span>
-          <div className="border-border ml-1 flex shrink-0 items-center gap-1.5 border-l pl-2">
-            <span className="text-muted-foreground text-xs">{status === "on" ? "On" : "Off"}</span>
-            <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="text-muted-foreground text-xs">Auto-approve</span>
-            <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
-          </div>
+          <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 px-3 text-xs font-medium"
+            onClick={onRun}
+            disabled={isRunDisabled}
+          >
+            {isRunning ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            Run now
+          </Button>
         </div>
-        {notification && (
+      </div>
+      {notification && (
+        <div className="px-3">
           <p
             className={cn(
-              "mt-1.5 text-xs",
+              "text-xs",
               notification.type === "success"
                 ? "text-green-700 dark:text-green-400"
                 : "text-red-600 dark:text-red-400",
@@ -1157,414 +1197,485 @@ function WorkflowSettingsPanel({
           >
             {notification.message}
           </p>
-        )}
-      </div>
-
-      {/* Instructions section */}
-      <Section
-        title="Instructions"
-        open={openSections.instructions}
-        onToggle={onToggleInstructions}
-      >
-        <textarea
-          className="text-foreground placeholder:text-muted-foreground/60 min-h-[140px] w-full resize-none rounded-lg border-0 bg-transparent px-0 py-0 text-sm leading-relaxed focus:outline-none"
-          value={prompt}
-          onChange={onPromptChange}
-          placeholder="Describe what this agent should do…"
-        />
-      </Section>
-
-      <Section title="Skills" open={openSections.skills} onToggle={onToggleSkills}>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-muted-foreground text-xs">
-              {selectedSkillKeys.length}/{availableSkills.length} selected
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={selectedSkillKeys.length === 0}
-              onClick={onClearSkills}
-            >
-              Clear
-            </Button>
-          </div>
-          {isSkillsLoading ? (
-            <p className="text-muted-foreground text-xs">Loading skills…</p>
-          ) : availableSkills.length === 0 ? (
-            <p className="text-muted-foreground text-xs">No skills available.</p>
-          ) : (
-            <>
-              <div className="-mx-1 grid grid-cols-1">
-                {(showAllSkills ? availableSkills : availableSkills.slice(0, 6)).map((skill) => (
-                  <label
-                    key={skill.key}
-                    className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      data-skill-key={skill.key}
-                      className="h-4 w-4"
-                      checked={selectedSkillKeys.includes(skill.key)}
-                      onChange={handleSkillInputChange}
-                    />
-                    <span className="text-xs">{skill.title}</span>
-                    <span className="text-muted-foreground ml-auto text-[10px] uppercase">
-                      {skill.source}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {availableSkills.length > 6 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onToggleShowAllSkills}
-                  className="text-muted-foreground h-7 text-xs"
-                >
-                  {showAllSkills ? (
-                    <>
-                      <ChevronUp className="mr-1 h-3 w-3" />
-                      Show less
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="mr-1 h-3 w-3" />
-                      {availableSkills.length - 6} more
-                    </>
-                  )}
-                </Button>
-              )}
-            </>
-          )}
         </div>
-      </Section>
+      )}
 
-      {/* Tools section */}
-      <Section title="Tools" open={openSections.tools} onToggle={onToggleTools}>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground text-xs">All tools allowed</span>
-            <Switch checked={!restrictTools} onCheckedChange={onRestrictToolsChange} />
+      {/* Tab content — scrollable */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === "details" && (
+          <div className="space-y-4 px-4 py-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Name</label>
+              <Input
+                value={name}
+                onChange={onNameChange}
+                placeholder="New Workflow"
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Description</label>
+              <textarea
+                className="text-foreground placeholder:text-muted-foreground/60 focus:ring-ring min-h-[80px] w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm leading-relaxed focus:ring-1 focus:outline-none"
+                value={description}
+                onChange={onDescriptionChange}
+                placeholder="What does this workflow do?"
+              />
+            </div>
           </div>
-          {restrictTools && (
-            <>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-muted-foreground text-xs">
-                  {allowedIntegrations.length}/{allIntegrationTypes.length} selected
-                </p>
-                <div className="flex items-center gap-2">
+        )}
+
+        {activeTab === "instruction" && (
+          <>
+            {/* Instructions section */}
+            <Section
+              title="Instructions"
+              open={openSections.instructions}
+              onToggle={onToggleInstructions}
+            >
+              <textarea
+                className="text-foreground placeholder:text-muted-foreground/60 min-h-[140px] w-full resize-none rounded-lg border-0 bg-transparent px-0 py-0 text-sm leading-relaxed focus:outline-none"
+                value={prompt}
+                onChange={onPromptChange}
+                placeholder="Describe what this agent should do…"
+              />
+            </Section>
+
+            <Section title="Skills" open={openSections.skills} onToggle={onToggleSkills}>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-muted-foreground text-xs">
+                    {selectedSkillKeys.length}/{availableSkills.length} selected
+                  </p>
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs"
-                    disabled={allowedIntegrations.length === allIntegrationTypes.length}
-                    onClick={onSelectAllIntegrations}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={allowedIntegrations.length === 0}
-                    onClick={onClearIntegrations}
+                    disabled={selectedSkillKeys.length === 0}
+                    onClick={onClearSkills}
                   >
                     Clear
                   </Button>
                 </div>
-              </div>
-              <div className="-mx-1 grid grid-cols-1">
-                {(showAllIntegrations ? integrationEntries : integrationEntries.slice(0, 4)).map(
-                  ({ key, name: label, logo }) => (
-                    <label
-                      key={key}
-                      className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
-                    >
-                      <IntegrationToggleSwitch
-                        integrationType={key}
-                        checked={allowedIntegrations.includes(key)}
-                        onToggle={onToggleIntegrationChecked}
-                      />
-                      <Image
-                        src={logo}
-                        alt={label}
-                        width={14}
-                        height={14}
-                        className="h-3.5 w-3.5"
-                      />
-                      <span className="text-xs">{label}</span>
-                    </label>
-                  ),
-                )}
-              </div>
-              {integrationEntries.length > 4 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onToggleShowAllIntegrations}
-                  className="text-muted-foreground h-7 text-xs"
-                >
-                  {showAllIntegrations ? (
-                    <>
-                      <ChevronUp className="mr-1 h-3 w-3" />
-                      Show less
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="mr-1 h-3 w-3" />
-                      {integrationEntries.length - 4} more
-                    </>
-                  )}
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-      </Section>
-
-      {/* Triggers section */}
-      <Section title="Trigger" open={openSections.triggers} onToggle={onToggleTriggers}>
-        <div className="space-y-3">
-          <Select value={triggerType} onValueChange={onTriggerTypeChange}>
-            <SelectTrigger className="h-9 w-full bg-transparent text-sm">
-              <SelectValue placeholder="Select a trigger" />
-            </SelectTrigger>
-            <SelectContent>
-              {triggers.map((trigger) => (
-                <SelectItem key={trigger.value} value={trigger.value}>
-                  {trigger.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <AnimatePresence initial={false} mode="wait">
-            {triggerType === "schedule" && (
-              <motion.div
-                key="schedule-settings"
-                className="space-y-3"
-                initial={scheduleMotionInitial}
-                animate={scheduleMotionAnimate}
-                exit={scheduleMotionExit}
-                transition={scheduleMotionTransition}
-                style={scheduleMotionStyle}
-              >
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium">Frequency</label>
-                  <Select value={scheduleType} onValueChange={onScheduleTypeChange}>
-                    <SelectTrigger className="bg-background h-9 w-full text-sm">
-                      <SelectValue placeholder="Select frequency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="interval">Every X hours</SelectItem>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {scheduleType === "interval" && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Run every</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        max={168}
-                        className="bg-background h-9 w-20 rounded-md border px-3 text-sm"
-                        value={Math.max(1, Math.round(intervalMinutes / 60))}
-                        onChange={onIntervalHoursChange}
-                      />
-                      <span className="text-muted-foreground text-xs">hours</span>
+                {isSkillsLoading ? (
+                  <p className="text-muted-foreground text-xs">Loading skills…</p>
+                ) : availableSkills.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">No skills available.</p>
+                ) : (
+                  <>
+                    <div className="-mx-1 grid grid-cols-1">
+                      {(showAllSkills ? availableSkills : availableSkills.slice(0, 6)).map(
+                        (skill) => (
+                          <label
+                            key={skill.key}
+                            className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              data-skill-key={skill.key}
+                              className="h-4 w-4"
+                              checked={selectedSkillKeys.includes(skill.key)}
+                              onChange={handleSkillInputChange}
+                            />
+                            <span className="text-xs">{skill.title}</span>
+                            <span className="text-muted-foreground ml-auto text-[10px] uppercase">
+                              {skill.source}
+                            </span>
+                          </label>
+                        ),
+                      )}
                     </div>
-                  </div>
+                    {availableSkills.length > 6 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onToggleShowAllSkills}
+                        className="text-muted-foreground h-7 text-xs"
+                      >
+                        {showAllSkills ? (
+                          <>
+                            <ChevronUp className="mr-1 h-3 w-3" />
+                            Show less
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="mr-1 h-3 w-3" />
+                            {availableSkills.length - 6} more
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </>
                 )}
+              </div>
+            </Section>
 
-                {(scheduleType === "daily" ||
-                  scheduleType === "weekly" ||
-                  scheduleType === "monthly") && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Time ({localTimezone})</label>
-                    <Input
-                      type="time"
-                      step={60}
-                      value={scheduleTime}
-                      onChange={onScheduleTimeChange}
-                      className="bg-background h-9 w-32 appearance-none text-sm [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
-                    />
-                  </div>
-                )}
-
-                {scheduleType === "weekly" && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Days of the week</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, index) => (
-                        <button
-                          key={day}
-                          type="button"
-                          data-day-index={index}
-                          className={cn(
-                            "h-8 w-10 rounded-md border text-xs font-medium transition-colors",
-                            scheduleDaysOfWeek.includes(index)
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "bg-background hover:bg-muted",
-                          )}
-                          onClick={onToggleWeekDay}
+            {/* Tools section */}
+            <Section title="Tools" open={openSections.tools} onToggle={onToggleTools}>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground text-xs">All tools allowed</span>
+                  <Switch checked={!restrictTools} onCheckedChange={onRestrictToolsChange} />
+                </div>
+                {restrictTools && (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-muted-foreground text-xs">
+                        {allowedIntegrations.length}/{allIntegrationTypes.length} selected
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={allowedIntegrations.length === allIntegrationTypes.length}
+                          onClick={onSelectAllIntegrations}
                         >
-                          {day}
-                        </button>
+                          All
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={allowedIntegrations.length === 0}
+                          onClick={onClearIntegrations}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="-mx-1 grid grid-cols-1">
+                      {(showAllIntegrations
+                        ? integrationEntries
+                        : integrationEntries.slice(0, 4)
+                      ).map(({ key, name: label, logo }) => (
+                        <label
+                          key={key}
+                          className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
+                        >
+                          <IntegrationToggleSwitch
+                            integrationType={key}
+                            checked={allowedIntegrations.includes(key)}
+                            onToggle={onToggleIntegrationChecked}
+                          />
+                          <Image
+                            src={logo}
+                            alt={label}
+                            width={14}
+                            height={14}
+                            className="h-3.5 w-3.5"
+                          />
+                          <span className="text-xs">{label}</span>
+                        </label>
                       ))}
                     </div>
-                  </div>
+                    {integrationEntries.length > 4 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onToggleShowAllIntegrations}
+                        className="text-muted-foreground h-7 text-xs"
+                      >
+                        {showAllIntegrations ? (
+                          <>
+                            <ChevronUp className="mr-1 h-3 w-3" />
+                            Show less
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="mr-1 h-3 w-3" />
+                            {integrationEntries.length - 4} more
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </>
                 )}
+              </div>
+            </Section>
 
-                {scheduleType === "monthly" && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Day of the month</label>
-                    <Select
-                      value={String(scheduleDayOfMonth)}
-                      onValueChange={onScheduleDayOfMonthChange}
+            {/* Triggers section */}
+            <Section title="Trigger" open={openSections.triggers} onToggle={onToggleTriggers}>
+              <div className="space-y-3">
+                <Select value={triggerType} onValueChange={onTriggerTypeChange}>
+                  <SelectTrigger className="h-9 w-full bg-transparent text-sm">
+                    <SelectValue placeholder="Select a trigger" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {triggers.map((trigger) => (
+                      <SelectItem key={trigger.value} value={trigger.value}>
+                        {trigger.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <AnimatePresence initial={false} mode="wait">
+                  {triggerType === "schedule" && (
+                    <motion.div
+                      key="schedule-settings"
+                      className="space-y-3"
+                      initial={scheduleMotionInitial}
+                      animate={scheduleMotionAnimate}
+                      exit={scheduleMotionExit}
+                      transition={scheduleMotionTransition}
+                      style={scheduleMotionStyle}
                     >
-                      <SelectTrigger className="bg-background h-9 w-20 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                          <SelectItem key={day} value={String(day)}>
-                            {day}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium">Frequency</label>
+                        <Select value={scheduleType} onValueChange={onScheduleTypeChange}>
+                          <SelectTrigger className="bg-background h-9 w-full text-sm">
+                            <SelectValue placeholder="Select frequency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="interval">Every X hours</SelectItem>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-          {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
-            <div className="bg-muted/20 space-y-3 rounded-lg border p-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium">Forwarding address</label>
-                {hasActiveForwardingAlias ? (
-                  <div className="flex flex-col gap-2">
-                    <Input
-                      type="text"
-                      value={workflowForwardingAddress ?? ""}
-                      disabled
-                      className="bg-background/60 font-mono text-xs"
-                      placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
-                    />
-                    <div className="flex gap-1.5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={onCopyWorkflowAlias}
-                        disabled={!workflowForwardingAddress}
-                      >
-                        {copiedForwardingField === "workflowAlias" ? "Copied" : "Copy"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={onRotateWorkflowAlias}
-                        disabled={rotateForwardingAlias.isPending}
-                      >
-                        Rotate
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={onDisableWorkflowAlias}
-                        disabled={disableForwardingAlias.isPending}
-                      >
-                        Disable
-                      </Button>
+                      {scheduleType === "interval" && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium">Run every</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              max={168}
+                              className="bg-background h-9 w-20 rounded-md border px-3 text-sm"
+                              value={Math.max(1, Math.round(intervalMinutes / 60))}
+                              onChange={onIntervalHoursChange}
+                            />
+                            <span className="text-muted-foreground text-xs">hours</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {(scheduleType === "daily" ||
+                        scheduleType === "weekly" ||
+                        scheduleType === "monthly") && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium">Time ({localTimezone})</label>
+                          <Input
+                            type="time"
+                            step={60}
+                            value={scheduleTime}
+                            onChange={onScheduleTimeChange}
+                            className="bg-background h-9 w-32 appearance-none text-sm [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                          />
+                        </div>
+                      )}
+
+                      {scheduleType === "weekly" && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium">Days of the week</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, index) => (
+                              <button
+                                key={day}
+                                type="button"
+                                data-day-index={index}
+                                className={cn(
+                                  "h-8 w-10 rounded-md border text-xs font-medium transition-colors",
+                                  scheduleDaysOfWeek.includes(index)
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "bg-background hover:bg-muted",
+                                )}
+                                onClick={onToggleWeekDay}
+                              >
+                                {day}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {scheduleType === "monthly" && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium">Day of the month</label>
+                          <Select
+                            value={String(scheduleDayOfMonth)}
+                            onValueChange={onScheduleDayOfMonthChange}
+                          >
+                            <SelectTrigger className="bg-background h-9 w-20 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                <SelectItem key={day} value={String(day)}>
+                                  {day}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
+                  <div className="bg-muted/20 space-y-3 rounded-lg border p-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">Forwarding address</label>
+                      {hasActiveForwardingAlias ? (
+                        <div className="flex flex-col gap-2">
+                          <Input
+                            type="text"
+                            value={workflowForwardingAddress ?? ""}
+                            disabled
+                            className="bg-background/60 font-mono text-xs"
+                            placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
+                          />
+                          <div className="flex gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={onCopyWorkflowAlias}
+                              disabled={!workflowForwardingAddress}
+                            >
+                              {copiedForwardingField === "workflowAlias" ? "Copied" : "Copy"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={onRotateWorkflowAlias}
+                              disabled={rotateForwardingAlias.isPending}
+                            >
+                              Rotate
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={onDisableWorkflowAlias}
+                              disabled={disableForwardingAlias.isPending}
+                            >
+                              Disable
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <Input
+                            type="text"
+                            value=""
+                            disabled
+                            className="bg-background/60 font-mono text-xs"
+                            placeholder="No forwarding address yet"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={onCreateWorkflowAlias}
+                            disabled={
+                              createForwardingAlias.isPending ||
+                              !workflowForwardingAlias?.receivingDomain ||
+                              !isEmailTriggerPersisted
+                            }
+                          >
+                            Create email
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <Input
-                      type="text"
-                      value=""
-                      disabled
-                      className="bg-background/60 font-mono text-xs"
-                      placeholder="No forwarding address yet"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={onCreateWorkflowAlias}
-                      disabled={
-                        createForwardingAlias.isPending ||
-                        !workflowForwardingAlias?.receivingDomain ||
-                        !isEmailTriggerPersisted
-                      }
-                    >
-                      Create email
-                    </Button>
                   </div>
                 )}
               </div>
-            </div>
-          )}
-        </div>
-      </Section>
+            </Section>
 
-      {/* Runs section */}
-      <Section
-        title="Runs"
-        open={openSections.runs}
-        onToggle={onToggleRuns}
-        renderAction={renderRunsAction}
-      >
-        {runs && runs.length > 0 ? (
-          <div className="-mx-1">
-            {runs.map((run) => (
-              <Link
-                key={run.id}
-                href={`/workflows/runs/${run.id}`}
-                className="hover:bg-muted/40 flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors"
-              >
-                <Circle
-                  className={cn(
-                    "h-1.5 w-1.5 shrink-0 fill-current",
-                    run.status === "completed"
-                      ? "text-emerald-500"
-                      : run.status === "running" ||
-                          run.status === "awaiting_approval" ||
-                          run.status === "awaiting_auth"
-                        ? "text-blue-500"
-                        : run.status === "error" || run.status === "cancelled"
-                          ? "text-red-500"
-                          : "text-muted-foreground",
-                  )}
-                />
-                <span className="text-foreground/70 text-xs">
-                  {getWorkflowRunStatusLabel(run.status)}
-                </span>
-                <span className="text-muted-foreground ml-auto text-xs">
-                  {formatRelativeTime(run.startedAt)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-xs">No runs yet.</p>
+            {/* Approval policy section */}
+            <Section
+              title="Approval policy"
+              open={openSections.approval}
+              onToggle={onToggleApproval}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="text-sm">Auto-approve</span>
+                  <p className="text-muted-foreground text-xs">
+                    Automatically approve all write actions
+                  </p>
+                </div>
+                <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
+              </div>
+            </Section>
+
+            {/* Model section */}
+            <Section title="Model" open={openSections.model} onToggle={onToggleModel}>
+              <div className="space-y-1">
+                <ModelSelector selectedModel={workflowModel} onModelChange={setWorkflowModel} />
+              </div>
+            </Section>
+          </>
         )}
-      </Section>
+
+        {activeTab === "runs" && (
+          <div className="px-4 py-3">
+            {runs && runs.length > 0 ? (
+              <div className="-mx-1">
+                {runs.map((run) => (
+                  <Link
+                    key={run.id}
+                    href={`/workflows/runs/${run.id}`}
+                    className="hover:bg-muted/40 flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors"
+                  >
+                    <Circle
+                      className={cn(
+                        "h-1.5 w-1.5 shrink-0 fill-current",
+                        run.status === "completed"
+                          ? "text-emerald-500"
+                          : run.status === "running" ||
+                              run.status === "awaiting_approval" ||
+                              run.status === "awaiting_auth"
+                            ? "text-blue-500"
+                            : run.status === "error" || run.status === "cancelled"
+                              ? "text-red-500"
+                              : "text-muted-foreground",
+                      )}
+                    />
+                    <span className="text-foreground/70 text-xs">
+                      {getWorkflowRunStatusLabel(run.status)}
+                    </span>
+                    <span className="text-muted-foreground ml-auto text-xs">
+                      {formatRelativeTime(run.startedAt)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-xs">No runs yet.</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === "docs" && (
+          <div className="px-4 py-3">
+            <div className="space-y-3">
+              <div className="border-muted-foreground/25 hover:border-muted-foreground/40 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 transition-colors">
+                <Upload className="text-muted-foreground h-8 w-8" />
+                <p className="text-muted-foreground text-sm">Drop files here or click to upload</p>
+                <Button variant="outline" size="sm" className="mt-1 h-7 text-xs">
+                  Browse files
+                </Button>
+              </div>
+              <div className="flex items-center gap-2 py-4">
+                <FileText className="text-muted-foreground h-4 w-4" />
+                <p className="text-muted-foreground text-xs">No documents added yet.</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
