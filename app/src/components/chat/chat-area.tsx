@@ -2,7 +2,6 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  MessageSquare,
   AlertCircle,
   Activity,
   Check,
@@ -19,6 +18,7 @@ import { usePostHog } from "posthog-js/react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { PromptBar } from "@/components/prompt-bar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -70,15 +70,14 @@ import {
 } from "@/orpc/hooks";
 import { ActivityFeed, type ActivityItemData } from "./activity-feed";
 import { AuthRequestCard } from "./auth-request-card";
-import { ChatInput } from "./chat-input";
 import { useChatModelStore } from "./chat-model-store";
 import { formatDuration } from "./chat-performance-metrics";
 import { useChatSkillStore } from "./chat-skill-store";
-import { DeviceSelector } from "./device-selector";
+// DeviceSelector removed from bottom bar – state kept for generation runtime
 import { MessageList, type Message, type MessagePart, type AttachmentData } from "./message-list";
 import { ModelSelector } from "./model-selector";
 import { ToolApprovalCard } from "./tool-approval-card";
-import { VoiceIndicator, VoiceHint } from "./voice-indicator";
+import { VoiceIndicator } from "./voice-indicator";
 
 type TraceStatus = RuntimeSnapshot["traceStatus"];
 type ActivitySegment = Omit<RuntimeActivitySegment, "items"> & {
@@ -2183,17 +2182,7 @@ export function ChatArea({
             </div>
           )}
           {messages.length === 0 && !isStreaming ? (
-            <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-center">
-              <div className="bg-muted flex h-16 w-16 items-center justify-center rounded-full">
-                <MessageSquare className="text-muted-foreground h-8 w-8" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold">How can I help you?</h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Ask me anything or use your connected integrations
-                </p>
-              </div>
-            </div>
+            <div className="h-[60vh]" />
           ) : (
             <>
               <MessageList messages={messages} />
@@ -2341,7 +2330,7 @@ export function ChatArea({
         </div>
       </div>
 
-      <div className="bg-background border-t p-4">
+      <div className="bg-background p-4">
         <div className="mx-auto w-full space-y-2">
           <div className="mx-auto w-full max-w-[1276px]">
             <div className="grid grid-cols-1 items-end gap-2 md:grid-cols-[52px_minmax(0,896px)_52px] md:justify-center">
@@ -2409,138 +2398,122 @@ export function ChatArea({
               </div>
             </div>
           </div>
-          <div className="mx-auto w-full max-w-[1276px]">
-            <div className="grid grid-cols-1 items-end gap-2 md:grid-cols-[52px_minmax(0,896px)_52px] md:justify-center">
-              <div className="min-w-0 self-start md:col-start-1">
-                <div className="bg-muted/50 border-input flex h-[52px] items-center justify-center rounded-lg border p-2">
-                  <DropdownMenu open={skillsMenuOpen} onOpenChange={handleOpenSkillsChange}>
-                    <DropdownMenuTrigger asChild>
+          <div className="mx-auto w-full max-w-4xl">
+            <PromptBar
+              onSubmit={handleSend}
+              onStop={handleStop}
+              disabled={isRecording || isProcessingVoice}
+              isStreaming={isStreaming}
+              isRecording={isRecording}
+              onStartRecording={handleStartRecording}
+              onStopRecording={stopRecordingAndTranscribe}
+              prefillRequest={inputPrefillRequest}
+              conversationId={draftConversationId}
+              placeholder="Send a message..."
+              renderSkills={() => (
+                <DropdownMenu open={skillsMenuOpen} onOpenChange={handleOpenSkillsChange}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={selectedSkillLabel}
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground relative flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {selectedSkillKeys.length > 0 ? (
+                        <span className="bg-foreground text-background absolute -top-1 -right-1 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-4 font-medium">
+                          {selectedSkillKeys.length}
+                        </span>
+                      ) : null}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="top"
+                    align="start"
+                    sideOffset={12}
+                    className="border-border/80 bg-background/95 flex h-[360px] w-[320px] flex-col rounded-xl p-0 shadow-xl backdrop-blur-sm"
+                  >
+                    <DropdownMenuLabel className="px-3 py-2.5">
+                      <div className="relative">
+                        <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
+                        <Input
+                          value={skillSearchQuery}
+                          onChange={handleSkillSearchChange}
+                          placeholder="Search skills..."
+                          className="h-9 pl-8"
+                        />
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <div className="min-h-0 flex-1 overflow-y-auto p-1">
+                      {isPlatformSkillsLoading || isPersonalSkillsLoading ? (
+                        <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
+                      ) : filteredSelectableSkills.length === 0 ? (
+                        <DropdownMenuItem disabled>No skills found</DropdownMenuItem>
+                      ) : (
+                        filteredSelectableSkills.map((skill) => {
+                          const isSelected = selectedSkillKeys.includes(skill.key);
+                          return (
+                            <DropdownMenuItem
+                              key={skill.key}
+                              data-skill-slug={skill.key}
+                              onSelect={handleSkillDropdownSelect}
+                            >
+                              <Check
+                                className={isSelected ? "h-4 w-4 opacity-100" : "h-4 w-4 opacity-0"}
+                              />
+                              <span className="truncate">{skill.title}</span>
+                            </DropdownMenuItem>
+                          );
+                        })
+                      )}
+                    </div>
+                    <DropdownMenuSeparator />
+                    <div className="grid grid-cols-2 items-center gap-0 p-1">
                       <Button
                         type="button"
                         variant="ghost"
-                        aria-label={selectedSkillLabel}
-                        className="relative h-9 w-9 px-0"
+                        onClick={handleClearSelectedSkills}
+                        disabled={selectedSkillKeys.length === 0}
+                        className="h-10 rounded-md"
                       >
-                        <Sparkles className="h-4 w-4" />
-                        {selectedSkillKeys.length > 0 ? (
-                          <span className="bg-foreground text-background absolute -top-1 -right-1 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-4 font-medium">
-                            {selectedSkillKeys.length}
-                          </span>
-                        ) : null}
+                        Clear
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      side="top"
-                      align="center"
-                      sideOffset={16}
-                      className="border-border/80 bg-background/95 flex h-[360px] w-[320px] flex-col rounded-xl p-0 shadow-xl backdrop-blur-sm"
-                    >
-                      <DropdownMenuLabel className="px-3 py-2.5">
-                        <div className="relative">
-                          <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
-                          <Input
-                            value={skillSearchQuery}
-                            onChange={handleSkillSearchChange}
-                            placeholder="Search skills..."
-                            className="h-9 pl-8"
-                          />
-                        </div>
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <div className="min-h-0 flex-1 overflow-y-auto p-1">
-                        {isPlatformSkillsLoading || isPersonalSkillsLoading ? (
-                          <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
-                        ) : filteredSelectableSkills.length === 0 ? (
-                          <DropdownMenuItem disabled>No skills found</DropdownMenuItem>
-                        ) : (
-                          filteredSelectableSkills.map((skill) => {
-                            const isSelected = selectedSkillKeys.includes(skill.key);
-                            return (
-                              <DropdownMenuItem
-                                key={skill.key}
-                                data-skill-slug={skill.key}
-                                onSelect={handleSkillDropdownSelect}
-                              >
-                                <Check
-                                  className={
-                                    isSelected ? "h-4 w-4 opacity-100" : "h-4 w-4 opacity-0"
-                                  }
-                                />
-                                <span className="truncate">{skill.title}</span>
-                              </DropdownMenuItem>
-                            );
-                          })
-                        )}
-                      </div>
-                      <DropdownMenuSeparator />
-                      <div className="grid grid-cols-2 items-center gap-0 p-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={handleClearSelectedSkills}
-                          disabled={selectedSkillKeys.length === 0}
-                          className="h-10 rounded-md"
-                        >
-                          Clear
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={handleCloseSkillsMenu}
-                          className="h-10 rounded-md"
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-              <div className="min-w-0 md:col-start-2">
-                <ChatInput
-                  onSend={handleSend}
-                  onStop={handleStop}
-                  disabled={isRecording || isProcessingVoice}
-                  isStreaming={isStreaming}
-                  isRecording={isRecording}
-                  onStartRecording={handleStartRecording}
-                  onStopRecording={stopRecordingAndTranscribe}
-                  prefillRequest={inputPrefillRequest}
-                  conversationId={draftConversationId}
-                />
-              </div>
-              <div className="hidden md:col-start-3 md:block" aria-hidden="true" />
-            </div>
-          </div>
-          <div className="mx-auto w-full max-w-4xl">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={handleCloseSkillsMenu}
+                        className="h-10 rounded-md"
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              renderModelSelector={() => (
                 <ModelSelector
                   selectedModel={selectedModel}
                   onModelChange={setSelectedModel}
                   disabled={isStreaming}
                 />
-                <DeviceSelector
-                  selectedDeviceId={selectedDeviceId}
-                  onSelect={setSelectedDeviceId}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="auto-approve"
-                  checked={autoApproveEnabled}
-                  onCheckedChange={handleAutoApproveChange}
-                />
-                <label
-                  htmlFor="auto-approve"
-                  className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs select-none"
-                >
-                  <CircleCheck className="h-3.5 w-3.5" />
-                  <span>Auto-approve</span>
-                </label>
-                <VoiceHint />
-              </div>
-            </div>
+              )}
+              renderAutoApproval={() => (
+                <div className="flex items-center gap-1.5">
+                  <Switch
+                    id="auto-approve"
+                    checked={autoApproveEnabled}
+                    onCheckedChange={handleAutoApproveChange}
+                  />
+                  <label
+                    htmlFor="auto-approve"
+                    className="text-muted-foreground flex cursor-pointer items-center gap-1 text-xs select-none"
+                  >
+                    <CircleCheck className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Auto-approve</span>
+                  </label>
+                </div>
+              )}
+            />
           </div>
         </div>
       </div>

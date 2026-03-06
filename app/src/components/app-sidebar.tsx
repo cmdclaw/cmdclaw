@@ -2,9 +2,9 @@
 
 import {
   BarChart3,
+  Bug,
   Check,
   ChevronDown,
-  Flag,
   Home,
   LoaderCircle,
   LogOut,
@@ -438,21 +438,21 @@ export function AppSidebar() {
       <Sheet open={reportOpen} onOpenChange={setReportOpen}>
         <SheetContent
           side="right"
-          title="Report an issue"
+          title="Bug report"
           description="Send a message to Slack"
           className="w-[420px] p-0"
         >
           <SheetHeader>
-            <SheetTitle>Report an issue</SheetTitle>
+            <SheetTitle>Bug report</SheetTitle>
             <SheetDescription>
-              This sends your message to the Slack report channel.
+              This sends your bug report to the Slack report channel.
             </SheetDescription>
           </SheetHeader>
           <div className="flex-1 px-4 pb-2">
             <textarea
               value={reportMessage}
               onChange={handleReportMessageChange}
-              placeholder="Describe the issue..."
+              placeholder="Describe the bug..."
               className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-[160px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
             />
             <input
@@ -545,203 +545,219 @@ export function AppSidebar() {
         </div>
 
         {/* Scrollable nav */}
-        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-2.5 pt-1 pb-3">
-          {/* Main nav */}
-          <div className="flex flex-col gap-0.5">
-            {mainNavItems.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(item.href)} />
-            ))}
-            <NavButton icon={Flag} label="Report" onClick={openReportSheet} />
-          </div>
-
-          {/* Coworker section */}
-          <div className="flex flex-col gap-1.5">
-            <SectionLabel>Coworker</SectionLabel>
+        <div className="relative min-h-0 flex-1">
+          <nav className="flex h-full flex-col gap-5 overflow-y-auto px-2.5 pt-1 pb-10">
+            {/* Main nav */}
             <div className="flex flex-col gap-0.5">
-              {coworkerNavItems.map((item) => (
+              {mainNavItems.map((item) => (
                 <NavLink key={item.href} item={item} active={isActive(item.href)} />
               ))}
+              <NavButton icon={Bug} label="Bug report" onClick={openReportSheet} />
             </div>
-          </div>
 
-          {/* Admin section (collapsible, admin only) */}
-          {isAdmin && (
+            {/* Coworker section */}
             <div className="flex flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={toggleAdmin}
-                className="text-sidebar-foreground/40 hover:text-sidebar-foreground/60 flex w-full items-center justify-between px-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors"
-              >
-                <span>Admin</span>
-                <ChevronDown
-                  className={cn(
-                    "h-3 w-3 transition-transform duration-200",
-                    !adminOpen && "-rotate-90",
-                  )}
-                />
-              </button>
-              {adminOpen && (
-                <div className="flex flex-col gap-0.5">
-                  {adminNavItems.map((item) => (
-                    <NavLink key={item.href} item={item} active={isActive(item.href)} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Recent */}
-          {(isChatPage
-            ? conversationsLoading || recentConversations.length > 0
-            : recentWorkflows.length > 0) && (
-            <div className="flex flex-col gap-1.5">
-              <SectionLabel>Recent</SectionLabel>
+              <SectionLabel>Coworker</SectionLabel>
               <div className="flex flex-col gap-0.5">
-                {isChatPage ? (
-                  conversationsLoading ? (
-                    <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
-                      Loading...
-                    </span>
-                  ) : (
-                    recentConversations.map((conversation) => {
-                      const isConversationActive = isActive(`/chat/${conversation.id}`);
-                      const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
-                        conversation.generationStatus,
-                      );
-                      const hasUnreadResults =
-                        !isConversationRunning &&
-                        !isConversationActive &&
-                        conversation.messageCount > (conversation.seenMessageCount ?? 0);
-                      const showConversationIndicator = isConversationRunning || hasUnreadResults;
-
-                      return (
-                        <div
-                          key={conversation.id}
-                          className={cn(
-                            "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
-                            isConversationActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                          )}
-                        >
-                          <Link
-                            href={`/chat/${conversation.id}`}
-                            prefetch={false}
-                            className="flex min-w-0 flex-1 items-center"
-                          >
-                            {isConversationRunning ? (
-                              <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                            ) : hasUnreadResults ? (
-                              <span
-                                className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
-                                aria-label="New unread results"
-                              />
-                            ) : null}
-                            <span
-                              className={cn(
-                                "min-w-0 flex-1 truncate",
-                                showConversationIndicator && "ml-2",
-                              )}
-                            >
-                              {conversation.title || "Untitled"}
-                            </span>
-                            <span
-                              className={cn(
-                                "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
-                                "group-hover:opacity-0 group-focus-within:opacity-0",
-                              )}
-                            >
-                              {formatRelativeShort(new Date(conversation.updatedAt))}
-                            </span>
-                          </Link>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className={cn(
-                                  "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
-                                  "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
-                                  "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
-                                  "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
-                                  isConversationActive
-                                    ? "before:from-sidebar-accent"
-                                    : "before:from-sidebar",
-                                )}
-                                aria-label="Conversation actions"
-                              >
-                                <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" side="right">
-                              <DropdownMenuItem
-                                data-conversation-id={conversation.id}
-                                data-conversation-pinned={conversation.isPinned ? "true" : "false"}
-                                onClick={handlePinMenuClick}
-                              >
-                                {conversation.isPinned ? (
-                                  <PinOff className="h-4 w-4" />
-                                ) : (
-                                  <Pin className="h-4 w-4" />
-                                )}
-                                <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                data-conversation-id={conversation.id}
-                                data-conversation-title={conversation.title ?? ""}
-                                onClick={handleRenameMenuClick}
-                              >
-                                <Pencil className="h-4 w-4" />
-                                <span>Rename</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                data-conversation-id={conversation.id}
-                                onClick={handleDeleteMenuClick}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span>Delete</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      );
-                    })
-                  )
-                ) : (
-                  recentWorkflows.map((workflow) => (
-                    <Link
-                      key={workflow.id}
-                      href={`/workflows/${workflow.id}`}
-                      prefetch={false}
-                      className={cn(
-                        "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
-                        isActive(`/workflows/${workflow.id}`)
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                      )}
-                    >
-                      <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                      <span className="truncate">{workflow.name || "Untitled"}</span>
-                    </Link>
-                  ))
-                )}
+                {coworkerNavItems.map((item) => (
+                  <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                ))}
               </div>
             </div>
-          )}
-        </nav>
 
-        {/* Footer: user */}
-        <div className="border-t px-2.5 py-2.5">
+            {/* Admin section (collapsible, admin only) */}
+            {isAdmin && (
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={toggleAdmin}
+                  className="text-sidebar-foreground/40 hover:text-sidebar-foreground/60 flex w-full items-center justify-between px-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors"
+                >
+                  <span>Admin</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3 w-3 transition-transform duration-200",
+                      !adminOpen && "-rotate-90",
+                    )}
+                  />
+                </button>
+                {adminOpen && (
+                  <div className="flex flex-col gap-0.5">
+                    {adminNavItems.map((item) => (
+                      <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Recent */}
+            {(isChatPage
+              ? conversationsLoading || recentConversations.length > 0
+              : recentWorkflows.length > 0) && (
+              <div className="flex flex-col gap-1.5">
+                <SectionLabel>Recent</SectionLabel>
+                <div className="flex flex-col gap-0.5">
+                  {isChatPage ? (
+                    conversationsLoading ? (
+                      <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
+                        Loading...
+                      </span>
+                    ) : (
+                      recentConversations.map((conversation) => {
+                        const isConversationActive = isActive(`/chat/${conversation.id}`);
+                        const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
+                          conversation.generationStatus,
+                        );
+                        const hasUnreadResults =
+                          !isConversationRunning &&
+                          !isConversationActive &&
+                          conversation.messageCount > (conversation.seenMessageCount ?? 0);
+                        const showConversationIndicator = isConversationRunning || hasUnreadResults;
+
+                        return (
+                          <div
+                            key={conversation.id}
+                            className={cn(
+                              "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
+                              isConversationActive
+                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                            )}
+                          >
+                            <Link
+                              href={`/chat/${conversation.id}`}
+                              prefetch={false}
+                              className="flex min-w-0 flex-1 items-center"
+                            >
+                              {isConversationRunning ? (
+                                <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                              ) : hasUnreadResults ? (
+                                <span
+                                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
+                                  aria-label="New unread results"
+                                />
+                              ) : null}
+                              <span
+                                className={cn(
+                                  "min-w-0 flex-1 truncate",
+                                  showConversationIndicator && "ml-2",
+                                )}
+                              >
+                                {conversation.title || "Untitled"}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
+                                  "group-hover:opacity-0 group-focus-within:opacity-0",
+                                )}
+                              >
+                                {formatRelativeShort(new Date(conversation.updatedAt))}
+                              </span>
+                            </Link>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
+                                    "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
+                                    "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                                    "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
+                                    isConversationActive
+                                      ? "before:from-sidebar-accent"
+                                      : "before:from-sidebar",
+                                  )}
+                                  aria-label="Conversation actions"
+                                >
+                                  <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" side="right">
+                                <DropdownMenuItem
+                                  data-conversation-id={conversation.id}
+                                  data-conversation-pinned={
+                                    conversation.isPinned ? "true" : "false"
+                                  }
+                                  onClick={handlePinMenuClick}
+                                >
+                                  {conversation.isPinned ? (
+                                    <PinOff className="h-4 w-4" />
+                                  ) : (
+                                    <Pin className="h-4 w-4" />
+                                  )}
+                                  <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  data-conversation-id={conversation.id}
+                                  data-conversation-title={conversation.title ?? ""}
+                                  onClick={handleRenameMenuClick}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  <span>Rename</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  data-conversation-id={conversation.id}
+                                  onClick={handleDeleteMenuClick}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span>Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        );
+                      })
+                    )
+                  ) : (
+                    recentWorkflows.map((workflow) => (
+                      <Link
+                        key={workflow.id}
+                        href={`/workflows/${workflow.id}`}
+                        prefetch={false}
+                        className={cn(
+                          "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
+                          isActive(`/workflows/${workflow.id}`)
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                        <span className="truncate">{workflow.name || "Untitled"}</span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </nav>
+          {/* Fade overlay at bottom of nav */}
+          <div className="from-sidebar pointer-events-none absolute right-0 bottom-0 left-0 h-14 bg-gradient-to-t to-transparent" />
+        </div>
+
+        {/* Footer: user card */}
+        <div className="px-2 pb-2.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="hover:bg-sidebar-accent/50 flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors"
+                className="bg-sidebar-accent/80 hover:bg-sidebar-accent border-sidebar-border flex h-11 w-full items-center gap-2.5 rounded-lg border px-2.5 text-[13px] transition-colors"
                 title={userEmail}
               >
-                <span className="bg-sidebar-accent text-sidebar-accent-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">
-                  {avatarInitial}
-                </span>
-                <span className="text-sidebar-foreground/70 truncate text-[13px]">
+                {session?.user?.image ? (
+                  <Image
+                    src={session.user.image}
+                    alt=""
+                    width={20}
+                    height={20}
+                    className="h-5 w-5 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="bg-sidebar-primary text-sidebar-primary-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">
+                    {avatarInitial}
+                  </span>
+                )}
+                <span className="text-sidebar-foreground/80 truncate text-[13px] font-medium">
                   {userEmail || "Account"}
                 </span>
               </button>

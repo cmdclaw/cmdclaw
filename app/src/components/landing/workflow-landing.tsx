@@ -4,7 +4,7 @@ import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS, WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
@@ -23,41 +23,135 @@ type TemplateItem = {
   prompt: string;
 };
 
+import type { PromptSegment } from "@/lib/prompt-segments";
+
+type HeroPromptExample = {
+  department: string;
+  color: string;
+  segments: PromptSegment[];
+  prompt: string;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_WORKFLOW_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
-const HERO_PROMPT_EXAMPLES = [
+// Brandfetch CDN icon URLs (fetched via Brand API)
+const BF = {
+  salesforce:
+    "https://cdn.brandfetch.io/idVE84WdIN/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  outreach:
+    "https://cdn.brandfetch.io/idppFLnf4N/w/150/h/150/theme/dark/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  googleCalendar:
+    "https://cdn.brandfetch.io/id6O2oGzv-/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  meta: "https://cdn.brandfetch.io/idWvz5T3V7/w/400/h/400/theme/dark/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  slack:
+    "https://cdn.brandfetch.io/idJ_HhtG0Z/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  greenhouse:
+    "https://cdn.brandfetch.io/id7baa8wpg/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  bamboohr:
+    "https://cdn.brandfetch.io/idpB2Dvgzu/w/180/h/180/theme/dark/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  atlassian:
+    "https://cdn.brandfetch.io/idlQIwGMOK/w/400/h/400/theme/dark/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  ironclad:
+    "https://cdn.brandfetch.io/id2DIJ2hXq/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  stripe:
+    "https://cdn.brandfetch.io/idxAg10C0L/w/480/h/480/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  brex: "https://cdn.brandfetch.io/idu49Dl4i8/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  quickbooks:
+    "https://cdn.brandfetch.io/idWrWLZ_I5/w/200/h/200/theme/dark/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+  zendesk:
+    "https://cdn.brandfetch.io/idNq8SRGPd/w/400/h/400/theme/dark/icon.jpeg?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+} as const;
+
+const HERO_PROMPT_EXAMPLES: HeroPromptExample[] = [
   {
     department: "Sales",
+    color: "#3B82F6",
+    segments: [
+      { type: "text", content: "When a deal in " },
+      { type: "brand", name: "Salesforce", icon: BF.salesforce },
+      { type: "text", content: " moves to Proposal Sent, draft follow-ups in " },
+      { type: "brand", name: "Outreach", icon: BF.outreach },
+      { type: "text", content: " and schedule reminders in " },
+      { type: "brand", name: "Google Calendar", icon: BF.googleCalendar },
+    ],
     prompt:
       "When a deal in Salesforce moves to Proposal Sent, draft follow-ups in Outreach and schedule reminders in Google Calendar.",
   },
   {
     department: "Marketing",
+    color: "#F472B6",
+    segments: [
+      { type: "text", content: "Every morning, compare " },
+      { type: "brand", name: "Meta Ads", icon: BF.meta },
+      { type: "text", content: " and " },
+      { type: "brand", name: "Google Ads", icon: BF.googleCalendar },
+      { type: "text", content: " CAC vs yesterday and send a performance digest to " },
+      { type: "brand", name: "Slack", icon: BF.slack },
+    ],
     prompt:
       "Every morning, compare Meta Ads and Google Ads CAC vs yesterday and send a performance digest to Slack.",
   },
   {
     department: "HR",
+    color: "#F59E0B",
+    segments: [
+      { type: "text", content: "When a candidate is marked Hired in " },
+      { type: "brand", name: "Greenhouse", icon: BF.greenhouse },
+      { type: "text", content: ", create onboarding tasks in " },
+      { type: "brand", name: "BambooHR", icon: BF.bamboohr },
+      { type: "text", content: ", " },
+      { type: "brand", name: "Jira", icon: BF.atlassian },
+      { type: "text", content: ", and " },
+      { type: "brand", name: "Google Workspace", icon: BF.googleCalendar },
+    ],
     prompt:
       "When a candidate is marked Hired in Greenhouse, create onboarding tasks in BambooHR, Jira, and Google Workspace.",
   },
   {
     department: "Legal",
+    color: "#8B5CF6",
+    segments: [
+      { type: "text", content: "When a new MSA is uploaded to " },
+      { type: "brand", name: "Ironclad", icon: BF.ironclad },
+      { type: "text", content: ", extract renewal and termination dates and add reminders to " },
+      { type: "brand", name: "Google Calendar", icon: BF.googleCalendar },
+    ],
     prompt:
       "When a new MSA is uploaded to Ironclad, extract renewal and termination dates and add reminders to Google Calendar.",
   },
   {
     department: "Finance",
+    color: "#10B981",
+    segments: [
+      { type: "text", content: "Every business day, reconcile " },
+      { type: "brand", name: "Stripe", icon: BF.stripe },
+      { type: "text", content: " and " },
+      { type: "brand", name: "Brex", icon: BF.brex },
+      { type: "text", content: " transactions in " },
+      { type: "brand", name: "QuickBooks", icon: BF.quickbooks },
+      { type: "text", content: " and send mismatch reports to " },
+      { type: "brand", name: "Slack", icon: BF.slack },
+    ],
     prompt:
       "Every business day, reconcile Stripe and Brex transactions in QuickBooks and send mismatch reports to Slack.",
   },
   {
     department: "Support",
+    color: "#06B6D4",
+    segments: [
+      { type: "text", content: "Every hour, triage new " },
+      { type: "brand", name: "Zendesk", icon: BF.zendesk },
+      {
+        type: "text",
+        content: " tickets by sentiment, auto-tag priority, and route critical ones to on-call in ",
+      },
+      { type: "brand", name: "Slack", icon: BF.slack },
+    ],
     prompt:
       "Every hour, triage new Zendesk tickets by sentiment, auto-tag priority, and route critical ones to on-call in Slack.",
   },
-] as const;
+];
 
 function getTriggerLabel(triggerType: string) {
   const map: Record<string, string> = {
@@ -218,10 +312,69 @@ function TemplateCard({
 
 // Landing
 
-const PromptComposer = dynamic(
-  () => import("@/components/prompt-composer").then((mod) => mod.PromptComposer),
-  { ssr: false },
-);
+const PromptBar = dynamic(() => import("@/components/prompt-bar").then((mod) => mod.PromptBar), {
+  ssr: false,
+});
+
+// ─── Animated Department Heading ──────────────────────────────────────────────
+
+function AnimatedDepartment({
+  department,
+  color,
+  isActive,
+}: {
+  department: string;
+  color: string;
+  isActive: boolean;
+}) {
+  const [displayedText, setDisplayedText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const prevDeptRef = useRef(department);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    // When department changes, start fresh
+    if (prevDeptRef.current !== department) {
+      prevDeptRef.current = department;
+      setDisplayedText("");
+      setIsTyping(true);
+    }
+  }, [department, isActive]);
+
+  // Start typing on mount
+  useEffect(() => {
+    setIsTyping(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isTyping || !isActive) return;
+
+    if (displayedText.length < department.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedText(department.slice(0, displayedText.length + 1));
+      }, 70);
+      return () => clearTimeout(timeout);
+    } else {
+      setIsTyping(false);
+    }
+  }, [displayedText, department, isTyping, isActive]);
+
+  return (
+    <span className="inline-flex items-baseline">
+      <span style={{ color }}>{displayedText}</span>
+      <span
+        className="ml-[1px] inline-block w-[2px] self-stretch"
+        style={{
+          backgroundColor: color,
+          animation: "blink-cursor 1s step-end infinite",
+        }}
+      />
+    </span>
+  );
+}
+
+// ─── Landing ─────────────────────────────────────────────────────────────────
 
 export function WorkflowLanding() {
   const createWorkflow = useCreateWorkflow();
@@ -229,6 +382,9 @@ export function WorkflowLanding() {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
+  const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
+
+  const activeExample = HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length];
 
   const doCreate = useCallback(
     async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
@@ -291,10 +447,6 @@ export function WorkflowLanding() {
     [creatingTemplateId, doCreate],
   );
 
-  const activeDepartment =
-    HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length]?.department ??
-    "your team";
-
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-slate-950">
       <div className="pointer-events-none absolute inset-0">
@@ -317,17 +469,24 @@ export function WorkflowLanding() {
         <section className="flex min-h-[62vh] items-center justify-center pt-8 md:min-h-[max(22rem,calc(100dvh-21rem))] md:pt-10 lg:min-h-[max(23rem,calc(100dvh-22rem))] lg:pt-12">
           <div className="mx-auto w-full max-w-2xl">
             <h1 className="mb-2 text-center text-xl font-semibold tracking-tight text-white">
-              What do you want to automate in {activeDepartment}?
+              What do you want to automate in{" "}
+              <AnimatedDepartment
+                department={activeExample?.department ?? "your team"}
+                color={activeExample?.color ?? "#3B82F6"}
+                isActive
+              />
+              ?
             </h1>
             <p className="mb-6 text-center text-sm text-slate-100/90">
               Describe a task and we&apos;ll build it step by step
             </p>
-            <PromptComposer
+            <PromptBar
               onSubmit={handlePromptComposerSubmit}
               isSubmitting={isCreating}
               variant="hero"
               placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
               animatedPlaceholders={heroAnimatedPrompts}
+              richAnimatedPlaceholders={heroRichSegments}
               onAnimatedPlaceholderIndexChange={setActivePromptIndex}
             />
           </div>

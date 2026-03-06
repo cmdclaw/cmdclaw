@@ -4,9 +4,11 @@ import { ArrowUp, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { AppShell } from "@/components/app-shell";
+import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 
@@ -307,6 +309,9 @@ function FilterPill({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function TemplatesPage() {
+  const searchParams = useSearchParams();
+  const previewId = searchParams.get("preview");
+
   const [search, setSearch] = useState("");
   const [activeIndustry, setActiveIndustry] = useState<string | null>(null);
   const [activeUseCase, setActiveUseCase] = useState<string | null>(null);
@@ -469,7 +474,8 @@ export default function TemplatesPage() {
                   transition={{ duration: 0.2, ease: "easeOut" }}
                 >
                   <Link
-                    href={`/template/${template.id}`}
+                    href={`/templates?preview=${template.id}`}
+                    scroll={false}
                     className="border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -513,6 +519,8 @@ export default function TemplatesPage() {
           )}
         </div>
       </div>
+
+      <TemplatePreviewModal templateId={previewId} />
     </AppShell>
   );
 }

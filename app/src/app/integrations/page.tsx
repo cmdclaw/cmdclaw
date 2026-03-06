@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import {
@@ -871,11 +872,8 @@ function IntegrationsPageContent() {
     },
   ];
 
-  const handleTabClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    const nextTab = event.currentTarget.dataset.tab as FilterTab | undefined;
-    if (nextTab) {
-      setActiveTab(nextTab);
-    }
+  const handleTabChange = useCallback((key: string) => {
+    setActiveTab(key as FilterTab);
   }, []);
 
   const handleSearchQueryChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1099,19 +1097,13 @@ function IntegrationsPageContent() {
       )}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="bg-muted grid w-full grid-cols-3 gap-1 rounded-lg p-1 sm:flex sm:w-fit">
+        <AnimatedTabs
+          activeKey={activeTab}
+          onTabChange={handleTabChange}
+          className="w-full grid-cols-3 sm:flex sm:w-fit"
+        >
           {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              data-tab={tab.id}
-              onClick={handleTabClick}
-              className={cn(
-                "min-w-0 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors sm:px-3 sm:text-sm",
-                activeTab === tab.id
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
+            <AnimatedTab key={tab.id} value={tab.id} className="text-[11px] sm:text-sm">
               {tab.label}
               <span
                 className={cn(
@@ -1123,9 +1115,9 @@ function IntegrationsPageContent() {
               >
                 {tab.count}
               </span>
-            </button>
+            </AnimatedTab>
           ))}
-        </div>
+        </AnimatedTabs>
 
         <div className="relative w-full sm:w-64">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />

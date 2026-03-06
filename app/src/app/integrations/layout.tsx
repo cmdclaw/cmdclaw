@@ -6,9 +6,7 @@ export default function IntegrationsLayout({ children }: { children: React.React
   return (
     <AppShell>
       <div className="bg-background min-h-screen">
-        <div className="container px-4 py-6">
-          <main className="mx-auto max-w-4xl">{children}</main>
-        </div>
+        <main className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">{children}</main>
       </div>
     </AppShell>
   );

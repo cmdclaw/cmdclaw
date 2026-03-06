@@ -1,21 +1,27 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
-import { cn } from "@/lib/utils";
 
 const adminTabs = [
-  { label: "Settings", href: "/admin" },
-  { label: "Impersonation", href: "/admin/impersonation" },
-  { label: "WhatsApp", href: "/admin/whatsapp" },
+  { key: "settings", label: "Settings", href: "/admin" },
+  { key: "impersonation", label: "Impersonation", href: "/admin/impersonation" },
+  { key: "whatsapp", label: "WhatsApp", href: "/admin/whatsapp" },
 ];
+
+function getActiveKey(pathname: string) {
+  if (pathname.startsWith("/admin/impersonation")) return "impersonation";
+  if (pathname.startsWith("/admin/whatsapp")) return "whatsapp";
+  return "settings";
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isAdmin, isLoading } = useIsAdmin();
+  const activeKey = getActiveKey(pathname);
 
   return (
     <AppShell>
@@ -31,26 +37,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           ) : (
             <>
-              <nav className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10 mb-6 flex gap-4 border-b backdrop-blur">
-                {adminTabs.map((tab) => {
-                  const isActive =
-                    tab.href === "/admin" ? pathname === "/admin" : pathname.startsWith(tab.href);
-                  return (
-                    <Link
-                      key={tab.href}
-                      href={tab.href}
-                      className={cn(
-                        "border-b-2 px-1 pb-2 text-sm font-medium transition-colors",
-                        isActive
-                          ? "border-foreground text-foreground"
-                          : "border-transparent text-muted-foreground hover:text-foreground",
-                      )}
-                    >
+              <div className="mb-6">
+                <AnimatedTabs activeKey={activeKey}>
+                  {adminTabs.map((tab) => (
+                    <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>
                       {tab.label}
-                    </Link>
-                  );
-                })}
-              </nav>
+                    </AnimatedTab>
+                  ))}
+                </AnimatedTabs>
+              </div>
               {children}
             </>
           )}

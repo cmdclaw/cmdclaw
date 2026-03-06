@@ -79,8 +79,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <AppShell>
-      <header className="flex h-14 items-center gap-2 border-b px-4">
-        <span className="text-sm font-medium">Chat</span>
+      <header className="flex h-14 items-center gap-2 px-4">
         {isAdmin && liveConversationId && (
           <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
         )}

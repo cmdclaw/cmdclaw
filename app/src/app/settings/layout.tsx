@@ -1,46 +1,38 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { cn } from "@/lib/utils";
+import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 
 const settingsTabs = [
-  { label: "General", href: "/settings" },
-  { label: "Usage", href: "/settings/usage" },
-  { label: "Subscriptions", href: "/settings/subscriptions" },
-  // { label: "Billing", href: "/settings/billing" },
-  // { label: "Devices", href: "/settings/devices" },
+  { key: "general", label: "General", href: "/settings" },
+  { key: "usage", label: "Usage", href: "/settings/usage" },
+  { key: "subscriptions", label: "Subscriptions", href: "/settings/subscriptions" },
 ];
+
+function getActiveKey(pathname: string) {
+  if (pathname.startsWith("/settings/usage")) return "usage";
+  if (pathname.startsWith("/settings/subscriptions")) return "subscriptions";
+  return "general";
+}
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const activeKey = getActiveKey(pathname);
 
   return (
     <AppShell>
       <div className="bg-background min-h-full">
         <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
-          <nav className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10 mb-6 flex gap-4 border-b backdrop-blur">
-            {settingsTabs.map((tab) => {
-              const isActive =
-                tab.href === "/settings" ? pathname === "/settings" : pathname.startsWith(tab.href);
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  prefetch={false}
-                  className={cn(
-                    "border-b-2 px-1 pb-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "border-foreground text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                >
+          <div className="mb-6">
+            <AnimatedTabs activeKey={activeKey}>
+              {settingsTabs.map((tab) => (
+                <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>
                   {tab.label}
-                </Link>
-              );
-            })}
-          </nav>
+                </AnimatedTab>
+              ))}
+            </AnimatedTabs>
+          </div>
           {children}
         </main>
       </div>

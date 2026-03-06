@@ -1,53 +1,102 @@
 "use client";
 
-import * as TabsPrimitive from "@radix-ui/react-tabs";
+import { motion } from "motion/react";
+import Link from "next/link";
 import * as React from "react";
+import { useId, useRef } from "react";
 import { cn } from "@/lib/utils";
 
-function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
+/* ─── AnimatedTabs ─── */
+
+type AnimatedTabsProps = {
+  activeKey: string;
+  onTabChange?: (key: string) => void;
+  children: React.ReactNode;
+  className?: string;
+};
+
+function AnimatedTabs({ activeKey, onTabChange, children, className }: AnimatedTabsProps) {
+  const id = useId();
+  const stableId = useRef(id);
+  const layoutId = `tab-pill-${stableId.current}`;
+
   return (
-    <TabsPrimitive.Root
-      data-slot="tabs"
-      className={cn("flex flex-col gap-2", className)}
-      {...props}
-    />
+    <div
+      role="tablist"
+      className={cn("bg-muted inline-flex items-center gap-0.5 rounded-lg p-1", className)}
+    >
+      {React.Children.map(children, (child) => {
+        if (!React.isValidElement<AnimatedTabProps>(child)) return child;
+        const tabValue = child.props.value;
+        return React.cloneElement(child, {
+          _active: tabValue === activeKey,
+          _layoutId: layoutId,
+          _onSelect: onTabChange,
+        });
+      })}
+    </div>
   );
 }
 
-function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
-  return (
-    <TabsPrimitive.List
-      data-slot="tabs-list"
-      className={cn(
-        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
-        className,
+/* ─── AnimatedTab ─── */
+
+type AnimatedTabProps = {
+  value: string;
+  children: React.ReactNode;
+  href?: string;
+  className?: string;
+  /** @internal */ _active?: boolean;
+  /** @internal */ _layoutId?: string;
+  /** @internal */ _onSelect?: (key: string) => void;
+};
+
+function AnimatedTab({
+  value,
+  children,
+  href,
+  className,
+  _active,
+  _layoutId,
+  _onSelect,
+}: AnimatedTabProps) {
+  const inner = (
+    <>
+      {_active && (
+        <motion.span
+          layoutId={_layoutId}
+          className="bg-background absolute inset-0 rounded-md shadow-sm"
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        />
       )}
-      {...props}
-    />
+      <span className="relative z-10">{children}</span>
+    </>
   );
-}
 
-function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+  const sharedClass = cn(
+    "relative inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+    _active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+    className,
+  );
+
+  if (href) {
+    return (
+      <Link href={href} prefetch={false} role="tab" aria-selected={_active} className={sharedClass}>
+        {inner}
+      </Link>
+    );
+  }
+
   return (
-    <TabsPrimitive.Trigger
-      data-slot="tabs-trigger"
-      className={cn(
-        "data-[state=active]:bg-background dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        className,
-      )}
-      {...props}
-    />
+    <button
+      type="button"
+      role="tab"
+      aria-selected={_active}
+      onClick={() => _onSelect?.(value)}
+      className={sharedClass}
+    >
+      {inner}
+    </button>
   );
 }
 
-function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
-  return (
-    <TabsPrimitive.Content
-      data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
-      {...props}
-    />
-  );
-}
-
-export { Tabs, TabsList, TabsTrigger, TabsContent };
+export { AnimatedTabs, AnimatedTab };

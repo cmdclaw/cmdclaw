@@ -10,6 +10,9 @@ const posthogProxyPath = "/_cmdclaw_lattice";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  images: {
+    remotePatterns: [{ hostname: "lh3.googleusercontent.com" }],
+  },
   serverExternalPackages: ["@whiskeysockets/baileys"],
   async rewrites() {
     return [
