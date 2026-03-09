@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileBottomBar } from "@/components/mobile-bottom-bar";
 import { authClient } from "@/lib/auth-client";
 
 const APP_SHELL_CONTENT_STYLE: React.CSSProperties = { transform: "translateZ(0)" };
@@ -54,16 +55,20 @@ export function AppShell({
     };
   }, [sidebarVisibility]);
 
-  const showSidebar =
+  const showNav =
     sidebarVisibility === "always" ||
     (sidebarVisibility === "authenticated" && showAuthenticatedSidebar);
 
   return (
     <div className="flex h-screen w-full">
-      {showSidebar ? <AppSidebar /> : null}
-      <div className="relative h-full min-w-0 flex-1 overflow-auto" style={APP_SHELL_CONTENT_STYLE}>
+      {showNav ? <AppSidebar /> : null}
+      <div
+        className="app-shell-scroll-container relative h-full min-w-0 flex-1 overflow-auto pb-14 md:pb-0"
+        style={APP_SHELL_CONTENT_STYLE}
+      >
         {children}
       </div>
+      {showNav ? <MobileBottomBar /> : null}
     </div>
   );
 }

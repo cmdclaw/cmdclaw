@@ -1,10 +1,11 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Menu } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
+import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
 
@@ -21,6 +22,10 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const setTimezoneMutation = useSetUserTimezone();
   const lastTimezoneSyncRef = useRef<string | null>(null);
+  const [recentDrawerOpen, setRecentDrawerOpen] = useState(false);
+  const openRecentDrawer = useCallback(() => {
+    setRecentDrawerOpen(true);
+  }, []);
 
   useEffect(() => {
     setLiveConversationId(routeConversationId);
@@ -79,13 +84,24 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   return (
     <>
       <header className="flex h-14 items-center gap-2 px-4">
+        <button
+          type="button"
+          onClick={openRecentDrawer}
+          className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md md:hidden"
+          aria-label="Recent chats"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         {isAdmin && liveConversationId && (
           <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
         )}
         <ChatCopyButton conversationId={liveConversationId} className="ml-auto" />
         <ChatShareControls conversationId={liveConversationId} />
       </header>
-      <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">{children}</div>
+      <div className="flex h-[calc(100vh-3.5rem-3.5rem)] flex-col overflow-hidden md:h-[calc(100vh-3.5rem)]">
+        {children}
+      </div>
+      <MobileRecentDrawer open={recentDrawerOpen} onOpenChange={setRecentDrawerOpen} mode="chats" />
     </>
   );
 }

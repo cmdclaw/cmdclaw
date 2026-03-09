@@ -6,6 +6,7 @@ import {
   CheckCheck,
   Check,
   ChevronDown,
+  Cuboid,
   Home,
   LoaderCircle,
   LogOut,
@@ -14,13 +15,12 @@ import {
   Pencil,
   Pin,
   PinOff,
-  Play,
   Settings,
   Shield,
   Toolbox,
   Trash2,
-  Workflow,
   LayoutTemplate,
+  Workflow,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -292,7 +292,7 @@ export function AppSidebar() {
 
   const coworkerNavItems: NavItem[] = [
     { icon: MessageSquare, label: "Chat", href: "/chat" },
-    { icon: Workflow, label: "Coworkers", href: "/coworkers" },
+    { icon: Cuboid, label: "Coworkers", href: "/coworkers" },
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
   ];
 
@@ -569,7 +569,7 @@ export function AppSidebar() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <aside className="bg-sidebar flex h-screen w-[220px] shrink-0 flex-col border-r">
+      <aside className="bg-sidebar hidden h-screen w-[220px] shrink-0 flex-col border-r md:flex">
         {/* Logo */}
         <div className="flex h-14 items-center gap-2.5 px-4">
           <Link href="/" prefetch={false} className="flex items-center gap-2.5">
@@ -689,13 +689,8 @@ export function AppSidebar() {
                         Loading...
                       </span>
                     ) : recentConversations.length === 0 ? (
-                      <div className="flex flex-col items-center gap-2 px-2.5 py-4 text-center">
-                        <MessageSquare className="text-sidebar-foreground/25 h-5 w-5" />
-                        <span className="text-sidebar-foreground/40 text-[12px] leading-relaxed">
-                          Start a conversation
-                          <br />
-                          to see it here
-                        </span>
+                      <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
+                        No conversations yet
                       </div>
                     ) : (
                       recentConversations.map((conversation) => {
@@ -805,13 +800,8 @@ export function AppSidebar() {
                       })
                     )
                   ) : recentCoworkers.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 px-2.5 py-4 text-center">
-                      <Play className="text-sidebar-foreground/25 h-5 w-5" />
-                      <span className="text-sidebar-foreground/40 text-[12px] leading-relaxed">
-                        Run a coworker
-                        <br />
-                        to see results here
-                      </span>
+                    <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
+                      No runs yet
                     </div>
                   ) : (
                     recentCoworkers.map((coworker) => (
