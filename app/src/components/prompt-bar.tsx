@@ -30,6 +30,7 @@ type PromptBarProps = {
   animatedPlaceholders?: string[];
   richAnimatedPlaceholders?: PromptSegment[][];
   onAnimatedPlaceholderIndexChange?: (index: number) => void;
+  shouldAnimatePlaceholder?: boolean;
 
   isRecording?: boolean;
   onStartRecording?: () => void;
@@ -138,6 +139,7 @@ export function PromptBar({
   animatedPlaceholders,
   richAnimatedPlaceholders,
   onAnimatedPlaceholderIndexChange,
+  shouldAnimatePlaceholder = false,
   isRecording = false,
   onStartRecording,
   onStopRecording,
@@ -214,7 +216,7 @@ export function PromptBar({
     [animatedPlaceholders, resolvedPlaceholder],
   );
 
-  const shouldAnimate = variant === "hero" && text.length === 0;
+  const shouldAnimate = (variant === "hero" || shouldAnimatePlaceholder) && text.length === 0;
   const shouldAnimatePlain = shouldAnimate && !useRichMode && placeholderPool.length > 1;
   const shouldAnimateRich = shouldAnimate && useRichMode;
 

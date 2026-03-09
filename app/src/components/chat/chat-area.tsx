@@ -14,6 +14,7 @@ import {
   Timer,
   Trash2,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { usePostHog } from "posthog-js/react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
@@ -103,6 +104,17 @@ type InputPrefillRequest = {
   id: string;
   text: string;
   mode?: "replace" | "append";
+};
+
+type ChatStarter = {
+  label: string;
+  prompt: string;
+};
+
+type ChatStarterSection = {
+  title: string;
+  description: string;
+  items: ChatStarter[];
 };
 
 const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
@@ -353,6 +365,125 @@ function getAgentInitLabel(status: string | null): string {
   }
 }
 
+const CHAT_PLACEHOLDER_PROMPTS = [
+  "What are my latest unread emails?",
+  "Summarize unread Slack messages mentioning me",
+  "What meetings do I have today and what should I know first?",
+  "Every morning, send me a digest of unread emails and urgent Slack threads",
+  "When a customer email sounds urgent, tag it and alert me in Slack",
+  "Every afternoon, summarize calendar changes and open follow-ups",
+];
+
+const CHAT_QUICK_STARTERS: ChatStarter[] = [
+  {
+    label: "Latest emails",
+    prompt:
+      "What are my latest unread emails? Group them by urgency and tell me what needs a reply first.",
+  },
+  {
+    label: "Unread Slack",
+    prompt:
+      "Show unread Slack messages and mentions that likely need my attention. Summarize each thread in one line.",
+  },
+  {
+    label: "Today's meetings",
+    prompt:
+      "What meetings do I have today? List the time, attendees, and any preparation I should do before each one.",
+  },
+  {
+    label: "Daily digest",
+    prompt:
+      "Create a daily digest workflow that sends me a morning summary of unread emails, important Slack threads, and today's meetings.",
+  },
+];
+
+const CHAT_DISCOVER_SECTIONS: ChatStarterSection[] = [
+  {
+    title: "Ask Right Now",
+    description: "One-shot prompts that pull from connected tools immediately.",
+    items: [
+      {
+        label: "Inbox triage",
+        prompt:
+          "Review my latest unread emails, highlight the critical ones, and draft short reply points for the top 3.",
+      },
+      {
+        label: "Slack catch-up",
+        prompt:
+          "Catch me up on unread Slack threads, especially anything blocking me or asking for a decision.",
+      },
+      {
+        label: "Meeting prep",
+        prompt:
+          "Look at today's calendar and give me a prep brief for each meeting with likely action items.",
+      },
+      {
+        label: "Follow-up list",
+        prompt:
+          "Find emails and messages from the last 48 hours that I should follow up on but have not answered yet.",
+      },
+    ],
+  },
+  {
+    title: "Automate For Me",
+    description: "Recurring or triggered workflows you can turn into a coworker.",
+    items: [
+      {
+        label: "Morning brief",
+        prompt:
+          "Every morning at 8am, send me a digest of unread emails, urgent Slack threads, and today's meetings.",
+      },
+      {
+        label: "Urgent email routing",
+        prompt:
+          "When a new email sounds urgent or frustrated, summarize it, suggest a reply, and alert me in Slack.",
+      },
+      {
+        label: "Post-meeting recap",
+        prompt:
+          "After each calendar event ends, generate a recap draft with next steps and send it to me for review.",
+      },
+      {
+        label: "End-of-day wrap-up",
+        prompt:
+          "Every weekday at 5pm, summarize what changed across email, Slack, and calendar and list unresolved items.",
+      },
+    ],
+  },
+];
+
+const CHAT_STARTER_VARIANTS = {
+  hidden: { opacity: 0, y: 6 },
+  visible: (index: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.25, delay: index * 0.04 },
+  }),
+} as const;
+
+const CHAT_DISCOVER_PANEL_VARIANTS = {
+  hidden: { opacity: 0, height: 0 },
+  visible: {
+    opacity: 1,
+    height: "auto",
+    transition: { duration: 0.25, ease: "easeInOut" },
+  },
+  exit: {
+    opacity: 0,
+    height: 0,
+    transition: { duration: 0.25, ease: "easeInOut" },
+  },
+} as const;
+
+const CHAT_DISCOVER_ITEM_VARIANTS = {
+  hidden: { opacity: 0, x: -4 },
+  visible: (index: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.2, delay: index * 0.03 },
+  }),
+} as const;
+
 export function ChatArea({
   conversationId,
   forceCoworkerQuerySync = false,
@@ -393,6 +524,7 @@ export function ChatArea({
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
   const [skillSearchQuery, setSkillSearchQuery] = useState("");
   const [inputPrefillRequest, setInputPrefillRequest] = useState<InputPrefillRequest | null>(null);
+  const [isDiscoverOpen, setIsDiscoverOpen] = useState(false);
   const initialPrefillAppliedRef = useRef(false);
   const [draftConversationId, setDraftConversationId] = useState<string | undefined>(
     conversationId,
@@ -481,6 +613,14 @@ export function ChatArea({
     });
   }, [initialPrefillText]);
 
+  const isEmptyChat = messages.length === 0 && !isStreaming;
+
+  useEffect(() => {
+    if (!isEmptyChat && isDiscoverOpen) {
+      setIsDiscoverOpen(false);
+    }
+  }, [isDiscoverOpen, isEmptyChat]);
+
   useEffect(() => {
     if (conversationId) {
       return;
@@ -518,6 +658,32 @@ export function ChatArea({
     const interval = window.setInterval(() => setStreamClockNow(Date.now()), 250);
     return () => window.clearInterval(interval);
   }, [isStreaming]);
+
+  const handleStarterSelect = useCallback((prompt: string) => {
+    setInputPrefillRequest({
+      id: `starter-${Date.now()}`,
+      text: prompt,
+    });
+  }, []);
+
+  const handleStarterButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const prompt = event.currentTarget.dataset.prompt;
+      if (!prompt) {
+        return;
+      }
+      handleStarterSelect(prompt);
+    },
+    [handleStarterSelect],
+  );
+
+  const handleToggleDiscover = useCallback(() => {
+    setIsDiscoverOpen((open) => !open);
+  }, []);
+
+  const handleCloseDiscover = useCallback(() => {
+    setIsDiscoverOpen(false);
+  }, []);
 
   const isStreamEventForActiveScope = useCallback(
     ({
@@ -2304,7 +2470,7 @@ export function ChatArea({
               <span>{streamError}</span>
             </div>
           )}
-          {messages.length === 0 && !isStreaming ? (
+          {isEmptyChat ? (
             <div className="h-[60vh]" />
           ) : (
             <>
@@ -2454,90 +2620,185 @@ export function ChatArea({
       </div>
 
       <div className="bg-background p-4">
-        <div className="mx-auto w-full space-y-2">
-          <div className="mx-auto w-full max-w-[1276px]">
-            <div className="grid grid-cols-1 items-end gap-2 md:grid-cols-[52px_minmax(0,896px)_52px] md:justify-center">
-              <div className="min-w-0 space-y-2 md:col-span-2">
-                {(isRecording || isProcessingVoice || voiceError) && (
-                  <VoiceIndicator
-                    isRecording={isRecording}
-                    isProcessing={isProcessingVoice}
-                    error={voiceError}
-                  />
-                )}
-                {queuedMessage && (
-                  <div className="from-muted/75 to-background rounded-3xl border bg-gradient-to-b px-4 py-3 shadow-[0_1px_0_0_hsl(var(--background))_inset,0_12px_24px_-22px_hsl(var(--foreground)/0.5)]">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="bg-background/80 border-border/70 inline-flex size-7 items-center justify-center rounded-full border">
-                          <ListTree className="text-muted-foreground h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm leading-none font-medium">
-                            {queuedMessage.content ||
-                              `${queuedMessage.attachments?.length ?? 0} queued attachment${(queuedMessage.attachments?.length ?? 0) === 1 ? "" : "s"}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
+        <div className="mx-auto w-full max-w-4xl space-y-2">
+          {isEmptyChat && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {CHAT_QUICK_STARTERS.map((starter, i) => (
+                  <motion.div
+                    key={starter.label}
+                    custom={i}
+                    variants={CHAT_STARTER_VARIANTS}
+                    initial="hidden"
+                    animate="visible"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      data-prompt={starter.prompt}
+                      onClick={handleStarterButtonClick}
+                    >
+                      {starter.label}
+                    </Button>
+                  </motion.div>
+                ))}
+                <motion.div
+                  custom={CHAT_QUICK_STARTERS.length}
+                  variants={CHAT_STARTER_VARIANTS}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <Button
+                    type="button"
+                    variant={isDiscoverOpen ? "outline" : "secondary"}
+                    size="sm"
+                    className="gap-1.5 rounded-full"
+                    onClick={handleToggleDiscover}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Discover
+                  </Button>
+                </motion.div>
+              </div>
+
+              <AnimatePresence>
+                {isDiscoverOpen && (
+                  <motion.div
+                    variants={CHAT_DISCOVER_PANEL_VARIANTS}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    className="overflow-hidden"
+                  >
+                    <div className="rounded-2xl border bg-stone-50/60 p-3">
+                      <div className="mb-2.5 flex items-center justify-end">
                         <Button
-                          size="sm"
-                          className="h-8 rounded-full px-3"
-                          variant="secondary"
-                          onClick={handleSendQueuedNow}
-                        >
-                          Steer
-                        </Button>
-                        <Button
-                          size="icon-sm"
+                          type="button"
                           variant="ghost"
-                          onClick={handleClearQueued}
-                          aria-label="Delete queued message"
-                          className="rounded-full"
+                          size="sm"
+                          className="text-muted-foreground hover:text-foreground -mr-1 h-7 rounded-full px-2 text-xs"
+                          onClick={handleCloseDiscover}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          Close
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="icon-sm" variant="ghost" className="rounded-full">
-                              <Ellipsis className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-56 rounded-2xl p-1.5">
-                            <DropdownMenuItem onClick={handleEditQueuedMessage}>
-                              <PenLine className="h-4 w-4" />
-                              Edit message
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleToggleQueueingEnabled}>
-                              <ListTree className="h-4 w-4" />
-                              {queueingEnabled ? "Turn off queueing" : "Turn on queueing"}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      </div>
+
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        {CHAT_DISCOVER_SECTIONS.map((section, sectionIdx) => (
+                          <div key={section.title}>
+                            <p className="mb-1.5 text-xs font-medium tracking-wide text-stone-500 uppercase">
+                              {section.title}
+                            </p>
+                            <div className="flex flex-col gap-1">
+                              {section.items.map((item, itemIdx) => (
+                                <motion.button
+                                  key={item.label}
+                                  type="button"
+                                  custom={sectionIdx * 2 + itemIdx}
+                                  variants={CHAT_DISCOVER_ITEM_VARIANTS}
+                                  initial="hidden"
+                                  animate="visible"
+                                  className="hover:bg-background group rounded-xl px-2.5 py-2 text-left transition-colors"
+                                  data-prompt={item.prompt}
+                                  onClick={handleStarterButtonClick}
+                                >
+                                  <span className="block text-sm font-medium">{item.label}</span>
+                                  <span className="text-muted-foreground mt-0.5 line-clamp-1 block text-xs leading-relaxed">
+                                    {item.prompt}
+                                  </span>
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {(isRecording || isProcessingVoice || voiceError) && (
+            <VoiceIndicator
+              isRecording={isRecording}
+              isProcessing={isProcessingVoice}
+              error={voiceError}
+            />
+          )}
+          {queuedMessage && (
+            <div className="from-muted/75 to-background rounded-3xl border bg-gradient-to-b px-4 py-3 shadow-[0_1px_0_0_hsl(var(--background))_inset,0_12px_24px_-22px_hsl(var(--foreground)/0.5)]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="bg-background/80 border-border/70 inline-flex size-7 items-center justify-center rounded-full border">
+                    <ListTree className="text-muted-foreground h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm leading-none font-medium">
+                      {queuedMessage.content ||
+                        `${queuedMessage.attachments?.length ?? 0} queued attachment${(queuedMessage.attachments?.length ?? 0) === 1 ? "" : "s"}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    className="h-8 rounded-full px-3"
+                    variant="secondary"
+                    onClick={handleSendQueuedNow}
+                  >
+                    Steer
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={handleClearQueued}
+                    aria-label="Delete queued message"
+                    className="rounded-full"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon-sm" variant="ghost" className="rounded-full">
+                        <Ellipsis className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-56 rounded-2xl p-1.5">
+                      <DropdownMenuItem onClick={handleEditQueuedMessage}>
+                        <PenLine className="h-4 w-4" />
+                        Edit message
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleToggleQueueingEnabled}>
+                        <ListTree className="h-4 w-4" />
+                        {queueingEnabled ? "Turn off queueing" : "Turn on queueing"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="mx-auto w-full max-w-4xl">
-            <PromptBar
-              onSubmit={handleSend}
-              onStop={handleStop}
-              disabled={isRecording || isProcessingVoice}
-              isStreaming={isStreaming}
-              isRecording={isRecording}
-              onStartRecording={handleStartRecording}
-              onStopRecording={stopRecordingAndTranscribe}
-              prefillRequest={inputPrefillRequest}
-              conversationId={draftConversationId}
-              placeholder="Send a message..."
-              renderSkills={skillsMenuNode}
-              renderModelSelector={modelSelectorNode}
-              renderAutoApproval={autoApprovalNode}
-            />
-          </div>
+          )}
+
+          <PromptBar
+            onSubmit={handleSend}
+            onStop={handleStop}
+            disabled={isRecording || isProcessingVoice}
+            isStreaming={isStreaming}
+            isRecording={isRecording}
+            onStartRecording={handleStartRecording}
+            onStopRecording={stopRecordingAndTranscribe}
+            prefillRequest={inputPrefillRequest}
+            conversationId={draftConversationId}
+            placeholder="Send a message..."
+            animatedPlaceholders={CHAT_PLACEHOLDER_PROMPTS}
+            shouldAnimatePlaceholder={isEmptyChat}
+            renderSkills={skillsMenuNode}
+            renderModelSelector={modelSelectorNode}
+            renderAutoApproval={autoApprovalNode}
+          />
         </div>
       </div>
     </div>
