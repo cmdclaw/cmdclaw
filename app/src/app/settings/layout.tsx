@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 
 const settingsTabs = [
@@ -25,21 +24,19 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const activeKey = getActiveKey(pathname);
 
   return (
-    <AppShell>
-      <div className="bg-background min-h-full">
-        <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
-          <div className="mb-6">
-            <AnimatedTabs activeKey={activeKey}>
-              {settingsTabs.map((tab) => (
-                <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>
-                  {tab.label}
-                </AnimatedTab>
-              ))}
-            </AnimatedTabs>
-          </div>
-          {children}
-        </main>
-      </div>
-    </AppShell>
+    <div className="bg-background min-h-full">
+      <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
+        <div className="mb-6">
+          <AnimatedTabs activeKey={activeKey}>
+            {settingsTabs.map((tab) => (
+              <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>
+                {tab.label}
+              </AnimatedTab>
+            ))}
+          </AnimatedTabs>
+        </div>
+        {children}
+      </main>
+    </div>
   );
 }

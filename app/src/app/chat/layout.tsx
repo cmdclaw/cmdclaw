@@ -3,7 +3,6 @@
 import { Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AppShell } from "@/components/app-shell";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -78,7 +77,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <AppShell>
+    <>
       <header className="flex h-14 items-center gap-2 px-4">
         {isAdmin && liveConversationId && (
           <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
@@ -87,6 +86,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         <ChatShareControls conversationId={liveConversationId} />
       </header>
       <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">{children}</div>
-    </AppShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { CheckCircle2, Loader2, Monitor, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
@@ -76,71 +75,69 @@ function ConnectDevicePageContent() {
   }, []);
 
   return (
-    <AppShell>
-      <div className="bg-background flex min-h-screen items-center justify-center">
-        <div className="w-full max-w-md px-4">
-          <div className="mb-8 text-center">
-            <div className="bg-muted mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl">
-              <Monitor className="text-muted-foreground h-7 w-7" />
-            </div>
-            <h1 className="text-2xl font-semibold">Connect Device</h1>
-            <p className="text-muted-foreground mt-2 text-sm">
-              Enter the code shown on your device to connect it as a compute backend.
+    <div className="bg-background flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-md px-4">
+        <div className="mb-8 text-center">
+          <div className="bg-muted mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl">
+            <Monitor className="text-muted-foreground h-7 w-7" />
+          </div>
+          <h1 className="text-2xl font-semibold">Connect Device</h1>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Enter the code shown on your device to connect it as a compute backend.
+          </p>
+        </div>
+
+        {status === "success" ? (
+          <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-6 text-center">
+            <CheckCircle2 className="mx-auto h-8 w-8 text-green-600 dark:text-green-400" />
+            <h2 className="mt-3 font-medium text-green-700 dark:text-green-300">
+              Device connected
+            </h2>
+            <p className="mt-1 text-sm text-green-600 dark:text-green-400">
+              Your device is now connected. You can start using it as a compute backend.
             </p>
           </div>
-
-          {status === "success" ? (
-            <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-6 text-center">
-              <CheckCircle2 className="mx-auto h-8 w-8 text-green-600 dark:text-green-400" />
-              <h2 className="mt-3 font-medium text-green-700 dark:text-green-300">
-                Device connected
-              </h2>
-              <p className="mt-1 text-sm text-green-600 dark:text-green-400">
-                Your device is now connected. You can start using it as a compute backend.
-              </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium">Device Code</label>
+              <Input
+                type="text"
+                value={code}
+                onChange={handleCodeChange}
+                placeholder="ABCD1234"
+                maxLength={12}
+                className="text-center font-mono text-lg tracking-widest"
+                autoFocus
+                disabled={status === "submitting"}
+              />
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium">Device Code</label>
-                <Input
-                  type="text"
-                  value={code}
-                  onChange={handleCodeChange}
-                  placeholder="ABCD1234"
-                  maxLength={12}
-                  className="text-center font-mono text-lg tracking-widest"
-                  autoFocus
-                  disabled={status === "submitting"}
-                />
+
+            {status === "error" && (
+              <div className="border-destructive/30 bg-destructive/10 text-destructive flex items-center gap-2 rounded-lg border p-3 text-sm">
+                <XCircle className="h-4 w-4 shrink-0" />
+                {errorMsg}
               </div>
+            )}
 
-              {status === "error" && (
-                <div className="border-destructive/30 bg-destructive/10 text-destructive flex items-center gap-2 rounded-lg border p-3 text-sm">
-                  <XCircle className="h-4 w-4 shrink-0" />
-                  {errorMsg}
-                </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!code.trim() || status === "submitting"}
+            >
+              {status === "submitting" ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                "Connect Device"
               )}
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={!code.trim() || status === "submitting"}
-              >
-                {status === "submitting" ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  "Connect Device"
-                )}
-              </Button>
-            </form>
-          )}
-        </div>
+            </Button>
+          </form>
+        )}
       </div>
-    </AppShell>
+    </div>
   );
 }
 

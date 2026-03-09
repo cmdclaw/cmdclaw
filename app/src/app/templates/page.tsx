@@ -7,7 +7,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
-import { AppShell } from "@/components/app-shell";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
@@ -398,7 +397,7 @@ function TemplatesPageContent() {
   }, []);
 
   return (
-    <AppShell sidebarVisibility="authenticated">
+    <>
       <div className="bg-background min-h-screen">
         <div className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">
           {/* Header */}
@@ -550,9 +549,8 @@ function TemplatesPageContent() {
           )}
         </div>
       </div>
-
       <TemplatePreviewModal templateId={previewId} />
-    </AppShell>
+    </>
   );
 }
 

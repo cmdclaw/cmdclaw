@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
 
 export default function WorkflowsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -14,7 +13,7 @@ export default function WorkflowsLayout({ children }: { children: React.ReactNod
     !isGridRoute;
 
   return (
-    <AppShell>
+    <>
       {isRunsRoute || isWorkflowEditorRoute ? (
         <div className="bg-background flex h-full min-h-0 w-full flex-1 overflow-hidden">
           {children}
@@ -24,6 +23,6 @@ export default function WorkflowsLayout({ children }: { children: React.ReactNod
           <main className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">{children}</main>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }
