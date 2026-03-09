@@ -6,8 +6,6 @@ import {
   FileText,
   Pencil,
   Trash2,
-  CheckCircle2,
-  XCircle,
   Search,
   Globe,
   FileOutput,
@@ -20,7 +18,8 @@ import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { IconDisplay } from "@/components/ui/icon-picker";
 import { Switch } from "@/components/ui/switch";
@@ -305,10 +304,6 @@ function SkillsPageContent() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [search, setSearch] = useState("");
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
 
   const handleCreate = useCallback(async () => {
     setIsCreating(true);
@@ -319,10 +314,7 @@ function SkillsPageContent() {
       });
       router.push(`/skills/${result.id}`);
     } catch {
-      setNotification({
-        type: "error",
-        message: "Failed to create skill. Please try again.",
-      });
+      toast.error("Failed to create skill. Please try again.");
       setIsCreating(false);
     }
   }, [createSkill, router]);
@@ -347,28 +339,14 @@ function SkillsPageContent() {
 
       try {
         await deleteSkill.mutateAsync(id);
-        setNotification({
-          type: "success",
-          message: `Skill "${displayName}" deleted.`,
-        });
+        toast.success(`Skill "${displayName}" deleted.`);
         refetch();
       } catch {
-        setNotification({
-          type: "error",
-          message: "Failed to delete skill.",
-        });
+        toast.error("Failed to delete skill.");
       }
     },
     [deleteSkill, refetch],
   );
-
-  useEffect(() => {
-    if (!notification) {
-      return;
-    }
-    const timer = setTimeout(() => setNotification(null), 5000);
-    return () => clearTimeout(timer);
-  }, [notification]);
 
   const skillsList = useMemo(() => (Array.isArray(skills) ? skills : []), [skills]);
 
@@ -422,25 +400,6 @@ function SkillsPageContent() {
           </Button>
         </div>
       </div>
-
-      {/* Notification */}
-      {notification && (
-        <div
-          className={cn(
-            "mb-6 flex items-center gap-2 rounded-lg border p-4",
-            notification.type === "success"
-              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-          )}
-        >
-          {notification.type === "success" ? (
-            <CheckCircle2 className="h-5 w-5" />
-          ) : (
-            <XCircle className="h-5 w-5" />
-          )}
-          {notification.message}
-        </div>
-      )}
 
       {/* Search */}
       <div className="border-border/50 bg-card mb-8 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm">

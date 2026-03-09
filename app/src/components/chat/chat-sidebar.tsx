@@ -46,6 +46,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
+  getConversationSeenTarget,
+  getEffectiveSeenMessageCount,
+  hasUnreadConversationResults,
+} from "@/lib/conversation-seen";
+import {
   useConversationList,
   useDeleteConversation,
   useMarkAllConversationsSeen,
@@ -196,8 +201,14 @@ export function ChatSidebar() {
       return 0;
     }
 
-    return data.conversations.filter((conv) => conv.messageCount > (conv.seenMessageCount ?? 0))
-      .length;
+    return data.conversations.filter(
+      (conv) =>
+        conv.messageCount >
+        getEffectiveSeenMessageCount({
+          serverSeenCount: conv.seenMessageCount,
+          optimisticSeenCount: latestSeenRef.current[conv.id],
+        }),
+    ).length;
   }, [data?.conversations]);
 
   const handleMarkAllRead = useCallback(async () => {
@@ -231,12 +242,13 @@ export function ChatSidebar() {
       return;
     }
 
-    const targetSeenCount = activeConversation.messageCount;
-    const serverSeenCount = activeConversation.seenMessageCount ?? 0;
-    const localLatestSeenCount = latestSeenRef.current[activeConversation.id] ?? 0;
-    const currentSeenCount = Math.max(serverSeenCount, localLatestSeenCount);
+    const targetSeenCount = getConversationSeenTarget({
+      messageCount: activeConversation.messageCount,
+      serverSeenCount: activeConversation.seenMessageCount,
+      optimisticSeenCount: latestSeenRef.current[activeConversation.id],
+    });
 
-    if (targetSeenCount <= currentSeenCount) {
+    if (targetSeenCount === null) {
       return;
     }
 
@@ -304,11 +316,13 @@ export function ChatSidebar() {
                   const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
                     conv.generationStatus,
                   );
-                  const seenMessageCount = conv.seenMessageCount ?? 0;
-                  const hasUnreadResults =
-                    !isConversationRunning &&
-                    !isActiveConversation &&
-                    conv.messageCount > seenMessageCount;
+                  const hasUnreadResults = hasUnreadConversationResults({
+                    isConversationActive: isActiveConversation,
+                    isConversationRunning,
+                    messageCount: conv.messageCount,
+                    serverSeenCount: conv.seenMessageCount,
+                    optimisticSeenCount: latestSeenRef.current[conv.id],
+                  });
 
                   return (
                     <SidebarMenuItem key={conv.id}>

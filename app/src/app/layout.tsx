@@ -3,7 +3,9 @@ import { AutumnProvider } from "autumn-js/react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { AppShellRouteWrapper } from "@/components/app-shell-route-wrapper";
+import { DesktopNotificationPermissionGate } from "@/components/desktop-notification-permission-gate";
 import { PostHogClientProvider } from "@/components/posthog-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { env } from "@/env";
 import { ORPCProvider } from "@/orpc/provider";
 // oxlint-disable-next-line import/no-unassigned-import
@@ -48,10 +50,12 @@ export default async function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <PostHogClientProvider>
           <ORPCProvider>
-            <AutumnProvider betterAuthUrl={env.NEXT_PUBLIC_APP_URL}>
+            <AutumnProvider betterAuthUrl={env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? ""}>
+              <DesktopNotificationPermissionGate />
               <AppShellRouteWrapper initialHasSession={hasSessionCookie}>
                 {children}
               </AppShellRouteWrapper>
+              <Toaster />
             </AutumnProvider>
           </ORPCProvider>
         </PostHogClientProvider>

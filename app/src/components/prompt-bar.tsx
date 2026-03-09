@@ -634,8 +634,8 @@ export function PromptBar({
               <Button
                 onClick={onStop}
                 size="icon"
-                variant="destructive"
-                className="h-8 w-8 rounded-lg"
+                variant="outline"
+                className="h-8 w-8 rounded-lg border-black bg-black text-white hover:bg-black/90 hover:text-white"
               >
                 <Square className="h-3.5 w-3.5" />
               </Button>

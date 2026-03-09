@@ -1,14 +1,14 @@
 "use client";
 
 import type { ITimezone } from "react-timezone-select";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TimezoneSelect from "react-timezone-select";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { authClient } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
 import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
@@ -129,10 +129,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [removingPhone, setRemovingPhone] = useState(false);
   const [timezoneInput, setTimezoneInput] = useState("");
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
   const { data: currentUser } = useCurrentUser();
   const setUserTimezone = useSetUserTimezone();
   const browserTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "", []);
@@ -158,13 +154,6 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  useEffect(() => {
     if (currentUser?.timezone) {
       setTimezoneInput(currentUser.timezone);
       return;
@@ -185,10 +174,10 @@ export default function SettingsPage() {
           name: fullName,
           phoneNumber: phoneNumber || undefined,
         });
-        setNotification({ type: "success", message: "Settings saved" });
+        toast.success("Settings saved");
       } catch (error) {
         console.error("Failed to update user:", error);
-        setNotification({ type: "error", message: "Failed to save settings" });
+        toast.error("Failed to save settings");
       } finally {
         setSaving(false);
       }
@@ -217,13 +206,10 @@ export default function SettingsPage() {
             }
           : prev,
       );
-      setNotification({ type: "success", message: "Phone number removed" });
+      toast.success("Phone number removed");
     } catch (error) {
       console.error("Failed to remove phone number:", error);
-      setNotification({
-        type: "error",
-        message: "Failed to remove phone number",
-      });
+      toast.error("Failed to remove phone number");
     } finally {
       setRemovingPhone(false);
     }
@@ -250,10 +236,10 @@ export default function SettingsPage() {
       }
       void setUserTimezone
         .mutateAsync(value)
-        .then(() => setNotification({ type: "success", message: "Timezone updated" }))
+        .then(() => toast.success("Timezone updated"))
         .catch((error) => {
           console.error("Failed to update timezone:", error);
-          setNotification({ type: "error", message: "Failed to update timezone" });
+          toast.error("Failed to update timezone");
         });
     },
     [setUserTimezone],
@@ -266,10 +252,10 @@ export default function SettingsPage() {
     setTimezoneInput(browserTimezone);
     void setUserTimezone
       .mutateAsync(browserTimezone)
-      .then(() => setNotification({ type: "success", message: "Timezone updated" }))
+      .then(() => toast.success("Timezone updated"))
       .catch((error) => {
         console.error("Failed to update timezone:", error);
-        setNotification({ type: "error", message: "Failed to update timezone" });
+        toast.error("Failed to update timezone");
       });
   }, [browserTimezone, setUserTimezone]);
 
@@ -300,20 +286,6 @@ export default function SettingsPage() {
         <h2 className="text-xl font-semibold">General Settings</h2>
         <p className="text-muted-foreground mt-1 text-sm">Manage your account information.</p>
       </div>
-
-      {notification && (
-        <div
-          className={cn(
-            "mb-6 flex items-center gap-2 rounded-lg border p-3 text-sm",
-            notification.type === "success"
-              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-          )}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          {notification.message}
-        </div>
-      )}
 
       <form onSubmit={handleSave} className="space-y-6">
         <div className="space-y-4">

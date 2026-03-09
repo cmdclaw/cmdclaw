@@ -4,8 +4,8 @@ import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 type WhatsAppStatus = {
   status: "disconnected" | "connecting" | "connected";
@@ -21,18 +21,6 @@ export default function WhatsAppIntegrationPage() {
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [linkExpiresAt, setLinkExpiresAt] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!notification) {
-      return;
-    }
-    const timer = setTimeout(() => setNotification(null), 4000);
-    return () => clearTimeout(timer);
-  }, [notification]);
 
   useEffect(() => {
     let active = true;
@@ -91,10 +79,7 @@ export default function WhatsAppIntegrationPage() {
       if (!res.ok) {
         if (res.status === 403) {
           setForbidden(true);
-          setNotification({
-            type: "error",
-            message: "Only admins can pair the WhatsApp bridge.",
-          });
+          toast.error("Only admins can pair the WhatsApp bridge.");
           return;
         }
         throw new Error(await res.text());
@@ -103,10 +88,7 @@ export default function WhatsAppIntegrationPage() {
       setWaStatus(data);
     } catch (err) {
       console.error("Failed to reconnect WhatsApp:", err);
-      setNotification({
-        type: "error",
-        message: "Failed to start WhatsApp pairing.",
-      });
+      toast.error("Failed to start WhatsApp pairing.");
     } finally {
       setWaLoading(false);
     }
@@ -122,16 +104,10 @@ export default function WhatsAppIntegrationPage() {
       const data = (await res.json()) as { code: string; expiresAt: string };
       setLinkCode(data.code);
       setLinkExpiresAt(data.expiresAt);
-      setNotification({
-        type: "success",
-        message: "WhatsApp link code generated.",
-      });
+      toast.success("WhatsApp link code generated.");
     } catch (err) {
       console.error("Failed to generate link code:", err);
-      setNotification({
-        type: "error",
-        message: "Failed to generate link code.",
-      });
+      toast.error("Failed to generate link code.");
     } finally {
       setLinkLoading(false);
     }
@@ -145,19 +121,6 @@ export default function WhatsAppIntegrationPage() {
           Pair WhatsApp with a QR code, then link your own number with a code.
         </p>
       </div>
-
-      {notification && (
-        <div
-          className={cn(
-            "mb-6 rounded-lg border p-3 text-sm",
-            notification.type === "success"
-              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-          )}
-        >
-          {notification.message}
-        </div>
-      )}
 
       <div className="space-y-6">
         <div className="rounded-lg border p-6">

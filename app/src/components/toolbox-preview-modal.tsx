@@ -117,6 +117,17 @@ export function ToolboxPreviewModal({
     }
   }, [previewId]);
 
+  const handleCommunitySkillToggle = useCallback(
+    (value: boolean) => {
+      if (!communitySkillProps || target?.kind !== "community") {
+        return;
+      }
+
+      communitySkillProps.onToggle(target.slug, value);
+    },
+    [communitySkillProps, target],
+  );
+
   if (!target) {
     return null;
   }
@@ -175,11 +186,7 @@ export function ToolboxPreviewModal({
             <CommunitySkillDetailContent
               skill={COMMUNITY_SKILLS_DATA[target.slug]}
               enabled={communitySkillProps?.getEnabled(target.slug)}
-              onToggle={
-                communitySkillProps
-                  ? (value: boolean) => communitySkillProps.onToggle(target.slug, value)
-                  : undefined
-              }
+              onToggle={communitySkillProps ? handleCommunitySkillToggle : undefined}
             />
           )}
           {target.kind === "integration" &&

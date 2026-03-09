@@ -592,6 +592,9 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
               >
                 Docs
               </a>
+              <Link href="/pricing" className="hover:text-foreground transition-colors">
+                Pricing
+              </Link>
               <Link href="/legal/terms" className="hover:text-foreground transition-colors">
                 Terms
               </Link>

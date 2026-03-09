@@ -4,7 +4,8 @@ import { ArrowUp, Loader2, PenLine, Play } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
@@ -283,27 +284,17 @@ export default function CoworkersPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [prompt, setPrompt] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const coworkerList = useMemo(() => {
     const real = Array.isArray(coworkers) ? coworkers : [];
     // Merge mock data with real coworkers for development
     return [...real, ...MOCK_COWORKERS];
   }, [coworkers]);
 
-  useEffect(() => {
-    if (!error) {
-      return;
-    }
-    const timer = setTimeout(() => setError(null), 5000);
-    return () => clearTimeout(timer);
-  }, [error]);
-
   const handleRunCoworker = useCallback(
     (coworker: CoworkerItem) => {
       const username = coworker.username?.trim();
       if (!username) {
-        setError("Missing coworker username.");
+        toast.error("Missing coworker username.");
         return;
       }
       const query = new URLSearchParams({ prefill: `run @coworker-${username}` });
@@ -372,11 +363,10 @@ export default function CoworkersPage() {
       return;
     }
     setIsCreating(true);
-    setError(null);
     try {
       await doCreate({ initialMessage: text, name: "", prompt: "", triggerType: "manual" });
     } catch {
-      setError("Failed to create coworker. Please try again.");
+      toast.error("Failed to create coworker. Please try again.");
       setIsCreating(false);
     }
   }, [doCreate, isCreating, prompt]);
@@ -393,12 +383,6 @@ export default function CoworkersPage() {
 
   return (
     <div className="space-y-10">
-      {error ? (
-        <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400">
-          {error}
-        </div>
-      ) : null}
-
       <div className="px-4 pt-[12vh] pb-8">
         <div className="mx-auto max-w-xl">
           <h1 className="text-foreground mb-2 text-center text-xl font-semibold tracking-tight">

@@ -1,10 +1,11 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle2, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -47,7 +48,7 @@ const PROVIDERS: {
     id: "openai",
     authType: "oauth",
     name: "ChatGPT",
-    description: "Use your ChatGPT Plus/Pro/Max subscription",
+    description: "Use your ChatGPT Plus/Pro/Max account",
     logoUrl: "/integrations/openai.svg",
     logoAlt: "OpenAI logo",
     logoClassName: "dark:invert",
@@ -61,11 +62,7 @@ const PROVIDERS: {
   },
 ];
 
-function SearchParamsHandler({
-  onNotification,
-}: {
-  onNotification: (notification: { type: "success" | "error"; message: string }) => void;
-}) {
+function SearchParamsHandler() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
@@ -74,20 +71,14 @@ function SearchParamsHandler({
     const error = searchParams.get("provider_error");
 
     if (connected) {
-      onNotification({
-        type: "success",
-        message: `${getProviderLabel(connected)} connected successfully!`,
-      });
+      toast.success(`${getProviderLabel(connected)} connected successfully!`);
       queryClient.invalidateQueries({ queryKey: ["providerAuth"] });
       window.history.replaceState({}, "", "/settings/subscriptions");
     } else if (error) {
-      onNotification({
-        type: "error",
-        message: `Connection failed: ${error.replace(/_/g, " ")}`,
-      });
+      toast.error(`Connection failed: ${error.replace(/_/g, " ")}`);
       window.history.replaceState({}, "", "/settings/subscriptions");
     }
-  }, [searchParams, queryClient, onNotification]);
+  }, [searchParams, queryClient]);
 
   return null;
 }
@@ -150,26 +141,6 @@ export default function SubscriptionsPage() {
   const [deviceFlow, setDeviceFlow] = useState<DeviceFlowState | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const copyFeedbackTimeoutRef = useRef<number | null>(null);
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
-
-  const handleNotification = useCallback(
-    (newNotification: { type: "success" | "error"; message: string }) => {
-      setNotification(newNotification);
-    },
-    [],
-  );
-
-  // Auto-dismiss notifications
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
   useEffect(() => {
     return () => {
       if (copyFeedbackTimeoutRef.current) {
@@ -184,10 +155,7 @@ export default function SubscriptionsPage() {
     }
 
     if (Date.now() >= deviceFlow.expiresAt) {
-      setNotification({
-        type: "error",
-        message: "Device code expired. Please reconnect to generate a new code.",
-      });
+      toast.error("Device code expired. Please reconnect to generate a new code.");
       setDeviceFlow(null);
       setConnectingProvider(null);
       return;
@@ -203,20 +171,14 @@ export default function SubscriptionsPage() {
 
           if (result.status === "connected") {
             await refetch();
-            setNotification({
-              type: "success",
-              message: `${getProviderLabel(deviceFlow.provider)} connected successfully!`,
-            });
+            toast.success(`${getProviderLabel(deviceFlow.provider)} connected successfully!`);
             setDeviceFlow(null);
             setConnectingProvider(null);
             return;
           }
 
           if (result.status === "failed") {
-            setNotification({
-              type: "error",
-              message: `Connection failed: ${result.error.replace(/_/g, " ")}`,
-            });
+            toast.error(`Connection failed: ${result.error.replace(/_/g, " ")}`);
             setDeviceFlow(null);
             setConnectingProvider(null);
             return;
@@ -262,10 +224,7 @@ export default function SubscriptionsPage() {
         setConnectingProvider(null);
       } catch (error) {
         console.error("Failed to start OAuth flow:", error);
-        setNotification({
-          type: "error",
-          message: "Failed to start connection. Please try again.",
-        });
+        toast.error("Failed to start connection. Please try again.");
         setConnectingProvider(null);
       }
     },
@@ -276,16 +235,10 @@ export default function SubscriptionsPage() {
     async (provider: ProviderID) => {
       try {
         await disconnectProvider.mutateAsync(provider);
-        setNotification({
-          type: "success",
-          message: `${getProviderLabel(provider)} disconnected.`,
-        });
+        toast.success(`${getProviderLabel(provider)} disconnected.`);
       } catch (error) {
         console.error("Failed to disconnect:", error);
-        setNotification({
-          type: "error",
-          message: "Failed to disconnect. Please try again.",
-        });
+        toast.error("Failed to disconnect. Please try again.");
       }
     },
     [disconnectProvider],
@@ -332,32 +285,15 @@ export default function SubscriptionsPage() {
   return (
     <div>
       <Suspense fallback={null}>
-        <SearchParamsHandler onNotification={handleNotification} />
+        <SearchParamsHandler />
       </Suspense>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Subscriptions</h2>
+        <h2 className="text-xl font-semibold">Connected AI Account</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Connect your existing AI subscriptions to use additional models in cmdclaw.
+          Connect your existing AI account to use provider-backed models without consuming CmdClaw
+          credits.
         </p>
       </div>
-
-      {notification && (
-        <div
-          className={cn(
-            "mb-6 flex items-center gap-2 rounded-lg border p-3 text-sm",
-            notification.type === "success"
-              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-          )}
-        >
-          {notification.type === "success" ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-          ) : (
-            <XCircle className="h-4 w-4 shrink-0" />
-          )}
-          {notification.message}
-        </div>
-      )}
 
       {deviceFlow && (
         <div className="mb-6 rounded-lg border p-4">
@@ -476,7 +412,7 @@ export default function SubscriptionsPage() {
           />
           <p className="text-muted-foreground text-xs">
             Anthropic models (Claude) are always available through CmdClaw&apos;s platform.
-            Connecting a subscription gives you access to additional models from that provider.
+            Connecting an AI account gives you access to additional models from that provider.
           </p>
         </div>
       </div>

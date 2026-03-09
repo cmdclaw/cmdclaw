@@ -42,7 +42,6 @@ import {
   useLinkLinkedIn,
   useSkillList,
   useCreateSkill,
-  useUpdateSkill,
   useDeleteSkill,
   useRequestGoogleAccess,
 } from "@/orpc/hooks";
@@ -581,7 +580,6 @@ function ToolboxPageContent() {
   // Skill hooks
   const { data: skills, isLoading: skillsLoading, refetch: refetchSkills } = useSkillList();
   const createSkill = useCreateSkill();
-  const updateSkill = useUpdateSkill();
   const deleteSkill = useDeleteSkill();
 
   // Local state
@@ -746,18 +744,6 @@ function ToolboxPageContent() {
       setIsCreating(false);
     }
   }, [createSkill, router]);
-
-  const handleSkillToggle = useCallback(
-    async (id: string, enabled: boolean) => {
-      try {
-        await updateSkill.mutateAsync({ id, enabled });
-        refetchSkills();
-      } catch (error) {
-        console.error("Failed to toggle skill:", error);
-      }
-    },
-    [refetchSkills, updateSkill],
-  );
 
   const handleSkillDelete = useCallback(
     async (id: string, displayName: string) => {
@@ -1000,6 +986,14 @@ function ToolboxPageContent() {
     ],
   );
 
+  const previewCommunitySkillProps = useMemo(
+    () => ({
+      getEnabled: (slug: string) => communitySkillToggles[slug] ?? false,
+      onToggle: handleCommunitySkillToggle,
+    }),
+    [communitySkillToggles, handleCommunitySkillToggle],
+  );
+
   return (
     <>
       {/* Header */}
@@ -1178,10 +1172,7 @@ function ToolboxPageContent() {
       <ToolboxPreviewModal
         previewId={previewId}
         integrationProps={previewIntegrationProps}
-        communitySkillProps={{
-          getEnabled: (slug: string) => communitySkillToggles[slug] ?? false,
-          onToggle: handleCommunitySkillToggle,
-        }}
+        communitySkillProps={previewCommunitySkillProps}
       />
     </>
   );

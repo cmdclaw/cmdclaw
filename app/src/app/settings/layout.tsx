@@ -6,12 +6,16 @@ import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 const settingsTabs = [
   { key: "general", label: "General", href: "/settings" },
   { key: "usage", label: "Usage", href: "/settings/usage" },
-  { key: "subscriptions", label: "Subscriptions", href: "/settings/subscriptions" },
+  { key: "billing", label: "Billing", href: "/settings/billing" },
+  { key: "subscriptions", label: "Connected AI Account", href: "/settings/subscriptions" },
 ];
 
 function getActiveKey(pathname: string) {
   if (pathname.startsWith("/settings/usage")) {
     return "usage";
+  }
+  if (pathname.startsWith("/settings/billing")) {
+    return "billing";
   }
   if (pathname.startsWith("/settings/subscriptions")) {
     return "subscriptions";

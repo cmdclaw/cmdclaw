@@ -25,7 +25,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BugReportDialog } from "@/components/bug-report-dialog";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
 import {
@@ -47,11 +47,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import {
+  getConversationSeenTarget,
+  getEffectiveSeenMessageCount,
+  hasUnreadConversationResults,
+} from "@/lib/conversation-seen";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
   useDeleteConversation,
   useMarkAllConversationsSeen,
+  useMarkConversationSeen,
   useUpdateConversationPinned,
   useUpdateConversationTitle,
   useCoworkerList,
@@ -82,6 +88,7 @@ const RUNNING_CONVERSATION_STATUSES = new Set([
   "awaiting_auth",
   "paused",
 ]);
+const EMPTY_CONVERSATIONS: ConversationListData["conversations"] = [];
 
 function formatRelativeShort(date: Date) {
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -172,12 +179,14 @@ export function AppSidebar() {
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const latestSeenRef = useRef<Record<string, number>>({});
 
   const { data: coworkers } = useCoworkerList();
   const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
   const conversationData = rawConversationData as ConversationListData | undefined;
   const deleteConversation = useDeleteConversation();
   const markAllConversationsSeenMutation = useMarkAllConversationsSeen();
+  const markConversationSeenMutation = useMarkConversationSeen();
   const updateConversationPinned = useUpdateConversationPinned();
   const updateConversationTitle = useUpdateConversationTitle();
 
@@ -287,10 +296,47 @@ export function AppSidebar() {
   const adminNavItems: NavItem[] = [{ icon: Shield, label: "Admin", href: "/admin" }];
 
   const recentCoworkers = coworkers?.slice(0, 5) ?? [];
-  const recentConversations = conversationData?.conversations ?? [];
+  const recentConversations = conversationData?.conversations ?? EMPTY_CONVERSATIONS;
   const unreadConversationCount = recentConversations.filter(
-    (conversation) => conversation.messageCount > (conversation.seenMessageCount ?? 0),
+    (conversation) =>
+      conversation.messageCount >
+      getEffectiveSeenMessageCount({
+        serverSeenCount: conversation.seenMessageCount,
+        optimisticSeenCount: latestSeenRef.current[conversation.id],
+      }),
   ).length;
+
+  useEffect(() => {
+    const activeConversationId = pathname.startsWith("/chat/")
+      ? pathname.slice("/chat/".length)
+      : "";
+    if (!activeConversationId) {
+      return;
+    }
+
+    const activeConversation = recentConversations.find(
+      (conversation) => conversation.id === activeConversationId,
+    );
+    if (!activeConversation) {
+      return;
+    }
+
+    const nextSeenCount = getConversationSeenTarget({
+      messageCount: activeConversation.messageCount,
+      serverSeenCount: activeConversation.seenMessageCount,
+      optimisticSeenCount: latestSeenRef.current[activeConversation.id],
+    });
+
+    if (nextSeenCount === null) {
+      return;
+    }
+
+    latestSeenRef.current[activeConversation.id] = nextSeenCount;
+    markConversationSeenMutation.mutate({
+      id: activeConversation.id,
+      seenMessageCount: nextSeenCount,
+    });
+  }, [markConversationSeenMutation, pathname, recentConversations]);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
@@ -378,8 +424,15 @@ export function AppSidebar() {
       return;
     }
 
+    for (const conversation of recentConversations) {
+      latestSeenRef.current[conversation.id] = Math.max(
+        latestSeenRef.current[conversation.id] ?? 0,
+        conversation.messageCount,
+      );
+    }
+
     await markAllConversationsSeenMutation.mutateAsync();
-  }, [markAllConversationsSeenMutation, unreadConversationCount]);
+  }, [markAllConversationsSeenMutation, recentConversations, unreadConversationCount]);
 
   const handleMarkAllReadClick = useCallback(() => {
     void handleMarkAllRead();
@@ -564,10 +617,13 @@ export function AppSidebar() {
                         const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
                           conversation.generationStatus,
                         );
-                        const hasUnreadResults =
-                          !isConversationRunning &&
-                          !isConversationActive &&
-                          conversation.messageCount > (conversation.seenMessageCount ?? 0);
+                        const hasUnreadResults = hasUnreadConversationResults({
+                          isConversationActive,
+                          isConversationRunning,
+                          messageCount: conversation.messageCount,
+                          serverSeenCount: conversation.seenMessageCount,
+                          optimisticSeenCount: latestSeenRef.current[conversation.id],
+                        });
                         const showConversationIndicator = isConversationRunning || hasUnreadResults;
 
                         return (

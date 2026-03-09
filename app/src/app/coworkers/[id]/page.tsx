@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 import { ChatArea } from "@/components/chat/chat-area";
 import { useChatSkillStore } from "@/components/chat/chat-skill-store";
 import { ModelSelector } from "@/components/chat/model-selector";
@@ -177,10 +178,6 @@ export default function CoworkerEditorPage() {
   const [showDisableAutoApproveDialog, setShowDisableAutoApproveDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
   const [copiedForwardingField, setCopiedForwardingField] = useState<"coworkerAlias" | null>(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
@@ -367,7 +364,7 @@ export default function CoworkerEditorPage() {
         return true;
       } catch (error) {
         console.error("Failed to update coworker:", error);
-        setNotification({ type: "error", message: "Failed to save coworker." });
+        toast.error("Failed to save coworker.");
         return false;
       } finally {
         setIsSaving(false);
@@ -451,14 +448,6 @@ export default function CoworkerEditorPage() {
       },
     });
   }, [coworker, getOrCreateBuilderConversation]);
-
-  useEffect(() => {
-    if (!notification) {
-      return;
-    }
-    const timer = setTimeout(() => setNotification(null), 4000);
-    return () => clearTimeout(timer);
-  }, [notification]);
 
   const handleStatusChange = useCallback((checked: boolean) => {
     setStatus(checked ? "on" : "off");
@@ -578,10 +567,10 @@ export default function CoworkerEditorPage() {
 
     try {
       await createForwardingAlias.mutateAsync(coworkerId);
-      setNotification({ type: "success", message: "Forwarding address created." });
+      toast.success("Forwarding address created.");
     } catch (error) {
       console.error("Failed to create forwarding alias:", error);
-      setNotification({ type: "error", message: "Failed to create forwarding address." });
+      toast.error("Failed to create forwarding address.");
     }
   }, [createForwardingAlias, coworkerId]);
 
@@ -592,10 +581,10 @@ export default function CoworkerEditorPage() {
 
     try {
       await rotateForwardingAlias.mutateAsync(coworkerId);
-      setNotification({ type: "success", message: "Forwarding address rotated." });
+      toast.success("Forwarding address rotated.");
     } catch (error) {
       console.error("Failed to rotate forwarding alias:", error);
-      setNotification({ type: "error", message: "Failed to rotate forwarding address." });
+      toast.error("Failed to rotate forwarding address.");
     }
   }, [rotateForwardingAlias, coworkerId]);
 
@@ -606,10 +595,10 @@ export default function CoworkerEditorPage() {
 
     try {
       await disableForwardingAlias.mutateAsync(coworkerId);
-      setNotification({ type: "success", message: "Forwarding address disabled." });
+      toast.success("Forwarding address disabled.");
     } catch (error) {
       console.error("Failed to disable forwarding alias:", error);
-      setNotification({ type: "error", message: "Failed to disable forwarding address." });
+      toast.error("Failed to disable forwarding address.");
     }
   }, [disableForwardingAlias, coworkerId]);
 
@@ -662,16 +651,16 @@ export default function CoworkerEditorPage() {
       }
       const saveSucceeded = await persistCoworker({ force: true });
       if (!saveSucceeded) {
-        setNotification({ type: "error", message: "Failed to save coworker before test run." });
+        toast.error("Failed to save coworker before test run.");
         return;
       }
 
       await triggerCoworker.mutateAsync({ id: coworkerId, payload: {} });
-      setNotification({ type: "success", message: "Run started." });
+      toast.success("Run started.");
       void refetchRuns();
     } catch (error) {
       console.error("Failed to run coworker:", error);
-      setNotification({ type: "error", message: "Failed to start run." });
+      toast.error("Failed to start run.");
     } finally {
       setIsStartingRun(false);
     }
@@ -708,7 +697,6 @@ export default function CoworkerEditorPage() {
         name={name}
         description={description}
         isSaving={isSaving}
-        notification={notification}
         status={status}
         autoApprove={autoApprove}
         prompt={prompt}
@@ -770,7 +758,6 @@ export default function CoworkerEditorPage() {
       name,
       description,
       isSaving,
-      notification,
       status,
       autoApprove,
       prompt,
@@ -879,7 +866,6 @@ type CoworkerSettingsPanelProps = {
   name: string;
   description: string;
   isSaving: boolean;
-  notification: { type: "success" | "error"; message: string } | null;
   status: "on" | "off";
   autoApprove: boolean;
   prompt: string;
@@ -956,7 +942,6 @@ function CoworkerSettingsPanel({
   name,
   description,
   isSaving,
-  notification,
   status,
   autoApprove,
   prompt,
@@ -1073,18 +1058,7 @@ function CoworkerSettingsPanel({
           </AnimatedTabs>
         </div>
         <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "shrink-0 text-xs transition-opacity",
-              isSaving
-                ? "text-muted-foreground opacity-100"
-                : notification?.type === "error"
-                  ? "text-red-600 opacity-100 dark:text-red-400"
-                  : "text-muted-foreground opacity-0",
-            )}
-          >
-            {isSaving ? "Saving…" : "Save failed"}
-          </span>
+          {isSaving && <span className="text-muted-foreground shrink-0 text-xs">Saving…</span>}
           <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
           <Button
             variant="outline"
@@ -1110,21 +1084,6 @@ function CoworkerSettingsPanel({
           </button>
         </div>
       </div>
-      {notification && (
-        <div className="px-3">
-          <p
-            className={cn(
-              "text-xs",
-              notification.type === "success"
-                ? "text-green-700 dark:text-green-400"
-                : "text-red-600 dark:text-red-400",
-            )}
-          >
-            {notification.message}
-          </p>
-        </div>
-      )}
-
       {/* Tab content — scrollable */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === "details" && (

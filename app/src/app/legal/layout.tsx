@@ -15,6 +15,9 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         <div className="text-muted-foreground container flex flex-col items-center gap-4 px-4 text-center text-sm md:flex-row md:justify-between md:text-left">
           <p>&copy; {new Date().getFullYear()} CmdClaw. All rights reserved.</p>
           <nav className="flex gap-4">
+            <Link href="/pricing" className="hover:underline">
+              Pricing
+            </Link>
             <Link href="/legal/terms" className="hover:underline">
               Terms
             </Link>

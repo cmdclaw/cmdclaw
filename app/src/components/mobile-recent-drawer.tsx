@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { hasUnreadConversationResults } from "@/lib/conversation-seen";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
@@ -269,10 +270,12 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                   const isRunning = RUNNING_CONVERSATION_STATUSES.has(
                     conversation.generationStatus,
                   );
-                  const hasUnread =
-                    !isRunning &&
-                    !active &&
-                    conversation.messageCount > (conversation.seenMessageCount ?? 0);
+                  const hasUnread = hasUnreadConversationResults({
+                    isConversationActive: active,
+                    isConversationRunning: isRunning,
+                    messageCount: conversation.messageCount,
+                    serverSeenCount: conversation.seenMessageCount,
+                  });
 
                   return (
                     <div
