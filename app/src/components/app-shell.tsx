@@ -63,7 +63,7 @@ export function AppShell({
     <div className="flex h-screen w-full">
       {showNav ? <AppSidebar /> : null}
       <div
-        className="app-shell-scroll-container relative h-full min-w-0 flex-1 overflow-auto pb-14 md:pb-0"
+        className="app-shell-scroll-container relative h-full min-w-0 flex-1 overflow-auto pb-16 md:pb-0"
         style={APP_SHELL_CONTENT_STYLE}
       >
         {children}

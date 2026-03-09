@@ -1,10 +1,10 @@
 "use client";
 
-import { Cuboid, Home, LayoutTemplate, Menu, MessageSquare } from "lucide-react";
+import { Cuboid, Home, LayoutTemplate, Menu, MessageSquare, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useState } from "react";
-import { MobileMenuSheet } from "@/components/mobile-menu-sheet";
+import { MobileMenuPanel } from "@/components/mobile-menu-sheet";
 import { cn } from "@/lib/utils";
 
 type BottomTab = {
@@ -37,24 +37,31 @@ export function MobileBottomBar() {
     [pathname],
   );
 
-  const openMenu = useCallback(() => {
-    setMenuOpen(true);
+  const toggleMenu = useCallback(() => {
+    setMenuOpen((prev) => !prev);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
   }, []);
 
   return (
     <>
-      <div className="bg-background/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-sm md:hidden">
+      {/* Menu panel - positioned above the bottom bar */}
+      <MobileMenuPanel open={menuOpen} onOpenChange={setMenuOpen} />
+
+      <div className="bg-background/95 fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border-t backdrop-blur-sm md:hidden">
         <nav className="flex items-stretch justify-around pb-[env(safe-area-inset-bottom)]">
           {/* Menu button */}
           <button
             type="button"
-            onClick={openMenu}
+            onClick={toggleMenu}
             className={cn(
-              "flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+              "flex flex-1 flex-col items-center gap-1 pt-3 pb-2 text-[11px] font-medium transition-colors",
               menuOpen ? "text-foreground" : "text-muted-foreground",
             )}
           >
-            <Menu className="h-5 w-5" />
+            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             <span>Menu</span>
           </button>
 
@@ -66,20 +73,19 @@ export function MobileBottomBar() {
                 key={tab.href}
                 href={tab.href}
                 prefetch={false}
+                onClick={closeMenu}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+                  "flex flex-1 flex-col items-center gap-1 pt-3 pb-2 text-[11px] font-medium transition-colors",
                   active ? "text-foreground" : "text-muted-foreground",
                 )}
               >
-                <tab.icon className="h-5 w-5" />
+                <tab.icon className="h-6 w-6" />
                 <span>{tab.label}</span>
               </Link>
             );
           })}
         </nav>
       </div>
-
-      <MobileMenuSheet open={menuOpen} onOpenChange={setMenuOpen} />
     </>
   );
 }

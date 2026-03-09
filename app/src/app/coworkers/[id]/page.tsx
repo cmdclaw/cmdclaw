@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNowStrict } from "date-fns";
-import { Loader2, Play, ChevronDown, ChevronUp, Circle, Upload, FileText } from "lucide-react";
+import { Loader2, Play, ChevronDown, ChevronUp, Circle, Upload, FileText, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -238,6 +238,10 @@ export default function CoworkerEditorPage() {
     model: false,
   });
 
+  const collapseToggleRef = useRef<(() => void) | null>(null);
+  const handleClose = useCallback(() => {
+    collapseToggleRef.current?.();
+  }, []);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedEditorRef = useRef(false);
   const initializedCoworkerIdRef = useRef<string | null>(null);
@@ -839,6 +843,7 @@ export default function CoworkerEditorPage() {
         onToggleTriggers={toggleTriggers}
         onToggleApproval={toggleApproval}
         onToggleModel={toggleModel}
+        onClose={handleClose}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dep list tracks all panel props
@@ -936,6 +941,8 @@ export default function CoworkerEditorPage() {
         rightPanelClassName="border-0 rounded-none bg-muted/30"
         left={chatPanel}
         right={settingsPanel}
+        collapsedLabel={coworkerDisplayName}
+        onCollapseToggleRef={collapseToggleRef}
       />
       <AlertDialog
         open={showDisableAutoApproveDialog}
@@ -1049,6 +1056,7 @@ type CoworkerSettingsPanelProps = {
   onToggleTriggers: () => void;
   onToggleApproval: () => void;
   onToggleModel: () => void;
+  onClose: () => void;
 };
 
 const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
@@ -1122,6 +1130,7 @@ function CoworkerSettingsPanel({
   onToggleTriggers,
   onToggleApproval,
   onToggleModel,
+  onClose,
 }: CoworkerSettingsPanelProps) {
   const [coworkerModel, setCoworkerModel] = useState(DEFAULT_COWORKER_MODEL);
 
@@ -1183,6 +1192,14 @@ function CoworkerSettingsPanel({
             )}
             Run now
           </Button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+            aria-label="Close panel"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </div>
       {notification && (

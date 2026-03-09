@@ -4,8 +4,7 @@ import { BarChart3, Bug, Settings, Shield, Toolbox } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +35,7 @@ function MenuItem({ icon: Icon, label, href, onClick, destructive, badge }: Menu
 
   if (href) {
     return (
-      <Link href={href} prefetch={false} className={classes}>
+      <Link href={href} prefetch={false} className={classes} onClick={onClick}>
         {content}
       </Link>
     );
@@ -49,12 +48,12 @@ function MenuItem({ icon: Icon, label, href, onClick, destructive, badge }: Menu
   );
 }
 
-type MobileMenuSheetProps = {
+type MobileMenuPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-export function MobileMenuSheet({ open, onOpenChange }: MobileMenuSheetProps) {
+export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
   const router = useRouter();
   const [session, setSession] = useState<SessionData>(null);
 
@@ -86,29 +85,37 @@ export function MobileMenuSheet({ open, onOpenChange }: MobileMenuSheetProps) {
     const { error } = await authClient.signOut();
     if (!error) {
       setSession(null);
+      onOpenChange(false);
       router.push("/login");
     }
-  }, [router]);
+  }, [router, onOpenChange]);
 
   const handleItemClick = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        title="Menu"
-        showCloseButton={false}
-        className="h-auto max-h-[80vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div className="bg-muted-foreground/30 h-1 w-10 rounded-full" />
-        </div>
+  const panelStyle = useMemo(
+    () => ({ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }),
+    [],
+  );
 
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={handleItemClick} />
+      )}
+
+      {/* Menu panel - slides up from above the bottom bar */}
+      <div
+        className={cn(
+          "bg-background fixed inset-x-0 bottom-0 z-35 rounded-t-2xl transition-transform duration-300 ease-out md:hidden",
+          open ? "translate-y-0" : "translate-y-full",
+        )}
+        style={panelStyle}
+      >
         {/* Account row */}
-        <div className="flex items-center justify-between border-b px-4 pb-4">
+        <div className="flex items-center justify-between border-b px-4 pt-5 pb-4">
           <div className="flex items-center gap-3">
             {session?.user?.image ? (
               <Image
@@ -149,14 +156,21 @@ export function MobileMenuSheet({ open, onOpenChange }: MobileMenuSheetProps) {
         </div>
 
         {/* Menu items */}
-        <div className="flex flex-col gap-0.5 px-1 py-2" onClick={handleItemClick}>
-          <MenuItem icon={Toolbox} label="Toolbox" href="/toolbox" />
-          <MenuItem icon={Settings} label="Settings" href="/settings" />
-          <MenuItem icon={BarChart3} label="Usage" href="/settings/usage" />
-          <MenuItem icon={Bug} label="Bug report" href="/support" />
-          {isAdmin && <MenuItem icon={Shield} label="Admin" href="/admin" />}
+        <div className="flex flex-col gap-0.5 px-1 py-2">
+          <MenuItem icon={Toolbox} label="Toolbox" href="/toolbox" onClick={handleItemClick} />
+          <MenuItem icon={Settings} label="Settings" href="/settings" onClick={handleItemClick} />
+          <MenuItem
+            icon={BarChart3}
+            label="Usage"
+            href="/settings/usage"
+            onClick={handleItemClick}
+          />
+          <MenuItem icon={Bug} label="Bug report" href="/support" onClick={handleItemClick} />
+          {isAdmin && (
+            <MenuItem icon={Shield} label="Admin" href="/admin" onClick={handleItemClick} />
+          )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </>
   );
 }
