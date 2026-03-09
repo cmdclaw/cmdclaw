@@ -55,7 +55,7 @@ const TEMPLATES: TemplateItem[] = [
     title: "Send polished follow-ups right after every call",
     description:
       "As soon as an Aircall transcript is ready, this coworker drafts a personalized follow-up email and creates the matching…",
-    triggerType: "schedule",
+    triggerType: "webhook",
     integrations: ["gmail", "hubspot"],
     industry: "Sales",
     useCase: "Follow-ups",
@@ -301,7 +301,7 @@ function FilterPill<T extends string>({
       onClick={handleClick}
       aria-pressed={active}
       className={cn(
-        "relative inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-[border-color,color,background-color] duration-200",
+        "relative inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-[border-color,color,background-color] duration-200",
         active
           ? "border-border/70 bg-muted text-foreground"
           : "border-transparent text-muted-foreground hover:border-border/50 hover:bg-muted/50 hover:text-foreground",
@@ -399,7 +399,7 @@ function TemplatesPageContent() {
           {/* Filters */}
           <div className="mb-10 space-y-4">
             {/* Industry pills */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
               <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
                 Industry
               </span>
@@ -415,7 +415,7 @@ function TemplatesPageContent() {
             </div>
 
             {/* Use case pills */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
               <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
                 Use case
               </span>
@@ -431,7 +431,7 @@ function TemplatesPageContent() {
             </div>
 
             {/* Integration pills */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
               <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
                 App
               </span>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BugReportDialog } from "@/components/bug-report-dialog";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +57,7 @@ type MobileMenuPanelProps = {
 export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
   const router = useRouter();
   const [session, setSession] = useState<SessionData>(null);
+  const [isBugReportOpen, setIsBugReportOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -94,6 +96,11 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
     onOpenChange(false);
   }, [onOpenChange]);
 
+  const handleBugReportClick = useCallback(() => {
+    onOpenChange(false);
+    setIsBugReportOpen(true);
+  }, [onOpenChange]);
+
   const panelStyle = useMemo(
     () => ({ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }),
     [],
@@ -101,6 +108,8 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
 
   return (
     <>
+      <BugReportDialog open={isBugReportOpen} onOpenChange={setIsBugReportOpen} />
+
       {/* Backdrop */}
       {open && (
         <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={handleItemClick} />
@@ -165,7 +174,7 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
             href="/settings/usage"
             onClick={handleItemClick}
           />
-          <MenuItem icon={Bug} label="Bug report" href="/support" onClick={handleItemClick} />
+          <MenuItem icon={Bug} label="Bug report" onClick={handleBugReportClick} />
           {isAdmin && (
             <MenuItem icon={Shield} label="Admin" href="/admin" onClick={handleItemClick} />
           )}

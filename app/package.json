@@ -120,6 +120,7 @@
     "react-markdown": "^10.1.0",
     "react-phone-number-input": "^3.4.14",
     "react-timezone-select": "^3.3.2",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "resend": "^6.7.0",
     "sandbox-agent": "^0.2.1",

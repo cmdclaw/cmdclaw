@@ -76,7 +76,7 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
   }, [createCoworker, templateId]);
 
   return (
-    <div className="flex min-h-[50vh] items-center justify-center px-6 py-16">
+    <div className="flex min-h-[calc(100dvh-8rem)] w-full items-center justify-center">
       {error ? (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-400">
           {error}

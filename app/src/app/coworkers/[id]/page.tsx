@@ -1,12 +1,25 @@
 "use client";
 
 import { formatDistanceToNowStrict } from "date-fns";
-import { Loader2, Play, ChevronDown, ChevronUp, Circle, Upload, FileText, X } from "lucide-react";
+import {
+  Loader2,
+  Play,
+  ChevronDown,
+  Circle,
+  Upload,
+  FileText,
+  X,
+  ArrowRight,
+  Pencil,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { ChatArea } from "@/components/chat/chat-area";
 import { useChatSkillStore } from "@/components/chat/chat-skill-store";
 import { ModelSelector } from "@/components/chat/model-selector";
@@ -21,6 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DualPanelWorkspace } from "@/components/ui/dual-panel-workspace";
 import { Input } from "@/components/ui/input";
 import {
@@ -74,6 +88,10 @@ const sectionMotionInitial = { height: 0, opacity: 0 } as const;
 const sectionMotionAnimate = { height: "auto" as const, opacity: 1 } as const;
 const sectionMotionExit = { height: 0, opacity: 0 } as const;
 const sectionMotionTransition = { duration: 0.2 } as const;
+const instructionRemarkPlugins = [remarkGfm, remarkBreaks];
+const toolboxRevealInitial = { opacity: 0, y: -4 } as const;
+const toolboxRevealAnimate = { opacity: 1, y: 0 } as const;
+const toolboxRevealTransition = { duration: 0.15 } as const;
 const EMPTY_SELECTED_SKILL_KEYS: string[] = [];
 
 function formatRelativeTime(value?: Date | string | null) {
@@ -107,65 +125,6 @@ function formatRelativeTime(value?: Date | string | null) {
               : unit;
 
   return `${amount}${shortUnit} ago`;
-}
-
-function IntegrationToggleSwitch({
-  integrationType,
-  checked,
-  onToggle,
-}: {
-  integrationType: IntegrationType;
-  checked: boolean;
-  onToggle: (type: IntegrationType) => void;
-}) {
-  const handleCheckedChange = useCallback(() => {
-    onToggle(integrationType);
-  }, [integrationType, onToggle]);
-
-  return <Switch checked={checked} onCheckedChange={handleCheckedChange} />;
-}
-
-function Section({
-  title,
-  open,
-  onToggle,
-  children,
-  renderAction,
-}: {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-  renderAction?: () => React.ReactNode;
-}) {
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="hover:bg-muted/30 flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium"
-      >
-        <span>{title}</span>
-        <div className="flex items-center gap-2">
-          {renderAction?.()}
-          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        </div>
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={sectionMotionInitial}
-            animate={sectionMotionAnimate}
-            exit={sectionMotionExit}
-            transition={sectionMotionTransition}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-3">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
 }
 
 function CoworkerChatPanel({
@@ -218,26 +177,15 @@ export default function CoworkerEditorPage() {
   const [showDisableAutoApproveDialog, setShowDisableAutoApproveDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
-  const [showAllIntegrations, setShowAllIntegrations] = useState(false);
-  const [showAllSkills, setShowAllSkills] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
   const [copiedForwardingField, setCopiedForwardingField] = useState<"coworkerAlias" | null>(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"instruction" | "runs" | "docs" | "details">(
-    "instruction",
-  );
-  const [openSections, setOpenSections] = useState({
-    instructions: true,
-    skills: true,
-    tools: true,
-    triggers: true,
-    approval: false,
-    model: false,
-  });
-
+  const [activeTab, setActiveTab] = useState<
+    "instruction" | "runs" | "docs" | "toolbox" | "details"
+  >("instruction");
   const collapseToggleRef = useRef<(() => void) | null>(null);
   const handleClose = useCallback(() => {
     collapseToggleRef.current?.();
@@ -583,13 +531,6 @@ export default function CoworkerEditorPage() {
     setAllowedIntegrations([]);
   }, []);
 
-  const handleToggleShowAllIntegrations = useCallback(() => {
-    setShowAllIntegrations((prev) => !prev);
-  }, []);
-  const handleToggleShowAllSkills = useCallback(() => {
-    setShowAllSkills((prev) => !prev);
-  }, []);
-
   const handleToggleIntegrationChecked = useCallback((type: IntegrationType) => {
     setAllowedIntegrations((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
@@ -736,17 +677,6 @@ export default function CoworkerEditorPage() {
     }
   }, [isStartingRun, persistCoworker, refetchRuns, triggerCoworker, coworkerId]);
 
-  const toggleSection = useCallback((section: keyof typeof openSections) => {
-    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  }, []);
-
-  const toggleInstructions = useCallback(() => toggleSection("instructions"), [toggleSection]);
-  const toggleSkills = useCallback(() => toggleSection("skills"), [toggleSection]);
-  const toggleTools = useCallback(() => toggleSection("tools"), [toggleSection]);
-  const toggleTriggers = useCallback(() => toggleSection("triggers"), [toggleSection]);
-  const toggleApproval = useCallback(() => toggleSection("approval"), [toggleSection]);
-  const toggleModel = useCallback(() => toggleSection("model"), [toggleSection]);
-
   const hasAgentInstructions = prompt.trim().length > 0;
   const coworkerDisplayName = coworker?.name?.trim().length ? coworker.name : "New Coworker";
 
@@ -785,12 +715,10 @@ export default function CoworkerEditorPage() {
         availableSkills={availableSkills}
         selectedSkillKeys={selectedSkillKeys}
         isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
-        showAllSkills={showAllSkills}
         restrictTools={restrictTools}
         allowedIntegrations={allowedIntegrations}
         allIntegrationTypes={allIntegrationTypes}
         integrationEntries={integrationEntries}
-        showAllIntegrations={showAllIntegrations}
         triggerType={triggerType}
         triggers={triggers}
         scheduleType={scheduleType}
@@ -805,7 +733,6 @@ export default function CoworkerEditorPage() {
         isEmailTriggerPersisted={isEmailTriggerPersisted}
         copiedForwardingField={copiedForwardingField}
         runs={runs}
-        openSections={openSections}
         activeTab={activeTab}
         isRunDisabled={isRunDisabled}
         isRunning={isRunning}
@@ -821,11 +748,9 @@ export default function CoworkerEditorPage() {
         onPromptChange={handlePromptChange}
         onClearSkills={handleClearSkills}
         onToggleSkillChecked={handleToggleSkillChecked}
-        onToggleShowAllSkills={handleToggleShowAllSkills}
         onRestrictToolsChange={handleRestrictToolsChange}
         onSelectAllIntegrations={handleSelectAllIntegrations}
         onClearIntegrations={handleClearIntegrations}
-        onToggleShowAllIntegrations={handleToggleShowAllIntegrations}
         onToggleIntegrationChecked={handleToggleIntegrationChecked}
         onTriggerTypeChange={setTriggerType}
         onScheduleTypeChange={handleScheduleTypeChange}
@@ -837,12 +762,6 @@ export default function CoworkerEditorPage() {
         onRotateCoworkerAlias={handleRotateCoworkerAlias}
         onDisableCoworkerAlias={handleDisableCoworkerAlias}
         onCreateCoworkerAlias={handleCreateCoworkerAlias}
-        onToggleInstructions={toggleInstructions}
-        onToggleSkills={toggleSkills}
-        onToggleTools={toggleTools}
-        onToggleTriggers={toggleTriggers}
-        onToggleApproval={toggleApproval}
-        onToggleModel={toggleModel}
         onClose={handleClose}
       />
     ),
@@ -859,12 +778,10 @@ export default function CoworkerEditorPage() {
       selectedSkillKeys,
       isPlatformSkillsLoading,
       isPersonalSkillsLoading,
-      showAllSkills,
       restrictTools,
       allowedIntegrations,
       allIntegrationTypes,
       integrationEntries,
-      showAllIntegrations,
       triggerType,
       triggers,
       scheduleType,
@@ -879,7 +796,6 @@ export default function CoworkerEditorPage() {
       isEmailTriggerPersisted,
       copiedForwardingField,
       runs,
-      openSections,
       activeTab,
       isRunDisabled,
       isRunning,
@@ -895,11 +811,9 @@ export default function CoworkerEditorPage() {
       handlePromptChange,
       handleClearSkills,
       handleToggleSkillChecked,
-      handleToggleShowAllSkills,
       handleRestrictToolsChange,
       handleSelectAllIntegrations,
       handleClearIntegrations,
-      handleToggleShowAllIntegrations,
       handleToggleIntegrationChecked,
       setTriggerType,
       handleScheduleTypeChange,
@@ -911,12 +825,6 @@ export default function CoworkerEditorPage() {
       handleRotateCoworkerAlias,
       handleDisableCoworkerAlias,
       handleCreateCoworkerAlias,
-      toggleInstructions,
-      toggleSkills,
-      toggleTools,
-      toggleTriggers,
-      toggleApproval,
-      toggleModel,
     ],
   );
 
@@ -938,10 +846,11 @@ export default function CoworkerEditorPage() {
         leftTitle="Chat"
         rightTitle={coworkerDisplayName}
         leftPanelClassName="border-0 rounded-none"
+        separatorClassName="bg-muted/30"
         rightPanelClassName="border-0 rounded-none bg-muted/30"
         left={chatPanel}
         right={settingsPanel}
-        collapsedLabel={coworkerDisplayName}
+        collapsedLabel="Coworker"
         onCollapseToggleRef={collapseToggleRef}
       />
       <AlertDialog
@@ -977,12 +886,10 @@ type CoworkerSettingsPanelProps = {
   availableSkills: { key: string; title: string; source: "Platform" | "Custom" }[];
   selectedSkillKeys: string[];
   isSkillsLoading: boolean;
-  showAllSkills: boolean;
   restrictTools: boolean;
   allowedIntegrations: IntegrationType[];
   allIntegrationTypes: IntegrationType[];
   integrationEntries: { key: IntegrationType; name: string; logo: string }[];
-  showAllIntegrations: boolean;
   triggerType: string;
   triggers: readonly { value: string; label: string }[];
   scheduleType: "interval" | "daily" | "weekly" | "monthly";
@@ -1011,21 +918,13 @@ type CoworkerSettingsPanelProps = {
         errorMessage: string | null;
       }>
     | undefined;
-  openSections: {
-    instructions: boolean;
-    skills: boolean;
-    tools: boolean;
-    triggers: boolean;
-    approval: boolean;
-    model: boolean;
-  };
-  activeTab: "instruction" | "runs" | "docs" | "details";
+  activeTab: "instruction" | "runs" | "docs" | "toolbox" | "details";
   isRunDisabled: boolean;
   isRunning: boolean;
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
-  onTabChange: (tab: "instruction" | "runs" | "docs" | "details") => void;
+  onTabChange: (tab: "instruction" | "runs" | "docs" | "toolbox" | "details") => void;
   onRun: (e: React.MouseEvent) => void;
   onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -1034,11 +933,9 @@ type CoworkerSettingsPanelProps = {
   onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onClearSkills: () => void;
   onToggleSkillChecked: (skillKey: string) => void;
-  onToggleShowAllSkills: () => void;
   onRestrictToolsChange: (checked: boolean) => void;
   onSelectAllIntegrations: () => void;
   onClearIntegrations: () => void;
-  onToggleShowAllIntegrations: () => void;
   onToggleIntegrationChecked: (type: IntegrationType) => void;
   onTriggerTypeChange: (value: string) => void;
   onScheduleTypeChange: (value: string) => void;
@@ -1050,12 +947,6 @@ type CoworkerSettingsPanelProps = {
   onRotateCoworkerAlias: () => void;
   onDisableCoworkerAlias: () => void;
   onCreateCoworkerAlias: () => void;
-  onToggleInstructions: () => void;
-  onToggleSkills: () => void;
-  onToggleTools: () => void;
-  onToggleTriggers: () => void;
-  onToggleApproval: () => void;
-  onToggleModel: () => void;
   onClose: () => void;
 };
 
@@ -1072,12 +963,10 @@ function CoworkerSettingsPanel({
   availableSkills,
   selectedSkillKeys,
   isSkillsLoading,
-  showAllSkills,
   restrictTools,
   allowedIntegrations,
   allIntegrationTypes,
   integrationEntries,
-  showAllIntegrations,
   triggerType,
   triggers,
   scheduleType,
@@ -1092,7 +981,6 @@ function CoworkerSettingsPanel({
   isEmailTriggerPersisted,
   copiedForwardingField,
   runs,
-  openSections,
   activeTab,
   isRunDisabled,
   isRunning,
@@ -1108,11 +996,9 @@ function CoworkerSettingsPanel({
   onPromptChange,
   onClearSkills,
   onToggleSkillChecked,
-  onToggleShowAllSkills,
   onRestrictToolsChange,
   onSelectAllIntegrations,
   onClearIntegrations,
-  onToggleShowAllIntegrations,
   onToggleIntegrationChecked,
   onTriggerTypeChange,
   onScheduleTypeChange,
@@ -1124,18 +1010,39 @@ function CoworkerSettingsPanel({
   onRotateCoworkerAlias,
   onDisableCoworkerAlias,
   onCreateCoworkerAlias,
-  onToggleInstructions,
-  onToggleSkills,
-  onToggleTools,
-  onToggleTriggers,
-  onToggleApproval,
-  onToggleModel,
   onClose,
 }: CoworkerSettingsPanelProps) {
   const [coworkerModel, setCoworkerModel] = useState(DEFAULT_COWORKER_MODEL);
+  const [instructionModalOpen, setInstructionModalOpen] = useState(false);
+  const [triggerExpanded, setTriggerExpanded] = useState(false);
 
-  const handleSkillInputChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleOpenInstructionModal = useCallback(() => {
+    setInstructionModalOpen(true);
+  }, []);
+
+  const handleCloseInstructionModal = useCallback(() => {
+    setInstructionModalOpen(false);
+  }, []);
+
+  const handleToggleTriggerExpanded = useCallback(() => {
+    setTriggerExpanded((value) => !value);
+  }, []);
+
+  const handleIntegrationButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const integrationType = event.currentTarget.dataset.integrationType as
+        | IntegrationType
+        | undefined;
+      if (!integrationType) {
+        return;
+      }
+      onToggleIntegrationChecked(integrationType);
+    },
+    [onToggleIntegrationChecked],
+  );
+
+  const handleSkillButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       const skillKey = event.currentTarget.dataset.skillKey;
       if (!skillKey) {
         return;
@@ -1147,7 +1054,7 @@ function CoworkerSettingsPanel({
 
   const handleTabChange = useCallback(
     (key: string) => {
-      onTabChange(key as "instruction" | "runs" | "docs" | "details");
+      onTabChange(key as "instruction" | "runs" | "docs" | "toolbox" | "details");
     },
     [onTabChange],
   );
@@ -1158,10 +1065,11 @@ function CoworkerSettingsPanel({
       <div className="flex items-center justify-between px-3 py-1.5">
         <div className="flex items-center">
           <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange}>
-            <AnimatedTab value="details">Details</AnimatedTab>
             <AnimatedTab value="instruction">Instruction</AnimatedTab>
             <AnimatedTab value="runs">Runs</AnimatedTab>
             <AnimatedTab value="docs">Docs</AnimatedTab>
+            <AnimatedTab value="toolbox">Toolbox</AnimatedTab>
+            <AnimatedTab value="details">Details</AnimatedTab>
           </AnimatedTabs>
         </div>
         <div className="flex items-center gap-2">
@@ -1220,20 +1128,27 @@ function CoworkerSettingsPanel({
       {/* Tab content — scrollable */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === "details" && (
-          <div className="space-y-4 px-4 py-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Name</label>
+          <div className="space-y-3 px-4 py-3">
+            {/* Name card */}
+            <div className="border-border/50 rounded-xl border px-4 py-3">
+              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Name
+              </label>
               <Input
                 value={name}
                 onChange={onNameChange}
                 placeholder="New Coworker"
-                className="text-sm"
+                className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Description</label>
+
+            {/* Description card */}
+            <div className="border-border/50 rounded-xl border px-4 py-3">
+              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Description
+              </label>
               <textarea
-                className="text-foreground placeholder:text-muted-foreground/60 focus:ring-ring min-h-[80px] w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm leading-relaxed focus:ring-1 focus:outline-none"
+                className="text-foreground placeholder:text-muted-foreground/60 mt-1.5 min-h-[80px] w-full resize-none bg-transparent text-sm leading-relaxed focus:outline-none"
                 value={description}
                 onChange={onDescriptionChange}
                 placeholder="What does this coworker do?"
@@ -1243,397 +1158,347 @@ function CoworkerSettingsPanel({
         )}
 
         {activeTab === "instruction" && (
-          <>
-            {/* Instructions section */}
-            <Section
-              title="Instructions"
-              open={openSections.instructions}
-              onToggle={onToggleInstructions}
+          <div className="space-y-3 px-4 py-3">
+            {/* Instruction preview card */}
+            <button
+              type="button"
+              className="group border-border/50 bg-card hover:border-border hover:bg-muted/30 relative w-full cursor-pointer rounded-xl border p-4 text-left transition-all"
+              onClick={handleOpenInstructionModal}
             >
-              <textarea
-                className="text-foreground placeholder:text-muted-foreground/60 min-h-[140px] w-full resize-none rounded-lg border-0 bg-transparent px-0 py-0 text-sm leading-relaxed focus:outline-none"
-                value={prompt}
-                onChange={onPromptChange}
-                placeholder="Describe what this coworker should do…"
-              />
-            </Section>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                  Instructions
+                </span>
+                <span className="text-muted-foreground group-hover:text-foreground flex items-center gap-1 text-xs transition-colors">
+                  <Pencil className="h-3 w-3" />
+                  Edit
+                </span>
+              </div>
+              {prompt ? (
+                <div className="relative max-h-[120px] overflow-hidden">
+                  <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1.5 prose-code:text-xs max-w-none text-sm leading-relaxed">
+                    <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>{prompt}</ReactMarkdown>
+                  </div>
+                  <div className="from-card group-hover:from-muted/30 pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
+                </div>
+              ) : (
+                <p className="text-muted-foreground/60 text-sm italic">
+                  Describe what this coworker should do…
+                </p>
+              )}
+            </button>
 
-            <Section title="Skills" open={openSections.skills} onToggle={onToggleSkills}>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-muted-foreground text-xs">
-                    {selectedSkillKeys.length}/{availableSkills.length} selected
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={selectedSkillKeys.length === 0}
-                    onClick={onClearSkills}
+            {/* Instruction editor modal */}
+            <Dialog open={instructionModalOpen} onOpenChange={setInstructionModalOpen}>
+              <DialogContent
+                className="flex h-[min(80dvh,700px)] w-[min(90vw,900px)] max-w-none flex-col gap-0 overflow-hidden p-0"
+                showCloseButton={false}
+              >
+                <DialogHeader className="border-border/40 flex-row items-center justify-between border-b px-5 py-3.5">
+                  <DialogTitle className="text-sm font-semibold">Edit instructions</DialogTitle>
+                  <button
+                    type="button"
+                    onClick={handleCloseInstructionModal}
+                    className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
                   >
-                    Clear
-                  </Button>
-                </div>
-                {isSkillsLoading ? (
-                  <p className="text-muted-foreground text-xs">Loading skills…</p>
-                ) : availableSkills.length === 0 ? (
-                  <p className="text-muted-foreground text-xs">No skills available.</p>
-                ) : (
-                  <>
-                    <div className="-mx-1 grid grid-cols-1">
-                      {(showAllSkills ? availableSkills : availableSkills.slice(0, 6)).map(
-                        (skill) => (
-                          <label
-                            key={skill.key}
-                            className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
-                          >
-                            <input
-                              type="checkbox"
-                              data-skill-key={skill.key}
-                              className="h-4 w-4"
-                              checked={selectedSkillKeys.includes(skill.key)}
-                              onChange={handleSkillInputChange}
-                            />
-                            <span className="text-xs">{skill.title}</span>
-                            <span className="text-muted-foreground ml-auto text-[10px] uppercase">
-                              {skill.source}
-                            </span>
-                          </label>
-                        ),
-                      )}
+                    <X className="h-4 w-4" />
+                  </button>
+                </DialogHeader>
+                <div className="grid flex-1 grid-cols-2 divide-x overflow-hidden">
+                  {/* Editor pane */}
+                  <div className="flex flex-col overflow-hidden">
+                    <div className="border-border/40 border-b px-4 py-2">
+                      <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                        Write
+                      </span>
                     </div>
-                    {availableSkills.length > 6 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onToggleShowAllSkills}
-                        className="text-muted-foreground h-7 text-xs"
-                      >
-                        {showAllSkills ? (
-                          <>
-                            <ChevronUp className="mr-1 h-3 w-3" />
-                            Show less
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="mr-1 h-3 w-3" />
-                            {availableSkills.length - 6} more
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            </Section>
-
-            {/* Tools section */}
-            <Section title="Tools" open={openSections.tools} onToggle={onToggleTools}>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground text-xs">All tools allowed</span>
-                  <Switch checked={!restrictTools} onCheckedChange={onRestrictToolsChange} />
-                </div>
-                {restrictTools && (
-                  <>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-muted-foreground text-xs">
-                        {allowedIntegrations.length}/{allIntegrationTypes.length} selected
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          disabled={allowedIntegrations.length === allIntegrationTypes.length}
-                          onClick={onSelectAllIntegrations}
-                        >
-                          All
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          disabled={allowedIntegrations.length === 0}
-                          onClick={onClearIntegrations}
-                        >
-                          Clear
-                        </Button>
-                      </div>
+                    <textarea
+                      className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
+                      value={prompt}
+                      onChange={onPromptChange}
+                      placeholder="Describe what this coworker should do…&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
+                      autoFocus
+                    />
+                  </div>
+                  {/* Preview pane */}
+                  <div className="bg-muted/20 flex flex-col overflow-hidden">
+                    <div className="border-border/40 border-b px-4 py-2">
+                      <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                        Preview
+                      </span>
                     </div>
-                    <div className="-mx-1 grid grid-cols-1">
-                      {(showAllIntegrations
-                        ? integrationEntries
-                        : integrationEntries.slice(0, 4)
-                      ).map(({ key, name: label, logo }) => (
-                        <label
-                          key={key}
-                          className="hover:bg-muted/40 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors"
-                        >
-                          <IntegrationToggleSwitch
-                            integrationType={key}
-                            checked={allowedIntegrations.includes(key)}
-                            onToggle={onToggleIntegrationChecked}
-                          />
-                          <Image
-                            src={logo}
-                            alt={label}
-                            width={14}
-                            height={14}
-                            className="h-3.5 w-3.5"
-                          />
-                          <span className="text-xs">{label}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {integrationEntries.length > 4 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onToggleShowAllIntegrations}
-                        className="text-muted-foreground h-7 text-xs"
-                      >
-                        {showAllIntegrations ? (
-                          <>
-                            <ChevronUp className="mr-1 h-3 w-3" />
-                            Show less
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="mr-1 h-3 w-3" />
-                            {integrationEntries.length - 4} more
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            </Section>
-
-            {/* Triggers section */}
-            <Section title="Trigger" open={openSections.triggers} onToggle={onToggleTriggers}>
-              <div className="space-y-3">
-                <Select value={triggerType} onValueChange={onTriggerTypeChange}>
-                  <SelectTrigger className="h-9 w-full bg-transparent text-sm">
-                    <SelectValue placeholder="Select a trigger" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {triggers.map((trigger) => (
-                      <SelectItem key={trigger.value} value={trigger.value}>
-                        {trigger.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <AnimatePresence initial={false} mode="wait">
-                  {triggerType === "schedule" && (
-                    <motion.div
-                      key="schedule-settings"
-                      className="space-y-3"
-                      initial={scheduleMotionInitial}
-                      animate={scheduleMotionAnimate}
-                      exit={scheduleMotionExit}
-                      transition={scheduleMotionTransition}
-                      style={scheduleMotionStyle}
-                    >
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Frequency</label>
-                        <Select value={scheduleType} onValueChange={onScheduleTypeChange}>
-                          <SelectTrigger className="bg-background h-9 w-full text-sm">
-                            <SelectValue placeholder="Select frequency" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="interval">Every X hours</SelectItem>
-                            <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {scheduleType === "interval" && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium">Run every</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min={1}
-                              max={168}
-                              className="bg-background h-9 w-20 rounded-md border px-3 text-sm"
-                              value={Math.max(1, Math.round(intervalMinutes / 60))}
-                              onChange={onIntervalHoursChange}
-                            />
-                            <span className="text-muted-foreground text-xs">hours</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {(scheduleType === "daily" ||
-                        scheduleType === "weekly" ||
-                        scheduleType === "monthly") && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium">Time ({localTimezone})</label>
-                          <Input
-                            type="time"
-                            step={60}
-                            value={scheduleTime}
-                            onChange={onScheduleTimeChange}
-                            className="bg-background h-9 w-32 appearance-none text-sm [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
-                          />
-                        </div>
-                      )}
-
-                      {scheduleType === "weekly" && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium">Days of the week</label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, index) => (
-                              <button
-                                key={day}
-                                type="button"
-                                data-day-index={index}
-                                className={cn(
-                                  "h-8 w-10 rounded-md border text-xs font-medium transition-colors",
-                                  scheduleDaysOfWeek.includes(index)
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "bg-background hover:bg-muted",
-                                )}
-                                onClick={onToggleWeekDay}
-                              >
-                                {day}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {scheduleType === "monthly" && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium">Day of the month</label>
-                          <Select
-                            value={String(scheduleDayOfMonth)}
-                            onValueChange={onScheduleDayOfMonthChange}
-                          >
-                            <SelectTrigger className="bg-background h-9 w-20 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                                <SelectItem key={day} value={String(day)}>
-                                  {day}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
-                  <div className="bg-muted/20 space-y-3 rounded-lg border p-3">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Forwarding address</label>
-                      {hasActiveForwardingAlias ? (
-                        <div className="flex flex-col gap-2">
-                          <Input
-                            type="text"
-                            value={coworkerForwardingAddress ?? ""}
-                            disabled
-                            className="bg-background/60 font-mono text-xs"
-                            placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
-                          />
-                          <div className="flex gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={onCopyCoworkerAlias}
-                              disabled={!coworkerForwardingAddress}
-                            >
-                              {copiedForwardingField === "coworkerAlias" ? "Copied" : "Copy"}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={onRotateCoworkerAlias}
-                              disabled={rotateForwardingAlias.isPending}
-                            >
-                              Rotate
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={onDisableCoworkerAlias}
-                              disabled={disableForwardingAlias.isPending}
-                            >
-                              Disable
-                            </Button>
-                          </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-3">
+                      {prompt ? (
+                        <div className="prose prose-sm dark:prose-invert prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-code:text-xs max-w-none text-sm leading-relaxed">
+                          <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>
+                            {prompt}
+                          </ReactMarkdown>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-2">
-                          <Input
-                            type="text"
-                            value=""
-                            disabled
-                            className="bg-background/60 font-mono text-xs"
-                            placeholder="No forwarding address yet"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={onCreateCoworkerAlias}
-                            disabled={
-                              createForwardingAlias.isPending ||
-                              !coworkerForwardingAlias?.receivingDomain ||
-                              !isEmailTriggerPersisted
-                            }
-                          >
-                            Create email
-                          </Button>
-                        </div>
+                        <p className="text-muted-foreground/40 text-sm italic">
+                          Preview will appear here…
+                        </p>
                       )}
                     </div>
                   </div>
-                )}
-              </div>
-            </Section>
+                </div>
+              </DialogContent>
+            </Dialog>
 
-            {/* Approval policy section */}
-            <Section
-              title="Approval policy"
-              open={openSections.approval}
-              onToggle={onToggleApproval}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <span className="text-sm">Auto-approve</span>
-                  <p className="text-muted-foreground text-xs">
-                    Automatically approve all write actions
+            {/* Trigger card */}
+            <div className="border-border/50 rounded-xl border">
+              <button
+                type="button"
+                className="hover:bg-muted/30 flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors"
+                onClick={handleToggleTriggerExpanded}
+              >
+                <div>
+                  <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                    Trigger
+                  </span>
+                  <p className="text-foreground mt-0.5 text-sm">
+                    {triggers.find((t) => t.value === triggerType)?.label ?? "Manual only"}
                   </p>
                 </div>
-                <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
-              </div>
-            </Section>
+                <ChevronDown
+                  className={cn(
+                    "text-muted-foreground h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                    triggerExpanded && "rotate-180",
+                  )}
+                />
+              </button>
+              <AnimatePresence initial={false}>
+                {triggerExpanded && (
+                  <motion.div
+                    initial={sectionMotionInitial}
+                    animate={sectionMotionAnimate}
+                    exit={sectionMotionExit}
+                    transition={sectionMotionTransition}
+                    className="overflow-hidden"
+                  >
+                    <div className="border-border/40 space-y-3 border-t px-4 pt-3 pb-4">
+                      <Select value={triggerType} onValueChange={onTriggerTypeChange}>
+                        <SelectTrigger className="h-9 w-full bg-transparent text-sm">
+                          <SelectValue placeholder="Select a trigger" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {triggers.map((trigger) => (
+                            <SelectItem key={trigger.value} value={trigger.value}>
+                              {trigger.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
-            {/* Model section */}
-            <Section title="Model" open={openSections.model} onToggle={onToggleModel}>
-              <div className="space-y-1">
-                <ModelSelector selectedModel={coworkerModel} onModelChange={setCoworkerModel} />
+                      <AnimatePresence initial={false} mode="wait">
+                        {triggerType === "schedule" && (
+                          <motion.div
+                            key="schedule-settings"
+                            className="space-y-3"
+                            initial={scheduleMotionInitial}
+                            animate={scheduleMotionAnimate}
+                            exit={scheduleMotionExit}
+                            transition={scheduleMotionTransition}
+                            style={scheduleMotionStyle}
+                          >
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium">Frequency</label>
+                              <Select value={scheduleType} onValueChange={onScheduleTypeChange}>
+                                <SelectTrigger className="bg-background h-9 w-full text-sm">
+                                  <SelectValue placeholder="Select frequency" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="interval">Every X hours</SelectItem>
+                                  <SelectItem value="daily">Daily</SelectItem>
+                                  <SelectItem value="weekly">Weekly</SelectItem>
+                                  <SelectItem value="monthly">Monthly</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {scheduleType === "interval" && (
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium">Run every</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={168}
+                                    className="bg-background h-9 w-20 rounded-md border px-3 text-sm"
+                                    value={Math.max(1, Math.round(intervalMinutes / 60))}
+                                    onChange={onIntervalHoursChange}
+                                  />
+                                  <span className="text-muted-foreground text-xs">hours</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {(scheduleType === "daily" ||
+                              scheduleType === "weekly" ||
+                              scheduleType === "monthly") && (
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium">
+                                  Time ({localTimezone})
+                                </label>
+                                <Input
+                                  type="time"
+                                  step={60}
+                                  value={scheduleTime}
+                                  onChange={onScheduleTimeChange}
+                                  className="bg-background h-9 w-32 appearance-none text-sm [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                                />
+                              </div>
+                            )}
+
+                            {scheduleType === "weekly" && (
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium">Days of the week</label>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, index) => (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      data-day-index={index}
+                                      className={cn(
+                                        "h-8 w-10 rounded-md border text-xs font-medium transition-colors",
+                                        scheduleDaysOfWeek.includes(index)
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "bg-background hover:bg-muted",
+                                      )}
+                                      onClick={onToggleWeekDay}
+                                    >
+                                      {day}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {scheduleType === "monthly" && (
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium">Day of the month</label>
+                                <Select
+                                  value={String(scheduleDayOfMonth)}
+                                  onValueChange={onScheduleDayOfMonthChange}
+                                >
+                                  <SelectTrigger className="bg-background h-9 w-20 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                      <SelectItem key={day} value={String(day)}>
+                                        {day}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
+                        <div className="bg-muted/20 space-y-3 rounded-lg border p-3">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium">Forwarding address</label>
+                            {hasActiveForwardingAlias ? (
+                              <div className="flex flex-col gap-2">
+                                <Input
+                                  type="text"
+                                  value={coworkerForwardingAddress ?? ""}
+                                  disabled
+                                  className="bg-background/60 font-mono text-xs"
+                                  placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
+                                />
+                                <div className="flex gap-1.5">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={onCopyCoworkerAlias}
+                                    disabled={!coworkerForwardingAddress}
+                                  >
+                                    {copiedForwardingField === "coworkerAlias" ? "Copied" : "Copy"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={onRotateCoworkerAlias}
+                                    disabled={rotateForwardingAlias.isPending}
+                                  >
+                                    Rotate
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={onDisableCoworkerAlias}
+                                    disabled={disableForwardingAlias.isPending}
+                                  >
+                                    Disable
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                <Input
+                                  type="text"
+                                  value=""
+                                  disabled
+                                  className="bg-background/60 font-mono text-xs"
+                                  placeholder="No forwarding address yet"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={onCreateCoworkerAlias}
+                                  disabled={
+                                    createForwardingAlias.isPending ||
+                                    !coworkerForwardingAlias?.receivingDomain ||
+                                    !isEmailTriggerPersisted
+                                  }
+                                >
+                                  Create email
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Approval policy card */}
+            <div className="border-border/50 flex items-center justify-between rounded-xl border px-4 py-3">
+              <div>
+                <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                  Approval policy
+                </span>
+                <p className="text-foreground mt-0.5 text-sm">
+                  {autoApprove ? "Auto-approve all write actions" : "Manual approval required"}
+                </p>
               </div>
-            </Section>
-          </>
+              <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
+            </div>
+
+            {/* Model card */}
+            <div className="border-border/50 flex items-center justify-between rounded-xl border px-4 py-3">
+              <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Model
+              </span>
+              <ModelSelector selectedModel={coworkerModel} onModelChange={setCoworkerModel} />
+            </div>
+          </div>
         )}
 
         {activeTab === "runs" && (
@@ -1690,6 +1555,212 @@ function CoworkerSettingsPanel({
                 <p className="text-muted-foreground text-xs">No documents added yet.</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === "toolbox" && (
+          <div className="space-y-5 px-4 py-3">
+            {/* All tools toggle */}
+            <div className="border-border/40 bg-muted/20 flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">All tools allowed</span>
+                <p className="text-muted-foreground text-[11px]">
+                  When enabled, this coworker can use any connected tool
+                </p>
+              </div>
+              <Switch checked={!restrictTools} onCheckedChange={onRestrictToolsChange} />
+            </div>
+
+            {restrictTools && (
+              <motion.div
+                initial={toolboxRevealInitial}
+                animate={toolboxRevealAnimate}
+                transition={toolboxRevealTransition}
+                className="space-y-5"
+              >
+                {/* Integrations section */}
+                <section>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                      Integrations
+                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={onSelectAllIntegrations}
+                        disabled={allowedIntegrations.length === allIntegrationTypes.length}
+                        className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors disabled:opacity-40"
+                      >
+                        All
+                      </button>
+                      <span className="text-muted-foreground/30 text-[10px]">·</span>
+                      <button
+                        type="button"
+                        onClick={onClearIntegrations}
+                        disabled={allowedIntegrations.length === 0}
+                        className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors disabled:opacity-40"
+                      >
+                        None
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {integrationEntries.map(({ key, name: label, logo }) => {
+                      const isActive = allowedIntegrations.includes(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          data-integration-type={key}
+                          onClick={handleIntegrationButtonClick}
+                          className={cn(
+                            "group relative flex items-center gap-2.5 rounded-lg border p-3 text-left transition-all duration-150",
+                            isActive
+                              ? "border-primary/30 bg-primary/5 shadow-sm"
+                              : "border-border/40 bg-card hover:border-border/70 opacity-60 hover:opacity-100",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-white p-1 dark:bg-gray-800",
+                              isActive ? "border-primary/20 shadow-sm" : "border-border/40",
+                            )}
+                          >
+                            <Image
+                              src={logo}
+                              alt={label}
+                              width={16}
+                              height={16}
+                              className="h-4 w-4 object-contain"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[12px] leading-tight font-medium">
+                              {label}
+                            </p>
+                            <div className="mt-0.5 flex items-center gap-1">
+                              <span
+                                className={cn(
+                                  "inline-block h-1.5 w-1.5 rounded-full",
+                                  isActive ? "bg-emerald-500" : "bg-muted-foreground/30",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "text-[9px] font-medium",
+                                  isActive
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-muted-foreground/50",
+                                )}
+                              >
+                                {isActive ? "On" : "Off"}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Skills section */}
+                <section>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                      Skills
+                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground text-[10px]">
+                        {selectedSkillKeys.length}/{availableSkills.length}
+                      </span>
+                      {selectedSkillKeys.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={onClearSkills}
+                          className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {isSkillsLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+                    </div>
+                  ) : availableSkills.length === 0 ? (
+                    <p className="text-muted-foreground py-4 text-center text-xs">
+                      No skills available.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {availableSkills.map((skill) => {
+                        const isActive = selectedSkillKeys.includes(skill.key);
+                        return (
+                          <button
+                            key={skill.key}
+                            type="button"
+                            data-skill-key={skill.key}
+                            onClick={handleSkillButtonClick}
+                            className={cn(
+                              "group relative flex items-center gap-2.5 rounded-lg border p-3 text-left transition-all duration-150",
+                              isActive
+                                ? "border-primary/30 bg-primary/5 shadow-sm"
+                                : "border-border/40 bg-card hover:border-border/70 opacity-60 hover:opacity-100",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                                isActive
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted/60 text-muted-foreground",
+                              )}
+                            >
+                              <span className="text-sm">
+                                {skill.source === "Custom" ? "⚡" : "🔧"}
+                              </span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12px] leading-tight font-medium">
+                                {skill.title}
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-1">
+                                <span
+                                  className={cn(
+                                    "inline-block h-1.5 w-1.5 rounded-full",
+                                    isActive ? "bg-emerald-500" : "bg-muted-foreground/30",
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    "text-[9px] font-medium uppercase tracking-wide",
+                                    isActive
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-muted-foreground/50",
+                                  )}
+                                >
+                                  {skill.source}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              </motion.div>
+            )}
+
+            {/* Manage in Toolbox link */}
+            <Link
+              href="/toolbox"
+              className="border-border/40 bg-card hover:bg-muted/30 hover:border-border/70 flex items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium transition-colors"
+            >
+              <span className="text-muted-foreground">Manage in Toolbox</span>
+              <ArrowRight className="text-muted-foreground h-3.5 w-3.5" />
+            </Link>
           </div>
         )}
       </div>

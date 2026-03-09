@@ -20,6 +20,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { IconDisplay } from "@/components/ui/icon-picker";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +37,7 @@ import {
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
 } from "@/lib/integration-errors";
 import {
+  getIntegrationActions,
   isComingSoonIntegration,
   type IntegrationType as IntegrationIconType,
 } from "@/lib/integration-icons";
@@ -277,6 +285,7 @@ function IntegrationToolCard({
   onToggle,
   onDisconnect,
   onRequestGoogleAccess,
+  onOpenDetails,
 }: {
   type: IntegrationType;
   config: { name: string; description: string; icon: string };
@@ -295,6 +304,7 @@ function IntegrationToolCard({
   onToggle: (id: string, enabled: boolean) => Promise<void>;
   onDisconnect: (id: string) => Promise<void>;
   onRequestGoogleAccess: (type: GoogleIntegrationType) => Promise<void>;
+  onOpenDetails: (type: IntegrationType) => void;
 }) {
   const isConnected = !!integration;
   const isEnabled = integration?.enabled ?? false;
@@ -336,6 +346,19 @@ function IntegrationToolCard({
   const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
   }, []);
+  const handleOpenDetails = useCallback(() => {
+    onOpenDetails(type);
+  }, [onOpenDetails, type]);
+  const handleCardKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      onOpenDetails(type);
+    },
+    [onOpenDetails, type],
+  );
 
   return (
     <motion.div
@@ -346,8 +369,12 @@ function IntegrationToolCard({
       transition={CARD_MOTION.transition}
     >
       <div
+        tabIndex={0}
+        onClick={handleOpenDetails}
+        onKeyDown={handleCardKeyDown}
         className={cn(
-          "border-border/40 bg-card hover:border-border/80 group relative flex min-h-[180px] flex-col rounded-xl border p-5 shadow-sm transition-all duration-200",
+          "border-border/40 bg-card hover:border-border/80 group relative flex min-h-[180px] cursor-pointer flex-col rounded-xl border p-5 shadow-sm transition-all duration-200",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           isPreviewOnly && "opacity-50",
           connectError && "border-red-500/30",
         )}
@@ -693,6 +720,7 @@ function ToolboxPageContent() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationType | null>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [isCreating, setIsCreating] = useState(false);
@@ -848,6 +876,16 @@ function ToolboxPageContent() {
     [requestGoogleAccess],
   );
 
+  const handleOpenIntegrationDetails = useCallback((type: IntegrationType) => {
+    setSelectedIntegration(type);
+  }, []);
+
+  const handleIntegrationDialogChange = useCallback((open: boolean) => {
+    if (!open) {
+      setSelectedIntegration(null);
+    }
+  }, []);
+
   // ─── Skill handlers ────────────────────────────────────────────────────────
   const handleCreateSkill = useCallback(async () => {
     setIsCreating(true);
@@ -996,8 +1034,199 @@ function ToolboxPageContent() {
     setSearch(e.target.value);
   }, []);
 
+  const selectedIntegrationDetails = useMemo(() => {
+    if (!selectedIntegration) {
+      return null;
+    }
+
+    const config = integrationConfig[selectedIntegration];
+    const integration = connectedIntegrations.get(selectedIntegration) ?? null;
+    const isWhatsApp = selectedIntegration === "whatsapp";
+    const actions = isWhatsApp ? [] : getIntegrationActions(selectedIntegration);
+    const connectError = !integration
+      ? integrationConnectErrors[selectedIntegration as OAuthIntegrationType]
+      : undefined;
+    const isGoogleType =
+      !isWhatsApp && isGoogleIntegrationType(selectedIntegration as OAuthIntegrationType);
+    const showGoogleRequest = !integration && isGoogleType && lacksGoogleAccess;
+
+    return {
+      type: selectedIntegration,
+      config,
+      integration,
+      isWhatsApp,
+      actions,
+      connectError,
+      showGoogleRequest,
+    };
+  }, [connectedIntegrations, integrationConnectErrors, lacksGoogleAccess, selectedIntegration]);
+
+  const handleCloseIntegrationDetails = useCallback(() => {
+    setSelectedIntegration(null);
+  }, []);
+
+  const handleDialogToggleIntegration = useCallback(
+    (enabled: boolean) => {
+      if (!selectedIntegrationDetails?.integration) {
+        return;
+      }
+
+      void handleIntegrationToggle(selectedIntegrationDetails.integration.id, enabled);
+    },
+    [handleIntegrationToggle, selectedIntegrationDetails],
+  );
+
+  const handleDialogDisconnectIntegration = useCallback(() => {
+    if (!selectedIntegrationDetails?.integration) {
+      return;
+    }
+
+    void handleIntegrationDisconnect(selectedIntegrationDetails.integration.id);
+  }, [handleIntegrationDisconnect, selectedIntegrationDetails]);
+
+  const handleDialogRequestGoogleAccess = useCallback(() => {
+    if (!selectedIntegrationDetails?.showGoogleRequest) {
+      return;
+    }
+
+    void handleRequestGoogleAccess(selectedIntegrationDetails.type as GoogleIntegrationType);
+  }, [handleRequestGoogleAccess, selectedIntegrationDetails]);
+
+  const handleDialogConnectIntegration = useCallback(() => {
+    if (!selectedIntegrationDetails || selectedIntegrationDetails.isWhatsApp) {
+      return;
+    }
+
+    void handleIntegrationConnect(selectedIntegrationDetails.type as OAuthIntegrationType);
+  }, [handleIntegrationConnect, selectedIntegrationDetails]);
+
   return (
     <div>
+      <AlertDialog
+        open={selectedIntegrationDetails !== null}
+        onOpenChange={handleIntegrationDialogChange}
+      >
+        {selectedIntegrationDetails && (
+          <AlertDialogContent className="max-w-md overflow-hidden p-0">
+            <AlertDialogHeader className="border-b px-5 pt-5 pb-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border bg-white p-2 shadow-sm dark:bg-gray-800">
+                  <Image
+                    src={selectedIntegrationDetails.config.icon}
+                    alt={selectedIntegrationDetails.config.name}
+                    width={28}
+                    height={28}
+                    className="h-auto max-h-7 w-auto max-w-7 object-contain"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <AlertDialogTitle className="text-base leading-tight">
+                    {selectedIntegrationDetails.config.name}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="mt-1 text-xs">
+                    {selectedIntegrationDetails.integration?.setupRequired
+                      ? "Finish setup to complete the connection."
+                      : selectedIntegrationDetails.integration
+                        ? `Connected as ${selectedIntegrationDetails.integration.displayName ?? selectedIntegrationDetails.config.name}`
+                        : selectedIntegrationDetails.config.description}
+                  </AlertDialogDescription>
+                </div>
+              </div>
+            </AlertDialogHeader>
+
+            <div className="space-y-4 px-5 py-4">
+              {selectedIntegrationDetails.connectError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+                  {selectedIntegrationDetails.connectError}
+                </div>
+              )}
+
+              <div>
+                <p className="text-muted-foreground mb-2 text-[11px] font-medium tracking-wide uppercase">
+                  Capabilities
+                </p>
+                {selectedIntegrationDetails.actions.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedIntegrationDetails.actions.map((action) => (
+                      <span
+                        key={action.key}
+                        className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs"
+                      >
+                        {action.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    No capabilities are listed for this integration yet.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <Button variant="outline" size="sm" onClick={handleCloseIntegrationDetails}>
+                  Close
+                </Button>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedIntegrationDetails.integration &&
+                  !selectedIntegrationDetails.integration.setupRequired ? (
+                    <>
+                      <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap">
+                        <Switch
+                          checked={selectedIntegrationDetails.integration.enabled}
+                          onCheckedChange={handleDialogToggleIntegration}
+                        />
+                        <span className="text-muted-foreground inline-block w-8 text-sm">
+                          {selectedIntegrationDetails.integration.enabled ? "On" : "Off"}
+                        </span>
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={handleDialogDisconnectIntegration}
+                      >
+                        Disconnect
+                      </Button>
+                    </>
+                  ) : selectedIntegrationDetails.isWhatsApp ? (
+                    <Button size="sm" asChild>
+                      <Link href="/integrations/whatsapp">
+                        Setup
+                        <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  ) : selectedIntegrationDetails.showGoogleRequest ? (
+                    <Button size="sm" variant="outline" onClick={handleDialogRequestGoogleAccess}>
+                      Request access
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={handleDialogConnectIntegration}
+                      disabled={connectingType === selectedIntegrationDetails.type}
+                      variant={selectedIntegrationDetails.connectError ? "destructive" : "default"}
+                    >
+                      {connectingType === selectedIntegrationDetails.type ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {connectingType === selectedIntegrationDetails.type
+                        ? "Connecting"
+                        : selectedIntegrationDetails.connectError
+                          ? "Retry"
+                          : "Connect"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
+
       {/* Header */}
       <div className="mb-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1162,6 +1391,7 @@ function ToolboxPageContent() {
                         onToggle={handleIntegrationToggle}
                         onDisconnect={handleIntegrationDisconnect}
                         onRequestGoogleAccess={handleRequestGoogleAccess}
+                        onOpenDetails={handleOpenIntegrationDetails}
                       />
                     );
                   })}

@@ -25,15 +25,8 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/animate-ui/components/radix/sheet";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BugReportDialog } from "@/components/bug-report-dialog";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
 import {
   AlertDialog,
@@ -174,16 +167,11 @@ export function AppSidebar() {
   const router = useRouter();
   const [session, setSession] = useState<SessionData>(null);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportMessage, setReportMessage] = useState("");
-  const [reportAttachment, setReportAttachment] = useState<File | null>(null);
-  const [reportError, setReportError] = useState("");
-  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: coworkers } = useCoworkerList();
   const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
@@ -397,77 +385,7 @@ export function AppSidebar() {
     void handleMarkAllRead();
   }, [handleMarkAllRead]);
 
-  const handleSubmitReport = useCallback(async () => {
-    const message = reportMessage.trim();
-    if (!message) {
-      setReportError("Please enter a message.");
-      return;
-    }
-
-    setIsSubmittingReport(true);
-    setReportError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("message", message);
-      if (reportAttachment) {
-        formData.append("attachment", reportAttachment);
-      }
-
-      const response = await fetch("/api/report", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        setReportError(data?.error ?? "Failed to send report.");
-        return;
-      }
-
-      setReportMessage("");
-      setReportAttachment(null);
-      setReportOpen(false);
-    } catch {
-      setReportError("Failed to send report.");
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  }, [reportAttachment, reportMessage]);
-
-  const handleReportMessageChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setReportMessage(e.target.value);
-      if (reportError) {
-        setReportError("");
-      }
-    },
-    [reportError],
-  );
-
-  const handleAttachmentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    setReportAttachment(file);
-  }, []);
-
-  const openAttachmentPicker = useCallback(() => {
-    attachmentInputRef.current?.click();
-  }, []);
-
-  const clearAttachment = useCallback(() => {
-    setReportAttachment(null);
-    if (attachmentInputRef.current) {
-      attachmentInputRef.current.value = "";
-    }
-  }, []);
-
-  const closeReportSheet = useCallback(() => {
-    setReportOpen(false);
-  }, []);
-
-  const openReportSheet = useCallback(() => {
+  const openReportDialog = useCallback(() => {
     setReportOpen(true);
   }, []);
 
@@ -477,59 +395,7 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sheet open={reportOpen} onOpenChange={setReportOpen}>
-        <SheetContent
-          side="right"
-          title="Bug report"
-          description="Send a message to Slack"
-          className="w-[420px] p-0"
-        >
-          <SheetHeader>
-            <SheetTitle>Bug report</SheetTitle>
-            <SheetDescription>
-              This sends your bug report to the Slack report channel.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 px-4 pb-2">
-            <textarea
-              value={reportMessage}
-              onChange={handleReportMessageChange}
-              placeholder="Describe the bug..."
-              className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-[160px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-            />
-            <input
-              ref={attachmentInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleAttachmentChange}
-            />
-            <div className="mt-3 flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={openAttachmentPicker}>
-                Add attachment
-              </Button>
-              {reportAttachment && (
-                <>
-                  <span className="text-muted-foreground max-w-[180px] truncate text-xs">
-                    {reportAttachment.name}
-                  </span>
-                  <Button type="button" variant="ghost" onClick={clearAttachment}>
-                    Remove
-                  </Button>
-                </>
-              )}
-            </div>
-            {reportError && <p className="text-destructive mt-2 text-xs">{reportError}</p>}
-          </div>
-          <SheetFooter className="border-t">
-            <Button variant="outline" onClick={closeReportSheet} disabled={isSubmittingReport}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitReport} disabled={isSubmittingReport}>
-              {isSubmittingReport ? "Sending..." : "Send"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      <BugReportDialog open={reportOpen} onOpenChange={setReportOpen} />
 
       <AlertDialog open={isRenameModalOpen} onOpenChange={handleRenameModalOpenChange}>
         <AlertDialogContent>
@@ -594,7 +460,7 @@ export function AppSidebar() {
               {mainNavItems.map((item) => (
                 <NavLink key={item.href} item={item} active={isActive(item.href)} />
               ))}
-              <NavButton icon={Bug} label="Bug report" onClick={openReportSheet} />
+              <NavButton icon={Bug} label="Bug report" onClick={openReportDialog} />
             </div>
 
             {/* Coworker section */}

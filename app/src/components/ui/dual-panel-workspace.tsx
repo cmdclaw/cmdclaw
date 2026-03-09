@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, PanelRight } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -28,11 +28,17 @@ type DualPanelWorkspaceProps = {
   showTitles?: boolean;
   leftPanelClassName?: string;
   rightPanelClassName?: string;
+  separatorClassName?: string;
+  /** Label shown on the collapsed sidebar button (e.g. coworker name). When set, replaces the chevron with a labeled button. */
+  collapsedLabel?: string;
+  /** Expose collapse toggle so child content can trigger it (e.g. an X close button inside the panel). */
+  onCollapseToggleRef?: React.MutableRefObject<(() => void) | null>;
 };
 
 const DEFAULT_RIGHT_WIDTH = 48;
 const DEFAULT_MIN_LEFT = 28;
 const DEFAULT_MIN_RIGHT = 30;
+const COLLAPSED_SEPARATOR_WIDTH_REM = 2;
 
 export function DualPanelWorkspace({
   left,
@@ -49,6 +55,9 @@ export function DualPanelWorkspace({
   showTitles = true,
   leftPanelClassName,
   rightPanelClassName,
+  separatorClassName,
+  collapsedLabel,
+  onCollapseToggleRef,
 }: DualPanelWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mobilePanel, setMobilePanel] = useState<"left" | "right">("right");
@@ -144,6 +153,18 @@ export function DualPanelWorkspace({
     }
   }, [isCollapsed, rightWidth, defaultRightWidth, setWidthWithinBounds]);
 
+  // Expose collapse toggle to child content
+  useEffect(() => {
+    if (onCollapseToggleRef) {
+      onCollapseToggleRef.current = handleCollapseToggle;
+    }
+    return () => {
+      if (onCollapseToggleRef) {
+        onCollapseToggleRef.current = null;
+      }
+    };
+  }, [handleCollapseToggle, onCollapseToggleRef]);
+
   const effectiveRightWidth = isCollapsed ? 0 : rightWidth;
   const leftWidth = 100 - effectiveRightWidth;
   const switchToLeftPanel = useCallback(() => {
@@ -152,7 +173,13 @@ export function DualPanelWorkspace({
   const switchToRightPanel = useCallback(() => {
     setMobilePanel("right");
   }, []);
-  const leftPanelStyle = useMemo(() => ({ width: `${leftWidth}%` }), [leftWidth]);
+  const leftPanelStyle = useMemo(
+    () =>
+      isCollapsed
+        ? { width: `calc(100% - ${COLLAPSED_SEPARATOR_WIDTH_REM}rem)` }
+        : { width: `${leftWidth}%` },
+    [isCollapsed, leftWidth],
+  );
   const rightPanelStyle = useMemo(
     () => ({ width: `${effectiveRightWidth}%` }),
     [effectiveRightWidth],
@@ -246,31 +273,50 @@ export function DualPanelWorkspace({
           onPointerDown={isCollapsed ? undefined : startDrag}
           onKeyDown={isCollapsed ? undefined : handleSeparatorKeyDown}
           className={cn(
-            "group relative shrink-0 transition-[width] duration-200 ease-out",
+            "relative shrink-0 transition-[width] duration-200 ease-out",
             isCollapsed ? "w-8" : "w-3",
             !isCollapsed && "cursor-col-resize",
           )}
         >
           {!isCollapsed && (
             <>
-              <div className="bg-border group-hover:bg-foreground/40 absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors" />
-              <div className="bg-border/80 group-hover:bg-foreground/40 absolute top-1/2 left-1/2 h-12 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors" />
+              {separatorClassName ? (
+                <div
+                  aria-hidden="true"
+                  className={cn("absolute inset-y-0 left-1/2 right-0", separatorClassName)}
+                />
+              ) : null}
+              <div className="bg-border absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
             </>
           )}
-          {collapsible && (
-            <button
-              type="button"
-              onClick={handleCollapseToggle}
-              className="hover:bg-muted bg-background absolute top-3 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border shadow-sm transition-colors"
-              aria-label={isCollapsed ? "Expand right panel" : "Collapse right panel"}
-            >
-              {isCollapsed ? (
-                <ChevronLeft className="h-3 w-3" />
-              ) : (
-                <ChevronRight className="h-3 w-3" />
-              )}
-            </button>
-          )}
+          {collapsible &&
+            (collapsedLabel ? (
+              // Labeled collapse button — only visible when collapsed; when expanded, the panel provides its own close button
+              isCollapsed && (
+                <button
+                  type="button"
+                  onClick={handleCollapseToggle}
+                  className="hover:bg-muted bg-background absolute top-3 right-2 z-10 flex items-center gap-1.5 rounded-lg border py-1.5 pr-2 pl-2.5 text-xs font-medium shadow-sm transition-colors"
+                  aria-label="Expand right panel"
+                >
+                  <PanelRight className="h-3.5 w-3.5" />
+                  {collapsedLabel}
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={handleCollapseToggle}
+                className="hover:bg-muted bg-background absolute top-3 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border shadow-sm transition-colors"
+                aria-label={isCollapsed ? "Expand right panel" : "Collapse right panel"}
+              >
+                {isCollapsed ? (
+                  <ChevronLeft className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+              </button>
+            ))}
         </div>
 
         <section
