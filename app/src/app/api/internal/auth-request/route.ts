@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     const allowedIntegrations = await generationManager.getAllowedIntegrationsForGeneration(genId);
 
     if (Array.isArray(allowedIntegrations) && !allowedIntegrations.includes(input.integration)) {
-      console.warn("[Internal] Integration not allowed for workflow:", input.integration);
+      console.warn("[Internal] Integration not allowed for coworker:", input.integration);
       return Response.json({ success: false });
     }
 

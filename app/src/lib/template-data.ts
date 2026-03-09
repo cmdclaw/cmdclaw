@@ -35,7 +35,7 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
     category: "Sales",
     title: "Send polished follow-ups right after every call",
     description:
-      "As soon as a transcript arrives, this workflow builds a short recap, drafts the email, and creates the matching CRM follow-up task.",
+      "As soon as a transcript arrives, this coworker builds a short recap, drafts the email, and creates the matching CRM follow-up task.",
     triggerTitle: "Call Transcription Ready",
     triggerDescription: "When an Aircall call transcription becomes available.",
     agentInstructions: [
@@ -97,6 +97,6 @@ export function getTemplateById(id: string): TemplateContent {
     ...MOCK_TEMPLATES["call-follow-up"],
     id,
     category: "Template",
-    title: `Workflow template: ${id.replace(/[-_]/g, " ")}`,
+    title: `Coworker template: ${id.replace(/[-_]/g, " ")}`,
   };
 }

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   buildUserForwardingAddress,
-  buildWorkflowForwardingAddress,
+  buildCoworkerForwardingAddress,
   extractEmailAddress,
-  generateWorkflowAliasLocalPart,
+  generateCoworkerAliasLocalPart,
   parseForwardingTargetFromEmail,
 } from "./email-forwarding";
 
 describe("email-forwarding", () => {
-  it("builds workflow and user forwarding aliases", () => {
-    expect(buildWorkflowForwardingAddress("beaver-strong-orange", "Mail.cmdclaw.ai")).toBe(
+  it("builds coworker and user forwarding aliases", () => {
+    expect(buildCoworkerForwardingAddress("beaver-strong-orange", "Mail.cmdclaw.ai")).toBe(
       "bot+beaver-strong-orange@mail.cmdclaw.ai",
     );
 
@@ -25,11 +25,11 @@ describe("email-forwarding", () => {
     expect(extractEmailAddress(undefined)).toBeNull();
   });
 
-  it("parses workflow and user aliases from recipient emails", () => {
+  it("parses coworker and user aliases from recipient emails", () => {
     expect(
       parseForwardingTargetFromEmail("bot+beaver-strong-orange@mail.cmdclaw.ai", "mail.cmdclaw.ai"),
     ).toEqual({
-      kind: "workflow_alias",
+      kind: "coworker_alias",
       localPart: "beaver-strong-orange",
     });
 
@@ -45,8 +45,8 @@ describe("email-forwarding", () => {
     expect(parseForwardingTargetFromEmail("bot@mail.cmdclaw.ai", "mail.cmdclaw.ai")).toBeNull();
   });
 
-  it("generates human-friendly workflow alias local-part", () => {
-    const value = generateWorkflowAliasLocalPart();
+  it("generates human-friendly coworker alias local-part", () => {
+    const value = generateCoworkerAliasLocalPart();
     expect(value).toMatch(/^[a-z]+-[a-z]+-[a-z]+$/);
   });
 

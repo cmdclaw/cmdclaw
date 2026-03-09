@@ -61,7 +61,7 @@ import {
   useMarkAllConversationsSeen,
   useUpdateConversationPinned,
   useUpdateConversationTitle,
-  useWorkflowList,
+  useCoworkerList,
 } from "@/orpc/hooks";
 
 type ConversationListData = {
@@ -185,7 +185,7 @@ export function AppSidebar() {
   const [renameTitle, setRenameTitle] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: workflows } = useWorkflowList();
+  const { data: coworkers } = useCoworkerList();
   const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
   const conversationData = rawConversationData as ConversationListData | undefined;
   const deleteConversation = useDeleteConversation();
@@ -258,16 +258,16 @@ export function AppSidebar() {
     }
     return pathname === href || pathname.startsWith(href + "/");
   };
-  const isWorkflowPage = pathname === "/workflows" || pathname.startsWith("/workflows/");
+  const isCoworkerPage = pathname === "/coworkers" || pathname.startsWith("/coworkers/");
 
-  // Only animate the recent section when navigating to/from workflows, not on first load/reload.
-  const recentDirection = isWorkflowPage ? 1 : -1;
+  // Only animate the recent section when navigating to/from coworkers, not on first load/reload.
+  const recentDirection = isCoworkerPage ? 1 : -1;
   const [recentAnimState, setRecentAnimState] = useState<"idle" | "animating">(() => {
     if (typeof window === "undefined") {
       return "idle";
     }
     const prev = sessionStorage.getItem("sidebar-recent");
-    const curr = isWorkflowPage ? "workflows" : "chats";
+    const curr = isCoworkerPage ? "coworkers" : "chats";
     sessionStorage.setItem("sidebar-recent", curr);
     return prev !== null && prev !== curr ? "animating" : "idle";
   });
@@ -292,13 +292,13 @@ export function AppSidebar() {
 
   const coworkerNavItems: NavItem[] = [
     { icon: MessageSquare, label: "Chat", href: "/chat" },
-    { icon: Workflow, label: "Workflows", href: "/workflows" },
+    { icon: Workflow, label: "Coworkers", href: "/coworkers" },
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
   ];
 
   const adminNavItems: NavItem[] = [{ icon: Shield, label: "Admin", href: "/admin" }];
 
-  const recentWorkflows = workflows?.slice(0, 5) ?? [];
+  const recentCoworkers = coworkers?.slice(0, 5) ?? [];
   const recentConversations = conversationData?.conversations ?? [];
   const unreadConversationCount = recentConversations.filter(
     (conversation) => conversation.messageCount > (conversation.seenMessageCount ?? 0),
@@ -633,7 +633,7 @@ export function AppSidebar() {
               </div>
             )}
 
-            {/* Recent — contextual: chats on all pages, runs on workflow page */}
+            {/* Recent — contextual: chats on all pages, runs on coworker page */}
             <div className="flex flex-col gap-1.5 overflow-hidden">
               <div
                 className="flex flex-col gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
@@ -642,13 +642,13 @@ export function AppSidebar() {
                 <div
                   className={cn(
                     "flex items-center justify-between gap-2 px-2.5",
-                    !isWorkflowPage && "group/recent-chats-header",
+                    !isCoworkerPage && "group/recent-chats-header",
                   )}
                 >
                   <span className="text-sidebar-foreground/40 text-[11px] font-semibold tracking-wider uppercase">
-                    {isWorkflowPage ? "Recent Runs" : "Recent Chats"}
+                    {isCoworkerPage ? "Recent Runs" : "Recent Chats"}
                   </span>
-                  {!isWorkflowPage ? (
+                  {!isCoworkerPage ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
@@ -683,7 +683,7 @@ export function AppSidebar() {
                   ) : null}
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  {!isWorkflowPage ? (
+                  {!isCoworkerPage ? (
                     conversationsLoading ? (
                       <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
                         Loading...
@@ -804,30 +804,30 @@ export function AppSidebar() {
                         );
                       })
                     )
-                  ) : recentWorkflows.length === 0 ? (
+                  ) : recentCoworkers.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 px-2.5 py-4 text-center">
                       <Play className="text-sidebar-foreground/25 h-5 w-5" />
                       <span className="text-sidebar-foreground/40 text-[12px] leading-relaxed">
-                        Run a workflow
+                        Run a coworker
                         <br />
                         to see results here
                       </span>
                     </div>
                   ) : (
-                    recentWorkflows.map((workflow) => (
+                    recentCoworkers.map((coworker) => (
                       <Link
-                        key={workflow.id}
-                        href={`/workflows/${workflow.id}`}
+                        key={coworker.id}
+                        href={`/coworkers/${coworker.id}`}
                         prefetch={false}
                         className={cn(
                           "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
-                          isActive(`/workflows/${workflow.id}`)
+                          isActive(`/coworkers/${coworker.id}`)
                             ? "bg-sidebar-accent text-sidebar-accent-foreground"
                             : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                         )}
                       >
                         <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                        <span className="truncate">{workflow.name || "Untitled"}</span>
+                        <span className="truncate">{coworker.name || "Untitled"}</span>
                       </Link>
                     ))
                   )}

@@ -65,7 +65,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "call-follow-up",
     title: "Send polished follow-ups right after every call",
     description:
-      "As soon as an Aircall transcript is ready, this workflow drafts a personalized follow-up email and creates the matching…",
+      "As soon as an Aircall transcript is ready, this coworker drafts a personalized follow-up email and creates the matching…",
     triggerType: "schedule",
     integrations: ["gmail", "hubspot"],
     industry: "Sales",
@@ -85,7 +85,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "calendly-qualify",
     title: "Qualify every new Calendly booking before the meeting",
     description:
-      "When a new meeting is booked, this workflow researches the person and company, sends a concise briefing,…",
+      "When a new meeting is booked, this coworker researches the person and company, sends a concise briefing,…",
     triggerType: "webhook",
     integrations: ["google_calendar", "linkedin", "hubspot", "slack"],
     industry: "Sales",
@@ -95,7 +95,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "deal-decision-makers",
     title: "Map every decision-maker in your top deals automatically",
     description:
-      "Every Monday morning, this workflow scans emails, Slack, call notes, and CRM data across your key deals, identifies wh…",
+      "Every Monday morning, this coworker scans emails, Slack, call notes, and CRM data across your key deals, identifies wh…",
     triggerType: "schedule",
     integrations: ["gmail", "slack", "hubspot", "linkedin", "salesforce"],
     industry: "Sales",
@@ -115,7 +115,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "call-transcript-crm",
     title: "Turn every call transcript into CRM-ready deal intelligence",
     description:
-      "This workflow polls CloudTalk, extracts structured commercial insight from each transcript, logs clean records in HubSpo…",
+      "This coworker polls CloudTalk, extracts structured commercial insight from each transcript, logs clean records in HubSpo…",
     triggerType: "webhook",
     integrations: ["salesforce", "hubspot", "slack"],
     industry: "Sales",
@@ -125,7 +125,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "closed-lost-lessons",
     title: "Capture closed-lost lessons before they get buried",
     description:
-      "When a HubSpot deal moves to closed-lost, this workflow reviews deal activity, writes a reusable company-level loss…",
+      "When a HubSpot deal moves to closed-lost, this coworker reviews deal activity, writes a reusable company-level loss…",
     triggerType: "email",
     integrations: ["hubspot", "slack"],
     industry: "Sales",
@@ -135,7 +135,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "gmail-to-hubspot-contacts",
     title: "Turn labeled Gmail threads into clean HubSpot contacts",
     description:
-      "Apply one Gmail label and this workflow extracts contact details from the latest message, upserts people in HubSpot, an…",
+      "Apply one Gmail label and this coworker extracts contact details from the latest message, upserts people in HubSpot, an…",
     triggerType: "email",
     integrations: ["gmail", "hubspot"],
     industry: "Sales",
@@ -404,7 +404,7 @@ function TemplatesPageContent() {
           <div className="mb-10">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">Templates</h1>
             <p className="text-muted-foreground mt-2 text-sm">
-              Pre-built workflows ready to deploy
+              Pre-built coworkers ready to deploy
             </p>
           </div>
 

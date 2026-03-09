@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { env } from "@/env";
-import { buildQueueJobId, EMAIL_FORWARDED_WORKFLOW_JOB_NAME, getQueue } from "@/server/queues";
-import { type ResendEmailReceivedEvent } from "@/server/services/workflow-email-forwarding";
+import { buildQueueJobId, EMAIL_FORWARDED_COWORKER_JOB_NAME, getQueue } from "@/server/queues";
+import { type ResendEmailReceivedEvent } from "@/server/services/coworker-email-forwarding";
 
 export const runtime = "nodejs";
 
@@ -70,9 +70,9 @@ export async function POST(request: Request) {
     const emailId = event.data?.email_id;
     if (emailId) {
       const queue = getQueue();
-      const jobId = buildQueueJobId([EMAIL_FORWARDED_WORKFLOW_JOB_NAME, svixId || emailId]);
+      const jobId = buildQueueJobId([EMAIL_FORWARDED_COWORKER_JOB_NAME, svixId || emailId]);
       await queue.add(
-        EMAIL_FORWARDED_WORKFLOW_JOB_NAME,
+        EMAIL_FORWARDED_COWORKER_JOB_NAME,
         {
           webhookId: svixId,
           event,

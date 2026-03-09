@@ -28,9 +28,9 @@ import {
   messageAttachment,
   skill,
   user,
-  workflow,
-  workflowRun,
-  workflowRunEvent,
+  coworker,
+  coworkerRun,
+  coworkerRunEvent,
   type ContentPart,
   type GenerationExecutionPolicy,
   type MessageTiming,
@@ -45,7 +45,7 @@ import {
   getEnabledIntegrationTypes,
 } from "@/server/integrations/cli-env";
 import { getChatSystemBehaviorPrompt } from "@/server/prompts/chat-system-behavior-prompt";
-import { getWorkflowSystemBehaviorPrompt } from "@/server/prompts/workflow-system-behavior-prompt";
+import { getCoworkerSystemBehaviorPrompt } from "@/server/prompts/coworker-system-behavior-prompt";
 import {
   buildQueueJobId,
   CHAT_GENERATION_JOB_NAME,
@@ -53,7 +53,7 @@ import {
   GENERATION_APPROVAL_TIMEOUT_JOB_NAME,
   GENERATION_AUTH_TIMEOUT_JOB_NAME,
   GENERATION_PREPARING_STUCK_CHECK_JOB_NAME,
-  WORKFLOW_GENERATION_JOB_NAME,
+  COWORKER_GENERATION_JOB_NAME,
   getQueue,
 } from "@/server/queues";
 import { buildRedisOptions } from "@/server/redis/connection-options";
@@ -76,41 +76,41 @@ import {
   writeResolvedIntegrationSkillsToSandbox,
   writeSkillsToSandbox,
 } from "@/server/sandbox/prep/skills-prep";
+import {
+  applyCoworkerBuilderPatch,
+  extractCoworkerBuilderPatch,
+  resolveCoworkerBuilderContextByConversation,
+  type CoworkerBuilderContext,
+} from "@/server/services/coworker-builder-service";
 import { createCommunityIntegrationSkill } from "@/server/services/integration-skill-service";
 import { writeSessionTranscriptFromConversation } from "@/server/services/memory-service";
 import { resolveSelectedPlatformSkillSlugs } from "@/server/services/platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "@/server/services/sandbox-file-service";
 import { SESSION_BOUNDARY_PREFIX } from "@/server/services/session-constants";
-import {
-  applyWorkflowBuilderPatch,
-  extractWorkflowBuilderPatch,
-  resolveWorkflowBuilderContextByConversation,
-  type WorkflowBuilderContext,
-} from "@/server/services/workflow-builder-service";
 import { generateConversationTitle } from "@/server/utils/generate-title";
 import { createTraceId, logServerEvent } from "@/server/utils/observability";
 import { isStatelessServerlessRuntime } from "@/server/utils/runtime-platform";
 
-let cachedDefaultWorkflowModelPromise: Promise<string> | undefined;
+let cachedDefaultCoworkerModelPromise: Promise<string> | undefined;
 
-async function resolveWorkflowModel(model?: string): Promise<string> {
+async function resolveCoworkerModel(model?: string): Promise<string> {
   const configured = model?.trim();
   if (configured) {
     parseModelReference(configured);
     return configured;
   }
 
-  if (!cachedDefaultWorkflowModelPromise) {
-    cachedDefaultWorkflowModelPromise = resolveDefaultOpencodeFreeModel();
+  if (!cachedDefaultCoworkerModelPromise) {
+    cachedDefaultCoworkerModelPromise = resolveDefaultOpencodeFreeModel();
   }
 
-  return cachedDefaultWorkflowModelPromise;
+  return cachedDefaultCoworkerModelPromise;
 }
 
 // Event types for generation stream
 export type GenerationEvent =
   | { type: "text"; content: string }
-  | { type: "system"; content: string; workflowId?: string }
+  | { type: "system"; content: string; coworkerId?: string }
   | {
       type: "tool_use";
       toolName: string;
@@ -283,16 +283,16 @@ interface GenerationContext {
   backendType: BackendType;
   deviceId?: string;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";
-  // Workflow fields
-  workflowRunId?: string;
+  // Coworker fields
+  coworkerRunId?: string;
   allowedIntegrations?: IntegrationType[];
   autoApprove: boolean;
   allowedCustomIntegrations?: string[];
-  workflowPrompt?: string;
-  workflowPromptDo?: string;
-  workflowPromptDont?: string;
+  coworkerPrompt?: string;
+  coworkerPromptDo?: string;
+  coworkerPromptDont?: string;
   triggerPayload?: unknown;
-  builderWorkflowContext?: WorkflowBuilderContext | null;
+  builderCoworkerContext?: CoworkerBuilderContext | null;
   selectedPlatformSkillSlugs?: string[];
   // Sandbox file collection
   generationMarkerTime?: number;
@@ -345,7 +345,7 @@ type PrePromptCacheRecord = {
 
 const PRE_PROMPT_CACHE_PATH = "/app/.opencode/pre-prompt-cache.json";
 const DEFAULT_MODEL_REFERENCE = "anthropic/claude-sonnet-4-6";
-const WORKFLOW_BUILDER_AUTO_APPLY_ENABLED = process.env.WORKFLOW_BUILDER_AUTO_APPLY !== "0";
+const COWORKER_BUILDER_AUTO_APPLY_ENABLED = process.env.COWORKER_BUILDER_AUTO_APPLY !== "0";
 
 async function getDoneArtifacts(messageId: string): Promise<
   | {
@@ -1076,10 +1076,10 @@ class GenerationManager {
 
   private async enqueueGenerationRun(
     generationId: string,
-    type: "chat" | "workflow",
+    type: "chat" | "coworker",
   ): Promise<void> {
     const queue = getQueue();
-    const jobName = type === "workflow" ? WORKFLOW_GENERATION_JOB_NAME : CHAT_GENERATION_JOB_NAME;
+    const jobName = type === "coworker" ? COWORKER_GENERATION_JOB_NAME : CHAT_GENERATION_JOB_NAME;
     await queue.add(
       jobName,
       { generationId },
@@ -1568,9 +1568,9 @@ class GenerationManager {
     const selectedPlatformSkillSlugs = await resolveSelectedPlatformSkillSlugs(
       params.selectedPlatformSkillSlugs,
     );
-    const builderWorkflowContext =
-      conv.type === "workflow"
-        ? await resolveWorkflowBuilderContextByConversation({
+    const builderCoworkerContext =
+      conv.type === "coworker"
+        ? await resolveCoworkerBuilderContextByConversation({
             database: db,
             userId,
             conversationId: conv.id,
@@ -1742,7 +1742,7 @@ class GenerationManager {
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: conv.autoApprove,
       attachments: fileAttachments,
-      builderWorkflowContext,
+      builderCoworkerContext,
       selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
@@ -1799,10 +1799,10 @@ class GenerationManager {
   }
 
   /**
-   * Start a new workflow generation.
+   * Start a new coworker generation.
    */
-  async startWorkflowGeneration(params: {
-    workflowRunId: string;
+  async startCoworkerGeneration(params: {
+    coworkerRunId: string;
     content: string;
     model?: string;
     userId: string;
@@ -1812,15 +1812,15 @@ class GenerationManager {
     allowedCustomIntegrations?: string[];
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model } = params;
-    const resolvedModel = await resolveWorkflowModel(model);
+    const resolvedModel = await resolveCoworkerModel(model);
 
     const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
     const [newConv] = await db
       .insert(conversation)
       .values({
         userId,
-        title: title || "Workflow run",
-        type: "workflow",
+        title: title || "Coworker run",
+        type: "coworker",
         model: resolvedModel,
         autoApprove: params.autoApprove,
       })
@@ -1859,10 +1859,10 @@ class GenerationManager {
       .where(eq(conversation.id, newConv.id));
 
     if (this.shouldDeferGenerationToWorker()) {
-      await this.enqueueGenerationRun(genRecord.id, "workflow");
+      await this.enqueueGenerationRun(genRecord.id, "coworker");
       logServerEvent(
         "info",
-        "WORKFLOW_GENERATION_ENQUEUED",
+        "COWORKER_GENERATION_ENQUEUED",
         { delivery: "queue" },
         {
           source: "generation-manager",
@@ -1900,15 +1900,15 @@ class GenerationManager {
       pendingMessageParts: new Map(),
       backendType: "opencode",
       sandboxProviderOverride: params.sandboxProvider,
-      workflowRunId: params.workflowRunId,
+      coworkerRunId: params.coworkerRunId,
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: params.autoApprove,
       allowedCustomIntegrations: params.allowedCustomIntegrations,
-      workflowPrompt: undefined,
-      workflowPromptDo: undefined,
-      workflowPromptDont: undefined,
+      coworkerPrompt: undefined,
+      coworkerPromptDo: undefined,
+      coworkerPromptDont: undefined,
       triggerPayload: undefined,
-      builderWorkflowContext: null,
+      builderCoworkerContext: null,
       selectedPlatformSkillSlugs: undefined,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
@@ -1927,7 +1927,7 @@ class GenerationManager {
 
     logServerEvent(
       "info",
-      "WORKFLOW_GENERATION_ENQUEUED",
+      "COWORKER_GENERATION_ENQUEUED",
       {},
       {
         source: "generation-manager",
@@ -1972,13 +1972,13 @@ class GenerationManager {
       orderBy: (fields, { desc }) => [desc(fields.createdAt)],
       columns: { content: true },
     });
-    const linkedWorkflowRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, generationId),
-      columns: { id: true, workflowId: true, triggerPayload: true },
+    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
+      columns: { id: true, coworkerId: true, triggerPayload: true },
     });
-    const linkedWorkflow = linkedWorkflowRun
-      ? await db.query.workflow.findFirst({
-          where: eq(workflow.id, linkedWorkflowRun.workflowId),
+    const linkedCoworker = linkedCoworkerRun
+      ? await db.query.coworker.findFirst({
+          where: eq(coworker.id, linkedCoworkerRun.coworkerId),
           columns: {
             allowedIntegrations: true,
             allowedCustomIntegrations: true,
@@ -1991,11 +1991,11 @@ class GenerationManager {
       : null;
     const executionPolicy = this.getExecutionPolicyFromRecord(
       genRecord,
-      linkedWorkflow?.autoApprove ?? genRecord.conversation.autoApprove,
+      linkedCoworker?.autoApprove ?? genRecord.conversation.autoApprove,
     );
-    const builderWorkflowContext =
-      genRecord.conversation.type === "workflow"
-        ? await resolveWorkflowBuilderContextByConversation({
+    const builderCoworkerContext =
+      genRecord.conversation.type === "coworker"
+        ? await resolveCoworkerBuilderContextByConversation({
             database: db,
             userId: genRecord.conversation.userId,
             conversationId: genRecord.conversationId,
@@ -2029,24 +2029,24 @@ class GenerationManager {
       pendingMessageParts: new Map(),
       backendType: "opencode",
       sandboxProviderOverride: executionPolicy.sandboxProvider,
-      workflowRunId: linkedWorkflowRun?.id,
+      coworkerRunId: linkedCoworkerRun?.id,
       allowedIntegrations:
         executionPolicy.allowedIntegrations ??
-        (linkedWorkflow?.allowedIntegrations as IntegrationType[] | null | undefined) ??
+        (linkedCoworker?.allowedIntegrations as IntegrationType[] | null | undefined) ??
         undefined,
       autoApprove:
         executionPolicy.autoApprove ??
-        linkedWorkflow?.autoApprove ??
+        linkedCoworker?.autoApprove ??
         genRecord.conversation.autoApprove,
       allowedCustomIntegrations:
         executionPolicy.allowedCustomIntegrations ??
-        linkedWorkflow?.allowedCustomIntegrations ??
+        linkedCoworker?.allowedCustomIntegrations ??
         undefined,
-      workflowPrompt: undefined,
-      workflowPromptDo: undefined,
-      workflowPromptDont: undefined,
+      coworkerPrompt: undefined,
+      coworkerPromptDo: undefined,
+      coworkerPromptDont: undefined,
       triggerPayload: undefined,
-      builderWorkflowContext,
+      builderCoworkerContext,
       selectedPlatformSkillSlugs: executionPolicy.selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
@@ -2171,7 +2171,7 @@ class GenerationManager {
     this.streamCounters.opened += 1;
 
     const maxWaitMs =
-      initial.conversation.type === "workflow"
+      initial.conversation.type === "coworker"
         ? Math.max(10 * 60 * 1000, GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS)
         : GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS;
     const startedAt = Date.now();
@@ -2547,13 +2547,13 @@ class GenerationManager {
       })
       .where(eq(conversation.id, genRecord.conversationId));
 
-    const linkedRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, generationId),
+    const linkedRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
       columns: { id: true },
     });
     if (linkedRun?.id) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({
           status:
             nextStatus === "running"
@@ -2562,10 +2562,10 @@ class GenerationManager {
                 ? "awaiting_approval"
                 : "awaiting_auth",
         })
-        .where(eq(workflowRun.id, linkedRun.id));
+        .where(eq(coworkerRun.id, linkedRun.id));
     }
 
-    const runType: "chat" | "workflow" = linkedRun ? "workflow" : "chat";
+    const runType: "chat" | "coworker" = linkedRun ? "coworker" : "chat";
     if (nextStatus === "awaiting_approval" && pendingApproval?.expiresAt) {
       await this.enqueueGenerationTimeout(generationId, "approval", pendingApproval.expiresAt);
     }
@@ -2621,18 +2621,18 @@ class GenerationManager {
         .set({ generationStatus: "paused" })
         .where(eq(conversation.id, genRecord.conversationId));
 
-      const linkedWorkflowRun = await db.query.workflowRun.findFirst({
-        where: eq(workflowRun.generationId, generationId),
+      const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+        where: eq(coworkerRun.generationId, generationId),
         columns: { id: true },
       });
-      if (linkedWorkflowRun?.id) {
+      if (linkedCoworkerRun?.id) {
         await db
-          .update(workflowRun)
+          .update(coworkerRun)
           .set({
             status: "cancelled",
             finishedAt: new Date(),
           })
-          .where(eq(workflowRun.id, linkedWorkflowRun.id));
+          .where(eq(coworkerRun.id, linkedCoworkerRun.id));
       }
 
       const ctx = this.activeGenerations.get(generationId);
@@ -2673,15 +2673,15 @@ class GenerationManager {
 
     await this.enqueueConversationQueuedMessageProcess(genRecord.conversationId);
 
-    const linkedWorkflowRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, generationId),
+    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
       columns: { id: true },
     });
-    if (linkedWorkflowRun?.id) {
+    if (linkedCoworkerRun?.id) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({ status: "cancelled", finishedAt: new Date() })
-        .where(eq(workflowRun.id, linkedWorkflowRun.id));
+        .where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
 
     const ctx = this.activeGenerations.get(generationId);
@@ -2882,13 +2882,13 @@ class GenerationManager {
 
     if (staleRunningIds.length > 0) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({
           status: "error",
           finishedAt: completedAt,
           errorMessage: staleRunningMessage,
         })
-        .where(inArray(workflowRun.generationId, staleRunningIds));
+        .where(inArray(coworkerRun.generationId, staleRunningIds));
       await db
         .update(conversation)
         .set({ generationStatus: "error" })
@@ -2897,12 +2897,12 @@ class GenerationManager {
 
     if (staleCancelledIds.length > 0) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({
           status: "cancelled",
           finishedAt: completedAt,
         })
-        .where(inArray(workflowRun.generationId, staleCancelledIds));
+        .where(inArray(coworkerRun.generationId, staleCancelledIds));
       await db
         .update(conversation)
         .set({ generationStatus: "idle" })
@@ -3062,16 +3062,16 @@ class GenerationManager {
   async getAllowedIntegrationsForGeneration(
     generationId: string,
   ): Promise<IntegrationType[] | null> {
-    const linkedRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, generationId),
-      columns: { workflowId: true },
+    const linkedRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
+      columns: { coworkerId: true },
     });
     if (!linkedRun) {
       return null;
     }
 
-    const wf = await db.query.workflow.findFirst({
-      where: eq(workflow.id, linkedRun.workflowId),
+    const wf = await db.query.coworker.findFirst({
+      where: eq(coworker.id, linkedRun.coworkerId),
       columns: { allowedIntegrations: true },
     });
 
@@ -3818,8 +3818,8 @@ class GenerationManager {
         "save them to /app or /home/user. Files created during your response will automatically ",
         "be made available for download in the chat interface.",
       ].join("");
-      const workflowPrompt = this.buildWorkflowPrompt(ctx);
-      const workflowBuilderPrompt = this.buildWorkflowBuilderPrompt(ctx);
+      const coworkerPrompt = this.buildCoworkerPrompt(ctx);
+      const coworkerBuilderPrompt = this.buildCoworkerBuilderPrompt(ctx);
       const integrationSkillDraftInstructions = this.getIntegrationSkillDraftInstructions();
       const selectedPlatformSkillInstructions = getSelectedPlatformSkillPrompt(
         ctx.selectedPlatformSkillSlugs,
@@ -3834,8 +3834,8 @@ class GenerationManager {
         integrationSkillsInstructions,
         integrationSkillDraftInstructions,
         memoryInstructions,
-        workflowPrompt,
-        workflowBuilderPrompt,
+        coworkerPrompt,
+        coworkerBuilderPrompt,
       ].filter(Boolean);
       const systemPrompt = systemPromptParts.join("\n\n");
 
@@ -4139,7 +4139,7 @@ class GenerationManager {
           console.error("[GenerationManager] Failed to import integration skill drafts:", error);
         }
       }
-      await this.tryAutoApplyWorkflowBuilderPatch(ctx);
+      await this.tryAutoApplyCoworkerBuilderPatch(ctx);
 
       // Collect new files created in the sandbox during generation
       let uploadedSandboxFileCount = 0;
@@ -4438,11 +4438,11 @@ class GenerationManager {
       .update(conversation)
       .set({ generationStatus: "awaiting_approval" })
       .where(eq(conversation.id, ctx.conversationId));
-    if (ctx.workflowRunId) {
+    if (ctx.coworkerRunId) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({ status: "awaiting_approval" })
-        .where(eq(workflowRun.id, ctx.workflowRunId));
+        .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
     await this.enqueueGenerationTimeout(ctx.id, "approval", expiresAt);
 
@@ -4676,11 +4676,11 @@ class GenerationManager {
       .set({ generationStatus: "generating" })
       .where(eq(conversation.id, ctx.conversationId));
 
-    if (ctx.workflowRunId) {
+    if (ctx.coworkerRunId) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({ status: "running" })
-        .where(eq(workflowRun.id, ctx.workflowRunId));
+        .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
 
     ctx.pendingApproval = null;
@@ -5267,8 +5267,8 @@ class GenerationManager {
     }
 
     const conversationId = genRecord.conversationId;
-    const linkedWorkflowRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, generationId),
+    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
       columns: { id: true },
     });
 
@@ -5289,11 +5289,11 @@ class GenerationManager {
 
       await this.enqueueConversationQueuedMessageProcess(conversationId);
 
-      if (linkedWorkflowRun?.id) {
+      if (linkedCoworkerRun?.id) {
         await db
-          .update(workflowRun)
+          .update(coworkerRun)
           .set({ status: "cancelled", finishedAt: new Date() })
-          .where(eq(workflowRun.id, linkedWorkflowRun.id));
+          .where(eq(coworkerRun.id, linkedCoworkerRun.id));
       }
 
       return true;
@@ -5332,11 +5332,11 @@ class GenerationManager {
         .set({ generationStatus: "generating" })
         .where(eq(conversation.id, conversationId));
 
-      if (linkedWorkflowRun?.id) {
+      if (linkedCoworkerRun?.id) {
         await db
-          .update(workflowRun)
+          .update(coworkerRun)
           .set({ status: "running" })
-          .where(eq(workflowRun.id, linkedWorkflowRun.id));
+          .where(eq(coworkerRun.id, linkedCoworkerRun.id));
       }
     }
 
@@ -5573,8 +5573,8 @@ class GenerationManager {
     }
 
     const conversationId = genRecord.conversationId;
-    const linkedWorkflowRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, generationId),
+    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
       columns: { id: true },
     });
     const expiresAt = computeExpiryIso(AUTH_TIMEOUT_MS);
@@ -5600,11 +5600,11 @@ class GenerationManager {
       .set({ generationStatus: "awaiting_auth" })
       .where(eq(conversation.id, conversationId));
 
-    if (linkedWorkflowRun?.id) {
+    if (linkedCoworkerRun?.id) {
       await db
-        .update(workflowRun)
+        .update(coworkerRun)
         .set({ status: "awaiting_auth" })
-        .where(eq(workflowRun.id, linkedWorkflowRun.id));
+        .where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
     await this.enqueueGenerationTimeout(generationId, "auth", expiresAt);
 
@@ -5860,16 +5860,16 @@ class GenerationManager {
         })
         .where(eq(conversation.id, ctx.conversationId));
 
-      if (ctx.workflowRunId) {
+      if (ctx.coworkerRunId) {
         await db
-          .update(workflowRun)
+          .update(coworkerRun)
           .set({
             status:
               status === "completed" ? "completed" : status === "cancelled" ? "cancelled" : "error",
             finishedAt: new Date(),
             errorMessage: ctx.errorMessage,
           })
-          .where(eq(workflowRun.id, ctx.workflowRunId));
+          .where(eq(coworkerRun.id, ctx.coworkerRunId));
       }
 
       await this.enqueueConversationQueuedMessageProcess(ctx.conversationId);
@@ -6013,20 +6013,20 @@ class GenerationManager {
   private broadcast(ctx: GenerationContext, event: GenerationEvent): void {
     this.publishEventToRedisStream(ctx, event);
 
-    if (ctx.workflowRunId) {
-      void this.recordWorkflowRunEvent(ctx.workflowRunId, event);
+    if (ctx.coworkerRunId) {
+      void this.recordCoworkerRunEvent(ctx.coworkerRunId, event);
     }
   }
 
-  private buildWorkflowPrompt(ctx: GenerationContext): string | null {
-    if (!ctx.workflowPrompt && ctx.triggerPayload === undefined) {
+  private buildCoworkerPrompt(ctx: GenerationContext): string | null {
+    if (!ctx.coworkerPrompt && ctx.triggerPayload === undefined) {
       return null;
     }
 
     const sections = [
-      ctx.workflowPrompt ? `## Workflow Instructions\n${ctx.workflowPrompt}` : null,
-      ctx.workflowPromptDo ? `## Do\n${ctx.workflowPromptDo}` : null,
-      ctx.workflowPromptDont ? `## Don't\n${ctx.workflowPromptDont}` : null,
+      ctx.coworkerPrompt ? `## Coworker Instructions\n${ctx.coworkerPrompt}` : null,
+      ctx.coworkerPromptDo ? `## Do\n${ctx.coworkerPromptDo}` : null,
+      ctx.coworkerPromptDont ? `## Don't\n${ctx.coworkerPromptDont}` : null,
       ctx.triggerPayload !== undefined
         ? `## Trigger Payload\n${JSON.stringify(ctx.triggerPayload, null, 2)}`
         : null,
@@ -6038,20 +6038,20 @@ class GenerationManager {
     return sections.join("\n\n");
   }
 
-  private buildWorkflowBuilderPrompt(ctx: GenerationContext): string | null {
-    if (!ctx.builderWorkflowContext) {
+  private buildCoworkerBuilderPrompt(ctx: GenerationContext): string | null {
+    if (!ctx.builderCoworkerContext) {
       return null;
     }
 
     const snapshot = JSON.stringify(
       {
-        workflowId: ctx.builderWorkflowContext.workflowId,
-        updatedAt: ctx.builderWorkflowContext.updatedAt,
+        coworkerId: ctx.builderCoworkerContext.coworkerId,
+        updatedAt: ctx.builderCoworkerContext.updatedAt,
         editable: {
-          prompt: ctx.builderWorkflowContext.prompt,
-          triggerType: ctx.builderWorkflowContext.triggerType,
-          schedule: ctx.builderWorkflowContext.schedule,
-          allowedIntegrations: ctx.builderWorkflowContext.allowedIntegrations,
+          prompt: ctx.builderCoworkerContext.prompt,
+          triggerType: ctx.builderCoworkerContext.triggerType,
+          schedule: ctx.builderCoworkerContext.schedule,
+          allowedIntegrations: ctx.builderCoworkerContext.allowedIntegrations,
         },
       },
       null,
@@ -6059,11 +6059,11 @@ class GenerationManager {
     );
 
     return [
-      "## Workflow Builder Context (System)",
-      "You are in workflow builder mode.",
-      "The workflow snapshot below is the latest server state. Only edit these fields: prompt, allowedIntegrations, triggerType, schedule.",
-      "If the user asks to change editable workflow fields, emit exactly one patch block in this format:",
-      "```workflow_builder_patch",
+      "## Coworker Builder Context (System)",
+      "You are in coworker builder mode.",
+      "The coworker snapshot below is the latest server state. Only edit these fields: prompt, allowedIntegrations, triggerType, schedule.",
+      "If the user asks to change editable coworker fields, emit exactly one patch block in this format:",
+      "```coworker_builder_patch",
       '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
       "```",
       "Rules:",
@@ -6078,22 +6078,22 @@ class GenerationManager {
       '  - {"type":"monthly","time":"HH:MM","dayOfMonth":1..31,"timezone":"Area/City"}',
       "- If triggerType is schedule, include a valid schedule object.",
       "- If triggerType is not schedule, omit schedule unless explicitly asked to clear it with null.",
-      '- For concrete workflow requests (for example: "send a message in #channel every hour"), emit a patch block in the same response, even if you also ask a follow-up question.',
+      '- For concrete coworker requests (for example: "send a message in #channel every hour"), emit a patch block in the same response, even if you also ask a follow-up question.',
       "- If information is missing, apply a best-effort default patch first, then ask a follow-up question.",
       '- Best-effort defaults: set triggerType=schedule with schedule {"type":"interval","intervalMinutes":60} for "every hour", and set prompt to a concise executable instruction.',
-      "- If no editable workflow change is requested, do not emit a patch block.",
+      "- If no editable coworker change is requested, do not emit a patch block.",
       "Snapshot:",
       snapshot,
     ].join("\n");
   }
 
-  private sanitizeContentPartsAfterWorkflowPatchExtraction(ctx: GenerationContext): void {
+  private sanitizeContentPartsAfterCoworkerPatchExtraction(ctx: GenerationContext): void {
     ctx.contentParts = ctx.contentParts
       .map((part) => {
         if (part.type !== "text") {
           return part;
         }
-        const extracted = extractWorkflowBuilderPatch(part.text);
+        const extracted = extractCoworkerBuilderPatch(part.text);
         return { ...part, text: extracted.sanitizedText };
       })
       .filter((part) => part.type !== "text" || part.text.trim().length > 0);
@@ -6101,7 +6101,7 @@ class GenerationManager {
 
   private appendSystemEvent(
     ctx: GenerationContext,
-    event: { content: string; workflowId?: string },
+    event: { content: string; coworkerId?: string },
   ): void {
     ctx.contentParts.push({
       type: "system",
@@ -6110,33 +6110,33 @@ class GenerationManager {
     this.broadcast(ctx, {
       type: "system",
       content: event.content,
-      workflowId: event.workflowId,
+      coworkerId: event.coworkerId,
     });
   }
 
-  private async tryAutoApplyWorkflowBuilderPatch(ctx: GenerationContext): Promise<void> {
-    if (!ctx.builderWorkflowContext) {
+  private async tryAutoApplyCoworkerBuilderPatch(ctx: GenerationContext): Promise<void> {
+    if (!ctx.builderCoworkerContext) {
       return;
     }
 
-    const extraction = extractWorkflowBuilderPatch(ctx.assistantContent);
+    const extraction = extractCoworkerBuilderPatch(ctx.assistantContent);
     ctx.assistantContent = extraction.sanitizedText;
-    this.sanitizeContentPartsAfterWorkflowPatchExtraction(ctx);
+    this.sanitizeContentPartsAfterCoworkerPatchExtraction(ctx);
 
     if (extraction.status === "none") {
       return;
     }
 
-    const workflowId = ctx.builderWorkflowContext.workflowId;
+    const coworkerId = ctx.builderCoworkerContext.coworkerId;
 
-    if (!WORKFLOW_BUILDER_AUTO_APPLY_ENABLED) {
+    if (!COWORKER_BUILDER_AUTO_APPLY_ENABLED) {
       const content =
-        "Workflow patch detected, but auto-apply is currently disabled by feature flag.";
-      this.appendSystemEvent(ctx, { content, workflowId });
+        "Coworker patch detected, but auto-apply is currently disabled by feature flag.";
+      this.appendSystemEvent(ctx, { content, coworkerId });
       logServerEvent(
         "warn",
-        "WORKFLOW_PATCH_APPLY_SKIPPED",
-        { reason: "feature_flag_disabled", workflowId },
+        "COWORKER_PATCH_APPLY_SKIPPED",
+        { reason: "feature_flag_disabled", coworkerId },
         {
           source: "generation-manager",
           traceId: ctx.traceId,
@@ -6149,13 +6149,13 @@ class GenerationManager {
     }
 
     if (extraction.status === "invalid") {
-      const content = `Workflow patch failed: ${extraction.message}`;
-      this.appendSystemEvent(ctx, { content, workflowId });
+      const content = `Coworker patch failed: ${extraction.message}`;
+      this.appendSystemEvent(ctx, { content, coworkerId });
       logServerEvent(
         "warn",
-        "WORKFLOW_PATCH_PARSE_FAILED",
+        "COWORKER_PATCH_PARSE_FAILED",
         {
-          workflowId,
+          coworkerId,
           error: extraction.message,
           rawPatch: extraction.rawPatch,
         },
@@ -6175,27 +6175,27 @@ class GenerationManager {
       columns: { role: true },
     });
 
-    const applyResult = await applyWorkflowBuilderPatch({
+    const applyResult = await applyCoworkerBuilderPatch({
       database: db,
       userId: ctx.userId,
       userRole: dbUser?.role ?? null,
-      workflowId,
+      coworkerId,
       conversationId: ctx.conversationId,
       baseUpdatedAt: extraction.envelope.baseUpdatedAt,
       patch: extraction.envelope.patch,
     });
 
     if (applyResult.status === "applied") {
-      ctx.builderWorkflowContext = applyResult.workflow;
+      ctx.builderCoworkerContext = applyResult.coworker;
       const changed =
         applyResult.appliedChanges.length > 0 ? applyResult.appliedChanges.join(", ") : "none";
-      const content = `Workflow updated by chat (${changed}).`;
-      this.appendSystemEvent(ctx, { content, workflowId });
+      const content = `Coworker updated by chat (${changed}).`;
+      this.appendSystemEvent(ctx, { content, coworkerId });
       logServerEvent(
         "info",
-        "WORKFLOW_PATCH_APPLIED",
+        "COWORKER_PATCH_APPLIED",
         {
-          workflowId,
+          coworkerId,
           changedFields: applyResult.appliedChanges,
         },
         {
@@ -6210,14 +6210,14 @@ class GenerationManager {
     }
 
     if (applyResult.status === "conflict") {
-      ctx.builderWorkflowContext = applyResult.workflow;
+      ctx.builderCoworkerContext = applyResult.coworker;
       const content =
-        "Workflow patch was not applied because the workflow changed. Please retry with latest state.";
-      this.appendSystemEvent(ctx, { content, workflowId });
+        "Coworker patch was not applied because the coworker changed. Please retry with latest state.";
+      this.appendSystemEvent(ctx, { content, coworkerId });
       logServerEvent(
         "warn",
-        "WORKFLOW_PATCH_CONFLICT",
-        { workflowId },
+        "COWORKER_PATCH_CONFLICT",
+        { coworkerId },
         {
           source: "generation-manager",
           traceId: ctx.traceId,
@@ -6229,12 +6229,12 @@ class GenerationManager {
       return;
     }
 
-    const content = `Workflow patch validation failed: ${applyResult.details.join("; ")}`;
-    this.appendSystemEvent(ctx, { content, workflowId });
+    const content = `Coworker patch validation failed: ${applyResult.details.join("; ")}`;
+    this.appendSystemEvent(ctx, { content, coworkerId });
     logServerEvent(
       "warn",
-      "WORKFLOW_PATCH_VALIDATION_FAILED",
-      { workflowId, details: applyResult.details },
+      "COWORKER_PATCH_VALIDATION_FAILED",
+      { coworkerId, details: applyResult.details },
       {
         source: "generation-manager",
         traceId: ctx.traceId,
@@ -6246,15 +6246,15 @@ class GenerationManager {
   }
 
   private buildModeBehaviorPrompt(ctx: GenerationContext): string | null {
-    if (ctx.workflowRunId) {
-      return getWorkflowSystemBehaviorPrompt();
+    if (ctx.coworkerRunId) {
+      return getCoworkerSystemBehaviorPrompt();
     }
 
     return getChatSystemBehaviorPrompt();
   }
 
-  private async recordWorkflowRunEvent(
-    workflowRunId: string,
+  private async recordCoworkerRunEvent(
+    coworkerRunId: string,
     event: GenerationEvent,
   ): Promise<void> {
     const loggableEvents = new Set([
@@ -6277,8 +6277,8 @@ class GenerationManager {
       return;
     }
 
-    await db.insert(workflowRunEvent).values({
-      workflowRunId,
+    await db.insert(coworkerRunEvent).values({
+      coworkerRunId,
       type: event.type,
       payload: event,
     });

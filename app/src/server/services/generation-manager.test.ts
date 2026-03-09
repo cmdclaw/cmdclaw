@@ -10,8 +10,8 @@ const {
   messageFindFirstMock,
   conversationFindFirstMock,
   conversationQueuedMessageFindManyMock,
-  workflowRunFindFirstMock,
-  workflowFindFirstMock,
+  coworkerRunFindFirstMock,
+  coworkerFindFirstMock,
   providerAuthFindFirstMock,
   queueAddMock,
   dbMock,
@@ -28,8 +28,8 @@ const {
   const messageFindFirstMock = vi.fn();
   const conversationFindFirstMock = vi.fn();
   const conversationQueuedMessageFindManyMock = vi.fn();
-  const workflowRunFindFirstMock = vi.fn();
-  const workflowFindFirstMock = vi.fn();
+  const coworkerRunFindFirstMock = vi.fn();
+  const coworkerFindFirstMock = vi.fn();
   const providerAuthFindFirstMock = vi.fn();
   const queueAddMock = vi.fn();
 
@@ -39,8 +39,8 @@ const {
       message: { findFirst: messageFindFirstMock },
       conversation: { findFirst: conversationFindFirstMock },
       conversationQueuedMessage: { findMany: conversationQueuedMessageFindManyMock },
-      workflowRun: { findFirst: workflowRunFindFirstMock },
-      workflow: { findFirst: workflowFindFirstMock },
+      coworkerRun: { findFirst: coworkerRunFindFirstMock },
+      coworker: { findFirst: coworkerFindFirstMock },
       providerAuth: { findFirst: providerAuthFindFirstMock, findMany: vi.fn(() => []) },
       skill: { findMany: vi.fn(() => []) },
       customIntegrationCredential: { findMany: vi.fn(() => []) },
@@ -59,8 +59,8 @@ const {
     messageFindFirstMock,
     conversationFindFirstMock,
     conversationQueuedMessageFindManyMock,
-    workflowRunFindFirstMock,
-    workflowFindFirstMock,
+    coworkerRunFindFirstMock,
+    coworkerFindFirstMock,
     providerAuthFindFirstMock,
     queueAddMock,
     dbMock,
@@ -151,7 +151,7 @@ vi.mock("@/server/queues", () => ({
       .filter(Boolean)
       .join("-"),
   CHAT_GENERATION_JOB_NAME: "generation:chat-run",
-  WORKFLOW_GENERATION_JOB_NAME: "generation:workflow-run",
+  COWORKER_GENERATION_JOB_NAME: "generation:coworker-run",
   CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME: "conversation:queued-message-process",
   GENERATION_APPROVAL_TIMEOUT_JOB_NAME: "generation:approval-timeout",
   GENERATION_AUTH_TIMEOUT_JOB_NAME: "generation:auth-timeout",
@@ -180,7 +180,7 @@ import {
   getEnabledIntegrationTypes,
 } from "@/server/integrations/cli-env";
 import { getChatSystemBehaviorPrompt } from "@/server/prompts/chat-system-behavior-prompt";
-import { getWorkflowSystemBehaviorPrompt } from "@/server/prompts/workflow-system-behavior-prompt";
+import { getCoworkerSystemBehaviorPrompt } from "@/server/prompts/coworker-system-behavior-prompt";
 import { getPreferredCloudSandboxProvider } from "@/server/sandbox/factory";
 import {
   getOrCreateSession,
@@ -231,8 +231,8 @@ type GenerationManagerTestHarness = {
   runGeneration: (ctx: GenerationCtx) => Promise<void>;
   handleSessionReset: (ctx: GenerationCtx) => Promise<void>;
   runOpenCodeGeneration: (ctx: GenerationCtx) => Promise<void>;
-  buildWorkflowPrompt: (ctx: GenerationCtx) => string | null;
-  buildWorkflowBuilderPrompt: (ctx: GenerationCtx) => string | null;
+  buildCoworkerPrompt: (ctx: GenerationCtx) => string | null;
+  buildCoworkerBuilderPrompt: (ctx: GenerationCtx) => string | null;
   processOpencodeEvent: (...args: unknown[]) => Promise<void>;
   handleOpenCodeActionableEvent: (...args: unknown[]) => Promise<unknown>;
   handleOpenCodePermissionAsked: (...args: unknown[]) => Promise<void>;
@@ -315,8 +315,8 @@ describe("generationManager transitions", () => {
     getLatestGenerationStreamEnvelopeMock.mockReset();
     getLatestGenerationStreamEnvelopeMock.mockResolvedValue(null);
     conversationQueuedMessageFindManyMock.mockResolvedValue([]);
-    workflowRunFindFirstMock.mockResolvedValue(null);
-    workflowFindFirstMock.mockResolvedValue(null);
+    coworkerRunFindFirstMock.mockResolvedValue(null);
+    coworkerFindFirstMock.mockResolvedValue(null);
     providerAuthFindFirstMock.mockResolvedValue(null);
     vi.mocked(getPreferredCloudSandboxProvider).mockReturnValue("e2b");
     isStatelessServerlessRuntimeMock.mockReturnValue(false);
@@ -632,7 +632,7 @@ describe("generationManager transitions", () => {
 
   it("times out approval into paused status and emits status_change", async () => {
     const ctx = createCtx();
-    workflowRunFindFirstMock.mockResolvedValue({ id: "wf-run-1" });
+    coworkerRunFindFirstMock.mockResolvedValue({ id: "wf-run-1" });
     const stalePendingApproval = {
       toolUseId: "plugin-stale",
       toolName: "Bash",
@@ -957,7 +957,7 @@ describe("generationManager transitions", () => {
     messageFindFirstMock.mockResolvedValueOnce({
       content: "fill this pdf",
     });
-    workflowRunFindFirstMock.mockResolvedValueOnce(null);
+    coworkerRunFindFirstMock.mockResolvedValueOnce(null);
 
     await generationManager.runQueuedGeneration("gen-queued");
 
@@ -1060,24 +1060,24 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("starts workflow generation and keeps workflow context fields", async () => {
+  it("starts coworker generation and keeps coworker context fields", async () => {
     const mgr = asTestManager();
     const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
 
     insertReturningMock
       .mockResolvedValueOnce([
         {
-          id: "conv-workflow",
+          id: "conv-coworker",
           userId: "user-1",
           model: "openai/gpt-4.1-mini",
           autoApprove: true,
-          type: "workflow",
+          type: "coworker",
         },
       ])
-      .mockResolvedValueOnce([{ id: "gen-workflow" }]);
+      .mockResolvedValueOnce([{ id: "gen-coworker" }]);
 
-    const result = await generationManager.startWorkflowGeneration({
-      workflowRunId: "wf-run-1",
+    const result = await generationManager.startCoworkerGeneration({
+      coworkerRunId: "wf-run-1",
       content: "Create a weekly report",
       userId: "user-1",
       autoApprove: true,
@@ -1087,17 +1087,17 @@ describe("generationManager transitions", () => {
     });
 
     expect(result).toEqual({
-      generationId: "gen-workflow",
-      conversationId: "conv-workflow",
+      generationId: "gen-coworker",
+      conversationId: "conv-coworker",
     });
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(mgr.activeGenerations.get("gen-workflow")).toMatchObject({
-      workflowRunId: "wf-run-1",
+    expect(mgr.activeGenerations.get("gen-coworker")).toMatchObject({
+      coworkerRunId: "wf-run-1",
       allowedIntegrations: ["github"],
       allowedCustomIntegrations: ["custom-slug"],
-      workflowPrompt: undefined,
-      workflowPromptDo: undefined,
-      workflowPromptDont: undefined,
+      coworkerPrompt: undefined,
+      coworkerPromptDo: undefined,
+      coworkerPromptDont: undefined,
       triggerPayload: undefined,
     });
   });
@@ -1633,37 +1633,37 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("builds workflow prompt sections only when workflow context is present", () => {
+  it("builds coworker prompt sections only when coworker context is present", () => {
     const mgr = asTestManager();
 
     expect(
-      mgr.buildWorkflowPrompt(createCtx({ workflowPrompt: undefined, triggerPayload: undefined })),
+      mgr.buildCoworkerPrompt(createCtx({ coworkerPrompt: undefined, triggerPayload: undefined })),
     ).toBeNull();
 
-    const prompt = mgr.buildWorkflowPrompt(
+    const prompt = mgr.buildCoworkerPrompt(
       createCtx({
-        workflowPrompt: "Primary workflow instructions",
-        workflowPromptDo: "Do this",
-        workflowPromptDont: "Do not do that",
+        coworkerPrompt: "Primary coworker instructions",
+        coworkerPromptDo: "Do this",
+        coworkerPromptDont: "Do not do that",
         triggerPayload: { event: "cron" },
       }),
     );
 
-    expect(prompt).toContain("## Workflow Instructions");
-    expect(prompt).toContain("Primary workflow instructions");
+    expect(prompt).toContain("## Coworker Instructions");
+    expect(prompt).toContain("Primary coworker instructions");
     expect(prompt).toContain("## Do");
     expect(prompt).toContain("## Don't");
     expect(prompt).toContain("## Trigger Payload");
   });
 
-  it("builds workflow builder context prompt when builder context is present", () => {
+  it("builds coworker builder context prompt when builder context is present", () => {
     const mgr = asTestManager();
-    const prompt = mgr.buildWorkflowBuilderPrompt(
+    const prompt = mgr.buildCoworkerBuilderPrompt(
       createCtx({
-        builderWorkflowContext: {
-          workflowId: "wf-1",
+        builderCoworkerContext: {
+          coworkerId: "wf-1",
           updatedAt: "2026-03-03T12:00:00.000Z",
-          prompt: "Current workflow prompt",
+          prompt: "Current coworker prompt",
           triggerType: "manual",
           schedule: null,
           allowedIntegrations: ["github"],
@@ -1671,9 +1671,9 @@ describe("generationManager transitions", () => {
       }),
     );
 
-    expect(prompt).toContain("Workflow Builder Context");
-    expect(prompt).toContain("workflow_builder_patch");
-    expect(prompt).toContain('"workflowId": "wf-1"');
+    expect(prompt).toContain("Coworker Builder Context");
+    expect(prompt).toContain("coworker_builder_patch");
+    expect(prompt).toContain('"coworkerId": "wf-1"');
   });
 
   it("runs OpenCode generation happy path and completes", async () => {
@@ -1768,7 +1768,7 @@ describe("generationManager transitions", () => {
 
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { system?: string };
-    expect(promptArg.system).not.toContain(getWorkflowSystemBehaviorPrompt());
+    expect(promptArg.system).not.toContain(getCoworkerSystemBehaviorPrompt());
     expect(promptArg.system).toContain(getChatSystemBehaviorPrompt() || "");
     expect(vi.mocked(collectNewSandboxFiles)).toHaveBeenCalledWith(
       expect.anything(),
@@ -1780,7 +1780,7 @@ describe("generationManager transitions", () => {
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
   });
 
-  it("adds workflow autonomy behavior prompt only for workflow runs", async () => {
+  it("adds coworker autonomy behavior prompt only for coworker runs", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
     vi.mocked(getCliEnvForUser).mockResolvedValue({});
@@ -1795,8 +1795,8 @@ describe("generationManager transitions", () => {
     vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
 
     conversationFindFirstMock.mockResolvedValue({
-      id: "conv-workflow",
-      title: "Workflow Conversation",
+      id: "conv-coworker",
+      title: "Coworker Conversation",
       opencodeSessionId: "session-existing",
     });
 
@@ -1834,19 +1834,19 @@ describe("generationManager transitions", () => {
     });
 
     const ctx = createCtx({
-      id: "gen-workflow-opencode",
-      conversationId: "conv-workflow",
+      id: "gen-coworker-opencode",
+      conversationId: "conv-coworker",
       backendType: "opencode",
       model: "anthropic/claude-sonnet-4-6",
-      workflowRunId: "wf-run-1",
-      userMessageContent: "Execute scheduled workflow task",
+      coworkerRunId: "wf-run-1",
+      userMessageContent: "Execute scheduled coworker task",
     });
 
     await mgr.runOpenCodeGeneration(ctx);
 
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { system?: string };
-    expect(promptArg.system).toContain(getWorkflowSystemBehaviorPrompt());
+    expect(promptArg.system).toContain(getCoworkerSystemBehaviorPrompt());
     expect(promptArg.system).toContain("Do not ask clarifying questions.");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });

@@ -5,7 +5,7 @@ import { ChatArea } from "@/components/chat/chat-area";
 
 export default function NewChatPage() {
   const searchParams = useSearchParams();
-  const initialPrefillText = searchParams.get("prefill");
+  const initialPrefillText = searchParams?.get("prefill") ?? null;
 
   return <ChatArea initialPrefillText={initialPrefillText} />;
 }

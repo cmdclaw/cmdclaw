@@ -50,8 +50,8 @@ function classifyService(tokens: string[]): string {
 }
 
 function classifyType(tokens: string[]): string {
-  if (tokens.includes("workflow") || tokens.includes("workflows")) {
-    return "workflow";
+  if (tokens.includes("coworker") || tokens.includes("coworkers")) {
+    return "coworker";
   }
   if (tokens.includes("chat")) {
     return "chat";

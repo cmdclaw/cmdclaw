@@ -100,7 +100,7 @@ export type GenerationStartInput = {
 
 export type GenerationCallbacks = {
   onText?: (content: string) => void | Promise<void>;
-  onSystem?: (data: { content: string; workflowId?: string }) => void | Promise<void>;
+  onSystem?: (data: { content: string; coworkerId?: string }) => void | Promise<void>;
   onThinking?: (data: ThinkingData) => void | Promise<void>;
   onToolUse?: (data: ToolUseData) => void | Promise<void>;
   onToolResult?: (toolName: string, result: unknown, toolUseId?: string) => void | Promise<void>;
@@ -174,7 +174,7 @@ export async function runGenerationStream(
       case "system":
         await callbacks.onSystem?.({
           content: event.content,
-          workflowId: event.workflowId,
+          coworkerId: event.coworkerId,
         });
         break;
       case "thinking":

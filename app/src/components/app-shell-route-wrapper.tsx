@@ -24,7 +24,7 @@ function getSidebarVisibility(pathname: string | null): SidebarVisibility | null
 
   if (
     pathname.startsWith("/chat") ||
-    pathname.startsWith("/workflows") ||
+    pathname.startsWith("/coworkers") ||
     pathname.startsWith("/settings") ||
     pathname.startsWith("/integrations") ||
     pathname.startsWith("/skills") ||

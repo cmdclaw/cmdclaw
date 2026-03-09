@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { buildUserForwardingAddress, EMAIL_FORWARDED_TRIGGER_TYPE } from "@/lib/email-forwarding";
-import { user, workflow } from "@/server/db/schema";
+import { user, coworker } from "@/server/db/schema";
 import { protectedProcedure } from "../middleware";
 
 function isValidIanaTimezone(timezone: string): boolean {
@@ -45,7 +45,7 @@ const forwarding = protectedProcedure.handler(async ({ context }) => {
     where: eq(user.id, context.user.id),
     columns: {
       id: true,
-      defaultForwardedWorkflowId: true,
+      defaultForwardedCoworkerId: true,
     },
   });
 
@@ -54,10 +54,10 @@ const forwarding = protectedProcedure.handler(async ({ context }) => {
     ? buildUserForwardingAddress(context.user.id, receivingDomain)
     : null;
 
-  const workflows = await context.db.query.workflow.findMany({
+  const coworkers = await context.db.query.coworker.findMany({
     where: and(
-      eq(workflow.ownerId, context.user.id),
-      eq(workflow.triggerType, EMAIL_FORWARDED_TRIGGER_TYPE),
+      eq(coworker.ownerId, context.user.id),
+      eq(coworker.triggerType, EMAIL_FORWARDED_TRIGGER_TYPE),
     ),
     columns: {
       id: true,
@@ -71,38 +71,38 @@ const forwarding = protectedProcedure.handler(async ({ context }) => {
   return {
     receivingDomain,
     userForwardingAddress,
-    defaultForwardedWorkflowId: dbUser?.defaultForwardedWorkflowId ?? null,
-    workflows,
+    defaultForwardedCoworkerId: dbUser?.defaultForwardedCoworkerId ?? null,
+    coworkers,
   };
 });
 
-const setDefaultForwardedWorkflow = protectedProcedure
+const setDefaultForwardedCoworker = protectedProcedure
   .input(
     z.object({
-      workflowId: z.string().nullable(),
+      coworkerId: z.string().nullable(),
     }),
   )
   .handler(async ({ input, context }) => {
-    if (input.workflowId) {
-      const owned = await context.db.query.workflow.findFirst({
+    if (input.coworkerId) {
+      const owned = await context.db.query.coworker.findFirst({
         where: and(
-          eq(workflow.id, input.workflowId),
-          eq(workflow.ownerId, context.user.id),
-          eq(workflow.triggerType, EMAIL_FORWARDED_TRIGGER_TYPE),
+          eq(coworker.id, input.coworkerId),
+          eq(coworker.ownerId, context.user.id),
+          eq(coworker.triggerType, EMAIL_FORWARDED_TRIGGER_TYPE),
         ),
         columns: { id: true },
       });
 
       if (!owned) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Workflow not found for forwarded-email default",
+          message: "Coworker not found for forwarded-email default",
         });
       }
     }
 
     await context.db
       .update(user)
-      .set({ defaultForwardedWorkflowId: input.workflowId })
+      .set({ defaultForwardedCoworkerId: input.coworkerId })
       .where(eq(user.id, context.user.id));
 
     return { success: true };
@@ -132,6 +132,6 @@ export const userRouter = {
   me,
   completeOnboarding,
   forwarding,
-  setDefaultForwardedWorkflow,
+  setDefaultForwardedCoworker,
   setTimezone,
 };

@@ -86,7 +86,7 @@ type ActivitySegment = Omit<RuntimeActivitySegment, "items"> & {
 
 type Props = {
   conversationId?: string;
-  forceWorkflowQuerySync?: boolean;
+  forceCoworkerQuerySync?: boolean;
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
 };
@@ -355,7 +355,7 @@ function getAgentInitLabel(status: string | null): string {
 
 export function ChatArea({
   conversationId,
-  forceWorkflowQuerySync = false,
+  forceCoworkerQuerySync = false,
   skillSelectionScopeKey: skillSelectionScopeKeyOverride,
   initialPrefillText,
 }: Props) {
@@ -976,9 +976,9 @@ export function ChatArea({
           }
           runtime.handleSystem(data.content);
           syncFromRuntime(runtime);
-          if (forceWorkflowQuerySync && data.workflowId) {
-            queryClient.invalidateQueries({ queryKey: ["workflow"] });
-            queryClient.invalidateQueries({ queryKey: ["workflow", "get", data.workflowId] });
+          if (forceCoworkerQuerySync && data.coworkerId) {
+            queryClient.invalidateQueries({ queryKey: ["coworker"] });
+            queryClient.invalidateQueries({ queryKey: ["coworker", "get", data.coworkerId] });
           }
         },
         onThinking: (data) => {
@@ -1211,7 +1211,7 @@ export function ChatArea({
     autoApproveEnabled,
     beginInitTracking,
     conversationId,
-    forceWorkflowQuerySync,
+    forceCoworkerQuerySync,
     handleInitStatusChange,
     markInitMissingAtEnd,
     markInitSignal,
@@ -1411,9 +1411,9 @@ export function ChatArea({
             }
             runtime.handleSystem(data.content);
             syncFromRuntime(runtime);
-            if (forceWorkflowQuerySync && data.workflowId) {
-              queryClient.invalidateQueries({ queryKey: ["workflow"] });
-              queryClient.invalidateQueries({ queryKey: ["workflow", "get", data.workflowId] });
+            if (forceCoworkerQuerySync && data.coworkerId) {
+              queryClient.invalidateQueries({ queryKey: ["coworker"] });
+              queryClient.invalidateQueries({ queryKey: ["coworker", "get", data.coworkerId] });
             }
           },
           onThinking: (data) => {
@@ -1656,7 +1656,7 @@ export function ChatArea({
       beginInitTracking,
       autoApproveEnabled,
       conversationId,
-      forceWorkflowQuerySync,
+      forceCoworkerQuerySync,
       handleInitStatusChange,
       markInitMissingAtEnd,
       markInitSignal,

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { env } from "@/env";
 import { db } from "@/server/db/client";
-import { conversation, workflow, workflowRun } from "@/server/db/schema";
+import { conversation, coworker, coworkerRun } from "@/server/db/schema";
 
 export const runtime = "nodejs";
 
@@ -163,13 +163,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const linkedRun = await db.query.workflowRun.findFirst({
-      where: eq(workflowRun.generationId, currentGenerationId),
-      columns: { workflowId: true },
+    const linkedRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, currentGenerationId),
+      columns: { coworkerId: true },
     });
     const wf = linkedRun
-      ? await db.query.workflow.findFirst({
-          where: eq(workflow.id, linkedRun.workflowId),
+      ? await db.query.coworker.findFirst({
+          where: eq(coworker.id, linkedRun.coworkerId),
           columns: { allowedIntegrations: true },
         })
       : undefined;

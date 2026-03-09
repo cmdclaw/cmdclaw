@@ -9,6 +9,7 @@ void jestDomVitest;
 
 type ChatAreaProps = {
   conversationId?: string;
+  initialPrefillText?: string | null;
 };
 
 const { chatAreaSpy } = vi.hoisted(() => ({
@@ -28,6 +29,6 @@ describe("NewChatPage", () => {
 
     expect(screen.getByTestId("chat-area")).toBeInTheDocument();
     expect(chatAreaSpy).toHaveBeenCalledTimes(1);
-    expect(chatAreaSpy.mock.calls[0]?.[0]).toEqual({});
+    expect(chatAreaSpy.mock.calls[0]?.[0]).toEqual({ initialPrefillText: null });
   });
 });

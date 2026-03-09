@@ -115,7 +115,7 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log("\nNote: chat and workflow CLIs both use the same token/config source by default.");
+    console.log("\nNote: chat and coworker CLIs both use the same token/config source by default.");
   } catch (error) {
     console.error("\nAuth inspect failed:");
     console.error(error instanceof Error ? error.message : String(error));

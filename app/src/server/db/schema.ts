@@ -22,7 +22,7 @@ export const user = pgTable("user", {
   image: text("image"),
   phoneNumber: text("phone_number"),
   timezone: text("timezone"),
-  defaultForwardedWorkflowId: text("default_forwarded_workflow_id"),
+  defaultForwardedCoworkerId: text("default_forwarded_coworker_id"),
   role: text("role").default("user"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
@@ -105,7 +105,7 @@ export const userRelations = relations(user, ({ many }) => ({
   memoryEntries: many(memoryEntry),
   memoryChunks: many(memoryChunk),
   memorySettings: many(memorySettings),
-  workflows: many(workflow),
+  coworkers: many(coworker),
   providerAuths: many(providerAuth),
   devices: many(device),
   customIntegrations: many(customIntegration),
@@ -168,7 +168,7 @@ export const generationRecordStatusEnum = pgEnum("generation_record_status", [
   "error",
 ]);
 
-export const conversationTypeEnum = pgEnum("conversation_type", ["chat", "workflow"]);
+export const conversationTypeEnum = pgEnum("conversation_type", ["chat", "coworker"]);
 
 export const conversation = pgTable(
   "conversation",
@@ -438,7 +438,7 @@ export const conversationQueuedMessage = pgTable(
 );
 
 // ========== INTEGRATION TYPE ENUM ==========
-// Defined early because workflow schema depends on it
+// Defined early because coworker schema depends on it
 
 export const integrationTypeEnum = pgEnum("integration_type", [
   "gmail",
@@ -467,11 +467,11 @@ export const integrationAuthStatusEnum = pgEnum("integration_auth_status", [
   "transient_error",
 ]);
 
-// ========== WORKFLOW SCHEMA ==========
+// ========== COWORKER SCHEMA ==========
 
-export const workflowStatusEnum = pgEnum("workflow_status", ["on", "off"]);
+export const coworkerStatusEnum = pgEnum("coworker_status", ["on", "off"]);
 
-export const workflowRunStatusEnum = pgEnum("workflow_run_status", [
+export const coworkerRunStatusEnum = pgEnum("coworker_run_status", [
   "running",
   "awaiting_approval",
   "awaiting_auth",
@@ -479,15 +479,15 @@ export const workflowRunStatusEnum = pgEnum("workflow_run_status", [
   "error",
   "cancelled",
 ]);
-export const workflowEmailAliasStatusEnum = pgEnum("workflow_email_alias_status", [
+export const coworkerEmailAliasStatusEnum = pgEnum("coworker_email_alias_status", [
   "active",
   "disabled",
   "rotated",
   "deleted",
 ]);
 
-export const workflow = pgTable(
-  "workflow",
+export const coworker = pgTable(
+  "coworker",
   {
     id: text("id")
       .primaryKey()
@@ -496,7 +496,7 @@ export const workflow = pgTable(
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    status: workflowStatusEnum("status").default("on").notNull(),
+    status: coworkerStatusEnum("status").default("on").notNull(),
     triggerType: text("trigger_type").notNull(),
     prompt: text("prompt").notNull(),
     promptDo: text("prompt_do"),
@@ -506,7 +506,7 @@ export const workflow = pgTable(
     allowedCustomIntegrations: text("allowed_custom_integrations").array().notNull().default([]),
     // Schedule configuration for time-based triggers (JSON object)
     schedule: jsonb("schedule"),
-    // Builder conversation for the workflow editor chat panel
+    // Builder conversation for the coworker editor chat panel
     builderConversationId: text("builder_conversation_id").references(() => conversation.id, {
       onDelete: "set null",
     }),
@@ -517,21 +517,21 @@ export const workflow = pgTable(
       .notNull(),
   },
   (table) => [
-    index("workflow_owner_id_idx").on(table.ownerId),
-    index("workflow_status_idx").on(table.status),
+    index("coworker_owner_id_idx").on(table.ownerId),
+    index("coworker_status_idx").on(table.status),
   ],
 );
 
-export const workflowRun = pgTable(
-  "workflow_run",
+export const coworkerRun = pgTable(
+  "coworker_run",
   {
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    workflowId: text("workflow_id")
+    coworkerId: text("coworker_id")
       .notNull()
-      .references(() => workflow.id, { onDelete: "cascade" }),
-    status: workflowRunStatusEnum("status").default("running").notNull(),
+      .references(() => coworker.id, { onDelete: "cascade" }),
+    status: coworkerRunStatusEnum("status").default("running").notNull(),
     triggerPayload: jsonb("trigger_payload").notNull(),
     generationId: text("generation_id").references(() => generation.id, {
       onDelete: "set null",
@@ -541,24 +541,24 @@ export const workflowRun = pgTable(
     errorMessage: text("error_message"),
   },
   (table) => [
-    index("workflow_run_workflow_id_idx").on(table.workflowId),
-    index("workflow_run_status_idx").on(table.status),
-    index("workflow_run_started_at_idx").on(table.startedAt),
+    index("coworker_run_coworker_id_idx").on(table.coworkerId),
+    index("coworker_run_status_idx").on(table.status),
+    index("coworker_run_started_at_idx").on(table.startedAt),
   ],
 );
 
-export const workflowEmailAlias = pgTable(
-  "workflow_email_alias",
+export const coworkerEmailAlias = pgTable(
+  "coworker_email_alias",
   {
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    workflowId: text("workflow_id")
+    coworkerId: text("coworker_id")
       .notNull()
-      .references(() => workflow.id, { onDelete: "cascade" }),
+      .references(() => coworker.id, { onDelete: "cascade" }),
     localPart: text("local_part").notNull(),
     domain: text("domain").notNull(),
-    status: workflowEmailAliasStatusEnum("status").default("active").notNull(),
+    status: coworkerEmailAliasStatusEnum("status").default("active").notNull(),
     replacedByAliasId: text("replaced_by_alias_id"),
     disabledReason: text("disabled_reason"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -566,26 +566,26 @@ export const workflowEmailAlias = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
-    index("workflow_email_alias_workflow_id_idx").on(table.workflowId),
-    index("workflow_email_alias_status_idx").on(table.status),
-    uniqueIndex("workflow_email_alias_address_idx").on(table.localPart, table.domain),
+    index("coworker_email_alias_coworker_id_idx").on(table.coworkerId),
+    index("coworker_email_alias_status_idx").on(table.status),
+    uniqueIndex("coworker_email_alias_address_idx").on(table.localPart, table.domain),
   ],
 );
 
-export const workflowRunEvent = pgTable(
-  "workflow_run_event",
+export const coworkerRunEvent = pgTable(
+  "coworker_run_event",
   {
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    workflowRunId: text("workflow_run_id")
+    coworkerRunId: text("coworker_run_id")
       .notNull()
-      .references(() => workflowRun.id, { onDelete: "cascade" }),
+      .references(() => coworkerRun.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
     payload: jsonb("payload").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (table) => [index("workflow_run_event_run_id_idx").on(table.workflowRunId)],
+  (table) => [index("coworker_run_event_run_id_idx").on(table.coworkerRunId)],
 );
 
 // ========== INTEGRATION SCHEMA ==========
@@ -765,39 +765,39 @@ export const conversationQueuedMessageRelations = relations(
   }),
 );
 
-export const workflowRelations = relations(workflow, ({ one, many }) => ({
-  owner: one(user, { fields: [workflow.ownerId], references: [user.id] }),
-  runs: many(workflowRun),
-  emailAliases: many(workflowEmailAlias),
+export const coworkerRelations = relations(coworker, ({ one, many }) => ({
+  owner: one(user, { fields: [coworker.ownerId], references: [user.id] }),
+  runs: many(coworkerRun),
+  emailAliases: many(coworkerEmailAlias),
 }));
 
-export const workflowRunRelations = relations(workflowRun, ({ one, many }) => ({
-  workflow: one(workflow, {
-    fields: [workflowRun.workflowId],
-    references: [workflow.id],
+export const coworkerRunRelations = relations(coworkerRun, ({ one, many }) => ({
+  coworker: one(coworker, {
+    fields: [coworkerRun.coworkerId],
+    references: [coworker.id],
   }),
   generation: one(generation, {
-    fields: [workflowRun.generationId],
+    fields: [coworkerRun.generationId],
     references: [generation.id],
   }),
-  events: many(workflowRunEvent),
+  events: many(coworkerRunEvent),
 }));
 
-export const workflowRunEventRelations = relations(workflowRunEvent, ({ one }) => ({
-  run: one(workflowRun, {
-    fields: [workflowRunEvent.workflowRunId],
-    references: [workflowRun.id],
+export const coworkerRunEventRelations = relations(coworkerRunEvent, ({ one }) => ({
+  run: one(coworkerRun, {
+    fields: [coworkerRunEvent.coworkerRunId],
+    references: [coworkerRun.id],
   }),
 }));
 
-export const workflowEmailAliasRelations = relations(workflowEmailAlias, ({ one }) => ({
-  workflow: one(workflow, {
-    fields: [workflowEmailAlias.workflowId],
-    references: [workflow.id],
+export const coworkerEmailAliasRelations = relations(coworkerEmailAlias, ({ one }) => ({
+  coworker: one(coworker, {
+    fields: [coworkerEmailAlias.coworkerId],
+    references: [coworker.id],
   }),
-  replacedByAlias: one(workflowEmailAlias, {
-    fields: [workflowEmailAlias.replacedByAliasId],
-    references: [workflowEmailAlias.id],
+  replacedByAlias: one(coworkerEmailAlias, {
+    fields: [coworkerEmailAlias.replacedByAliasId],
+    references: [coworkerEmailAlias.id],
     relationName: "replacedByAlias",
   }),
 }));

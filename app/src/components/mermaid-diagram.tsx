@@ -28,7 +28,7 @@ export function MermaidDiagram({
           >
             <Image
               src={imageUrl}
-              alt="Workflow diagram"
+              alt="Coworker diagram"
               width={460}
               height={400}
               className="h-auto w-auto max-w-full object-contain"

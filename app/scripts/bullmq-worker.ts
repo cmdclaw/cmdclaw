@@ -6,14 +6,14 @@ import {
   startQueues,
   stopQueues,
 } from "../src/server/queues";
-import { startGmailWorkflowWatcher } from "../src/server/services/workflow-gmail-watcher";
-import { reconcileScheduledWorkflowJobs } from "../src/server/services/workflow-scheduler";
-import { startXDmWorkflowWatcher } from "../src/server/services/workflow-x-dm-watcher";
+import { startGmailCoworkerWatcher } from "../src/server/services/coworker-gmail-watcher";
+import { reconcileScheduledCoworkerJobs } from "../src/server/services/coworker-scheduler";
+import { startXDmCoworkerWatcher } from "../src/server/services/coworker-x-dm-watcher";
 
 const { worker, queueEvents, workerConnection, queueEventsConnection, queueName, redisUrl } =
   startQueues();
-const stopGmailWatcher = startGmailWorkflowWatcher();
-const stopXDmWatcher = startXDmWorkflowWatcher();
+const stopGmailWatcher = startGmailCoworkerWatcher();
+const stopXDmWatcher = startXDmCoworkerWatcher();
 const staleReaperIntervalMs = 10 * 60 * 1000;
 let staleReaperInterval: ReturnType<typeof setInterval> | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -66,10 +66,10 @@ console.log(`[worker] listening on "${queueName}" with redis "${redisUrl}"`);
 
 void (async () => {
   try {
-    const { synced, failed } = await reconcileScheduledWorkflowJobs();
-    console.log(`[worker] reconciled scheduled workflows: ${synced} synced, ${failed} failed`);
+    const { synced, failed } = await reconcileScheduledCoworkerJobs();
+    console.log(`[worker] reconciled scheduled coworkers: ${synced} synced, ${failed} failed`);
   } catch (error) {
-    console.error("[worker] failed to reconcile scheduled workflows", error);
+    console.error("[worker] failed to reconcile scheduled coworkers", error);
   }
 
   try {

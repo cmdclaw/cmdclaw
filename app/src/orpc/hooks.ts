@@ -585,24 +585,24 @@ export function useUpdateSkillFile() {
   });
 }
 
-// ========== WORKFLOW HOOKS ==========
+// ========== COWORKER HOOKS ==========
 
-export function useWorkflowList() {
+export function useCoworkerList() {
   return useQuery({
-    queryKey: ["workflow", "list"],
-    queryFn: () => client.workflow.list(),
+    queryKey: ["coworker", "list"],
+    queryFn: () => client.coworker.list(),
   });
 }
 
-export function useWorkflow(id: string | undefined) {
+export function useCoworker(id: string | undefined) {
   return useQuery({
-    queryKey: ["workflow", "get", id],
-    queryFn: () => client.workflow.get({ id: id! }),
+    queryKey: ["coworker", "get", id],
+    queryFn: () => client.coworker.get({ id: id! }),
     enabled: !!id,
   });
 }
 
-export function useCreateWorkflow() {
+export function useCreateCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -633,20 +633,20 @@ export function useCreateWorkflow() {
         | "reddit"
         | "twitter"
       )[];
-    }) => client.workflow.create(input),
+    }) => client.coworker.create(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
     },
   });
 }
 
-export type WorkflowSchedule =
+export type CoworkerSchedule =
   | { type: "interval"; intervalMinutes: number }
   | { type: "daily"; time: string; timezone?: string }
   | { type: "weekly"; time: string; daysOfWeek: number[]; timezone?: string }
   | { type: "monthly"; time: string; dayOfMonth: number; timezone?: string };
 
-export function useUpdateWorkflow() {
+export function useUpdateCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -679,20 +679,20 @@ export function useUpdateWorkflow() {
         | "reddit"
         | "twitter"
       )[];
-      schedule?: WorkflowSchedule | null;
-    }) => client.workflow.update(input),
+      schedule?: CoworkerSchedule | null;
+    }) => client.coworker.update(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
     },
   });
 }
 
-export function useApplyWorkflowBuilderPatch() {
+export function useApplyCoworkerBuilderPatch() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: {
-      workflowId: string;
+      coworkerId: string;
       conversationId: string;
       baseUpdatedAt: string;
       patch: {
@@ -728,97 +728,97 @@ export function useApplyWorkflowBuilderPatch() {
             }
           | null;
       };
-    }) => client.workflow.applyBuilderPatch(input),
+    }) => client.coworker.applyBuilderPatch(input),
     onSuccess: (_, input) => {
-      queryClient.invalidateQueries({ queryKey: ["workflow"] });
-      queryClient.invalidateQueries({ queryKey: ["workflow", "get", input.workflowId] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker", "get", input.coworkerId] });
     },
   });
 }
 
-export function useDeleteWorkflow() {
+export function useDeleteCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
     // eslint-disable-next-line drizzle/enforce-delete-with-where -- ORPC client delete, not a Drizzle query
-    mutationFn: (id: string) => client.workflow.delete({ id }),
+    mutationFn: (id: string) => client.coworker.delete({ id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
     },
   });
 }
 
-export function useTriggerWorkflow() {
+export function useTriggerCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { id: string; payload?: unknown }) => client.workflow.trigger(input),
+    mutationFn: (input: { id: string; payload?: unknown }) => client.coworker.trigger(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
     },
   });
 }
 
-export function useWorkflowRun(id: string | undefined) {
+export function useCoworkerRun(id: string | undefined) {
   return useQuery({
-    queryKey: ["workflow", "run", id],
-    queryFn: () => client.workflow.getRun({ id: id! }),
+    queryKey: ["coworker", "run", id],
+    queryFn: () => client.coworker.getRun({ id: id! }),
     enabled: !!id,
   });
 }
 
-export function useWorkflowRuns(workflowId: string | undefined, limit = 20) {
+export function useCoworkerRuns(coworkerId: string | undefined, limit = 20) {
   return useQuery({
-    queryKey: ["workflow", "runs", workflowId, limit],
-    queryFn: () => client.workflow.listRuns({ workflowId: workflowId!, limit }),
-    enabled: !!workflowId,
+    queryKey: ["coworker", "runs", coworkerId, limit],
+    queryFn: () => client.coworker.listRuns({ coworkerId: coworkerId!, limit }),
+    enabled: !!coworkerId,
   });
 }
 
-export function useWorkflowForwardingAlias(workflowId: string | undefined) {
+export function useCoworkerForwardingAlias(coworkerId: string | undefined) {
   return useQuery({
-    queryKey: ["workflow", "forwarding-alias", workflowId],
-    queryFn: () => client.workflow.getForwardingAlias({ id: workflowId! }),
-    enabled: !!workflowId,
+    queryKey: ["coworker", "forwarding-alias", coworkerId],
+    queryFn: () => client.coworker.getForwardingAlias({ id: coworkerId! }),
+    enabled: !!coworkerId,
   });
 }
 
-export function useCreateWorkflowForwardingAlias() {
+export function useCreateCoworkerForwardingAlias() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workflowId: string) => client.workflow.createForwardingAlias({ id: workflowId }),
-    onSuccess: (_, workflowId) => {
-      queryClient.invalidateQueries({ queryKey: ["workflow", "forwarding-alias", workflowId] });
+    mutationFn: (coworkerId: string) => client.coworker.createForwardingAlias({ id: coworkerId }),
+    onSuccess: (_, coworkerId) => {
+      queryClient.invalidateQueries({ queryKey: ["coworker", "forwarding-alias", coworkerId] });
     },
   });
 }
 
-export function useDisableWorkflowForwardingAlias() {
+export function useDisableCoworkerForwardingAlias() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workflowId: string) => client.workflow.disableForwardingAlias({ id: workflowId }),
-    onSuccess: (_, workflowId) => {
-      queryClient.invalidateQueries({ queryKey: ["workflow", "forwarding-alias", workflowId] });
+    mutationFn: (coworkerId: string) => client.coworker.disableForwardingAlias({ id: coworkerId }),
+    onSuccess: (_, coworkerId) => {
+      queryClient.invalidateQueries({ queryKey: ["coworker", "forwarding-alias", coworkerId] });
     },
   });
 }
 
-export function useRotateWorkflowForwardingAlias() {
+export function useRotateCoworkerForwardingAlias() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workflowId: string) => client.workflow.rotateForwardingAlias({ id: workflowId }),
-    onSuccess: (_, workflowId) => {
-      queryClient.invalidateQueries({ queryKey: ["workflow", "forwarding-alias", workflowId] });
+    mutationFn: (coworkerId: string) => client.coworker.rotateForwardingAlias({ id: coworkerId }),
+    onSuccess: (_, coworkerId) => {
+      queryClient.invalidateQueries({ queryKey: ["coworker", "forwarding-alias", coworkerId] });
     },
   });
 }
 
 export function useGetOrCreateBuilderConversation() {
   return useMutation({
-    mutationFn: (id: string) => client.workflow.getOrCreateBuilderConversation({ id }),
+    mutationFn: (id: string) => client.coworker.getOrCreateBuilderConversation({ id }),
   });
 }
 
@@ -915,12 +915,12 @@ export function useUserForwardingSettings() {
   });
 }
 
-export function useSetDefaultForwardedWorkflow() {
+export function useSetDefaultForwardedCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workflowId: string | null) =>
-      client.user.setDefaultForwardedWorkflow({ workflowId }),
+    mutationFn: (coworkerId: string | null) =>
+      client.user.setDefaultForwardedCoworker({ coworkerId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user", "forwarding"] });
     },

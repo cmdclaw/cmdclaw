@@ -114,7 +114,7 @@ export type RuntimeDoneData = {
 
 export type RuntimeServerEvent =
   | { type: "text"; content: string }
-  | { type: "system"; content: string; workflowId?: string }
+  | { type: "system"; content: string; coworkerId?: string }
   | { type: "thinking"; content: string; thinkingId: string }
   | {
       type: "tool_use";

@@ -19,7 +19,7 @@ const generationEventPayloadSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("system"),
     content: z.string(),
-    workflowId: z.string().optional(),
+    coworkerId: z.string().optional(),
   }),
   z.object({
     type: z.literal("tool_use"),

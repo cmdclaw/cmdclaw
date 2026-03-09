@@ -61,7 +61,7 @@ const COLORS = [
 ] as const;
 
 export type ForwardingTarget =
-  | { kind: "workflow_alias"; localPart: string }
+  | { kind: "coworker_alias"; localPart: string }
   | { kind: "user"; id: string };
 
 function normalizeDomain(domain: string): string {
@@ -91,7 +91,7 @@ export function extractEmailAddress(value: string | null | undefined): string | 
   return emailMatch[0].trim().toLowerCase();
 }
 
-export function buildWorkflowForwardingAddress(
+export function buildCoworkerForwardingAddress(
   aliasLocalPart: string,
   domain: string,
   localPart = DEFAULT_LOCAL_PART,
@@ -142,7 +142,7 @@ export function parseForwardingTargetFromEmail(
   }
 
   if (normalizedToken.length > 0) {
-    return { kind: "workflow_alias", localPart: normalizedToken };
+    return { kind: "coworker_alias", localPart: normalizedToken };
   }
 
   return null;
@@ -152,6 +152,6 @@ function pickWord<T extends readonly string[]>(list: T): string {
   return list[Math.floor(Math.random() * list.length)] ?? "token";
 }
 
-export function generateWorkflowAliasLocalPart(): string {
+export function generateCoworkerAliasLocalPart(): string {
   return `${pickWord(ANIMALS)}-${pickWord(ADJECTIVES)}-${pickWord(COLORS)}`;
 }

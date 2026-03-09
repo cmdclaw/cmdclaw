@@ -73,7 +73,7 @@ export function isComingSoonIntegration(integration: IntegrationType): boolean {
   return COMING_SOON_INTEGRATIONS.has(integration);
 }
 
-export const WORKFLOW_AVAILABLE_INTEGRATION_TYPES: IntegrationType[] = ALL_INTEGRATION_TYPES.filter(
+export const COWORKER_AVAILABLE_INTEGRATION_TYPES: IntegrationType[] = ALL_INTEGRATION_TYPES.filter(
   (integration) => !isComingSoonIntegration(integration),
 );
 

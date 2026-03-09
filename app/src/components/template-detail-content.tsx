@@ -54,7 +54,7 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
 
           <div className="mt-8">
             <Button asChild className="gap-1.5 rounded-lg px-5">
-              <Link href={`/workflows?template=${template.id}`}>
+              <Link href={`/coworkers?template=${template.id}`}>
                 <Play className="size-3.5 fill-current" />
                 {template.heroCta}
               </Link>
@@ -97,12 +97,12 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
           </div>
         </div>
 
-        {/* Workflow summary */}
+        {/* Coworker summary */}
         <div>
           <section>
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold">What this workflow does</h2>
+                <h2 className="text-sm font-semibold">What this coworker does</h2>
                 <p className="text-muted-foreground mt-1 text-xs">Step-by-step breakdown</p>
               </div>
               <div className="border-border/50 bg-muted/50 inline-flex rounded-lg border p-0.5 text-xs">
@@ -183,10 +183,10 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
           </div>
         </section>
 
-        {/* ── Workflow diagram ── */}
+        {/* ── Coworker diagram ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">Workflow Diagram</h2>
+            <h2 className="text-sm font-semibold">Coworker Diagram</h2>
             <p className="text-muted-foreground mt-1 text-xs">
               Visual overview of the automation flow
             </p>
@@ -200,7 +200,7 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
             <h2 className="text-sm font-semibold">Connected Apps</h2>
             <p className="text-muted-foreground mt-1 text-xs">
               {template.connectedApps.length} app{template.connectedApps.length === 1 ? "" : "s"}{" "}
-              used by this workflow
+              used by this coworker
             </p>
           </div>
           <div className="border-border/40 bg-card rounded-xl border shadow-sm">
@@ -241,7 +241,7 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
         {/* ── Deploy CTA ── */}
         <section className="flex justify-center pt-2 pb-4">
           <Button asChild className="gap-1.5 rounded-lg px-8">
-            <Link href={`/workflows?template=${template.id}`}>
+            <Link href={`/coworkers?template=${template.id}`}>
               Deploy the agent
               <ArrowRight className="size-3.5" />
             </Link>

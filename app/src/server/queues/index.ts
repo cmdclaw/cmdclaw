@@ -2,8 +2,8 @@ import { Queue, QueueEvents, Worker, type ConnectionOptions, type Processor } fr
 import IORedis from "ioredis";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@/lib/email-forwarding";
 import { buildRedisOptions } from "@/server/redis/connection-options";
-import { processForwardedEmailEvent } from "@/server/services/workflow-email-forwarding";
-import { triggerWorkflowRun } from "@/server/services/workflow-service";
+import { processForwardedEmailEvent } from "@/server/services/coworker-email-forwarding";
+import { triggerCoworkerRun } from "@/server/services/coworker-service";
 
 const rawQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
 export const queueName = rawQueueName.replaceAll(":", "-");
@@ -13,12 +13,12 @@ const redisOptions = {
   enableReadyCheck: false,
 } as const;
 
-export const SCHEDULED_WORKFLOW_JOB_NAME = "workflow:scheduled-trigger";
-export const GMAIL_WORKFLOW_JOB_NAME = "workflow:gmail-trigger";
-export const X_DM_WORKFLOW_JOB_NAME = "workflow:x-dm-trigger";
-export const EMAIL_FORWARDED_WORKFLOW_JOB_NAME = "workflow:email-forwarded-trigger";
+export const SCHEDULED_COWORKER_JOB_NAME = "coworker:scheduled-trigger";
+export const GMAIL_COWORKER_JOB_NAME = "coworker:gmail-trigger";
+export const X_DM_COWORKER_JOB_NAME = "coworker:x-dm-trigger";
+export const EMAIL_FORWARDED_COWORKER_JOB_NAME = "coworker:email-forwarded-trigger";
 export const CHAT_GENERATION_JOB_NAME = "generation:chat-run";
-export const WORKFLOW_GENERATION_JOB_NAME = "generation:workflow-run";
+export const COWORKER_GENERATION_JOB_NAME = "generation:coworker-run";
 export const GENERATION_APPROVAL_TIMEOUT_JOB_NAME = "generation:approval-timeout";
 export const GENERATION_AUTH_TIMEOUT_JOB_NAME = "generation:auth-timeout";
 export const GENERATION_PREPARING_STUCK_CHECK_JOB_NAME = "generation:preparing-stuck-check";
@@ -35,10 +35,10 @@ export function buildQueueJobId(parts: Array<string | number | null | undefined>
   return normalized.length > 0 ? normalized : "job";
 }
 
-type JobPayload = Record<string, unknown> & { workflowId?: string };
+type JobPayload = Record<string, unknown> & { coworkerId?: string };
 type JobHandler = Processor<JobPayload, unknown, string>;
 
-function isActiveWorkflowRunConflict(error: unknown): boolean {
+function isActiveCoworkerRunConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
   }
@@ -53,73 +53,73 @@ function isActiveWorkflowRunConflict(error: unknown): boolean {
     maybeError.code === "BAD_REQUEST" &&
     maybeError.status === 400 &&
     typeof maybeError.message === "string" &&
-    maybeError.message.includes("Workflow already has an active run")
+    maybeError.message.includes("Coworker already has an active run")
   );
 }
 
 const handlers: Record<string, JobHandler> = {
-  [SCHEDULED_WORKFLOW_JOB_NAME]: async (job) => {
-    const workflowId = job.data?.workflowId;
-    if (!workflowId || typeof workflowId !== "string") {
-      throw new Error(`Missing workflowId in scheduled job "${job.id}"`);
+  [SCHEDULED_COWORKER_JOB_NAME]: async (job) => {
+    const coworkerId = job.data?.coworkerId;
+    if (!coworkerId || typeof coworkerId !== "string") {
+      throw new Error(`Missing coworkerId in scheduled job "${job.id}"`);
     }
 
     const scheduleType =
       typeof job.data?.scheduleType === "string" ? job.data.scheduleType : "unknown";
 
-    return triggerWorkflowRun({
-      workflowId,
+    return triggerCoworkerRun({
+      coworkerId,
       triggerPayload: {
         source: "schedule",
-        workflowId,
+        coworkerId,
         scheduleType,
         scheduledFor: new Date().toISOString(),
       },
     });
   },
-  [GMAIL_WORKFLOW_JOB_NAME]: async (job) => {
-    const workflowId = job.data?.workflowId;
-    if (!workflowId || typeof workflowId !== "string") {
-      throw new Error(`Missing workflowId in gmail job "${job.id}"`);
+  [GMAIL_COWORKER_JOB_NAME]: async (job) => {
+    const coworkerId = job.data?.coworkerId;
+    if (!coworkerId || typeof coworkerId !== "string") {
+      throw new Error(`Missing coworkerId in gmail job "${job.id}"`);
     }
 
     try {
-      return await triggerWorkflowRun({
-        workflowId,
+      return await triggerCoworkerRun({
+        coworkerId,
         triggerPayload: job.data?.triggerPayload ?? {},
       });
     } catch (error) {
-      if (isActiveWorkflowRunConflict(error)) {
+      if (isActiveCoworkerRunConflict(error)) {
         console.warn(
-          `[worker] skipped gmail workflow trigger because run is already active for workflow ${workflowId}`,
+          `[worker] skipped gmail coworker trigger because run is already active for coworker ${coworkerId}`,
         );
         return;
       }
       throw error;
     }
   },
-  [X_DM_WORKFLOW_JOB_NAME]: async (job) => {
-    const workflowId = job.data?.workflowId;
-    if (!workflowId || typeof workflowId !== "string") {
-      throw new Error(`Missing workflowId in x dm job "${job.id}"`);
+  [X_DM_COWORKER_JOB_NAME]: async (job) => {
+    const coworkerId = job.data?.coworkerId;
+    if (!coworkerId || typeof coworkerId !== "string") {
+      throw new Error(`Missing coworkerId in x dm job "${job.id}"`);
     }
 
     try {
-      return await triggerWorkflowRun({
-        workflowId,
+      return await triggerCoworkerRun({
+        coworkerId,
         triggerPayload: job.data?.triggerPayload ?? {},
       });
     } catch (error) {
-      if (isActiveWorkflowRunConflict(error)) {
+      if (isActiveCoworkerRunConflict(error)) {
         console.warn(
-          `[worker] skipped x dm workflow trigger because run is already active for workflow ${workflowId}`,
+          `[worker] skipped x dm coworker trigger because run is already active for coworker ${coworkerId}`,
         );
         return;
       }
       throw error;
     }
   },
-  [EMAIL_FORWARDED_WORKFLOW_JOB_NAME]: async (job) => {
+  [EMAIL_FORWARDED_COWORKER_JOB_NAME]: async (job) => {
     try {
       console.info("[worker] received forwarded-email job", {
         jobId: job.id ?? null,
@@ -136,7 +136,7 @@ const handlers: Record<string, JobHandler> = {
         job.data as Parameters<typeof processForwardedEmailEvent>[0],
       );
     } catch (error) {
-      if (isActiveWorkflowRunConflict(error)) {
+      if (isActiveCoworkerRunConflict(error)) {
         console.warn(
           `[worker] skipped forwarded email trigger because run is already active (source: ${EMAIL_FORWARDED_TRIGGER_TYPE})`,
         );
@@ -154,10 +154,10 @@ const handlers: Record<string, JobHandler> = {
     const { generationManager } = await import("@/server/services/generation-manager");
     await generationManager.runQueuedGeneration(generationId);
   },
-  [WORKFLOW_GENERATION_JOB_NAME]: async (job) => {
+  [COWORKER_GENERATION_JOB_NAME]: async (job) => {
     const generationId = job.data?.generationId;
     if (!generationId || typeof generationId !== "string") {
-      throw new Error(`Missing generationId in workflow generation job "${job.id}"`);
+      throw new Error(`Missing generationId in coworker generation job "${job.id}"`);
     }
 
     const { generationManager } = await import("@/server/services/generation-manager");
