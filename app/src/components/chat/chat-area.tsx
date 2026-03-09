@@ -19,7 +19,6 @@ import { usePostHog } from "posthog-js/react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { IntegrationType } from "@/lib/integration-icons";
-import { PromptBar } from "@/components/prompt-bar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -71,6 +70,7 @@ import {
 } from "@/orpc/hooks";
 import { ActivityFeed, type ActivityItemData } from "./activity-feed";
 import { AuthRequestCard } from "./auth-request-card";
+import { BottomActionBar } from "./bottom-action-bar";
 import { useChatModelStore } from "./chat-model-store";
 import { formatDuration } from "./chat-performance-metrics";
 import { useChatSkillStore } from "./chat-skill-store";
@@ -2534,18 +2534,20 @@ export function ChatArea({
                               integrationsUsed={nextSegmentIntegrations}
                               elapsedMs={streamElapsedMs ?? undefined}
                             />
-                            <ToolApprovalCard
-                              toolUseId={deferredApproval.toolUseId}
-                              toolName={deferredApproval.toolName}
-                              toolInput={deferredApproval.toolInput}
-                              integration={deferredApproval.integration}
-                              operation={deferredApproval.operation}
-                              command={deferredApproval.command}
-                              status={deferredApproval.status}
-                              isLoading={isApproving}
-                              onApprove={segmentApproveHandlers.get(segment.id)!}
-                              onDeny={segmentDenyHandlers.get(segment.id)!}
-                            />
+                            {deferredApproval.status !== "pending" && (
+                              <ToolApprovalCard
+                                toolUseId={deferredApproval.toolUseId}
+                                toolName={deferredApproval.toolName}
+                                toolInput={deferredApproval.toolInput}
+                                integration={deferredApproval.integration}
+                                operation={deferredApproval.operation}
+                                command={deferredApproval.command}
+                                status={deferredApproval.status}
+                                isLoading={isApproving}
+                                onApprove={segmentApproveHandlers.get(segment.id)!}
+                                onDeny={segmentDenyHandlers.get(segment.id)!}
+                              />
+                            )}
                           </div>,
                         );
                         index += 1;
@@ -2578,7 +2580,7 @@ export function ChatArea({
                             />
                           )}
 
-                          {segment.approval && (
+                          {segment.approval && segment.approval.status !== "pending" && (
                             <ToolApprovalCard
                               toolUseId={segment.approval.toolUseId}
                               toolName={segment.approval.toolName}
@@ -2593,7 +2595,7 @@ export function ChatArea({
                             />
                           )}
 
-                          {segment.auth && (
+                          {segment.auth && segment.auth.status !== "pending" && (
                             <AuthRequestCard
                               integrations={segment.auth.integrations}
                               connectedIntegrations={segment.auth.connectedIntegrations}
@@ -2782,7 +2784,14 @@ export function ChatArea({
             </div>
           )}
 
-          <PromptBar
+          <BottomActionBar
+            segments={segments}
+            segmentApproveHandlers={segmentApproveHandlers}
+            segmentDenyHandlers={segmentDenyHandlers}
+            isApproving={isApproving}
+            handleAuthConnect={handleAuthConnect}
+            handleAuthCancel={handleAuthCancel}
+            isSubmittingAuth={isSubmittingAuth}
             onSubmit={handleSend}
             onStop={handleStop}
             disabled={isRecording || isProcessingVoice}
