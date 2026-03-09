@@ -25,6 +25,7 @@ try to colocated tests with the code they test when relevant. for collacting use
 -  Group related changes; avoid bundling unrelated refactors.
 -  **Multi-agent safety:** when the user says "push," you may `git pull --rebase` to integrate the latest changes (never discard other agents' work). When the user says "commit," scope to your changes only. When the user says "commit all," commit everything in grouped chunks.
 -  **Multi-agent safety:** when you see unrecognized files, keep going; focus on your changes and commit only those.
+- in case you have issue with lefthook, you can bypass it is there is no issue in the files you edited
 
 
 Always prefer Big Bang Rewrite when doing a big refactoring do not get backward compatibility or add fallback logic.
