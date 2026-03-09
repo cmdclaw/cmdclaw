@@ -4,11 +4,12 @@ import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS, WORKFLOW_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
-import { cn } from "@/lib/utils";
 import { client } from "@/orpc/client";
 import { useCreateWorkflow } from "@/orpc/hooks";
 
@@ -271,27 +272,12 @@ function IntegrationLogos({ integrations }: { integrations: IntegrationType[] })
   );
 }
 
-function TemplateCard({
-  template,
-  onSelect,
-  loading,
-}: {
-  template: TemplateItem;
-  onSelect: (t: TemplateItem) => void;
-  loading: boolean;
-}) {
-  const handleClick = useCallback(() => {
-    onSelect(template);
-  }, [onSelect, template]);
-
+function TemplateCard({ template }: { template: TemplateItem }) {
   return (
-    <button
-      className={cn(
-        "group border-border/60 bg-card hover:border-slate-300 hover:bg-slate-100 relative flex min-h-[170px] w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150",
-        loading && "pointer-events-none",
-      )}
-      onClick={handleClick}
-      disabled={loading}
+    <Link
+      href={`/?preview=${template.id}`}
+      scroll={false}
+      className="group border-border/60 bg-card relative flex min-h-[170px] w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150 hover:border-slate-300 hover:bg-slate-100"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -306,7 +292,7 @@ function TemplateCard({
       <div className="mt-auto pt-1">
         <IntegrationLogos integrations={template.integrations} />
       </div>
-    </button>
+    </Link>
   );
 }
 
@@ -384,12 +370,13 @@ function AnimatedDepartment({
 // ─── Landing ─────────────────────────────────────────────────────────────────
 
 export function WorkflowLanding() {
+  const searchParams = useSearchParams();
   const createWorkflow = useCreateWorkflow();
   const [isCreating, setIsCreating] = useState(false);
-  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
   const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
+  const previewId = searchParams.get("preview");
 
   const activeExample = HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length];
 
@@ -440,18 +427,6 @@ export function WorkflowLanding() {
       setIsCreating(false);
     },
     [doCreate, isCreating],
-  );
-
-  const handleTemplateSelect = useCallback(
-    async (template: TemplateItem) => {
-      if (creatingTemplateId) {
-        return;
-      }
-      setCreatingTemplateId(template.id);
-      await doCreate({ prompt: template.prompt, triggerType: template.triggerType });
-      setCreatingTemplateId(null);
-    },
-    [creatingTemplateId, doCreate],
   );
 
   return (
@@ -517,16 +492,12 @@ export function WorkflowLanding() {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURED_TEMPLATES.map((template) => (
-              <TemplateCard
-                key={template.id}
-                template={template}
-                onSelect={handleTemplateSelect}
-                loading={creatingTemplateId === template.id}
-              />
+              <TemplateCard key={template.id} template={template} />
             ))}
           </div>
         </section>
       </div>
+      <TemplatePreviewModal templateId={previewId} closeHref="/" />
     </div>
   );
 }

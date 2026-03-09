@@ -21,13 +21,19 @@ const WINDOW_MOTION = {
   transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
 } as const;
 
-export function TemplatePreviewModal({ templateId }: { templateId: string | null }) {
+export function TemplatePreviewModal({
+  templateId,
+  closeHref = "/templates",
+}: {
+  templateId: string | null;
+  closeHref?: string;
+}) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => {
-    router.push("/templates", { scroll: false });
-  }, [router]);
+    router.push(closeHref, { scroll: false });
+  }, [closeHref, router]);
 
   // Close on Escape
   useEffect(() => {
