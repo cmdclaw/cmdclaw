@@ -1,5 +1,7 @@
 import type { IntegrationType } from "@/lib/integration-icons";
 
+export type TemplateTriggerType = "manual" | "schedule" | "email" | "webhook";
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ConnectedApp = {
@@ -14,6 +16,7 @@ export type TemplateContent = {
   category: string;
   title: string;
   description: string;
+  triggerType: TemplateTriggerType;
   triggerTitle: string;
   triggerDescription: string;
   agentInstructions: string[];
@@ -36,6 +39,7 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
     title: "Send polished follow-ups right after every call",
     description:
       "As soon as a transcript arrives, this coworker builds a short recap, drafts the email, and creates the matching CRM follow-up task.",
+    triggerType: "webhook",
     triggerTitle: "Call Transcription Ready",
     triggerDescription: "When an Aircall call transcription becomes available.",
     agentInstructions: [
@@ -99,4 +103,8 @@ export function getTemplateById(id: string): TemplateContent {
     category: "Template",
     title: `Coworker template: ${id.replace(/[-_]/g, " ")}`,
   };
+}
+
+export function findTemplateById(id: string): TemplateContent | null {
+  return MOCK_TEMPLATES[id] ?? null;
 }

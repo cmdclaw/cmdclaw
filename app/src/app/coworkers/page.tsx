@@ -326,15 +326,25 @@ export default function CoworkersPage() {
   }, []);
 
   const doCreate = useCallback(
-    async (initialMessage: string) => {
+    async ({
+      initialMessage,
+      name,
+      prompt: coworkerPrompt,
+      triggerType,
+    }: {
+      initialMessage?: string;
+      name?: string;
+      prompt: string;
+      triggerType: "manual" | "schedule" | "email" | "webhook";
+    }) => {
       const result = await createCoworker.mutateAsync({
-        name: "",
-        triggerType: "manual",
-        prompt: "",
+        name,
+        triggerType,
+        prompt: coworkerPrompt,
         allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
       });
 
-      const text = initialMessage.trim();
+      const text = initialMessage?.trim() ?? "";
       if (text) {
         try {
           const { conversationId } = await client.coworker.getOrCreateBuilderConversation({
@@ -351,7 +361,7 @@ export default function CoworkersPage() {
         }
       }
 
-      window.location.href = `/coworkers/${result.id}`;
+      window.location.assign(`/coworkers/${result.id}`);
     },
     [createCoworker],
   );
@@ -364,7 +374,7 @@ export default function CoworkersPage() {
     setIsCreating(true);
     setError(null);
     try {
-      await doCreate(text);
+      await doCreate({ initialMessage: text, name: "", prompt: "", triggerType: "manual" });
     } catch {
       setError("Failed to create coworker. Please try again.");
       setIsCreating(false);
