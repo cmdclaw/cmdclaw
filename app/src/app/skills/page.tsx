@@ -104,18 +104,33 @@ const CATEGORY_LABELS: Record<string, string> = {
   industry: "Industry",
 };
 
+const CARD_MOTION = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, scale: 0.96 },
+  transition: { duration: 0.2, ease: "easeOut" },
+} as const;
+
+const FADE_IN_MOTION = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+} as const;
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function CommunitySkillCard({ skill }: { skill: CommunitySkill }) {
   const [enabled, setEnabled] = useState(skill.enabled);
+  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  }, []);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      initial={CARD_MOTION.initial}
+      animate={CARD_MOTION.animate}
+      exit={CARD_MOTION.exit}
+      transition={CARD_MOTION.transition}
     >
       <Link
         href={`/skills/community/${skill.id}`}
@@ -151,7 +166,7 @@ function CommunitySkillCard({ skill }: { skill: CommunitySkill }) {
               </span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.preventDefault()}>
+          <div className="flex shrink-0 items-center gap-1.5" onClick={handleCardActionClick}>
             <label className="flex cursor-pointer items-center gap-1.5">
               <Switch checked={enabled} onCheckedChange={setEnabled} />
               <span className="text-muted-foreground w-6 text-[11px]">
@@ -209,14 +224,17 @@ function CustomSkillCard({
     },
     [onDelete, skill.id, skill.displayName],
   );
+  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  }, []);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      initial={CARD_MOTION.initial}
+      animate={CARD_MOTION.animate}
+      exit={CARD_MOTION.exit}
+      transition={CARD_MOTION.transition}
     >
       <Link
         href={`/skills/${skill.id}`}
@@ -235,7 +253,7 @@ function CustomSkillCard({
               <span className="text-muted-foreground font-mono text-[10px]">{skill.name}</span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.preventDefault()}>
+          <div className="flex shrink-0 items-center gap-1" onClick={handleCardActionClick}>
             <label className="flex cursor-pointer items-center gap-1.5">
               <Switch checked={skill.enabled} onCheckedChange={handleToggle} />
               <span className="text-muted-foreground w-6 text-[11px]">
@@ -255,7 +273,7 @@ function CustomSkillCard({
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
             Custom
           </span>
-          <div className="flex items-center gap-0.5" onClick={(e) => e.preventDefault()}>
+          <div className="flex items-center gap-0.5" onClick={handleCardActionClick}>
             <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
               <Link href={`/skills/${skill.id}`}>
                 <Pencil className="h-3.5 w-3.5" />
@@ -352,12 +370,14 @@ function SkillsPageContent() {
     return () => clearTimeout(timer);
   }, [notification]);
 
-  const skillsList = Array.isArray(skills) ? skills : [];
+  const skillsList = useMemo(() => (Array.isArray(skills) ? skills : []), [skills]);
 
   const q = search.toLowerCase().trim();
 
   const filteredCommunity = useMemo(() => {
-    if (!q) return COMMUNITY_SKILLS;
+    if (!q) {
+      return COMMUNITY_SKILLS;
+    }
     return COMMUNITY_SKILLS.filter(
       (s) =>
         s.displayName.toLowerCase().includes(q) ||
@@ -367,7 +387,9 @@ function SkillsPageContent() {
   }, [q]);
 
   const filteredCustom = useMemo(() => {
-    if (!q) return skillsList;
+    if (!q) {
+      return skillsList;
+    }
     return skillsList.filter(
       (s) =>
         s.displayName.toLowerCase().includes(q) ||
@@ -375,6 +397,9 @@ function SkillsPageContent() {
         s.name.toLowerCase().includes(q),
     );
   }, [q, skillsList]);
+  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.target.value);
+  }, []);
 
   return (
     <div>
@@ -423,7 +448,7 @@ function SkillsPageContent() {
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={handleSearchChange}
           placeholder="Search skills…"
           className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
         />
@@ -467,8 +492,8 @@ function SkillsPageContent() {
           </div>
         ) : filteredCustom.length === 0 && q ? (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={FADE_IN_MOTION.initial}
+            animate={FADE_IN_MOTION.animate}
             className="py-12 text-center"
           >
             <p className="text-muted-foreground text-sm">No custom skills match your search.</p>
@@ -511,8 +536,8 @@ function SkillsPageContent() {
         </motion.div>
         {filteredCommunity.length === 0 && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={FADE_IN_MOTION.initial}
+            animate={FADE_IN_MOTION.animate}
             className="py-12 text-center"
           >
             <p className="text-muted-foreground text-sm">No community skills match your search.</p>

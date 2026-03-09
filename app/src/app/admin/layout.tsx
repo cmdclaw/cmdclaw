@@ -13,8 +13,12 @@ const adminTabs = [
 ];
 
 function getActiveKey(pathname: string) {
-  if (pathname.startsWith("/admin/impersonation")) return "impersonation";
-  if (pathname.startsWith("/admin/whatsapp")) return "whatsapp";
+  if (pathname.startsWith("/admin/impersonation")) {
+    return "impersonation";
+  }
+  if (pathname.startsWith("/admin/whatsapp")) {
+    return "whatsapp";
+  }
   return "settings";
 }
 

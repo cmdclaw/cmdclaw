@@ -2,10 +2,19 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
-export function MermaidDiagram({ imageUrl, source }: { imageUrl: string; source: string }) {
+export function MermaidDiagram({
+  imageUrl,
+  source: _source,
+}: {
+  imageUrl: string;
+  source: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const handleToggle = useCallback(() => {
+    setExpanded((current) => !current);
+  }, []);
 
   return (
     <div className="mx-auto max-w-xl">
@@ -36,7 +45,7 @@ export function MermaidDiagram({ imageUrl, source }: { imageUrl: string; source:
         {/* Toggle button */}
         <button
           type="button"
-          onClick={() => setExpanded(!expanded)}
+          onClick={handleToggle}
           className="text-muted-foreground hover:text-foreground flex w-full items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors"
         >
           {expanded ? (

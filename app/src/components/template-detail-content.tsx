@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
-import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
+import { INTEGRATION_LOGOS } from "@/lib/integration-icons";
 import { type TemplateContent, base64Url } from "@/lib/template-data";
 
 export function TemplateDetailContent({ template }: { template: TemplateContent }) {

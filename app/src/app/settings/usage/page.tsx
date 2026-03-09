@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 // TODO: remove mock data once real usage is wired up
 const MOCK_USAGE = 400;
 const MOCK_LIMIT = 500;
@@ -10,6 +12,7 @@ export default function UsagePage() {
   const limit = MOCK_LIMIT;
   const resetDays = MOCK_RESET_DAYS;
   const percentage = Math.min((usage / limit) * 100, 100);
+  const progressStyle = useMemo(() => ({ width: `${Math.max(percentage, 0.5)}%` }), [percentage]);
   return (
     <div>
       <div className="mb-6">
@@ -28,10 +31,7 @@ export default function UsagePage() {
 
         <div className="mt-3">
           <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
-            <div
-              className="h-full rounded-full bg-[#B55239]"
-              style={{ width: `${Math.max(percentage, 0.5)}%` }}
-            />
+            <div className="h-full rounded-full bg-[#B55239]" style={progressStyle} />
           </div>
         </div>
 

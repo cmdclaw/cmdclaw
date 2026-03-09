@@ -6,6 +6,8 @@ import * as React from "react";
 import { useId, useRef } from "react";
 import { cn } from "@/lib/utils";
 
+const ACTIVE_TAB_PILL_TRANSITION = { type: "spring", stiffness: 400, damping: 30 } as const;
+
 /* ─── AnimatedTabs ─── */
 
 type AnimatedTabsProps = {
@@ -26,7 +28,9 @@ function AnimatedTabs({ activeKey, onTabChange, children, className }: AnimatedT
       className={cn("inline-flex items-center gap-0.5 rounded-lg p-1", className)}
     >
       {React.Children.map(children, (child) => {
-        if (!React.isValidElement<AnimatedTabProps>(child)) return child;
+        if (!React.isValidElement<AnimatedTabProps>(child)) {
+          return child;
+        }
         const tabValue = child.props.value;
         return React.cloneElement(child, {
           _active: tabValue === activeKey,
@@ -59,13 +63,17 @@ function AnimatedTab({
   _layoutId,
   _onSelect,
 }: AnimatedTabProps) {
+  const handleClick = React.useCallback(() => {
+    _onSelect?.(value);
+  }, [_onSelect, value]);
+
   const inner = (
     <>
       {_active && (
         <motion.span
           layoutId={_layoutId}
           className="bg-muted absolute inset-0 rounded-md"
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          transition={ACTIVE_TAB_PILL_TRANSITION}
         />
       )}
       <span className="relative z-10">{children}</span>
@@ -91,7 +99,7 @@ function AnimatedTab({
       type="button"
       role="tab"
       aria-selected={_active}
-      onClick={() => _onSelect?.(value)}
+      onClick={handleClick}
       className={sharedClass}
     >
       {inner}

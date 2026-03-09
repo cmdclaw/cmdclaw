@@ -332,7 +332,9 @@ function AnimatedDepartment({
   const prevDeptRef = useRef(department);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      return;
+    }
 
     // When department changes, start fresh
     if (prevDeptRef.current !== department) {
@@ -348,7 +350,9 @@ function AnimatedDepartment({
   }, []);
 
   useEffect(() => {
-    if (!isTyping || !isActive) return;
+    if (!isTyping || !isActive) {
+      return;
+    }
 
     if (displayedText.length < department.length) {
       const timeout = setTimeout(() => {
@@ -360,16 +364,19 @@ function AnimatedDepartment({
     }
   }, [displayedText, department, isTyping, isActive]);
 
+  const textStyle = useMemo(() => ({ color }), [color]);
+  const cursorStyle = useMemo(
+    () => ({
+      backgroundColor: color,
+      animation: "blink-cursor 1s step-end infinite",
+    }),
+    [color],
+  );
+
   return (
     <span className="inline-flex items-baseline">
-      <span style={{ color }}>{displayedText}</span>
-      <span
-        className="ml-[1px] inline-block w-[2px] self-stretch"
-        style={{
-          backgroundColor: color,
-          animation: "blink-cursor 1s step-end infinite",
-        }}
-      />
+      <span style={textStyle}>{displayedText}</span>
+      <span className="ml-[1px] inline-block w-[2px] self-stretch" style={cursorStyle} />
     </span>
   );
 }
@@ -467,8 +474,8 @@ export function WorkflowLanding() {
       <div className="relative z-10 mx-auto w-full max-w-[1500px] px-6 pb-10">
         {/* ── Prompt area — centered hero ── */}
         <section className="flex min-h-[62vh] items-center justify-center pt-8 md:min-h-[max(22rem,calc(100dvh-21rem))] md:pt-10 lg:min-h-[max(23rem,calc(100dvh-22rem))] lg:pt-12">
-          <div className="mx-auto w-full max-w-2xl">
-            <h1 className="mb-2 text-center text-xl font-semibold tracking-tight text-white">
+          <div className="mx-auto w-full max-w-3xl">
+            <h1 className="mb-3 text-center text-3xl font-semibold tracking-tight text-white drop-shadow-[0_0_30px_rgba(56,189,248,0.25)] md:text-4xl lg:text-5xl">
               What do you want to automate in{" "}
               <AnimatedDepartment
                 department={activeExample?.department ?? "your team"}
@@ -477,7 +484,7 @@ export function WorkflowLanding() {
               />
               ?
             </h1>
-            <p className="mb-6 text-center text-sm text-slate-100/90">
+            <p className="mb-8 text-center text-base text-white/70 md:text-lg">
               Describe a task and we&apos;ll build it step by step
             </p>
             <PromptBar

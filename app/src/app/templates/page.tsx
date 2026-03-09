@@ -234,6 +234,18 @@ const TEMPLATES: TemplateItem[] = [
   },
 ];
 
+const FILTER_PILL_TRANSITION = { type: "spring", duration: 0.4, bounce: 0.15 } as const;
+const TEMPLATE_CARD_MOTION = {
+  initial: { opacity: 0, scale: 0.96 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.96 },
+  transition: { duration: 0.2, ease: "easeOut" },
+} as const;
+const FADE_IN_MOTION = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+} as const;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getTriggerLabel(triggerType: string) {
@@ -253,7 +265,9 @@ function IntegrationLogos({ integrations }: { integrations: IntegrationType[] })
     <div className="flex items-center gap-1">
       {integrations.map((key) => {
         const logo = INTEGRATION_LOGOS[key];
-        if (!logo) return null;
+        if (!logo) {
+          return null;
+        }
         return (
           <Image
             key={key}
@@ -269,23 +283,31 @@ function IntegrationLogos({ integrations }: { integrations: IntegrationType[] })
   );
 }
 
-function FilterPill({
-  label,
-  active,
-  onClick,
-  groupId,
-  icon,
-}: {
+type FilterPillProps<T extends string> = {
+  value: T;
   label: string;
   active: boolean;
-  onClick: () => void;
+  onSelect: (value: T) => void;
   groupId: string;
-  icon?: React.ReactNode;
-}) {
+  iconSrc?: string;
+};
+
+function FilterPill<T extends string>({
+  value,
+  label,
+  active,
+  onSelect,
+  groupId,
+  iconSrc,
+}: FilterPillProps<T>) {
+  const handleClick = useCallback(() => {
+    onSelect(value);
+  }, [onSelect, value]);
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       className={cn(
         "relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",
         active
@@ -297,10 +319,14 @@ function FilterPill({
         <motion.span
           layoutId={`filter-pill-${groupId}`}
           className="bg-muted border-border/60 absolute inset-0 rounded-full border"
-          transition={{ type: "spring", duration: 0.4, bounce: 0.15 }}
+          transition={FILTER_PILL_TRANSITION}
         />
       )}
-      {icon && <span className="relative">{icon}</span>}
+      {iconSrc ? (
+        <span className="relative">
+          <Image src={iconSrc} alt={value} width={14} height={14} className="size-3.5" />
+        </span>
+      ) : null}
       <span className="relative">{label}</span>
     </button>
   );
@@ -350,19 +376,29 @@ function TemplatesPageContent() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return TEMPLATES.filter((t) => {
-      if (activeIndustry && t.industry !== activeIndustry) return false;
-      if (activeUseCase && t.useCase !== activeUseCase) return false;
-      if (activeIntegration && !t.integrations.includes(activeIntegration)) return false;
-      if (q && !t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q))
+      if (activeIndustry && t.industry !== activeIndustry) {
         return false;
+      }
+      if (activeUseCase && t.useCase !== activeUseCase) {
+        return false;
+      }
+      if (activeIntegration && !t.integrations.includes(activeIntegration)) {
+        return false;
+      }
+      if (q && !t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) {
+        return false;
+      }
       return true;
     });
   }, [search, activeIndustry, activeUseCase, activeIntegration]);
 
   const hasActiveFilter = activeIndustry || activeUseCase || activeIntegration;
+  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.target.value);
+  }, []);
 
   return (
-    <AppShell>
+    <AppShell sidebarVisibility="authenticated">
       <div className="bg-background min-h-screen">
         <div className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">
           {/* Header */}
@@ -379,7 +415,7 @@ function TemplatesPageContent() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               placeholder="Search templates…"
               className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
             />
@@ -395,9 +431,10 @@ function TemplatesPageContent() {
               {INDUSTRIES.map((industry) => (
                 <FilterPill
                   key={industry}
+                  value={industry}
                   label={industry}
                   active={activeIndustry === industry}
-                  onClick={() => toggleIndustry(industry)}
+                  onSelect={toggleIndustry}
                   groupId="industry"
                 />
               ))}
@@ -411,9 +448,10 @@ function TemplatesPageContent() {
               {USE_CASES.map((useCase) => (
                 <FilterPill
                   key={useCase}
+                  value={useCase}
                   label={useCase}
                   active={activeUseCase === useCase}
-                  onClick={() => toggleUseCase(useCase)}
+                  onSelect={toggleUseCase}
                   groupId="usecase"
                 />
               ))}
@@ -427,19 +465,12 @@ function TemplatesPageContent() {
               {INTEGRATIONS_FILTER.map((integration) => (
                 <FilterPill
                   key={integration}
+                  value={integration}
                   label={INTEGRATION_DISPLAY_NAMES[integration]}
                   active={activeIntegration === integration}
-                  onClick={() => toggleIntegration(integration)}
+                  onSelect={toggleIntegration}
                   groupId="integration"
-                  icon={
-                    <Image
-                      src={INTEGRATION_LOGOS[integration]}
-                      alt={integration}
-                      width={14}
-                      height={14}
-                      className="size-3.5"
-                    />
-                  }
+                  iconSrc={INTEGRATION_LOGOS[integration]}
                 />
               ))}
             </div>
@@ -468,10 +499,10 @@ function TemplatesPageContent() {
                 <motion.div
                   key={template.id}
                   layout
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.96 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  initial={TEMPLATE_CARD_MOTION.initial}
+                  animate={TEMPLATE_CARD_MOTION.animate}
+                  exit={TEMPLATE_CARD_MOTION.exit}
+                  transition={TEMPLATE_CARD_MOTION.transition}
                 >
                   <Link
                     href={`/templates?preview=${template.id}`}
@@ -503,8 +534,8 @@ function TemplatesPageContent() {
           {/* Empty state */}
           {filtered.length === 0 && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={FADE_IN_MOTION.initial}
+              animate={FADE_IN_MOTION.animate}
               className="py-20 text-center"
             >
               <p className="text-muted-foreground text-sm">No templates match your filters.</p>

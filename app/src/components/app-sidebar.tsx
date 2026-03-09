@@ -3,6 +3,7 @@
 import {
   BarChart3,
   Bug,
+  CheckCheck,
   Check,
   ChevronDown,
   Home,
@@ -24,7 +25,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -57,6 +58,7 @@ import { cn } from "@/lib/utils";
 import {
   useConversationList,
   useDeleteConversation,
+  useMarkAllConversationsSeen,
   useUpdateConversationPinned,
   useUpdateConversationTitle,
   useWorkflowList,
@@ -187,6 +189,7 @@ export function AppSidebar() {
   const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
   const conversationData = rawConversationData as ConversationListData | undefined;
   const deleteConversation = useDeleteConversation();
+  const markAllConversationsSeenMutation = useMarkAllConversationsSeen();
   const updateConversationPinned = useUpdateConversationPinned();
   const updateConversationTitle = useUpdateConversationTitle();
 
@@ -255,13 +258,14 @@ export function AppSidebar() {
     }
     return pathname === href || pathname.startsWith(href + "/");
   };
-  const isChatPage = pathname === "/chat" || pathname.startsWith("/chat/");
   const isWorkflowPage = pathname === "/workflows" || pathname.startsWith("/workflows/");
 
   // Only animate the recent section when navigating to/from workflows, not on first load/reload.
   const recentDirection = isWorkflowPage ? 1 : -1;
   const [recentAnimState, setRecentAnimState] = useState<"idle" | "animating">(() => {
-    if (typeof window === "undefined") return "idle";
+    if (typeof window === "undefined") {
+      return "idle";
+    }
     const prev = sessionStorage.getItem("sidebar-recent");
     const curr = isWorkflowPage ? "workflows" : "chats";
     sessionStorage.setItem("sidebar-recent", curr);
@@ -273,6 +277,13 @@ export function AppSidebar() {
       requestAnimationFrame(() => setRecentAnimState("idle"));
     }
   }, [recentAnimState]);
+  const recentContentStyle = useMemo(
+    () =>
+      recentAnimState === "animating"
+        ? { opacity: 0, transform: `translateX(${recentDirection * 40}px)` }
+        : { opacity: 1, transform: "translateX(0)" },
+    [recentAnimState, recentDirection],
+  );
 
   const mainNavItems: NavItem[] = [
     { icon: Home, label: "Home", href: "/" },
@@ -289,6 +300,9 @@ export function AppSidebar() {
 
   const recentWorkflows = workflows?.slice(0, 5) ?? [];
   const recentConversations = conversationData?.conversations ?? [];
+  const unreadConversationCount = recentConversations.filter(
+    (conversation) => conversation.messageCount > (conversation.seenMessageCount ?? 0),
+  ).length;
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
@@ -370,6 +384,18 @@ export function AppSidebar() {
     },
     [handleRenameSubmit],
   );
+
+  const handleMarkAllRead = useCallback(async () => {
+    if (unreadConversationCount === 0 || markAllConversationsSeenMutation.isPending) {
+      return;
+    }
+
+    await markAllConversationsSeenMutation.mutateAsync();
+  }, [markAllConversationsSeenMutation, unreadConversationCount]);
+
+  const handleMarkAllReadClick = useCallback(() => {
+    void handleMarkAllRead();
+  }, [handleMarkAllRead]);
 
   const handleSubmitReport = useCallback(async () => {
     const message = reportMessage.trim();
@@ -611,15 +637,51 @@ export function AppSidebar() {
             <div className="flex flex-col gap-1.5 overflow-hidden">
               <div
                 className="flex flex-col gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                style={
-                  recentAnimState === "animating"
-                    ? { opacity: 0, transform: `translateX(${recentDirection * 40}px)` }
-                    : { opacity: 1, transform: "translateX(0)" }
-                }
+                style={recentContentStyle}
               >
-                <span className="text-sidebar-foreground/40 px-2.5 text-[11px] font-semibold tracking-wider uppercase">
-                  {isWorkflowPage ? "Recent Runs" : "Recent Chats"}
-                </span>
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-2 px-2.5",
+                    !isWorkflowPage && "group/recent-chats-header",
+                  )}
+                >
+                  <span className="text-sidebar-foreground/40 text-[11px] font-semibold tracking-wider uppercase">
+                    {isWorkflowPage ? "Recent Runs" : "Recent Chats"}
+                  </span>
+                  {!isWorkflowPage ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "text-sidebar-foreground/45 hover:text-sidebar-foreground h-5 w-5 rounded-sm transition-all",
+                            "pointer-events-none opacity-0 group-hover/recent-chats-header:pointer-events-auto group-hover/recent-chats-header:opacity-100",
+                            "focus-visible:pointer-events-auto focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100",
+                          )}
+                          aria-label="Recent chat actions"
+                        >
+                          <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="bottom">
+                        <DropdownMenuItem
+                          onClick={handleMarkAllReadClick}
+                          disabled={
+                            unreadConversationCount === 0 ||
+                            markAllConversationsSeenMutation.isPending
+                          }
+                        >
+                          {markAllConversationsSeenMutation.isPending ? (
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCheck className="h-4 w-4" />
+                          )}
+                          <span>Mark all as read</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                </div>
                 <div className="flex flex-col gap-0.5">
                   {!isWorkflowPage ? (
                     conversationsLoading ? (

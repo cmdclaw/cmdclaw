@@ -180,7 +180,6 @@ function WorkflowCard({
 
   return (
     <div
-      role="link"
       tabIndex={0}
       onClick={handleOpen}
       onKeyDown={handleKeyDown}

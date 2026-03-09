@@ -167,7 +167,9 @@ const integrationConfig: Record<string, { name: string; description: string; ico
 
 const adminPreviewOnlyIntegrations = new Set<IntegrationType>(
   (Object.keys(integrationConfig) as IntegrationType[]).filter((type) => {
-    if (type === "whatsapp") return true;
+    if (type === "whatsapp") {
+      return true;
+    }
     return isComingSoonIntegration(type as IntegrationIconType);
   }),
 );
@@ -239,6 +241,18 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
     enabled: true,
   },
 ];
+
+const CARD_MOTION = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, scale: 0.96 },
+  transition: { duration: 0.2, ease: "easeOut" },
+} as const;
+
+const FADE_IN_MOTION = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+} as const;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -319,14 +333,17 @@ function IntegrationToolCard({
       void onRequestGoogleAccess(type as GoogleIntegrationType);
     }
   }, [isGoogleType, onRequestGoogleAccess, type]);
+  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+  }, []);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      initial={CARD_MOTION.initial}
+      animate={CARD_MOTION.animate}
+      exit={CARD_MOTION.exit}
+      transition={CARD_MOTION.transition}
     >
       <div
         className={cn(
@@ -388,7 +405,7 @@ function IntegrationToolCard({
           </div>
 
           {/* Toggle or Connect */}
-          <div className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 items-center" onClick={handleCardActionClick}>
             {isConnected && !integration.setupRequired ? (
               <label className="flex cursor-pointer items-center gap-1.5">
                 <Switch checked={isEnabled} onCheckedChange={handleToggle} />
@@ -467,14 +484,17 @@ function IntegrationToolCard({
 
 function CommunityToolCard({ skill }: { skill: CommunitySkill }) {
   const [enabled, setEnabled] = useState(skill.enabled);
+  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  }, []);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      initial={CARD_MOTION.initial}
+      animate={CARD_MOTION.animate}
+      exit={CARD_MOTION.exit}
+      transition={CARD_MOTION.transition}
     >
       <Link
         href={`/skills/community/${skill.id}`}
@@ -510,7 +530,7 @@ function CommunityToolCard({ skill }: { skill: CommunitySkill }) {
               </span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.preventDefault()}>
+          <div className="flex shrink-0 items-center gap-1.5" onClick={handleCardActionClick}>
             <label className="flex cursor-pointer items-center gap-1.5">
               <Switch checked={enabled} onCheckedChange={setEnabled} />
               <span className="text-muted-foreground w-6 text-[11px]">
@@ -568,14 +588,17 @@ function CustomToolCard({
     },
     [onDelete, skill.id, skill.displayName],
   );
+  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  }, []);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      initial={CARD_MOTION.initial}
+      animate={CARD_MOTION.animate}
+      exit={CARD_MOTION.exit}
+      transition={CARD_MOTION.transition}
     >
       <Link
         href={`/skills/${skill.id}`}
@@ -594,7 +617,7 @@ function CustomToolCard({
               <span className="text-muted-foreground font-mono text-[10px]">{skill.name}</span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.preventDefault()}>
+          <div className="flex shrink-0 items-center gap-1" onClick={handleCardActionClick}>
             <label className="flex cursor-pointer items-center gap-1.5">
               <Switch checked={skill.enabled} onCheckedChange={handleToggle} />
               <span className="text-muted-foreground w-6 text-[11px]">
@@ -614,7 +637,7 @@ function CustomToolCard({
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
             Custom
           </span>
-          <div className="flex items-center gap-0.5" onClick={(e) => e.preventDefault()}>
+          <div className="flex items-center gap-0.5" onClick={handleCardActionClick}>
             <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
               <Link href={`/skills/${skill.id}`}>
                 <Pencil className="h-3.5 w-3.5" />
@@ -683,8 +706,10 @@ function ToolboxPageContent() {
     () => (Array.isArray(integrations) ? integrations : []),
     [integrations],
   );
-  const connectedIntegrations = new Map<string, (typeof integrationsList)[number]>(
-    integrationsList.map((i) => [i.type, i]),
+  const connectedIntegrations = useMemo(
+    () =>
+      new Map<string, (typeof integrationsList)[number]>(integrationsList.map((i) => [i.type, i])),
+    [integrationsList],
   );
 
   const visibleIntegrations = useMemo(
@@ -1053,7 +1078,11 @@ function ToolboxPageContent() {
           <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
         </div>
       ) : !hasResults ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-16 text-center">
+        <motion.div
+          initial={FADE_IN_MOTION.initial}
+          animate={FADE_IN_MOTION.animate}
+          className="py-16 text-center"
+        >
           <p className="text-muted-foreground text-sm">
             {q
               ? "No tools match your search."

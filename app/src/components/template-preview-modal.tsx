@@ -7,6 +7,20 @@ import { useCallback, useEffect, useRef } from "react";
 import { TemplateDetailContent } from "@/components/template-detail-content";
 import { getTemplateById } from "@/lib/template-data";
 
+const BACKDROP_MOTION = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.2 },
+} as const;
+
+const WINDOW_MOTION = {
+  initial: { opacity: 0, scale: 0.96, y: 12 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit: { opacity: 0, scale: 0.96, y: 12 },
+  transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+} as const;
+
 export function TemplatePreviewModal({ templateId }: { templateId: string | null }) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -17,9 +31,13 @@ export function TemplatePreviewModal({ templateId }: { templateId: string | null
 
   // Close on Escape
   useEffect(() => {
-    if (!templateId) return;
+    if (!templateId) {
+      return;
+    }
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") {
+        close();
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -27,7 +45,9 @@ export function TemplatePreviewModal({ templateId }: { templateId: string | null
 
   // Lock body scroll when open
   useEffect(() => {
-    if (!templateId) return;
+    if (!templateId) {
+      return;
+    }
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -51,10 +71,10 @@ export function TemplatePreviewModal({ templateId }: { templateId: string | null
           {/* Backdrop */}
           <motion.div
             key="backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            initial={BACKDROP_MOTION.initial}
+            animate={BACKDROP_MOTION.animate}
+            exit={BACKDROP_MOTION.exit}
+            transition={BACKDROP_MOTION.transition}
             className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
             onClick={close}
           />
@@ -62,10 +82,10 @@ export function TemplatePreviewModal({ templateId }: { templateId: string | null
           {/* Window */}
           <motion.div
             key="window"
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            initial={WINDOW_MOTION.initial}
+            animate={WINDOW_MOTION.animate}
+            exit={WINDOW_MOTION.exit}
+            transition={WINDOW_MOTION.transition}
             className="bg-background border-border/60 fixed inset-0 z-50 m-auto flex h-[85vh] w-[85vw] max-w-[1200px] flex-col overflow-hidden rounded-2xl border shadow-2xl"
           >
             {/* Title bar */}

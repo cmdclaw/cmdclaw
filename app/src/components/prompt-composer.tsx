@@ -17,6 +17,11 @@ type PromptComposerProps = {
   className?: string;
 };
 
+const RICH_PLACEHOLDER_LINE_HEIGHT_STYLE = { lineHeight: "2rem" } as const;
+const RICH_PLACEHOLDER_CURSOR_STYLE = {
+  animation: "blink-cursor 1s step-end infinite",
+} as const;
+
 // ─── Rich Placeholder Overlay ────────────────────────────────────────────────
 
 /**
@@ -81,11 +86,11 @@ function RichPlaceholderOverlay({
   }
 
   return (
-    <span className="inline" style={{ lineHeight: "2rem" }}>
+    <span className="inline" style={RICH_PLACEHOLDER_LINE_HEIGHT_STYLE}>
       {elements}
       <span
         className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
-        style={{ animation: "blink-cursor 1s step-end infinite" }}
+        style={RICH_PLACEHOLDER_CURSOR_STYLE}
       />
     </span>
   );
@@ -138,7 +143,9 @@ export function PromptComposer({
 
   // ── Sync index to parent (for heading changes) ──
   useEffect(() => {
-    if (!shouldAnimate || !onAnimatedPlaceholderIndexChange) return;
+    if (!shouldAnimate || !onAnimatedPlaceholderIndexChange) {
+      return;
+    }
     const idx = useRichMode ? richIndex : placeholderIndex;
     onAnimatedPlaceholderIndexChange(idx);
   }, [onAnimatedPlaceholderIndexChange, placeholderIndex, richIndex, shouldAnimate, useRichMode]);

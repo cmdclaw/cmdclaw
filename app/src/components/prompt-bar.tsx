@@ -38,15 +38,19 @@ type PromptBarProps = {
   conversationId?: string;
   prefillRequest?: { id: string; text: string; mode?: "replace" | "append" } | null;
 
-  renderSkills?: () => React.ReactNode;
-  renderModelSelector?: () => React.ReactNode;
-  renderAutoApproval?: () => React.ReactNode;
+  renderSkills?: React.ReactNode;
+  renderModelSelector?: React.ReactNode;
+  renderAutoApproval?: React.ReactNode;
 
   className?: string;
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_FILES = 5;
+const RICH_PLACEHOLDER_LINE_HEIGHT_STYLE = { lineHeight: "2rem" } as const;
+const RICH_PLACEHOLDER_CURSOR_STYLE = {
+  animation: "blink-cursor 1s step-end infinite",
+} as const;
 
 // ─── Rich Placeholder Overlay ───────────────────────────────────────────────
 
@@ -71,7 +75,9 @@ function RichPlaceholderOverlay({
     const seg = segments[i];
     const segLen = seg.type === "text" ? seg.content.length : seg.name.length;
 
-    if (consumed >= charPos) break;
+    if (consumed >= charPos) {
+      break;
+    }
 
     const charsAvailable = Math.min(segLen, charPos - consumed);
     consumed += segLen;
@@ -98,11 +104,11 @@ function RichPlaceholderOverlay({
   }
 
   return (
-    <span className="inline" style={{ lineHeight: "2rem" }}>
+    <span className="inline" style={RICH_PLACEHOLDER_LINE_HEIGHT_STYLE}>
       {elements}
       <span
         className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
-        style={{ animation: "blink-cursor 1s step-end infinite" }}
+        style={RICH_PLACEHOLDER_CURSOR_STYLE}
       />
     </span>
   );
@@ -157,7 +163,9 @@ export function PromptBar({
   const [loadedDraftKey, setLoadedDraftKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isDraftHydrated || variant === "hero") return;
+    if (!isDraftHydrated || variant === "hero") {
+      return;
+    }
     const draft = readDraft(draftKey);
     setText(draft?.text ?? "");
     setAttachments([]);
@@ -165,13 +173,17 @@ export function PromptBar({
   }, [draftKey, isDraftHydrated, readDraft, variant]);
 
   useEffect(() => {
-    if (!isDraftHydrated || variant === "hero" || loadedDraftKey !== draftKey) return;
+    if (!isDraftHydrated || variant === "hero" || loadedDraftKey !== draftKey) {
+      return;
+    }
     upsertDraft(draftKey, text);
   }, [draftKey, isDraftHydrated, loadedDraftKey, upsertDraft, text, variant]);
 
   // ── Prefill ──
   useEffect(() => {
-    if (!prefillRequest) return;
+    if (!prefillRequest) {
+      return;
+    }
     setText((prev) => {
       const next =
         prefillRequest.mode === "append"
@@ -208,7 +220,9 @@ export function PromptBar({
 
   // Sync index to parent
   useEffect(() => {
-    if (!shouldAnimate || !onAnimatedPlaceholderIndexChange) return;
+    if (!shouldAnimate || !onAnimatedPlaceholderIndexChange) {
+      return;
+    }
     onAnimatedPlaceholderIndexChange(useRichMode ? richIndex : placeholderIndex);
   }, [onAnimatedPlaceholderIndexChange, placeholderIndex, richIndex, shouldAnimate, useRichMode]);
 
@@ -313,7 +327,9 @@ export function PromptBar({
           dataUrl: await readFileAsDataUrl(f),
         })),
       );
-      if (added.length) setAttachments((prev) => [...prev, ...added]);
+      if (added.length) {
+        setAttachments((prev) => [...prev, ...added]);
+      }
     },
     [attachments.length],
   );
@@ -321,6 +337,19 @@ export function PromptBar({
   const removeAttachment = useCallback((idx: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   }, []);
+  const handleRemoveAttachmentClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const attachmentUrl = event.currentTarget.dataset.attachmentUrl;
+      if (!attachmentUrl) {
+        return;
+      }
+      const index = attachments.findIndex((attachment) => attachment.dataUrl === attachmentUrl);
+      if (index >= 0) {
+        removeAttachment(index);
+      }
+    },
+    [attachments, removeAttachment],
+  );
 
   const handleOpenFilePicker = useCallback(() => {
     setAttachPopoverOpen(false);
@@ -329,7 +358,9 @@ export function PromptBar({
 
   const handleFileInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files) void addFiles(e.target.files);
+      if (e.target.files) {
+        void addFiles(e.target.files);
+      }
       e.target.value = "";
     },
     [addFiles],
@@ -348,7 +379,9 @@ export function PromptBar({
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      if (e.dataTransfer.files.length > 0) void addFiles(e.dataTransfer.files);
+      if (e.dataTransfer.files.length > 0) {
+        void addFiles(e.dataTransfer.files);
+      }
     },
     [addFiles],
   );
@@ -356,11 +389,15 @@ export function PromptBar({
   // ── Submit ──
   const handleSubmit = useCallback(() => {
     const trimmed = text.trim();
-    if ((!trimmed && attachments.length === 0) || disabled || isSubmitting) return;
+    if ((!trimmed && attachments.length === 0) || disabled || isSubmitting) {
+      return;
+    }
     onSubmit(trimmed, attachments.length > 0 ? attachments : undefined);
     setAttachments([]);
     setText("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   }, [text, attachments, disabled, isSubmitting, onSubmit]);
 
   const handleKeyDown = useCallback(
@@ -381,35 +418,45 @@ export function PromptBar({
   const handleRecordMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      if (!disabled && !isStreaming) onStartRecording?.();
+      if (!disabled && !isStreaming) {
+        onStartRecording?.();
+      }
     },
     [disabled, isStreaming, onStartRecording],
   );
   const handleRecordMouseUp = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      if (isRecording) onStopRecording?.();
+      if (isRecording) {
+        onStopRecording?.();
+      }
     },
     [isRecording, onStopRecording],
   );
   const handleRecordMouseLeave = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      if (isRecording) onStopRecording?.();
+      if (isRecording) {
+        onStopRecording?.();
+      }
     },
     [isRecording, onStopRecording],
   );
   const handleRecordTouchStart = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
-      if (!disabled && !isStreaming) onStartRecording?.();
+      if (!disabled && !isStreaming) {
+        onStartRecording?.();
+      }
     },
     [disabled, isStreaming, onStartRecording],
   );
   const handleRecordTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
-      if (isRecording) onStopRecording?.();
+      if (isRecording) {
+        onStopRecording?.();
+      }
     },
     [isRecording, onStopRecording],
   );
@@ -436,9 +483,9 @@ export function PromptBar({
         {/* Attachment previews */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pt-3">
-            {attachments.map((a, i) => (
+            {attachments.map((a) => (
               <div
-                key={`${a.name}-${i}`}
+                key={a.dataUrl}
                 className="group border-border/50 relative flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-xs shadow-sm"
               >
                 {a.mimeType.startsWith("image/") ? (
@@ -456,7 +503,8 @@ export function PromptBar({
                 <span className="text-foreground/80 max-w-[100px] truncate">{a.name}</span>
                 <button
                   type="button"
-                  onClick={() => removeAttachment(i)}
+                  data-attachment-url={a.dataUrl}
+                  onClick={handleRemoveAttachmentClick}
                   className="hover:bg-muted ml-0.5 rounded-full p-0.5"
                 >
                   <X className="h-3 w-3" />
@@ -543,10 +591,10 @@ export function PromptBar({
             />
 
             {/* Skills slot */}
-            {renderSkills?.()}
+            {renderSkills}
 
             {/* Model selector slot */}
-            {renderModelSelector?.()}
+            {renderModelSelector}
           </div>
 
           {/* Spacer */}
@@ -554,7 +602,7 @@ export function PromptBar({
 
           {/* Right group: auto-approval, voice, send */}
           <div className="flex items-center gap-1">
-            {renderAutoApproval?.()}
+            {renderAutoApproval}
 
             {/* Voice */}
             {showVoice && (

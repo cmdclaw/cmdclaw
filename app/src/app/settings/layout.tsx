@@ -11,8 +11,12 @@ const settingsTabs = [
 ];
 
 function getActiveKey(pathname: string) {
-  if (pathname.startsWith("/settings/usage")) return "usage";
-  if (pathname.startsWith("/settings/subscriptions")) return "subscriptions";
+  if (pathname.startsWith("/settings/usage")) {
+    return "usage";
+  }
+  if (pathname.startsWith("/settings/subscriptions")) {
+    return "subscriptions";
+  }
   return "general";
 }
 
