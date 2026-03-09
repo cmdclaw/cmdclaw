@@ -379,7 +379,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   const createCoworker = useCreateCoworker();
   const [isCreating, setIsCreating] = useState(false);
   const [activePromptIndex, setActivePromptIndex] = useState(0);
-  const [showFooter, setShowFooter] = useState(!initialHasSession);
+  const [isAnonymous, setShowFooter] = useState(!initialHasSession);
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
   const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
   const previewId = searchParams.get("preview");
@@ -477,6 +477,20 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
         <div className="pointer-events-none absolute right-0 bottom-0 left-0 z-20 h-20 bg-gradient-to-b from-transparent to-slate-950/70 sm:hidden" />
 
         <div className="relative z-10 mx-auto w-full max-w-[1500px] px-6 pb-10">
+          {/* ── Top bar ── */}
+          {isAnonymous ? (
+            <div className="flex items-center justify-end pt-5">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="border-white/45 bg-white/80 hover:bg-white"
+              >
+                <Link href="/login">Log in</Link>
+              </Button>
+            </div>
+          ) : null}
+
           {/* ── Prompt area — centered hero ── */}
           <section className="flex min-h-[62vh] items-center justify-center pt-8 md:min-h-[max(22rem,calc(100dvh-21rem))] md:pt-10 lg:min-h-[max(23rem,calc(100dvh-22rem))] lg:pt-12">
             <div className="mx-auto w-full max-w-3xl">
@@ -531,7 +545,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
       </div>
 
       {/* ── Footer ── */}
-      {showFooter ? (
+      {isAnonymous ? (
         <footer className="border-border/60 bg-background border-t px-6 py-5">
           <div className="text-muted-foreground mx-auto flex max-w-[1500px] items-center justify-between text-xs">
             <div className="flex items-center gap-3">
