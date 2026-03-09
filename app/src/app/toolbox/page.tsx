@@ -2,8 +2,6 @@
 
 import {
   ArrowUp,
-  CheckCircle2,
-  ExternalLink,
   FileInput,
   FileOutput,
   Globe,
@@ -14,17 +12,16 @@ import {
   Table,
   Trash2,
   Wand2,
-  XCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ToolboxPreviewModal } from "@/components/toolbox-preview-modal";
 import { Button } from "@/components/ui/button";
 import { IconDisplay } from "@/components/ui/icon-picker";
-import { Switch } from "@/components/ui/switch";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import {
@@ -271,13 +268,8 @@ function IntegrationToolCard({
   type,
   config,
   integration,
-  isConnecting,
   connectError,
   isPreviewOnly,
-  lacksGoogleAccess,
-  onConnect,
-  onToggle,
-  onRequestGoogleAccess,
 }: {
   type: IntegrationType;
   config: { name: string; description: string; icon: string };
@@ -288,55 +280,11 @@ function IntegrationToolCard({
     displayName: string | null;
     setupRequired?: boolean;
   } | null;
-  isConnecting: boolean;
   connectError?: string;
   isPreviewOnly: boolean;
-  lacksGoogleAccess: boolean;
-  onConnect: (type: OAuthIntegrationType) => Promise<void>;
-  onToggle: (id: string, enabled: boolean) => Promise<void>;
-  onRequestGoogleAccess: (type: GoogleIntegrationType) => Promise<void>;
 }) {
   const isConnected = !!integration;
   const isEnabled = integration?.enabled ?? false;
-  const isWhatsApp = type === "whatsapp";
-  const isGoogleType = !isWhatsApp && isGoogleIntegrationType(type as OAuthIntegrationType);
-  const showGoogleRequest = !integration && isGoogleType && lacksGoogleAccess;
-
-  const handleToggle = useCallback(
-    (value: boolean) => {
-      if (integration) {
-        void onToggle(integration.id, value);
-      }
-    },
-    [integration, onToggle],
-  );
-
-  const handleConnect = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isWhatsApp) {
-        void onConnect(type as OAuthIntegrationType);
-      }
-    },
-    [isWhatsApp, onConnect, type],
-  );
-
-  const handleRequestAccess = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isGoogleType) {
-        void onRequestGoogleAccess(type as GoogleIntegrationType);
-      }
-    },
-    [isGoogleType, onRequestGoogleAccess, type],
-  );
-
-  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-  }, []);
 
   return (
     <motion.div
@@ -407,49 +355,17 @@ function IntegrationToolCard({
             </div>
           </div>
 
-          {/* Toggle or Connect */}
-          <div className="flex shrink-0 items-center" onClick={handleCardActionClick}>
-            {isConnected && !integration.setupRequired ? (
-              <label className="flex cursor-pointer items-center gap-1.5">
-                <Switch checked={isEnabled} onCheckedChange={handleToggle} />
-                <span className="text-muted-foreground w-6 text-[11px]">
-                  {isEnabled ? "On" : "Off"}
-                </span>
-              </label>
-            ) : !isPreviewOnly && !isWhatsApp ? (
-              showGoogleRequest ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleRequestAccess}
-                >
-                  Request access
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                  variant={connectError ? "destructive" : "default"}
-                >
-                  {isConnecting ? (
-                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  ) : (
-                    <ExternalLink className="mr-1.5 h-3 w-3" />
-                  )}
-                  {isConnecting ? "Connecting" : connectError ? "Retry" : "Connect"}
-                </Button>
-              )
-            ) : isWhatsApp ? (
-              <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-                <Link href="/integrations/whatsapp">
-                  Setup
-                  <ExternalLink className="ml-1.5 h-3 w-3" />
-                </Link>
-              </Button>
-            ) : null}
+          {/* Status */}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "mt-0.5 size-2 rounded-full",
+                isConnected && isEnabled ? "bg-green-500" : "bg-muted-foreground/30",
+              )}
+            />
+            <span className="text-muted-foreground text-xs">
+              {isConnected && isEnabled ? "On" : "Off"}
+            </span>
           </div>
         </div>
 
@@ -477,13 +393,7 @@ function IntegrationToolCard({
   );
 }
 
-function CommunityToolCard({ skill }: { skill: CommunitySkill }) {
-  const [enabled, setEnabled] = useState(skill.enabled);
-  const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-  }, []);
-
+function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled: boolean }) {
   return (
     <motion.div
       layout
@@ -527,13 +437,14 @@ function CommunityToolCard({ skill }: { skill: CommunitySkill }) {
               </span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5" onClick={handleCardActionClick}>
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <Switch checked={enabled} onCheckedChange={setEnabled} />
-              <span className="text-muted-foreground w-6 text-[11px]">
-                {enabled ? "On" : "Off"}
-              </span>
-            </label>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "mt-0.5 size-2 rounded-full",
+                enabled ? "bg-green-500" : "bg-muted-foreground/30",
+              )}
+            />
+            <span className="text-muted-foreground text-xs">{enabled ? "On" : "Off"}</span>
           </div>
         </div>
 
@@ -556,7 +467,6 @@ function CommunityToolCard({ skill }: { skill: CommunitySkill }) {
 
 function CustomToolCard({
   skill,
-  onToggle,
   onDelete,
 }: {
   skill: {
@@ -567,16 +477,8 @@ function CustomToolCard({
     icon: string | null;
     enabled: boolean;
   };
-  onToggle: (id: string, enabled: boolean) => Promise<void>;
   onDelete: (id: string, displayName: string) => Promise<void>;
 }) {
-  const handleToggle = useCallback(
-    (value: boolean) => {
-      void onToggle(skill.id, value);
-    },
-    [onToggle, skill.id],
-  );
-
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
@@ -614,13 +516,14 @@ function CustomToolCard({
               <span className="text-muted-foreground font-mono text-[10px]">{skill.name}</span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1" onClick={handleCardActionClick}>
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <Switch checked={skill.enabled} onCheckedChange={handleToggle} />
-              <span className="text-muted-foreground w-6 text-[11px]">
-                {skill.enabled ? "On" : "Off"}
-              </span>
-            </label>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "mt-0.5 size-2 rounded-full",
+                skill.enabled ? "bg-green-500" : "bg-muted-foreground/30",
+              )}
+            />
+            <span className="text-muted-foreground text-xs">{skill.enabled ? "On" : "Off"}</span>
           </div>
         </div>
 
@@ -686,13 +589,12 @@ function ToolboxPageContent() {
   const [integrationConnectErrors, setIntegrationConnectErrors] = useState<
     Partial<Record<OAuthIntegrationType, string>>
   >({});
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [isCreating, setIsCreating] = useState(false);
+  const [communitySkillToggles, setCommunitySkillToggles] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(COMMUNITY_SKILLS.map((s) => [s.id, s.enabled])),
+  );
   const linkedInLinkingRef = useRef(false);
 
   const isLoading = integrationsLoading || skillsLoading;
@@ -731,14 +633,11 @@ function ToolboxPageContent() {
       linkLinkedIn
         .mutateAsync(accountId)
         .then(() => {
-          setNotification({ type: "success", message: "LinkedIn connected successfully!" });
+          toast.success("LinkedIn connected successfully!");
           refetchIntegrations();
         })
         .catch(() => {
-          setNotification({
-            type: "error",
-            message: "Failed to connect LinkedIn. Please try again.",
-          });
+          toast.error("Failed to connect LinkedIn. Please try again.");
         })
         .finally(() => {
           window.history.replaceState({}, "", "/toolbox");
@@ -752,28 +651,17 @@ function ToolboxPageContent() {
     const error = searchParams.get("error");
     if (success) {
       queueMicrotask(() => {
-        setNotification({ type: "success", message: "Integration connected successfully!" });
+        toast.success("Integration connected successfully!");
       });
       window.history.replaceState({}, "", "/toolbox");
       refetchIntegrations();
     } else if (error) {
       queueMicrotask(() => {
-        setNotification({
-          type: "error",
-          message: `Failed to connect: ${error.replace(/_/g, " ")}`,
-        });
+        toast.error(`Failed to connect: ${error.replace(/_/g, " ")}`);
       });
       window.history.replaceState({}, "", "/toolbox");
     }
   }, [searchParams, refetchIntegrations]);
-
-  // Auto-dismiss notifications
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
 
   // ─── Integration handlers ───────────────────────────────────────────────────
   const handleIntegrationConnect = useCallback(
@@ -834,12 +722,11 @@ function ToolboxPageContent() {
     async (type: GoogleIntegrationType) => {
       try {
         await requestGoogleAccess.mutateAsync({ integration: type, source: "integrations" });
-        setNotification({
-          type: "success",
-          message: "Access request sent. We notified the team and will approve your Google access.",
-        });
+        toast.success(
+          "Access request sent. We notified the team and will approve your Google access.",
+        );
       } catch {
-        setNotification({ type: "error", message: "Failed to send access request." });
+        toast.error("Failed to send access request.");
       }
     },
     [requestGoogleAccess],
@@ -855,7 +742,7 @@ function ToolboxPageContent() {
       });
       router.push(`/skills/${result.id}`);
     } catch {
-      setNotification({ type: "error", message: "Failed to create skill." });
+      toast.error("Failed to create skill.");
       setIsCreating(false);
     }
   }, [createSkill, router]);
@@ -879,14 +766,19 @@ function ToolboxPageContent() {
       }
       try {
         await deleteSkill.mutateAsync(id);
-        setNotification({ type: "success", message: `Skill "${displayName}" deleted.` });
+        toast.success(`Skill "${displayName}" deleted.`);
         refetchSkills();
       } catch {
-        setNotification({ type: "error", message: "Failed to delete skill." });
+        toast.error("Failed to delete skill.");
       }
     },
     [deleteSkill, refetchSkills],
   );
+
+  // ─── Community skill handlers ─────────────────────────────────────────────
+  const handleCommunitySkillToggle = useCallback((id: string, value: boolean) => {
+    setCommunitySkillToggles((prev) => ({ ...prev, [id]: value }));
+  }, []);
 
   // ─── Search & filter ───────────────────────────────────────────────────────
   const q = search.toLowerCase().trim();
@@ -947,13 +839,13 @@ function ToolboxPageContent() {
       );
     }
     if (activeTab === "active") {
-      filtered = filtered.filter((s) => s.enabled);
+      filtered = filtered.filter((s) => communitySkillToggles[s.id] ?? s.enabled);
     }
     if (activeTab === "needs_setup") {
       return []; // skills never need setup
     }
     return filtered;
-  }, [q, activeTab]);
+  }, [q, activeTab, communitySkillToggles]);
 
   // ─── Counts ─────────────────────────────────────────────────────────────────
   const totalActive = useMemo(() => {
@@ -962,9 +854,11 @@ function ToolboxPageContent() {
       return integration?.enabled;
     }).length;
     const activeCustom = skillsList.filter((s) => s.enabled).length;
-    const activeCommunity = COMMUNITY_SKILLS.filter((s) => s.enabled).length;
+    const activeCommunity = COMMUNITY_SKILLS.filter(
+      (s) => communitySkillToggles[s.id] ?? s.enabled,
+    ).length;
     return activeIntegrations + activeCustom + activeCommunity;
-  }, [visibleIntegrations, connectedIntegrations, skillsList]);
+  }, [visibleIntegrations, connectedIntegrations, skillsList, communitySkillToggles]);
 
   const totalNeedsSetup = useMemo(() => {
     return visibleIntegrations.filter(([type]) => {
@@ -1128,25 +1022,6 @@ function ToolboxPageContent() {
         </div>
       </div>
 
-      {/* Notification */}
-      {notification && (
-        <div
-          className={cn(
-            "mb-6 flex items-center gap-2 rounded-lg border p-4",
-            notification.type === "success"
-              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-          )}
-        >
-          {notification.type === "success" ? (
-            <CheckCircle2 className="h-5 w-5" />
-          ) : (
-            <XCircle className="h-5 w-5" />
-          )}
-          {notification.message}
-        </div>
-      )}
-
       {/* Filters row */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <AnimatedTabs
@@ -1223,12 +1098,7 @@ function ToolboxPageContent() {
               <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <AnimatePresence mode="popLayout">
                   {filteredCustomSkills.map((skill) => (
-                    <CustomToolCard
-                      key={skill.id}
-                      skill={skill}
-                      onToggle={handleSkillToggle}
-                      onDelete={handleSkillDelete}
-                    />
+                    <CustomToolCard key={skill.id} skill={skill} onDelete={handleSkillDelete} />
                   ))}
                 </AnimatePresence>
               </motion.div>
@@ -1260,17 +1130,12 @@ function ToolboxPageContent() {
                         type={type}
                         config={config}
                         integration={integration}
-                        isConnecting={connectingType === type}
                         connectError={
                           !integration
                             ? integrationConnectErrors[type as OAuthIntegrationType]
                             : undefined
                         }
                         isPreviewOnly={adminPreviewOnlyIntegrations.has(type)}
-                        lacksGoogleAccess={lacksGoogleAccess}
-                        onConnect={handleIntegrationConnect}
-                        onToggle={handleIntegrationToggle}
-                        onRequestGoogleAccess={handleRequestGoogleAccess}
                       />
                     );
                   })}
@@ -1297,7 +1162,11 @@ function ToolboxPageContent() {
               <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <AnimatePresence mode="popLayout">
                   {filteredCommunitySkills.map((skill) => (
-                    <CommunityToolCard key={skill.id} skill={skill} />
+                    <CommunityToolCard
+                      key={skill.id}
+                      skill={skill}
+                      enabled={communitySkillToggles[skill.id] ?? skill.enabled}
+                    />
                   ))}
                 </AnimatePresence>
               </motion.div>
@@ -1306,7 +1175,14 @@ function ToolboxPageContent() {
         </div>
       )}
 
-      <ToolboxPreviewModal previewId={previewId} integrationProps={previewIntegrationProps} />
+      <ToolboxPreviewModal
+        previewId={previewId}
+        integrationProps={previewIntegrationProps}
+        communitySkillProps={{
+          getEnabled: (slug: string) => communitySkillToggles[slug] ?? false,
+          onToggle: handleCommunitySkillToggle,
+        }}
+      />
     </>
   );
 }

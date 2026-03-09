@@ -9,6 +9,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -289,7 +290,15 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function CommunitySkillDetailContent({ skill }: { skill: CommunitySkillContent }) {
+export function CommunitySkillDetailContent({
+  skill,
+  enabled,
+  onToggle,
+}: {
+  skill: CommunitySkillContent;
+  enabled?: boolean;
+  onToggle?: (value: boolean) => void;
+}) {
   return (
     <div className="mx-auto max-w-3xl pb-8">
       {/* ── Hero section ── */}
@@ -309,10 +318,19 @@ export function CommunitySkillDetailContent({ skill }: { skill: CommunitySkillCo
           </p>
 
           <div className="mt-8 flex items-center gap-3">
-            <Button className="gap-1.5 rounded-lg px-5">
-              <Zap className="size-3.5" />
-              Activate skill
-            </Button>
+            {onToggle ? (
+              <label className="flex cursor-pointer items-center gap-2">
+                <Switch checked={enabled ?? false} onCheckedChange={onToggle} />
+                <span className="text-muted-foreground text-sm">
+                  {enabled ? "Enabled" : "Disabled"}
+                </span>
+              </label>
+            ) : (
+              <Button className="gap-1.5 rounded-lg px-5">
+                <Zap className="size-3.5" />
+                Activate skill
+              </Button>
+            )}
             <Button variant="outline" className="gap-1.5 rounded-lg px-5" asChild>
               <a href={skill.githubUrl} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="size-3.5" />
@@ -422,13 +440,17 @@ export function CommunitySkillDetailContent({ skill }: { skill: CommunitySkillCo
           </div>
         </section>
 
-        {/* ── Activate CTA ── */}
-        <section className="flex justify-center pt-2 pb-4">
-          <Button className="gap-1.5 rounded-lg px-8">
-            <Zap className="size-3.5" />
-            Activate skill
-          </Button>
-        </section>
+        {/* ── Toggle CTA ── */}
+        {onToggle && (
+          <section className="flex justify-center pt-2 pb-4">
+            <label className="flex cursor-pointer items-center gap-2">
+              <Switch checked={enabled ?? false} onCheckedChange={onToggle} />
+              <span className="text-muted-foreground text-sm">
+                {enabled ? "Enabled" : "Disabled"}
+              </span>
+            </label>
+          </section>
+        )}
       </div>
     </div>
   );

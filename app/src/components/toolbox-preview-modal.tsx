@@ -69,6 +69,7 @@ function getMaximizeHref(target: PreviewTarget): string | null {
 export function ToolboxPreviewModal({
   previewId,
   integrationProps,
+  communitySkillProps,
 }: {
   previewId: string | null;
   integrationProps?: Omit<
@@ -82,6 +83,10 @@ export function ToolboxPreviewModal({
     getConnectError: (type: string) => string | undefined;
     isWhatsApp: (type: string) => boolean;
     showGoogleRequest: (type: string) => boolean;
+  };
+  communitySkillProps?: {
+    getEnabled: (slug: string) => boolean;
+    onToggle: (slug: string, value: boolean) => void;
   };
 }) {
   const router = useRouter();
@@ -167,7 +172,15 @@ export function ToolboxPreviewModal({
           className="flex-1 overflow-y-auto overscroll-contain px-6 pt-8 pb-16 md:px-8 md:pt-10"
         >
           {target.kind === "community" && COMMUNITY_SKILLS_DATA[target.slug] && (
-            <CommunitySkillDetailContent skill={COMMUNITY_SKILLS_DATA[target.slug]} />
+            <CommunitySkillDetailContent
+              skill={COMMUNITY_SKILLS_DATA[target.slug]}
+              enabled={communitySkillProps?.getEnabled(target.slug)}
+              onToggle={
+                communitySkillProps
+                  ? (value: boolean) => communitySkillProps.onToggle(target.slug, value)
+                  : undefined
+              }
+            />
           )}
           {target.kind === "integration" &&
             integrationProps &&
