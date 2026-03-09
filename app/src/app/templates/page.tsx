@@ -10,18 +10,7 @@ import type { IntegrationType } from "@/lib/integration-icons";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type TemplateItem = {
-  id: string;
-  title: string;
-  description: string;
-  triggerType: "manual" | "schedule" | "email" | "webhook";
-  integrations: IntegrationType[];
-  industry: string;
-  useCase: string;
-};
+import { filterTemplates, toggleMultiSelect, type TemplateItem } from "./templates-filters";
 
 // ─── Filter options ──────────────────────────────────────────────────────────
 
@@ -240,6 +229,11 @@ const TEMPLATE_CARD_MOTION = {
   exit: { opacity: 0, scale: 0.96 },
   transition: { duration: 0.2, ease: "easeOut" },
 } as const;
+const ACTIVE_PILL_MOTION = {
+  initial: { opacity: 0, scale: 0.92 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.92 },
+} as const;
 const FADE_IN_MOTION = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
@@ -287,7 +281,6 @@ type FilterPillProps<T extends string> = {
   label: string;
   active: boolean;
   onSelect: (value: T) => void;
-  groupId: string;
   iconSrc?: string;
 };
 
@@ -296,7 +289,6 @@ function FilterPill<T extends string>({
   label,
   active,
   onSelect,
-  groupId,
   iconSrc,
 }: FilterPillProps<T>) {
   const handleClick = useCallback(() => {
@@ -307,20 +299,25 @@ function FilterPill<T extends string>({
     <button
       type="button"
       onClick={handleClick}
+      aria-pressed={active}
       className={cn(
-        "relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",
+        "relative inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-[border-color,color,background-color] duration-200",
         active
-          ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          ? "border-border/70 bg-muted text-foreground"
+          : "border-transparent text-muted-foreground hover:border-border/50 hover:bg-muted/50 hover:text-foreground",
       )}
     >
-      {active && (
-        <motion.span
-          layoutId={`filter-pill-${groupId}`}
-          className="bg-muted border-border/60 absolute inset-0 rounded-full border"
-          transition={FILTER_PILL_TRANSITION}
-        />
-      )}
+      <AnimatePresence initial={false}>
+        {active ? (
+          <motion.span
+            initial={ACTIVE_PILL_MOTION.initial}
+            animate={ACTIVE_PILL_MOTION.animate}
+            exit={ACTIVE_PILL_MOTION.exit}
+            transition={FILTER_PILL_TRANSITION}
+            className="bg-muted absolute inset-0 rounded-full"
+          />
+        ) : null}
+      </AnimatePresence>
       {iconSrc ? (
         <span className="relative">
           <Image src={iconSrc} alt={value} width={14} height={14} className="size-3.5" />
@@ -338,60 +335,39 @@ function TemplatesPageContent() {
   const previewId = searchParams.get("preview");
 
   const [search, setSearch] = useState("");
-  const [activeIndustry, setActiveIndustry] = useState<string | null>(null);
-  const [activeUseCase, setActiveUseCase] = useState<string | null>(null);
-  const [activeIntegration, setActiveIntegration] = useState<IntegrationType | null>(null);
+  const [activeIndustries, setActiveIndustries] = useState<string[]>([]);
+  const [activeUseCases, setActiveUseCases] = useState<string[]>([]);
+  const [activeIntegrations, setActiveIntegrations] = useState<IntegrationType[]>([]);
 
   const clearFilters = useCallback(() => {
-    setActiveIndustry(null);
-    setActiveUseCase(null);
-    setActiveIntegration(null);
+    setActiveIndustries([]);
+    setActiveUseCases([]);
+    setActiveIntegrations([]);
   }, []);
 
-  const toggleIndustry = useCallback(
-    (industry: string) => {
-      clearFilters();
-      setActiveIndustry((prev) => (prev === industry ? null : industry));
-    },
-    [clearFilters],
-  );
+  const toggleIndustry = useCallback((industry: string) => {
+    setActiveIndustries((prev) => toggleMultiSelect(prev, industry));
+  }, []);
 
-  const toggleUseCase = useCallback(
-    (useCase: string) => {
-      clearFilters();
-      setActiveUseCase((prev) => (prev === useCase ? null : useCase));
-    },
-    [clearFilters],
-  );
+  const toggleUseCase = useCallback((useCase: string) => {
+    setActiveUseCases((prev) => toggleMultiSelect(prev, useCase));
+  }, []);
 
-  const toggleIntegration = useCallback(
-    (integration: IntegrationType) => {
-      clearFilters();
-      setActiveIntegration((prev) => (prev === integration ? null : integration));
-    },
-    [clearFilters],
-  );
+  const toggleIntegration = useCallback((integration: IntegrationType) => {
+    setActiveIntegrations((prev) => toggleMultiSelect(prev, integration));
+  }, []);
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    return TEMPLATES.filter((t) => {
-      if (activeIndustry && t.industry !== activeIndustry) {
-        return false;
-      }
-      if (activeUseCase && t.useCase !== activeUseCase) {
-        return false;
-      }
-      if (activeIntegration && !t.integrations.includes(activeIntegration)) {
-        return false;
-      }
-      if (q && !t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) {
-        return false;
-      }
-      return true;
+    return filterTemplates(TEMPLATES, {
+      search,
+      industries: activeIndustries,
+      useCases: activeUseCases,
+      integrations: activeIntegrations,
     });
-  }, [search, activeIndustry, activeUseCase, activeIntegration]);
+  }, [search, activeIndustries, activeUseCases, activeIntegrations]);
 
-  const hasActiveFilter = activeIndustry || activeUseCase || activeIntegration;
+  const hasActiveFilter =
+    activeIndustries.length > 0 || activeUseCases.length > 0 || activeIntegrations.length > 0;
   const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
   }, []);
@@ -432,9 +408,8 @@ function TemplatesPageContent() {
                   key={industry}
                   value={industry}
                   label={industry}
-                  active={activeIndustry === industry}
+                  active={activeIndustries.includes(industry)}
                   onSelect={toggleIndustry}
-                  groupId="industry"
                 />
               ))}
             </div>
@@ -449,9 +424,8 @@ function TemplatesPageContent() {
                   key={useCase}
                   value={useCase}
                   label={useCase}
-                  active={activeUseCase === useCase}
+                  active={activeUseCases.includes(useCase)}
                   onSelect={toggleUseCase}
-                  groupId="usecase"
                 />
               ))}
             </div>
@@ -466,9 +440,8 @@ function TemplatesPageContent() {
                   key={integration}
                   value={integration}
                   label={INTEGRATION_DISPLAY_NAMES[integration]}
-                  active={activeIntegration === integration}
+                  active={activeIntegrations.includes(integration)}
                   onSelect={toggleIntegration}
-                  groupId="integration"
                   iconSrc={INTEGRATION_LOGOS[integration]}
                 />
               ))}
