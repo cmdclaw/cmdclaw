@@ -409,7 +409,7 @@ function SkillsPageContent() {
           <div className="min-w-0">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">Skills</h1>
             <p className="text-muted-foreground mt-2 text-sm">
-              Extend your agent with pre-built and custom capabilities
+              Extend your coworker with pre-built and custom capabilities
             </p>
           </div>
           <Button onClick={handleCreate} disabled={isCreating} className="self-start">
@@ -479,7 +479,7 @@ function SkillsPageContent() {
             <FileText className="text-muted-foreground/50 mx-auto h-12 w-12" />
             <h3 className="mt-4 text-lg font-medium">No custom skills yet</h3>
             <p className="text-muted-foreground mt-1 text-sm">
-              Create your first skill to teach the AI agent new capabilities.
+              Create your first skill to teach your coworker new capabilities.
             </p>
             <Button className="mt-4" onClick={handleCreate} disabled={isCreating}>
               {isCreating ? (

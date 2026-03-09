@@ -150,10 +150,10 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
 
       {/* ── Below hero: single-column content ── */}
       <div className="space-y-14">
-        {/* ── Agent instructions ── */}
+        {/* ── Coworker instructions ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">Agent Instructions</h2>
+            <h2 className="text-sm font-semibold">Coworker Instructions</h2>
             <p className="text-muted-foreground mt-1 text-xs">
               Trigger details and execution steps
             </p>
@@ -242,7 +242,7 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
         <section className="flex justify-center pt-2 pb-4">
           <Button asChild className="gap-1.5 rounded-lg px-8">
             <Link href={`/coworkers?template=${template.id}`}>
-              Deploy the agent
+              Deploy the coworker
               <ArrowRight className="size-3.5" />
             </Link>
           </Button>

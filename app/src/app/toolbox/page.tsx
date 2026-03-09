@@ -1004,7 +1004,7 @@ function ToolboxPageContent() {
           <div className="min-w-0">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">Toolbox</h1>
             <p className="text-muted-foreground mt-2 text-sm">
-              Integrations, skills, and capabilities for your agent
+              Integrations, skills, and capabilities for your coworker
             </p>
           </div>
           <Button onClick={handleCreateSkill} disabled={isCreating} className="self-start">
@@ -1132,7 +1132,7 @@ function ToolboxPageContent() {
                 <div>
                   <h2 className="text-sm font-semibold">Integrations</h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    Connect external services to your agent
+                    Connect external services to your coworker
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">

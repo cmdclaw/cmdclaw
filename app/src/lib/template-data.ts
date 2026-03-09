@@ -50,7 +50,7 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
       "If contact exists, associate task to contact using HUBSPOT_DEFINED association type 204.",
       "If no contact is found, skip Gmail draft and still create the HubSpot task with the phone number in the body.",
     ],
-    heroCta: "Deploy this template",
+    heroCta: "Deploy this coworker",
     summaryBlocks: [
       {
         title: "Capture new call transcript",

@@ -94,7 +94,7 @@ const TEMPLATES: TemplateItem[] = [
     id: "meeting-prep",
     title: "Know who you meet in your next sales call",
     description:
-      "Walk into every call already knowing who they are and what they care about. Let your agent do the homework you never…",
+      "Walk into every call already knowing who they are and what they care about. Let your coworker do the homework you never…",
     triggerType: "schedule",
     integrations: ["google_calendar", "linkedin", "slack"],
     industry: "Sales",

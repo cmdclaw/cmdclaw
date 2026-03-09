@@ -946,7 +946,7 @@ export default function CoworkerEditorPage() {
             <AlertDialogTitle>Turn off auto-approve?</AlertDialogTitle>
             <AlertDialogDescription>
               If you turn this off, coworker runs can stop and wait for manual approval on write
-              actions. The agent might stay stuck until someone approves in the UI.
+              actions. The coworker might stay stuck until someone approves in the UI.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1237,7 +1237,7 @@ function CoworkerSettingsPanel({
                 className="text-foreground placeholder:text-muted-foreground/60 min-h-[140px] w-full resize-none rounded-lg border-0 bg-transparent px-0 py-0 text-sm leading-relaxed focus:outline-none"
                 value={prompt}
                 onChange={onPromptChange}
-                placeholder="Describe what this agent should do…"
+                placeholder="Describe what this coworker should do…"
               />
             </Section>
 
