@@ -7,6 +7,10 @@ bun install
 bun run dev
 ```
 
+### Self-Hosting
+
+See [SELF_HOSTING.md](./SELF_HOSTING.md) for the Docker Compose deployment.
+
 Optional sandbox runtime selector:
 
 - `SANDBOX_AGENT_RUNTIME=agentsdk` (default): run `sandbox-agent` and connect via OpenCode-compatible `/opencode` endpoints.

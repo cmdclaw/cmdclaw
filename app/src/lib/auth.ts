@@ -11,6 +11,7 @@ import {
 } from "better-auth/plugins";
 import { Resend } from "resend";
 import { env } from "@/env";
+import { getTrustedOrigins } from "@/lib/trusted-origins";
 import { db } from "@/server/db/client";
 import { authSchema } from "@/server/db/schema";
 
@@ -47,16 +48,7 @@ export const auth = betterAuth({
       appBundleIdentifier: env.APPLE_APP_BUNDLE_IDENTIFIER,
     },
   },
-  trustedOrigins: [
-    "https://appleid.apple.com",
-    "https://cmdclaw.ai",
-    "https://www.cmdclaw.ai",
-    "https://app.cmdclaw.ai",
-    `http://localhost:${process.env.PORT ?? 3000}`,
-    `http://127.0.0.1:${process.env.PORT ?? 3000}`,
-    "https://localcan.baptistecolle.com",
-    "cmdclaw://",
-  ],
+  trustedOrigins: getTrustedOrigins(),
   // Don't forget to regenerate the schema if you add a new plugin
   // Run "bun auth:generate" to regenerate the schema
   plugins: [

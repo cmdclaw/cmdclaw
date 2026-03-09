@@ -1,17 +1,13 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "@/env";
 import { auth } from "@/lib/auth";
+import { getTrustedOrigins } from "@/lib/trusted-origins";
 
-const trustedOrigins = new Set([
-  "https://app.cmdclaw.ai",
-  "https://cmdclaw.ai",
-  "https://www.cmdclaw.ai",
-  "https://localcan.baptistecolle.com",
-  `http://localhost:${process.env.PORT ?? 3000}`,
-  `http://127.0.0.1:${process.env.PORT ?? 3000}`,
-]);
+const trustedOrigins = new Set(getTrustedOrigins());
 
-const DEFAULT_ALLOWED_ORIGIN = "https://app.cmdclaw.ai";
+const DEFAULT_ALLOWED_ORIGIN =
+  env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 function getCorsHeaders(origin: string | null) {
   const isAllowed = origin && trustedOrigins.has(origin);
