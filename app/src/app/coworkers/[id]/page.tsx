@@ -917,7 +917,7 @@ export default function CoworkerEditorPage() {
 
   if (isLoading || !coworker) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
