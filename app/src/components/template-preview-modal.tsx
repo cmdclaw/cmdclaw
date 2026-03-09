@@ -1,27 +1,19 @@
 "use client";
 
 import { Maximize2, X } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { TemplateDetailContent } from "@/components/template-detail-content";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getTemplateById } from "@/lib/template-data";
-
-const BACKDROP_MOTION = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1 },
-  exit: { opacity: 0 },
-  transition: { duration: 0.2 },
-} as const;
-
-const WINDOW_MOTION = {
-  initial: { opacity: 0, scale: 0.96, y: 12 },
-  animate: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.96, y: 12 },
-  transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
-} as const;
 
 export function TemplatePreviewModal({
   templateId,
@@ -37,44 +29,18 @@ export function TemplatePreviewModal({
     router.push(closeHref, { scroll: false });
   }, [closeHref, router]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!templateId) {
-      return;
-    }
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
         close();
       }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [templateId, close]);
+    },
+    [close],
+  );
 
-  // Lock body scroll when open
-  useEffect(() => {
-    if (!templateId) {
-      return;
-    }
-    const scrollContainer = document.querySelector<HTMLElement>(".app-shell-scroll-container");
-    const prevBodyOverflow = document.body.style.overflow;
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-    const prevContainerOverflow = scrollContainer?.style.overflow;
-
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-    if (scrollContainer) {
-      scrollContainer.style.overflow = "hidden";
-    }
-
-    return () => {
-      document.body.style.overflow = prevBodyOverflow;
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      if (scrollContainer) {
-        scrollContainer.style.overflow = prevContainerOverflow ?? "";
-      }
-    };
-  }, [templateId]);
+  const handleOpenAutoFocus = useCallback((event: Event) => {
+    event.preventDefault();
+  }, []);
 
   // Reset scroll position when template changes
   useEffect(() => {
@@ -85,67 +51,58 @@ export function TemplatePreviewModal({
 
   const template = templateId ? getTemplateById(templateId) : null;
 
+  if (!template) {
+    return null;
+  }
+
   return (
-    <AnimatePresence>
-      {template && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            key="backdrop"
-            initial={BACKDROP_MOTION.initial}
-            animate={BACKDROP_MOTION.animate}
-            exit={BACKDROP_MOTION.exit}
-            transition={BACKDROP_MOTION.transition}
-            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
-            onClick={close}
-          />
+    <Dialog open onOpenChange={handleOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        onOpenAutoFocus={handleOpenAutoFocus}
+        className="border-border/60 bg-background top-1/2 flex h-[min(92dvh,960px)] w-[min(96vw,1400px)] max-w-none -translate-y-1/2 flex-col gap-0 overflow-hidden rounded-2xl border p-0 shadow-2xl sm:w-[min(92vw,1400px)]"
+      >
+        <div className="border-border/40 bg-muted/30 flex shrink-0 items-center justify-between border-b px-5 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="bg-muted size-2.5 rounded-full" />
+            <DialogTitle className="text-muted-foreground max-w-[400px] truncate text-xs font-medium">
+              {template.title}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Preview the full template details before opening the standalone template page.
+            </DialogDescription>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              asChild
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Link href={`/template/${template.id}`} aria-label="Open full page">
+                <Maximize2 className="size-4" />
+              </Link>
+            </Button>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted -mr-1.5 flex size-7 items-center justify-center rounded-lg transition-colors"
+                aria-label="Close preview"
+              >
+                <X className="size-4" />
+              </button>
+            </DialogClose>
+          </div>
+        </div>
 
-          {/* Window */}
-          <motion.div
-            key="window"
-            initial={WINDOW_MOTION.initial}
-            animate={WINDOW_MOTION.animate}
-            exit={WINDOW_MOTION.exit}
-            transition={WINDOW_MOTION.transition}
-            className="bg-background border-border/60 fixed inset-0 z-50 m-auto flex h-[85vh] w-[85vw] max-w-[1200px] flex-col overflow-hidden rounded-2xl border shadow-2xl"
-          >
-            {/* Title bar */}
-            <div className="border-border/40 bg-muted/30 flex shrink-0 items-center justify-between border-b px-5 py-3">
-              <div className="flex items-center gap-2.5">
-                <div className="bg-muted size-2.5 rounded-full" />
-                <span className="text-muted-foreground max-w-[400px] truncate text-xs font-medium">
-                  {template.title}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  asChild
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Link href={`/template/${template.id}`} aria-label="Open full page">
-                    <Maximize2 className="size-4" />
-                  </Link>
-                </Button>
-                <button
-                  onClick={close}
-                  className="text-muted-foreground hover:text-foreground hover:bg-muted -mr-1.5 flex size-7 items-center justify-center rounded-lg transition-colors"
-                  aria-label="Close preview"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Scrollable content */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 pt-10 pb-16">
-              <TemplateDetailContent template={template} />
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto overscroll-contain px-6 pt-8 pb-16 md:px-8 md:pt-10"
+        >
+          <TemplateDetailContent template={template} />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
