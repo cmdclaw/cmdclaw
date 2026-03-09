@@ -19,6 +19,7 @@ import {
 } from "@/server/ai/opencode-models";
 import { parseBashCommand } from "@/server/ai/permission-checker";
 import { getProviderModels } from "@/server/ai/subscription-providers";
+import { trackGenerationBilling } from "@/server/billing/service";
 import { db } from "@/server/db/client";
 import {
   conversation,
@@ -87,6 +88,7 @@ import { writeSessionTranscriptFromConversation } from "@/server/services/memory
 import { resolveSelectedPlatformSkillSlugs } from "@/server/services/platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "@/server/services/sandbox-file-service";
 import { SESSION_BOUNDARY_PREFIX } from "@/server/services/session-constants";
+import { sendTaskDonePush } from "@/server/services/web-push-service";
 import { generateConversationTitle } from "@/server/utils/generate-title";
 import { createTraceId, logServerEvent } from "@/server/utils/observability";
 import { isStatelessServerlessRuntime } from "@/server/utils/runtime-platform";
@@ -1246,7 +1248,7 @@ class GenerationManager {
           allowed: false,
           reason: "openai_not_connected",
           userMessage:
-            "This ChatGPT model requires an active ChatGPT subscription connection. Connect it in Settings > Subscriptions, then retry.",
+            "This ChatGPT model requires a connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
         };
       }
       const allowedIDs = new Set(getProviderModels("openai").map((model) => model.id));
@@ -1271,7 +1273,7 @@ class GenerationManager {
           allowed: false,
           reason: "kimi_not_connected",
           userMessage:
-            "This Kimi model requires a connected Kimi API key in Settings > Subscriptions.",
+            "This Kimi model requires a connected Kimi API key in Settings > Connected AI Account.",
         };
       }
       const allowedIDs = new Set(getProviderModels("kimi").map((model) => model.id));
@@ -1513,10 +1515,20 @@ class GenerationManager {
       isNewConversation = true;
       const resolvedModel = requestedModel ?? DEFAULT_MODEL_REFERENCE;
       const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+      const dbUser =
+        "user" in db.query
+          ? await db.query.user.findFirst({
+              where: eq(user.id, userId),
+              columns: {
+                activeWorkspaceId: true,
+              },
+            })
+          : null;
       const [newConv] = await db
         .insert(conversation)
         .values({
           userId,
+          workspaceId: dbUser?.activeWorkspaceId ?? null,
           title,
           type: "chat",
           model: resolvedModel,
@@ -5695,6 +5707,7 @@ class GenerationManager {
       // where readers observe status changes before terminal events are available.
 
       let messageId: string | undefined;
+      let completedAssistantContent: string | undefined;
       const shouldPersistErrorAssistantMessage = status === "error";
 
       if (status === "completed" || status === "cancelled" || shouldPersistErrorAssistantMessage) {
@@ -5803,6 +5816,7 @@ class GenerationManager {
           .returning();
 
         messageId = assistantMessage.id;
+        completedAssistantContent = assistantMessage.content;
 
         // Link uploaded sandbox files to the final assistant message
         const uploadedFileIds = Array.from(ctx.uploadedSandboxFileIds || []);
@@ -5860,6 +5874,24 @@ class GenerationManager {
         })
         .where(eq(conversation.id, ctx.conversationId));
 
+      if (status === "completed") {
+        try {
+          const sandboxRuntimeMs = ctx.sandboxId
+            ? Math.max(0, Date.now() - ctx.startedAt.getTime())
+            : 0;
+          await trackGenerationBilling({
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            model: ctx.model,
+            inputTokens: ctx.usage.inputTokens,
+            outputTokens: ctx.usage.outputTokens,
+            sandboxRuntimeMs,
+          });
+        } catch (error) {
+          console.error("[GenerationManager] Failed to track billing:", error);
+        }
+      }
+
       if (ctx.coworkerRunId) {
         await db
           .update(coworkerRun)
@@ -5885,6 +5917,22 @@ class GenerationManager {
           usage: ctx.usage,
           artifacts,
         });
+
+        try {
+          await sendTaskDonePush({
+            userId: ctx.userId,
+            conversationId: ctx.conversationId,
+            messageId,
+            content: completedAssistantContent,
+          });
+        } catch (error) {
+          console.error("[GenerationManager] Failed to send task completion push", {
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+            error,
+          });
+        }
       } else if (status === "cancelled") {
         this.broadcast(ctx, {
           type: "cancelled",

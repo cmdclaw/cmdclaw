@@ -25,8 +25,11 @@ const me = protectedProcedure.handler(async ({ context }) => {
     name: context.user.name,
     email: context.user.email,
     image: context.user.image,
+    role: dbUser?.role ?? "user",
     onboardedAt: dbUser?.onboardedAt ?? null,
     timezone: dbUser?.timezone ?? null,
+    activeWorkspaceId: dbUser?.activeWorkspaceId ?? null,
+    billingPlanId: dbUser?.billingPlanId ?? "free",
   };
 });
 

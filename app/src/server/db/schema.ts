@@ -23,6 +23,9 @@ export const user = pgTable("user", {
   phoneNumber: text("phone_number"),
   timezone: text("timezone"),
   defaultForwardedCoworkerId: text("default_forwarded_coworker_id"),
+  activeWorkspaceId: text("active_workspace_id"),
+  billingPlanId: text("billing_plan_id").default("free").notNull(),
+  autumnCustomerId: text("autumn_customer_id"),
   role: text("role").default("user"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
@@ -95,10 +98,69 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const workspaceMembershipRoleEnum = pgEnum("workspace_membership_role", [
+  "owner",
+  "admin",
+  "member",
+]);
+
+export const billingOwnerTypeEnum = pgEnum("billing_owner_type", ["user", "workspace"]);
+
+export const workspace = pgTable(
+  "workspace",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    slug: text("slug"),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    billingPlanId: text("billing_plan_id").default("business").notNull(),
+    autumnCustomerId: text("autumn_customer_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [uniqueIndex("workspace_slug_idx").on(table.slug)],
+);
+
+export const workspaceMember = pgTable(
+  "workspace_member",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: workspaceMembershipRoleEnum("role").default("member").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("workspace_member_workspace_user_idx").on(table.workspaceId, table.userId),
+    index("workspace_member_user_idx").on(table.userId),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  webPushSubscriptions: many(webPushSubscription),
+  workspacesCreated: many(workspace),
+  workspaceMemberships: many(workspaceMember),
   conversations: many(conversation),
+  billingLedgers: many(billingLedger),
   integrations: many(integration),
   skills: many(skill),
   memoryFiles: many(memoryFile),
@@ -127,6 +189,61 @@ export const sessionRelations = relations(session, ({ one }) => ({
 export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
+    references: [user.id],
+  }),
+}));
+
+export const workspaceRelations = relations(workspace, ({ one, many }) => ({
+  createdByUser: one(user, {
+    fields: [workspace.createdByUserId],
+    references: [user.id],
+  }),
+  members: many(workspaceMember),
+  conversations: many(conversation),
+  billingLedgers: many(billingLedger),
+  billingTopUps: many(billingTopUp),
+}));
+
+export const workspaceMemberRelations = relations(workspaceMember, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [workspaceMember.workspaceId],
+    references: [workspace.id],
+  }),
+  user: one(user, {
+    fields: [workspaceMember.userId],
+    references: [user.id],
+  }),
+}));
+
+export const webPushSubscription = pgTable(
+  "web_push_subscription",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    expirationTime: timestamp("expiration_time"),
+    auth: text("auth").notNull(),
+    p256dh: text("p256dh").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("web_push_subscription_endpoint_idx").on(table.endpoint),
+    index("web_push_subscription_user_id_idx").on(table.userId),
+  ],
+);
+
+export const webPushSubscriptionRelations = relations(webPushSubscription, ({ one }) => ({
+  user: one(user, {
+    fields: [webPushSubscription.userId],
     references: [user.id],
   }),
 }));
@@ -177,6 +294,7 @@ export const conversation = pgTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "set null" }),
     type: conversationTypeEnum("type").default("chat").notNull(),
     title: text("title").default("New conversation"),
     // OpenCode session ID for resuming conversations
@@ -208,6 +326,7 @@ export const conversation = pgTable(
   },
   (table) => [
     index("conversation_user_id_idx").on(table.userId),
+    index("conversation_workspace_id_idx").on(table.workspaceId),
     index("conversation_created_at_idx").on(table.createdAt),
     uniqueIndex("conversation_share_token_idx").on(table.shareToken),
   ],
@@ -393,6 +512,64 @@ export const generation = pgTable(
   (table) => [
     index("generation_conversation_id_idx").on(table.conversationId),
     index("generation_status_idx").on(table.status),
+  ],
+);
+
+export const billingLedger = pgTable(
+  "billing_ledger",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    generationId: text("generation_id").references(() => generation.id, {
+      onDelete: "set null",
+    }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    ownerType: billingOwnerTypeEnum("owner_type").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
+    autumnCustomerId: text("autumn_customer_id").notNull(),
+    planId: text("plan_id").notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").default(0).notNull(),
+    outputTokens: integer("output_tokens").default(0).notNull(),
+    sandboxRuntimeMs: integer("sandbox_runtime_ms").default(0).notNull(),
+    creditsCharged: integer("credits_charged").default(0).notNull(),
+    autumnTrackCode: text("autumn_track_code"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("billing_ledger_generation_id_idx").on(table.generationId),
+    index("billing_ledger_user_id_idx").on(table.userId),
+    index("billing_ledger_workspace_id_idx").on(table.workspaceId),
+    index("billing_ledger_conversation_id_idx").on(table.conversationId),
+  ],
+);
+
+export const billingTopUp = pgTable(
+  "billing_top_up",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    ownerType: billingOwnerTypeEnum("owner_type").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
+    grantedByUserId: text("granted_by_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    usdAmount: integer("usd_amount").notNull(),
+    creditsGranted: integer("credits_granted").notNull(),
+    autumnCustomerId: text("autumn_customer_id").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("billing_top_up_user_id_idx").on(table.userId),
+    index("billing_top_up_workspace_id_idx").on(table.workspaceId),
+    index("billing_top_up_granted_by_idx").on(table.grantedByUserId),
   ],
 );
 
@@ -655,8 +832,13 @@ export const integrationToken = pgTable(
 
 export const conversationRelations = relations(conversation, ({ one, many }) => ({
   user: one(user, { fields: [conversation.userId], references: [user.id] }),
+  workspace: one(workspace, {
+    fields: [conversation.workspaceId],
+    references: [workspace.id],
+  }),
   messages: many(message),
   generations: many(generation),
+  billingLedgers: many(billingLedger),
   queuedMessages: many(conversationQueuedMessage),
 }));
 
@@ -744,6 +926,41 @@ export const generationRelations = relations(generation, ({ one }) => ({
   message: one(message, {
     fields: [generation.messageId],
     references: [message.id],
+  }),
+}));
+
+export const billingLedgerRelations = relations(billingLedger, ({ one }) => ({
+  generation: one(generation, {
+    fields: [billingLedger.generationId],
+    references: [generation.id],
+  }),
+  conversation: one(conversation, {
+    fields: [billingLedger.conversationId],
+    references: [conversation.id],
+  }),
+  user: one(user, {
+    fields: [billingLedger.userId],
+    references: [user.id],
+  }),
+  workspace: one(workspace, {
+    fields: [billingLedger.workspaceId],
+    references: [workspace.id],
+  }),
+}));
+
+export const billingTopUpRelations = relations(billingTopUp, ({ one }) => ({
+  user: one(user, {
+    fields: [billingTopUp.userId],
+    references: [user.id],
+  }),
+  workspace: one(workspace, {
+    fields: [billingTopUp.workspaceId],
+    references: [workspace.id],
+  }),
+  grantedByUser: one(user, {
+    fields: [billingTopUp.grantedByUserId],
+    references: [user.id],
+    relationName: "billingTopUpGrantedByUser",
   }),
 }));
 

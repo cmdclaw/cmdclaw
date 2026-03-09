@@ -46,7 +46,7 @@ export const SUBSCRIPTION_PROVIDERS: Record<SubscriptionProviderID, Subscription
   openai: {
     authType: "oauth",
     name: "ChatGPT",
-    description: "Use your ChatGPT Plus/Pro/Max subscription",
+    description: "Use your ChatGPT Plus/Pro/Max account",
     // OpenAI PKCE client — no secret needed
     clientId: "app_EMoamEEZ73f0CkXaXp7hrann",
     authUrl: "https://auth.openai.com/oauth/authorize",
@@ -65,7 +65,7 @@ export const SUBSCRIPTION_PROVIDERS: Record<SubscriptionProviderID, Subscription
   kimi: {
     authType: "api_key",
     name: "Kimi",
-    description: "Use your Kimi for Coding subscription",
+    description: "Use your Kimi for Coding account",
     docsUrl: "https://www.kimi.com/coding/docs/en/third-party-agents.html",
     apiKeyLabel: "KIMI_API_KEY",
     models: [

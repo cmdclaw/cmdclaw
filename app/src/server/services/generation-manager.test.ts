@@ -1056,7 +1056,7 @@ describe("generationManager transitions", () => {
         model: "openai/gpt-5.2-codex",
       }),
     ).rejects.toThrow(
-      "This ChatGPT model requires an active ChatGPT subscription connection. Connect it in Settings > Subscriptions, then retry.",
+      "This ChatGPT model requires a connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
     );
   });
 

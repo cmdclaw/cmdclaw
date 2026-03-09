@@ -938,6 +938,110 @@ export function useSetUserTimezone() {
   });
 }
 
+// ========== BILLING HOOKS ==========
+
+export function useBillingOverview() {
+  return useQuery({
+    queryKey: ["billing", "overview"],
+    queryFn: () => client.billing.overview(),
+  });
+}
+
+export function useCreateWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ name }: { name: string }) => client.billing.createWorkspace({ name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
+    },
+  });
+}
+
+export function useSwitchWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workspaceId: string | null) => client.billing.switchWorkspace({ workspaceId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+    },
+  });
+}
+
+export function useAttachBillingPlan() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      ownerType: "user" | "workspace";
+      workspaceId?: string;
+      planId: "free" | "pro" | "business" | "enterprise";
+      successUrl?: string;
+    }) => client.billing.attachPlan(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
+    },
+  });
+}
+
+export function useOpenBillingPortal() {
+  return useMutation({
+    mutationFn: (input: {
+      ownerType: "user" | "workspace";
+      workspaceId?: string;
+      returnUrl?: string;
+    }) => client.billing.openPortal(input),
+  });
+}
+
+export function useCancelBillingPlan() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      ownerType: "user" | "workspace";
+      workspaceId?: string;
+      productId: "pro" | "business" | "enterprise";
+    }) => client.billing.cancelPlan(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
+    },
+  });
+}
+
+export function useManualBillingTopUp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      ownerType: "user" | "workspace";
+      workspaceId?: string;
+      usdAmount: number;
+    }) => client.billing.manualTopUp(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+    },
+  });
+}
+
+export function useInviteWorkspaceMembers() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; emails: string[]; role?: "admin" | "member" }) =>
+      client.billing.inviteMembers(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+    },
+  });
+}
+
 // ========== PROVIDER AUTH HOOKS ==========
 
 type SubscriptionProvider = "openai" | "google" | "kimi";

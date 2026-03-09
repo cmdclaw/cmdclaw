@@ -11,10 +11,10 @@ export const env = createEnv({
     APP_URL: z.url().optional(),
     DATABASE_URL: z.url(),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    RESEND_API_KEY: z.string(),
-    RESEND_WEBHOOK_SECRET: z.string(),
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_WEBHOOK_SECRET: z.string().optional(),
     RESEND_RECEIVING_DOMAIN: z.string().optional(),
-    EMAIL_FROM: z.email(),
+    EMAIL_FROM: z.email().optional(),
     REDIS_URL: z.url(),
     OPENAI_API_KEY: z.string(),
     POSTHOG_API_KEY: z.string().optional(),
@@ -95,6 +95,9 @@ export const env = createEnv({
     COMMUNITY_REPO_GITHUB_TOKEN: z.string().optional(),
     COMMUNITY_REPO_OWNER: z.string().default("cmdclaw-community"),
     COMMUNITY_REPO_NAME: z.string().default("cmdclaw-community-integrations"),
+    WEB_PUSH_VAPID_SUBJECT: z.string().optional(),
+    WEB_PUSH_VAPID_PUBLIC_KEY: z.string().optional(),
+    WEB_PUSH_VAPID_PRIVATE_KEY: z.string().optional(),
   },
 
   /**
@@ -103,7 +106,7 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    NEXT_PUBLIC_APP_URL: z.url(),
+    NEXT_PUBLIC_APP_URL: z.url().optional(),
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().optional(),
   },
@@ -182,6 +185,9 @@ export const env = createEnv({
     COMMUNITY_REPO_GITHUB_TOKEN: process.env.COMMUNITY_REPO_GITHUB_TOKEN,
     COMMUNITY_REPO_OWNER: process.env.COMMUNITY_REPO_OWNER,
     COMMUNITY_REPO_NAME: process.env.COMMUNITY_REPO_NAME,
+    WEB_PUSH_VAPID_SUBJECT: process.env.WEB_PUSH_VAPID_SUBJECT,
+    WEB_PUSH_VAPID_PUBLIC_KEY: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
+    WEB_PUSH_VAPID_PRIVATE_KEY: process.env.WEB_PUSH_VAPID_PRIVATE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,

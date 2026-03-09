@@ -1,4 +1,5 @@
 import { baseProcedure } from "./middleware";
+import { billingRouter } from "./routers/billing";
 import { conversationRouter } from "./routers/conversation";
 import { coworkerRouter } from "./routers/coworker";
 import { deviceRouter } from "./routers/device";
@@ -6,6 +7,7 @@ import { generationRouter } from "./routers/generation";
 import { integrationRouter } from "./routers/integration";
 import { integrationSkillRouter } from "./routers/integration-skill";
 import { internalRouter } from "./routers/internal";
+import { notificationRouter } from "./routers/notification";
 import { providerAuthRouter } from "./routers/provider-auth";
 import { skillRouter } from "./routers/skill";
 import { userRouter } from "./routers/user";
@@ -17,12 +19,14 @@ const ping = baseProcedure.handler(async () => ({
 }));
 
 export const appRouter = {
+  billing: billingRouter,
   conversation: conversationRouter,
   device: deviceRouter,
   generation: generationRouter,
   integration: integrationRouter,
   integrationSkill: integrationSkillRouter,
   internal: internalRouter,
+  notification: notificationRouter,
   providerAuth: providerAuthRouter,
   skill: skillRouter,
   user: userRouter,

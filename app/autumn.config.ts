@@ -1,36 +1,69 @@
-import { feature, product, featureItem, priceItem } from "atmn";
+import { feature, featureItem, priceItem, product } from "atmn";
+import {
+  BILLING_CREDIT_FEATURE_ID,
+  BILLING_ORG_SUPPORT_FEATURE_ID,
+  BILLING_PLANS,
+  BILLING_SANDBOX_FEATURE_ID,
+} from "./src/lib/billing-plans";
 
-// Features
-export const messages = feature({
-  id: "messages",
-  name: "Messages",
+export const llmCredits = feature({
+  id: BILLING_CREDIT_FEATURE_ID,
+  name: "LLM Credits",
   type: "single_use",
 });
 
-export const e2bSandbox = feature({
-  id: "e2b_sandbox",
-  name: "E2B Cloud Sandbox",
+export const orgSupport = feature({
+  id: BILLING_ORG_SUPPORT_FEATURE_ID,
+  name: "Organization Support",
   type: "boolean",
 });
 
-// Products
+export const cloudSandbox = feature({
+  id: BILLING_SANDBOX_FEATURE_ID,
+  name: "Cloud Sandbox",
+  type: "boolean",
+});
+
 export const free = product({
-  id: "free",
-  name: "Free",
+  id: BILLING_PLANS.free.id,
+  name: BILLING_PLANS.free.name,
   is_default: true,
   items: [],
 });
 
 export const pro = product({
-  id: "pro",
-  name: "Pro",
+  id: BILLING_PLANS.pro.id,
+  name: BILLING_PLANS.pro.name,
   items: [
     featureItem({
-      feature_id: messages.id,
-      included_usage: 10000,
+      feature_id: llmCredits.id,
+      included_usage: BILLING_PLANS.pro.includedCredits,
       interval: "month",
     }),
-    featureItem({ feature_id: e2bSandbox.id }),
-    priceItem({ price: 30, interval: "month" }),
+    featureItem({ feature_id: cloudSandbox.id }),
+    priceItem({ price: BILLING_PLANS.pro.monthlyPriceUsd ?? 0, interval: "month" }),
   ],
+});
+
+export const business = product({
+  id: BILLING_PLANS.business.id,
+  name: BILLING_PLANS.business.name,
+  items: [
+    featureItem({
+      feature_id: llmCredits.id,
+      included_usage: BILLING_PLANS.business.includedCredits,
+      interval: "month",
+    }),
+    featureItem({ feature_id: orgSupport.id }),
+    featureItem({ feature_id: cloudSandbox.id }),
+    priceItem({ price: BILLING_PLANS.business.monthlyPriceUsd ?? 0, interval: "month" }),
+  ],
+});
+
+// Autumn's current typed config surface does not expose rollover metadata,
+// so the app stores rollover policy in checked-in plan metadata and the UI.
+export const enterprise = product({
+  id: BILLING_PLANS.enterprise.id,
+  name: BILLING_PLANS.enterprise.name,
+  items: [featureItem({ feature_id: orgSupport.id }), featureItem({ feature_id: cloudSandbox.id })],
 });
