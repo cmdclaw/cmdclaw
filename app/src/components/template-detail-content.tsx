@@ -1,20 +1,57 @@
 "use client";
 
-import { ArrowRight, Play, Link2, Share2 } from "lucide-react";
+import { ArrowRight, Check, Link2, Play, Share2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS } from "@/lib/integration-icons";
 import { type TemplateContent, base64Url } from "@/lib/template-data";
 
 export function TemplateDetailContent({ template }: { template: TemplateContent }) {
+  const [copied, setCopied] = useState(false);
   const mermaidImage = `https://mermaid.ink/img/${base64Url(template.mermaid)}?bgColor=f8f8f8`;
+  const templatePath = `/template/${template.id}`;
 
   const integrationIcons = template.connectedApps
     .filter((app) => app.integration)
     .map((app) => app.integration!);
   const extraCount = template.connectedApps.filter((app) => !app.integration).length;
+
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  const getTemplateUrl = useCallback(() => {
+    if (typeof window === "undefined") {
+      return templatePath;
+    }
+    return `${window.location.origin}${templatePath}`;
+  }, [templatePath]);
+
+  const copyTemplateLink = useCallback(async () => {
+    await navigator.clipboard.writeText(getTemplateUrl());
+    setCopied(true);
+  }, [getTemplateUrl]);
+
+  const shareTemplateLink = useCallback(async () => {
+    const url = getTemplateUrl();
+    if (navigator.share) {
+      await navigator.share({
+        title: template.title,
+        text: template.description,
+        url,
+      });
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+  }, [getTemplateUrl, template.description, template.title]);
 
   return (
     <div className="mx-auto max-w-3xl pb-8">
@@ -86,11 +123,21 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
                 Share
               </p>
               <div className="flex items-center gap-3">
-                <button className="text-muted-foreground hover:text-foreground transition-colors">
-                  <Link2 className="size-4" />
+                <button
+                  type="button"
+                  onClick={copyTemplateLink}
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+                >
+                  {copied ? <Check className="size-4" /> : <Link2 className="size-4" />}
+                  {copied ? "Copied" : "Copy link"}
                 </button>
-                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                <button
+                  type="button"
+                  onClick={shareTemplateLink}
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+                >
                   <Share2 className="size-4" />
+                  Share
                 </button>
               </div>
             </div>
@@ -100,16 +147,10 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
         {/* Coworker summary */}
         <div>
           <section>
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5">
               <div>
                 <h2 className="text-sm font-semibold">What this coworker does</h2>
                 <p className="text-muted-foreground mt-1 text-xs">Step-by-step breakdown</p>
-              </div>
-              <div className="border-border/50 bg-muted/50 inline-flex rounded-lg border p-0.5 text-xs">
-                <span className="bg-card text-foreground rounded-md px-2.5 py-1 font-medium shadow-sm">
-                  Summary
-                </span>
-                <span className="text-muted-foreground px-2.5 py-1">Preview</span>
               </div>
             </div>
 

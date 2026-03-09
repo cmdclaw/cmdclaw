@@ -1,10 +1,12 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { TemplateDetailContent } from "@/components/template-detail-content";
+import { Button } from "@/components/ui/button";
 import { getTemplateById } from "@/lib/template-data";
 
 const BACKDROP_MOTION = {
@@ -54,10 +56,23 @@ export function TemplatePreviewModal({
     if (!templateId) {
       return;
     }
-    const prev = document.body.style.overflow;
+    const scrollContainer = document.querySelector<HTMLElement>(".app-shell-scroll-container");
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevContainerOverflow = scrollContainer?.style.overflow;
+
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    if (scrollContainer) {
+      scrollContainer.style.overflow = "hidden";
+    }
+
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      if (scrollContainer) {
+        scrollContainer.style.overflow = prevContainerOverflow ?? "";
+      }
     };
   }, [templateId]);
 
@@ -102,12 +117,26 @@ export function TemplatePreviewModal({
                   {template.title}
                 </span>
               </div>
-              <button
-                onClick={close}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted -mr-1.5 flex size-7 items-center justify-center rounded-lg transition-colors"
-              >
-                <X className="size-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <Button
+                  asChild
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Link href={`/template/${template.id}`} aria-label="Open full page">
+                    <Maximize2 className="size-4" />
+                  </Link>
+                </Button>
+                <button
+                  onClick={close}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted -mr-1.5 flex size-7 items-center justify-center rounded-lg transition-colors"
+                  aria-label="Close preview"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
             </div>
 
             {/* Scrollable content */}
