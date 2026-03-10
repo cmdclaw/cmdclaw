@@ -18,4 +18,4 @@ services:
       - uptime-kuma
     working_dir: /workspace/app
     volumes:
-      - ../../app:/workspace/app
+      - ../../apps/web:/workspace/app

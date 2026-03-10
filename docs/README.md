@@ -1,1 +1,1 @@
-mint dev --port 3333
+bun run dev
