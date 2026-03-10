@@ -55,8 +55,7 @@ cmdclaw/
 ├── apps/
 │   ├── web/      # Next.js web app
 │   ├── desktop/  # Electron wrapper
-│   ├── worker/   # BullMQ worker runtime
-│   └── ws/       # WebSocket runtime
+│   └── worker/   # BullMQ worker runtime
 ├── packages/
 │   ├── config/   # Shared tooling config
 │   ├── core/     # Shared runtime logic
@@ -96,7 +95,7 @@ bun db:push
 # Seed the database (optional)
 bun db:seed
 
-# Start the web app, worker, and WS runtime
+# Start the web app and worker
 bun dev
 ```
 
@@ -112,8 +111,8 @@ bun dev:docs        # Start the docs site
 bun build           # Production build for all workspaces
 bun db:studio       # Open Drizzle Studio
 bun db:push         # Push schema changes
-bun start:worker    # Start the background job worker
-bun start:ws        # Start the WebSocket server
+bun start:worker    # Start the background job worker (loads apps/web/.env)
+bun start:ws        # Start the WebSocket server (loads apps/web/.env)
 bun check           # Run workspace checks
 bun test            # Run workspace tests
 ```

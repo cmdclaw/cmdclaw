@@ -9,8 +9,13 @@ const posthogProxyPath = "/_cmdclaw_lattice";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: "standalone",
   reactCompiler: true,
   transpilePackages: ["@cmdclaw/core", "@cmdclaw/db"],
+  typescript: {
+    ignoreBuildErrors: true,
+    tsconfigPath: "./tsconfig.build.json",
+  },
   images: {
     remotePatterns: [{ hostname: "lh3.googleusercontent.com" }],
   },

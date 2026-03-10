@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "bunx mint dev --port 3333"
+    "dev": "bunx mint dev --port 3333",
+    "build": "bunx mint validate",
+    "check": "bunx mint validate"
   }
 }

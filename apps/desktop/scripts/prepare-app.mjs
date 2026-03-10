@@ -33,7 +33,7 @@ async function copyIfExists(src, dest) {
 
 if (!(await exists(standaloneSrc))) {
   throw new Error(
-    `Missing Next standalone output at ${standaloneSrc}. Run desktop build (it sets NEXT_PRIVATE_STANDALONE=true for app build).`
+    `Missing Next standalone output at ${standaloneSrc}. Build apps/web before preparing the desktop bundle.`
   );
 }
 

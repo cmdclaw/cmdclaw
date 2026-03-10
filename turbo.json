@@ -26,6 +26,9 @@
         "app-bundle/**"
       ]
     },
+    "@cmdclaw/docs#build": {
+      "outputs": []
+    },
     "check": {
       "dependsOn": [
         "^check"

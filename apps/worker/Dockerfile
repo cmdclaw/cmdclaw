@@ -7,7 +7,6 @@ COPY package.json bun.lock turbo.json tsconfig.json ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/desktop/package.json ./apps/desktop/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
-COPY apps/ws/package.json ./apps/ws/package.json
 COPY docs/package.json ./docs/package.json
 COPY packages/config/package.json ./packages/config/package.json
 COPY packages/core/package.json ./packages/core/package.json

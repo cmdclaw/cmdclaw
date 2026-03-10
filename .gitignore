@@ -12,6 +12,7 @@ experiments/
 .agents
 
 .turbo*
+.turbo-prune-web
 
 node_modules
 

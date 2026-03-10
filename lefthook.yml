@@ -5,7 +5,7 @@ pre-commit:
     lint:
       run: bun run --cwd apps/web lint
     typecheck:
-      run: bun run check:web && bun run check:worker && bun run check:ws
+      run: bun run check:web && bun run check:worker
     format:
       run: bun run --cwd apps/web format:write
       stage_fixed: true

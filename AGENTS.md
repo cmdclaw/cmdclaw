@@ -3,7 +3,7 @@
 This repository is organized into several top-level folders. Each folder can have its own `AGENTS.md` with specific guidance for work in that area.
 
 ## Top-Level Structure
-- `apps/` - Deployable runtimes, including `apps/web`, `apps/desktop`, `apps/worker`, and `apps/ws`.
+- `apps/` - Deployable runtimes, including `apps/web`, `apps/desktop`, and `apps/worker`.
 - `apple/` - macOS and iOS SwiftUI applications.
 - `packages/` - Shared workspace packages such as config, core, and db.
 - `docs/` - Documentation site (Mintlify documentation).
@@ -21,7 +21,7 @@ try to colocated tests with the code they test when relevant. for collacting use
 
 ## Commit policy
 -  Do not commit unless the user explicitly asks.
--  Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
+-  Create commits with `tools/scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
 -  Follow concise, action-oriented commit messages (e.g., `CLI: add verbose flag to send`).
 -  Group related changes; avoid bundling unrelated refactors.
 -  **Multi-agent safety:** when the user says "push," you may `git pull --rebase` to integrate the latest changes (never discard other agents' work). When the user says "commit," scope to your changes only. When the user says "commit all," commit everything in grouped chunks.

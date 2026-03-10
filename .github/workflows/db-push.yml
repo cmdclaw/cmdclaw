@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'app/src/server/db/schema.ts'
+      - "packages/db/src/schema.ts"
+      - ".github/workflows/db-push.yml"
   workflow_dispatch:
 
 jobs:
@@ -21,11 +22,9 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        working-directory: app
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Push DB changes
-        working-directory: app
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SKIP_ENV_VALIDATION: "1"
