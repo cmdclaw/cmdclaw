@@ -3,14 +3,11 @@ pre-commit:
     secrets:
       run: gitleaks protect --staged --config .gitleaks.toml --redact
     lint:
-      root: app
-      run: bun run lint
+      run: bun run --cwd apps/web lint
     typecheck:
-      root: app
-      run: bun run typecheck
+      run: bun run check:web && bun run check:worker && bun run check:ws
     format:
-      root: app
-      run: bun run format:write
+      run: bun run --cwd apps/web format:write
       stage_fixed: true
 
 
@@ -18,12 +15,9 @@ pre-push:
   parallel: false
   commands:
     check:
-      root: app
       run: bun run check
     test:
-      root: app
       run: bun run test
     build:
-      root: app
       run: bun run build
       

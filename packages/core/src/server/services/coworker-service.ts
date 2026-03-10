@@ -1,0 +1,283 @@
+import { ORPCError } from "@orpc/server";
+import { and, eq, inArray } from "drizzle-orm";
+import type { IntegrationType } from "../oauth/config";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "../../lib/chat-model-defaults";
+import { resolveDefaultOpencodeFreeModel } from "../ai/opencode-models";
+import { db } from "@cmdclaw/db/client";
+import {
+  conversation,
+  generation,
+  providerAuth,
+  coworker,
+  coworkerRun,
+  coworkerRunEvent,
+} from "@cmdclaw/db/schema";
+import { generationManager } from "./generation-manager";
+
+const ACTIVE_COWORKER_RUN_STATUSES = ["running", "awaiting_approval", "awaiting_auth"] as const;
+const TERMINAL_GENERATION_STATUSES = ["completed", "cancelled", "error"] as const;
+const ORPHAN_RUN_GRACE_MS = 2 * 60 * 1000;
+const COWORKER_PREPARING_TIMEOUT_MS = (() => {
+  const seconds = Number(process.env.COWORKER_PREPARING_TIMEOUT_SECONDS ?? "300");
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 5 * 60 * 1000;
+  }
+  return Math.floor(seconds * 1000);
+})();
+
+async function resolveCoworkerDefaultModelForUser(userId: string): Promise<string> {
+  const configured = process.env.CMDCLAW_CHAT_MODEL?.trim();
+  if (configured) {
+    return resolveDefaultOpencodeFreeModel(configured);
+  }
+
+  const openAIAuth = await db.query.providerAuth.findFirst({
+    where: and(eq(providerAuth.userId, userId), eq(providerAuth.provider, "openai")),
+    columns: { id: true },
+  });
+
+  if (openAIAuth) {
+    return DEFAULT_CONNECTED_CHATGPT_MODEL;
+  }
+
+  return resolveDefaultOpencodeFreeModel();
+}
+
+function mapGenerationStatusToCoworkerRunStatus(
+  status: (typeof TERMINAL_GENERATION_STATUSES)[number],
+): "completed" | "cancelled" | "error" {
+  if (status === "completed") {
+    return "completed";
+  }
+  if (status === "cancelled") {
+    return "cancelled";
+  }
+  return "error";
+}
+
+async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promise<void> {
+  const candidateRuns = await db.query.coworkerRun.findMany({
+    where: and(
+      eq(coworkerRun.coworkerId, coworkerId),
+      inArray(coworkerRun.status, [...ACTIVE_COWORKER_RUN_STATUSES]),
+    ),
+    with: {
+      generation: {
+        columns: {
+          id: true,
+          conversationId: true,
+          status: true,
+          startedAt: true,
+          completedAt: true,
+          contentParts: true,
+          pendingApproval: true,
+          pendingAuth: true,
+          errorMessage: true,
+        },
+      },
+    },
+    limit: 20,
+  });
+
+  const updates = candidateRuns.map(async (run) => {
+    const gen = run.generation;
+    if (!gen) {
+      const isLikelyOrphan =
+        run.status === "running" && Date.now() - run.startedAt.getTime() > ORPHAN_RUN_GRACE_MS;
+      if (!isLikelyOrphan) {
+        return;
+      }
+
+      await db
+        .update(coworkerRun)
+        .set({
+          status: "error",
+          finishedAt: run.finishedAt ?? new Date(),
+          errorMessage: run.errorMessage ?? "Coworker run failed before generation could start.",
+        })
+        .where(eq(coworkerRun.id, run.id));
+
+      return;
+    }
+
+    if (
+      !TERMINAL_GENERATION_STATUSES.includes(
+        gen.status as (typeof TERMINAL_GENERATION_STATUSES)[number],
+      )
+    ) {
+      const isPreparingTimeout =
+        run.status === "running" &&
+        gen.status === "running" &&
+        Date.now() - gen.startedAt.getTime() > COWORKER_PREPARING_TIMEOUT_MS &&
+        (gen.contentParts?.length ?? 0) === 0 &&
+        !gen.pendingApproval &&
+        !gen.pendingAuth;
+
+      if (isPreparingTimeout) {
+        const errorMessage = "Coworker run timed out while preparing agent.";
+
+        await db
+          .update(generation)
+          .set({
+            status: "error",
+            completedAt: new Date(),
+            errorMessage,
+          })
+          .where(eq(generation.id, gen.id));
+
+        await db
+          .update(conversation)
+          .set({ generationStatus: "error" })
+          .where(eq(conversation.id, gen.conversationId));
+
+        await db
+          .update(coworkerRun)
+          .set({
+            status: "error",
+            finishedAt: run.finishedAt ?? new Date(),
+            errorMessage,
+          })
+          .where(eq(coworkerRun.id, run.id));
+
+        return;
+      }
+
+      return;
+    }
+
+    const mappedStatus = mapGenerationStatusToCoworkerRunStatus(
+      gen.status as (typeof TERMINAL_GENERATION_STATUSES)[number],
+    );
+
+    await db
+      .update(coworkerRun)
+      .set({
+        status: mappedStatus,
+        finishedAt: run.finishedAt ?? gen.completedAt ?? new Date(),
+        errorMessage: run.errorMessage ?? gen.errorMessage ?? null,
+      })
+      .where(eq(coworkerRun.id, run.id));
+  });
+
+  await Promise.all(updates);
+}
+
+export async function triggerCoworkerRun(params: {
+  coworkerId: string;
+  triggerPayload: unknown;
+  userId?: string;
+  userRole?: string | null;
+}): Promise<{
+  coworkerId: string;
+  runId: string;
+  generationId: string;
+  conversationId: string;
+}> {
+  const wf = await db.query.coworker.findFirst({
+    where: params.userId
+      ? and(eq(coworker.id, params.coworkerId), eq(coworker.ownerId, params.userId))
+      : eq(coworker.id, params.coworkerId),
+  });
+
+  if (!wf) {
+    throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
+  }
+
+  if (wf.status !== "on") {
+    throw new ORPCError("BAD_REQUEST", { message: "Coworker is turned off" });
+  }
+
+  // Defensive reconciliation for runs that were left active while their generation already ended.
+  // This avoids permanently blocking future triggers for the coworker.
+  await reconcileStaleCoworkerRunsForCoworker(wf.id);
+
+  const activeRun = await db.query.coworkerRun.findFirst({
+    where: and(
+      eq(coworkerRun.coworkerId, wf.id),
+      inArray(coworkerRun.status, [...ACTIVE_COWORKER_RUN_STATUSES]),
+    ),
+    orderBy: (run, { desc }) => [desc(run.startedAt)],
+  });
+
+  if (params.userRole !== "admin" && activeRun) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Coworker already has an active run",
+    });
+  }
+
+  const [run] = await db
+    .insert(coworkerRun)
+    .values({
+      coworkerId: wf.id,
+      status: "running",
+      triggerPayload: params.triggerPayload,
+    })
+    .returning();
+
+  await db.insert(coworkerRunEvent).values({
+    coworkerRunId: run.id,
+    type: "trigger",
+    payload: params.triggerPayload ?? {},
+  });
+
+  const payloadText = JSON.stringify(params.triggerPayload ?? {}, null, 2);
+  const coworkerSections = [
+    wf.prompt?.trim() ? `## Coworker Instructions\n${wf.prompt}` : null,
+    wf.promptDo?.trim() ? `## Do\n${wf.promptDo}` : null,
+    wf.promptDont?.trim() ? `## Don't\n${wf.promptDont}` : null,
+    `## Trigger Payload\n${payloadText}`,
+  ].filter(Boolean);
+  const userContent = coworkerSections.join("\n\n");
+
+  const allowedIntegrations = (wf.allowedIntegrations ?? []) as IntegrationType[];
+  const allowedCustomIntegrations = Array.isArray(wf.allowedCustomIntegrations)
+    ? wf.allowedCustomIntegrations.filter((value): value is string => typeof value === "string")
+    : [];
+
+  let generationId: string;
+  let conversationId: string;
+  try {
+    const coworkerModel = await resolveCoworkerDefaultModelForUser(wf.ownerId);
+    const startResult = await generationManager.startCoworkerGeneration({
+      coworkerRunId: run.id,
+      content: userContent,
+      model: coworkerModel,
+      userId: wf.ownerId,
+      autoApprove: wf.autoApprove,
+      allowedIntegrations,
+      allowedCustomIntegrations,
+    });
+
+    generationId = startResult.generationId;
+    conversationId = startResult.conversationId;
+
+    await db.update(coworkerRun).set({ generationId }).where(eq(coworkerRun.id, run.id));
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to start coworker generation";
+
+    await db
+      .update(coworkerRun)
+      .set({
+        status: "error",
+        finishedAt: new Date(),
+        errorMessage,
+      })
+      .where(eq(coworkerRun.id, run.id));
+
+    await db.insert(coworkerRunEvent).values({
+      coworkerRunId: run.id,
+      type: "error",
+      payload: { message: errorMessage, stage: "start_generation" },
+    });
+
+    throw error;
+  }
+
+  return {
+    coworkerId: wf.id,
+    runId: run.id,
+    generationId: generationId!,
+    conversationId: conversationId!,
+  };
+}

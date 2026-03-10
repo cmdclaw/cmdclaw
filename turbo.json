@@ -1,0 +1,45 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "dist/**",
+        "build/**",
+        "coverage/**",
+        "app-bundle/**"
+      ]
+    },
+    "@cmdclaw/desktop#build": {
+      "dependsOn": [
+        "@cmdclaw/web#build"
+      ],
+      "outputs": [
+        "dist/**",
+        "app-bundle/**"
+      ]
+    },
+    "check": {
+      "dependsOn": [
+        "^check"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "coverage/**",
+        "playwright-report/**",
+        "test-results/**"
+      ]
+    }
+  }
+}

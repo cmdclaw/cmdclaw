@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/public/logo.png" alt="CmdClaw" width="80" />
+  <img src="apps/web/public/logo.png" alt="CmdClaw" width="80" />
 </p>
 
 <h1 align="center">CmdClaw</h1>
@@ -50,9 +50,17 @@ CmdClaw is an open-source, multi-platform AI assistant that lets you interact wi
 
 ## Project Structure
 
-```
+```text
 cmdclaw/
-├── app/          # Next.js web application
+├── apps/
+│   ├── web/      # Next.js web app
+│   ├── desktop/  # Electron wrapper
+│   ├── worker/   # BullMQ worker runtime
+│   └── ws/       # WebSocket runtime
+├── packages/
+│   ├── config/   # Shared tooling config
+│   ├── core/     # Shared runtime logic
+│   └── db/       # Drizzle schema and DB client
 ├── apple/        # macOS and iOS SwiftUI applications
 ├── docs/         # Documentation site (Mintlify)
 └── infra/        # Infrastructure as code
@@ -71,16 +79,16 @@ cmdclaw/
 ```bash
 # Clone the repo
 git clone https://github.com/your-username/cmdclaw.git
-cd cmdclaw/app
+cd cmdclaw
 
 # Install dependencies
 bun install
 
 # Start local services (Postgres, Redis, MinIO)
-docker compose up -d
+docker compose -f apps/web/docker-compose.yml up -d
 
 # Configure environment variables
-cp .env.example .env
+cp apps/web/.env.selfhost.example apps/web/.env
 
 # Push the database schema
 bun db:push
@@ -88,24 +96,26 @@ bun db:push
 # Seed the database (optional)
 bun db:seed
 
-# Start the dev server
+# Start the web app, worker, and WS runtime
 bun dev
 ```
 
-The app will be available at `http://localhost:3000`.
+The web app will be available at `http://localhost:3000`.
 
 ### Useful Commands
 
 ```bash
-bun dev             # Start dev server
-bun build           # Production build
-bun db:studio       # Open Drizzle Studio (DB browser)
+bun dev             # Start web + worker + ws
+bun dev:web         # Start only the web app
+bun dev:desktop     # Start the Electron wrapper
+bun dev:docs        # Start the docs site
+bun build           # Production build for all workspaces
+bun db:studio       # Open Drizzle Studio
 bun db:push         # Push schema changes
-bun lint:fix        # Fix lint issues
-bun typecheck       # Run type checker
-bun test            # Run unit tests
-bun test:e2e        # Run end-to-end tests
-bun worker          # Start background job worker
+bun start:worker    # Start the background job worker
+bun start:ws        # Start the WebSocket server
+bun check           # Run workspace checks
+bun test            # Run workspace tests
 ```
 
 ## Native Apps

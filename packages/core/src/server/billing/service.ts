@@ -1,0 +1,602 @@
+import { addMonths } from "date-fns";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import {
+  BILLING_CREDIT_FEATURE_ID,
+  BILLING_PLANS,
+  TOP_UP_CREDITS_PER_USD,
+  TOP_UP_EXPIRY_MONTHS,
+  type BillingOwnerType,
+  type BillingPlanId,
+} from "../../lib/billing-plans";
+import { db } from "@cmdclaw/db/client";
+import {
+  billingLedger,
+  billingTopUp,
+  conversation,
+  user,
+  workspace,
+  workspaceMember,
+} from "@cmdclaw/db/schema";
+import { getAutumnClient } from "./autumn";
+import { calculateCredits } from "./credit-calculator";
+
+export type BillingOwner = {
+  ownerType: BillingOwnerType;
+  ownerId: string;
+  autumnCustomerId: string;
+  planId: BillingPlanId;
+};
+
+function slugifyWorkspaceName(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+async function uniqueWorkspaceSlug(name: string): Promise<string> {
+  const base = slugifyWorkspaceName(name) || "workspace";
+  const candidate = `${base}-${crypto.randomUUID().slice(0, 8)}`;
+  const existing = await db.query.workspace.findFirst({
+    where: eq(workspace.slug, candidate),
+    columns: { id: true },
+  });
+  return existing ? `${candidate}-${Date.now().toString(36)}` : candidate;
+}
+
+type BillingFeatureSnapshot = {
+  balance?: number | null;
+  included_usage?: number;
+  usage?: number;
+  next_reset_at?: number | null;
+  rollovers?: { balance: number; expires_at: number };
+  breakdown?: Array<{
+    interval: string;
+    balance?: number;
+    usage?: number;
+    included_usage?: number;
+    next_reset_at?: number;
+  }>;
+};
+
+export async function resolveBillingOwnerForUser(userId: string): Promise<BillingOwner> {
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: {
+      id: true,
+      activeWorkspaceId: true,
+    },
+  });
+
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  const activeWorkspace = await ensureWorkspaceForUser(userId, dbUser.activeWorkspaceId);
+  return {
+    ownerType: "workspace",
+    ownerId: activeWorkspace.id,
+    autumnCustomerId: activeWorkspace.autumnCustomerId ?? activeWorkspace.id,
+    planId: activeWorkspace.billingPlanId as BillingPlanId,
+  };
+}
+
+async function getWorkspaceForUser(userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMember.findFirst({
+    where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, workspaceId)),
+    with: {
+      workspace: {
+        columns: {
+          id: true,
+          name: true,
+          billingPlanId: true,
+          autumnCustomerId: true,
+        },
+      },
+    },
+  });
+
+  return membership?.workspace ?? null;
+}
+
+export async function ensureWorkspaceForUser(userId: string, activeWorkspaceId?: string | null) {
+  if (activeWorkspaceId) {
+    const activeWorkspace = await getWorkspaceForUser(userId, activeWorkspaceId);
+    if (activeWorkspace) {
+      return activeWorkspace;
+    }
+  }
+
+  const existingMembership = await db.query.workspaceMember.findFirst({
+    where: eq(workspaceMember.userId, userId),
+    with: {
+      workspace: {
+        columns: {
+          id: true,
+          name: true,
+          billingPlanId: true,
+          autumnCustomerId: true,
+        },
+      },
+    },
+    orderBy: [desc(workspaceMember.createdAt)],
+  });
+
+  if (existingMembership?.workspace) {
+    await db
+      .update(user)
+      .set({ activeWorkspaceId: existingMembership.workspace.id })
+      .where(eq(user.id, userId));
+    return existingMembership.workspace;
+  }
+
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  const workspaceName = `${dbUser.name}'s workspace`;
+  return createWorkspaceForUser(userId, workspaceName);
+}
+
+export async function resolveBillingOwnerForConversation(
+  conversationId: string,
+): Promise<BillingOwner> {
+  const conv = await db.query.conversation.findFirst({
+    where: eq(conversation.id, conversationId),
+    columns: {
+      id: true,
+      userId: true,
+      workspaceId: true,
+    },
+  });
+
+  if (!conv || !conv.userId) {
+    throw new Error("Conversation not found");
+  }
+
+  if (conv.workspaceId) {
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, conv.workspaceId),
+      columns: {
+        id: true,
+        billingPlanId: true,
+        autumnCustomerId: true,
+      },
+    });
+
+    if (org) {
+      return {
+        ownerType: "workspace",
+        ownerId: org.id,
+        autumnCustomerId: org.autumnCustomerId ?? org.id,
+        planId: org.billingPlanId as BillingPlanId,
+      };
+    }
+  }
+
+  return resolveBillingOwnerForUser(conv.userId);
+}
+
+export async function createWorkspaceForUser(userId: string, name: string) {
+  const slug = await uniqueWorkspaceSlug(name);
+  const [created] = await db
+    .insert(workspace)
+    .values({
+      name,
+      slug,
+      createdByUserId: userId,
+      billingPlanId: "free",
+      autumnCustomerId: null,
+    })
+    .returning();
+
+  await db.insert(workspaceMember).values({
+    workspaceId: created.id,
+    userId,
+    role: "owner",
+  });
+
+  await db.update(user).set({ activeWorkspaceId: created.id }).where(eq(user.id, userId));
+
+  return created;
+}
+
+export async function listWorkspacesForUser(userId: string) {
+  const memberships = await db.query.workspaceMember.findMany({
+    where: eq(workspaceMember.userId, userId),
+    with: {
+      workspace: true,
+    },
+    orderBy: [desc(workspaceMember.createdAt)],
+  });
+
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: { activeWorkspaceId: true },
+  });
+
+  return memberships.map((membership) => ({
+    id: membership.workspace.id,
+    name: membership.workspace.name,
+    slug: membership.workspace.slug,
+    role: membership.role,
+    billingPlanId: membership.workspace.billingPlanId as BillingPlanId,
+    active: membership.workspace.id === dbUser?.activeWorkspaceId,
+  }));
+}
+
+export async function setActiveWorkspace(userId: string, workspaceId: string | null) {
+  if (workspaceId) {
+    const membership = await db.query.workspaceMember.findFirst({
+      where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, workspaceId)),
+      columns: { id: true },
+    });
+
+    if (!membership) {
+      throw new Error("Workspace not found");
+    }
+  }
+
+  await db.update(user).set({ activeWorkspaceId: workspaceId }).where(eq(user.id, userId));
+}
+
+export async function upsertConversationWorkspace(
+  userId: string,
+  conversationId: string,
+  workspaceId: string | null,
+) {
+  if (workspaceId) {
+    const membership = await db.query.workspaceMember.findFirst({
+      where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, workspaceId)),
+      columns: { id: true },
+    });
+    if (!membership) {
+      throw new Error("Workspace not found");
+    }
+  }
+
+  await db
+    .update(conversation)
+    .set({ workspaceId })
+    .where(and(eq(conversation.id, conversationId), eq(conversation.userId, userId)));
+}
+
+export async function ensureBillingCustomer(
+  owner: BillingOwner,
+  customerData?: {
+    name?: string | null;
+    email?: string | null;
+  },
+) {
+  const autumnClient = getAutumnClient();
+  if (!autumnClient) {
+    return owner.autumnCustomerId;
+  }
+
+  try {
+    await autumnClient.customers.get(owner.autumnCustomerId);
+    return owner.autumnCustomerId;
+  } catch {
+    await autumnClient.customers.create({
+      id: owner.autumnCustomerId,
+      name: customerData?.name ?? undefined,
+      email: customerData?.email ?? undefined,
+    });
+    return owner.autumnCustomerId;
+  }
+}
+
+export async function attachPlanToOwner(args: {
+  owner: BillingOwner;
+  planId: BillingPlanId;
+  successUrl?: string;
+  customerData?: { name?: string | null; email?: string | null };
+}) {
+  const autumnClient = getAutumnClient();
+  if (!autumnClient) {
+    throw new Error("Autumn is not configured");
+  }
+
+  await ensureBillingCustomer(args.owner, args.customerData);
+  const result = await autumnClient.attach({
+    customer_id: args.owner.autumnCustomerId,
+    product_id: args.planId,
+    success_url: args.successUrl,
+    customer_data: {
+      name: args.customerData?.name ?? undefined,
+      email: args.customerData?.email ?? undefined,
+    },
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  if (!result.data?.checkout_url) {
+    await db
+      .update(workspace)
+      .set({ billingPlanId: args.planId, autumnCustomerId: args.owner.autumnCustomerId })
+      .where(eq(workspace.id, args.owner.ownerId));
+  }
+
+  return result.data;
+}
+
+export async function openBillingPortalForOwner(owner: BillingOwner, returnUrl?: string) {
+  const autumnClient = getAutumnClient();
+  if (!autumnClient) {
+    throw new Error("Autumn is not configured");
+  }
+
+  await ensureBillingCustomer(owner);
+  const result = await autumnClient.customers.billingPortal(owner.autumnCustomerId, {
+    return_url: returnUrl,
+  });
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+  return result.data;
+}
+
+export async function cancelPlanForOwner(owner: BillingOwner, productId: BillingPlanId) {
+  const autumnClient = getAutumnClient();
+  if (!autumnClient) {
+    throw new Error("Autumn is not configured");
+  }
+
+  const result = await autumnClient.cancel({
+    customer_id: owner.autumnCustomerId,
+    product_id: productId,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  await db.update(workspace).set({ billingPlanId: "free" }).where(eq(workspace.id, owner.ownerId));
+
+  return result.data;
+}
+
+export async function createManualTopUp(args: {
+  owner: BillingOwner;
+  grantedByUserId: string;
+  usdAmount: number;
+}) {
+  const autumnClient = getAutumnClient();
+  const creditsGranted = Math.max(0, Math.floor(args.usdAmount * TOP_UP_CREDITS_PER_USD));
+  const expiresAt = addMonths(new Date(), TOP_UP_EXPIRY_MONTHS);
+
+  if (creditsGranted <= 0) {
+    throw new Error("Top-up amount must be positive");
+  }
+
+  await ensureBillingCustomer(args.owner);
+
+  if (autumnClient) {
+    const result = await autumnClient.balances.create({
+      customer_id: args.owner.autumnCustomerId,
+      feature_id: BILLING_CREDIT_FEATURE_ID,
+      granted_balance: creditsGranted,
+      reset: { interval: "one_off" },
+      expires_at: Math.floor(expiresAt.getTime() / 1000),
+    });
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+  }
+
+  const [topUp] = await db
+    .insert(billingTopUp)
+    .values({
+      ownerType: "workspace",
+      userId: null,
+      workspaceId: args.owner.ownerId,
+      grantedByUserId: args.grantedByUserId,
+      usdAmount: args.usdAmount,
+      creditsGranted,
+      autumnCustomerId: args.owner.autumnCustomerId,
+      expiresAt,
+    })
+    .returning();
+
+  return topUp;
+}
+
+export async function getBillingOverviewForUser(userId: string) {
+  const owner = await resolveBillingOwnerForUser(userId);
+  const plan = BILLING_PLANS[owner.planId];
+  const recentCharges = await db.query.billingLedger.findMany({
+    where:
+      owner.ownerType === "workspace"
+        ? eq(billingLedger.workspaceId, owner.ownerId)
+        : eq(billingLedger.userId, owner.ownerId),
+    orderBy: [desc(billingLedger.createdAt)],
+    limit: 20,
+  });
+  const recentTopUps = await db.query.billingTopUp.findMany({
+    where:
+      owner.ownerType === "workspace"
+        ? eq(billingTopUp.workspaceId, owner.ownerId)
+        : eq(billingTopUp.userId, owner.ownerId),
+    orderBy: [desc(billingTopUp.createdAt)],
+    limit: 20,
+  });
+
+  let llmCreditsFeature: BillingFeatureSnapshot | null = null;
+  const autumnClient = getAutumnClient();
+  if (autumnClient) {
+    try {
+      await ensureBillingCustomer(owner);
+      const result = await autumnClient.check({
+        customer_id: owner.autumnCustomerId,
+        feature_id: BILLING_CREDIT_FEATURE_ID,
+        required_balance: 0,
+      });
+      llmCreditsFeature = (result.data as BillingFeatureSnapshot | undefined) ?? null;
+    } catch (error) {
+      console.error("[Billing] Failed to fetch Autumn credit balance", error);
+    }
+  }
+
+  return {
+    owner,
+    plan,
+    feature: llmCreditsFeature,
+    recentCharges,
+    recentTopUps,
+    workspaces: await listWorkspacesForUser(userId),
+  };
+}
+
+export async function trackGenerationBilling(args: {
+  generationId: string;
+  conversationId: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  sandboxRuntimeMs: number;
+}) {
+  const existing = await db.query.billingLedger.findFirst({
+    where: eq(billingLedger.generationId, args.generationId),
+    columns: { id: true },
+  });
+  if (existing) {
+    return existing;
+  }
+
+  const owner = await resolveBillingOwnerForConversation(args.conversationId);
+  const calculation = calculateCredits({
+    model: args.model,
+    inputTokens: args.inputTokens,
+    outputTokens: args.outputTokens,
+    sandboxRuntimeMs: args.sandboxRuntimeMs,
+  });
+
+  if (calculation.credits <= 0) {
+    return null;
+  }
+
+  const autumnClient = getAutumnClient();
+  let trackCode: string | null = null;
+  if (autumnClient) {
+    try {
+      await ensureBillingCustomer(owner);
+      const result = await autumnClient.track({
+        customer_id: owner.autumnCustomerId,
+        feature_id: BILLING_CREDIT_FEATURE_ID,
+        value: calculation.credits,
+      });
+      trackCode = result.data?.code ?? null;
+    } catch (error) {
+      console.error("[Billing] Failed to track Autumn usage", error);
+    }
+  }
+
+  const [ledger] = await db
+    .insert(billingLedger)
+    .values({
+      generationId: args.generationId,
+      conversationId: args.conversationId,
+      ownerType: "workspace",
+      userId: null,
+      workspaceId: owner.ownerId,
+      autumnCustomerId: owner.autumnCustomerId,
+      planId: owner.planId,
+      model: args.model,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      sandboxRuntimeMs: args.sandboxRuntimeMs,
+      creditsCharged: calculation.credits,
+      autumnTrackCode: trackCode,
+    })
+    .returning();
+
+  return ledger;
+}
+
+export async function getWorkspaceMembershipForUser(userId: string, workspaceId: string) {
+  return db.query.workspaceMember.findFirst({
+    where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, workspaceId)),
+  });
+}
+
+export async function listWorkspaceMembers(workspaceId: string) {
+  const members = await db.query.workspaceMember.findMany({
+    where: eq(workspaceMember.workspaceId, workspaceId),
+    with: {
+      user: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  return members.map((member) => ({
+    userId: member.user.id,
+    name: member.user.name,
+    email: member.user.email,
+    role: member.role,
+  }));
+}
+
+export async function addWorkspaceMembers(
+  workspaceId: string,
+  emails: string[],
+  role: "admin" | "member" = "member",
+) {
+  const users = await db.query.user.findMany({
+    where: inArray(user.email, emails),
+    columns: { id: true, email: true },
+  });
+
+  await Promise.all(
+    users.map((dbUser) =>
+      db
+        .insert(workspaceMember)
+        .values({
+          workspaceId,
+          userId: dbUser.id,
+          role,
+        })
+        .onConflictDoNothing(),
+    ),
+  );
+
+  return users.map((item) => item.email);
+}
+
+export async function renameWorkspace(workspaceId: string, name: string) {
+  const trimmedName = name.trim();
+
+  const [updated] = await db
+    .update(workspace)
+    .set({
+      name: trimmedName,
+    })
+    .where(eq(workspace.id, workspaceId))
+    .returning({
+      id: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+    });
+
+  if (!updated) {
+    throw new Error("Workspace not found");
+  }
+
+  return updated;
+}

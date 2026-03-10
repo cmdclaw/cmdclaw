@@ -1,0 +1,12 @@
+set dotenv-load := true
+
+app_image := "cmdclaw-app"
+worker_image := "cmdclaw-worker"
+
+docker-run-app:
+  docker build -f Dockerfile.app -t {{app_image}} ../..
+  docker run --rm --env-file .env -p 3000:3000 {{app_image}}
+
+docker-run-worker:
+  docker build -f ../worker/Dockerfile -t {{worker_image}} ../..
+  docker run --rm --env-file .env {{worker_image}}

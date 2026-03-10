@@ -1,0 +1,16 @@
+{
+  "name": "@cmdclaw/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch --env-file=../web/.env index.ts",
+    "start": "bun index.ts",
+    "build": "bunx tsc --noEmit -p tsconfig.json",
+    "check": "bunx tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cmdclaw/core": "workspace:*",
+    "@cmdclaw/db": "workspace:*"
+  }
+}

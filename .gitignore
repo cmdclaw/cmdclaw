@@ -1,10 +1,18 @@
 .env
 .claude
 .vercel
+.DS_Store
 .env*.local
+*.tsbuildinfo
 
 experiments/
-!app/experiments/
-!app/experiments/**
+!apps/web/experiments/
+!apps/web/experiments/**
 
 .agents
+
+.turbo*
+
+node_modules
+
+.opencode

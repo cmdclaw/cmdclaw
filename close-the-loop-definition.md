@@ -19,7 +19,7 @@ Closing the loop reduces idle handoffs and repetitive manual steps, making softw
 ## CmdClaw example
 
 In this codebase, an example of"closing the loop" is:
-1. Keep the app/worker running (`bun run dev`, with worker/server visible in tmux logs).
+1. Keep the web, worker, and WS runtimes running (`bun run dev`, with worker/server visible in tmux logs).
 2. Make a change.
 3. Validate behavior via `bun run chat` (real prompt, real execution path).
 4. Read tmux logs to confirm server + worker behavior and catch regressions.

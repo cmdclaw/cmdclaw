@@ -1,0 +1,40 @@
+{
+  "name": "cmdclaw",
+  "private": true,
+  "packageManager": "bun@1.3.9",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "docs"
+  ],
+  "scripts": {
+    "dev": "turbo dev --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=tui",
+    "build": "turbo build",
+    "check": "turbo check",
+    "test": "turbo test",
+    "dev:web": "turbo dev --filter=@cmdclaw/web",
+    "dev:desktop": "turbo dev --filter=@cmdclaw/desktop",
+    "dev:docs": "turbo dev --filter=@cmdclaw/docs",
+    "dev:worker": "turbo dev --filter=@cmdclaw/worker",
+    "dev:ws": "turbo dev --filter=@cmdclaw/ws",
+    "start:web": "bun run --cwd apps/web start",
+    "start:worker": "bun run --cwd apps/worker start",
+    "start:ws": "bun run --cwd apps/ws start",
+    "build:web": "turbo build --filter=@cmdclaw/web",
+    "build:desktop": "turbo build --filter=@cmdclaw/desktop",
+    "build:docs": "turbo build --filter=@cmdclaw/docs",
+    "build:worker": "turbo build --filter=@cmdclaw/worker",
+    "build:ws": "turbo build --filter=@cmdclaw/ws",
+    "db:push": "bun run --cwd apps/web db:push",
+    "db:seed": "bun run --cwd apps/web db:seed",
+    "db:reset": "bun run --cwd apps/web db:reset",
+    "db:studio": "bun run --cwd apps/web db:studio",
+    "check:web": "turbo check --filter=@cmdclaw/web",
+    "check:docs": "turbo check --filter=@cmdclaw/docs",
+    "check:worker": "turbo check --filter=@cmdclaw/worker",
+    "check:ws": "turbo check --filter=@cmdclaw/ws"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.8"
+  }
+}
