@@ -274,7 +274,10 @@ export async function ensureWorkspaceForUser(userId: string, activeWorkspaceId?:
       });
     }
 
-    await db.update(user).set({ activeWorkspaceId: existingWorkspace.id }).where(eq(user.id, userId));
+    await db
+      .update(user)
+      .set({ activeWorkspaceId: existingWorkspace.id })
+      .where(eq(user.id, userId));
 
     return existingWorkspace;
   }

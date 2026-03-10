@@ -168,19 +168,26 @@ describe("billingRouter", () => {
     });
   });
 
-  it("rejects personal ownerType input for attach plan", async () => {
-    await expect(
-      billingRouterAny.attachPlan({
-        input: {
-          ownerType: "user",
-          planId: "pro",
-        },
-        context: createContext(),
+  it("normalizes personal ownerType input to workspace billing", async () => {
+    const result = (await billingRouterAny.attachPlan({
+      input: {
+        ownerType: "user",
+        planId: "pro",
+      },
+      context: createContext(),
+    })) as { checkoutUrl: string | null; customerId: string; planId: string };
+
+    expect(ensureWorkspaceForUserMock).toHaveBeenCalledWith("user-1", "ws-1");
+    expect(attachPlanToOwnerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: expect.objectContaining({
+          ownerType: "workspace",
+          ownerId: "ws-1",
+        }),
+        planId: "pro",
       }),
-    ).rejects.toMatchObject({
-      code: "BAD_REQUEST",
-      message: "Personal billing is no longer supported",
-    });
+    );
+    expect(result.planId).toBe("pro");
   });
 
   it("attaches workspace plans using the ensured workspace owner", async () => {

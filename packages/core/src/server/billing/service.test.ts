@@ -1,8 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+process.env.BETTER_AUTH_SECRET ??= "test-better-auth-secret";
+process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/cmdclaw";
+process.env.REDIS_URL ??= "redis://localhost:6379";
+process.env.OPENAI_API_KEY ??= "test-openai-key";
+process.env.ANTHROPIC_API_KEY ??= "test-anthropic-key";
+process.env.SANDBOX_DEFAULT ??= "docker";
+process.env.ENCRYPTION_KEY ??= "0".repeat(64);
+process.env.CMDCLAW_SERVER_SECRET ??= "1".repeat(64);
+process.env.AWS_ENDPOINT_URL ??= "http://localhost:9000";
+process.env.AWS_ACCESS_KEY_ID ??= "test-access-key";
+process.env.AWS_SECRET_ACCESS_KEY ??= "test-secret-key";
+
 var userFindFirstMock: ReturnType<typeof vi.fn>;
 var workspaceMemberFindFirstMock: ReturnType<typeof vi.fn>;
 var workspaceFindFirstMock: ReturnType<typeof vi.fn>;
+var billingTopUpFindManyMock: ReturnType<typeof vi.fn>;
 var workspaceInsertReturningMock: ReturnType<typeof vi.fn>;
 var billingTopUpInsertReturningMock: ReturnType<typeof vi.fn>;
 var workspaceInsertValuesMock: ReturnType<typeof vi.fn>;
@@ -11,11 +24,13 @@ var billingTopUpInsertValuesMock: ReturnType<typeof vi.fn>;
 var userUpdateWhereMock: ReturnType<typeof vi.fn>;
 var userUpdateSetMock: ReturnType<typeof vi.fn>;
 var balancesCreateMock: ReturnType<typeof vi.fn>;
+var autumnCheckMock: ReturnType<typeof vi.fn>;
 var insertMock: ReturnType<typeof vi.fn>;
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: (() => {
     userFindFirstMock = vi.fn();
+    billingTopUpFindManyMock = vi.fn();
     workspaceMemberFindFirstMock = vi.fn();
     workspaceFindFirstMock = vi.fn();
     workspaceInsertReturningMock = vi.fn();
@@ -36,6 +51,7 @@ vi.mock("@cmdclaw/db/client", () => ({
     return {
       query: {
         user: { findFirst: userFindFirstMock },
+        billingTopUp: { findMany: billingTopUpFindManyMock },
         workspaceMember: { findFirst: workspaceMemberFindFirstMock },
         workspace: { findFirst: workspaceFindFirstMock },
       },
@@ -50,8 +66,10 @@ vi.mock("@cmdclaw/db/client", () => ({
 vi.mock("./autumn", () => ({
   getAutumnClient: (() => {
     balancesCreateMock = vi.fn();
+    autumnCheckMock = vi.fn();
     return vi.fn(() => ({
       balances: { create: balancesCreateMock },
+      check: autumnCheckMock,
       customers: {
         get: vi.fn().mockRejectedValue(new Error("missing")),
         create: vi.fn().mockResolvedValue({}),
@@ -60,17 +78,35 @@ vi.mock("./autumn", () => ({
   })(),
 }));
 
-import {
+const {
   createManualTopUp,
   createWorkspaceForUser,
+  getAdminBillingOverviewForUser,
+  getExistingBillingOwnerForUser,
   resolveBillingOwnerForUser,
-} from "./service";
+} = await import("./service");
 
 describe("billing service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     insertMock.mockReturnValue({ values: billingTopUpInsertValuesMock });
     balancesCreateMock.mockResolvedValue({ data: { message: "ok" }, error: null });
+    autumnCheckMock.mockResolvedValue({
+      data: {
+        balance: 900,
+        breakdown: [{ interval: "one_off", balance: 400 }],
+      },
+      error: null,
+    });
+    billingTopUpFindManyMock.mockResolvedValue([
+      {
+        id: "topup-1",
+        usdAmount: 25,
+        creditsGranted: 2500,
+        createdAt: new Date("2026-03-10T10:00:00.000Z"),
+        expiresAt: new Date("2027-03-10T10:00:00.000Z"),
+      },
+    ]);
     workspaceInsertReturningMock.mockResolvedValue([
       {
         id: "ws-created",
@@ -151,6 +187,67 @@ describe("billing service", () => {
       autumnCustomerId: "ws-created",
       planId: "free",
     });
+  });
+
+  it("returns no existing billing owner when the target user has no active workspace", async () => {
+    userFindFirstMock.mockResolvedValue({
+      id: "user-1",
+      name: "Alice",
+      email: "alice@example.com",
+      activeWorkspaceId: null,
+    });
+
+    const result = await getExistingBillingOwnerForUser("user-1");
+
+    expect(result).toEqual({
+      targetUser: {
+        id: "user-1",
+        name: "Alice",
+        email: "alice@example.com",
+      },
+      activeWorkspace: null,
+      owner: null,
+    });
+    expect(workspaceMemberFindFirstMock).not.toHaveBeenCalled();
+  });
+
+  it("loads an admin billing overview without creating a workspace", async () => {
+    userFindFirstMock.mockResolvedValue({
+      id: "user-1",
+      name: "Alice",
+      email: "alice@example.com",
+      activeWorkspaceId: "ws-1",
+    });
+    workspaceMemberFindFirstMock.mockResolvedValue({
+      workspace: {
+        id: "ws-1",
+        name: "Alpha",
+        slug: "alpha",
+        billingPlanId: "pro",
+        autumnCustomerId: "cus-ws-1",
+      },
+    });
+
+    const result = await getAdminBillingOverviewForUser("user-1");
+
+    expect(result.targetUser).toEqual({
+      id: "user-1",
+      name: "Alice",
+      email: "alice@example.com",
+    });
+    expect(result.activeWorkspace).toEqual({
+      id: "ws-1",
+      name: "Alpha",
+      slug: "alpha",
+    });
+    expect(result.plan?.id).toBe("pro");
+    expect(result.feature).toEqual({
+      balance: 900,
+      breakdown: [{ interval: "one_off", balance: 400 }],
+    });
+    expect(result.recentTopUps).toHaveLength(1);
+    expect(workspaceInsertValuesMock).not.toHaveBeenCalled();
+    expect(workspaceMemberInsertValuesMock).not.toHaveBeenCalled();
   });
 
   it("creates new workspaces on the free plan", async () => {
