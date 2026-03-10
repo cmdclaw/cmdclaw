@@ -1,5 +1,5 @@
 {
-  "name": "cmdclaw-desktop",
+  "name": "@cmdclaw/desktop",
   "version": "0.1.0",
   "private": true,
   "description": "Electron desktop wrapper for CmdClaw web app",
@@ -13,8 +13,8 @@
   },
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k -s first \"bun run --cwd ../app dev\" \"wait-on tcp:3000 && cross-env NODE_ENV=development NEXT_DEV_URL=http://localhost:3000 node ./scripts/run-electron.mjs\"",
-    "app:build": "cross-env NEXT_PRIVATE_STANDALONE=true bun run --cwd ../app build",
+    "dev": "concurrently -k -s first \"bun run --cwd ../web dev\" \"wait-on tcp:3000 && cross-env NODE_ENV=development NEXT_DEV_URL=http://localhost:3000 node ./scripts/run-electron.mjs\"",
+    "app:build": "cross-env NEXT_PRIVATE_STANDALONE=true bun run --cwd ../web build",
     "app:prepare": "node ./scripts/prepare-app.mjs",
     "build": "bun run app:build && bun run app:prepare",
     "start": "cross-env NODE_ENV=production node ./scripts/run-electron.mjs",

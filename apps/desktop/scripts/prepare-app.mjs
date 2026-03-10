@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const desktopRoot = path.resolve(__dirname, "..");
-const appRoot = path.resolve(desktopRoot, "../app");
+const appRoot = path.resolve(desktopRoot, "../web");
 
 const standaloneSrc = path.join(appRoot, ".next", "standalone");
 const staticSrc = path.join(appRoot, ".next", "static");
