@@ -60,14 +60,14 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
     bun dev
     ```
 
-    This starts the web app and worker from the monorepo root.
+    This starts the web app, worker, and WS runtime from the monorepo root.
     The web app will be available at `http://localhost:3000`.
   </Step>
 </Steps>
 
 ## Docker Compose (all-in-one)
 
-For a fully containerized setup (app + worker + DB + Redis + MinIO),
+For a fully containerized setup (app + worker + WS server + DB + Redis + MinIO),
 use the bundled compose file at `apps/web/docker-compose.selfhost.yml`:
 
 ```bash

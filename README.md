@@ -55,7 +55,8 @@ cmdclaw/
 ├── apps/
 │   ├── web/      # Next.js web app
 │   ├── desktop/  # Electron wrapper
-│   └── worker/   # BullMQ worker runtime
+│   ├── worker/   # BullMQ worker runtime
+│   └── ws/       # WebSocket runtime
 ├── packages/
 │   ├── config/   # Shared tooling config
 │   ├── core/     # Shared runtime logic
@@ -95,7 +96,7 @@ bun db:push
 # Seed the database (optional)
 bun db:seed
 
-# Start the web app and worker
+# Start the web app, worker, and WS runtime
 bun dev
 ```
 
