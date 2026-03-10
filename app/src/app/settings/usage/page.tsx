@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BILLING_PLANS, TOP_UP_CREDITS_PER_USD, formatCredits } from "@/lib/billing-plans";
-import { useBillingOverview, useCurrentUser, useManualBillingTopUp } from "@/orpc/hooks";
+import { useBillingOverview, useManualBillingTopUp } from "@/orpc/hooks";
 
 function formatDate(value: number | string | Date | null | undefined): string {
   if (!value) {
@@ -18,7 +18,6 @@ function formatDate(value: number | string | Date | null | undefined): string {
 
 export default function UsagePage() {
   const { data, isLoading, refetch } = useBillingOverview();
-  const { data: currentUser } = useCurrentUser();
   const manualTopUp = useManualBillingTopUp();
   const [topUpUsd, setTopUpUsd] = useState("25");
 
@@ -39,9 +38,7 @@ export default function UsagePage() {
     | null
     | undefined;
 
-  const ownerType = data?.owner.ownerType ?? "user";
-  const activeWorkspaceId =
-    ownerType === "workspace" ? data?.owner.ownerId : currentUser?.activeWorkspaceId;
+  const activeWorkspaceId = data?.owner.ownerId;
 
   const included = plan.includedCredits;
   const balance = Math.max(0, Number(feature?.balance ?? 0));
@@ -68,8 +65,8 @@ export default function UsagePage() {
 
     try {
       await manualTopUp.mutateAsync({
-        ownerType,
-        workspaceId: ownerType === "workspace" ? (activeWorkspaceId ?? undefined) : undefined,
+        ownerType: "workspace",
+        workspaceId: activeWorkspaceId ?? undefined,
         usdAmount,
       });
       toast.success(
@@ -79,7 +76,7 @@ export default function UsagePage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to grant top-up.");
     }
-  }, [activeWorkspaceId, manualTopUp, ownerType, refetch, topUpUsd]);
+  }, [activeWorkspaceId, manualTopUp, refetch, topUpUsd]);
 
   const topUpCreditsPreview = Math.max(
     0,
@@ -98,7 +95,9 @@ export default function UsagePage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Usage</h2>
-        <p className="text-muted-foreground mt-1 text-sm">Credits from your {plan.name} plan.</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Shared workspace credits from your {plan.name} plan.
+        </p>
       </div>
 
       {/* Subscription usage */}

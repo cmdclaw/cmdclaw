@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { buildUserForwardingAddress, EMAIL_FORWARDED_TRIGGER_TYPE } from "@/lib/email-forwarding";
+import { ensureWorkspaceForUser } from "@/server/billing/service";
 import { user, coworker } from "@/server/db/schema";
 import { protectedProcedure } from "../middleware";
 
@@ -19,6 +20,7 @@ const me = protectedProcedure.handler(async ({ context }) => {
   const dbUser = await context.db.query.user.findFirst({
     where: eq(user.id, context.user.id),
   });
+  const workspace = await ensureWorkspaceForUser(context.user.id, dbUser?.activeWorkspaceId);
 
   return {
     id: context.user.id,
@@ -28,8 +30,8 @@ const me = protectedProcedure.handler(async ({ context }) => {
     role: dbUser?.role ?? "user",
     onboardedAt: dbUser?.onboardedAt ?? null,
     timezone: dbUser?.timezone ?? null,
-    activeWorkspaceId: dbUser?.activeWorkspaceId ?? null,
-    billingPlanId: dbUser?.billingPlanId ?? "free",
+    activeWorkspaceId: workspace.id,
+    billingPlanId: workspace.billingPlanId,
   };
 });
 

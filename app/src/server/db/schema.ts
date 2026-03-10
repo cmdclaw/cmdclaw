@@ -117,7 +117,7 @@ export const workspace = pgTable(
     createdByUserId: text("created_by_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    billingPlanId: text("billing_plan_id").default("business").notNull(),
+    billingPlanId: text("billing_plan_id").default("free").notNull(),
     autumnCustomerId: text("autumn_customer_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

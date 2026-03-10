@@ -6,23 +6,13 @@ import { Fragment, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { BILLING_PLANS, TOP_UP_CREDITS_PER_USD, formatCredits } from "@/lib/billing-plans";
 import {
   useAttachBillingPlan,
   useBillingOverview,
   useCancelBillingPlan,
-  useCreateWorkspace,
-  useCurrentUser,
   useManualBillingTopUp,
   useOpenBillingPortal,
-  useSwitchWorkspace,
 } from "@/orpc/hooks";
 
 const TOP_UP_PRESETS = [10, 25, 50, 100];
@@ -30,28 +20,14 @@ const EMPTY_WORKSPACE_OPTIONS: Array<{ id: string; name: string }> = [];
 
 export default function BillingPage() {
   const { data: overview, isLoading, refetch } = useBillingOverview();
-  const { data: currentUser } = useCurrentUser();
   const attachPlan = useAttachBillingPlan();
   const openPortal = useOpenBillingPortal();
   const cancelPlan = useCancelBillingPlan();
   const manualTopUp = useManualBillingTopUp();
-  const createWorkspace = useCreateWorkspace();
-  const switchWorkspace = useSwitchWorkspace();
 
   const [topUpUsd, setTopUpUsd] = useState("25");
-  const [workspaceName, setWorkspaceName] = useState("");
-  const [pendingWorkspacePlanId, setPendingWorkspacePlanId] = useState<
-    "business" | "enterprise" | null
-  >(null);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
-    currentUser?.activeWorkspaceId ?? null,
-  );
 
-  const activeWorkspaceId =
-    overview?.owner.ownerType === "workspace"
-      ? overview.owner.ownerId
-      : currentUser?.activeWorkspaceId;
-  const ownerType = overview?.owner.ownerType ?? "user";
+  const activeWorkspaceId = overview?.owner.ownerId;
   const currentPlan = overview?.plan ?? BILLING_PLANS.free;
   const workspaceOptions = overview?.workspaces ?? EMPTY_WORKSPACE_OPTIONS;
   const availableTargetPlans = useMemo(() => {
@@ -69,18 +45,11 @@ export default function BillingPage() {
     | undefined;
 
   const handleAttachPlan = useCallback(
-    async (
-      planId: "free" | "pro" | "business" | "enterprise",
-      options?: { ownerType?: "user" | "workspace"; workspaceId?: string },
-    ) => {
+    async (planId: "free" | "pro" | "business" | "enterprise") => {
       try {
-        const targetOwnerType = options?.ownerType ?? ownerType;
         const result = await attachPlan.mutateAsync({
-          ownerType: targetOwnerType,
-          workspaceId:
-            targetOwnerType === "workspace"
-              ? (options?.workspaceId ?? activeWorkspaceId ?? undefined)
-              : undefined,
+          ownerType: "workspace",
+          workspaceId: activeWorkspaceId ?? undefined,
           planId,
           successUrl:
             typeof window !== "undefined"
@@ -92,20 +61,19 @@ export default function BillingPage() {
           return;
         }
         toast.success(`Plan updated to ${BILLING_PLANS[planId].name}.`);
-        setPendingWorkspacePlanId(null);
         await refetch();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to update plan.");
       }
     },
-    [activeWorkspaceId, attachPlan, ownerType, refetch],
+    [activeWorkspaceId, attachPlan, refetch],
   );
 
   const handleOpenPortal = useCallback(async () => {
     try {
       const result = await openPortal.mutateAsync({
-        ownerType,
-        workspaceId: ownerType === "workspace" ? (activeWorkspaceId ?? undefined) : undefined,
+        ownerType: "workspace",
+        workspaceId: activeWorkspaceId ?? undefined,
         returnUrl:
           typeof window !== "undefined" ? `${window.location.origin}/settings/billing` : undefined,
       });
@@ -113,13 +81,13 @@ export default function BillingPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to open billing portal.");
     }
-  }, [activeWorkspaceId, openPortal, ownerType]);
+  }, [activeWorkspaceId, openPortal]);
 
   const handleCancel = useCallback(async () => {
     try {
       await cancelPlan.mutateAsync({
-        ownerType,
-        workspaceId: ownerType === "workspace" ? (activeWorkspaceId ?? undefined) : undefined,
+        ownerType: "workspace",
+        workspaceId: activeWorkspaceId ?? undefined,
         productId:
           currentPlan.id === "business" || currentPlan.id === "enterprise" ? currentPlan.id : "pro",
       });
@@ -128,7 +96,7 @@ export default function BillingPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to cancel plan.");
     }
-  }, [activeWorkspaceId, cancelPlan, currentPlan.id, ownerType, refetch]);
+  }, [activeWorkspaceId, cancelPlan, currentPlan.id, refetch]);
 
   const handleManualTopUp = useCallback(async () => {
     const usdAmount = Number(topUpUsd);
@@ -139,8 +107,8 @@ export default function BillingPage() {
 
     try {
       await manualTopUp.mutateAsync({
-        ownerType,
-        workspaceId: ownerType === "workspace" ? (activeWorkspaceId ?? undefined) : undefined,
+        ownerType: "workspace",
+        workspaceId: activeWorkspaceId ?? undefined,
         usdAmount,
       });
       toast.success(
@@ -150,39 +118,11 @@ export default function BillingPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to add credits.");
     }
-  }, [activeWorkspaceId, manualTopUp, ownerType, refetch, topUpUsd]);
+  }, [activeWorkspaceId, manualTopUp, refetch, topUpUsd]);
 
   const handleTopUpUsdChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setTopUpUsd(event.target.value);
   }, []);
-
-  const handleWorkspaceNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setWorkspaceName(event.target.value);
-  }, []);
-
-  const handleCreateWorkspace = useCallback(async () => {
-    const name = workspaceName.trim();
-    if (name.length < 2) {
-      toast.error("Workspace name must be at least 2 characters.");
-      return;
-    }
-
-    try {
-      const created = await createWorkspace.mutateAsync({ name });
-      await switchWorkspace.mutateAsync(created.id);
-      setWorkspaceName("");
-      if (pendingWorkspacePlanId) {
-        await handleAttachPlan(pendingWorkspacePlanId, {
-          ownerType: "workspace",
-          workspaceId: created.id,
-        });
-        return;
-      }
-      toast.success("Workspace created. You can now subscribe to a Business plan.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create workspace.");
-    }
-  }, [createWorkspace, handleAttachPlan, pendingWorkspacePlanId, switchWorkspace, workspaceName]);
 
   const handlePlanButtonClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -195,41 +135,10 @@ export default function BillingPage() {
       if (!planId) {
         return;
       }
-      const plan = BILLING_PLANS[planId];
-      if (plan.ownerType === "workspace") {
-        if (workspaceOptions.length > 0) {
-          setSelectedWorkspaceId(activeWorkspaceId ?? workspaceOptions[0]?.id ?? null);
-        }
-      }
-      if (plan.ownerType === "workspace" && !activeWorkspaceId) {
-        setPendingWorkspacePlanId(planId as "business" | "enterprise");
-        toast.message(
-          workspaceOptions.length > 0
-            ? "Choose a workspace or create a new one to continue."
-            : "Create a workspace to continue with a Business plan.",
-        );
-        return;
-      }
       void handleAttachPlan(planId);
     },
-    [activeWorkspaceId, handleAttachPlan, workspaceOptions],
+    [handleAttachPlan],
   );
-
-  const handleUseWorkspace = useCallback(async () => {
-    if (!selectedWorkspaceId || !pendingWorkspacePlanId) {
-      return;
-    }
-
-    try {
-      await switchWorkspace.mutateAsync(selectedWorkspaceId);
-      await handleAttachPlan(pendingWorkspacePlanId, {
-        ownerType: "workspace",
-        workspaceId: selectedWorkspaceId,
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to continue with workspace.");
-    }
-  }, [handleAttachPlan, pendingWorkspacePlanId, selectedWorkspaceId, switchWorkspace]);
 
   const handleTopUpPresetClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     setTopUpUsd(event.currentTarget.dataset.amount ?? "25");
@@ -267,70 +176,13 @@ export default function BillingPage() {
 
       {/* Plan cards */}
       <section>
-        {ownerType === "workspace" && activeWorkspaceId ? (
+        {activeWorkspaceId ? (
           <div className="text-muted-foreground mb-4 rounded-lg border px-3 py-2 text-[13px]">
             Managing workspace billing for{" "}
             <span className="text-foreground font-medium">
               {workspaceOptions.find((workspace) => workspace.id === activeWorkspaceId)?.name ??
                 "workspace"}
             </span>
-          </div>
-        ) : null}
-
-        {pendingWorkspacePlanId ? (
-          <div className="bg-accent/40 mb-4 rounded-lg border p-3">
-            <div className="mb-3 space-y-1">
-              <div className="text-sm font-medium">
-                {`Set up a workspace to start ${BILLING_PLANS[pendingWorkspacePlanId].name}`}
-              </div>
-              <p className="text-muted-foreground text-[13px]">
-                Choose an existing workspace or create a new one. You can invite teammates and
-                manage roles later.
-              </p>
-            </div>
-
-            {workspaceOptions.length > 0 ? (
-              <div className="mb-2 flex flex-col gap-2 sm:flex-row">
-                <Select value={selectedWorkspaceId ?? ""} onValueChange={setSelectedWorkspaceId}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Choose workspace" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {workspaceOptions.map((workspace) => (
-                      <SelectItem key={workspace.id} value={workspace.id}>
-                        {workspace.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleUseWorkspace}
-                  disabled={
-                    switchWorkspace.isPending || attachPlan.isPending || !selectedWorkspaceId
-                  }
-                >
-                  Use workspace
-                </Button>
-              </div>
-            ) : null}
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                value={workspaceName}
-                onChange={handleWorkspaceNameChange}
-                placeholder="New workspace name"
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                onClick={handleCreateWorkspace}
-                disabled={createWorkspace.isPending}
-              >
-                Continue with Business
-              </Button>
-            </div>
           </div>
         ) : null}
 
@@ -350,21 +202,14 @@ export default function BillingPage() {
 
         <div className="grid gap-3 sm:grid-cols-2">
           {availableTargetPlans.map((plan, index) => {
-            const isCurrent = plan.id === currentPlan.id && plan.ownerType === ownerType;
-            const requiresWorkspaceSetup = plan.ownerType === "workspace" && !activeWorkspaceId;
-            const buttonLabel = requiresWorkspaceSetup
-              ? plan.id === "enterprise"
-                ? "Set up workspace"
-                : "Create workspace to continue"
-              : isCurrent
-                ? "Current plan"
-                : plan.ctaLabel;
+            const isCurrent = plan.id === currentPlan.id;
+            const buttonLabel = isCurrent ? "Current plan" : plan.ctaLabel;
             return (
               <Fragment key={plan.id}>
                 {index === 2 && (
                   <div className="text-muted-foreground col-span-full mt-3 mb-1 flex items-center gap-2 text-xs">
                     <div className="bg-border h-px flex-1" />
-                    <span>Team plans</span>
+                    <span>Higher shared-credit plans</span>
                     <div className="bg-border h-px flex-1" />
                   </div>
                 )}
@@ -400,18 +245,12 @@ export default function BillingPage() {
                     {plan.description}
                   </p>
 
-                  {requiresWorkspaceSetup && (
-                    <p className="text-muted-foreground mt-2 text-[12px] leading-relaxed">
-                      Requires a workspace before checkout. You can invite teammates after setup.
-                    </p>
-                  )}
-
                   <div className="mt-4 space-y-2 text-[13px]">
                     <div className="flex items-center gap-2">
                       <Sparkles className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                       <span>
                         {plan.includedCredits > 0
-                          ? `${formatCredits(plan.includedCredits)} credits/mo`
+                          ? `${formatCredits(plan.includedCredits)} shared credits/mo`
                           : "No included credits"}
                       </span>
                     </div>
@@ -456,8 +295,8 @@ export default function BillingPage() {
       <section className="rounded-xl border p-5">
         <h3 className="text-sm font-medium">Credits</h3>
         <p className="text-muted-foreground mt-1 text-[13px]">
-          Your credit pool is used for all AI interactions. Plan credits refresh monthly, top-ups
-          expire after 12 months.
+          Your workspace credit pool is used for all AI interactions. Plan credits refresh monthly,
+          top-ups expire after 12 months.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">

@@ -66,8 +66,6 @@ export async function resolveBillingOwnerForUser(userId: string): Promise<Billin
     where: eq(user.id, userId),
     columns: {
       id: true,
-      billingPlanId: true,
-      autumnCustomerId: true,
       activeWorkspaceId: true,
     },
   });
@@ -76,43 +74,78 @@ export async function resolveBillingOwnerForUser(userId: string): Promise<Billin
     throw new Error("User not found");
   }
 
-  if (dbUser.activeWorkspaceId) {
-    const membership = await db.query.workspaceMember.findFirst({
-      where: and(
-        eq(workspaceMember.userId, userId),
-        eq(workspaceMember.workspaceId, dbUser.activeWorkspaceId),
-      ),
-      with: {
-        workspace: {
-          columns: {
-            id: true,
-            billingPlanId: true,
-            autumnCustomerId: true,
-          },
+  const activeWorkspace = await ensureWorkspaceForUser(userId, dbUser.activeWorkspaceId);
+  return {
+    ownerType: "workspace",
+    ownerId: activeWorkspace.id,
+    autumnCustomerId: activeWorkspace.autumnCustomerId ?? activeWorkspace.id,
+    planId: activeWorkspace.billingPlanId as BillingPlanId,
+  };
+}
+
+async function getWorkspaceForUser(userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMember.findFirst({
+    where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, workspaceId)),
+    with: {
+      workspace: {
+        columns: {
+          id: true,
+          name: true,
+          billingPlanId: true,
+          autumnCustomerId: true,
         },
       },
-    });
+    },
+  });
 
-    if (
-      membership?.workspace &&
-      (membership.workspace.billingPlanId === "business" ||
-        membership.workspace.billingPlanId === "enterprise")
-    ) {
-      return {
-        ownerType: "workspace",
-        ownerId: membership.workspace.id,
-        autumnCustomerId: membership.workspace.autumnCustomerId ?? membership.workspace.id,
-        planId: membership.workspace.billingPlanId as BillingPlanId,
-      };
+  return membership?.workspace ?? null;
+}
+
+export async function ensureWorkspaceForUser(userId: string, activeWorkspaceId?: string | null) {
+  if (activeWorkspaceId) {
+    const activeWorkspace = await getWorkspaceForUser(userId, activeWorkspaceId);
+    if (activeWorkspace) {
+      return activeWorkspace;
     }
   }
 
-  return {
-    ownerType: "user",
-    ownerId: dbUser.id,
-    autumnCustomerId: dbUser.autumnCustomerId ?? dbUser.id,
-    planId: (dbUser.billingPlanId as BillingPlanId) ?? "free",
-  };
+  const existingMembership = await db.query.workspaceMember.findFirst({
+    where: eq(workspaceMember.userId, userId),
+    with: {
+      workspace: {
+        columns: {
+          id: true,
+          name: true,
+          billingPlanId: true,
+          autumnCustomerId: true,
+        },
+      },
+    },
+    orderBy: [desc(workspaceMember.createdAt)],
+  });
+
+  if (existingMembership?.workspace) {
+    await db
+      .update(user)
+      .set({ activeWorkspaceId: existingMembership.workspace.id })
+      .where(eq(user.id, userId));
+    return existingMembership.workspace;
+  }
+
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  const workspaceName = `${dbUser.name}'s workspace`;
+  return createWorkspaceForUser(userId, workspaceName);
 }
 
 export async function resolveBillingOwnerForConversation(
@@ -141,7 +174,7 @@ export async function resolveBillingOwnerForConversation(
       },
     });
 
-    if (org && (org.billingPlanId === "business" || org.billingPlanId === "enterprise")) {
+    if (org) {
       return {
         ownerType: "workspace",
         ownerId: org.id,
@@ -162,7 +195,7 @@ export async function createWorkspaceForUser(userId: string, name: string) {
       name,
       slug,
       createdByUserId: userId,
-      billingPlanId: "business",
+      billingPlanId: "free",
       autumnCustomerId: null,
     })
     .returning();
@@ -290,17 +323,10 @@ export async function attachPlanToOwner(args: {
   }
 
   if (!result.data?.checkout_url) {
-    if (args.owner.ownerType === "user") {
-      await db
-        .update(user)
-        .set({ billingPlanId: args.planId, autumnCustomerId: args.owner.autumnCustomerId })
-        .where(eq(user.id, args.owner.ownerId));
-    } else {
-      await db
-        .update(workspace)
-        .set({ billingPlanId: args.planId, autumnCustomerId: args.owner.autumnCustomerId })
-        .where(eq(workspace.id, args.owner.ownerId));
-    }
+    await db
+      .update(workspace)
+      .set({ billingPlanId: args.planId, autumnCustomerId: args.owner.autumnCustomerId })
+      .where(eq(workspace.id, args.owner.ownerId));
   }
 
   return result.data;
@@ -337,9 +363,7 @@ export async function cancelPlanForOwner(owner: BillingOwner, productId: Billing
     throw new Error(result.error.message);
   }
 
-  if (owner.ownerType === "user") {
-    await db.update(user).set({ billingPlanId: "free" }).where(eq(user.id, owner.ownerId));
-  }
+  await db.update(workspace).set({ billingPlanId: "free" }).where(eq(workspace.id, owner.ownerId));
 
   return result.data;
 }
@@ -375,9 +399,9 @@ export async function createManualTopUp(args: {
   const [topUp] = await db
     .insert(billingTopUp)
     .values({
-      ownerType: args.owner.ownerType,
-      userId: args.owner.ownerType === "user" ? args.owner.ownerId : null,
-      workspaceId: args.owner.ownerType === "workspace" ? args.owner.ownerId : null,
+      ownerType: "workspace",
+      userId: null,
+      workspaceId: args.owner.ownerId,
       grantedByUserId: args.grantedByUserId,
       usdAmount: args.usdAmount,
       creditsGranted,
@@ -484,9 +508,9 @@ export async function trackGenerationBilling(args: {
     .values({
       generationId: args.generationId,
       conversationId: args.conversationId,
-      ownerType: owner.ownerType,
-      userId: owner.ownerType === "user" ? owner.ownerId : null,
-      workspaceId: owner.ownerType === "workspace" ? owner.ownerId : null,
+      ownerType: "workspace",
+      userId: null,
+      workspaceId: owner.ownerId,
       autumnCustomerId: owner.autumnCustomerId,
       planId: owner.planId,
       model: args.model,

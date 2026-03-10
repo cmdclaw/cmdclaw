@@ -1,17 +1,17 @@
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { BILLING_PLANS, type BillingOwnerType, type BillingPlanId } from "@/lib/billing-plans";
+import { BILLING_PLANS, type BillingPlanId } from "@/lib/billing-plans";
 import {
   addWorkspaceMembers,
   attachPlanToOwner,
   cancelPlanForOwner,
   createManualTopUp,
   createWorkspaceForUser,
+  ensureWorkspaceForUser,
   getBillingOverviewForUser,
   getWorkspaceMembershipForUser,
   openBillingPortalForOwner,
-  resolveBillingOwnerForUser,
   setActiveWorkspace,
 } from "@/server/billing/service";
 import { user, workspace } from "@/server/db/schema";
@@ -28,25 +28,25 @@ async function getDbRole(userId: string, db: typeof import("@/server/db/client")
 async function resolveRequestedOwner(params: {
   userId: string;
   db: typeof import("@/server/db/client").db;
-  ownerType: BillingOwnerType;
+  ownerType: "user" | "workspace";
   workspaceId?: string;
 }) {
   if (params.ownerType === "user") {
-    return resolveBillingOwnerForUser(params.userId).then((owner) => {
-      if (owner.ownerType === "workspace") {
-        return {
-          ownerType: "user" as const,
-          ownerId: params.userId,
-          autumnCustomerId: params.userId,
-          planId: "free" as BillingPlanId,
-        };
-      }
-      return owner;
-    });
+    throw new ORPCError("BAD_REQUEST", { message: "Personal billing is no longer supported" });
   }
 
   if (!params.workspaceId) {
-    throw new ORPCError("BAD_REQUEST", { message: "Workspace ID is required" });
+    const dbUser = await params.db.query.user.findFirst({
+      where: eq(user.id, params.userId),
+      columns: { activeWorkspaceId: true },
+    });
+    const ensuredWorkspace = await ensureWorkspaceForUser(params.userId, dbUser?.activeWorkspaceId);
+    return {
+      ownerType: "workspace" as const,
+      ownerId: ensuredWorkspace.id,
+      autumnCustomerId: ensuredWorkspace.autumnCustomerId ?? ensuredWorkspace.id,
+      planId: ensuredWorkspace.billingPlanId as BillingPlanId,
+    };
   }
 
   const membership = await getWorkspaceMembershipForUser(params.userId, params.workspaceId);
@@ -113,7 +113,7 @@ const attachPlan = protectedProcedure
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
-      ownerType: input.ownerType,
+      ownerType: "workspace",
       workspaceId: input.workspaceId,
     });
     const plan = BILLING_PLANS[input.planId];
@@ -150,7 +150,7 @@ const openPortal = protectedProcedure
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
-      ownerType: input.ownerType,
+      ownerType: "workspace",
       workspaceId: input.workspaceId,
     });
     const result = await openBillingPortalForOwner(owner, input.returnUrl);
@@ -169,14 +169,12 @@ const cancelPlan = protectedProcedure
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
-      ownerType: input.ownerType,
+      ownerType: "workspace",
       workspaceId: input.workspaceId,
     });
-    if (owner.ownerType === "workspace" && input.productId === "business") {
-      const membership = await getWorkspaceMembershipForUser(context.user.id, owner.ownerId);
-      if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
-        throw new ORPCError("FORBIDDEN", { message: "Workspace admin required" });
-      }
+    const membership = await getWorkspaceMembershipForUser(context.user.id, owner.ownerId);
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      throw new ORPCError("FORBIDDEN", { message: "Workspace admin required" });
     }
     await cancelPlanForOwner(owner, input.productId);
     return { success: true };
@@ -199,7 +197,7 @@ const manualTopUp = protectedProcedure
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
-      ownerType: input.ownerType,
+      ownerType: "workspace",
       workspaceId: input.workspaceId,
     });
     const result = await createManualTopUp({

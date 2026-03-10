@@ -21,29 +21,31 @@ const PLAN_META: Record<
     features: [
       "Manual credit top-ups",
       "All AI models",
-      "Unlimited coworkers",
+      "Unlimited users",
+      "Shared workspace access",
       "Community support",
     ],
-    featurePrefix: "What\u2019s included",
+    featurePrefix: "Workspace includes",
   },
   pro: {
     highlighted: true,
     features: [
-      `${formatCredits(2500)} monthly credits`,
+      `${formatCredits(2500)} monthly shared credits`,
       "1-month credit rollover",
       "On-demand top-ups",
       "Priority support",
-      "Unlimited coworkers",
+      "Shared across unlimited users",
     ],
     featurePrefix: "All features in Free, plus:",
   },
   business: {
     features: [
-      "Credits shared across team",
+      `${formatCredits(5000)} monthly shared credits`,
       "3-month credit rollover",
       "Workspace billing & admin",
       "On-demand top-ups",
       "Priority support",
+      "Shared across unlimited users",
     ],
     featurePrefix: "All features in Pro, plus:",
   },
@@ -102,7 +104,7 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
           ? "custom pricing"
           : plan.monthlyPriceUsd === 0
             ? "no credit card required"
-            : "per user"}
+            : "shared across unlimited users"}
       </div>
 
       <div className="mt-6">
@@ -178,7 +180,8 @@ export default function PricingPage() {
         <div className="mx-auto max-w-xl text-center">
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Pricing</h1>
           <p className="mt-3 text-base text-neutral-500">
-            Start for free. Upgrade to get the capacity that matches your team&apos;s needs.
+            Start with a shared workspace. Upgrade for a larger shared credit pool as your team
+            grows.
           </p>
         </div>
 
