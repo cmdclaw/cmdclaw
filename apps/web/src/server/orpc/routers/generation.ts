@@ -2,11 +2,11 @@ import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
 import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observability";
+import { db } from "@cmdclaw/db/client";
+import { generation, conversation } from "@cmdclaw/db/schema";
 import { eventIterator } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/server/db/client";
-import { generation, conversation } from "@/server/db/schema";
 import { detectMessageLanguage } from "@/server/utils/detect-message-language";
 import { protectedProcedure } from "../middleware";
 

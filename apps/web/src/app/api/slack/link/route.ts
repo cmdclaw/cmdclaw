@@ -1,8 +1,8 @@
+import { db } from "@cmdclaw/db/client";
+import { slackUserLink } from "@cmdclaw/db/schema";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/server/db/client";
-import { slackUserLink } from "@/server/db/schema";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

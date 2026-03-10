@@ -13,13 +13,13 @@ import {
   renameWorkspace,
   setActiveWorkspace,
 } from "@cmdclaw/core/server/billing/service";
+import { user, workspace } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { user, workspace } from "@/server/db/schema";
 import { protectedProcedure } from "../middleware";
 
-async function getDbRole(userId: string, db: typeof import("@/server/db/client").db) {
+async function getDbRole(userId: string, db: typeof import("@cmdclaw/db/client").db) {
   const dbUser = await db.query.user.findFirst({
     where: eq(user.id, userId),
     columns: { role: true },
@@ -29,7 +29,7 @@ async function getDbRole(userId: string, db: typeof import("@/server/db/client")
 
 async function resolveRequestedOwner(params: {
   userId: string;
-  db: typeof import("@/server/db/client").db;
+  db: typeof import("@cmdclaw/db/client").db;
   ownerType: "user" | "workspace";
   workspaceId?: string;
 }) {

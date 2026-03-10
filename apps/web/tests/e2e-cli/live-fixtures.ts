@@ -1,9 +1,9 @@
 import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { getValidTokensForUser } from "@cmdclaw/core/server/integrations/token-refresh";
+import { closePool, db } from "@cmdclaw/db/client";
+import { integration, integrationToken, user } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
-import { closePool, db } from "@/server/db/client";
-import { integration, integrationToken, user } from "@/server/db/schema";
 import { loadConfig, createRpcClient } from "../../scripts/lib/cli-shared";
 import { resolveLiveE2EModel } from "../e2e/live-chat-model";
 

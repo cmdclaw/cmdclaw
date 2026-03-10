@@ -1,8 +1,8 @@
+import { db } from "@cmdclaw/db/client";
+import { conversation, message, user } from "@cmdclaw/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { beforeAll, describe, expect, test } from "vitest";
-import { db } from "@/server/db/client";
-import { conversation, message, user } from "@/server/db/schema";
 import {
   assertExitOk,
   defaultServerUrl,

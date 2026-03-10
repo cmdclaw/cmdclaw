@@ -66,7 +66,7 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 

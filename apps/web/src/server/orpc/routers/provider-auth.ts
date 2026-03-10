@@ -5,10 +5,10 @@ import {
   type SubscriptionProviderID,
 } from "@cmdclaw/core/server/ai/subscription-providers";
 import { encrypt } from "@cmdclaw/core/server/utils/encryption";
+import { providerAuth } from "@cmdclaw/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { deletePending, getPending, storePending } from "@/server/ai/pending-oauth";
-import { providerAuth } from "@/server/db/schema";
 import { protectedProcedure } from "../middleware";
 
 const oauthProviderSchema = z.enum(["openai", "google"]);
@@ -384,7 +384,7 @@ export async function storeProviderTokens(params: {
   refreshToken: string;
   expiresAt: Date;
 }): Promise<void> {
-  const { db } = await import("@/server/db/client");
+  const { db } = await import("@cmdclaw/db/client");
 
   const encryptedAccess = encrypt(params.accessToken);
   const encryptedRefresh = encrypt(params.refreshToken);

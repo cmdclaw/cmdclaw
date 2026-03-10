@@ -1,7 +1,7 @@
+import { db } from "@cmdclaw/db/client";
+import { conversation, coworker, coworkerRun } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { env } from "@/env";
-import { db } from "@/server/db/client";
-import { conversation, coworker, coworkerRun } from "@/server/db/schema";
 
 export const runtime = "nodejs";
 

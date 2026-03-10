@@ -1,9 +1,9 @@
 import { getPresignedDownloadUrl } from "@cmdclaw/core/server/storage/s3-client";
+import { db } from "@cmdclaw/db/client";
+import { conversation, message } from "@cmdclaw/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { SharedConversationView } from "@/components/chat/shared-conversation-view";
-import { db } from "@/server/db/client";
-import { conversation, message } from "@/server/db/schema";
 
 type Props = {
   params: Promise<{ shareToken: string }>;

@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 import { getValidTokensForUser } from "@cmdclaw/core/server/integrations/token-refresh";
+import { closePool, db } from "@cmdclaw/db/client";
+import { user } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { closePool, db } from "@/server/db/client";
-import { user } from "@/server/db/schema";
 import { expect, test } from "../../../tests/e2e/live-fixtures";
 
 type SlackMessage = {

@@ -8,13 +8,13 @@
  * Automatically loads integration tokens from the database for the configured user.
  */
 
+import * as schema from "@cmdclaw/db/schema";
 import { Daytona } from "@daytonaio/sdk";
 import * as dotenvConfig from "dotenv/config";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { createInterface } from "readline";
-import * as schema from "@/server/db/schema";
 
 void dotenvConfig;
 

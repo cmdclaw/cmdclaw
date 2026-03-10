@@ -1,7 +1,7 @@
+import { closePool, db } from "@cmdclaw/db/client";
+import { conversation, slackConversation, slackUserLink, user } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { createHmac, randomUUID } from "node:crypto";
-import { closePool, db } from "@/server/db/client";
-import { conversation, slackConversation, slackUserLink, user } from "@/server/db/schema";
 import { expect, test } from "./live-fixtures";
 
 type SlackApiResponse = {

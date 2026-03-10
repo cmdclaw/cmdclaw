@@ -1,6 +1,6 @@
+import { db } from "@cmdclaw/db/client";
+import { providerOauthState } from "@cmdclaw/db/schema";
 import { eq, lt } from "drizzle-orm";
-import { db } from "@/server/db/client";
-import { providerOauthState } from "@/server/db/schema";
 
 /**
  * Durable store for pending OAuth PKCE verifiers.

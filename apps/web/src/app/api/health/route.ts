@@ -1,9 +1,9 @@
 import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
+import { db } from "@cmdclaw/db/client";
 import { sql } from "drizzle-orm";
 import IORedis from "ioredis";
 import { NextResponse } from "next/server";
 import { env } from "@/env";
-import { db } from "@/server/db/client";
 
 const redisBaseOptions = {
   maxRetriesPerRequest: 1,

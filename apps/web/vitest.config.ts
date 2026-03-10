@@ -7,7 +7,6 @@ const liveE2EEnabled = process.env.E2E_LIVE === "1";
 export default defineConfig({
   resolve: {
     alias: {
-      "@/server/db": fileURLToPath(new URL("../../packages/db/src", import.meta.url)),
       "@/env": fileURLToPath(new URL("./src/env.js", import.meta.url)),
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },

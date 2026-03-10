@@ -1,9 +1,9 @@
 import { writeSessionTranscriptFromConversation } from "@cmdclaw/core/server/services/memory-service";
+import { conversation, message, messageAttachment, sandboxFile } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, desc, and, isNull, asc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { conversation, message, messageAttachment, sandboxFile } from "@/server/db/schema";
 import { protectedProcedure } from "../middleware";
 
 // List conversations for current user

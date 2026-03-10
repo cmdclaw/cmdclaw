@@ -1,6 +1,6 @@
+import { db } from "@cmdclaw/db/client";
+import { conversation, generation } from "@cmdclaw/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { db } from "@/server/db/client";
-import { conversation, generation } from "@/server/db/schema";
 
 const CALLBACK_ROUTABLE_GENERATION_STATUSES = [
   "running",

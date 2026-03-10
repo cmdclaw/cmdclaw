@@ -18,7 +18,7 @@ const { generationFindFirstMock, conversationFindFirstMock, dbMock } = vi.hoiste
   };
 });
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 

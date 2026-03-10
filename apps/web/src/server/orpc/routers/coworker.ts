@@ -12,9 +12,6 @@ import {
   syncCoworkerScheduleJob,
 } from "@cmdclaw/core/server/services/coworker-scheduler";
 import { triggerCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
-import { ORPCError } from "@orpc/server";
-import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import {
   conversation,
   generation,
@@ -23,7 +20,10 @@ import {
   coworkerEmailAlias,
   coworkerRun,
   coworkerRunEvent,
-} from "@/server/db/schema";
+} from "@cmdclaw/db/schema";
+import { ORPCError } from "@orpc/server";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { generateCoworkerName } from "@/server/utils/generate-coworker-name";
 import { protectedProcedure } from "../middleware";
 

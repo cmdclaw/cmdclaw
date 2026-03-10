@@ -1,8 +1,8 @@
+import { db } from "@cmdclaw/db/client";
+import { generation } from "@cmdclaw/db/schema";
 import { test as base, expect } from "@playwright/test";
 import { inArray } from "drizzle-orm";
 import { Sandbox } from "e2b";
-import { db } from "@/server/db/client";
-import { generation } from "@/server/db/schema";
 import { resolveLiveE2EModel } from "./live-chat-model";
 
 type LiveFixtures = {

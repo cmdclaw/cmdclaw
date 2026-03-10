@@ -8,6 +8,7 @@
  * Automatically loads integration tokens from the database for the configured user.
  */
 
+import * as schema from "@cmdclaw/db/schema";
 // Load env
 import * as dotenvConfig from "dotenv/config";
 import { eq, and } from "drizzle-orm";
@@ -15,7 +16,6 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Sandbox } from "e2b";
 import { Pool } from "pg";
 import { createInterface } from "readline";
-import * as schema from "@/server/db/schema";
 
 void dotenvConfig;
 

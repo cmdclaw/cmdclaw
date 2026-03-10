@@ -52,7 +52,7 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 

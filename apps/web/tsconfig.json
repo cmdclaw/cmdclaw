@@ -7,7 +7,6 @@
       }
     ],
     "paths": {
-      "@/server/db/*": ["../../packages/db/src/*"],
       "@/*": ["./src/*"]
     }
   },
@@ -17,8 +16,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts",
-    "../../packages/db/src/**/*.ts"
+    "**/*.mts"
   ],
   "exclude": ["node_modules"]
 }

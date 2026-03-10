@@ -1,10 +1,10 @@
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
+import { db } from "@cmdclaw/db/client";
+import { integration, integrationToken } from "@cmdclaw/db/schema";
 import { eq, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/server/db/client";
-import { integration, integrationToken } from "@/server/db/schema";
 import { fetchDynamicsInstances } from "@/server/integrations/dynamics";
 
 function getRequestAwareBaseUrl(request: NextRequest): string {

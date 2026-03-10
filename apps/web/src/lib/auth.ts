@@ -1,3 +1,5 @@
+import { db } from "@cmdclaw/db/client";
+import { authSchema } from "@cmdclaw/db/schema";
 import { autumn } from "autumn-js/better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -6,8 +8,6 @@ import { admin, bearer, lastLoginMethod, magicLink } from "better-auth/plugins";
 import { Resend } from "resend";
 import { env } from "@/env";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
-import { db } from "@/server/db/client";
-import { authSchema } from "@/server/db/schema";
 
 const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 

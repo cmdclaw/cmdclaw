@@ -45,8 +45,8 @@ async function main(): Promise<void> {
   try {
     const [{ auth }, dbModule, schemaModule] = await Promise.all([
       import("@/lib/auth"),
-      import("@/server/db/client"),
-      import("@/server/db/schema"),
+      import("@cmdclaw/db/client"),
+      import("@cmdclaw/db/schema"),
     ]);
 
     const { db } = dbModule;

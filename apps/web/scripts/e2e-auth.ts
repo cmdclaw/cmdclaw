@@ -1,11 +1,11 @@
+import { db, closePool } from "@cmdclaw/db/client";
+import { session, user } from "@cmdclaw/db/schema";
 import { serializeSignedCookie } from "better-call";
 import { eq } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { auth } from "@/lib/auth";
-import { db, closePool } from "@/server/db/client";
-import { session, user } from "@/server/db/schema";
 
 type StorageCookie = {
   name: string;

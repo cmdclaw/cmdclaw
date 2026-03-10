@@ -1,5 +1,13 @@
 import { encrypt, decrypt } from "@cmdclaw/core/server/lib/encryption";
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
+import {
+  integration,
+  integrationToken,
+  customIntegration,
+  customIntegrationCredential,
+  googleIntegrationAccessAllowlist,
+  user,
+} from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { createHash, randomBytes } from "crypto";
 import { and, eq, or } from "drizzle-orm";
@@ -9,14 +17,6 @@ import {
   isUnipileMissingCredentialsError,
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
 } from "@/lib/integration-errors";
-import {
-  integration,
-  integrationToken,
-  customIntegration,
-  customIntegrationCredential,
-  googleIntegrationAccessAllowlist,
-  user,
-} from "@/server/db/schema";
 import { fetchDynamicsInstances } from "@/server/integrations/dynamics";
 import {
   generateLinkedInAuthUrl,

@@ -1,5 +1,14 @@
 import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
+import { db } from "@cmdclaw/db/client";
+import {
+  conversation,
+  whatsappAuthState,
+  whatsappConversation,
+  whatsappLinkCode,
+  whatsappUserLink,
+  user,
+} from "@cmdclaw/db/schema";
 import createWASocket, {
   type AuthenticationState,
   Browsers,
@@ -12,15 +21,6 @@ import createWASocket, {
 } from "@whiskeysockets/baileys";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import IORedis from "ioredis";
-import { db } from "@/server/db/client";
-import {
-  conversation,
-  whatsappAuthState,
-  whatsappConversation,
-  whatsappLinkCode,
-  whatsappUserLink,
-  user,
-} from "@/server/db/schema";
 
 type WhatsAppStatus = "disconnected" | "connecting" | "connected";
 

@@ -5,15 +5,15 @@ import {
   resolveIntegrationSkillForUser,
   validateIntegrationSkillFilePath,
 } from "@cmdclaw/core/server/services/integration-skill-service";
-import { ORPCError } from "@orpc/server";
-import { and, eq } from "drizzle-orm";
-import { z } from "zod";
-import { db } from "@/server/db/client";
+import { db } from "@cmdclaw/db/client";
 import {
   integrationSkill,
   integrationSkillFile,
   integrationSkillPreference,
-} from "@/server/db/schema";
+} from "@cmdclaw/db/schema";
+import { ORPCError } from "@orpc/server";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { protectedProcedure } from "../middleware";
 
 const createFromChat = protectedProcedure

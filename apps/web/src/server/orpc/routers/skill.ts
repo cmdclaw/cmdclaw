@@ -5,10 +5,10 @@ import {
   generateStorageKey,
   ensureBucket,
 } from "@cmdclaw/core/server/storage/s3-client";
+import { skill, skillFile, skillDocument } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, and, count } from "drizzle-orm";
 import { z } from "zod";
-import { skill, skillFile, skillDocument } from "@/server/db/schema";
 import { validateFileUpload } from "@/server/storage/validation";
 import { protectedProcedure } from "../middleware";
 

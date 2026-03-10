@@ -1,9 +1,9 @@
 import { getOAuthConfig } from "@cmdclaw/core/server/oauth/config";
+import { db } from "@cmdclaw/db/client";
+import { integration } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db } from "@/server/db/client";
-import { integration } from "@/server/db/schema";
 
 type DynamicsInstance = {
   id: string;
