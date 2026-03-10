@@ -18,6 +18,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
+RUN NODE_ENV=development bun install
+RUN bun run --cwd apps/worker bundle
 WORKDIR /app/apps/worker
-CMD ["bun", "index.ts"]
+CMD ["bun", "dist/index.js"]
