@@ -54,7 +54,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: ["bun", "run", "db:push"]
+    command: ["bun", "run", "--cwd", "/app/packages/db", "db:push"]
     restart: "no"
 
   app:
