@@ -11,7 +11,9 @@ import {
   ensureWorkspaceForUser,
   getBillingOverviewForUser,
   getWorkspaceMembershipForUser,
+  listWorkspaceMembers,
   openBillingPortalForOwner,
+  renameWorkspace,
   setActiveWorkspace,
 } from "@/server/billing/service";
 import { user, workspace } from "@/server/db/schema";
@@ -229,6 +231,40 @@ const inviteMembers = protectedProcedure
     return { added };
   });
 
+const members = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const membership = await getWorkspaceMembershipForUser(context.user.id, input.workspaceId);
+    if (!membership) {
+      throw new ORPCError("NOT_FOUND", { message: "Workspace not found" });
+    }
+
+    return {
+      members: await listWorkspaceMembers(input.workspaceId),
+      membershipRole: membership.role,
+    };
+  });
+
+const rename = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string(),
+      name: z.string().trim().min(2).max(80),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const membership = await getWorkspaceMembershipForUser(context.user.id, input.workspaceId);
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      throw new ORPCError("FORBIDDEN", { message: "Workspace admin required" });
+    }
+
+    return renameWorkspace(input.workspaceId, input.name);
+  });
+
 export const billingRouter = {
   overview,
   createWorkspace,
@@ -238,4 +274,6 @@ export const billingRouter = {
   cancelPlan,
   manualTopUp,
   inviteMembers,
+  members,
+  rename,
 };

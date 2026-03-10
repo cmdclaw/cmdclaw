@@ -578,3 +578,25 @@ export async function addWorkspaceMembers(
 
   return users.map((item) => item.email);
 }
+
+export async function renameWorkspace(workspaceId: string, name: string) {
+  const trimmedName = name.trim();
+
+  const [updated] = await db
+    .update(workspace)
+    .set({
+      name: trimmedName,
+    })
+    .where(eq(workspace.id, workspaceId))
+    .returning({
+      id: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+    });
+
+  if (!updated) {
+    throw new Error("Workspace not found");
+  }
+
+  return updated;
+}
