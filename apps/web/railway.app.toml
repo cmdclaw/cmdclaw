@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.app"
+dockerfilePath = "apps/web/Dockerfile.app"
 
 [deploy]
 startCommand = "bun run --silent start -- -H 0.0.0.0"
