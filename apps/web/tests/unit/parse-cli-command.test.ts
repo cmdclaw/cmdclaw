@@ -61,7 +61,7 @@ describe("parseCliCommand", () => {
       },
       {
         command: "google-gmail list --limit 5",
-        integration: "gmail",
+        integration: "google_gmail",
         operation: "list",
       },
       {
