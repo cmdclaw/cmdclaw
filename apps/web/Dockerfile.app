@@ -1,15 +1,19 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.3.9 AS pruner
+FROM oven/bun:1.3.10 AS bun
+
+FROM node:24-bookworm-slim AS pruner
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
-RUN bun --version
+RUN bun --version && node --version
 COPY . .
 RUN bun x turbo prune --scope=@cmdclaw/web --docker --out-dir /tmp/pruned
 RUN bun -e 'const fs = require("fs"); for (const path of ["/tmp/pruned/json/package.json", "/tmp/pruned/full/package.json"]) { const pkg = JSON.parse(fs.readFileSync(path, "utf8")); pkg.workspaces = pkg.workspaces.filter((entry) => entry !== "docs"); fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`); }'
 RUN mkdir -p /tmp/pruned/full/packages/config
 RUN cp -R /app/packages/config/. /tmp/pruned/full/packages/config/
 
-FROM oven/bun:1.3.9 AS builder
+FROM node:24-bookworm-slim AS builder
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY --from=pruner /tmp/pruned/json/ ./
 RUN NODE_ENV=development bun install --frozen-lockfile --ignore-scripts
@@ -22,9 +26,9 @@ ARG NEXT_PUBLIC_POSTHOG_HOST
 ENV SKIP_ENV_VALIDATION=${SKIP_ENV_VALIDATION}
 ENV NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY} \
     NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
-RUN bun x next build --webpack
+RUN node ./node_modules/next/dist/bin/next build
 
-FROM oven/bun:1.3.9 AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /app/apps/web
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/apps/web/package.json ./package.json
@@ -37,4 +41,4 @@ COPY --from=builder /app/apps/web/node_modules ./node_modules
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages /app/packages
 EXPOSE 3000
-CMD ["bun", "run", "start"]
+CMD ["node", "./node_modules/next/dist/bin/next", "start"]
