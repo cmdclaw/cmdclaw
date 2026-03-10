@@ -13,7 +13,6 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   transpilePackages: ["@cmdclaw/core", "@cmdclaw/db"],
   typescript: {
-    ignoreBuildErrors: true,
     tsconfigPath: "./tsconfig.build.json",
   },
   images: {
