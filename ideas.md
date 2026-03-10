@@ -1,2 +1,0 @@
-- test how to imporve opencode sandbxo ready status
-- single file upload to give me 
