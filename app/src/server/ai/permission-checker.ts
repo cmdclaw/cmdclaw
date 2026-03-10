@@ -1,5 +1,5 @@
 /**
- * Server-side permission checker for BYOC direct mode.
+ * Server-side permission checker for direct mode.
  * Ported from sandbox-templates/common/plugins/integration-permissions.ts.
  *
  * Checks bash commands for integration CLI usage and enforces

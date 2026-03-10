@@ -13,8 +13,4 @@ describe("sandbox provider registry", () => {
   it("returns docker provider", () => {
     expect(getSandboxProvider("docker").id).toBe("docker");
   });
-
-  it("returns byoc provider", () => {
-    expect(getSandboxProvider("byoc").id).toBe("byoc");
-  });
 });

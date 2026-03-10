@@ -1,5 +1,5 @@
 /**
- * Shared types for sandbox backends (E2B, BYOC) and daemon WebSocket protocol.
+ * Shared types for sandbox backends and the device WebSocket protocol.
  */
 
 // ========== SandboxBackend Interface ==========

@@ -1,4 +1,4 @@
-export type SandboxProviderId = "e2b" | "daytona" | "docker" | "byoc";
+export type SandboxProviderId = "e2b" | "daytona" | "docker";
 
 export type RuntimeHarnessId = "opencode" | "agent-sdk";
 

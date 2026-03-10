@@ -183,27 +183,6 @@ volumes:
   cmdclaw_minio_data:
 ```
 
-## BYOC daemon (local compute)
-
-The BYOC daemon is meant to run on the user's local machine, not inside the
-server Docker stack. This lets the server execute tools and sandbox commands on
-their device.
-
-1. Install the daemon using the provided scripts in `src/daemon/scripts/`.
-2. Authenticate the device:
-
-```bash
-cmdclaw-daemon auth
-```
-
-3. Start the daemon:
-
-```bash
-cmdclaw-daemon start
-```
-
-If you don't want BYOC:
-
 - Set `E2B_API_KEY` and `E2B_DAYTONA_SANDBOX_NAME` to use E2B cloud sandboxes.
 - Or set `DAYTONA_API_KEY` (plus optional `DAYTONA_SERVER_URL` / `DAYTONA_TARGET`) to use Daytona sandboxes.
 - Or set `SANDBOX_DEFAULT=docker` to use local Docker-based sandboxes.
@@ -216,9 +195,9 @@ CmdClaw uses BullMQ for background jobs (e.g., processing integrations). Start t
 bun worker
 ```
 
-## WebSocket server (BYOC)
+## WebSocket server
 
-The WebSocket server handles daemon connections and runs separately from Next.js:
+The WebSocket server still runs separately from Next.js:
 
 ```bash
 bun ws:dev
@@ -231,7 +210,7 @@ bun ws:dev
 | `bun dev` | Start the dev server |
 | `bun build` | Production build |
 | `bun worker` | Start the background job worker |
-| `bun ws:dev` | Start the BYOC WebSocket server |
+| `bun ws:dev` | Start the WebSocket server |
 | `bun db:push` | Push schema changes to the database |
 | `bun db:studio` | Open Drizzle Studio (database browser) |
 | `bun db:seed` | Seed the database |

@@ -5,7 +5,6 @@ type MockState = {
   isE2BConfigured: boolean;
   isDaytonaConfigured: boolean;
   isDockerConfigured: boolean;
-  isDeviceOnline: boolean;
 };
 
 function getState(): MockState {
@@ -18,7 +17,6 @@ function getState(): MockState {
   isE2BConfigured: true,
   isDaytonaConfigured: false,
   isDockerConfigured: false,
-  isDeviceOnline: false,
 };
 
 vi.mock("@/env", () => ({
@@ -35,10 +33,6 @@ vi.mock("@/env", () => ({
   ),
 }));
 
-vi.mock("@/server/ws/server", () => ({
-  isDeviceOnline: () => getState().isDeviceOnline,
-}));
-
 vi.mock("./e2b", () => ({
   E2BSandboxBackend: class E2BSandboxBackend {
     readonly provider = "e2b";
@@ -53,12 +47,6 @@ vi.mock("./daytona", () => ({
   isDaytonaConfigured: () => getState().isDaytonaConfigured,
 }));
 
-vi.mock("./byoc", () => ({
-  BYOCSandboxBackend: class BYOCSandboxBackend {
-    constructor(public readonly deviceId: string) {}
-  },
-}));
-
 vi.mock("./docker", () => ({
   DockerSandboxBackend: class DockerSandboxBackend {
     readonly provider = "docker";
@@ -66,7 +54,7 @@ vi.mock("./docker", () => ({
   isDockerConfigured: () => getState().isDockerConfigured,
 }));
 
-import { getPreferredCloudSandboxProvider, getSandboxBackend } from "@/server/sandbox/factory";
+import { getPreferredCloudSandboxProvider } from "@/server/sandbox/factory";
 
 describe("sandbox factory", () => {
   beforeEach(() => {
@@ -75,7 +63,6 @@ describe("sandbox factory", () => {
     state.isE2BConfigured = true;
     state.isDaytonaConfigured = false;
     state.isDockerConfigured = false;
-    state.isDeviceOnline = false;
   });
 
   it("uses E2B when SANDBOX_DEFAULT=e2b and E2B is configured", () => {
@@ -109,16 +96,6 @@ describe("sandbox factory", () => {
     expect(() => getPreferredCloudSandboxProvider()).toThrow(
       "SANDBOX_DEFAULT is set to 'daytona' but DAYTONA_API_KEY is not configured",
     );
-  });
-
-  it("still prioritizes BYOC when a selected device is online", () => {
-    const state = getState();
-    state.isDeviceOnline = true;
-
-    const backend = getSandboxBackend("conv-1", "user-1", "device-1") as {
-      deviceId?: string;
-    };
-    expect(backend.deviceId).toBe("device-1");
   });
 
   it("uses Docker when SANDBOX_DEFAULT=docker and Docker is configured", () => {

@@ -1,5 +1,5 @@
 /**
- * Tool definitions for direct LLM calls (BYOC mode).
+ * Tool definitions for direct LLM calls.
  * These match the tools that OpenCode provides to the model.
  */
 

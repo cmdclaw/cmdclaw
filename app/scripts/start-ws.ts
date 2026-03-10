@@ -1,5 +1,5 @@
 /**
- * Dev startup script for the BYOC WebSocket server.
+ * Dev startup script for the WebSocket server.
  * Run with: bun scripts/start-ws.ts
  */
 

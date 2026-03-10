@@ -74,7 +74,6 @@ import { BottomActionBar } from "./bottom-action-bar";
 import { useChatModelStore } from "./chat-model-store";
 import { formatDuration } from "./chat-performance-metrics";
 import { useChatSkillStore } from "./chat-skill-store";
-// DeviceSelector removed from bottom bar – state kept for generation runtime
 import { MessageList, type Message, type MessagePart, type AttachmentData } from "./message-list";
 import { ModelSelector } from "./model-selector";
 import { ToolApprovalCard } from "./tool-approval-card";
@@ -519,7 +518,6 @@ export function ChatArea({
   const [localAutoApprove, setLocalAutoApprove] = useState(false);
   const selectedModel = useChatModelStore((state) => state.selectedModel);
   const setSelectedModel = useChatModelStore((state) => state.setSelectedModel);
-  const [selectedDeviceId] = useState<string | undefined>(undefined);
   const [queueingEnabled, setQueueingEnabled] = useState(true);
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
   const [skillSearchQuery, setSkillSearchQuery] = useState("");
@@ -1545,7 +1543,6 @@ export function ChatArea({
           content,
           model: selectedModel,
           autoApprove: autoApproveEnabled,
-          deviceId: selectedDeviceId,
           selectedPlatformSkillSlugs,
           fileAttachments: attachments,
         },
@@ -1829,7 +1826,6 @@ export function ChatArea({
       persistInterruptedRuntimeMessage,
       queryClient,
       resetInitTracking,
-      selectedDeviceId,
       selectedSkillKeys,
       selectedModel,
       startGeneration,

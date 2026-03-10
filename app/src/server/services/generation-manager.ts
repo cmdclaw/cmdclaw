@@ -281,9 +281,7 @@ interface GenerationContext {
       parts: RuntimePart[];
     }
   >;
-  // BYOC fields
   backendType: BackendType;
-  deviceId?: string;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";
   // Coworker fields
   coworkerRunId?: string;
@@ -1426,7 +1424,6 @@ class GenerationManager {
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
     allowedIntegrations?: IntegrationType[];
-    deviceId?: string;
     fileAttachments?: UserFileAttachment[];
     selectedPlatformSkillSlugs?: string[];
   }): Promise<{ generationId: string; conversationId: string }> {
@@ -1450,7 +1447,6 @@ class GenerationManager {
       {
         hasConversationId: Boolean(params.conversationId),
         requestedModel: requestedModel ?? null,
-        hasDeviceId: Boolean(params.deviceId),
         hasAllowedIntegrations: params.allowedIntegrations !== undefined,
         sandboxProviderOverride: params.sandboxProvider ?? null,
         fileAttachmentsCount: fileAttachments?.length ?? 0,
@@ -1749,7 +1745,6 @@ class GenerationManager {
       messageRoles: new Map(),
       pendingMessageParts: new Map(),
       backendType,
-      deviceId: params.deviceId,
       sandboxProviderOverride: params.sandboxProvider,
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: conv.autoApprove,

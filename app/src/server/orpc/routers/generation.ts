@@ -201,7 +201,6 @@ const startGeneration = protectedProcedure
       model: modelReferenceSchema.optional(),
       autoApprove: z.boolean().optional(),
       sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
-      deviceId: z.string().optional(),
       selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
       fileAttachments: z
         .array(
@@ -237,7 +236,6 @@ const startGeneration = protectedProcedure
         userId: context.user.id,
         autoApprove: input.autoApprove,
         sandboxProvider: input.sandboxProvider,
-        deviceId: input.deviceId,
         selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
         fileAttachments: input.fileAttachments,
       });

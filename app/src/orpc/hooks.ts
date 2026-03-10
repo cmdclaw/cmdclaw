@@ -1139,7 +1139,6 @@ export function useGeneration() {
         content: string;
         model?: string;
         autoApprove?: boolean;
-        deviceId?: string;
         selectedPlatformSkillSlugs?: string[];
         fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
       },

@@ -1056,8 +1056,7 @@ When a slug is listed above, prioritize that community skill's SKILL.md and reso
 
 /**
  * SandboxBackend implementation backed by E2B cloud sandboxes.
- * Wraps existing E2B functions into the SandboxBackend interface
- * for use alongside BYOCSandboxBackend.
+ * Wraps existing E2B functions into the SandboxBackend interface.
  */
 export class E2BSandboxBackend implements SandboxBackend {
   private sandbox: Sandbox | null = null;

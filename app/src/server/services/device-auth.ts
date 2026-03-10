@@ -1,7 +1,5 @@
 /**
- * Device authentication helpers for BYOC daemon.
- * Uses Better Auth's device authorization plugin for the code flow.
- * This module provides token verification for WebSocket connections.
+ * Device authentication helpers for WebSocket connections.
  */
 
 import { eq } from "drizzle-orm";
@@ -11,7 +9,7 @@ import { device } from "@/server/db/schema";
 
 /**
  * Verify a Better Auth bearer token and resolve the device.
- * Used by the WebSocket server to authenticate daemon connections.
+ * Used by the WebSocket server to authenticate device connections.
  */
 export async function verifyDeviceToken(
   token: string,

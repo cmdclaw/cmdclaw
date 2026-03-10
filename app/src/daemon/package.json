@@ -1,9 +1,0 @@
-{
-  "name": "cmdclaw-daemon",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "bun run src/index.ts",
-    "build": "bun run build.ts"
-  }
-}

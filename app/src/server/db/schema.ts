@@ -1413,7 +1413,7 @@ export const deviceCode = pgTable("device_code", {
     .notNull(),
 });
 
-// ========== DEVICE (BYOC) SCHEMA ==========
+// ========== DEVICE CONNECTION SCHEMA ==========
 
 export const device = pgTable(
   "device",

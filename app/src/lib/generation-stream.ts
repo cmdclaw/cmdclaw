@@ -93,7 +93,6 @@ export type GenerationStartInput = {
   model?: string;
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
-  deviceId?: string;
   selectedPlatformSkillSlugs?: string[];
   fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
 };

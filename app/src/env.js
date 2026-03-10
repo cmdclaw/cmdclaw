@@ -71,7 +71,7 @@ export const env = createEnv({
     CMDCLAW_SERVER_SECRET: z.string(),
     // Public callback URL for sandbox -> app internal routes (approval/auth)
     E2B_CALLBACK_BASE_URL: z.url().optional(),
-    // BYOC WebSocket server port
+    // Dedicated WebSocket server port
     WS_PORT: z.string().default("4097"),
     // S3/MinIO Configuration (AWS SDK generic naming)
     AWS_ENDPOINT_URL: z.url(),

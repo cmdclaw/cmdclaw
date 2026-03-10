@@ -2,13 +2,7 @@ import { autumn } from "autumn-js/better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import {
-  admin,
-  bearer,
-  deviceAuthorization,
-  lastLoginMethod,
-  magicLink,
-} from "better-auth/plugins";
+import { admin, bearer, lastLoginMethod, magicLink } from "better-auth/plugins";
 import { Resend } from "resend";
 import { env } from "@/env";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
@@ -57,9 +51,6 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
       adminRoles: ["admin"],
-    }),
-    deviceAuthorization({
-      verificationUri: "/connect",
     }),
     lastLoginMethod(),
     autumn({
