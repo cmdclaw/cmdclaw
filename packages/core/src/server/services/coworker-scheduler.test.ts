@@ -34,11 +34,11 @@ const {
   };
 });
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/queues", () => ({
+vi.mock("../queues", () => ({
   SCHEDULED_COWORKER_JOB_NAME: "coworker:scheduled-trigger",
   getQueue: getQueueMock,
 }));
@@ -50,7 +50,7 @@ import {
   removeCoworkerScheduleJob,
   syncCoworkerScheduleJob,
   upsertCoworkerScheduleJob,
-} from "@cmdclaw/core/server/services/coworker-scheduler";
+} from "./coworker-scheduler";
 
 type CoworkerScheduleRowInput = Parameters<typeof upsertCoworkerScheduleJob>[0];
 

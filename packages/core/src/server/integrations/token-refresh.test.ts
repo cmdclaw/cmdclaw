@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mswServer } from "@/test/msw/server";
+import { mswServer } from "../../test/msw/server";
 
 const {
   updateMock,
@@ -74,15 +74,15 @@ const {
   };
 });
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/oauth/config", () => ({
+vi.mock("../oauth/config", () => ({
   getOAuthConfig: getOAuthConfigMock,
 }));
 
-vi.mock("@cmdclaw/core/server/lib/encryption", () => ({
+vi.mock("../lib/encryption", () => ({
   decrypt: decryptMock,
 }));
 
@@ -99,7 +99,7 @@ import {
   getValidAccessToken,
   getValidTokensForUser,
   getValidCustomTokens,
-} from "@cmdclaw/core/server/integrations/token-refresh";
+} from "./token-refresh";
 
 let fetchSpy: ReturnType<typeof vi.spyOn>;
 

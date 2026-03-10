@@ -5,7 +5,7 @@ const { syncCoworkerScheduleJobMock } = vi.hoisted(() => ({
   syncCoworkerScheduleJobMock: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-scheduler", () => ({
+vi.mock("./coworker-scheduler", () => ({
   syncCoworkerScheduleJob: syncCoworkerScheduleJobMock,
 }));
 
@@ -13,7 +13,7 @@ import {
   applyCoworkerBuilderPatch,
   extractCoworkerBuilderPatch,
   coworkerBuilderPatchEnvelopeSchema,
-} from "@cmdclaw/core/server/services/coworker-builder-service";
+} from "./coworker-builder-service";
 
 function createDbStub() {
   const findFirst = vi.fn();

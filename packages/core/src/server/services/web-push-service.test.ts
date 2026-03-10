@@ -1,4 +1,4 @@
-import { buildTaskDonePushBody } from "@cmdclaw/core/server/services/web-push-service";
+import { buildTaskDonePushBody } from "./web-push-service";
 import { describe, expect, it } from "vitest";
 
 describe("buildTaskDonePushBody", () => {

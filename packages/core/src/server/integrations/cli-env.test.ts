@@ -5,7 +5,7 @@ const { getValidTokensForUserMock, findIntegrationMock } = vi.hoisted(() => ({
   findIntegrationMock: vi.fn(),
 }));
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: {
     query: {
       integration: {
@@ -15,12 +15,12 @@ vi.mock("@/server/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/token-refresh", () => ({
+vi.mock("./token-refresh", () => ({
   getValidTokensForUser: getValidTokensForUserMock,
   getValidCustomTokens: vi.fn(),
 }));
 
-import { getTokensForIntegrations } from "@cmdclaw/core/server/integrations/cli-env";
+import { getTokensForIntegrations } from "./cli-env";
 
 describe("getTokensForIntegrations", () => {
   beforeEach(() => {

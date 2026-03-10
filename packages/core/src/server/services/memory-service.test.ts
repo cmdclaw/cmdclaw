@@ -71,21 +71,21 @@ const {
   };
 });
 
-vi.mock("@/env", () => ({
+vi.mock("../../env", () => ({
   env: {
     OPENAI_API_KEY: "test-openai-key",
   },
 }));
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/utils/encryption", () => ({
+vi.mock("../utils/encryption", () => ({
   decrypt: vi.fn((value: string) => value),
 }));
 
-vi.mock("@cmdclaw/core/server/utils/generate-title", () => ({
+vi.mock("../utils/generate-title", () => ({
   generateConversationTitle: generateConversationTitleMock,
 }));
 
@@ -108,7 +108,7 @@ import {
   readMemoryFile,
   searchMemoryWithSessions,
   writeSessionTranscriptFromConversation,
-} from "@cmdclaw/core/server/services/memory-service";
+} from "./memory-service";
 
 describe("chunkMarkdown", () => {
   it("keeps chunk boundaries and overlap", () => {

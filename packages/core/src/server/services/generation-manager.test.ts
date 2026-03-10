@@ -90,15 +90,15 @@ const { ensureBucketMock, uploadToS3Mock } = vi.hoisted(() => ({
   uploadToS3Mock: vi.fn(),
 }));
 
-vi.mock("@/env", () => ({
+vi.mock("../../env", () => ({
   env: {},
 }));
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/sandbox/opencode-session", () => ({
+vi.mock("../sandbox/opencode-session", () => ({
   getOrCreateSession: vi.fn(),
   writeSkillsToSandbox: vi.fn(),
   getSkillsSystemPrompt: vi.fn(() => ""),
@@ -106,26 +106,26 @@ vi.mock("@cmdclaw/core/server/sandbox/opencode-session", () => ({
   getIntegrationSkillsSystemPrompt: vi.fn(() => ""),
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/cli-env", () => ({
+vi.mock("../integrations/cli-env", () => ({
   getCliEnvForUser: vi.fn(),
   getCliInstructions: vi.fn(() => ""),
   getCliInstructionsWithCustom: vi.fn(() => ""),
   getEnabledIntegrationTypes: vi.fn(() => []),
 }));
 
-vi.mock("@cmdclaw/core/server/utils/generate-title", () => ({
+vi.mock("../utils/generate-title", () => ({
   generateConversationTitle: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/core/server/sandbox/factory", () => ({
+vi.mock("../sandbox/factory", () => ({
   getPreferredCloudSandboxProvider: vi.fn(() => "e2b"),
 }));
 
-vi.mock("@cmdclaw/core/server/ai/permission-checker", () => ({
+vi.mock("../ai/permission-checker", () => ({
   parseBashCommand: vi.fn(() => null),
 }));
 
-vi.mock("@cmdclaw/core/server/services/memory-service", () => ({
+vi.mock("./memory-service", () => ({
   buildMemorySystemPrompt: vi.fn(() => ""),
   readMemoryFile: vi.fn(),
   searchMemoryWithSessions: vi.fn(() => []),
@@ -134,27 +134,27 @@ vi.mock("@cmdclaw/core/server/services/memory-service", () => ({
   writeSessionTranscriptFromConversation: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/core/server/services/sandbox-file-service", () => ({
+vi.mock("./sandbox-file-service", () => ({
   uploadSandboxFile: vi.fn(),
   collectNewSandboxFiles: vi.fn(() => []),
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("../storage/s3-client", () => ({
   ensureBucket: ensureBucketMock,
   uploadToS3: uploadToS3Mock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/integration-skill-service", () => ({
+vi.mock("./integration-skill-service", () => ({
   createCommunityIntegrationSkill: vi.fn(),
   resolvePreferredCommunitySkillsForUser: vi.fn(() => []),
 }));
 
-vi.mock("@cmdclaw/core/server/utils/observability", () => ({
+vi.mock("../utils/observability", () => ({
   createTraceId: vi.fn(() => "trace-1"),
   logServerEvent: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/core/server/queues", () => ({
+vi.mock("../queues", () => ({
   buildQueueJobId: (parts: Array<string | number | null | undefined>) =>
     parts
       .map((part) => String(part ?? "").trim())
@@ -171,11 +171,11 @@ vi.mock("@cmdclaw/core/server/queues", () => ({
   }),
 }));
 
-vi.mock("@cmdclaw/core/server/utils/runtime-platform", () => ({
+vi.mock("../utils/runtime-platform", () => ({
   isStatelessServerlessRuntime: isStatelessServerlessRuntimeMock,
 }));
 
-vi.mock("@cmdclaw/core/server/redis/generation-event-bus", () => ({
+vi.mock("../redis/generation-event-bus", () => ({
   publishGenerationStreamEvent: publishGenerationStreamEventMock,
   readGenerationStreamAfter: readGenerationStreamAfterMock,
   generationStreamExists: generationStreamExistsMock,
@@ -187,28 +187,28 @@ import {
   getCliEnvForUser,
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
-} from "@cmdclaw/core/server/integrations/cli-env";
-import { getChatSystemBehaviorPrompt } from "@cmdclaw/core/server/prompts/chat-system-behavior-prompt";
-import { getCoworkerSystemBehaviorPrompt } from "@cmdclaw/core/server/prompts/coworker-system-behavior-prompt";
-import { getPreferredCloudSandboxProvider } from "@cmdclaw/core/server/sandbox/factory";
+} from "../integrations/cli-env";
+import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-prompt";
+import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
+import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
 import {
   getOrCreateSession,
   writeSkillsToSandbox,
   getSkillsSystemPrompt,
   writeResolvedIntegrationSkillsToSandbox,
   getIntegrationSkillsSystemPrompt,
-} from "@cmdclaw/core/server/sandbox/opencode-session";
-import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
+} from "../sandbox/opencode-session";
+import { generationManager } from "./generation-manager";
 import {
   syncMemoryToSandbox,
   buildMemorySystemPrompt,
-} from "@cmdclaw/core/server/services/memory-service";
+} from "./memory-service";
 import {
   uploadSandboxFile,
   collectNewSandboxFiles,
-} from "@cmdclaw/core/server/services/sandbox-file-service";
-import { logServerEvent } from "@cmdclaw/core/server/utils/observability";
-import { env } from "@/env";
+} from "./sandbox-file-service";
+import { logServerEvent } from "../utils/observability";
+import { env } from "../../env";
 
 type GenerationCtx = {
   id: string;

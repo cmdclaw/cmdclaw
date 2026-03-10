@@ -10,7 +10,7 @@ const originalSandboxEnv = {
 
 async function loadPolicyResolverModule() {
   vi.resetModules();
-  return import("@cmdclaw/core/server/sandbox/selection/policy-resolver");
+  return import("./policy-resolver");
 }
 
 function setSandboxEnv(params: {

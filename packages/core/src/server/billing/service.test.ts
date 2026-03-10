@@ -13,7 +13,7 @@ var userUpdateSetMock: ReturnType<typeof vi.fn>;
 var balancesCreateMock: ReturnType<typeof vi.fn>;
 var insertMock: ReturnType<typeof vi.fn>;
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: (() => {
     userFindFirstMock = vi.fn();
     workspaceMemberFindFirstMock = vi.fn();
@@ -47,7 +47,7 @@ vi.mock("@/server/db/client", () => ({
   })(),
 }));
 
-vi.mock("@cmdclaw/core/server/billing/autumn", () => ({
+vi.mock("./autumn", () => ({
   getAutumnClient: (() => {
     balancesCreateMock = vi.fn();
     return vi.fn(() => ({
@@ -64,7 +64,7 @@ import {
   createManualTopUp,
   createWorkspaceForUser,
   resolveBillingOwnerForUser,
-} from "@cmdclaw/core/server/billing/service";
+} from "./service";
 
 describe("billing service", () => {
   beforeEach(() => {

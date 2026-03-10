@@ -1,4 +1,4 @@
-import { calculateCredits } from "@cmdclaw/core/server/billing/credit-calculator";
+import { calculateCredits } from "./credit-calculator";
 import { describe, expect, it } from "vitest";
 
 describe("calculateCredits", () => {

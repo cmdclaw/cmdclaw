@@ -58,21 +58,21 @@ const {
   };
 });
 
-vi.mock("@/server/db/client", () => ({
+vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
+vi.mock("./generation-manager", () => ({
   generationManager: {
     startCoworkerGeneration: startCoworkerGenerationMock,
   },
 }));
 
-vi.mock("@cmdclaw/core/server/ai/opencode-models", () => ({
+vi.mock("../ai/opencode-models", () => ({
   resolveDefaultOpencodeFreeModel: resolveDefaultOpencodeFreeModelMock,
 }));
 
-import { triggerCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
+import { triggerCoworkerRun } from "./coworker-service";
 
 describe("triggerCoworkerRun", () => {
   beforeEach(() => {

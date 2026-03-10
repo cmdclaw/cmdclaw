@@ -1,4 +1,4 @@
-import { getOAuthConfig } from "@cmdclaw/core/server/oauth/config";
+import { getOAuthConfig } from "./config";
 import { describe, expect, it } from "vitest";
 
 function encodeBase64Url(value: string): string {

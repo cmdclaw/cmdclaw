@@ -18,7 +18,7 @@ async function loadFactoryModule() {
       existsSync: () => false,
     };
   });
-  return import("@cmdclaw/core/server/sandbox/factory");
+  return import("./factory");
 }
 
 function setSandboxEnv(params: {
