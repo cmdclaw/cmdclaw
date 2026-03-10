@@ -66,12 +66,12 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@cmdclaw/core": "workspace:*",
-    "@cmdclaw/db": "workspace:*",
     "@anthropic-ai/sdk": "^0.71.2",
     "@aws-sdk/client-s3": "^3.968.0",
     "@aws-sdk/s3-request-presigner": "^3.968.0",
     "@base-ui/react": "^1.0.0-beta.7",
+    "@cmdclaw/core": "workspace:*",
+    "@cmdclaw/db": "workspace:*",
     "@daytonaio/sdk": "^0.144.0",
     "@fal-ai/client": "^1.8.3",
     "@google/generative-ai": "^0.24.1",
@@ -99,6 +99,7 @@
     "atmn": "^0.0.33",
     "autumn-js": "^0.1.74",
     "better-auth": "1.4.3",
+    "better-call": "1.1.0",
     "bullmq": "^5.65.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
