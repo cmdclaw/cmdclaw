@@ -305,7 +305,7 @@ describe("integrationRouter", () => {
 
     const google = (await integrationRouterAny.getAuthUrl({
       input: {
-        type: "gmail",
+        type: "google_gmail",
         redirectUrl: "https://app.example.com/integrations",
       },
       context,
@@ -337,7 +337,7 @@ describe("integrationRouter", () => {
     await expect(
       integrationRouterAny.getAuthUrl({
         input: {
-          type: "gmail",
+          type: "google_gmail",
           redirectUrl: "https://app.example.com/integrations",
         },
         context,
@@ -361,7 +361,7 @@ describe("integrationRouter", () => {
 
     const result = (await integrationRouterAny.getAuthUrl({
       input: {
-        type: "gmail",
+        type: "google_gmail",
         redirectUrl: "https://app.example.com/integrations",
       },
       context,
