@@ -44,7 +44,7 @@ type Args = {
 
 const DEFAULT_CLIENT_ID = "cmdclaw-cli";
 const AUTH_INTEGRATION_TYPES = [
-  "gmail",
+  "google_gmail",
   "google_calendar",
   "google_docs",
   "google_sheets",

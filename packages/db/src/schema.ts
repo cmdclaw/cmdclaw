@@ -619,7 +619,7 @@ export const conversationQueuedMessage = pgTable(
 // Defined early because coworker schema depends on it
 
 export const integrationTypeEnum = pgEnum("integration_type", [
-  "gmail",
+  "google_gmail",
   "outlook",
   "outlook_calendar",
   "google_calendar",
@@ -1739,6 +1739,16 @@ export const cloudAccountLinkState = pgTable(
   (table) => [index("cloud_account_link_state_created_at_idx").on(table.createdAt)],
 );
 
+export const controlPlaneAuthState = pgTable(
+  "control_plane_auth_state",
+  {
+    state: text("state").primaryKey(),
+    returnPath: text("return_path"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("control_plane_auth_state_created_at_idx").on(table.createdAt)],
+);
+
 export const controlPlaneLinkRequest = pgTable(
   "control_plane_link_request",
   {
@@ -1753,6 +1763,22 @@ export const controlPlaneLinkRequest = pgTable(
     completedAt: timestamp("completed_at"),
   },
   (table) => [index("control_plane_link_request_created_at_idx").on(table.createdAt)],
+);
+
+export const controlPlaneAuthRequest = pgTable(
+  "control_plane_auth_request",
+  {
+    code: text("code").primaryKey(),
+    localState: text("local_state").notNull(),
+    returnUrl: text("return_url").notNull(),
+    returnPath: text("return_path"),
+    completedByUserId: text("completed_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [index("control_plane_auth_request_created_at_idx").on(table.createdAt)],
 );
 
 export const whatsappUserLink = pgTable(

@@ -49,7 +49,7 @@ export const PREVIEW_MOCK_DATA: Record<string, PreviewMockData[]> = {
     },
   ],
 
-  gmail: [
+  google_gmail: [
     {
       operation: "send",
       label: "Send Email",

@@ -8,6 +8,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin, bearer, lastLoginMethod, magicLink } from "better-auth/plugins";
 import { Resend } from "resend";
 import { env } from "@/env";
+import { shouldGrantAdminRole } from "@/lib/admin-emails";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
 
 const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
@@ -15,7 +16,6 @@ const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 const appUrl =
   env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
-const ADMIN_EMAILS = new Set(["baptiste@heybap.com"]);
 const socialProviders = isSelfHostedEdition()
   ? {}
   : {
@@ -124,7 +124,7 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          if (ADMIN_EMAILS.has(user.email)) {
+          if (shouldGrantAdminRole(user.email)) {
             return { data: { ...user, role: "admin" } };
           }
           return { data: user };

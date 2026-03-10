@@ -18,7 +18,7 @@ import {
 } from "@/orpc/hooks";
 
 const integrationConfig = {
-  gmail: {
+  google_gmail: {
     name: "Gmail",
     icon: "/integrations/google-gmail.svg",
   },
@@ -70,7 +70,7 @@ const integrationConfig = {
 
 type IntegrationType = keyof typeof integrationConfig;
 
-const recommendedIntegrations: IntegrationType[] = ["gmail", "google_calendar"];
+const recommendedIntegrations: IntegrationType[] = ["google_gmail", "google_calendar"];
 const otherIntegrations: IntegrationType[] = [
   "outlook",
   "outlook_calendar",

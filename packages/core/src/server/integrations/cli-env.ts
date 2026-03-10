@@ -13,7 +13,7 @@ import { getValidTokensForUser, getValidCustomTokens } from "./token-refresh";
 
 // Token-based integrations map to their access token env var
 const ENV_VAR_MAP: Record<Exclude<IntegrationType, "linkedin">, string> = {
-  gmail: "GMAIL_ACCESS_TOKEN",
+  google_gmail: "GMAIL_ACCESS_TOKEN",
   outlook: "OUTLOOK_ACCESS_TOKEN",
   outlook_calendar: "OUTLOOK_CALENDAR_ACCESS_TOKEN",
   google_calendar: "GOOGLE_CALENDAR_ACCESS_TOKEN",
@@ -220,7 +220,7 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 
   // Always include ALL integration instructions - auth will be requested on use if needed
   const instructions = `
-## Google Gmail CLI [${statusTag("gmail")}]
+## Google Gmail CLI [${statusTag("google_gmail")}]
 - google-gmail list [-q query] [-l limit] - List emails
 - google-gmail get <messageId> - Get full email content
 - google-gmail unread - Count unread emails

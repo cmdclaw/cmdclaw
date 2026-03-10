@@ -225,7 +225,12 @@ export function useRequestGoogleAccess() {
       integration,
       source,
     }: {
-      integration?: "gmail" | "google_calendar" | "google_docs" | "google_sheets" | "google_drive";
+      integration?:
+        | "google_gmail"
+        | "google_calendar"
+        | "google_docs"
+        | "google_sheets"
+        | "google_drive";
       source?: "integrations" | "chat" | "onboarding";
     }) => client.integration.requestGoogleAccess({ integration, source }),
     onSuccess: () => {
@@ -267,7 +272,7 @@ export function useGetAuthUrl() {
       redirectUrl,
     }: {
       type:
-        | "gmail"
+        | "google_gmail"
         | "outlook"
         | "outlook_calendar"
         | "google_calendar"
@@ -614,7 +619,7 @@ export function useCreateCoworker() {
       promptDont?: string;
       autoApprove?: boolean;
       allowedIntegrations: (
-        | "gmail"
+        | "google_gmail"
         | "outlook"
         | "outlook_calendar"
         | "google_calendar"
@@ -660,7 +665,7 @@ export function useUpdateCoworker() {
       promptDont?: string | null;
       autoApprove?: boolean;
       allowedIntegrations?: (
-        | "gmail"
+        | "google_gmail"
         | "outlook"
         | "outlook_calendar"
         | "google_calendar"

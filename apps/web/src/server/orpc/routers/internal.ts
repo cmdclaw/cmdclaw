@@ -27,7 +27,7 @@ function verifyPluginSecret(authHeader: string | undefined): boolean {
 }
 
 const integrationSchema = z.enum([
-  "gmail",
+  "google_gmail",
   "outlook",
   "outlook_calendar",
   "google_calendar",

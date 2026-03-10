@@ -1,7 +1,7 @@
 import { env } from "../../env";
 
 export type IntegrationType =
-  | "gmail"
+  | "google_gmail"
   | "outlook"
   | "outlook_calendar"
   | "google_calendar"
@@ -63,7 +63,7 @@ function parseJwtClaims(token: string): JwtClaims | null {
 const getAppUrl = () => env.APP_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 const configs: Record<IntegrationType, () => OAuthConfig> = {
-  gmail: () => ({
+  google_gmail: () => ({
     clientId: env.GOOGLE_CLIENT_ID ?? "",
     clientSecret: env.GOOGLE_CLIENT_SECRET ?? "",
     authUrl: "https://accounts.google.com/o/oauth2/v2/auth",

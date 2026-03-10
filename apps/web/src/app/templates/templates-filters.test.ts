@@ -8,7 +8,7 @@ const TEMPLATES: TemplateItem[] = [
     title: "Sales follow-up",
     description: "Draft follow-up emails for prospects.",
     triggerType: "manual",
-    integrations: ["gmail", "hubspot"],
+    integrations: ["google_gmail", "hubspot"],
     industry: "Sales",
     useCase: "Follow-ups",
   },
@@ -48,7 +48,7 @@ describe("filterTemplates", () => {
       search: "",
       industries: ["Sales"],
       useCases: ["Follow-ups", "Meeting Prep"],
-      integrations: ["slack", "gmail"],
+      integrations: ["slack", "google_gmail"],
     });
 
     expect(result.map((template) => template.id)).toEqual([

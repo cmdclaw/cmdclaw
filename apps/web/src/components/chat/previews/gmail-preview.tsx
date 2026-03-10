@@ -19,7 +19,7 @@ function GmailSendPreview({ args }: { args: Record<string, string | undefined> }
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <IntegrationLogo integration="gmail" size={16} />
+        <IntegrationLogo integration="google_gmail" size={16} />
         <span className="text-sm font-medium">Send Email</span>
       </div>
 

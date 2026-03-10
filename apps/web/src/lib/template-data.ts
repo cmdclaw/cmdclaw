@@ -59,7 +59,7 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
       {
         title: "Capture new call transcript",
         body: "Watches for a completed transcript and pulls metadata for the contact context.",
-        integrations: ["gmail"],
+        integrations: ["google_gmail"],
       },
       {
         title: "Find the matching CRM contact",
@@ -69,7 +69,7 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
       {
         title: "Draft the follow-up in one shot",
         body: "Writes concise notes + next actions and creates both a Gmail draft and CRM task.",
-        integrations: ["gmail", "hubspot"],
+        integrations: ["google_gmail", "hubspot"],
       },
     ],
     mermaid: `flowchart TD
@@ -83,7 +83,7 @@ const MOCK_TEMPLATES: Record<string, TemplateContent> = {
     connectedApps: [
       { name: "Aircall", tools: 4, fallbackLabel: "A" },
       { name: "HubSpot", tools: 4, integration: "hubspot" },
-      { name: "Gmail", tools: 1, integration: "gmail" },
+      { name: "Gmail", tools: 1, integration: "google_gmail" },
       { name: "Slack", tools: 1, integration: "slack" },
     ],
   },

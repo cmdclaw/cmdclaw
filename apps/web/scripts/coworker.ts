@@ -32,7 +32,7 @@ type ParsedArgs = {
 };
 
 type CoworkerIntegrationType =
-  | "gmail"
+  | "google_gmail"
   | "google_calendar"
   | "google_docs"
   | "google_sheets"
@@ -50,7 +50,7 @@ type CoworkerIntegrationType =
   | "twitter";
 
 const integrationTypes = new Set<CoworkerIntegrationType>([
-  "gmail",
+  "google_gmail",
   "google_calendar",
   "google_docs",
   "google_sheets",

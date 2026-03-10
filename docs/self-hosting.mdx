@@ -41,6 +41,8 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
     - `REDIS_URL` -- Redis connection string
     - `ANTHROPIC_API_KEY` -- For Claude
     - `BETTER_AUTH_SECRET` -- Authentication secret
+    - `CMDCLAW_CLOUD_API_BASE_URL` -- CmdClaw Cloud base URL for delegated login
+    - `CMDCLAW_CLOUD_INSTANCE_API_KEY` -- Shared control-plane instance key
   </Step>
   <Step title="Set up the database">
     Push the schema to your database:
@@ -80,6 +82,8 @@ Fill in at least:
 - `BETTER_AUTH_SECRET`
 - `ENCRYPTION_KEY`
 - `CMDCLAW_SERVER_SECRET`
+- `CMDCLAW_CLOUD_API_BASE_URL`
+- `CMDCLAW_CLOUD_INSTANCE_API_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
@@ -99,6 +103,10 @@ docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.
 ```
 
 Then open `http://localhost:8114`.
+
+Self-hosted end-user login is delegated to CmdClaw Cloud. Configure the same
+`CMDCLAW_CLOUD_INSTANCE_API_KEY` on the cloud deployment and on each self-hosted deployment
+that should trust it.
 
 - Set `E2B_API_KEY` and `E2B_DAYTONA_SANDBOX_NAME` to use E2B cloud sandboxes.
 - Or set `DAYTONA_API_KEY` (plus optional `DAYTONA_SERVER_URL` / `DAYTONA_TARGET`) to use Daytona sandboxes.

@@ -128,7 +128,7 @@ function normalizeIntegrations(input: string[]): string[] {
   const seen = new Set<string>();
   const output: string[] = [];
   for (const value of input) {
-    const trimmed = value.trim();
+    const trimmed = value.trim().replace(/-/g, "_");
     if (!trimmed || seen.has(trimmed)) {
       continue;
     }

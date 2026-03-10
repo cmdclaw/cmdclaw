@@ -23,10 +23,10 @@ const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev
 const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const TEST_USER_EMAIL = "collebaptiste@gmail.com";
 
-type IntegrationType = "gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
+type IntegrationType = "google_gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
 
 const ENV_VAR_MAP: Record<IntegrationType, string> = {
-  gmail: "GMAIL_ACCESS_TOKEN",
+  google_gmail: "GMAIL_ACCESS_TOKEN",
   slack: "SLACK_ACCESS_TOKEN",
   notion: "NOTION_ACCESS_TOKEN",
   linear: "LINEAR_ACCESS_TOKEN",

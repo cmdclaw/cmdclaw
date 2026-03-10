@@ -42,7 +42,7 @@ const MOCK_COWORKERS: CoworkerItem[] = [
       "Summarizes unread emails from the last 24 hours and sends a clean digest with action items every morning at 8am.",
     status: "on",
     triggerType: "schedule",
-    integrations: ["gmail"],
+    integrations: ["google_gmail"],
     recentRuns: [{ id: "r1", status: "completed", startedAt: new Date(Date.now() - 3600000) }],
   },
   {
@@ -97,7 +97,7 @@ const MOCK_COWORKERS: CoworkerItem[] = [
       "Monitors usage data and support tickets daily. When churn risk is detected, notifies the CS team in Slack with full context and suggested actions.",
     status: "on",
     triggerType: "schedule",
-    integrations: ["hubspot", "slack", "gmail"],
+    integrations: ["hubspot", "slack", "google_gmail"],
     recentRuns: [{ id: "r5", status: "completed", startedAt: new Date(Date.now() - 172800000) }],
   },
 ];

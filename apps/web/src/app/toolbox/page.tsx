@@ -55,14 +55,14 @@ type IntegrationType = IntegrationIconType | "whatsapp";
 type OAuthIntegrationType = IntegrationIconType;
 
 type GoogleIntegrationType =
-  | "gmail"
+  | "google_gmail"
   | "google_calendar"
   | "google_docs"
   | "google_sheets"
   | "google_drive";
 
 const googleIntegrationTypes = new Set<GoogleIntegrationType>([
-  "gmail",
+  "google_gmail",
   "google_calendar",
   "google_docs",
   "google_sheets",
@@ -76,7 +76,7 @@ function isGoogleIntegrationType(type: OAuthIntegrationType): type is GoogleInte
 // ─── Integration config ─────────────────────────────────────────────────────────
 
 const integrationConfig: Record<string, { name: string; description: string; icon: string }> = {
-  gmail: {
+  google_gmail: {
     name: "Google Gmail",
     description: "Read and send emails",
     icon: "/integrations/google-gmail.svg",

@@ -28,10 +28,10 @@ const DEFAULT_WORKDIR = "/app";
 const TEST_USER_EMAIL = "collebaptiste@gmail.com";
 const INTERACTIVE_TIMEOUT_SECONDS = 60 * 60; // 1 hour
 
-type IntegrationType = "gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
+type IntegrationType = "google_gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
 
 const ENV_VAR_MAP: Record<IntegrationType, string> = {
-  gmail: "GMAIL_ACCESS_TOKEN",
+  google_gmail: "GMAIL_ACCESS_TOKEN",
   slack: "SLACK_ACCESS_TOKEN",
   notion: "NOTION_ACCESS_TOKEN",
   linear: "LINEAR_ACCESS_TOKEN",

@@ -56,7 +56,7 @@ import {
 type FilterTab = "all" | "connected" | "not_connected";
 
 const integrationConfig = {
-  gmail: {
+  google_gmail: {
     name: "Google Gmail",
     description: "Read and send emails",
     icon: "/integrations/google-gmail.svg",
@@ -189,7 +189,7 @@ const defaultCustomForm: CustomFormState = {
 type IntegrationType = keyof typeof integrationConfig;
 type OAuthIntegrationType = Exclude<IntegrationType, "whatsapp">;
 type GoogleIntegrationType =
-  | "gmail"
+  | "google_gmail"
   | "google_calendar"
   | "google_docs"
   | "google_sheets"
@@ -200,7 +200,7 @@ const adminPreviewOnlyIntegrations = new Set<IntegrationType>(
   ),
 );
 const googleIntegrationTypes = new Set<GoogleIntegrationType>([
-  "gmail",
+  "google_gmail",
   "google_calendar",
   "google_docs",
   "google_sheets",

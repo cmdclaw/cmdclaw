@@ -48,3 +48,10 @@ export type ControlPlaneHealthStatus = {
 export type ProviderAuthStatusPayload = {
   connected: string[];
 };
+
+export type CloudAuthExchangePayload = {
+  cloudUserId: string;
+  email: string;
+  name: string | null;
+  image: string | null;
+};

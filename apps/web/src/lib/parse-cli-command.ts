@@ -16,7 +16,7 @@ export type ParsedCommand = {
 // CLI name to integration type mapping
 const CLI_TO_INTEGRATION: Record<string, string> = {
   slack: "slack",
-  "google-gmail": "gmail",
+  "google-gmail": "google_gmail",
   "outlook-mail": "outlook",
   "outlook-calendar": "outlook_calendar",
   "google-calendar": "google_calendar",

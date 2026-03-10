@@ -25,7 +25,7 @@ export interface IntegrationPreviewConfig {
 // Map integration names to their preview components and display names
 export const INTEGRATION_PREVIEWS: Record<string, IntegrationPreviewConfig> = {
   slack: { component: SlackPreview, displayName: "Slack" },
-  gmail: { component: GmailPreview, displayName: "Gmail" },
+  google_gmail: { component: GmailPreview, displayName: "Gmail" },
   outlook: { component: GmailPreview, displayName: "Outlook Mail" },
   outlook_calendar: {
     component: CalendarPreview,
@@ -48,7 +48,7 @@ export const INTEGRATION_PREVIEWS: Record<string, IntegrationPreviewConfig> = {
 /**
  * Get the preview component for a given integration
  *
- * @param integration - The integration name (e.g., "slack", "gmail")
+ * @param integration - The integration name (e.g., "slack", "google_gmail")
  * @returns The preview component or null if not found
  */
 export function getPreviewComponent(integration: string): PreviewComponent | null {

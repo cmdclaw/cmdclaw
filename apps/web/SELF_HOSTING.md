@@ -24,6 +24,8 @@ cp .env.selfhost.example .env.selfhost
 - `BETTER_AUTH_SECRET`
 - `ENCRYPTION_KEY`
 - `CMDCLAW_SERVER_SECRET`
+- `CMDCLAW_CLOUD_API_BASE_URL`
+- `CMDCLAW_CLOUD_INSTANCE_API_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
@@ -76,14 +78,30 @@ APP_URL=https://cmdclaw.company.internal
 
 Then place your usual reverse proxy in front of port `8114`.
 
+## Authentication
+
+Self-hosted login is delegated to CmdClaw Cloud.
+
+You must configure:
+
+```env
+CMDCLAW_CLOUD_API_BASE_URL=https://app.cmdclaw.ai
+CMDCLAW_CLOUD_INSTANCE_API_KEY=replace-with-shared-instance-api-key
+```
+
+Use the same `CMDCLAW_CLOUD_INSTANCE_API_KEY` on:
+
+- the cloud deployment that exposes `/api/control-plane/*`
+- each self-hosted deployment that should trust that cloud control plane
+
+Users authenticate on CmdClaw Cloud with the existing cloud login methods, then the
+self-hosted instance creates its own local session after the control-plane exchange.
+
 ## Email
 
-`RESEND_*` and `EMAIL_FROM` are optional in this self-hosted setup.
+`RESEND_*` and `EMAIL_FROM` are optional for the self-hosted app itself.
 
-If they are not set:
-
-- magic links are logged to the `app` container logs instead of being emailed
-- inbound email forwarding features stay unavailable
+They are no longer required for end-user login when cloud-managed authentication is enabled.
 
 Check logs with:
 

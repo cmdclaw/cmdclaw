@@ -4,7 +4,7 @@ import { assertCloudControlPlaneEnabled, requireCloudSession } from "@/server/co
 import { generateLinkedInAuthUrl } from "@/server/integrations/unipile";
 
 const SUPPORTED_TYPES = new Set<IntegrationType>([
-  "gmail",
+  "google_gmail",
   "outlook",
   "outlook_calendar",
   "google_calendar",
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
     }
 
     if (
-      type === "gmail" ||
+      type === "google_gmail" ||
       type === "google_calendar" ||
       type === "google_docs" ||
       type === "google_sheets" ||

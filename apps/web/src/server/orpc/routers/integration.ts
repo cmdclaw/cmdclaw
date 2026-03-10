@@ -35,7 +35,7 @@ import {
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 
 const GOOGLE_INTEGRATION_TYPES = new Set<IntegrationType>([
-  "gmail",
+  "google_gmail",
   "google_calendar",
   "google_docs",
   "google_sheets",
@@ -167,7 +167,7 @@ function generateCodeChallenge(verifier: string): string {
 }
 
 const integrationTypeSchema = z.enum([
-  "gmail",
+  "google_gmail",
   "outlook",
   "outlook_calendar",
   "google_calendar",
@@ -188,7 +188,7 @@ const integrationTypeSchema = z.enum([
 ]);
 
 const googleIntegrationTypeSchema = z.enum([
-  "gmail",
+  "google_gmail",
   "google_calendar",
   "google_docs",
   "google_sheets",
@@ -484,7 +484,7 @@ const getAuthUrl = protectedProcedure
 
     // Add provider-specific params
     const googleTypes = [
-      "gmail",
+      "google_gmail",
       "google_calendar",
       "google_docs",
       "google_sheets",

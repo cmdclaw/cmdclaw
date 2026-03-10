@@ -9,7 +9,7 @@
 // Integration CLI names to internal type mapping
 const CLI_TO_INTEGRATION: Record<string, string> = {
   slack: "slack",
-  "google-gmail": "gmail",
+  "google-gmail": "google_gmail",
   "outlook-mail": "outlook",
   "outlook-calendar": "outlook_calendar",
   "google-calendar": "google_calendar",
@@ -33,7 +33,7 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     read: ["channels", "history", "search", "recent", "users", "user", "thread"],
     write: ["send", "react", "upload"],
   },
-  gmail: {
+  google_gmail: {
     read: ["list", "get", "unread"],
     write: ["send"],
   },
@@ -188,7 +188,7 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
 
 const INTEGRATION_NAMES: Record<string, string> = {
   slack: "Slack",
-  gmail: "Gmail",
+  google_gmail: "Gmail",
   outlook: "Outlook Mail",
   outlook_calendar: "Outlook Calendar",
   google_calendar: "Google Calendar",

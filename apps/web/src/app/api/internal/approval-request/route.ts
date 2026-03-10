@@ -10,7 +10,7 @@ const approvalRequestSchema = z.object({
   sandboxId: z.string().optional(),
   conversationId: z.string().min(1),
   integration: z.enum([
-    "gmail",
+    "google_gmail",
     "outlook",
     "outlook_calendar",
     "google_calendar",

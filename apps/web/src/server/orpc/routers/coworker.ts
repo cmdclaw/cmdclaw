@@ -28,7 +28,7 @@ import { generateCoworkerName } from "@/server/utils/generate-coworker-name";
 import { protectedProcedure } from "../middleware";
 
 const integrationTypeSchema = z.enum([
-  "gmail",
+  "google_gmail",
   "outlook",
   "outlook_calendar",
   "google_calendar",

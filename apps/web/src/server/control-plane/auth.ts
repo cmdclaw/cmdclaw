@@ -1,6 +1,6 @@
 import { isCloudEdition } from "@cmdclaw/core/server/edition";
 import { db } from "@cmdclaw/db/client";
-import { controlPlaneLinkRequest } from "@cmdclaw/db/schema";
+import { controlPlaneAuthRequest, controlPlaneLinkRequest } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "@/env";
 import { auth } from "@/lib/auth";
@@ -34,6 +34,22 @@ export async function requireCloudSession(request: Request) {
 export async function getValidLinkRequest(code: string) {
   const request = await db.query.controlPlaneLinkRequest.findFirst({
     where: eq(controlPlaneLinkRequest.code, code),
+  });
+
+  if (!request) {
+    return null;
+  }
+
+  if (Date.now() - request.createdAt.getTime() > LINK_REQUEST_TTL_MS) {
+    return null;
+  }
+
+  return request;
+}
+
+export async function getValidAuthRequest(code: string) {
+  const request = await db.query.controlPlaneAuthRequest.findFirst({
+    where: eq(controlPlaneAuthRequest.code, code),
   });
 
   if (!request) {

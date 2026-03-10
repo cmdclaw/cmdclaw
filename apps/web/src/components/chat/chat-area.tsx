@@ -2033,7 +2033,7 @@ export function ChatArea({
         // Get auth URL and redirect
         const result = await getAuthUrl({
           type: integration as
-            | "gmail"
+            | "google_gmail"
             | "outlook"
             | "outlook_calendar"
             | "google_calendar"

@@ -565,7 +565,7 @@ export async function getGmailAccessTokenForExpectedUser(): Promise<string> {
   }
 
   const tokens = await getValidTokensForUser(dbUser.id);
-  const gmailToken = tokens.get("gmail");
+  const gmailToken = tokens.get("google_gmail");
 
   if (!gmailToken) {
     throw new Error(

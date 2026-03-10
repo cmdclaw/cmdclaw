@@ -173,7 +173,7 @@ const FEATURED_TEMPLATES: TemplateItem[] = [
     description:
       "As soon as a call transcript is ready, draft a personalized follow-up email and create the matching CRM entry.",
     triggerType: "webhook",
-    integrations: ["gmail", "hubspot"],
+    integrations: ["google_gmail", "hubspot"],
     prompt:
       "When a call transcript is ready, draft a personalized follow-up email summarizing key points and next steps, then log it in HubSpot.",
   },
@@ -203,7 +203,7 @@ const FEATURED_TEMPLATES: TemplateItem[] = [
     description:
       "Every morning, read unread emails from the last 24 hours and send a clean digest with action items.",
     triggerType: "schedule",
-    integrations: ["gmail"],
+    integrations: ["google_gmail"],
     prompt:
       "Every morning at 8am, read my unread emails from the last 24 hours, summarize the most important ones, and send me a digest email with key action items.",
   },
@@ -233,7 +233,7 @@ const FEATURED_TEMPLATES: TemplateItem[] = [
     description:
       "Monitor usage data and support tickets to detect churn risk, then notify the CS team in Slack.",
     triggerType: "schedule",
-    integrations: ["hubspot", "slack", "gmail"],
+    integrations: ["hubspot", "slack", "google_gmail"],
     prompt:
       "Monitor usage data and support tickets daily. When churn risk is detected, notify the CS team in Slack with full context and suggested actions.",
   },
@@ -243,7 +243,7 @@ const FEATURED_TEMPLATES: TemplateItem[] = [
     description:
       "Apply one Gmail label and this coworker extracts contact details, upserts people in HubSpot, and logs the interaction.",
     triggerType: "email",
-    integrations: ["gmail", "hubspot"],
+    integrations: ["google_gmail", "hubspot"],
     prompt:
       "When a Gmail thread is labeled, extract contact details from the latest message, upsert the person in HubSpot, and log the interaction.",
   },

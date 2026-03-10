@@ -1,12 +1,14 @@
 import { env } from "../../env";
 import { isSelfHostedEdition } from "../edition";
 import type {
+  CloudAuthExchangePayload,
   ControlPlaneHealthStatus,
   DelegatedRuntimeCredentialsRequest,
   DelegatedRuntimeCredentialsResponse,
   IntegrationLinkStatus,
   ProviderAuthStatusPayload,
 } from "./types";
+import { createControlPlaneAuthState } from "./local-auth";
 import { createCloudAccountLinkState, getCloudAccountLinkForUser } from "./local-links";
 
 const INSTANCE_API_KEY_HEADER = "x-cmdclaw-instance-api-key";
@@ -174,6 +176,37 @@ export async function exchangeCloudAccountLink(code: string): Promise<string> {
   });
 
   return result.cloudUserId;
+}
+
+export async function startCloudAuth(params: { returnPath?: string | null }): Promise<string> {
+  requireControlPlaneConfig();
+
+  const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    throw new Error("APP_URL is not configured");
+  }
+
+  const localState = await createControlPlaneAuthState({
+    returnPath: params.returnPath ?? null,
+  });
+
+  const result = await callControlPlane<{ authorizeUrl: string }>("/api/control-plane/auth/start", {
+    method: "POST",
+    body: JSON.stringify({
+      localState,
+      returnPath: params.returnPath ?? null,
+      returnUrl: new URL("/api/control-plane/auth/callback", appUrl).toString(),
+    }),
+  });
+
+  return result.authorizeUrl;
+}
+
+export async function exchangeCloudAuth(code: string): Promise<CloudAuthExchangePayload> {
+  return callControlPlane<CloudAuthExchangePayload>("/api/control-plane/auth/exchange", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
 }
 
 export function getCloudManagedIntegrationConnectUrl(type: string): string {

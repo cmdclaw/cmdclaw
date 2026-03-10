@@ -101,7 +101,7 @@ async function listWatchableCoworkers(): Promise<WatchableCoworker[]> {
       integration,
       and(
         eq(integration.userId, coworker.ownerId),
-        eq(integration.type, "gmail"),
+        eq(integration.type, "google_gmail"),
         eq(integration.enabled, true),
       ),
     )
@@ -269,7 +269,7 @@ export async function pollGmailCoworkerTriggers(): Promise<{
           refreshToken: item.refreshToken,
           expiresAt: item.expiresAt,
           integrationId: item.integrationId,
-          type: "gmail",
+          type: "google_gmail",
         });
         tokenCache.set(item.integrationId, accessToken);
       }

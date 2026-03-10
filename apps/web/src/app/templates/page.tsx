@@ -35,7 +35,7 @@ const USE_CASES = [
 ] as const;
 
 const INTEGRATIONS_FILTER: IntegrationType[] = [
-  "gmail",
+  "google_gmail",
   "hubspot",
   "slack",
   "linkedin",
@@ -56,7 +56,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "As soon as an Aircall transcript is ready, this coworker drafts a personalized follow-up email and creates the matching…",
     triggerType: "webhook",
-    integrations: ["gmail", "hubspot"],
+    integrations: ["google_gmail", "hubspot"],
     industry: "Sales",
     useCase: "Follow-ups",
   },
@@ -86,7 +86,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "Every Monday morning, this coworker scans emails, Slack, call notes, and CRM data across your key deals, identifies wh…",
     triggerType: "schedule",
-    integrations: ["gmail", "slack", "hubspot", "linkedin", "salesforce"],
+    integrations: ["google_gmail", "slack", "hubspot", "linkedin", "salesforce"],
     industry: "Sales",
     useCase: "Data Enrichment",
   },
@@ -126,7 +126,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "Apply one Gmail label and this coworker extracts contact details from the latest message, upserts people in HubSpot, an…",
     triggerType: "email",
-    integrations: ["gmail", "hubspot"],
+    integrations: ["google_gmail", "hubspot"],
     industry: "Sales",
     useCase: "CRM Sync",
   },
@@ -166,7 +166,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "Monitor usage data and support tickets to detect churn risk, then notify the CS team in Slack with context…",
     triggerType: "schedule",
-    integrations: ["hubspot", "slack", "gmail"],
+    integrations: ["hubspot", "slack", "google_gmail"],
     industry: "Customer Success",
     useCase: "Notifications",
   },
@@ -176,7 +176,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "When a deal closes in Salesforce, kick off a tailored onboarding email sequence with milestones…",
     triggerType: "webhook",
-    integrations: ["salesforce", "gmail", "slack"],
+    integrations: ["salesforce", "google_gmail", "slack"],
     industry: "Customer Success",
     useCase: "Follow-ups",
   },
@@ -186,7 +186,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "Every Friday, match incoming payments against open invoices in Google Sheets and flag discrepancies…",
     triggerType: "schedule",
-    integrations: ["google_sheets", "gmail", "slack"],
+    integrations: ["google_sheets", "google_gmail", "slack"],
     industry: "Finance",
     useCase: "Reporting",
   },
@@ -196,7 +196,7 @@ const TEMPLATES: TemplateItem[] = [
     description:
       "When a new application arrives, pull the candidate's LinkedIn profile and prepare a brief for the hiring manager…",
     triggerType: "webhook",
-    integrations: ["gmail", "linkedin", "notion"],
+    integrations: ["google_gmail", "linkedin", "notion"],
     industry: "HR",
     useCase: "Data Enrichment",
   },

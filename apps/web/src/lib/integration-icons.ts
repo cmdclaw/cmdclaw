@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 export type IntegrationType =
-  | "gmail"
+  | "google_gmail"
   | "outlook"
   | "outlook_calendar"
   | "google_calendar"
@@ -44,7 +44,7 @@ export type IntegrationType =
   | "twitter";
 
 export const ALL_INTEGRATION_TYPES: IntegrationType[] = [
-  "gmail",
+  "google_gmail",
   "outlook",
   "outlook_calendar",
   "google_calendar",
@@ -78,7 +78,7 @@ export const COWORKER_AVAILABLE_INTEGRATION_TYPES: IntegrationType[] = ALL_INTEG
 );
 
 export const INTEGRATION_ICONS: Record<IntegrationType, LucideIcon> = {
-  gmail: Mail,
+  google_gmail: Mail,
   outlook: Mail,
   outlook_calendar: Calendar,
   google_calendar: Calendar,
@@ -99,7 +99,7 @@ export const INTEGRATION_ICONS: Record<IntegrationType, LucideIcon> = {
 };
 
 export const INTEGRATION_DISPLAY_NAMES: Record<IntegrationType, string> = {
-  gmail: "Gmail",
+  google_gmail: "Gmail",
   outlook: "Outlook Mail",
   outlook_calendar: "Outlook Calendar",
   google_calendar: "Google Calendar",
@@ -120,7 +120,7 @@ export const INTEGRATION_DISPLAY_NAMES: Record<IntegrationType, string> = {
 };
 
 export const INTEGRATION_COLORS: Record<IntegrationType, string> = {
-  gmail: "text-red-500",
+  google_gmail: "text-red-500",
   outlook: "text-[#0A5CBD]",
   outlook_calendar: "text-[#0A5CBD]",
   google_calendar: "text-blue-500",
@@ -141,7 +141,7 @@ export const INTEGRATION_COLORS: Record<IntegrationType, string> = {
 };
 
 export const INTEGRATION_LOGOS: Record<IntegrationType, string> = {
-  gmail: "/integrations/google-gmail.svg",
+  google_gmail: "/integrations/google-gmail.svg",
   outlook: "/integrations/outlook.svg",
   outlook_calendar: "/integrations/outlook-calendar.svg",
   google_calendar: "/integrations/google-calendar.svg",
@@ -175,7 +175,7 @@ export const INTEGRATION_OPERATION_LABELS: Record<IntegrationType, Record<string
     react: "Adding reaction",
     upload: "Uploading file",
   },
-  gmail: {
+  google_gmail: {
     list: "Listing emails",
     get: "Reading email",
     unread: "Getting unread emails",
