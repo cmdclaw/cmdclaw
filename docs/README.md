@@ -1,1 +1,1 @@
-mint dev
+mint dev --port 3333
