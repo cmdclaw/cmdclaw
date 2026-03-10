@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBottomBar } from "@/components/mobile-bottom-bar";
+import { SelfhostControlPlaneGate } from "@/components/selfhost-control-plane-gate";
 import { authClient } from "@/lib/auth-client";
 
 const APP_SHELL_CONTENT_STYLE: React.CSSProperties = { transform: "translateZ(0)" };
@@ -61,6 +62,7 @@ export function AppShell({
 
   return (
     <div className="flex h-screen w-full">
+      <SelfhostControlPlaneGate />
       {showNav ? <AppSidebar /> : null}
       <div
         className="app-shell-scroll-container relative h-full min-w-0 flex-1 overflow-auto pb-16 md:pb-0"

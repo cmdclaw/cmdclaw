@@ -169,6 +169,7 @@ export const userRelations = relations(user, ({ many }) => ({
   memorySettings: many(memorySettings),
   coworkers: many(coworker),
   providerAuths: many(providerAuth),
+  cloudAccountLinks: many(cloudAccountLink),
   devices: many(device),
   customIntegrations: many(customIntegration),
   customIntegrationCredentials: many(customIntegrationCredential),
@@ -1393,6 +1394,36 @@ export const providerAuthRelations = relations(providerAuth, ({ one }) => ({
   }),
 }));
 
+export const cloudAccountLink = pgTable(
+  "cloud_account_link",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    cloudUserId: text("cloud_user_id").notNull(),
+    status: text("status").default("linked").notNull(),
+    linkedAt: timestamp("linked_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("cloud_account_link_user_id_idx").on(table.userId),
+    index("cloud_account_link_cloud_user_id_idx").on(table.cloudUserId),
+  ],
+);
+
+export const cloudAccountLinkRelations = relations(cloudAccountLink, ({ one }) => ({
+  user: one(user, {
+    fields: [cloudAccountLink.userId],
+    references: [user.id],
+  }),
+}));
+
 // ========== DEVICE CODE (Better Auth plugin) ==========
 
 export const deviceCode = pgTable("device_code", {
@@ -1692,6 +1723,36 @@ export const providerOauthState = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("provider_oauth_state_created_at_idx").on(table.createdAt)],
+);
+
+export const cloudAccountLinkState = pgTable(
+  "cloud_account_link_state",
+  {
+    state: text("state").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    requestedIntegrationType: text("requested_integration_type"),
+    returnPath: text("return_path"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("cloud_account_link_state_created_at_idx").on(table.createdAt)],
+);
+
+export const controlPlaneLinkRequest = pgTable(
+  "control_plane_link_request",
+  {
+    code: text("code").primaryKey(),
+    localState: text("local_state").notNull(),
+    returnUrl: text("return_url").notNull(),
+    requestedIntegrationType: text("requested_integration_type"),
+    completedByUserId: text("completed_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [index("control_plane_link_request_created_at_idx").on(table.createdAt)],
 );
 
 export const whatsappUserLink = pgTable(

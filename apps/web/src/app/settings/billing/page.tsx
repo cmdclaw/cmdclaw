@@ -7,10 +7,12 @@ import {
   formatCredits,
 } from "@cmdclaw/core/lib/billing-plans";
 import { Check, ExternalLink, Loader2, Sparkles, Zap } from "lucide-react";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { clientEditionCapabilities } from "@/lib/edition";
 import {
   useAttachBillingPlan,
   useBillingOverview,
@@ -23,6 +25,7 @@ const TOP_UP_PRESETS = [10, 25, 50, 100];
 const EMPTY_WORKSPACE_OPTIONS: Array<{ id: string; name: string }> = [];
 
 export default function BillingPage() {
+  const router = useRouter();
   const { data: overview, isLoading, refetch } = useBillingOverview();
   const attachPlan = useAttachBillingPlan();
   const openPortal = useOpenBillingPortal();
@@ -150,6 +153,16 @@ export default function BillingPage() {
 
   const topUpCredits = Math.max(0, Math.floor(Number(topUpUsd || 0) * TOP_UP_CREDITS_PER_USD));
   const balance = Math.max(0, Number(feature?.balance ?? 0));
+
+  useEffect(() => {
+    if (!clientEditionCapabilities.hasBilling) {
+      router.replace("/settings");
+    }
+  }, [router]);
+
+  if (!clientEditionCapabilities.hasBilling) {
+    return null;
+  }
 
   if (isLoading) {
     return (

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BugReportDialog } from "@/components/bug-report-dialog";
 import { authClient } from "@/lib/auth-client";
+import { clientEditionCapabilities } from "@/lib/edition";
 import { cn } from "@/lib/utils";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
@@ -102,7 +103,7 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
   }, [onOpenChange]);
 
   const panelStyle = useMemo(
-    () => ({ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }),
+    () => ({ paddingBottom: "calc(4rem + var(--safe-area-inset-bottom))" }),
     [],
   );
 
@@ -168,16 +169,20 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
         <div className="flex flex-col gap-0.5 px-1 py-2">
           <MenuItem icon={Toolbox} label="Toolbox" href="/toolbox" onClick={handleItemClick} />
           <MenuItem icon={Settings} label="Settings" href="/settings" onClick={handleItemClick} />
-          <MenuItem
-            icon={BarChart3}
-            label="Usage"
-            href="/settings/usage"
-            onClick={handleItemClick}
-          />
+          {clientEditionCapabilities.hasBilling ? (
+            <MenuItem
+              icon={BarChart3}
+              label="Usage"
+              href="/settings/usage"
+              onClick={handleItemClick}
+            />
+          ) : null}
           <MenuItem icon={Bug} label="Bug report" onClick={handleBugReportClick} />
-          {isAdmin && (
+          {clientEditionCapabilities.hasSupportAdmin && isAdmin ? (
             <MenuItem icon={Shield} label="Admin" href="/admin" onClick={handleItemClick} />
-          )}
+          ) : clientEditionCapabilities.hasInstanceAdmin ? (
+            <MenuItem icon={Shield} label="Instance" href="/instance" onClick={handleItemClick} />
+          ) : null}
         </div>
       </div>
     </>

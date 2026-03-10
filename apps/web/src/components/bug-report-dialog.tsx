@@ -19,6 +19,10 @@ type BugReportDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+const dialogContentStyle = {
+  top: "max(50%, calc(50% + var(--safe-area-inset-top) / 2))",
+};
+
 export function BugReportDialog({ open, onOpenChange }: BugReportDialogProps) {
   const [reportMessage, setReportMessage] = useState("");
   const [reportAttachment, setReportAttachment] = useState<File | null>(null);
@@ -124,7 +128,8 @@ export function BugReportDialog({ open, onOpenChange }: BugReportDialogProps) {
       <DialogContent
         showCloseButton={false}
         onOpenAutoFocus={handleOpenAutoFocus}
-        className="top-[max(50%,calc(50%+env(safe-area-inset-top)/2))] grid max-h-[min(90vh,720px)] w-[calc(100vw-1.5rem)] max-w-xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl p-0 sm:w-full"
+        className="grid max-h-[min(90vh,720px)] w-[calc(100vw-1.5rem)] max-w-xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl p-0 sm:w-full"
+        style={dialogContentStyle}
       >
         <DialogClose className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-full p-1 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
           <X className="size-4" />

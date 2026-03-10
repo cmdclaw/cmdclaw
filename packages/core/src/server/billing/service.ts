@@ -19,6 +19,7 @@ import {
 } from "@cmdclaw/db/schema";
 import { getAutumnClient } from "./autumn";
 import { calculateCredits } from "./credit-calculator";
+import { isSelfHostedEdition } from "../edition";
 
 export type BillingOwner = {
   ownerType: BillingOwnerType;
@@ -61,6 +62,18 @@ type BillingFeatureSnapshot = {
   }>;
 };
 
+export type BillingWorkspaceSummary = {
+  id: string;
+  name: string;
+  slug: string | null;
+};
+
+export type BillingTargetUserSummary = {
+  id: string;
+  name: string | null;
+  email: string | null;
+};
+
 export async function resolveBillingOwnerForUser(userId: string): Promise<BillingOwner> {
   const dbUser = await db.query.user.findFirst({
     where: eq(user.id, userId),
@@ -91,6 +104,7 @@ async function getWorkspaceForUser(userId: string, workspaceId: string) {
         columns: {
           id: true,
           name: true,
+          slug: true,
           billingPlanId: true,
           autumnCustomerId: true,
         },
@@ -101,7 +115,170 @@ async function getWorkspaceForUser(userId: string, workspaceId: string) {
   return membership?.workspace ?? null;
 }
 
+async function getBillingSnapshotForOwner(owner: BillingOwner) {
+  const recentTopUps = await db.query.billingTopUp.findMany({
+    where:
+      owner.ownerType === "workspace"
+        ? eq(billingTopUp.workspaceId, owner.ownerId)
+        : eq(billingTopUp.userId, owner.ownerId),
+    orderBy: [desc(billingTopUp.createdAt)],
+    limit: 20,
+  });
+
+  let llmCreditsFeature: BillingFeatureSnapshot | null = null;
+  const autumnClient = getAutumnClient();
+  if (autumnClient) {
+    try {
+      await ensureBillingCustomer(owner);
+      const result = await autumnClient.check({
+        customer_id: owner.autumnCustomerId,
+        feature_id: BILLING_CREDIT_FEATURE_ID,
+        required_balance: 0,
+      });
+      llmCreditsFeature = (result.data as BillingFeatureSnapshot | undefined) ?? null;
+    } catch (error) {
+      console.error("[Billing] Failed to fetch Autumn credit balance", error);
+    }
+  }
+
+  return {
+    plan: BILLING_PLANS[owner.planId],
+    feature: llmCreditsFeature,
+    recentTopUps,
+  };
+}
+
+export async function getExistingBillingOwnerForUser(userId: string): Promise<{
+  targetUser: BillingTargetUserSummary;
+  activeWorkspace: BillingWorkspaceSummary | null;
+  owner: BillingOwner | null;
+}> {
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: {
+      id: true,
+      name: true,
+      email: true,
+      activeWorkspaceId: true,
+    },
+  });
+
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  if (!dbUser.activeWorkspaceId) {
+    return {
+      targetUser: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+      },
+      activeWorkspace: null,
+      owner: null,
+    };
+  }
+
+  const activeWorkspace = await getWorkspaceForUser(dbUser.id, dbUser.activeWorkspaceId);
+  if (!activeWorkspace) {
+    return {
+      targetUser: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+      },
+      activeWorkspace: null,
+      owner: null,
+    };
+  }
+
+  return {
+    targetUser: {
+      id: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+    },
+    activeWorkspace: {
+      id: activeWorkspace.id,
+      name: activeWorkspace.name,
+      slug: activeWorkspace.slug,
+    },
+    owner: {
+      ownerType: "workspace",
+      ownerId: activeWorkspace.id,
+      autumnCustomerId: activeWorkspace.autumnCustomerId ?? activeWorkspace.id,
+      planId: activeWorkspace.billingPlanId as BillingPlanId,
+    },
+  };
+}
+
+export async function getAdminBillingOverviewForUser(userId: string) {
+  const target = await getExistingBillingOwnerForUser(userId);
+  if (!target.owner || !target.activeWorkspace) {
+    return {
+      targetUser: target.targetUser,
+      activeWorkspace: null,
+      plan: null,
+      feature: null,
+      recentTopUps: [],
+    };
+  }
+
+  const snapshot = await getBillingSnapshotForOwner(target.owner);
+  return {
+    targetUser: target.targetUser,
+    activeWorkspace: target.activeWorkspace,
+    plan: snapshot.plan,
+    feature: snapshot.feature,
+    recentTopUps: snapshot.recentTopUps,
+  };
+}
+
 export async function ensureWorkspaceForUser(userId: string, activeWorkspaceId?: string | null) {
+  if (isSelfHostedEdition()) {
+    if (activeWorkspaceId) {
+      const activeWorkspace = await getWorkspaceForUser(userId, activeWorkspaceId);
+      if (activeWorkspace) {
+        return activeWorkspace;
+      }
+    }
+
+    const existingWorkspace = await db.query.workspace.findFirst({
+      columns: {
+        id: true,
+        name: true,
+        billingPlanId: true,
+        autumnCustomerId: true,
+        createdByUserId: true,
+      },
+      orderBy: [desc(workspace.createdAt)],
+    });
+
+    if (!existingWorkspace) {
+      return createWorkspaceForUser(userId, "Workspace");
+    }
+
+    const membership = await db.query.workspaceMember.findFirst({
+      where: and(
+        eq(workspaceMember.userId, userId),
+        eq(workspaceMember.workspaceId, existingWorkspace.id),
+      ),
+      columns: { id: true },
+    });
+
+    if (!membership) {
+      await db.insert(workspaceMember).values({
+        workspaceId: existingWorkspace.id,
+        userId,
+        role: "member",
+      });
+    }
+
+    await db.update(user).set({ activeWorkspaceId: existingWorkspace.id }).where(eq(user.id, userId));
+
+    return existingWorkspace;
+  }
+
   if (activeWorkspaceId) {
     const activeWorkspace = await getWorkspaceForUser(userId, activeWorkspaceId);
     if (activeWorkspace) {
@@ -189,11 +366,12 @@ export async function resolveBillingOwnerForConversation(
 
 export async function createWorkspaceForUser(userId: string, name: string) {
   const slug = await uniqueWorkspaceSlug(name);
+  const isSelfHosted = isSelfHostedEdition();
   const [created] = await db
     .insert(workspace)
     .values({
       name,
-      slug,
+      slug: isSelfHosted ? "selfhost-workspace" : slug,
       createdByUserId: userId,
       billingPlanId: "free",
       autumnCustomerId: null,
@@ -212,6 +390,24 @@ export async function createWorkspaceForUser(userId: string, name: string) {
 }
 
 export async function listWorkspacesForUser(userId: string) {
+  if (isSelfHostedEdition()) {
+    const ensured = await ensureWorkspaceForUser(userId);
+    const membership = await db.query.workspaceMember.findFirst({
+      where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, ensured.id)),
+      columns: { role: true },
+    });
+    return [
+      {
+        id: ensured.id,
+        name: ensured.name,
+        slug: "selfhost-workspace",
+        role: membership?.role ?? "member",
+        billingPlanId: ensured.billingPlanId as BillingPlanId,
+        active: true,
+      },
+    ];
+  }
+
   const memberships = await db.query.workspaceMember.findMany({
     where: eq(workspaceMember.userId, userId),
     with: {
@@ -236,6 +432,16 @@ export async function listWorkspacesForUser(userId: string) {
 }
 
 export async function setActiveWorkspace(userId: string, workspaceId: string | null) {
+  if (isSelfHostedEdition()) {
+    const ensured = await ensureWorkspaceForUser(userId);
+    if (workspaceId && workspaceId !== ensured.id) {
+      throw new Error("Workspace not found");
+    }
+
+    await db.update(user).set({ activeWorkspaceId: ensured.id }).where(eq(user.id, userId));
+    return;
+  }
+
   if (workspaceId) {
     const membership = await db.query.workspaceMember.findFirst({
       where: and(eq(workspaceMember.userId, userId), eq(workspaceMember.workspaceId, workspaceId)),
@@ -415,7 +621,6 @@ export async function createManualTopUp(args: {
 
 export async function getBillingOverviewForUser(userId: string) {
   const owner = await resolveBillingOwnerForUser(userId);
-  const plan = BILLING_PLANS[owner.planId];
   const recentCharges = await db.query.billingLedger.findMany({
     where:
       owner.ownerType === "workspace"
@@ -424,37 +629,14 @@ export async function getBillingOverviewForUser(userId: string) {
     orderBy: [desc(billingLedger.createdAt)],
     limit: 20,
   });
-  const recentTopUps = await db.query.billingTopUp.findMany({
-    where:
-      owner.ownerType === "workspace"
-        ? eq(billingTopUp.workspaceId, owner.ownerId)
-        : eq(billingTopUp.userId, owner.ownerId),
-    orderBy: [desc(billingTopUp.createdAt)],
-    limit: 20,
-  });
-
-  let llmCreditsFeature: BillingFeatureSnapshot | null = null;
-  const autumnClient = getAutumnClient();
-  if (autumnClient) {
-    try {
-      await ensureBillingCustomer(owner);
-      const result = await autumnClient.check({
-        customer_id: owner.autumnCustomerId,
-        feature_id: BILLING_CREDIT_FEATURE_ID,
-        required_balance: 0,
-      });
-      llmCreditsFeature = (result.data as BillingFeatureSnapshot | undefined) ?? null;
-    } catch (error) {
-      console.error("[Billing] Failed to fetch Autumn credit balance", error);
-    }
-  }
+  const snapshot = await getBillingSnapshotForOwner(owner);
 
   return {
     owner,
-    plan,
-    feature: llmCreditsFeature,
+    plan: snapshot.plan,
+    feature: snapshot.feature,
     recentCharges,
-    recentTopUps,
+    recentTopUps: snapshot.recentTopUps,
     workspaces: await listWorkspacesForUser(userId),
   };
 }

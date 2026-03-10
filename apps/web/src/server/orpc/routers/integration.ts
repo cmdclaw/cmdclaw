@@ -1,3 +1,12 @@
+import {
+  disconnectCloudManagedIntegration,
+  getCloudManagedIntegrationConnectUrl,
+  listCloudManagedIntegrations,
+  startCloudAccountLink,
+  toggleCloudManagedIntegration,
+} from "@cmdclaw/core/server/control-plane/client";
+import { getCloudAccountLinkForUser } from "@cmdclaw/core/server/control-plane/local-links";
+import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { encrypt, decrypt } from "@cmdclaw/core/server/lib/encryption";
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import {
@@ -188,6 +197,20 @@ const googleIntegrationTypeSchema = z.enum([
 
 // List user's integrations
 const list = protectedProcedure.handler(async ({ context }) => {
+  if (isSelfHostedEdition()) {
+    const link = await getCloudAccountLinkForUser(context.user.id);
+    if (!link) {
+      return [];
+    }
+
+    const integrations = await listCloudManagedIntegrations(context.user.id);
+    return integrations.map((item) =>
+      Object.assign(item, {
+        createdAt: new Date(item.createdAt),
+      }),
+    );
+  }
+
   const integrations = await context.db.query.integration.findMany({
     where: eq(integration.userId, context.user.id),
   });
@@ -224,11 +247,19 @@ const list = protectedProcedure.handler(async ({ context }) => {
 });
 
 const getGoogleAccessStatus = protectedProcedure.handler(async ({ context }) => {
+  if (isSelfHostedEdition()) {
+    return { allowed: true };
+  }
+
   const allowed = await canUserAccessGoogleIntegrations(context);
   return { allowed };
 });
 
 const listGoogleAccessAllowlist = protectedProcedure.handler(async ({ context }) => {
+  if (isSelfHostedEdition()) {
+    throw new ORPCError("FORBIDDEN", { message: "Support admin is only available in cloud" });
+  }
+
   await ensureAdmin(context);
 
   return context.db.query.googleIntegrationAccessAllowlist.findMany({
@@ -249,6 +280,10 @@ const addGoogleAccessAllowlistEntry = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      throw new ORPCError("FORBIDDEN", { message: "Support admin is only available in cloud" });
+    }
+
     await ensureAdmin(context);
 
     const normalizedEmail = normalizeEmail(input.email);
@@ -298,6 +333,10 @@ const removeGoogleAccessAllowlistEntry = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      throw new ORPCError("FORBIDDEN", { message: "Support admin is only available in cloud" });
+    }
+
     await ensureAdmin(context);
 
     const removed = await context.db
@@ -324,6 +363,10 @@ const requestGoogleAccess = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      return { ok: true as const, alreadyAllowed: true as const };
+    }
+
     const alreadyAllowed = await canUserAccessGoogleIntegrations(context);
     if (alreadyAllowed) {
       return { ok: true as const, alreadyAllowed: true as const };
@@ -370,6 +413,21 @@ const getAuthUrl = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      const link = await getCloudAccountLinkForUser(context.user.id);
+      if (!link) {
+        return {
+          authUrl: await startCloudAccountLink({
+            userId: context.user.id,
+            requestedIntegrationType: input.type,
+            returnPath: "/integrations",
+          }),
+        };
+      }
+
+      return { authUrl: getCloudManagedIntegrationConnectUrl(input.type) };
+    }
+
     // LinkedIn uses Unipile hosted auth instead of standard OAuth
     if (input.type === "linkedin") {
       let url: string;
@@ -464,6 +522,12 @@ const handleCallback = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "OAuth callbacks are handled by the cloud control plane in self-hosted mode",
+      });
+    }
+
     let stateData: {
       userId: string;
       type: IntegrationType;
@@ -664,6 +728,15 @@ const toggle = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      await toggleCloudManagedIntegration({
+        userId: context.user.id,
+        integrationId: input.id,
+        enabled: input.enabled,
+      });
+      return { success: true };
+    }
+
     const existing = await context.db.query.integration.findFirst({
       where: and(eq(integration.id, input.id), eq(integration.userId, context.user.id)),
     });
@@ -701,6 +774,14 @@ const toggle = protectedProcedure
 const disconnect = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      await disconnectCloudManagedIntegration({
+        userId: context.user.id,
+        integrationId: input.id,
+      });
+      return { success: true };
+    }
+
     // First, get the integration to check if it's LinkedIn
     const existingIntegration = await context.db.query.integration.findFirst({
       where: and(eq(integration.id, input.id), eq(integration.userId, context.user.id)),

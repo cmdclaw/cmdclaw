@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { isSelfHostedClientEdition } from "@/lib/edition";
 
 type SignInState = "idle" | "sending" | "sent" | "error";
 
@@ -74,6 +75,7 @@ function LoginContent() {
   const [status, setStatus] = useState<SignInState>("idle");
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const lastMethod = authClient.getLastUsedLoginMethod();
+  const isSelfHosted = isSelfHostedClientEdition();
 
   useEffect(() => {
     let isMounted = true;
@@ -164,31 +166,49 @@ function LoginContent() {
           CmdClaw
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
-        <p className="text-muted-foreground text-sm">Enter your email to get a magic link.</p>
+        <p className="text-muted-foreground text-sm">
+          {isSelfHosted
+            ? "Use a magic link to access this self-hosted instance."
+            : "Enter your email to get a magic link."}
+        </p>
       </div>
 
       <div className="space-y-4">
-        <div className="flex flex-col gap-2">
-          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-            <GoogleIcon />
-            <span className="ml-2">Continue with Google</span>
-            {lastMethod === "google" && <LastUsedBadge />}
-          </Button>
-          <Button type="button" variant="outline" className="w-full" onClick={handleAppleSignIn}>
-            <AppleIcon />
-            <span className="ml-2">Continue with Apple</span>
-            {lastMethod === "apple" && <LastUsedBadge />}
-          </Button>
-        </div>
+        {!isSelfHosted ? (
+          <>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleGoogleSignIn}
+              >
+                <GoogleIcon />
+                <span className="ml-2">Continue with Google</span>
+                {lastMethod === "google" && <LastUsedBadge />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleAppleSignIn}
+              >
+                <AppleIcon />
+                <span className="ml-2">Continue with Apple</span>
+                {lastMethod === "apple" && <LastUsedBadge />}
+              </Button>
+            </div>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card text-muted-foreground px-2">Or continue with</span>
-          </div>
-        </div>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card text-muted-foreground px-2">Or continue with</span>
+              </div>
+            </div>
+          </>
+        ) : null}
 
         <form onSubmit={requestMagicLink} className="space-y-3">
           <label className="text-muted-foreground text-sm font-medium" htmlFor="email">

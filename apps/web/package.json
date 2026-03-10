@@ -27,6 +27,7 @@
     "db:seed": "bun run --cwd ../../packages/db --env-file=../../apps/web/.env seed",
     "db:studio": "bun run --cwd ../../packages/db --env-file=../../apps/web/.env db:studio",
     "dev": "next dev",
+    "dev:selfhost": "next dev --port 3001",
     "docker-up:local": "docker compose up",
     "e2b:build:dev": "bun src/sandbox-templates/e2b/build.dev.ts",
     "e2b:build:prod": "bun src/sandbox-templates/e2b/build.prod.ts",

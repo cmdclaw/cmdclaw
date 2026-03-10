@@ -9,6 +9,9 @@ export const env = createEnv({
   server: {
     BETTER_AUTH_SECRET: z.string(),
     APP_URL: z.url().optional(),
+    CMDCLAW_EDITION: z.enum(["cloud", "selfhost"]).default("cloud"),
+    CMDCLAW_CLOUD_API_BASE_URL: z.url().optional(),
+    CMDCLAW_CLOUD_INSTANCE_API_KEY: z.string().optional(),
     DATABASE_URL: z.url(),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     RESEND_API_KEY: z.string().optional(),
@@ -107,6 +110,7 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_APP_URL: z.url().optional(),
+    NEXT_PUBLIC_CMDCLAW_EDITION: z.enum(["cloud", "selfhost"]).optional(),
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().optional(),
   },
@@ -118,6 +122,9 @@ export const env = createEnv({
   runtimeEnv: {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     APP_URL: process.env.APP_URL,
+    CMDCLAW_EDITION: process.env.CMDCLAW_EDITION,
+    CMDCLAW_CLOUD_API_BASE_URL: process.env.CMDCLAW_CLOUD_API_BASE_URL,
+    CMDCLAW_CLOUD_INSTANCE_API_KEY: process.env.CMDCLAW_CLOUD_INSTANCE_API_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
@@ -189,6 +196,8 @@ export const env = createEnv({
     WEB_PUSH_VAPID_PUBLIC_KEY: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
     WEB_PUSH_VAPID_PRIVATE_KEY: process.env.WEB_PUSH_VAPID_PRIVATE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_CMDCLAW_EDITION:
+      process.env.NEXT_PUBLIC_CMDCLAW_EDITION ?? process.env.CMDCLAW_EDITION,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
   },

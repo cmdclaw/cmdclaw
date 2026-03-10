@@ -31,6 +31,8 @@ type DualPanelWorkspaceProps = {
   separatorClassName?: string;
   /** Label shown on the collapsed sidebar button (e.g. coworker name). When set, replaces the chevron with a labeled button. */
   collapsedLabel?: string;
+  /** Hide the separator collapse button while expanded when the panel already offers its own close affordance. */
+  showExpandedCollapseButton?: boolean;
   /** Expose collapse toggle so child content can trigger it (e.g. an X close button inside the panel). */
   onCollapseToggleRef?: React.MutableRefObject<(() => void) | null>;
 };
@@ -57,6 +59,7 @@ export function DualPanelWorkspace({
   rightPanelClassName,
   separatorClassName,
   collapsedLabel,
+  showExpandedCollapseButton = true,
   onCollapseToggleRef,
 }: DualPanelWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -290,6 +293,7 @@ export function DualPanelWorkspace({
             </>
           )}
           {collapsible &&
+            (isCollapsed || showExpandedCollapseButton) &&
             (collapsedLabel ? (
               // Labeled collapse button — only visible when collapsed; when expanded, the panel provides its own close button
               isCollapsed && (

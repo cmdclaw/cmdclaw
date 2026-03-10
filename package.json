@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev": "turbo dev --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=tui",
+    "dev:selfhost": "bun --env-file=apps/web/.env.selfhost turbo dev:selfhost --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=tui",
+    "dev:selfhost:web": "bun --env-file=apps/web/.env.selfhost turbo dev:selfhost --filter=@cmdclaw/web",
     "build": "turbo build",
     "check": "turbo check",
     "test": "turbo test",

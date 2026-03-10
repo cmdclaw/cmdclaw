@@ -5,6 +5,10 @@
       "cache": false,
       "persistent": true
     },
+    "dev:selfhost": {
+      "cache": false,
+      "persistent": true
+    },
     "build": {
       "dependsOn": [
         "^build"

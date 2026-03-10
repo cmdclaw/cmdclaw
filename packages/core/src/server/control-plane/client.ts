@@ -1,0 +1,190 @@
+import { env } from "../../env";
+import { isSelfHostedEdition } from "../edition";
+import type {
+  ControlPlaneHealthStatus,
+  DelegatedRuntimeCredentialsRequest,
+  DelegatedRuntimeCredentialsResponse,
+  IntegrationLinkStatus,
+  ProviderAuthStatusPayload,
+} from "./types";
+import { createCloudAccountLinkState, getCloudAccountLinkForUser } from "./local-links";
+
+const INSTANCE_API_KEY_HEADER = "x-cmdclaw-instance-api-key";
+
+function requireControlPlaneConfig() {
+  if (!env.CMDCLAW_CLOUD_API_BASE_URL || !env.CMDCLAW_CLOUD_INSTANCE_API_KEY) {
+    throw new Error("Cloud control plane is not configured");
+  }
+}
+
+async function callControlPlane<T>(path: string, init?: RequestInit): Promise<T> {
+  requireControlPlaneConfig();
+
+  const response = await fetch(new URL(path, env.CMDCLAW_CLOUD_API_BASE_URL).toString(), {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      [INSTANCE_API_KEY_HEADER]: env.CMDCLAW_CLOUD_INSTANCE_API_KEY!,
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Control plane request failed (${response.status})`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function requireLinkedCloudUserId(userId: string): Promise<string> {
+  const link = await getCloudAccountLinkForUser(userId);
+  if (!link?.cloudUserId) {
+    throw new Error("Cloud account is not linked");
+  }
+  return link.cloudUserId;
+}
+
+export function isControlPlaneEnabled(): boolean {
+  return isSelfHostedEdition();
+}
+
+export async function getControlPlaneHealth(): Promise<ControlPlaneHealthStatus> {
+  return callControlPlane<ControlPlaneHealthStatus>("/api/control-plane/health");
+}
+
+export async function listCloudManagedIntegrations(userId: string): Promise<IntegrationLinkStatus[]> {
+  const cloudUserId = await requireLinkedCloudUserId(userId);
+  return callControlPlane<IntegrationLinkStatus[]>("/api/control-plane/integrations/status", {
+    method: "POST",
+    body: JSON.stringify({ cloudUserId }),
+  });
+}
+
+export async function toggleCloudManagedIntegration(params: {
+  userId: string;
+  integrationId: string;
+  enabled: boolean;
+}) {
+  const cloudUserId = await requireLinkedCloudUserId(params.userId);
+  return callControlPlane<{ success: true }>("/api/control-plane/integrations/toggle", {
+    method: "POST",
+    body: JSON.stringify({
+      cloudUserId,
+      integrationId: params.integrationId,
+      enabled: params.enabled,
+    }),
+  });
+}
+
+export async function disconnectCloudManagedIntegration(params: {
+  userId: string;
+  integrationId: string;
+}) {
+  const cloudUserId = await requireLinkedCloudUserId(params.userId);
+  return callControlPlane<{ success: true }>("/api/control-plane/integrations/disconnect", {
+    method: "POST",
+    body: JSON.stringify({
+      cloudUserId,
+      integrationId: params.integrationId,
+    }),
+  });
+}
+
+export async function getDelegatedRuntimeCredentials(
+  userId: string,
+  input: DelegatedRuntimeCredentialsRequest,
+): Promise<DelegatedRuntimeCredentialsResponse> {
+  const cloudUserId = await requireLinkedCloudUserId(userId);
+  return callControlPlane<DelegatedRuntimeCredentialsResponse>(
+    "/api/control-plane/runtime-credentials",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        cloudUserId,
+        integrationTypes: input.integrationTypes,
+      }),
+    },
+  );
+}
+
+export async function getCloudManagedProviderAuthStatus(
+  userId: string,
+): Promise<ProviderAuthStatusPayload> {
+  const cloudUserId = await requireLinkedCloudUserId(userId);
+  return callControlPlane<ProviderAuthStatusPayload>("/api/control-plane/provider-auth/status", {
+    method: "POST",
+    body: JSON.stringify({ cloudUserId }),
+  });
+}
+
+export async function disconnectCloudManagedProviderAuth(params: {
+  userId: string;
+  provider: string;
+}) {
+  const cloudUserId = await requireLinkedCloudUserId(params.userId);
+  return callControlPlane<{ success: true }>("/api/control-plane/provider-auth/disconnect", {
+    method: "POST",
+    body: JSON.stringify({
+      cloudUserId,
+      provider: params.provider,
+    }),
+  });
+}
+
+export async function getDelegatedProviderAuths(userId: string) {
+  const delegated = await getDelegatedRuntimeCredentials(userId, { integrationTypes: [] });
+  return delegated.providerAuths;
+}
+
+export async function startCloudAccountLink(params: {
+  userId: string;
+  requestedIntegrationType?: string | null;
+  returnPath?: string | null;
+}): Promise<string> {
+  requireControlPlaneConfig();
+
+  const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    throw new Error("APP_URL is not configured");
+  }
+
+  const localState = await createCloudAccountLinkState({
+    userId: params.userId,
+    requestedIntegrationType: params.requestedIntegrationType ?? null,
+    returnPath: params.returnPath ?? null,
+  });
+
+  const result = await callControlPlane<{ authorizeUrl: string }>("/api/control-plane/link/start", {
+    method: "POST",
+    body: JSON.stringify({
+      localState,
+      requestedIntegrationType: params.requestedIntegrationType ?? null,
+      returnUrl: new URL("/api/control-plane/link/callback", appUrl).toString(),
+    }),
+  });
+
+  return result.authorizeUrl;
+}
+
+export async function exchangeCloudAccountLink(code: string): Promise<string> {
+  const result = await callControlPlane<{ cloudUserId: string }>("/api/control-plane/link/exchange", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+
+  return result.cloudUserId;
+}
+
+export function getCloudManagedIntegrationConnectUrl(type: string): string {
+  requireControlPlaneConfig();
+  return new URL(
+    `/api/control-plane/integrations/connect?type=${encodeURIComponent(type)}`,
+    env.CMDCLAW_CLOUD_API_BASE_URL,
+  ).toString();
+}
+
+export function getCloudManagedSubscriptionsUrl(): string {
+  requireControlPlaneConfig();
+  return new URL("/settings/subscriptions", env.CMDCLAW_CLOUD_API_BASE_URL).toString();
+}

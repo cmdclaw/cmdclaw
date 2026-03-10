@@ -4,8 +4,15 @@ import {
   isOAuthProviderConfig,
   type SubscriptionProviderID,
 } from "@cmdclaw/core/server/ai/subscription-providers";
+import {
+  disconnectCloudManagedProviderAuth,
+  getCloudManagedProviderAuthStatus,
+  getCloudManagedSubscriptionsUrl,
+} from "@cmdclaw/core/server/control-plane/client";
+import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { encrypt } from "@cmdclaw/core/server/utils/encryption";
 import { providerAuth } from "@cmdclaw/db/schema";
+import { ORPCError } from "@orpc/server";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { deletePending, getPending, storePending } from "@/server/ai/pending-oauth";
@@ -117,6 +124,13 @@ async function requestOpenAIDeviceCode(config: {
 const connect = protectedProcedure
   .input(z.object({ provider: oauthProviderSchema }))
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      return {
+        mode: "redirect" as const,
+        authUrl: getCloudManagedSubscriptionsUrl(),
+      };
+    }
+
     if (input.provider === "google") {
       throw new Error("Google subscription is not supported yet");
     }
@@ -198,6 +212,13 @@ const connect = protectedProcedure
  * Poll OpenAI device flow and finalize token storage once approved.
  */
 const poll = protectedProcedure.input(pollProviderSchema).handler(async ({ input, context }) => {
+  if (isSelfHostedEdition()) {
+    return {
+      status: "failed" as const,
+      error: "cloud_managed",
+    };
+  }
+
   const pending = await getPending(input.flowId);
   if (!pending || pending.userId !== context.user.id || pending.provider !== input.provider) {
     return {
@@ -303,6 +324,17 @@ const poll = protectedProcedure.input(pollProviderSchema).handler(async ({ input
  * Return which subscription providers the user has connected.
  */
 const status = protectedProcedure.handler(async ({ context }) => {
+  if (isSelfHostedEdition()) {
+    const providerStatus = await getCloudManagedProviderAuthStatus(context.user.id);
+    const connected: Record<string, { connectedAt: Date }> = {};
+    for (const provider of providerStatus.connected) {
+      connected[provider] = {
+        connectedAt: new Date(),
+      };
+    }
+    return { connected };
+  }
+
   const auths = await context.db.query.providerAuth.findMany({
     where: eq(providerAuth.userId, context.user.id),
   });
@@ -324,6 +356,14 @@ const status = protectedProcedure.handler(async ({ context }) => {
 const disconnect = protectedProcedure
   .input(z.object({ provider: providerSchema }))
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      await disconnectCloudManagedProviderAuth({
+        userId: context.user.id,
+        provider: input.provider,
+      });
+      return { success: true };
+    }
+
     await context.db
       .delete(providerAuth)
       .where(
@@ -345,6 +385,12 @@ const setApiKey = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    if (isSelfHostedEdition()) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Provider auth is cloud-managed in self-hosted edition",
+      });
+    }
+
     const apiKey = input.apiKey.trim();
     if (!apiKey) {
       throw new Error("API key cannot be empty");

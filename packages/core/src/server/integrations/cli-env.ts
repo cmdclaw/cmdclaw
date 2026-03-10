@@ -1,9 +1,14 @@
 import { eq, and } from "drizzle-orm";
 import type { IntegrationType } from "../oauth/config";
 import { env } from "../../env";
+import { isSelfHostedEdition } from "../edition";
 import { db } from "@cmdclaw/db/client";
 import { integration, customIntegrationCredential } from "@cmdclaw/db/schema";
 import { decrypt } from "../lib/encryption";
+import {
+  getDelegatedRuntimeCredentials,
+  listCloudManagedIntegrations,
+} from "../control-plane/client";
 import { getValidTokensForUser, getValidCustomTokens } from "./token-refresh";
 
 // Token-based integrations map to their access token env var
@@ -28,6 +33,11 @@ const ENV_VAR_MAP: Record<Exclude<IntegrationType, "linkedin">, string> = {
 };
 
 export async function getCliEnvForUser(userId: string): Promise<Record<string, string>> {
+  if (isSelfHostedEdition()) {
+    const delegated = await getDelegatedRuntimeCredentials(userId, { integrationTypes: [] });
+    return delegated.cliEnv;
+  }
+
   const cliEnv: Record<string, string> = {};
   const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
 
@@ -542,6 +552,13 @@ ${instructions}
 }
 
 export async function getEnabledIntegrationTypes(userId: string): Promise<IntegrationType[]> {
+  if (isSelfHostedEdition()) {
+    const integrations = await listCloudManagedIntegrations(userId);
+    return integrations
+      .filter((item) => item.enabled)
+      .map((item) => item.type) as IntegrationType[];
+  }
+
   const results = await db
     .select({ type: integration.type })
     .from(integration)
@@ -558,6 +575,11 @@ export async function getTokensForIntegrations(
   userId: string,
   integrationTypes: string[],
 ): Promise<Record<string, string>> {
+  if (isSelfHostedEdition()) {
+    const delegated = await getDelegatedRuntimeCredentials(userId, { integrationTypes });
+    return delegated.tokens;
+  }
+
   const tokens: Record<string, string> = {};
   const requestedTokenIntegrations = integrationTypes.filter(
     (type): type is Exclude<IntegrationType, "linkedin"> => type in ENV_VAR_MAP,

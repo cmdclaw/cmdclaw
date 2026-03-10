@@ -30,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsAdmin } from "@/hooks/use-is-admin";
+import { clientEditionCapabilities } from "@/lib/edition";
 import {
   isUnipileMissingCredentialsError,
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
@@ -715,6 +716,11 @@ function IntegrationsPageContent() {
   );
 
   useEffect(() => {
+    if (clientEditionCapabilities.edition === "selfhost") {
+      setWhatsAppBridgeStatus(null);
+      return;
+    }
+
     let active = true;
 
     const loadWhatsAppStatus = async () => {
@@ -816,7 +822,12 @@ function IntegrationsPageContent() {
       IntegrationType,
       (typeof integrationConfig)[IntegrationType],
     ][]
-  ).filter(([type]) => isAdmin || !adminPreviewOnlyIntegrations.has(type));
+  ).filter(([type]) => {
+    if (clientEditionCapabilities.edition === "selfhost" && type === "whatsapp") {
+      return false;
+    }
+    return isAdmin || !adminPreviewOnlyIntegrations.has(type);
+  });
 
   // Filter integrations based on search and tab
   const filteredIntegrations = visibleIntegrations.filter(([type, config]) => {

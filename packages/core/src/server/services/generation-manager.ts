@@ -20,6 +20,7 @@ import {
 import { parseBashCommand } from "../ai/permission-checker";
 import { getProviderModels } from "../ai/subscription-providers";
 import { trackGenerationBilling } from "../billing/service";
+import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
@@ -1237,11 +1238,8 @@ class GenerationManager {
     }
 
     if (providerID === "openai") {
-      const { providerAuth } = await import("@cmdclaw/db/schema");
-      const auth = await db.query.providerAuth.findFirst({
-        where: and(eq(providerAuth.userId, params.userId), eq(providerAuth.provider, "openai")),
-      });
-      if (!auth) {
+      const hasAuth = await hasConnectedProviderAuthForUser(params.userId, "openai");
+      if (!hasAuth) {
         return {
           allowed: false,
           reason: "openai_not_connected",
@@ -1262,11 +1260,8 @@ class GenerationManager {
     }
 
     if (providerID === "kimi-for-coding") {
-      const { providerAuth } = await import("@cmdclaw/db/schema");
-      const auth = await db.query.providerAuth.findFirst({
-        where: and(eq(providerAuth.userId, params.userId), eq(providerAuth.provider, "kimi")),
-      });
-      if (!auth) {
+      const hasAuth = await hasConnectedProviderAuthForUser(params.userId, "kimi");
+      if (!hasAuth) {
         return {
           allowed: false,
           reason: "kimi_not_connected",

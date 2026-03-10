@@ -827,17 +827,18 @@ export default function CoworkerEditorPage() {
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       <DualPanelWorkspace
         storageKey="coworker-editor-panels-v2"
-        defaultRightWidth={45}
+        defaultRightWidth={50}
+        minRightWidth={50}
         collapsible
+        showExpandedCollapseButton={false}
         showTitles={false}
         leftTitle="Chat"
         rightTitle={coworkerDisplayName}
         leftPanelClassName="border-0 rounded-none"
         separatorClassName="bg-muted/30"
-        rightPanelClassName="border-0 rounded-none bg-muted/30"
+        rightPanelClassName="border-0 rounded-none bg-muted/30 md:min-w-[34rem]"
         left={chatPanel}
         right={settingsPanel}
-        collapsedLabel="Coworker"
         onCollapseToggleRef={collapseToggleRef}
       />
       <AlertDialog
@@ -1047,8 +1048,8 @@ function CoworkerSettingsPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Tab bar */}
-      <div className="flex items-center justify-between px-3 py-1.5">
-        <div className="flex items-center">
+      <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+        <div className="min-w-0 flex-1 overflow-x-auto">
           <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange}>
             <AnimatedTab value="instruction">Instruction</AnimatedTab>
             <AnimatedTab value="runs">Runs</AnimatedTab>
@@ -1057,7 +1058,7 @@ function CoworkerSettingsPanel({
             <AnimatedTab value="details">Details</AnimatedTab>
           </AnimatedTabs>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {isSaving && <span className="text-muted-foreground shrink-0 text-xs">Saving…</span>}
           <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
           <Button

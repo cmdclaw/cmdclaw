@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type React from "react";
 import { AutumnProvider } from "autumn-js/react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
@@ -21,9 +22,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const isSelfHostedEdition = env.CMDCLAW_EDITION === "selfhost";
+
+function BillingProviderWrapper({ children }: { children: React.ReactNode }) {
+  if (isSelfHostedEdition) {
+    return children;
+  }
+
+  return (
+    <AutumnProvider betterAuthUrl={env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? ""}>
+      {children}
+    </AutumnProvider>
+  );
+}
+
 export const metadata: Metadata = {
-  title: "CmdClaw",
-  description: "Your AI Assistant",
+  title: isSelfHostedEdition ? "CmdClaw Self-hosted" : "CmdClaw Cloud",
+  description: isSelfHostedEdition ? "Your self-hosted CmdClaw deployment" : "Your AI Assistant",
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -47,16 +62,19 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        data-edition={env.CMDCLAW_EDITION}
+      >
         <PostHogClientProvider>
           <ORPCProvider>
-            <AutumnProvider betterAuthUrl={env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? ""}>
+            <BillingProviderWrapper>
               <DesktopNotificationPermissionGate />
               <AppShellRouteWrapper initialHasSession={hasSessionCookie}>
                 {children}
               </AppShellRouteWrapper>
               <Toaster />
-            </AutumnProvider>
+            </BillingProviderWrapper>
           </ORPCProvider>
         </PostHogClientProvider>
       </body>

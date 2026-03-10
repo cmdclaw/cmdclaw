@@ -20,6 +20,10 @@ const tabs: BottomTab[] = [
   { icon: LayoutTemplate, label: "Templates", href: "/templates" },
 ];
 
+const mobileBottomNavStyle = {
+  paddingBottom: "var(--safe-area-inset-bottom)",
+};
+
 export function MobileBottomBar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -51,7 +55,7 @@ export function MobileBottomBar() {
       <MobileMenuPanel open={menuOpen} onOpenChange={setMenuOpen} />
 
       <div className="bg-background/95 fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border-t backdrop-blur-sm md:hidden">
-        <nav className="flex items-stretch justify-around pb-[env(safe-area-inset-bottom)]">
+        <nav className="flex items-stretch justify-around" style={mobileBottomNavStyle}>
           {/* Menu button */}
           <button
             type="button"

@@ -14,7 +14,9 @@ function createProcedureStub() {
 var attachPlanToOwnerMock: ReturnType<typeof vi.fn>;
 var createManualTopUpMock: ReturnType<typeof vi.fn>;
 var ensureWorkspaceForUserMock: ReturnType<typeof vi.fn>;
+var getAdminBillingOverviewForUserMock: ReturnType<typeof vi.fn>;
 var getBillingOverviewForUserMock: ReturnType<typeof vi.fn>;
+var getExistingBillingOwnerForUserMock: ReturnType<typeof vi.fn>;
 var getWorkspaceMembershipForUserMock: ReturnType<typeof vi.fn>;
 var openBillingPortalForOwnerMock: ReturnType<typeof vi.fn>;
 var cancelPlanForOwnerMock: ReturnType<typeof vi.fn>;
@@ -38,6 +40,10 @@ vi.mock("@cmdclaw/core/server/billing/service", () => ({
     return createManualTopUpMock;
   })(),
   createWorkspaceForUser: vi.fn(),
+  getAdminBillingOverviewForUser: (() => {
+    getAdminBillingOverviewForUserMock = vi.fn();
+    return getAdminBillingOverviewForUserMock;
+  })(),
   ensureWorkspaceForUser: (() => {
     ensureWorkspaceForUserMock = vi.fn();
     return ensureWorkspaceForUserMock;
@@ -45,6 +51,10 @@ vi.mock("@cmdclaw/core/server/billing/service", () => ({
   getBillingOverviewForUser: (() => {
     getBillingOverviewForUserMock = vi.fn();
     return getBillingOverviewForUserMock;
+  })(),
+  getExistingBillingOwnerForUser: (() => {
+    getExistingBillingOwnerForUserMock = vi.fn();
+    return getExistingBillingOwnerForUserMock;
   })(),
   getWorkspaceMembershipForUser: (() => {
     getWorkspaceMembershipForUserMock = vi.fn();
@@ -64,7 +74,7 @@ const billingRouterAny = billingRouter as unknown as Record<
   (args: unknown) => Promise<unknown>
 >;
 
-function createContext() {
+function createContext(role = "admin") {
   return {
     user: {
       id: "user-1",
@@ -75,7 +85,7 @@ function createContext() {
       query: {
         user: {
           findFirst: vi.fn().mockResolvedValue({
-            role: "admin",
+            role,
             activeWorkspaceId: "ws-1",
           }),
         },
@@ -123,27 +133,54 @@ describe("billingRouter", () => {
       plan: { id: "free" },
       workspaces: [],
     });
-  });
-
-  it("ignores personal ownerType input and resolves the workspace owner", async () => {
-    const result = (await billingRouterAny.attachPlan({
-      input: {
-        ownerType: "user",
+    getAdminBillingOverviewForUserMock.mockResolvedValue({
+      targetUser: {
+        id: "user-2",
+        name: "Target User",
+        email: "target@example.com",
+      },
+      activeWorkspace: {
+        id: "ws-target",
+        name: "Target Workspace",
+        slug: "target-workspace",
+      },
+      plan: { id: "pro", name: "Pro" },
+      feature: { balance: 900 },
+      recentTopUps: [],
+    });
+    getExistingBillingOwnerForUserMock.mockResolvedValue({
+      targetUser: {
+        id: "user-2",
+        name: "Target User",
+        email: "target@example.com",
+      },
+      activeWorkspace: {
+        id: "ws-target",
+        name: "Target Workspace",
+        slug: "target-workspace",
+      },
+      owner: {
+        ownerType: "workspace",
+        ownerId: "ws-target",
+        autumnCustomerId: "cus-target",
         planId: "pro",
       },
-      context: createContext(),
-    })) as { checkoutUrl: string | null; customerId: string; planId: string };
+    });
+  });
 
-    expect(ensureWorkspaceForUserMock).toHaveBeenCalledWith("user-1", "ws-1");
-    expect(attachPlanToOwnerMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        owner: expect.objectContaining({
-          ownerType: "workspace",
-          ownerId: "ws-1",
-        }),
+  it("rejects personal ownerType input for attach plan", async () => {
+    await expect(
+      billingRouterAny.attachPlan({
+        input: {
+          ownerType: "user",
+          planId: "pro",
+        },
+        context: createContext(),
       }),
-    );
-    expect(result.planId).toBe("pro");
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Personal billing is no longer supported",
+    });
   });
 
   it("attaches workspace plans using the ensured workspace owner", async () => {
@@ -188,5 +225,85 @@ describe("billingRouter", () => {
       undefined,
     );
     expect(result.url).toBe("https://portal.example.com");
+  });
+
+  it("returns an admin overview for a target user", async () => {
+    const result = (await billingRouterAny.adminUserOverview({
+      input: {
+        targetUserId: "user-2",
+      },
+      context: createContext(),
+    })) as {
+      targetUser: { id: string };
+      activeWorkspace: { id: string } | null;
+    };
+
+    expect(getAdminBillingOverviewForUserMock).toHaveBeenCalledWith("user-2");
+    expect(result.targetUser.id).toBe("user-2");
+    expect(result.activeWorkspace?.id).toBe("ws-target");
+  });
+
+  it("blocks admin overview for non-admin users", async () => {
+    await expect(
+      billingRouterAny.adminUserOverview({
+        input: {
+          targetUserId: "user-2",
+        },
+        context: createContext("member"),
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Admin role required for manual top-ups",
+    });
+  });
+
+  it("creates admin top-ups on the selected user's active workspace", async () => {
+    const result = (await billingRouterAny.adminManualTopUp({
+      input: {
+        targetUserId: "user-2",
+        usdAmount: 25,
+      },
+      context: createContext(),
+    })) as { id: string; creditsGranted: number };
+
+    expect(getExistingBillingOwnerForUserMock).toHaveBeenCalledWith("user-2");
+    expect(createManualTopUpMock).toHaveBeenCalledWith({
+      owner: expect.objectContaining({
+        ownerType: "workspace",
+        ownerId: "ws-target",
+      }),
+      grantedByUserId: "user-1",
+      usdAmount: 25,
+    });
+    expect(result).toEqual({
+      id: "topup-1",
+      creditsGranted: 2500,
+      expiresAt: new Date("2027-03-09T00:00:00.000Z"),
+    });
+  });
+
+  it("rejects admin top-ups when the target user has no active workspace", async () => {
+    getExistingBillingOwnerForUserMock.mockResolvedValueOnce({
+      targetUser: {
+        id: "user-2",
+        name: "Target User",
+        email: "target@example.com",
+      },
+      activeWorkspace: null,
+      owner: null,
+    });
+
+    await expect(
+      billingRouterAny.adminManualTopUp({
+        input: {
+          targetUserId: "user-2",
+          usdAmount: 25,
+        },
+        context: createContext(),
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Selected user does not have an active workspace",
+    });
   });
 });

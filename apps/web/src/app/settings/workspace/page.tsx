@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { clientEditionCapabilities } from "@/lib/edition";
 import {
   useBillingOverview,
   useInviteWorkspaceMembers,
@@ -156,38 +157,56 @@ export default function WorkspaceSettingsPage() {
           </Button>
         </form>
 
-        <p className="text-muted-foreground mt-3 text-sm">
-          Workspace billing and credit management stay in the Billing and Usage tabs.
-        </p>
+        {clientEditionCapabilities.hasBilling ? (
+          <p className="text-muted-foreground mt-3 text-sm">
+            Workspace billing and credit management stay in the Billing and Usage tabs.
+          </p>
+        ) : (
+          <p className="text-muted-foreground mt-3 text-sm">
+            This self-hosted deployment keeps one workspace for the whole instance.
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border p-5">
         <div>
           <h3 className="text-sm font-medium">Members</h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            Add existing users to this workspace and review current access.
+            Review current access for this workspace.
           </p>
         </div>
 
-        <form onSubmit={handleInviteSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <Input
-            value={inviteEmailsInput}
-            onChange={handleInviteEmailsChange}
-            placeholder="alice@example.com, bob@example.com"
-            disabled={!canInviteMembers || inviteMembers.isPending}
-          />
-          <Button type="submit" disabled={!canInviteMembers || inviteMembers.isPending}>
-            {inviteMembers.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add members"}
-          </Button>
-        </form>
+        {clientEditionCapabilities.edition === "cloud" ? (
+          <>
+            <form onSubmit={handleInviteSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <Input
+                value={inviteEmailsInput}
+                onChange={handleInviteEmailsChange}
+                placeholder="alice@example.com, bob@example.com"
+                disabled={!canInviteMembers || inviteMembers.isPending}
+              />
+              <Button type="submit" disabled={!canInviteMembers || inviteMembers.isPending}>
+                {inviteMembers.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Add members"
+                )}
+              </Button>
+            </form>
 
-        {!canInviteMembers ? (
-          <p className="text-muted-foreground mt-3 text-sm">
-            Workspace admin access is required to add members.
-          </p>
+            {!canInviteMembers ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Workspace admin access is required to add members.
+              </p>
+            ) : (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Only users with existing accounts can be added right now.
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-muted-foreground mt-3 text-sm">
-            Only users with existing accounts can be added right now.
+            New users automatically join this instance workspace after signup.
           </p>
         )}
 

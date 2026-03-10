@@ -57,7 +57,7 @@ docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost up -d
 7. Open:
 
 ```text
-http://localhost:3000
+http://localhost:8114
 ```
 
 The app health endpoint is:
@@ -74,7 +74,7 @@ For an internal company deployment, set both:
 APP_URL=https://cmdclaw.company.internal
 ```
 
-Then place your usual reverse proxy in front of port `3000`.
+Then place your usual reverse proxy in front of port `8114`.
 
 ## Email
 

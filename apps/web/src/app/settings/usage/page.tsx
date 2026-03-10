@@ -7,10 +7,12 @@ import {
   formatCredits,
 } from "@cmdclaw/core/lib/billing-plans";
 import { Loader2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { clientEditionCapabilities } from "@/lib/edition";
 import { useBillingOverview, useManualBillingTopUp } from "@/orpc/hooks";
 
 function formatDate(value: number | string | Date | null | undefined): string {
@@ -21,6 +23,7 @@ function formatDate(value: number | string | Date | null | undefined): string {
 }
 
 export default function UsagePage() {
+  const router = useRouter();
   const { data, isLoading, refetch } = useBillingOverview();
   const manualTopUp = useManualBillingTopUp();
   const [topUpUsd, setTopUpUsd] = useState("25");
@@ -86,6 +89,16 @@ export default function UsagePage() {
     0,
     Math.floor(Number(topUpUsd || 0) * TOP_UP_CREDITS_PER_USD),
   );
+
+  useEffect(() => {
+    if (!clientEditionCapabilities.hasBilling) {
+      router.replace("/settings");
+    }
+  }, [router]);
+
+  if (!clientEditionCapabilities.hasBilling) {
+    return null;
+  }
 
   if (isLoading) {
     return (

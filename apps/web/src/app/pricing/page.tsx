@@ -5,8 +5,10 @@ import {
   formatCredits,
   type BillingPlanDefinition,
 } from "@cmdclaw/core/lib/billing-plans";
+import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { Check } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 const PLAN_META: Record<
@@ -165,6 +167,10 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
 }
 
 export default function PricingPage() {
+  if (isSelfHostedEdition()) {
+    redirect("/");
+  }
+
   const plans = Object.values(BILLING_PLANS);
   const allPlans = [
     plans.find((p) => p.id === "free")!,

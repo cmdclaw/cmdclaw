@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-const protectedRoutes = ["/chat", "/settings", "/onboarding", "/admin"];
+const protectedRoutes = ["/chat", "/settings", "/onboarding", "/admin", "/instance"];
 const publicRoutes = ["/login", "/api/auth", "/legal", "/support", "/shared"];
 
 export function proxy(request: NextRequest) {

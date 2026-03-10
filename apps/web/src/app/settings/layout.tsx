@@ -2,14 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
-
-const settingsTabs = [
-  { key: "general", label: "General", href: "/settings" },
-  { key: "workspace", label: "Workspace", href: "/settings/workspace" },
-  { key: "usage", label: "Usage", href: "/settings/usage" },
-  { key: "billing", label: "Billing", href: "/settings/billing" },
-  { key: "subscriptions", label: "Connected AI Account", href: "/settings/subscriptions" },
-];
+import { clientEditionCapabilities } from "@/lib/edition";
 
 function getActiveKey(pathname: string) {
   if (pathname.startsWith("/settings/workspace")) {
@@ -30,6 +23,17 @@ function getActiveKey(pathname: string) {
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeKey = getActiveKey(pathname);
+  const settingsTabs = [
+    { key: "general", label: "General", href: "/settings" },
+    { key: "workspace", label: "Workspace", href: "/settings/workspace" },
+    ...(clientEditionCapabilities.hasBilling
+      ? [
+          { key: "usage", label: "Usage", href: "/settings/usage" },
+          { key: "billing", label: "Billing", href: "/settings/billing" },
+        ]
+      : []),
+    { key: "subscriptions", label: "Connected AI Account", href: "/settings/subscriptions" },
+  ];
 
   return (
     <div className="bg-background min-h-full">

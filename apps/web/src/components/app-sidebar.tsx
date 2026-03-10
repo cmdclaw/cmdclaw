@@ -52,6 +52,7 @@ import {
   getEffectiveSeenMessageCount,
   hasUnreadConversationResults,
 } from "@/lib/conversation-seen";
+import { clientEditionCapabilities } from "@/lib/edition";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
@@ -213,7 +214,7 @@ export function AppSidebar() {
 
   // Auto-expand admin section when on admin routes
   useEffect(() => {
-    if (pathname?.startsWith("/admin")) {
+    if (pathname?.startsWith("/admin") || pathname?.startsWith("/instance")) {
       setAdminOpen(true);
     }
   }, [pathname]);
@@ -293,7 +294,11 @@ export function AppSidebar() {
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
   ];
 
-  const adminNavItems: NavItem[] = [{ icon: Shield, label: "Admin", href: "/admin" }];
+  const adminNavItems: NavItem[] = clientEditionCapabilities.hasSupportAdmin
+    ? [{ icon: Shield, label: "Admin", href: "/admin" }]
+    : clientEditionCapabilities.hasInstanceAdmin
+      ? [{ icon: Shield, label: "Instance", href: "/instance" }]
+      : [];
 
   const recentCoworkers = coworkers?.slice(0, 5) ?? [];
   const recentConversations = conversationData?.conversations ?? EMPTY_CONVERSATIONS;
@@ -792,13 +797,15 @@ export function AppSidebar() {
                   <span>Settings</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/settings/usage" prefetch={false} className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  <span>Usage</span>
-                </Link>
-              </DropdownMenuItem>
-              {isImpersonating && (
+              {clientEditionCapabilities.hasBilling ? (
+                <DropdownMenuItem asChild>
+                  <Link href="/settings/usage" prefetch={false} className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    <span>Usage</span>
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {clientEditionCapabilities.hasSupportAdmin && isImpersonating ? (
                 <DropdownMenuItem
                   onClick={handleStopImpersonating}
                   disabled={stoppingImpersonation}
@@ -808,7 +815,7 @@ export function AppSidebar() {
                     {stoppingImpersonation ? "Stopping impersonation..." : "Stop impersonating"}
                   </span>
                 </DropdownMenuItem>
-              )}
+              ) : null}
               {session?.user ? (
                 <DropdownMenuItem
                   onClick={handleSignOut}

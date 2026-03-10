@@ -947,6 +947,14 @@ export function useBillingOverview() {
   });
 }
 
+export function useAdminBillingUserOverview(targetUserId: string | null) {
+  return useQuery({
+    queryKey: ["billing", "admin-user-overview", targetUserId],
+    queryFn: () => client.billing.adminUserOverview({ targetUserId: targetUserId! }),
+    enabled: Boolean(targetUserId),
+  });
+}
+
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
 
@@ -1026,6 +1034,18 @@ export function useManualBillingTopUp() {
     }) => client.billing.manualTopUp(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["billing"] });
+    },
+  });
+}
+
+export function useAdminManualBillingTopUp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { targetUserId: string; usdAmount: number }) =>
+      client.billing.adminManualTopUp(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing", "admin-user-overview"] });
     },
   });
 }

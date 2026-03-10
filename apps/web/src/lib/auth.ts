@@ -1,3 +1,4 @@
+import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { db } from "@cmdclaw/db/client";
 import { authSchema } from "@cmdclaw/db/schema";
 import { autumn } from "autumn-js/better-auth";
@@ -15,6 +16,27 @@ const appUrl =
   env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 const ADMIN_EMAILS = new Set(["baptiste@heybap.com"]);
+const socialProviders = isSelfHostedEdition()
+  ? {}
+  : {
+      ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET
+        ? {
+            apple: {
+              clientId: env.APPLE_CLIENT_ID,
+              clientSecret: env.APPLE_CLIENT_SECRET,
+              appBundleIdentifier: env.APPLE_APP_BUNDLE_IDENTIFIER,
+            },
+          }
+        : {}),
+    };
 
 export const auth = betterAuth({
   appName: "CmdClaw",
@@ -31,17 +53,7 @@ export const auth = betterAuth({
     provider: "pg",
     schema: authSchema,
   }),
-  socialProviders: {
-    google: {
-      clientId: env.GOOGLE_CLIENT_ID as string,
-      clientSecret: env.GOOGLE_CLIENT_SECRET as string,
-    },
-    apple: {
-      clientId: env.APPLE_CLIENT_ID as string,
-      clientSecret: env.APPLE_CLIENT_SECRET as string,
-      appBundleIdentifier: env.APPLE_APP_BUNDLE_IDENTIFIER,
-    },
-  },
+  socialProviders,
   trustedOrigins: getTrustedOrigins(),
   // Don't forget to regenerate the schema if you add a new plugin
   // Run "bun auth:generate" to regenerate the schema
@@ -53,9 +65,13 @@ export const auth = betterAuth({
       adminRoles: ["admin"],
     }),
     lastLoginMethod(),
-    autumn({
-      secretKey: env.AUTUMN_SECRET_KEY,
-    }),
+    ...(!isSelfHostedEdition()
+      ? [
+          autumn({
+            secretKey: env.AUTUMN_SECRET_KEY,
+          }),
+        ]
+      : []),
     magicLink({
       expiresIn: 3600, // 1 hour
       async sendMagicLink({ email, url }) {

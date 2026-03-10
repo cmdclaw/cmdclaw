@@ -11,6 +11,8 @@ import {
 } from "../services/session-constants";
 import { downloadFromS3 } from "../storage/s3-client";
 import { decrypt } from "../utils/encryption";
+import { getDelegatedProviderAuths } from "../control-plane/client";
+import { isSelfHostedEdition } from "../edition";
 import { logServerEvent, type ObservabilityContext } from "../utils/observability";
 import type { SandboxBackend, ExecuteResult } from "./types";
 import {
@@ -783,20 +785,32 @@ async function replayConversationHistory(
  */
 export async function injectProviderAuth(client: OpencodeClient, userId: string): Promise<void> {
   try {
-    const auths = await db.query.providerAuth.findMany({
-      where: eq(providerAuth.userId, userId),
-    });
+    const auths = isSelfHostedEdition()
+      ? (await getDelegatedProviderAuths(userId)).map((auth) => ({
+          provider: auth.provider,
+          access: auth.accessToken,
+          refresh: auth.refreshToken ?? "",
+          expires: auth.expiresAt ?? Date.now(),
+        }))
+      : (
+          await db.query.providerAuth.findMany({
+            where: eq(providerAuth.userId, userId),
+          })
+        ).map((auth) => ({
+          provider: auth.provider,
+          access: decrypt(auth.accessToken),
+          refresh: auth.refreshToken ? decrypt(auth.refreshToken) : "",
+          expires: auth.expiresAt?.getTime() ?? Date.now(),
+        }));
     await Promise.all(
       auths.map(async (auth) => {
         try {
-          const access = decrypt(auth.accessToken);
-
           if (auth.provider === "kimi") {
             await client.auth.set({
               providerID: "kimi-for-coding",
               auth: {
                 type: "api",
-                key: access,
+                key: auth.access,
               },
             });
             console.log(`[E2B] Injected kimi-for-coding auth for user ${userId}`);
@@ -807,9 +821,9 @@ export async function injectProviderAuth(client: OpencodeClient, userId: string)
             providerID: auth.provider,
             auth: {
               type: "oauth",
-              access,
-              refresh: decrypt(auth.refreshToken),
-              expires: auth.expiresAt.getTime(),
+              access: auth.access,
+              refresh: auth.refresh,
+              expires: auth.expires,
             },
           });
           console.log(`[E2B] Injected ${auth.provider} auth for user ${userId}`);

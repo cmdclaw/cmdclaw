@@ -1,5 +1,6 @@
+import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { redirect } from "next/navigation";
 
 export default function AdvancedSettingsPage() {
-  redirect("/admin");
+  redirect(isSelfHostedEdition() ? "/instance" : "/admin");
 }

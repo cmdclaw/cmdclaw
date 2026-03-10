@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch --env-file=../web/.env index.ts",
+    "dev:selfhost": "bun --watch --env-file=../web/.env.selfhost index.ts",
     "start": "bun --env-file=../web/.env index.ts",
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json"

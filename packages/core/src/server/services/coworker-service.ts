@@ -3,11 +3,11 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { IntegrationType } from "../oauth/config";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "../../lib/chat-model-defaults";
 import { resolveDefaultOpencodeFreeModel } from "../ai/opencode-models";
+import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
   generation,
-  providerAuth,
   coworker,
   coworkerRun,
   coworkerRunEvent,
@@ -31,12 +31,7 @@ async function resolveCoworkerDefaultModelForUser(userId: string): Promise<strin
     return resolveDefaultOpencodeFreeModel(configured);
   }
 
-  const openAIAuth = await db.query.providerAuth.findFirst({
-    where: and(eq(providerAuth.userId, userId), eq(providerAuth.provider, "openai")),
-    columns: { id: true },
-  });
-
-  if (openAIAuth) {
+  if (await hasConnectedProviderAuthForUser(userId, "openai")) {
     return DEFAULT_CONNECTED_CHATGPT_MODEL;
   }
 

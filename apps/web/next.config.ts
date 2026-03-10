@@ -9,6 +9,7 @@ const posthogProxyPath = "/_cmdclaw_lattice";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
   reactCompiler: true,
   transpilePackages: ["@cmdclaw/core", "@cmdclaw/db"],

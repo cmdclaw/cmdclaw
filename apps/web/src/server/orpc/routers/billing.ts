@@ -5,6 +5,8 @@ import {
   cancelPlanForOwner,
   createManualTopUp,
   createWorkspaceForUser,
+  getAdminBillingOverviewForUser,
+  getExistingBillingOwnerForUser,
   ensureWorkspaceForUser,
   getBillingOverviewForUser,
   getWorkspaceMembershipForUser,
@@ -13,11 +15,28 @@ import {
   renameWorkspace,
   setActiveWorkspace,
 } from "@cmdclaw/core/server/billing/service";
+import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { user, workspace } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";
+
+function assertBillingEnabled() {
+  if (isSelfHostedEdition()) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Billing is not available in self-hosted edition",
+    });
+  }
+}
+
+function assertCloudWorkspaceManagementEnabled() {
+  if (isSelfHostedEdition()) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "This workspace action is not available in self-hosted edition",
+    });
+  }
+}
 
 async function getDbRole(userId: string, db: typeof import("@cmdclaw/db/client").db) {
   const dbUser = await db.query.user.findFirst({
@@ -76,6 +95,29 @@ const overview = protectedProcedure.handler(async ({ context }) => {
   return getBillingOverviewForUser(context.user.id);
 });
 
+const adminUserOverview = protectedProcedure
+  .input(
+    z.object({
+      targetUserId: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required for manual top-ups" });
+    }
+
+    try {
+      return await getAdminBillingOverviewForUser(input.targetUserId);
+    } catch (error) {
+      if (error instanceof Error && error.message === "User not found") {
+        throw new ORPCError("NOT_FOUND", { message: "User not found" });
+      }
+      throw error;
+    }
+  });
+
 const createWorkspace = protectedProcedure
   .input(
     z.object({
@@ -83,6 +125,7 @@ const createWorkspace = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertCloudWorkspaceManagementEnabled();
     const created = await createWorkspaceForUser(context.user.id, input.name);
     return {
       id: created.id,
@@ -98,6 +141,7 @@ const switchWorkspace = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertCloudWorkspaceManagementEnabled();
     await setActiveWorkspace(context.user.id, input.workspaceId);
     return { success: true };
   });
@@ -112,6 +156,7 @@ const attachPlan = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertBillingEnabled();
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
@@ -149,6 +194,7 @@ const openPortal = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertBillingEnabled();
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
@@ -168,6 +214,7 @@ const cancelPlan = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertBillingEnabled();
     const owner = await resolveRequestedOwner({
       userId: context.user.id,
       db: context.db,
@@ -191,6 +238,7 @@ const manualTopUp = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertBillingEnabled();
     const role = await getDbRole(context.user.id, context.db);
     if (role !== "admin") {
       throw new ORPCError("FORBIDDEN", { message: "Admin role required for manual top-ups" });
@@ -214,6 +262,48 @@ const manualTopUp = protectedProcedure
     };
   });
 
+const adminManualTopUp = protectedProcedure
+  .input(
+    z.object({
+      targetUserId: z.string(),
+      usdAmount: z.number().positive(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required for manual top-ups" });
+    }
+
+    let target;
+    try {
+      target = await getExistingBillingOwnerForUser(input.targetUserId);
+    } catch (error) {
+      if (error instanceof Error && error.message === "User not found") {
+        throw new ORPCError("NOT_FOUND", { message: "User not found" });
+      }
+      throw error;
+    }
+
+    if (!target.owner) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Selected user does not have an active workspace",
+      });
+    }
+
+    const result = await createManualTopUp({
+      owner: target.owner,
+      grantedByUserId: context.user.id,
+      usdAmount: input.usdAmount,
+    });
+    return {
+      id: result.id,
+      creditsGranted: result.creditsGranted,
+      expiresAt: result.expiresAt,
+    };
+  });
+
 const inviteMembers = protectedProcedure
   .input(
     z.object({
@@ -223,6 +313,7 @@ const inviteMembers = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    assertCloudWorkspaceManagementEnabled();
     const membership = await getWorkspaceMembershipForUser(context.user.id, input.workspaceId);
     if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
       throw new ORPCError("FORBIDDEN", { message: "Workspace admin required" });
@@ -267,12 +358,14 @@ const rename = protectedProcedure
 
 export const billingRouter = {
   overview,
+  adminUserOverview,
   createWorkspace,
   switchWorkspace,
   attachPlan,
   openPortal,
   cancelPlan,
   manualTopUp,
+  adminManualTopUp,
   inviteMembers,
   members,
   rename,
