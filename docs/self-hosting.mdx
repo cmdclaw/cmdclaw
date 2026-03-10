@@ -67,11 +67,35 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
 
 ## Docker Compose (all-in-one)
 
-For a fully containerized setup (app + worker + WS server + DB + Redis + MinIO),
+For a fully containerized setup backed by published GHCR images (app + worker + DB + Redis + MinIO),
 use the bundled compose file at `apps/web/docker-compose.selfhost.yml`:
 
 ```bash
-docker compose -f apps/web/docker-compose.selfhost.yml up -d --build
+cp apps/web/.env.selfhost.example apps/web/.env.selfhost
+```
+
+Fill in at least:
+
+- `APP_URL`
+- `BETTER_AUTH_SECRET`
+- `ENCRYPTION_KEY`
+- `CMDCLAW_SERVER_SECRET`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+
+Optionally pin the image tags in `apps/web/.env.selfhost`:
+
+```env
+CMDCLAW_APP_IMAGE=ghcr.io/baptistecolle/cmdclaw-web:main
+CMDCLAW_WORKER_IMAGE=ghcr.io/baptistecolle/cmdclaw-worker:main
+```
+
+Then pull, migrate, and start:
+
+```bash
+docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.selfhost pull
+docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.selfhost run --rm migrate
+docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.selfhost up -d
 ```
 
 Then open `http://localhost:3000`.
@@ -79,6 +103,9 @@ Then open `http://localhost:3000`.
 - Set `E2B_API_KEY` and `E2B_DAYTONA_SANDBOX_NAME` to use E2B cloud sandboxes.
 - Or set `DAYTONA_API_KEY` (plus optional `DAYTONA_SERVER_URL` / `DAYTONA_TARGET`) to use Daytona sandboxes.
 - Or set `SANDBOX_DEFAULT=docker` to use local Docker-based sandboxes.
+- Published images also get a daily `YYYYMMDD-N` tag such as `20260310-1`.
+- Use a `sha-...` tag instead of `main` if you want to test a specific published build.
+- The published `app` image does not include custom browser-side `NEXT_PUBLIC_POSTHOG_*` values; build `apps/web/Dockerfile.app` yourself if you need them.
 
 ## Background worker
 

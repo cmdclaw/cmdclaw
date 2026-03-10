@@ -44,9 +44,7 @@ services:
       retries: 10
 
   migrate:
-    build:
-      context: ../..
-      dockerfile: apps/worker/Dockerfile
+    image: ${CMDCLAW_WORKER_IMAGE:-ghcr.io/baptistecolle/cmdclaw-worker:main}
     env_file:
       - .env.selfhost
     depends_on:
@@ -60,12 +58,7 @@ services:
     restart: "no"
 
   app:
-    build:
-      context: ../..
-      dockerfile: apps/web/Dockerfile.app
-      args:
-        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
-        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-}
+    image: ${CMDCLAW_APP_IMAGE:-ghcr.io/baptistecolle/cmdclaw-web:main}
     env_file:
       - .env.selfhost
     depends_on:
@@ -82,7 +75,7 @@ services:
       test:
         [
           "CMD",
-          "bun",
+          "node",
           "-e",
           "fetch('http://127.0.0.1:3000/api/health').then((r)=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))",
         ]
@@ -93,9 +86,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   worker:
-    build:
-      context: ../..
-      dockerfile: apps/worker/Dockerfile
+    image: ${CMDCLAW_WORKER_IMAGE:-ghcr.io/baptistecolle/cmdclaw-worker:main}
     env_file:
       - .env.selfhost
     depends_on:
