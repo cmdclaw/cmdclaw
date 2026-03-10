@@ -62,31 +62,47 @@ jobs:
             const packageName = process.env.PACKAGE_NAME;
             const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
+            async function listVersionsForUser() {
+              return github.paginate(
+                "GET /users/{username}/packages/{package_type}/{package_name}/versions",
+                {
+                  username: owner,
+                  package_type: "container",
+                  package_name: packageName,
+                  per_page: 100,
+                },
+              );
+            }
+
+            async function listVersionsForOrg() {
+              return github.paginate(
+                "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
+                {
+                  org: owner,
+                  package_type: "container",
+                  package_name: packageName,
+                  per_page: 100,
+                },
+              );
+            }
+
             async function listVersions() {
               try {
-                return await github.paginate(
-                  "GET /users/{username}/packages/{package_type}/{package_name}/versions",
-                  {
-                    username: owner,
-                    package_type: "container",
-                    package_name: packageName,
-                    per_page: 100,
-                  },
-                );
+                return await listVersionsForUser();
               } catch (error) {
                 if (error.status !== 404) {
                   throw error;
                 }
 
-                return await github.paginate(
-                  "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
-                  {
-                    org: owner,
-                    package_type: "container",
-                    package_name: packageName,
-                    per_page: 100,
-                  },
-                );
+                try {
+                  return await listVersionsForOrg();
+                } catch (orgError) {
+                  if (orgError.status === 404) {
+                    return [];
+                  }
+
+                  throw orgError;
+                }
               }
             }
 
