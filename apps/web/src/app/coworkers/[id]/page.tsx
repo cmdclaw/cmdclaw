@@ -190,6 +190,7 @@ export default function CoworkerEditorPage() {
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedEditorRef = useRef(false);
   const initializedCoworkerIdRef = useRef<string | null>(null);
+  const lastSyncedCoworkerUpdatedAtRef = useRef<string | null>(null);
   const lastSavedPayloadRef = useRef<string | null>(null);
   const builderConversationInitializedRef = useRef(false);
 
@@ -377,9 +378,6 @@ export default function CoworkerEditorPage() {
     if (!coworker) {
       return;
     }
-    if (initializedCoworkerIdRef.current === coworker.id) {
-      return;
-    }
 
     const availableIntegrationTypes = COWORKER_AVAILABLE_INTEGRATION_TYPES;
     const coworkerAllowedIntegrations = (
@@ -388,6 +386,38 @@ export default function CoworkerEditorPage() {
     const hasRestriction =
       coworkerAllowedIntegrations.length > 0 &&
       coworkerAllowedIntegrations.length < availableIntegrationTypes.length;
+    const payloadFromCoworker = {
+      id: coworker.id,
+      name: coworker.name,
+      status: coworker.status,
+      triggerType: coworker.triggerType,
+      prompt: coworker.prompt,
+      autoApprove: coworker.autoApprove ?? true,
+      allowedIntegrations:
+        hasRestriction || coworkerAllowedIntegrations.length === 0
+          ? coworkerAllowedIntegrations
+          : availableIntegrationTypes,
+      schedule: (coworker.schedule as CoworkerSchedule | null) ?? null,
+    } as const;
+    const serverPayloadSignature = getCoworkerPayloadSignature(payloadFromCoworker);
+    const currentLocalPayload = hasInitializedEditorRef.current ? getCoworkerUpdateInput() : null;
+    const currentLocalSignature = currentLocalPayload
+      ? getCoworkerPayloadSignature(currentLocalPayload)
+      : null;
+    const hasUnsavedLocalChanges =
+      currentLocalSignature !== null &&
+      lastSavedPayloadRef.current !== null &&
+      currentLocalSignature !== lastSavedPayloadRef.current;
+    const coworkerUpdatedAt =
+      coworker.updatedAt instanceof Date
+        ? coworker.updatedAt.toISOString()
+        : new Date(coworker.updatedAt).toISOString();
+    const isFirstHydration = initializedCoworkerIdRef.current !== coworker.id;
+    const hasFreshServerUpdate = lastSyncedCoworkerUpdatedAtRef.current !== coworkerUpdatedAt;
+
+    if (!isFirstHydration && (!hasFreshServerUpdate || hasUnsavedLocalChanges)) {
+      return;
+    }
 
     setName(coworker.name);
     setTriggerType(coworker.triggerType);
@@ -418,23 +448,10 @@ export default function CoworkerEditorPage() {
       }
     }
     initializedCoworkerIdRef.current = coworker.id;
+    lastSyncedCoworkerUpdatedAtRef.current = coworkerUpdatedAt;
     hasInitializedEditorRef.current = true;
-
-    const payloadFromCoworker = {
-      id: coworker.id,
-      name: coworker.name,
-      status: coworker.status,
-      triggerType: coworker.triggerType,
-      prompt: coworker.prompt,
-      autoApprove: coworker.autoApprove ?? true,
-      allowedIntegrations:
-        hasRestriction || coworkerAllowedIntegrations.length === 0
-          ? coworkerAllowedIntegrations
-          : availableIntegrationTypes,
-      schedule: schedule,
-    } as const;
-    lastSavedPayloadRef.current = getCoworkerPayloadSignature(payloadFromCoworker);
-  }, [getCoworkerPayloadSignature, coworker]);
+    lastSavedPayloadRef.current = serverPayloadSignature;
+  }, [coworker, getCoworkerPayloadSignature, getCoworkerUpdateInput]);
 
   // Get or create builder conversation once coworker loads
   useEffect(() => {
