@@ -7,7 +7,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
-import oceanBg from "@/components/landing/assets/ocean-bg.avif";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
@@ -465,12 +464,12 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
           <Image
-            src={oceanBg}
+            src="/landing/ocean-bg.avif"
             alt=""
             fill
             priority
-            placeholder="blur"
             sizes="100vw"
+            unoptimized
             aria-hidden
             className="animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover opacity-80 saturate-110"
           />

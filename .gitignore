@@ -17,3 +17,6 @@ experiments/
 node_modules
 
 .opencode
+.linear.toml
+
+.next*
