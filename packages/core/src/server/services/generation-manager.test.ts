@@ -198,7 +198,11 @@ import {
   writeResolvedIntegrationSkillsToSandbox,
   getIntegrationSkillsSystemPrompt,
 } from "../sandbox/opencode-session";
-import { generationManager } from "./generation-manager";
+import {
+  buildDefaultQuestionAnswers,
+  buildQuestionCommand,
+  generationManager,
+} from "./generation-manager";
 import {
   syncMemoryToSandbox,
   buildMemorySystemPrompt,
@@ -345,6 +349,40 @@ describe("generationManager transitions", () => {
 
     const mgr = asTestManager();
     mgr.activeGenerations.clear();
+  });
+
+  it("formats cmdclaw question approvals from the questions payload", () => {
+    const request = {
+      id: "que-1",
+      sessionID: "ses-1",
+      questions: [
+        {
+          header: "Goal",
+          question: "What do you want me to ask you about?",
+          options: [
+            { label: "Project task (Recommended)" },
+            { label: "Preferences" },
+          ],
+        },
+        {
+          header: "Format",
+          question: "How should I phrase it?",
+          options: [{ label: "Direct" }],
+        },
+      ],
+      tool: {
+        messageID: "msg-1",
+        callID: "call-1",
+      },
+    };
+
+    expect(buildQuestionCommand(request)).toBe(
+      "Question: What do you want me to ask you about? [Project task (Recommended) | Preferences] (+1 more)",
+    );
+    expect(buildDefaultQuestionAnswers(request)).toEqual([
+      ["Project task (Recommended)"],
+      ["Direct"],
+    ]);
   });
 
   it("cancels generation by aborting active context and setting cancel_requested", async () => {
@@ -648,6 +686,64 @@ describe("generationManager transitions", () => {
     });
     expect(ctx.pendingApproval).toBeNull();
     expect(ctx.status).toBe("running");
+  });
+
+  it("does not auto-answer OpenCode questions when autoApprove is enabled", async () => {
+    const questionReplyMock = vi.fn().mockResolvedValue({ data: true, error: undefined });
+    const ctx = createCtx({
+      autoApprove: true,
+      opencodeClient: {
+        question: {
+          reply: questionReplyMock,
+          reject: vi.fn(),
+        },
+      },
+    });
+    const mgr = asTestManager();
+    const queueApprovalSpy = vi
+      .spyOn(mgr, "queueOpenCodeApprovalRequest")
+      .mockResolvedValue(undefined);
+    const request = {
+      id: "question-request-manual",
+      sessionID: "session-1",
+      questions: [
+        {
+          header: "Destination",
+          question: "Where should this run?",
+          options: [{ label: "Slack" }],
+        },
+      ],
+      tool: {
+        messageID: "msg-1",
+        callID: "call-1",
+      },
+    };
+
+    await mgr.handleOpenCodeQuestionAsked(
+      ctx,
+      {
+        question: {
+          reply: questionReplyMock,
+          reject: vi.fn(),
+        },
+      },
+      request,
+    );
+
+    expect(questionReplyMock).not.toHaveBeenCalled();
+    expect(queueApprovalSpy).toHaveBeenCalledWith(
+      ctx,
+      expect.any(Object),
+      {
+        kind: "question",
+        request,
+        defaultAnswers: buildDefaultQuestionAnswers(request),
+      },
+      expect.objectContaining({
+        integration: "cmdclaw",
+        operation: "question",
+      }),
+    );
   });
 
   it("times out approval into paused status and emits status_change", async () => {

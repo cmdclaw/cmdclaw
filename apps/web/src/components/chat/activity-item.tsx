@@ -65,6 +65,7 @@ export type ActivityItemData = {
   timestamp: number;
   type: "text" | "thinking" | "tool_call" | "tool_result" | "system";
   content: string;
+  toolUseId?: string;
   toolName?: string;
   integration?: IntegrationType;
   operation?: string;

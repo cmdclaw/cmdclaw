@@ -23,6 +23,7 @@ const QUESTION_TOOL_INPUT = {
     },
   ],
 };
+const APPROVED_QUESTION_ANSWERS = [["Beta"]];
 
 describe("ToolApprovalCard", () => {
   it("submits a typed custom answer with the submit button", () => {
@@ -48,5 +49,27 @@ describe("ToolApprovalCard", () => {
     fireEvent.click(screen.getByTestId("question-typed-submit-0"));
 
     expect(onApprove).toHaveBeenCalledWith([["Gamma"]]);
+  });
+
+  it("renders approved questions with the prompt and saved answer", () => {
+    render(
+      <ToolApprovalCard
+        toolUseId="question-2"
+        toolName="question"
+        toolInput={QUESTION_TOOL_INPUT}
+        integration="cmdclaw"
+        operation="question"
+        command="Question: undefined"
+        questionAnswers={APPROVED_QUESTION_ANSWERS}
+        onApprove={vi.fn()}
+        onDeny={vi.fn()}
+        status="approved"
+      />,
+    );
+
+    expect(screen.getAllByText("Choose one")).not.toHaveLength(0);
+    expect(screen.getByText("Saved answer")).toBeInTheDocument();
+    expect(screen.getAllByText("Beta")).not.toHaveLength(0);
+    expect(screen.queryByText("Question: undefined")).not.toBeInTheDocument();
   });
 });

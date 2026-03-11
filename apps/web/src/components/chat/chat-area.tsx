@@ -76,6 +76,10 @@ import { formatDuration } from "./chat-performance-metrics";
 import { useChatSkillStore } from "./chat-skill-store";
 import { MessageList, type Message, type MessagePart, type AttachmentData } from "./message-list";
 import { ModelSelector } from "./model-selector";
+import {
+  collectQuestionApprovalToolUseIds,
+  isQuestionApprovalRequest,
+} from "./question-approval-utils";
 import { ToolApprovalCard } from "./tool-approval-card";
 import { VoiceIndicator } from "./voice-indicator";
 
@@ -118,6 +122,7 @@ type ChatStarterSection = {
 
 const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
 const EMPTY_SELECTED_SKILLS: string[] = [];
+const EMPTY_ACTIVITY_ITEMS: ActivityItemData[] = [];
 const CUSTOM_SKILL_PREFIX = "custom:";
 
 type PersistedContentPart =
@@ -570,6 +575,42 @@ export function ChatArea({
   const queuedMessageRef = useRef<QueuedMessage | null>(null);
   const autoApproveEnabled = useMemo(() => localAutoApprove, [localAutoApprove]);
   const isOpenAIConnected = Boolean(connectedProviders?.openai);
+  const suppressedQuestionToolUseIds = useMemo(
+    () =>
+      collectQuestionApprovalToolUseIds(
+        segments.flatMap((segment) =>
+          segment.approval
+            ? [
+                {
+                  toolUseId: segment.approval.toolUseId,
+                  toolInput: segment.approval.toolInput,
+                  toolName: segment.approval.toolName,
+                  integration: segment.approval.integration,
+                  operation: segment.approval.operation,
+                },
+              ]
+            : [],
+        ),
+      ),
+    [segments],
+  );
+  const visibleActivityItemsBySegmentId = useMemo(() => {
+    const visibleItems = new Map<string, ActivityItemData[]>();
+
+    for (const segment of segments) {
+      visibleItems.set(
+        segment.id,
+        segment.items.filter(
+          (item) =>
+            item.type !== "tool_call" ||
+            !item.toolUseId ||
+            !suppressedQuestionToolUseIds.has(item.toolUseId),
+        ),
+      );
+    }
+
+    return visibleItems;
+  }, [segments, suppressedQuestionToolUseIds]);
   const resolvedDefaultModel = useMemo(
     () =>
       resolveDefaultChatModel({
@@ -1124,10 +1165,14 @@ export function ChatArea({
       syncFromRuntime(runtime);
       const streamScope = streamScopeRef.current;
       const streamGenerationId = activeGeneration.generationId;
+      let acceptFurtherEvents = true;
 
       subscribeToGeneration(activeGeneration.generationId, {
         onText: (text) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           markInitSignal("text");
@@ -1135,7 +1180,10 @@ export function ChatArea({
           syncFromRuntime(runtime);
         },
         onSystem: (data) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           runtime.handleSystem(data.content);
@@ -1146,7 +1194,10 @@ export function ChatArea({
           }
         },
         onThinking: (data) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           markInitSignal("thinking");
@@ -1154,7 +1205,10 @@ export function ChatArea({
           syncFromRuntime(runtime);
         },
         onToolUse: (data) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           markInitSignal("tool_use", { toolName: data.toolName });
@@ -1162,7 +1216,10 @@ export function ChatArea({
           syncFromRuntime(runtime);
         },
         onToolResult: (toolName, result, toolUseId) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           markInitSignal("tool_result", { toolName });
@@ -1171,6 +1228,7 @@ export function ChatArea({
         },
         onPendingApproval: async (data) => {
           if (
+            !acceptFurtherEvents ||
             !isStreamEventForActiveScope({
               scope: streamScope,
               streamGenerationId,
@@ -1194,7 +1252,14 @@ export function ChatArea({
           }
           runtime.handlePendingApproval(data);
           syncFromRuntime(runtime);
-          if (autoApproveEnabled) {
+          if (
+            autoApproveEnabled &&
+            !isQuestionApprovalRequest({
+              toolName: data.toolName,
+              integration: data.integration,
+              operation: data.operation,
+            })
+          ) {
             try {
               await submitApproval({
                 generationId: data.generationId,
@@ -1207,14 +1272,20 @@ export function ChatArea({
           }
         },
         onApprovalResult: (toolUseId, decision) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           runtime.handleApprovalResult(toolUseId, decision);
           syncFromRuntime(runtime);
         },
         onApproval: (data) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           runtime.handleApproval(data);
@@ -1222,6 +1293,7 @@ export function ChatArea({
         },
         onAuthNeeded: (data) => {
           if (
+            !acceptFurtherEvents ||
             !isStreamEventForActiveScope({
               scope: streamScope,
               streamGenerationId,
@@ -1240,21 +1312,30 @@ export function ChatArea({
           syncFromRuntime(runtime);
         },
         onAuthProgress: (connected, remaining) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           runtime.handleAuthProgress(connected, remaining);
           syncFromRuntime(runtime);
         },
         onAuthResult: (success) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           runtime.handleAuthResult(success);
           syncFromRuntime(runtime);
         },
         onSandboxFile: (file) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           markInitSignal("sandbox_file", { filename: file.filename });
@@ -1262,7 +1343,10 @@ export function ChatArea({
           syncFromRuntime(runtime);
         },
         onStatusChange: (status) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
           handleInitStatusChange(status);
@@ -1278,6 +1362,7 @@ export function ChatArea({
           ) {
             return;
           }
+          acceptFurtherEvents = false;
           const timing = artifacts?.timing;
           markInitSignal("done");
           runtime.handleDone({
@@ -1333,9 +1418,13 @@ export function ChatArea({
           }
         },
         onError: (message) => {
-          if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
             return;
           }
+          acceptFurtherEvents = false;
           runtime.handleError();
           syncFromRuntime(runtime);
           console.error("Generation error:", message);
@@ -1348,6 +1437,7 @@ export function ChatArea({
         },
         onCancelled: (data) => {
           if (
+            !acceptFurtherEvents ||
             !isStreamEventForActiveScope({
               scope: streamScope,
               streamGenerationId,
@@ -1357,6 +1447,7 @@ export function ChatArea({
           ) {
             return;
           }
+          acceptFurtherEvents = false;
           if (runtimeRef.current === runtime) {
             persistInterruptedRuntimeMessage(runtime, data.messageId);
           }
@@ -1530,6 +1621,7 @@ export function ChatArea({
       syncFromRuntime(runtime);
       const streamScope = streamScopeRef.current;
       let streamGenerationId: string | undefined;
+      let acceptFurtherEvents = true;
       const generationRequestStartedAtMs = Date.now();
 
       const selectedKeys = selectedSkillKeysOverride ?? selectedSkillKeys;
@@ -1561,7 +1653,10 @@ export function ChatArea({
             }
           },
           onText: (text) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             markInitSignal("text");
@@ -1569,7 +1664,10 @@ export function ChatArea({
             syncFromRuntime(runtime);
           },
           onSystem: (data) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             runtime.handleSystem(data.content);
@@ -1580,7 +1678,10 @@ export function ChatArea({
             }
           },
           onThinking: (data) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             markInitSignal("thinking");
@@ -1588,7 +1689,10 @@ export function ChatArea({
             syncFromRuntime(runtime);
           },
           onToolUse: (data) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             markInitSignal("tool_use", { toolName: data.toolName });
@@ -1596,7 +1700,10 @@ export function ChatArea({
             syncFromRuntime(runtime);
           },
           onToolResult: (toolName, result, toolUseId) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             markInitSignal("tool_result", { toolName });
@@ -1605,6 +1712,7 @@ export function ChatArea({
           },
           onPendingApproval: async (data) => {
             if (
+              !acceptFurtherEvents ||
               !isStreamEventForActiveScope({
                 scope: streamScope,
                 streamGenerationId,
@@ -1621,7 +1729,14 @@ export function ChatArea({
             }
             runtime.handlePendingApproval(data);
             syncFromRuntime(runtime);
-            if (autoApproveEnabled) {
+            if (
+              autoApproveEnabled &&
+              !isQuestionApprovalRequest({
+                toolName: data.toolName,
+                integration: data.integration,
+                operation: data.operation,
+              })
+            ) {
               try {
                 await submitApproval({
                   generationId: data.generationId,
@@ -1634,14 +1749,20 @@ export function ChatArea({
             }
           },
           onApprovalResult: (toolUseId, decision) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             runtime.handleApprovalResult(toolUseId, decision);
             syncFromRuntime(runtime);
           },
           onApproval: (data) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             runtime.handleApproval(data);
@@ -1649,6 +1770,7 @@ export function ChatArea({
           },
           onAuthNeeded: (data) => {
             if (
+              !acceptFurtherEvents ||
               !isStreamEventForActiveScope({
                 scope: streamScope,
                 streamGenerationId,
@@ -1667,21 +1789,30 @@ export function ChatArea({
             syncFromRuntime(runtime);
           },
           onAuthProgress: (connected, remaining) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             runtime.handleAuthProgress(connected, remaining);
             syncFromRuntime(runtime);
           },
           onAuthResult: (success) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             runtime.handleAuthResult(success);
             syncFromRuntime(runtime);
           },
           onSandboxFile: (file) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             markInitSignal("sandbox_file", { filename: file.filename });
@@ -1689,7 +1820,10 @@ export function ChatArea({
             syncFromRuntime(runtime);
           },
           onStatusChange: (status) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
             handleInitStatusChange(status);
@@ -1705,6 +1839,7 @@ export function ChatArea({
             ) {
               return;
             }
+            acceptFurtherEvents = false;
             const doneAtMs = Date.now();
             const timing = withActivityDurations(
               withEndToEndDuration(artifacts?.timing, generationRequestStartedAtMs, doneAtMs),
@@ -1770,9 +1905,13 @@ export function ChatArea({
             }
           },
           onError: (message) => {
-            if (!isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })) {
+            if (
+              !acceptFurtherEvents ||
+              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+            ) {
               return;
             }
+            acceptFurtherEvents = false;
             runtime.handleError();
             syncFromRuntime(runtime);
             console.error("Generation error:", message);
@@ -1794,6 +1933,7 @@ export function ChatArea({
           },
           onCancelled: (data) => {
             if (
+              !acceptFurtherEvents ||
               !isStreamEventForActiveScope({
                 scope: streamScope,
                 streamGenerationId,
@@ -1803,6 +1943,7 @@ export function ChatArea({
             ) {
               return;
             }
+            acceptFurtherEvents = false;
             if (runtimeRef.current === runtime) {
               persistInterruptedRuntimeMessage(runtime, data.messageId);
             }
@@ -2503,18 +2644,24 @@ export function ChatArea({
                       const segment = segments[index];
                       const nextSegment = segments[index + 1];
                       const deferredApproval = segment.approval;
+                      const visibleSegmentItems =
+                        visibleActivityItemsBySegmentId.get(segment.id) ?? EMPTY_ACTIVITY_ITEMS;
+                      const visibleNextSegmentItems = nextSegment
+                        ? (visibleActivityItemsBySegmentId.get(nextSegment.id) ??
+                          EMPTY_ACTIVITY_ITEMS)
+                        : EMPTY_ACTIVITY_ITEMS;
                       const shouldDeferApprovalAfterNextActivity =
                         !!deferredApproval &&
                         segment.items.length === 0 &&
                         !!nextSegment &&
-                        nextSegment.items.length > 0 &&
+                        visibleNextSegmentItems.length > 0 &&
                         !nextSegment.approval &&
                         !nextSegment.auth;
 
                       if (shouldDeferApprovalAfterNextActivity && nextSegment && deferredApproval) {
                         const nextSegmentIntegrations = Array.from(
                           new Set(
-                            nextSegment.items
+                            visibleNextSegmentItems
                               .filter((item) => item.integration)
                               .map((item) => item.integration as IntegrationType),
                           ),
@@ -2523,7 +2670,7 @@ export function ChatArea({
                         renderedSegments.push(
                           <div key={`${segment.id}-${nextSegment.id}`} className="space-y-4">
                             <ActivityFeed
-                              items={nextSegment.items}
+                              items={visibleNextSegmentItems}
                               isStreaming={isStreaming && index + 1 === segments.length - 1}
                               isExpanded={nextSegment.isExpanded}
                               onToggleExpand={segmentToggleHandlers.get(nextSegment.id)!}
@@ -2539,6 +2686,7 @@ export function ChatArea({
                                 operation={deferredApproval.operation}
                                 command={deferredApproval.command}
                                 status={deferredApproval.status}
+                                questionAnswers={deferredApproval.questionAnswers}
                                 isLoading={isApproving}
                                 onApprove={segmentApproveHandlers.get(segment.id)!}
                                 onDeny={segmentDenyHandlers.get(segment.id)!}
@@ -2552,7 +2700,7 @@ export function ChatArea({
 
                       const segmentIntegrations = Array.from(
                         new Set(
-                          segment.items
+                          visibleSegmentItems
                             .filter((item) => item.integration)
                             .map((item) => item.integration as IntegrationType),
                         ),
@@ -2560,9 +2708,9 @@ export function ChatArea({
 
                       renderedSegments.push(
                         <div key={segment.id} className="space-y-4">
-                          {segment.items.length > 0 && (
+                          {visibleSegmentItems.length > 0 && (
                             <ActivityFeed
-                              items={segment.items}
+                              items={visibleSegmentItems}
                               isStreaming={
                                 isStreaming &&
                                 index === segments.length - 1 &&
@@ -2585,6 +2733,7 @@ export function ChatArea({
                               operation={segment.approval.operation}
                               command={segment.approval.command}
                               status={segment.approval.status}
+                              questionAnswers={segment.approval.questionAnswers}
                               isLoading={isApproving}
                               onApprove={segmentApproveHandlers.get(segment.id)!}
                               onDeny={segmentDenyHandlers.get(segment.id)!}

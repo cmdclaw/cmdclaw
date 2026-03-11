@@ -11,6 +11,7 @@ import { useChatAdvancedSettingsStore } from "./chat-advanced-settings-store";
 import { getTimingMetrics, type MessageTiming } from "./chat-performance-metrics";
 import { CollapsedTrace } from "./collapsed-trace";
 import { MessageBubble } from "./message-bubble";
+import { collectQuestionApprovalToolUseIds } from "./question-approval-utils";
 import { ToolApprovalCard } from "./tool-approval-card";
 
 // Display segment for saved messages
@@ -60,29 +61,6 @@ function parseQuestionAnswersFromResult(result: unknown): string[][] | undefined
   }
 
   return matches.map((answer) => [answer]);
-}
-
-function extractApprovalLinkedToolUseId(input: unknown): string | undefined {
-  if (typeof input !== "object" || input === null) {
-    return undefined;
-  }
-
-  const tool = (input as { tool?: unknown }).tool;
-  if (typeof tool !== "object" || tool === null) {
-    return undefined;
-  }
-
-  const candidateCallId = (tool as { callID?: unknown; callId?: unknown }).callID;
-  if (typeof candidateCallId === "string" && candidateCallId.length > 0) {
-    return candidateCallId;
-  }
-
-  const fallbackCallId = (tool as { callID?: unknown; callId?: unknown }).callId;
-  if (typeof fallbackCallId === "string" && fallbackCallId.length > 0) {
-    return fallbackCallId;
-  }
-
-  return undefined;
 }
 
 export function MessageItem({
@@ -184,17 +162,17 @@ export function MessageItem({
     }
 
     const result: DisplaySegment[] = [];
-    const explicitApprovalToolUseIds = new Set<string>();
-    for (const part of parts) {
-      if (part.type !== "approval") {
-        continue;
-      }
-      explicitApprovalToolUseIds.add(part.toolUseId);
-      const linkedToolUseId = extractApprovalLinkedToolUseId(part.toolInput);
-      if (linkedToolUseId) {
-        explicitApprovalToolUseIds.add(linkedToolUseId);
-      }
-    }
+    const explicitApprovalToolUseIds = collectQuestionApprovalToolUseIds(
+      parts
+        .filter((part): part is MessagePart & { type: "approval" } => part.type === "approval")
+        .map((part) => ({
+          toolUseId: part.toolUseId,
+          toolInput: part.toolInput,
+          toolName: part.toolName,
+          integration: part.integration,
+          operation: part.operation,
+        })),
+    );
     const activityTimingByToolUseId = timing?.activityDurationsMs?.perToolUseIdMs ?? {};
     let currentSegment: DisplaySegment = {
       id: "seg-0",
@@ -227,6 +205,10 @@ export function MessageItem({
           approval: null,
         };
       } else if (part.type === "tool_call") {
+        if (explicitApprovalToolUseIds.has(part.id)) {
+          continue;
+        }
+
         // Add tool call to current segment's items
         currentSegment.items.push({
           id: `activity-${part.id}`,

@@ -25,6 +25,7 @@ import { LinearPreview } from "./previews/linear-preview";
 import { NotionPreview } from "./previews/notion-preview";
 import { SheetsPreview } from "./previews/sheets-preview";
 import { SlackPreview } from "./previews/slack-preview";
+import { isQuestionApprovalRequest, parseQuestionRequestPayload } from "./question-approval-utils";
 
 export interface ToolApprovalCardProps {
   toolUseId: string;
@@ -39,78 +40,6 @@ export interface ToolApprovalCardProps {
   status: "pending" | "approved" | "denied";
   isLoading?: boolean;
   readonly?: boolean;
-}
-
-type QuestionOption = {
-  label: string;
-  description?: string;
-};
-
-type QuestionPrompt = {
-  header: string;
-  question: string;
-  options: QuestionOption[];
-  multiple?: boolean;
-  custom?: boolean;
-};
-
-type QuestionRequestPayload = {
-  questions: QuestionPrompt[];
-};
-
-function parseQuestionRequestPayload(input: unknown): QuestionRequestPayload | null {
-  if (typeof input !== "object" || input === null) {
-    return null;
-  }
-
-  const rawQuestions = (input as { questions?: unknown }).questions;
-  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
-    return null;
-  }
-
-  const questions: QuestionPrompt[] = [];
-  for (const rawQuestion of rawQuestions) {
-    if (typeof rawQuestion !== "object" || rawQuestion === null) {
-      return null;
-    }
-    const question = rawQuestion as {
-      header?: unknown;
-      question?: unknown;
-      options?: unknown;
-      multiple?: unknown;
-      custom?: unknown;
-    };
-
-    if (typeof question.header !== "string" || typeof question.question !== "string") {
-      return null;
-    }
-
-    const rawOptions = Array.isArray(question.options) ? question.options : [];
-    const options: QuestionOption[] = [];
-    for (const rawOption of rawOptions) {
-      if (typeof rawOption !== "object" || rawOption === null) {
-        continue;
-      }
-      const option = rawOption as { label?: unknown; description?: unknown };
-      if (typeof option.label !== "string" || option.label.length === 0) {
-        continue;
-      }
-      options.push({
-        label: option.label,
-        description: typeof option.description === "string" ? option.description : undefined,
-      });
-    }
-
-    questions.push({
-      header: question.header,
-      question: question.question,
-      options,
-      multiple: typeof question.multiple === "boolean" ? question.multiple : undefined,
-      custom: typeof question.custom === "boolean" ? question.custom : undefined,
-    });
-  }
-
-  return questions.length > 0 ? { questions } : null;
 }
 
 function renderPreview(integration: string, previewProps: PreviewProps) {
@@ -160,9 +89,7 @@ export function ToolApprovalCard({
   const logo = getIntegrationLogo(integration);
   const IntegrationIcon = getIntegrationIcon(integration);
   const displayName = getIntegrationDisplayName(integration);
-  const isQuestionRequest =
-    (operation === "question" || toolName.toLowerCase() === "question") &&
-    integration.toLowerCase() === "cmdclaw";
+  const isQuestionRequest = isQuestionApprovalRequest({ toolName, integration, operation });
   const questionPayload = useMemo(
     () => (isQuestionRequest ? parseQuestionRequestPayload(toolInput) : null),
     [isQuestionRequest, toolInput],
@@ -546,17 +473,19 @@ export function ToolApprovalCard({
         {previewProps && <div className="mb-3">{renderPreview(integration, previewProps)}</div>}
 
         {/* Raw Command Section */}
-        {command && (
+        {command && !isQuestionRequest && (
           <div className="mb-3">
             <pre className="bg-muted overflow-x-auto rounded p-2 font-mono text-xs">{command}</pre>
           </div>
         )}
 
-        {status === "pending" && questionPayload && (
+        {questionPayload && (
           <div className="mb-3 space-y-4">
             {questionPayload.questions.map((question, index) => {
               const canTypeOwnAnswer = question.custom !== false;
               const useTypedAnswer = !!typedMode[index];
+              const savedAnswers =
+                questionAnswers?.[index]?.filter((answer) => answer.length > 0) ?? [];
 
               return (
                 <div key={`${question.header}-${question.question}`} className="space-y-2">
@@ -565,7 +494,7 @@ export function ToolApprovalCard({
                     <p className="text-muted-foreground text-sm">{question.question}</p>
                   </div>
 
-                  {question.options.length > 0 && (
+                  {status === "pending" && question.options.length > 0 && (
                     <div className="space-y-2">
                       {question.options.map((option) => {
                         const selected = selectedOptions[index] ?? [];
@@ -595,7 +524,7 @@ export function ToolApprovalCard({
                     </div>
                   )}
 
-                  {canTypeOwnAnswer && (
+                  {status === "pending" && canTypeOwnAnswer && (
                     <div className="space-y-2">
                       <button
                         type="button"
@@ -637,28 +566,20 @@ export function ToolApprovalCard({
                       )}
                     </div>
                   )}
+
+                  {status !== "pending" && savedAnswers.length > 0 && (
+                    <div className="bg-muted/60 rounded-md border px-3 py-2">
+                      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                        Saved answer
+                      </p>
+                      <p className="mt-1 text-sm">{savedAnswers.join(", ")}</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
-
-        {status !== "pending" &&
-          isQuestionRequest &&
-          questionAnswers &&
-          questionAnswers.length > 0 && (
-            <div className="mb-3 space-y-2">
-              <p className="text-sm font-medium">Saved answers</p>
-              {questionAnswers.map((answers) => (
-                <p
-                  key={`saved-answer-${answers.join("::")}`}
-                  className="text-muted-foreground text-sm"
-                >
-                  {answers.join(", ")}
-                </p>
-              ))}
-            </div>
-          )}
 
         {status === "pending" && !questionPayload && (
           <div className="flex justify-end gap-2">

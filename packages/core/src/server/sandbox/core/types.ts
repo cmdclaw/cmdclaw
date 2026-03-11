@@ -73,12 +73,23 @@ export type RuntimePermissionRequest = {
 
 export type RuntimeQuestionRequest = {
   id: string;
-  question: string;
-  options?: Array<{
-    label: string;
-    value: string;
+  sessionID?: string;
+  questions: Array<{
+    header: string;
+    question: string;
+    options?: Array<{
+      label: string;
+      value?: string;
+      description?: string;
+    }>;
+    multiple?: boolean;
+    custom?: boolean;
   }>;
-  allowMultiple?: boolean;
+  tool?: {
+    messageID?: string;
+    callID?: string;
+    callId?: string;
+  };
 };
 
 export type RuntimeEvent =

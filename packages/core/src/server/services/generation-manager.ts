@@ -630,7 +630,7 @@ function isOpenCodeActionableEvent(event: RuntimeEvent): event is OpenCodeAction
   );
 }
 
-function buildDefaultQuestionAnswers(request: RuntimeQuestionRequest): string[][] {
+export function buildDefaultQuestionAnswers(request: RuntimeQuestionRequest): string[][] {
   if (request.questions.length === 0) {
     return [["default answer"]];
   }
@@ -638,7 +638,7 @@ function buildDefaultQuestionAnswers(request: RuntimeQuestionRequest): string[][
   return request.questions.map((question) => [question.options?.[0]?.label ?? "default answer"]);
 }
 
-function buildQuestionCommand(request: RuntimeQuestionRequest): string {
+export function buildQuestionCommand(request: RuntimeQuestionRequest): string {
   const primaryQuestion = request.questions[0];
   if (!primaryQuestion) {
     return "Question";
@@ -4371,18 +4371,6 @@ class GenerationManager {
     request: RuntimeQuestionRequest,
   ): Promise<void> {
     const defaultAnswers = buildDefaultQuestionAnswers(request);
-
-    if (ctx.autoApprove) {
-      try {
-        await this.replyQuestionRequest(client, {
-          requestID: request.id,
-          answers: defaultAnswers,
-        });
-      } catch (err) {
-        console.error("[GenerationManager] Failed to auto-answer question:", err);
-      }
-      return;
-    }
 
     const toolUseId = `opencode-question-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const command = buildQuestionCommand(request);

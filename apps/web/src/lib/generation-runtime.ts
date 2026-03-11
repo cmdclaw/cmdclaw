@@ -49,6 +49,7 @@ export type RuntimeSegmentApproval = {
   operation: string;
   command?: string;
   status: "pending" | "approved" | "denied";
+  questionAnswers?: string[][];
 };
 
 export type RuntimeSegmentAuth = {
@@ -465,6 +466,7 @@ export class GenerationRuntime {
           operation: data.operation,
           command: data.command,
           status: data.status,
+          questionAnswers: data.questionAnswers,
         };
         updatedExistingSegment = true;
         break;
@@ -481,6 +483,7 @@ export class GenerationRuntime {
         operation: data.operation,
         command: data.command,
         status: data.status,
+        questionAnswers: data.questionAnswers,
       };
       currentSeg.isExpanded = false;
       this.segments.push({
@@ -725,16 +728,31 @@ export class GenerationRuntime {
     }
 
     const partsWithApprovals: RuntimeMessagePart[] = [];
+    const orphanApprovalParts: Array<RuntimeMessagePart & { type: "approval" }> = [];
+    const attachedApprovalToolUseIds = new Set<string>();
     for (const part of this.parts) {
+      if (part.type === "approval") {
+        orphanApprovalParts.push({ ...part });
+        continue;
+      }
+
       partsWithApprovals.push({ ...part });
       if (part.type === "tool_call") {
         const approval = approvalMap.get(part.id);
         if (approval) {
           partsWithApprovals.push(approval);
+          attachedApprovalToolUseIds.add(approval.toolUseId);
           // eslint-disable-next-line drizzle/enforce-delete-with-where -- Map.delete, not a Drizzle query
           approvalMap.delete(part.id);
         }
       }
+    }
+
+    for (const approval of orphanApprovalParts) {
+      if (attachedApprovalToolUseIds.has(approval.toolUseId)) {
+        continue;
+      }
+      partsWithApprovals.push(approval);
     }
 
     // Keep unresolved approvals (if any) rather than dropping data.

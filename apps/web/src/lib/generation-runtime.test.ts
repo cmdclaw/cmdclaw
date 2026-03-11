@@ -78,4 +78,40 @@ describe("GenerationRuntime tool result matching", () => {
     expect(stats.totalToolDurationMs).toBeGreaterThanOrEqual(0);
     expect(stats.perToolUseIdMs["tool-search-1"]).toBeGreaterThanOrEqual(0);
   });
+
+  it("does not duplicate approvals in the built assistant message", () => {
+    const runtime = createGenerationRuntime();
+
+    runtime.handleToolUse({
+      toolName: "question",
+      toolInput: {
+        questions: [{ header: "Next Task", question: "What would you like to work on right now?" }],
+      },
+      toolUseId: "question-tool-1",
+      integration: "cmdclaw",
+      operation: "question",
+    });
+    runtime.handleApproval({
+      toolUseId: "question-tool-1",
+      toolName: "Question",
+      toolInput: {
+        questions: [{ header: "Next Task", question: "What would you like to work on right now?" }],
+      },
+      integration: "cmdclaw",
+      operation: "question",
+      status: "approved",
+      questionAnswers: [["Review code changes"]],
+    });
+    runtime.handleText("Got it.");
+
+    const assistant = runtime.buildAssistantMessage();
+    const approvals = assistant.parts.filter((part) => part.type === "approval");
+
+    expect(approvals).toHaveLength(1);
+    expect(approvals[0]).toMatchObject({
+      toolUseId: "question-tool-1",
+      status: "approved",
+      questionAnswers: [["Review code changes"]],
+    });
+  });
 });
