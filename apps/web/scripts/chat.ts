@@ -611,16 +611,6 @@ async function runGeneration(
               return;
             }
 
-            if (options.autoApprove) {
-              await client.generation.submitApproval({
-                generationId: approval.generationId,
-                toolUseId: approval.toolUseId,
-                decision: "approve",
-              });
-              process.stdout.write(" -> auto-approve question with defaults\n");
-              return;
-            }
-
             const approvalPrompt = createApprovalPrompt(rl);
             if (!approvalPrompt) {
               await client.generation.submitApproval({

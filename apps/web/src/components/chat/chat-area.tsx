@@ -629,6 +629,15 @@ export function ChatArea({
       | null
       | undefined
   )?.model;
+  const conversationType = (
+    existingConversation as
+      | {
+          type?: "chat" | "coworker";
+        }
+      | null
+      | undefined
+  )?.type;
+  const isCoworkerConversation = conversationType === "coworker";
   const showModelSwitchWarning = Boolean(
     conversationId && conversationModel && selectedModel !== conversationModel,
   );
@@ -1053,6 +1062,7 @@ export function ChatArea({
       | {
           model?: string;
           autoApprove?: boolean;
+          type?: "chat" | "coworker";
           messages?: PersistedConversationMessage[];
         }
       | null
@@ -1063,7 +1073,7 @@ export function ChatArea({
       setSelectedModel(conv.model);
     }
     if (typeof conv?.autoApprove === "boolean") {
-      setLocalAutoApprove(conv.autoApprove);
+      setLocalAutoApprove(conv.type === "coworker" ? false : conv.autoApprove);
     }
 
     if (conv?.messages) {
@@ -2268,6 +2278,10 @@ export function ChatArea({
   }, [handleDeny, segments]);
   const handleAutoApproveChange = useCallback(
     (checked: boolean) => {
+      if (isCoworkerConversation) {
+        setLocalAutoApprove(false);
+        return;
+      }
       setLocalAutoApprove(checked);
       if (conversationId) {
         updateAutoApprove({
@@ -2276,7 +2290,7 @@ export function ChatArea({
         });
       }
     },
-    [conversationId, updateAutoApprove],
+    [conversationId, isCoworkerConversation, updateAutoApprove],
   );
 
   const selectedSkillLabel = useMemo(() => {
@@ -2468,8 +2482,9 @@ export function ChatArea({
       <div className="flex items-center gap-1.5">
         <Switch
           id="auto-approve"
-          checked={autoApproveEnabled}
+          checked={isCoworkerConversation ? false : autoApproveEnabled}
           onCheckedChange={handleAutoApproveChange}
+          disabled={isCoworkerConversation}
         />
         <label
           htmlFor="auto-approve"
@@ -2480,7 +2495,7 @@ export function ChatArea({
         </label>
       </div>
     ),
-    [autoApproveEnabled, handleAutoApproveChange],
+    [autoApproveEnabled, handleAutoApproveChange, isCoworkerConversation],
   );
 
   // Voice recording: stop and transcribe

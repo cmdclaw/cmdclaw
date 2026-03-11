@@ -836,9 +836,21 @@ const getOrCreateBuilderConversation = protectedProcedure
     if (wf.builderConversationId) {
       const existing = await context.db.query.conversation.findFirst({
         where: eq(conversation.id, wf.builderConversationId),
-        columns: { id: true },
+        columns: { id: true, autoApprove: true },
       });
       if (existing) {
+        if (existing.autoApprove) {
+          await context.db
+            .update(conversation)
+            .set({ autoApprove: false })
+            .where(
+              and(
+                eq(conversation.id, existing.id),
+                eq(conversation.userId, context.user.id),
+                eq(conversation.type, "coworker"),
+              ),
+            );
+        }
         return { conversationId: existing.id };
       }
     }
@@ -850,7 +862,7 @@ const getOrCreateBuilderConversation = protectedProcedure
         userId: context.user.id,
         type: "coworker",
         title: `${wf.name || "Coworker"} – Chat`,
-        autoApprove: true,
+        autoApprove: false,
       })
       .returning({ id: conversation.id });
 

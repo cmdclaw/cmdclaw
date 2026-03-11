@@ -90,6 +90,9 @@ function createContext() {
         generation: {
           findFirst: vi.fn(),
         },
+        conversation: {
+          findFirst: vi.fn(),
+        },
         user: {
           findFirst: vi.fn(),
         },
@@ -786,6 +789,53 @@ describe("coworkerRouter", () => {
         context,
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("creates builder conversations with auto-approve disabled", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      name: "Coworker",
+      builderConversationId: null,
+    });
+    context.mocks.insertReturningMock.mockResolvedValue([{ id: "conv-builder-1" }]);
+
+    const result = await coworkerRouterAny.getOrCreateBuilderConversation({
+      input: { id: "wf-1" },
+      context,
+    });
+
+    expect(result).toEqual({ conversationId: "conv-builder-1" });
+    expect(context.mocks.insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        type: "coworker",
+        autoApprove: false,
+      }),
+    );
+  });
+
+  it("forces existing builder conversations to disable auto-approve", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      name: "Coworker",
+      builderConversationId: "conv-builder-1",
+    });
+    context.db.query.conversation.findFirst.mockResolvedValue({
+      id: "conv-builder-1",
+      autoApprove: true,
+    });
+
+    const result = await coworkerRouterAny.getOrCreateBuilderConversation({
+      input: { id: "wf-1" },
+      context,
+    });
+
+    expect(result).toEqual({ conversationId: "conv-builder-1" });
+    expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({ autoApprove: false }),
+    );
   });
 
   it("returns INTERNAL_SERVER_ERROR when scheduler cleanup fails during delete", async () => {

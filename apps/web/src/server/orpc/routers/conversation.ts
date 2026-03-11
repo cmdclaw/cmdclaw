@@ -72,6 +72,7 @@ const get = protectedProcedure
 
     return {
       id: conv.id,
+      type: conv.type,
       title: conv.title,
       isPinned: conv.isPinned,
       isShared: conv.isShared,
