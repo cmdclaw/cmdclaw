@@ -631,17 +631,24 @@ function isOpenCodeActionableEvent(event: RuntimeEvent): event is OpenCodeAction
 }
 
 function buildDefaultQuestionAnswers(request: RuntimeQuestionRequest): string[][] {
-  const firstOptionLabel = request.options?.[0]?.label;
-  if (firstOptionLabel) {
-    return [[firstOptionLabel]];
+  if (request.questions.length === 0) {
+    return [["default answer"]];
   }
-  return [["default answer"]];
+
+  return request.questions.map((question) => [question.options?.[0]?.label ?? "default answer"]);
 }
 
 function buildQuestionCommand(request: RuntimeQuestionRequest): string {
-  const options = (request.options ?? []).map((option) => option.label).filter(Boolean);
+  const primaryQuestion = request.questions[0];
+  if (!primaryQuestion) {
+    return "Question";
+  }
+
+  const options = (primaryQuestion.options ?? []).map((option) => option.label).filter(Boolean);
   const optionsText = options.length > 0 ? ` [${options.join(" | ")}]` : "";
-  return `Question: ${request.question}${optionsText}`;
+  const remainingCount = Math.max(0, request.questions.length - 1);
+  const remainingText = remainingCount > 0 ? ` (+${remainingCount} more)` : "";
+  return `Question: ${primaryQuestion.question}${optionsText}${remainingText}`;
 }
 
 type UserFileAttachment = { name: string; mimeType: string; dataUrl: string };
@@ -1492,16 +1499,7 @@ class GenerationManager {
       if (existing.userId !== userId) {
         throw new Error("Access denied");
       }
-      if (typeof autoApprove === "boolean" && existing.autoApprove !== autoApprove) {
-        const [updatedConversation] = await db
-          .update(conversation)
-          .set({ autoApprove })
-          .where(eq(conversation.id, existing.id))
-          .returning();
-        conv = updatedConversation ?? { ...existing, autoApprove };
-      } else {
-        conv = existing;
-      }
+      conv = existing;
     } else {
       isNewConversation = true;
       const resolvedModel = requestedModel ?? DEFAULT_MODEL_REFERENCE;
@@ -5437,6 +5435,31 @@ class GenerationManager {
       .set({ generationStatus: "awaiting_approval" })
       .where(eq(conversation.id, genRecord.conversationId));
 
+    const pendingApprovalEvent: GenerationEvent = {
+      type: "pending_approval",
+      generationId,
+      conversationId: genRecord.conversationId,
+      toolUseId,
+      toolName: pendingApproval.toolName,
+      toolInput: pendingApproval.toolInput,
+      integration: pendingApproval.integration,
+      operation: pendingApproval.operation,
+      command: pendingApproval.command,
+    };
+
+    const activeCtx = this.activeGenerations.get(generationId);
+    if (activeCtx) {
+      activeCtx.status = "awaiting_approval";
+      activeCtx.pendingApproval = pendingApproval;
+      this.broadcast(activeCtx, pendingApprovalEvent);
+    } else {
+      await this.publishDetachedGenerationStreamEvent({
+        generationId,
+        conversationId: genRecord.conversationId,
+        event: pendingApprovalEvent,
+      });
+    }
+
     await this.enqueueGenerationTimeout(generationId, "approval", expiresAt);
 
     return { decision: "pending", toolUseId, expiresAt };
@@ -6046,6 +6069,39 @@ class GenerationManager {
           },
         );
       });
+  }
+
+  private async publishDetachedGenerationStreamEvent(params: {
+    generationId: string;
+    conversationId: string;
+    event: GenerationEvent;
+  }): Promise<void> {
+    try {
+      const latest = await getLatestGenerationStreamEnvelope(params.generationId);
+      const envelope: GenerationStreamEnvelope = {
+        generationId: params.generationId,
+        conversationId: params.conversationId,
+        sequence: (latest?.envelope.sequence ?? 0) + 1,
+        eventType: params.event.type,
+        payload: params.event,
+        createdAtMs: Date.now(),
+      };
+      await publishGenerationStreamEvent(params.generationId, envelope);
+    } catch (error) {
+      logServerEvent(
+        "error",
+        "GENERATION_STREAM_PUBLISH_FAILED",
+        {
+          error: formatErrorMessage(error),
+          eventType: params.event.type,
+        },
+        {
+          source: "generation-manager",
+          generationId: params.generationId,
+          conversationId: params.conversationId,
+        },
+      );
+    }
   }
 
   private broadcast(ctx: GenerationContext, event: GenerationEvent): void {

@@ -847,6 +847,41 @@ describe("generationManager transitions", () => {
     });
   });
 
+  it("does not persist per-run autoApprove onto an existing conversation", async () => {
+    const mgr = asTestManager();
+    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+
+    generationFindFirstMock.mockResolvedValueOnce(null);
+    conversationFindFirstMock.mockResolvedValueOnce({
+      id: "conv-existing",
+      userId: "user-1",
+      model: "anthropic/claude-sonnet-4-6",
+      autoApprove: true,
+      type: "chat",
+    });
+    insertReturningMock
+      .mockResolvedValueOnce([{ id: "msg-user" }])
+      .mockResolvedValueOnce([{ id: "gen-existing" }]);
+
+    const result = await generationManager.startGeneration({
+      conversationId: "conv-existing",
+      content: "hello",
+      userId: "user-1",
+      autoApprove: false,
+    });
+
+    expect(result).toEqual({
+      generationId: "gen-existing",
+      conversationId: "conv-existing",
+    });
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(updateSetMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        autoApprove: false,
+      }),
+    );
+  });
+
   it("returns an empty queued-message list when conversation no longer exists", async () => {
     conversationFindFirstMock.mockResolvedValue(null);
 
@@ -1649,6 +1684,124 @@ describe("generationManager transitions", () => {
     expect(updateSetMock).not.toHaveBeenCalledWith(
       expect.objectContaining({
         pendingApproval: expect.anything(),
+      }),
+    );
+  });
+
+  it("broadcasts pending approval for plugin write requests to live subscribers", async () => {
+    const ctx = createCtx();
+    const mgr = asTestManager();
+    mgr.activeGenerations.set(ctx.id, ctx);
+    generationFindFirstMock.mockResolvedValue({
+      id: ctx.id,
+      conversationId: ctx.conversationId,
+      conversation: {
+        id: ctx.conversationId,
+        userId: ctx.userId,
+        autoApprove: false,
+      },
+    });
+
+    const result = await generationManager.requestPluginApproval(ctx.id, {
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+
+    expect(result.decision).toBe("pending");
+    expect(result.toolUseId).toBeTruthy();
+    expect(result.expiresAt).toBeTruthy();
+    expect(ctx.status).toBe("awaiting_approval");
+    expect(ctx.pendingApproval).toEqual(
+      expect.objectContaining({
+        toolUseId: result.toolUseId,
+        integration: "slack",
+        operation: "send",
+        command: "slack send -c C123 -t hi",
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "awaiting_approval",
+        pendingApproval: expect.objectContaining({
+          toolUseId: result.toolUseId,
+          integration: "slack",
+          operation: "send",
+        }),
+      }),
+    );
+
+    const publishedPayloads = (publishGenerationStreamEventMock.mock.calls as unknown[][])
+      .map((call) => call[1] as { payload?: unknown } | undefined)
+      .filter((entry): entry is { payload?: unknown } => !!entry)
+      .map((entry) => entry.payload);
+
+    expect(publishedPayloads).toContainEqual({
+      type: "pending_approval",
+      generationId: ctx.id,
+      conversationId: ctx.conversationId,
+      toolUseId: result.toolUseId,
+      toolName: "Bash",
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+  });
+
+  it("publishes pending approval to the generation stream without an active in-memory context", async () => {
+    generationFindFirstMock.mockResolvedValue({
+      id: "gen-detached",
+      conversationId: "conv-detached",
+      conversation: {
+        id: "conv-detached",
+        userId: "user-1",
+        autoApprove: false,
+      },
+    });
+    getLatestGenerationStreamEnvelopeMock.mockResolvedValue({
+      cursor: "1-1",
+      envelope: {
+        generationId: "gen-detached",
+        conversationId: "conv-detached",
+        sequence: 7,
+        eventType: "tool_use",
+        payload: {
+          type: "tool_use",
+          toolName: "bash",
+          toolInput: { command: "slack channels" },
+        },
+        createdAtMs: Date.now() - 1000,
+      },
+    });
+
+    const result = await generationManager.requestPluginApproval("gen-detached", {
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+
+    expect(result.decision).toBe("pending");
+    expect(publishGenerationStreamEventMock).toHaveBeenCalledWith(
+      "gen-detached",
+      expect.objectContaining({
+        generationId: "gen-detached",
+        conversationId: "conv-detached",
+        sequence: 8,
+        eventType: "pending_approval",
+        payload: {
+          type: "pending_approval",
+          generationId: "gen-detached",
+          conversationId: "conv-detached",
+          toolUseId: result.toolUseId,
+          toolName: "Bash",
+          toolInput: { command: "slack send -c C123 -t hi" },
+          integration: "slack",
+          operation: "send",
+          command: "slack send -c C123 -t hi",
+        },
       }),
     );
   });
