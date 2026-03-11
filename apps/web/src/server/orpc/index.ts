@@ -5,7 +5,6 @@ import { coworkerRouter } from "./routers/coworker";
 import { generationRouter } from "./routers/generation";
 import { integrationRouter } from "./routers/integration";
 import { integrationSkillRouter } from "./routers/integration-skill";
-import { internalRouter } from "./routers/internal";
 import { notificationRouter } from "./routers/notification";
 import { providerAuthRouter } from "./routers/provider-auth";
 import { skillRouter } from "./routers/skill";
@@ -23,7 +22,6 @@ export const appRouter = {
   generation: generationRouter,
   integration: integrationRouter,
   integrationSkill: integrationSkillRouter,
-  internal: internalRouter,
   notification: notificationRouter,
   providerAuth: providerAuthRouter,
   skill: skillRouter,

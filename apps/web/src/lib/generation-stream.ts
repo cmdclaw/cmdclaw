@@ -195,48 +195,58 @@ export async function runGenerationStream(
       case "tool_result":
         await callbacks.onToolResult?.(event.toolName, event.result, event.toolUseId);
         break;
-      case "pending_approval":
+      case "interrupt_pending":
         conversationId = event.conversationId;
-        await callbacks.onPendingApproval?.({
-          generationId: event.generationId,
-          conversationId: event.conversationId,
-          toolUseId: event.toolUseId,
-          toolName: event.toolName,
-          toolInput: event.toolInput,
-          integration: event.integration,
-          operation: event.operation,
-          command: event.command,
-        });
+        if (event.kind === "auth") {
+          await callbacks.onAuthNeeded?.({
+            generationId: event.generationId,
+            conversationId: event.conversationId,
+            integrations: event.display.authSpec?.integrations ?? [],
+            reason: event.display.authSpec?.reason,
+          });
+        } else {
+          await callbacks.onPendingApproval?.({
+            generationId: event.generationId,
+            conversationId: event.conversationId,
+            toolUseId: event.providerToolUseId,
+            toolName: event.display.title,
+            toolInput: event.display.toolInput ?? {},
+            integration: event.display.integration ?? "cmdclaw",
+            operation: event.display.operation ?? "unknown",
+            command: event.display.command,
+          });
+        }
         break;
-      case "approval_result":
-        await callbacks.onApprovalResult?.(event.toolUseId, event.decision);
-        break;
-      case "approval":
-        await callbacks.onApproval?.({
-          toolUseId: event.toolUseId,
-          toolName: event.toolName,
-          toolInput: event.toolInput,
-          integration: event.integration,
-          operation: event.operation,
-          command: event.command,
-          status: event.status,
-          questionAnswers: event.questionAnswers,
-        });
-        break;
-      case "auth_needed":
-        conversationId = event.conversationId;
-        await callbacks.onAuthNeeded?.({
-          generationId: event.generationId,
-          conversationId: event.conversationId,
-          integrations: event.integrations,
-          reason: event.reason,
-        });
-        break;
-      case "auth_progress":
-        await callbacks.onAuthProgress?.(event.connected, event.remaining);
-        break;
-      case "auth_result":
-        await callbacks.onAuthResult?.(event.success, event.integrations);
+      case "interrupt_resolved":
+        if (event.kind === "auth") {
+          const connectedIntegrations = event.responsePayload?.connectedIntegrations ?? [];
+          const remaining = (event.display.authSpec?.integrations ?? []).filter(
+            (integration) => !connectedIntegrations.includes(integration),
+          );
+          await Promise.all(
+            connectedIntegrations.map((connected) =>
+              callbacks.onAuthProgress?.(connected, remaining),
+            ),
+          );
+          await callbacks.onAuthResult?.(
+            event.status === "accepted",
+            event.display.authSpec?.integrations,
+          );
+        } else {
+          const toolUseId = event.providerToolUseId;
+          const decision = event.status === "accepted" ? "approved" : "denied";
+          await callbacks.onApprovalResult?.(toolUseId, decision);
+          await callbacks.onApproval?.({
+            toolUseId,
+            toolName: event.display.title,
+            toolInput: event.display.toolInput ?? {},
+            integration: event.display.integration ?? "cmdclaw",
+            operation: event.display.operation ?? "unknown",
+            command: event.display.command,
+            status: decision,
+            questionAnswers: event.responsePayload?.questionAnswers,
+          });
+        }
         break;
       case "sandbox_file":
         await callbacks.onSandboxFile?.({

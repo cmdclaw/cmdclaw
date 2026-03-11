@@ -85,6 +85,134 @@ const { isStatelessServerlessRuntimeMock } = vi.hoisted(() => ({
   isStatelessServerlessRuntimeMock: vi.fn(() => false),
 }));
 
+const {
+  interruptStore,
+  createInterruptMock,
+  getInterruptMock,
+  getPendingInterruptForGenerationMock,
+  listPendingInterruptsForGenerationMock,
+  findPendingInterruptByToolUseIdMock,
+  findPendingAuthInterruptByIntegrationMock,
+  resolveInterruptMock,
+  expireInterruptMock,
+  cancelInterruptsForGenerationMock,
+  projectInterruptEventMock,
+} = vi.hoisted(() => {
+  const interruptStore = new Map<string, any>();
+
+  const projectInterruptEventMock = vi.fn((interrupt: any) => ({
+    interruptId: interrupt.id,
+    generationId: interrupt.generationId,
+    conversationId: interrupt.conversationId,
+    kind: interrupt.kind,
+    status: interrupt.status,
+    providerToolUseId: interrupt.providerToolUseId,
+    display: interrupt.display,
+    responsePayload: interrupt.responsePayload,
+  }));
+
+  const createInterruptMock = vi.fn(async (input: any) => {
+    const interrupt = {
+      id: `interrupt-${input.providerToolUseId ?? input.kind}`,
+      generationId: input.generationId,
+      conversationId: input.conversationId,
+      kind: input.kind,
+      status: "pending",
+      display: input.display,
+      provider: input.provider,
+      providerRequestId: input.providerRequestId ?? null,
+      providerToolUseId: input.providerToolUseId,
+      responsePayload: undefined,
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: input.expiresAt ?? null,
+      resolvedAt: null,
+      requestedByUserId: input.requestedByUserId ?? null,
+      resolvedByUserId: null,
+    };
+    interruptStore.set(interrupt.id, interrupt);
+    return interrupt;
+  });
+
+  const getInterruptMock = vi.fn(async (interruptId: string) => interruptStore.get(interruptId) ?? null);
+
+  const getPendingInterruptForGenerationMock = vi.fn(async (generationId: string) => {
+    const pending = [...interruptStore.values()].find(
+      (interrupt) => interrupt.generationId === generationId && interrupt.status === "pending",
+    );
+    return pending ?? null;
+  });
+
+  const listPendingInterruptsForGenerationMock = vi.fn(async (generationId: string) =>
+    [...interruptStore.values()].filter(
+      (interrupt) => interrupt.generationId === generationId && interrupt.status === "pending",
+    ),
+  );
+
+  const findPendingInterruptByToolUseIdMock = vi.fn(async (params: any) => {
+    const interrupt = [...interruptStore.values()].find(
+      (entry) =>
+        entry.generationId === params.generationId &&
+        entry.providerToolUseId === params.providerToolUseId &&
+        entry.status === "pending",
+    );
+    return interrupt ?? null;
+  });
+
+  const findPendingAuthInterruptByIntegrationMock = vi.fn(async (params: any) => {
+    const interrupt = [...interruptStore.values()].find(
+      (entry) =>
+        entry.generationId === params.generationId &&
+        entry.kind === "auth" &&
+        entry.status === "pending" &&
+        entry.display.authSpec?.integrations?.includes(params.integration),
+    );
+    return interrupt ?? null;
+  });
+
+  const resolveInterruptMock = vi.fn(async (params: any) => {
+    const existing = interruptStore.get(params.interruptId);
+    if (!existing) {
+      return null;
+    }
+    const resolved = {
+      ...existing,
+      status: params.status,
+      responsePayload: params.responsePayload,
+      resolvedAt: new Date("2026-03-11T15:01:00.000Z"),
+      resolvedByUserId: params.resolvedByUserId ?? null,
+    };
+    interruptStore.set(resolved.id, resolved);
+    return resolved;
+  });
+
+  const expireInterruptMock = vi.fn(async (interruptId: string) =>
+    resolveInterruptMock({ interruptId, status: "expired" }),
+  );
+
+  const cancelInterruptsForGenerationMock = vi.fn(async (generationId: string) => {
+    for (const interrupt of interruptStore.values()) {
+      if (interrupt.generationId === generationId && interrupt.status === "pending") {
+        interrupt.status = "cancelled";
+        interrupt.resolvedAt = new Date("2026-03-11T15:01:00.000Z");
+      }
+    }
+  });
+
+  return {
+    interruptStore,
+    createInterruptMock,
+    getInterruptMock,
+    getPendingInterruptForGenerationMock,
+    listPendingInterruptsForGenerationMock,
+    findPendingInterruptByToolUseIdMock,
+    findPendingAuthInterruptByIntegrationMock,
+    resolveInterruptMock,
+    expireInterruptMock,
+    cancelInterruptsForGenerationMock,
+    projectInterruptEventMock,
+  };
+});
+
 const { ensureBucketMock, uploadToS3Mock } = vi.hoisted(() => ({
   ensureBucketMock: vi.fn(),
   uploadToS3Mock: vi.fn(),
@@ -173,6 +301,21 @@ vi.mock("../queues", () => ({
 
 vi.mock("../utils/runtime-platform", () => ({
   isStatelessServerlessRuntime: isStatelessServerlessRuntimeMock,
+}));
+
+vi.mock("./generation-interrupt-service", () => ({
+  generationInterruptService: {
+    createInterrupt: createInterruptMock,
+    getInterrupt: getInterruptMock,
+    getPendingInterruptForGeneration: getPendingInterruptForGenerationMock,
+    listPendingInterruptsForGeneration: listPendingInterruptsForGenerationMock,
+    findPendingInterruptByToolUseId: findPendingInterruptByToolUseIdMock,
+    findPendingAuthInterruptByIntegration: findPendingAuthInterruptByIntegrationMock,
+    resolveInterrupt: resolveInterruptMock,
+    expireInterrupt: expireInterruptMock,
+    cancelInterruptsForGeneration: cancelInterruptsForGenerationMock,
+    projectInterruptEvent: projectInterruptEventMock,
+  },
 }));
 
 vi.mock("../redis/generation-event-bus", () => ({
@@ -293,6 +436,79 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
   return ctx;
 }
 
+function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
+  if (ctx.pendingApproval) {
+    const pendingApproval = ctx.pendingApproval as {
+      toolUseId: string;
+      toolName?: string;
+      toolInput?: Record<string, unknown>;
+      integration?: string;
+      operation?: string;
+      command?: string;
+      requestedAt?: string;
+    };
+    return {
+      id: `interrupt-${pendingApproval.toolUseId}`,
+      generationId: ctx.id,
+      conversationId: ctx.conversationId,
+      kind:
+        pendingApproval.operation === "question" || pendingApproval.operation === "permission"
+          ? pendingApproval.operation === "question"
+            ? "runtime_question"
+            : "runtime_permission"
+          : "plugin_write",
+      status: "pending",
+      display: {
+        title: pendingApproval.toolName ?? "Bash",
+        integration: pendingApproval.integration ?? "cmdclaw",
+        operation: pendingApproval.operation ?? "unknown",
+        command: pendingApproval.command,
+        toolInput: pendingApproval.toolInput ?? {},
+      },
+      provider: "plugin",
+      providerRequestId: null,
+      providerToolUseId: pendingApproval.toolUseId,
+      responsePayload: undefined,
+      requestedAt: new Date(pendingApproval.requestedAt ?? "2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    };
+  }
+
+  if (ctx.pendingAuth) {
+    const pendingAuth = ctx.pendingAuth;
+    return {
+      id: `interrupt-auth-${ctx.id}`,
+      generationId: ctx.id,
+      conversationId: ctx.conversationId,
+      kind: "auth",
+      status: "pending",
+      display: {
+        title: "Auth Required",
+        authSpec: {
+          integrations: pendingAuth.integrations ?? [],
+          connectedIntegrations: pendingAuth.connectedIntegrations ?? [],
+        },
+      },
+      provider: "plugin",
+      providerRequestId: null,
+      providerToolUseId: `auth-${ctx.id}`,
+      responsePayload: {
+        connectedIntegrations: pendingAuth.connectedIntegrations ?? [],
+      },
+      requestedAt: new Date(String(pendingAuth.requestedAt ?? "2026-03-11T15:00:00.000Z")),
+      expiresAt: null,
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    };
+  }
+
+  return null;
+}
+
 async function collectEvents(generator: AsyncGenerator<unknown>) {
   const events: unknown[] = [];
   for await (const event of generator) {
@@ -313,6 +529,159 @@ describe("generationManager transitions", () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    interruptStore.clear();
+    createInterruptMock.mockImplementation(async (input: any) => {
+      const interrupt = {
+        id: `interrupt-${input.providerToolUseId ?? input.kind}`,
+        generationId: input.generationId,
+        conversationId: input.conversationId,
+        kind: input.kind,
+        status: "pending",
+        display: input.display,
+        provider: input.provider,
+        providerRequestId: input.providerRequestId ?? null,
+        providerToolUseId: input.providerToolUseId,
+        responsePayload: undefined,
+        requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+        expiresAt: input.expiresAt ?? null,
+        resolvedAt: null,
+        requestedByUserId: input.requestedByUserId ?? null,
+        resolvedByUserId: null,
+      };
+      interruptStore.set(interrupt.id, interrupt);
+
+      const activeCtx = asTestManager().activeGenerations.get(input.generationId);
+      if (activeCtx) {
+        activeCtx.currentInterruptId = interrupt.id;
+        activeCtx.status = input.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
+        if (input.kind === "auth") {
+          activeCtx.pendingAuth = {
+            integrations: input.display.authSpec?.integrations ?? [],
+            connectedIntegrations: input.display.authSpec?.connectedIntegrations ?? [],
+            requestedAt: interrupt.requestedAt.toISOString(),
+          };
+        } else {
+          activeCtx.pendingApproval = {
+            toolUseId: input.providerToolUseId,
+            toolName: input.display.title,
+            toolInput: input.display.toolInput ?? {},
+            integration: input.display.integration ?? "cmdclaw",
+            operation: input.display.operation ?? "unknown",
+            command: input.display.command,
+            requestedAt: interrupt.requestedAt.toISOString(),
+          };
+        }
+      }
+
+      return interrupt;
+    });
+    getInterruptMock.mockImplementation(async (interruptId: string) => interruptStore.get(interruptId) ?? null);
+    getPendingInterruptForGenerationMock.mockImplementation(async (generationId: string) => {
+      const stored = [...interruptStore.values()].find(
+        (interrupt) => interrupt.generationId === generationId && interrupt.status === "pending",
+      );
+      if (stored) {
+        return stored;
+      }
+      const activeCtx = asTestManager().activeGenerations.get(generationId);
+      return activeCtx ? deriveInterruptFromCtx(activeCtx) : null;
+    });
+    listPendingInterruptsForGenerationMock.mockImplementation(async (generationId: string) => {
+      const stored = [...interruptStore.values()].filter(
+        (interrupt) => interrupt.generationId === generationId && interrupt.status === "pending",
+      );
+      if (stored.length > 0) {
+        return stored;
+      }
+      const activeCtx = asTestManager().activeGenerations.get(generationId);
+      const derived = activeCtx ? deriveInterruptFromCtx(activeCtx) : null;
+      return derived ? [derived] : [];
+    });
+    findPendingInterruptByToolUseIdMock.mockImplementation(async (params: any) => {
+      const stored = [...interruptStore.values()].find(
+        (entry) =>
+          entry.generationId === params.generationId &&
+          entry.providerToolUseId === params.providerToolUseId &&
+          entry.status === "pending",
+      );
+      if (stored) {
+        return stored;
+      }
+      const activeCtx = asTestManager().activeGenerations.get(params.generationId);
+      const derived = activeCtx ? deriveInterruptFromCtx(activeCtx) : null;
+      return derived?.providerToolUseId === params.providerToolUseId ? derived : null;
+    });
+    findPendingAuthInterruptByIntegrationMock.mockImplementation(async (params: any) => {
+      const stored = [...interruptStore.values()].find(
+        (entry) =>
+          entry.generationId === params.generationId &&
+          entry.kind === "auth" &&
+          entry.status === "pending" &&
+          entry.display.authSpec?.integrations?.includes(params.integration),
+      );
+      if (stored) {
+        return stored;
+      }
+      const activeCtx = asTestManager().activeGenerations.get(params.generationId);
+      const derived = activeCtx ? deriveInterruptFromCtx(activeCtx) : null;
+      return derived?.kind === "auth" &&
+        derived.display.authSpec?.integrations?.includes(params.integration)
+        ? derived
+        : null;
+    });
+    resolveInterruptMock.mockImplementation(async (params: any) => {
+      const existing =
+        interruptStore.get(params.interruptId) ??
+        [...interruptStore.values()].find((entry) => entry.id === params.interruptId) ??
+        null;
+      if (!existing) {
+        return null;
+      }
+      const resolved = {
+        ...existing,
+        status: params.status,
+        responsePayload: params.responsePayload,
+        resolvedAt: new Date("2026-03-11T15:01:00.000Z"),
+        resolvedByUserId: params.resolvedByUserId ?? null,
+      };
+      interruptStore.set(resolved.id, resolved);
+
+      const activeCtx = asTestManager().activeGenerations.get(resolved.generationId);
+      if (activeCtx?.currentInterruptId === resolved.id) {
+        activeCtx.currentInterruptId = undefined;
+        activeCtx.pendingApproval = null;
+        activeCtx.pendingAuth = null;
+      }
+
+      return resolved;
+    });
+    expireInterruptMock.mockImplementation(async (interruptId: string) =>
+      resolveInterruptMock({ interruptId, status: "expired" }),
+    );
+    cancelInterruptsForGenerationMock.mockImplementation(async (generationId: string) => {
+      for (const interrupt of interruptStore.values()) {
+        if (interrupt.generationId === generationId && interrupt.status === "pending") {
+          interrupt.status = "cancelled";
+          interrupt.resolvedAt = new Date("2026-03-11T15:01:00.000Z");
+        }
+      }
+      const activeCtx = asTestManager().activeGenerations.get(generationId);
+      if (activeCtx) {
+        activeCtx.currentInterruptId = undefined;
+        activeCtx.pendingApproval = null;
+        activeCtx.pendingAuth = null;
+      }
+    });
+    projectInterruptEventMock.mockImplementation((interrupt: any) => ({
+      interruptId: interrupt.id,
+      generationId: interrupt.generationId,
+      conversationId: interrupt.conversationId,
+      kind: interrupt.kind,
+      status: interrupt.status,
+      providerToolUseId: interrupt.providerToolUseId,
+      display: interrupt.display,
+      responsePayload: interrupt.responsePayload,
+    }));
     updateWhereMock.mockResolvedValue(undefined);
     insertValuesMock.mockReset();
     insertReturningMock.mockReset();

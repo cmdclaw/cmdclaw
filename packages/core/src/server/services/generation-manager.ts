@@ -26,6 +26,7 @@ import {
   conversation,
   conversationQueuedMessage,
   generation,
+  generationInterrupt,
   message,
   messageAttachment,
   skill,
@@ -93,6 +94,12 @@ import { sendTaskDonePush } from "./web-push-service";
 import { generateConversationTitle } from "../utils/generate-title";
 import { createTraceId, logServerEvent } from "../utils/observability";
 import { isStatelessServerlessRuntime } from "../utils/runtime-platform";
+import {
+  generationInterruptService,
+  type GenerationInterruptEventPayload,
+  type GenerationInterruptKind,
+  type GenerationInterruptRecord,
+} from "./generation-interrupt-service";
 
 let cachedDefaultCoworkerModelPromise: Promise<string> | undefined;
 
@@ -125,46 +132,8 @@ export type GenerationEvent =
     }
   | { type: "tool_result"; toolName: string; result: unknown; toolUseId?: string }
   | { type: "thinking"; content: string; thinkingId: string }
-  | {
-      type: "pending_approval";
-      generationId: string;
-      conversationId: string;
-      toolUseId: string;
-      toolName: string;
-      toolInput: unknown;
-      integration: string;
-      operation: string;
-      command?: string;
-    }
-  | {
-      type: "approval_result";
-      toolUseId: string;
-      decision: "approved" | "denied";
-    }
-  | {
-      type: "approval";
-      toolUseId: string;
-      toolName: string;
-      toolInput: unknown;
-      integration: string;
-      operation: string;
-      command?: string;
-      status: "approved" | "denied";
-      questionAnswers?: string[][];
-    }
-  | {
-      type: "auth_needed";
-      generationId: string;
-      conversationId: string;
-      integrations: string[];
-      reason?: string;
-    }
-  | {
-      type: "auth_progress";
-      connected: string;
-      remaining: string[];
-    }
-  | { type: "auth_result"; success: boolean; integrations?: string[] }
+  | ({ type: "interrupt_pending" } & GenerationInterruptEventPayload)
+  | ({ type: "interrupt_resolved" } & GenerationInterruptEventPayload)
   | {
       type: "sandbox_file";
       fileId: string;
@@ -261,6 +230,8 @@ interface GenerationContext {
   pendingAuth: PendingAuth | null;
   authTimeoutId?: ReturnType<typeof setTimeout>;
   authResolver?: (result: { success: boolean; userId?: string }) => void;
+  currentInterruptId?: string;
+  runtimeCallbackToken?: string;
   usage: { inputTokens: number; outputTokens: number; totalCostUsd: number };
   sessionId?: string;
   errorMessage?: string;
@@ -1521,7 +1492,7 @@ class GenerationManager {
           title,
           type: "chat",
           model: resolvedModel,
-          autoApprove: autoApprove ?? false,
+          autoApprove: false,
         })
         .returning();
       conv = newConv;
@@ -1643,6 +1614,7 @@ class GenerationManager {
     }
 
     // Create generation record
+    const runtimeCallbackToken = crypto.randomUUID();
     const [genRecord] = await db
       .insert(generation)
       .values({
@@ -1650,11 +1622,12 @@ class GenerationManager {
         status: "running",
         executionPolicy: buildExecutionPolicy({
           allowedIntegrations: params.allowedIntegrations,
-          autoApprove: conv.autoApprove,
+          autoApprove: autoApprove ?? conv.autoApprove,
           sandboxProvider: params.sandboxProvider,
           selectedPlatformSkillSlugs,
           queuedFileAttachments: fileAttachments,
         }),
+        runtimeCallbackToken,
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
@@ -1740,12 +1713,13 @@ class GenerationManager {
       backendType,
       sandboxProviderOverride: params.sandboxProvider,
       allowedIntegrations: params.allowedIntegrations,
-      autoApprove: conv.autoApprove,
+      autoApprove: autoApprove ?? conv.autoApprove,
       attachments: fileAttachments,
       builderCoworkerContext,
       selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
+      runtimeCallbackToken,
       agentInitStartedAt: undefined,
       agentInitReadyAt: undefined,
       agentInitFailedAt: undefined,
@@ -2001,6 +1975,9 @@ class GenerationManager {
             conversationId: genRecord.conversationId,
           })
         : null;
+    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+      generationId,
+    );
 
     const ctx: GenerationContext = {
       id: genRecord.id,
@@ -2011,8 +1988,8 @@ class GenerationManager {
       contentParts: (genRecord.contentParts as ContentPart[] | null) ?? [],
       assistantContent: "",
       abortController: new AbortController(),
-      pendingApproval: (genRecord.pendingApproval as PendingApproval | null) ?? null,
-      pendingAuth: (genRecord.pendingAuth as PendingAuth | null) ?? null,
+      pendingApproval: null,
+      pendingAuth: null,
       usage: {
         inputTokens: genRecord.inputTokens,
         outputTokens: genRecord.outputTokens,
@@ -2050,6 +2027,7 @@ class GenerationManager {
       selectedPlatformSkillSlugs: executionPolicy.selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
+      runtimeCallbackToken: genRecord.runtimeCallbackToken ?? undefined,
       agentInitStartedAt: undefined,
       agentInitReadyAt: undefined,
       agentInitFailedAt: undefined,
@@ -2059,6 +2037,7 @@ class GenerationManager {
       streamPublishedCount: 0,
       streamDeliveredCount: 0,
     };
+    ctx.currentInterruptId = pendingInterrupt?.id;
 
     logServerEvent(
       "info",
@@ -2077,19 +2056,19 @@ class GenerationManager {
 
     this.activeGenerations.set(genRecord.id, ctx);
     this.markPhase(ctx, "generation_started");
-    if (ctx.status === "awaiting_approval" && ctx.pendingApproval?.expiresAt) {
-      await this.enqueueGenerationTimeout(ctx.id, "approval", ctx.pendingApproval.expiresAt);
+    if (ctx.status === "awaiting_approval" && pendingInterrupt?.expiresAt) {
+      await this.enqueueGenerationTimeout(ctx.id, "approval", pendingInterrupt.expiresAt.toISOString());
     }
-    if (ctx.status === "awaiting_auth" && ctx.pendingAuth?.expiresAt) {
-      await this.enqueueGenerationTimeout(ctx.id, "auth", ctx.pendingAuth.expiresAt);
+    if (ctx.status === "awaiting_auth" && pendingInterrupt?.expiresAt) {
+      await this.enqueueGenerationTimeout(ctx.id, "auth", pendingInterrupt.expiresAt.toISOString());
     }
     if (
       ctx.status === "awaiting_approval" &&
-      ctx.pendingApproval &&
+      pendingInterrupt &&
       Date.now() >=
         resolveExpiryMs(
-          ctx.pendingApproval.expiresAt,
-          ctx.pendingApproval.requestedAt,
+          pendingInterrupt.expiresAt?.toISOString(),
+          pendingInterrupt.requestedAt.toISOString(),
           APPROVAL_TIMEOUT_MS,
         )
     ) {
@@ -2098,28 +2077,30 @@ class GenerationManager {
     }
     if (
       ctx.status === "awaiting_auth" &&
-      ctx.pendingAuth &&
+      pendingInterrupt &&
       Date.now() >=
-        resolveExpiryMs(ctx.pendingAuth.expiresAt, ctx.pendingAuth.requestedAt, AUTH_TIMEOUT_MS)
+        resolveExpiryMs(
+          pendingInterrupt.expiresAt?.toISOString(),
+          pendingInterrupt.requestedAt.toISOString(),
+          AUTH_TIMEOUT_MS,
+        )
     ) {
       await this.processGenerationTimeout(ctx.id, "auth");
       return;
     }
 
-    if (
-      ctx.status === "awaiting_approval" &&
-      ctx.pendingApproval?.opencodeRequestId &&
-      ctx.pendingApproval?.opencodeRequestKind
-    ) {
-      const decision = await this.waitForOpenCodeApprovalDecision(
-        ctx.id,
-        ctx.pendingApproval.toolUseId,
-      );
+    if (ctx.status === "awaiting_approval" && pendingInterrupt?.provider === "opencode") {
+      const decision = await this.waitForOpenCodeApprovalDecision(pendingInterrupt.id);
       if (!decision) {
         await this.handleApprovalTimeout(ctx);
         return;
       }
-      await this.applyOpenCodeApprovalDecision(ctx, decision.decision, decision.questionAnswers);
+      await this.applyOpenCodeApprovalDecision(
+        ctx,
+        pendingInterrupt.id,
+        decision.decision,
+        decision.questionAnswers,
+      );
       return;
     }
 
@@ -2193,8 +2174,7 @@ class GenerationManager {
     let cursor = options?.cursor ?? "0-0";
     let observedParts: ContentPart[] = [];
     let lastStatus: typeof generation.$inferSelect.status | null = null;
-    let emittedPendingApprovalToolUseId: string | null = null;
-    let emittedPendingAuthRequestedAt: string | null = null;
+    let emittedPendingInterruptId: string | null = null;
     const isTestRuntime = process.env.NODE_ENV === "test";
     let testLoopIterations = 0;
 
@@ -2303,7 +2283,12 @@ class GenerationManager {
                 }
               }
               for (let i = observedParts.length; i < latestParts.length; i += 1) {
-                const partEvent = this.emitReplayPartEvent(latestParts[i], latestParts);
+                const partEvent = this.emitReplayPartEvent(
+                  latest.id,
+                  latest.conversationId,
+                  latestParts[i],
+                  latestParts,
+                );
                 if (partEvent) {
                   eventsYielded += 1;
                   yield partEvent;
@@ -2317,38 +2302,14 @@ class GenerationManager {
                 yield { type: "status_change", status: latest.status };
               }
 
-              if (latest.status === "awaiting_approval" && latest.pendingApproval) {
-                const pendingApproval = latest.pendingApproval as PendingApproval;
-                if (emittedPendingApprovalToolUseId !== pendingApproval.toolUseId) {
-                  emittedPendingApprovalToolUseId = pendingApproval.toolUseId;
-                  eventsYielded += 1;
-                  yield {
-                    type: "pending_approval",
-                    generationId: latest.id,
-                    conversationId: latest.conversationId,
-                    toolUseId: pendingApproval.toolUseId,
-                    toolName: pendingApproval.toolName,
-                    toolInput: pendingApproval.toolInput,
-                    integration: pendingApproval.integration,
-                    operation: pendingApproval.operation,
-                    command: pendingApproval.command,
-                  };
-                }
-              }
-
-              if (latest.status === "awaiting_auth" && latest.pendingAuth) {
-                const pendingAuth = latest.pendingAuth as PendingAuth;
-                if (emittedPendingAuthRequestedAt !== pendingAuth.requestedAt) {
-                  emittedPendingAuthRequestedAt = pendingAuth.requestedAt;
-                  eventsYielded += 1;
-                  yield {
-                    type: "auth_needed",
-                    generationId: latest.id,
-                    conversationId: latest.conversationId,
-                    integrations: pendingAuth.integrations,
-                    reason: pendingAuth.reason,
-                  };
-                }
+              const pendingInterrupt =
+                latest.status === "awaiting_approval" || latest.status === "awaiting_auth"
+                  ? await generationInterruptService.getPendingInterruptForGeneration(latest.id)
+                  : null;
+              if (pendingInterrupt && emittedPendingInterruptId !== pendingInterrupt.id) {
+                emittedPendingInterruptId = pendingInterrupt.id;
+                eventsYielded += 1;
+                yield this.projectInterruptPendingEvent(pendingInterrupt);
               }
             }
 
@@ -2519,13 +2480,14 @@ class GenerationManager {
       return false;
     }
 
-    const pendingApproval = genRecord.pendingApproval as PendingApproval | null;
-    const pendingAuth = genRecord.pendingAuth as PendingAuth | null;
-    const nextStatus: GenerationStatus = pendingApproval
-      ? "awaiting_approval"
-      : pendingAuth
+    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+      generationId,
+    );
+    const nextStatus: GenerationStatus = pendingInterrupt
+      ? pendingInterrupt.kind === "auth"
         ? "awaiting_auth"
-        : "running";
+        : "awaiting_approval"
+      : "running";
 
     await db
       .update(generation)
@@ -2566,11 +2528,11 @@ class GenerationManager {
     }
 
     const runType: "chat" | "coworker" = linkedRun ? "coworker" : "chat";
-    if (nextStatus === "awaiting_approval" && pendingApproval?.expiresAt) {
-      await this.enqueueGenerationTimeout(generationId, "approval", pendingApproval.expiresAt);
+    if (nextStatus === "awaiting_approval" && pendingInterrupt?.expiresAt) {
+      await this.enqueueGenerationTimeout(generationId, "approval", pendingInterrupt.expiresAt.toISOString());
     }
-    if (nextStatus === "awaiting_auth" && pendingAuth?.expiresAt) {
-      await this.enqueueGenerationTimeout(generationId, "auth", pendingAuth.expiresAt);
+    if (nextStatus === "awaiting_auth" && pendingInterrupt?.expiresAt) {
+      await this.enqueueGenerationTimeout(generationId, "auth", pendingInterrupt.expiresAt.toISOString());
     }
     if (this.shouldDeferGenerationToWorker()) {
       await this.enqueueGenerationRun(generationId, runType);
@@ -2596,18 +2558,21 @@ class GenerationManager {
 
     const now = Date.now();
     if (kind === "approval") {
-      const pendingApproval = genRecord.pendingApproval as PendingApproval | null;
-      if (!pendingApproval || genRecord.status !== "awaiting_approval") {
+      const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+        generationId,
+      );
+      if (!pendingInterrupt || pendingInterrupt.kind === "auth" || genRecord.status !== "awaiting_approval") {
         return;
       }
       const expiresAtMs = resolveExpiryMs(
-        pendingApproval.expiresAt,
-        pendingApproval.requestedAt,
+        pendingInterrupt.expiresAt?.toISOString(),
+        pendingInterrupt.requestedAt.toISOString(),
         APPROVAL_TIMEOUT_MS,
       );
       if (Number.isFinite(expiresAtMs) && now < expiresAtMs) {
         return;
       }
+      await generationInterruptService.expireInterrupt(pendingInterrupt.id);
 
       await db
         .update(generation)
@@ -2644,24 +2609,26 @@ class GenerationManager {
       return;
     }
 
-    const pendingAuth = genRecord.pendingAuth as PendingAuth | null;
-    if (!pendingAuth || genRecord.status !== "awaiting_auth") {
+    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+      generationId,
+    );
+    if (!pendingInterrupt || pendingInterrupt.kind !== "auth" || genRecord.status !== "awaiting_auth") {
       return;
     }
     const expiresAtMs = resolveExpiryMs(
-      pendingAuth.expiresAt,
-      pendingAuth.requestedAt,
+      pendingInterrupt.expiresAt?.toISOString(),
+      pendingInterrupt.requestedAt.toISOString(),
       AUTH_TIMEOUT_MS,
     );
     if (Number.isFinite(expiresAtMs) && now < expiresAtMs) {
       return;
     }
+    await generationInterruptService.expireInterrupt(pendingInterrupt.id);
 
     await db
       .update(generation)
       .set({
         status: "cancelled",
-        pendingAuth: null,
         completedAt: new Date(),
       })
       .where(eq(generation.id, generationId));
@@ -2852,6 +2819,7 @@ class GenerationManager {
       "Generation was marked as stale by the worker reaper after exceeding max running age.";
 
     if (staleRunningIds.length > 0) {
+      await Promise.all(staleRunningIds.map((id) => generationInterruptService.cancelInterruptsForGeneration(id)));
       await db
         .update(generation)
         .set({
@@ -2867,6 +2835,7 @@ class GenerationManager {
     }
 
     if (staleCancelledIds.length > 0) {
+      await Promise.all(staleCancelledIds.map((id) => generationInterruptService.cancelInterruptsForGeneration(id)));
       await db
         .update(generation)
         .set({
@@ -2984,8 +2953,11 @@ class GenerationManager {
       throw new Error("Access denied");
     }
 
-    const pending = genRecord.pendingApproval as PendingApproval | null;
-    if (!pending || pending.toolUseId !== toolUseId) {
+    const interrupt = await generationInterruptService.findPendingInterruptByToolUseId({
+      generationId,
+      providerToolUseId: toolUseId,
+    });
+    if (!interrupt) {
       return false;
     }
 
@@ -2997,21 +2969,23 @@ class GenerationManager {
         .filter((answers) => answers.length > 0) ?? [];
     const approvalPart: ContentPart = {
       type: "approval",
-      tool_use_id: pending.toolUseId,
-      tool_name: pending.toolName,
-      tool_input: pending.toolInput,
-      integration: pending.integration,
-      operation: pending.operation,
-      command: pending.command,
+      tool_use_id: interrupt.providerToolUseId,
+      tool_name: interrupt.display.title,
+      tool_input: interrupt.display.toolInput ?? {},
+      integration: interrupt.display.integration ?? "cmdclaw",
+      operation: interrupt.display.operation ?? "question",
+      command: interrupt.display.command,
       status: decision === "approve" ? "approved" : "denied",
       question_answers:
-        normalizedQuestionAnswers.length > 0 ? normalizedQuestionAnswers : pending.questionAnswers,
+        normalizedQuestionAnswers.length > 0
+          ? normalizedQuestionAnswers
+          : interrupt.responsePayload?.questionAnswers,
     };
     const baseContentParts = (genRecord.contentParts as ContentPart[] | null) ?? [];
     const nextContentParts = [...baseContentParts];
     const existingApprovalIndex = nextContentParts.findIndex(
       (part): part is ContentPart & { type: "approval" } =>
-        part.type === "approval" && part.tool_use_id === pending.toolUseId,
+        part.type === "approval" && part.tool_use_id === interrupt.providerToolUseId,
     );
     if (existingApprovalIndex >= 0) {
       nextContentParts[existingApprovalIndex] = approvalPart;
@@ -3022,38 +2996,27 @@ class GenerationManager {
     await db
       .update(generation)
       .set({
-        pendingApproval: {
-          ...pending,
-          decision: decision === "approve" ? "allow" : "deny",
-          questionAnswers:
-            normalizedQuestionAnswers.length > 0 ? normalizedQuestionAnswers : undefined,
-        },
         contentParts: nextContentParts.length > 0 ? nextContentParts : null,
       })
       .where(eq(generation.id, generationId));
 
+    const resolvedInterrupt = await generationInterruptService.resolveInterrupt({
+      interruptId: interrupt.id,
+      status: decision === "approve" ? "accepted" : "rejected",
+      responsePayload:
+        normalizedQuestionAnswers.length > 0 ? { questionAnswers: normalizedQuestionAnswers } : undefined,
+      resolvedByUserId: userId,
+    });
+
     const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx) {
       activeCtx.contentParts = nextContentParts;
-      this.broadcast(activeCtx, {
-        type: "approval_result",
-        toolUseId: pending.toolUseId,
-        decision: decision === "approve" ? "approved" : "denied",
-      });
-      this.broadcast(activeCtx, {
-        type: "approval",
-        toolUseId: pending.toolUseId,
-        toolName: pending.toolName,
-        toolInput: pending.toolInput,
-        integration: pending.integration,
-        operation: pending.operation,
-        command: pending.command,
-        status: decision === "approve" ? "approved" : "denied",
-        questionAnswers:
-          normalizedQuestionAnswers.length > 0
-            ? normalizedQuestionAnswers
-            : pending.questionAnswers,
-      });
+      if (activeCtx.currentInterruptId === interrupt.id) {
+        activeCtx.currentInterruptId = undefined;
+      }
+      if (resolvedInterrupt) {
+        this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
+      }
     }
 
     return true;
@@ -3095,10 +3058,25 @@ class GenerationManager {
       return null;
     }
 
+    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(generationId);
+    const pendingApproval =
+      pendingInterrupt && pendingInterrupt.kind !== "auth"
+        ? {
+            toolUseId: pendingInterrupt.providerToolUseId,
+            toolName: pendingInterrupt.display.title,
+            toolInput: pendingInterrupt.display.toolInput ?? {},
+            requestedAt: pendingInterrupt.requestedAt.toISOString(),
+            expiresAt: pendingInterrupt.expiresAt?.toISOString(),
+            integration: pendingInterrupt.display.integration ?? "cmdclaw",
+            operation: pendingInterrupt.display.operation ?? "unknown",
+            command: pendingInterrupt.display.command,
+          }
+        : null;
+
     return {
       status: genRecord.status as GenerationStatus,
       contentParts: genRecord.contentParts ?? [],
-      pendingApproval: genRecord.pendingApproval ?? null,
+      pendingApproval,
       usage: {
         inputTokens: genRecord.inputTokens,
         outputTokens: genRecord.outputTokens,
@@ -3177,6 +3155,8 @@ class GenerationManager {
   }
 
   private emitReplayPartEvent(
+    generationId: string,
+    conversationId: string,
     part: ContentPart,
     allParts: ContentPart[],
   ): GenerationStreamEvent | null {
@@ -3223,15 +3203,27 @@ class GenerationManager {
     }
     if (part.type === "approval") {
       return {
-        type: "approval",
-        toolUseId: part.tool_use_id,
-        toolName: part.tool_name,
-        toolInput: part.tool_input,
-        integration: part.integration,
-        operation: part.operation,
-        command: part.command,
-        status: part.status,
-        questionAnswers: part.question_answers,
+        type: "interrupt_resolved",
+        interruptId: `approval-part:${generationId}:${part.tool_use_id}`,
+        generationId,
+        conversationId,
+        kind:
+          part.operation === "question" || (part.question_answers?.length ?? 0) > 0
+            ? "runtime_question"
+            : "plugin_write",
+        status: part.status === "approved" ? "accepted" : "rejected",
+        providerToolUseId: part.tool_use_id,
+        display: {
+          title: part.tool_name,
+          integration: part.integration,
+          operation: part.operation,
+          command: part.command,
+          toolInput:
+            part.tool_input && typeof part.tool_input === "object"
+              ? (part.tool_input as Record<string, unknown>)
+              : undefined,
+        },
+        responsePayload: part.question_answers ? { questionAnswers: part.question_answers } : undefined,
       };
     }
     return null;
@@ -3404,6 +3396,9 @@ class GenerationManager {
       }
       if (dbUser?.timezone) {
         filteredCliEnv.CMDCLAW_USER_TIMEZONE = dbUser.timezone;
+      }
+      if (ctx.runtimeCallbackToken) {
+        filteredCliEnv.CMDCLAW_GENERATION_CALLBACK_TOKEN = ctx.runtimeCallbackToken;
       }
 
       // Get conversation for existing session info
@@ -4404,28 +4399,41 @@ class GenerationManager {
     pendingApproval: PendingApproval,
   ): Promise<void> {
     const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
-    const persistedPendingApproval: PendingApproval = {
-      ...pendingApproval,
-      expiresAt,
-      opencodeRequestKind: openCodeRequest.kind,
-      opencodeRequestId: openCodeRequest.request.id,
-      opencodeDefaultAnswers:
-        openCodeRequest.kind === "question" ? openCodeRequest.defaultAnswers : undefined,
-    };
-    ctx.status = "awaiting_approval";
-    ctx.pendingApproval = persistedPendingApproval;
+    const interrupt = await generationInterruptService.createInterrupt({
+      generationId: ctx.id,
+      conversationId: ctx.conversationId,
+      kind: openCodeRequest.kind === "question" ? "runtime_question" : "runtime_permission",
+      display: {
+        title: pendingApproval.toolName,
+        integration: pendingApproval.integration,
+        operation: pendingApproval.operation,
+        command: pendingApproval.command,
+        toolInput: pendingApproval.toolInput,
+        questionSpec:
+          openCodeRequest.kind === "question"
+            ? {
+                questions: openCodeRequest.request.questions.map((question) => ({
+                  header: question.header,
+                  question: question.question,
+                  options: (question.options ?? []).map((option) => ({
+                    label: option.label,
+                    description: option.description,
+                  })),
+                  multiple: question.multiple === true ? true : undefined,
+                  custom: question.custom === true ? true : undefined,
+                })),
+              }
+            : undefined,
+      },
+      provider: "opencode",
+      providerRequestId: openCodeRequest.request.id,
+      providerToolUseId: pendingApproval.toolUseId,
+      expiresAt: new Date(expiresAt),
+    });
 
-    await db
-      .update(generation)
-      .set({
-        status: "awaiting_approval",
-        pendingApproval: persistedPendingApproval,
-      })
-      .where(eq(generation.id, ctx.id));
-    await db
-      .update(conversation)
-      .set({ generationStatus: "awaiting_approval" })
-      .where(eq(conversation.id, ctx.conversationId));
+    ctx.status = "awaiting_approval";
+    ctx.currentInterruptId = interrupt.id;
+
     if (ctx.coworkerRunId) {
       await db
         .update(coworkerRun)
@@ -4434,22 +4442,9 @@ class GenerationManager {
     }
     await this.enqueueGenerationTimeout(ctx.id, "approval", expiresAt);
 
-    this.broadcast(ctx, {
-      type: "pending_approval",
-      generationId: ctx.id,
-      conversationId: ctx.conversationId,
-      toolUseId: persistedPendingApproval.toolUseId,
-      toolName: persistedPendingApproval.toolName,
-      toolInput: persistedPendingApproval.toolInput,
-      integration: persistedPendingApproval.integration,
-      operation: persistedPendingApproval.operation,
-      command: persistedPendingApproval.command,
-    });
+    this.broadcast(ctx, this.projectInterruptPendingEvent(interrupt));
 
-    const decision = await this.waitForOpenCodeApprovalDecision(
-      ctx.id,
-      persistedPendingApproval.toolUseId,
-    );
+    const decision = await this.waitForOpenCodeApprovalDecision(interrupt.id);
     if (!decision) {
       await this.rejectOpenCodePendingApprovalRequest(ctx, client).catch((err) =>
         console.error("[GenerationManager] Failed to reject OpenCode request on timeout:", err),
@@ -4460,6 +4455,7 @@ class GenerationManager {
 
     await this.applyOpenCodeApprovalDecision(
       ctx,
+      interrupt.id,
       decision.decision,
       decision.questionAnswers,
       client,
@@ -4470,9 +4466,18 @@ class GenerationManager {
     ctx: GenerationContext,
     liveClient?: ApprovalCapableClient,
   ): Promise<void> {
-    const pendingApproval = ctx.pendingApproval;
-    const requestKind = pendingApproval?.opencodeRequestKind;
-    const requestId = pendingApproval?.opencodeRequestId;
+    const interruptId = ctx.currentInterruptId;
+    if (!interruptId) {
+      return;
+    }
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
+    const requestKind =
+      interrupt?.kind === "runtime_permission"
+        ? "permission"
+        : interrupt?.kind === "runtime_question"
+          ? "question"
+          : undefined;
+    const requestId = interrupt?.providerRequestId;
     if (!requestKind || !requestId) {
       return;
     }
@@ -4513,48 +4518,36 @@ class GenerationManager {
   }
 
   private async waitForOpenCodeApprovalDecision(
-    generationId: string,
-    toolUseId: string,
+    interruptId: string,
   ): Promise<{ decision: "allow" | "deny"; questionAnswers?: string[][] } | null> {
     while (true) {
       // eslint-disable-next-line no-await-in-loop -- polling by design
       await new Promise((resolve) => setTimeout(resolve, 400));
-      // eslint-disable-next-line no-await-in-loop -- polling by design
-      const latest = await db.query.generation.findFirst({
-        where: eq(generation.id, generationId),
-      });
+      const latest = await generationInterruptService.getInterrupt(interruptId);
       if (!latest) {
         return { decision: "deny" };
       }
 
-      const latestApproval = latest.pendingApproval as PendingApproval | null;
-      if (!latestApproval || latestApproval.toolUseId !== toolUseId) {
-        if (latest.status === "running" || latest.status === "completed") {
-          return { decision: "allow" };
-        }
-        if (latest.status === "cancelled" || latest.status === "error") {
-          return { decision: "deny" };
-        }
-        continue;
-      }
-
       const expiresAtMs = resolveExpiryMs(
-        latestApproval.expiresAt,
-        latestApproval.requestedAt,
+        latest.expiresAt?.toISOString(),
+        latest.requestedAt.toISOString(),
         APPROVAL_TIMEOUT_MS,
       );
       if (Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs) {
         return null;
       }
 
-      if (latestApproval.decision) {
+      if (latest.status === "accepted") {
         return {
-          decision: latestApproval.decision,
-          questionAnswers: latestApproval.questionAnswers,
+          decision: "allow",
+          questionAnswers: latest.responsePayload?.questionAnswers,
         };
       }
-
-      if (latest.cancelRequestedAt || latest.status === "cancelled" || latest.status === "error") {
+      if (
+        latest.status === "rejected" ||
+        latest.status === "cancelled" ||
+        latest.status === "expired"
+      ) {
         return { decision: "deny" };
       }
     }
@@ -4562,20 +4555,29 @@ class GenerationManager {
 
   private async applyOpenCodeApprovalDecision(
     ctx: GenerationContext,
+    interruptId: string,
     decision: "allow" | "deny",
     questionAnswers?: string[][],
     liveClient?: ApprovalCapableClient,
   ): Promise<void> {
-    const pendingApproval = ctx.pendingApproval;
-    const toolUseId = pendingApproval?.toolUseId ?? `opencode-${ctx.id}`;
-    const requestKind = pendingApproval?.opencodeRequestKind;
-    const requestId = pendingApproval?.opencodeRequestId;
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
+    const toolUseId = interrupt?.providerToolUseId ?? `opencode-${ctx.id}`;
+    const requestKind =
+      interrupt?.kind === "runtime_permission"
+        ? "permission"
+        : interrupt?.kind === "runtime_question"
+          ? "question"
+          : undefined;
+    const requestId = interrupt?.providerRequestId;
     if (!requestKind || !requestId) {
       return;
     }
 
     let opencodeClient = liveClient;
-    let defaultAnswers = pendingApproval?.opencodeDefaultAnswers ?? [[]];
+    let defaultAnswers =
+      interrupt?.display.questionSpec?.questions.map((question) => [
+        question.options[0]?.label ?? "default answer",
+      ]) ?? [[]];
     if (!opencodeClient) {
       const conv = await db.query.conversation.findFirst({
         where: eq(conversation.id, ctx.conversationId),
@@ -4636,11 +4638,11 @@ class GenerationManager {
     const approvalPart: ContentPart = {
       type: "approval",
       tool_use_id: toolUseId,
-      tool_name: pendingApproval?.toolName ?? "question",
-      tool_input: pendingApproval?.toolInput ?? {},
-      integration: pendingApproval?.integration ?? "opencode",
-      operation: pendingApproval?.operation ?? "question",
-      command: pendingApproval?.command,
+      tool_name: interrupt?.display.title ?? "question",
+      tool_input: interrupt?.display.toolInput ?? {},
+      integration: interrupt?.display.integration ?? "opencode",
+      operation: interrupt?.display.operation ?? "question",
+      command: interrupt?.display.command,
       status: approvalStatus,
       question_answers: resolvedQuestionAnswers,
     };
@@ -4650,19 +4652,19 @@ class GenerationManager {
       ctx.contentParts.push(approvalPart);
     }
 
+    const resolvedInterrupt = await generationInterruptService.resolveInterrupt({
+      interruptId,
+      status: decision === "allow" ? "accepted" : "rejected",
+      responsePayload:
+        decision === "allow" ? { questionAnswers: resolvedQuestionAnswers } : undefined,
+    });
+
     await db
       .update(generation)
       .set({
-        status: "running",
-        pendingApproval: null,
         contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
       })
       .where(eq(generation.id, ctx.id));
-
-    await db
-      .update(conversation)
-      .set({ generationStatus: "generating" })
-      .where(eq(conversation.id, ctx.conversationId));
 
     if (ctx.coworkerRunId) {
       await db
@@ -4671,24 +4673,11 @@ class GenerationManager {
         .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
 
-    ctx.pendingApproval = null;
+    ctx.currentInterruptId = undefined;
     ctx.status = "running";
-    this.broadcast(ctx, {
-      type: "approval_result",
-      toolUseId,
-      decision: decision === "allow" ? "approved" : "denied",
-    });
-    this.broadcast(ctx, {
-      type: "approval",
-      toolUseId,
-      toolName: approvalPart.tool_name,
-      toolInput: approvalPart.tool_input,
-      integration: approvalPart.integration,
-      operation: approvalPart.operation,
-      command: approvalPart.command,
-      status: approvalPart.status,
-      questionAnswers: approvalPart.question_answers,
-    });
+    if (resolvedInterrupt) {
+      this.broadcast(ctx, this.projectInterruptResolvedEvent(resolvedInterrupt));
+    }
   }
 
   /**
@@ -5186,7 +5175,7 @@ class GenerationManager {
   }
 
   private async handleApprovalTimeout(ctx: GenerationContext): Promise<void> {
-    if (ctx.status !== "awaiting_approval" || !ctx.pendingApproval) {
+    if (ctx.status !== "awaiting_approval" || !ctx.currentInterruptId) {
       return;
     }
 
@@ -5217,7 +5206,7 @@ class GenerationManager {
   }
 
   private async handleAuthTimeout(ctx: GenerationContext): Promise<void> {
-    if (ctx.status !== "awaiting_auth" || !ctx.pendingAuth) {
+    if (ctx.status !== "awaiting_auth" || !ctx.currentInterruptId) {
       return;
     }
 
@@ -5249,8 +5238,11 @@ class GenerationManager {
       throw new Error("Access denied");
     }
 
-    const pendingAuth = genRecord.pendingAuth as PendingAuth | null;
-    if (!pendingAuth) {
+    const pendingInterrupt = await generationInterruptService.findPendingAuthInterruptByIntegration({
+      generationId,
+      integration,
+    });
+    if (!pendingInterrupt) {
       return false;
     }
 
@@ -5261,11 +5253,16 @@ class GenerationManager {
     });
 
     if (!success) {
+      await generationInterruptService.resolveInterrupt({
+        interruptId: pendingInterrupt.id,
+        status: "cancelled",
+        responsePayload: { integration },
+        resolvedByUserId: userId,
+      });
       await db
         .update(generation)
         .set({
           status: "cancelled",
-          pendingAuth: null,
           completedAt: new Date(),
         })
         .where(eq(generation.id, generationId));
@@ -5287,45 +5284,26 @@ class GenerationManager {
       return true;
     }
 
-    // Track connected integration
-    const connectedIntegrations = Array.from(
-      new Set([...pendingAuth.connectedIntegrations, integration]),
-    );
+    const resolvedInterrupt = await generationInterruptService.resolveInterrupt({
+      interruptId: pendingInterrupt.id,
+      status: "accepted",
+      responsePayload: {
+        connectedIntegrations: [integration],
+        integration,
+      },
+      resolvedByUserId: userId,
+    });
 
-    const allConnected = pendingAuth.integrations.every((requiredIntegration) =>
-      connectedIntegrations.includes(requiredIntegration),
-    );
+    if (linkedCoworkerRun?.id) {
+      await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedCoworkerRun.id));
+    }
 
-    await db
-      .update(generation)
-      .set({
-        pendingAuth: {
-          ...pendingAuth,
-          connectedIntegrations,
-        },
-      })
-      .where(eq(generation.id, generationId));
-
-    if (allConnected) {
-      await db
-        .update(generation)
-        .set({
-          status: "running",
-          pendingAuth: null,
-        })
-        .where(eq(generation.id, generationId));
-
-      await db
-        .update(conversation)
-        .set({ generationStatus: "generating" })
-        .where(eq(conversation.id, conversationId));
-
-      if (linkedCoworkerRun?.id) {
-        await db
-          .update(coworkerRun)
-          .set({ status: "running" })
-          .where(eq(coworkerRun.id, linkedCoworkerRun.id));
+    const activeCtx = this.activeGenerations.get(generationId);
+    if (activeCtx && resolvedInterrupt) {
+      if (activeCtx.currentInterruptId === resolvedInterrupt.id) {
+        activeCtx.currentInterruptId = undefined;
       }
+      this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
     }
 
     return true;
@@ -5393,52 +5371,35 @@ class GenerationManager {
       return { decision: "deny" };
     }
 
-    if (genRecord.conversation.autoApprove) {
+    const policy = this.getExecutionPolicyFromRecord(genRecord, genRecord.conversation.autoApprove);
+    if (policy.autoApprove ?? genRecord.conversation.autoApprove) {
       return { decision: "allow" };
     }
 
     const toolUseId = `plugin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
-    const pendingApproval: PendingApproval = {
-      toolUseId,
-      toolName: "Bash",
-      toolInput: request.toolInput,
-      requestedAt: new Date().toISOString(),
-      expiresAt,
-      integration: request.integration,
-      operation: request.operation,
-      command: request.command,
-    };
-
-    await db
-      .update(generation)
-      .set({
-        status: "awaiting_approval",
-        pendingApproval,
-      })
-      .where(eq(generation.id, generationId));
-
-    await db
-      .update(conversation)
-      .set({ generationStatus: "awaiting_approval" })
-      .where(eq(conversation.id, genRecord.conversationId));
-
-    const pendingApprovalEvent: GenerationEvent = {
-      type: "pending_approval",
+    const interrupt = await generationInterruptService.createInterrupt({
       generationId,
       conversationId: genRecord.conversationId,
-      toolUseId,
-      toolName: pendingApproval.toolName,
-      toolInput: pendingApproval.toolInput,
-      integration: pendingApproval.integration,
-      operation: pendingApproval.operation,
-      command: pendingApproval.command,
-    };
+      kind: "plugin_write",
+      display: {
+        title: "Bash",
+        integration: request.integration,
+        operation: request.operation,
+        command: request.command,
+        toolInput: request.toolInput,
+      },
+      provider: "plugin",
+      providerToolUseId: toolUseId,
+      expiresAt: new Date(expiresAt),
+    });
+
+    const pendingApprovalEvent = this.projectInterruptPendingEvent(interrupt);
 
     const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx) {
       activeCtx.status = "awaiting_approval";
-      activeCtx.pendingApproval = pendingApproval;
+      activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, pendingApprovalEvent);
     } else {
       await this.publishDetachedGenerationStreamEvent({
@@ -5453,64 +5414,113 @@ class GenerationManager {
     return { decision: "pending", toolUseId, expiresAt };
   }
 
-  async getPluginApprovalStatus(
+  async requestAuthInterrupt(
     generationId: string,
-    toolUseId: string,
-  ): Promise<"pending" | "allow" | "deny"> {
+    request: {
+      integration: string;
+      reason?: string;
+    },
+  ): Promise<{ interruptId: string; status: "pending"; expiresAt?: string } | { status: "accepted" }> {
     const genRecord = await db.query.generation.findFirst({
       where: eq(generation.id, generationId),
       with: { conversation: true },
     });
     if (!genRecord) {
+      return { status: "accepted" };
+    }
+
+    const existing = await generationInterruptService.findPendingAuthInterruptByIntegration({
+      generationId,
+      integration: request.integration,
+    });
+    if (existing) {
+      return {
+        interruptId: existing.id,
+        status: "pending",
+        expiresAt: existing.expiresAt?.toISOString(),
+      };
+    }
+
+    const expiresAt = computeExpiryIso(AUTH_TIMEOUT_MS);
+    const interrupt = await generationInterruptService.createInterrupt({
+      generationId,
+      conversationId: genRecord.conversationId,
+      kind: "auth",
+      display: {
+        title: "Connection Required",
+        authSpec: {
+          integrations: [request.integration],
+          reason: request.reason,
+        },
+      },
+      provider: "plugin",
+      providerToolUseId: `auth-${Date.now()}-${request.integration}`,
+      expiresAt: new Date(expiresAt),
+    });
+
+    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
+      columns: { id: true },
+    });
+    if (linkedCoworkerRun?.id) {
+      await db
+        .update(coworkerRun)
+        .set({ status: "awaiting_auth" })
+        .where(eq(coworkerRun.id, linkedCoworkerRun.id));
+    }
+
+    const activeCtx = this.activeGenerations.get(generationId);
+    if (activeCtx) {
+      activeCtx.status = "awaiting_auth";
+      activeCtx.currentInterruptId = interrupt.id;
+      this.broadcast(activeCtx, this.projectInterruptPendingEvent(interrupt));
+    } else {
+      await this.publishDetachedGenerationStreamEvent({
+        generationId,
+        conversationId: genRecord.conversationId,
+        event: this.projectInterruptPendingEvent(interrupt),
+      });
+    }
+    await this.enqueueGenerationTimeout(generationId, "auth", expiresAt);
+
+    return { interruptId: interrupt.id, status: "pending", expiresAt };
+  }
+
+  async getPluginApprovalStatus(
+    generationId: string,
+    interruptId: string,
+  ): Promise<"pending" | "allow" | "deny"> {
+    const genRecord = await db.query.generation.findFirst({ where: eq(generation.id, generationId) });
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
+    if (!genRecord || !interrupt || interrupt.generationId !== generationId) {
       return "deny";
     }
 
-    const latestApproval = genRecord.pendingApproval as PendingApproval | null;
-    if (!latestApproval || latestApproval.toolUseId !== toolUseId) {
-      const approvalFromParts = ((genRecord.contentParts as ContentPart[] | null) ?? []).find(
-        (part): part is ContentPart & { type: "approval" } =>
-          part.type === "approval" && part.tool_use_id === toolUseId,
-      );
-      if (approvalFromParts?.status === "approved") {
-        return "allow";
-      }
-      if (approvalFromParts?.status === "denied") {
-        return "deny";
-      }
-      if (
-        genRecord.status === "cancelled" ||
-        genRecord.status === "error" ||
-        genRecord.status === "paused"
-      ) {
-        return "deny";
-      }
-      return "pending";
-    }
-
-    if (!latestApproval.decision) {
+    if (interrupt.status === "pending") {
       const expiresAtMs = resolveExpiryMs(
-        latestApproval.expiresAt,
-        latestApproval.requestedAt,
+        interrupt.expiresAt?.toISOString(),
+        interrupt.requestedAt.toISOString(),
         APPROVAL_TIMEOUT_MS,
       );
       if (Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs) {
+        await generationInterruptService.expireInterrupt(interrupt.id);
         await this.processGenerationTimeout(generationId, "approval");
         return "deny";
       }
       return "pending";
     }
 
-    const resolvedDecision = latestApproval.decision;
+    const resolvedDecision = interrupt.status === "accepted" ? "allow" : "deny";
     const approvalPart: ContentPart = {
       type: "approval",
-      tool_use_id: latestApproval.toolUseId,
-      tool_name: latestApproval.toolName,
-      tool_input: latestApproval.toolInput,
-      integration: latestApproval.integration,
-      operation: latestApproval.operation,
-      command: latestApproval.command,
+      tool_use_id: interrupt.providerToolUseId,
+      tool_name: interrupt.display.title,
+      tool_input: interrupt.display.toolInput ?? {},
+      integration: interrupt.display.integration ?? "plugin",
+      operation: interrupt.display.operation ?? "unknown",
+      command: interrupt.display.command,
       status: resolvedDecision === "allow" ? "approved" : "denied",
-      question_answers: latestApproval.questionAnswers,
+      question_answers: interrupt.responsePayload?.questionAnswers,
     };
 
     const activeCtx = this.activeGenerations.get(generationId);
@@ -5519,7 +5529,7 @@ class GenerationManager {
     const nextContentParts = [...baseContentParts];
     const existingApprovalIndex = nextContentParts.findIndex(
       (part): part is ContentPart & { type: "approval" } =>
-        part.type === "approval" && part.tool_use_id === latestApproval.toolUseId,
+        part.type === "approval" && part.tool_use_id === interrupt.providerToolUseId,
     );
     if (existingApprovalIndex >= 0) {
       nextContentParts[existingApprovalIndex] = approvalPart;
@@ -5533,34 +5543,12 @@ class GenerationManager {
     await db
       .update(generation)
       .set({
-        status: "running",
-        pendingApproval: null,
         contentParts: nextContentParts.length > 0 ? nextContentParts : null,
       })
       .where(eq(generation.id, generationId));
 
-    await db
-      .update(conversation)
-      .set({ generationStatus: "generating" })
-      .where(eq(conversation.id, genRecord.conversationId));
-
     if (activeCtx) {
-      this.broadcast(activeCtx, {
-        type: "approval_result",
-        toolUseId: latestApproval.toolUseId,
-        decision: resolvedDecision === "allow" ? "approved" : "denied",
-      });
-      this.broadcast(activeCtx, {
-        type: "approval",
-        toolUseId: latestApproval.toolUseId,
-        toolName: latestApproval.toolName,
-        toolInput: latestApproval.toolInput,
-        integration: latestApproval.integration,
-        operation: latestApproval.operation,
-        command: latestApproval.command,
-        status: resolvedDecision === "allow" ? "approved" : "denied",
-        questionAnswers: latestApproval.questionAnswers,
-      });
+      this.broadcast(activeCtx, this.projectInterruptResolvedEvent(interrupt));
     }
 
     return resolvedDecision;
@@ -5591,27 +5579,21 @@ class GenerationManager {
       columns: { id: true },
     });
     const expiresAt = computeExpiryIso(AUTH_TIMEOUT_MS);
-    const pendingAuth: PendingAuth = {
-      integrations: [request.integration],
-      connectedIntegrations: [],
-      requestedAt: new Date().toISOString(),
-      expiresAt,
-      reason: request.reason,
-    };
-
-    // Create a promise that resolves when OAuth completes
-    await db
-      .update(generation)
-      .set({
-        status: "awaiting_auth",
-        pendingAuth,
-      })
-      .where(eq(generation.id, generationId));
-
-    await db
-      .update(conversation)
-      .set({ generationStatus: "awaiting_auth" })
-      .where(eq(conversation.id, conversationId));
+    const interrupt = await generationInterruptService.createInterrupt({
+      generationId,
+      conversationId,
+      kind: "auth",
+      display: {
+        title: "Connection Required",
+        authSpec: {
+          integrations: [request.integration],
+          reason: request.reason,
+        },
+      },
+      provider: "plugin",
+      providerToolUseId: `auth-${Date.now()}-${request.integration}`,
+      expiresAt: new Date(expiresAt),
+    });
 
     if (linkedCoworkerRun?.id) {
       await db
@@ -5620,6 +5602,18 @@ class GenerationManager {
         .where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
     await this.enqueueGenerationTimeout(generationId, "auth", expiresAt);
+    const activeCtx = this.activeGenerations.get(generationId);
+    if (activeCtx) {
+      activeCtx.status = "awaiting_auth";
+      activeCtx.currentInterruptId = interrupt.id;
+      this.broadcast(activeCtx, this.projectInterruptPendingEvent(interrupt));
+    } else {
+      await this.publishDetachedGenerationStreamEvent({
+        generationId,
+        conversationId,
+        event: this.projectInterruptPendingEvent(interrupt),
+      });
+    }
 
     let resolved: { success: boolean; userId?: string } | null = null;
     while (resolved === null) {
@@ -5631,43 +5625,22 @@ class GenerationManager {
       await new Promise((resolve) => setTimeout(resolve, 400));
 
       // eslint-disable-next-line no-await-in-loop -- polling by design
-      const latest = await db.query.generation.findFirst({
-        where: eq(generation.id, generationId),
-        with: { conversation: true },
-      });
+      const latest = await generationInterruptService.getInterrupt(interrupt.id);
       if (!latest) {
         resolved = { success: false };
         break;
       }
-
-      const latestPendingAuth = latest.pendingAuth as PendingAuth | null;
-      if (latestPendingAuth?.connectedIntegrations.includes(request.integration)) {
-        resolved = latest.conversation.userId
-          ? { success: true, userId: latest.conversation.userId }
+      if (latest.status === "accepted") {
+        resolved = genRecord.conversation.userId
+          ? { success: true, userId: genRecord.conversation.userId }
           : { success: false };
         break;
       }
-
       if (
-        latest.status !== "awaiting_auth" &&
-        !latestPendingAuth?.integrations.includes(request.integration)
+        latest.status === "rejected" ||
+        latest.status === "expired" ||
+        latest.status === "cancelled"
       ) {
-        if (latest.status === "running" || latest.status === "completed") {
-          console.warn(
-            `[GenerationManager] auth_reconciled generation=${generationId} integration=${request.integration} status=${latest.status}`,
-          );
-          resolved = latest.conversation.userId
-            ? { success: true, userId: latest.conversation.userId }
-            : { success: false };
-          break;
-        }
-        if (latest.status === "cancelled" || latest.status === "error") {
-          resolved = { success: false };
-          break;
-        }
-      }
-
-      if (latest.cancelRequestedAt || latest.status === "cancelled" || latest.status === "error") {
         resolved = { success: false };
         break;
       }
@@ -5850,6 +5823,7 @@ class GenerationManager {
       }
 
       // Update generation record
+      await generationInterruptService.cancelInterruptsForGeneration(ctx.id);
       await db
         .update(generation)
         .set({
@@ -6057,6 +6031,20 @@ class GenerationManager {
           },
         );
       });
+  }
+
+  private projectInterruptPendingEvent(interrupt: GenerationInterruptRecord): GenerationEvent {
+    return {
+      type: "interrupt_pending",
+      ...generationInterruptService.projectInterruptEvent(interrupt),
+    };
+  }
+
+  private projectInterruptResolvedEvent(interrupt: GenerationInterruptRecord): GenerationEvent {
+    return {
+      type: "interrupt_resolved",
+      ...generationInterruptService.projectInterruptEvent(interrupt),
+    };
   }
 
   private async publishDetachedGenerationStreamEvent(params: {
@@ -6342,12 +6330,8 @@ class GenerationManager {
     const loggableEvents = new Set([
       "tool_use",
       "tool_result",
-      "pending_approval",
-      "approval_result",
-      "approval",
-      "auth_needed",
-      "auth_progress",
-      "auth_result",
+      "interrupt_pending",
+      "interrupt_resolved",
       "done",
       "error",
       "cancelled",

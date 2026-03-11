@@ -13,6 +13,7 @@ import {
   coworkerRunEvent,
 } from "@cmdclaw/db/schema";
 import { generationManager } from "./generation-manager";
+import { generationInterruptService } from "./generation-interrupt-service";
 
 const ACTIVE_COWORKER_RUN_STATUSES = ["running", "awaiting_approval", "awaiting_auth"] as const;
 const TERMINAL_GENERATION_STATUSES = ["completed", "cancelled", "error"] as const;
@@ -65,8 +66,6 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
           startedAt: true,
           completedAt: true,
           contentParts: true,
-          pendingApproval: true,
-          pendingAuth: true,
           errorMessage: true,
         },
       },
@@ -100,13 +99,13 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
         gen.status as (typeof TERMINAL_GENERATION_STATUSES)[number],
       )
     ) {
+      const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(gen.id);
       const isPreparingTimeout =
         run.status === "running" &&
         gen.status === "running" &&
         Date.now() - gen.startedAt.getTime() > COWORKER_PREPARING_TIMEOUT_MS &&
         (gen.contentParts?.length ?? 0) === 0 &&
-        !gen.pendingApproval &&
-        !gen.pendingAuth;
+        !pendingInterrupt;
 
       if (isPreparingTimeout) {
         const errorMessage = "Coworker run timed out while preparing agent.";

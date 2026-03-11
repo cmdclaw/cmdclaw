@@ -286,6 +286,21 @@ export const generationRecordStatusEnum = pgEnum("generation_record_status", [
   "error",
 ]);
 
+export const generationInterruptKindEnum = pgEnum("generation_interrupt_kind", [
+  "plugin_write",
+  "runtime_permission",
+  "runtime_question",
+  "auth",
+]);
+
+export const generationInterruptStatusEnum = pgEnum("generation_interrupt_status", [
+  "pending",
+  "accepted",
+  "rejected",
+  "expired",
+  "cancelled",
+]);
+
 export const conversationTypeEnum = pgEnum("conversation_type", ["chat", "coworker"]);
 
 export const conversation = pgTable(
@@ -473,6 +488,37 @@ export type QueuedMessageAttachment = {
   dataUrl: string;
 };
 
+export type GenerationInterruptDisplay = {
+  title: string;
+  integration?: string;
+  operation?: string;
+  command?: string;
+  toolInput?: Record<string, unknown>;
+  questionSpec?: {
+    questions: Array<{
+      header: string;
+      question: string;
+      options: Array<{
+        label: string;
+        description?: string;
+      }>;
+      multiple?: boolean;
+      custom?: boolean;
+    }>;
+  };
+  authSpec?: {
+    integrations: string[];
+    reason?: string;
+  };
+};
+
+export type GenerationInterruptResponsePayload = {
+  questionAnswers?: string[][];
+  connectedIntegrations?: string[];
+  tokens?: Record<string, string>;
+  integration?: string;
+};
+
 export const generation = pgTable(
   "generation",
   {
@@ -495,6 +541,7 @@ export const generation = pgTable(
     pendingAuth: jsonb("pending_auth").$type<PendingAuth>(),
     // Execution policy snapshot for durable worker restarts
     executionPolicy: jsonb("execution_policy").$type<GenerationExecutionPolicy>(),
+    runtimeCallbackToken: text("runtime_callback_token"),
     // E2B state
     sandboxId: text("sandbox_id"),
     // Resolved execution metadata for deterministic resume/debugging
@@ -513,6 +560,43 @@ export const generation = pgTable(
   (table) => [
     index("generation_conversation_id_idx").on(table.conversationId),
     index("generation_status_idx").on(table.status),
+  ],
+);
+
+export const generationInterrupt = pgTable(
+  "generation_interrupt",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    generationId: text("generation_id")
+      .notNull()
+      .references(() => generation.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    kind: generationInterruptKindEnum("kind").notNull(),
+    status: generationInterruptStatusEnum("status").default("pending").notNull(),
+    display: jsonb("display").$type<GenerationInterruptDisplay>().notNull(),
+    provider: text("provider").notNull(),
+    providerRequestId: text("provider_request_id"),
+    providerToolUseId: text("provider_tool_use_id").notNull(),
+    responsePayload: jsonb("response_payload").$type<GenerationInterruptResponsePayload>(),
+    requestedAt: timestamp("requested_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at"),
+    resolvedAt: timestamp("resolved_at"),
+    requestedByUserId: text("requested_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    resolvedByUserId: text("resolved_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("generation_interrupt_generation_id_idx").on(table.generationId),
+    index("generation_interrupt_conversation_id_idx").on(table.conversationId),
+    index("generation_interrupt_status_idx").on(table.status),
+    uniqueIndex("generation_interrupt_provider_tool_use_id_idx").on(table.providerToolUseId),
   ],
 );
 

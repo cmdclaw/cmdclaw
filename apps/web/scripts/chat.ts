@@ -613,13 +613,8 @@ async function runGeneration(
 
             const approvalPrompt = createApprovalPrompt(rl);
             if (!approvalPrompt) {
-              await client.generation.submitApproval({
-                generationId: approval.generationId,
-                toolUseId: approval.toolUseId,
-                decision: "approve",
-              });
               process.stdout.write(
-                " -> no interactive prompt available, using question defaults\n",
+                ` -> no interactive prompt available, leaving question interrupt pending (${approval.toolUseId})\n`,
               );
               return;
             }
@@ -652,13 +647,9 @@ async function runGeneration(
 
           const approvalPrompt = createApprovalPrompt(rl);
           if (!approvalPrompt) {
-            const decision = "deny";
-            process.stdout.write(` -> auto-${decision}\n`);
-            await client.generation.submitApproval({
-              generationId: approval.generationId,
-              toolUseId: approval.toolUseId,
-              decision,
-            });
+            process.stdout.write(
+              ` -> no interactive prompt available, leaving interrupt pending (${approval.toolUseId})\n`,
+            );
             return;
           }
 

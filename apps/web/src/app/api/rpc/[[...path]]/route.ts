@@ -1,7 +1,5 @@
 import { RPCHandler } from "@orpc/server/fetch";
 import { createHash } from "node:crypto";
-import { POST as approvalRequestHandler } from "@/app/api/internal/approval-request/route";
-import { POST as authRequestHandler } from "@/app/api/internal/auth-request/route";
 import { appRouter } from "@/server/orpc";
 import { createORPCContext } from "@/server/orpc/context";
 
@@ -10,12 +8,6 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const handler = new RPCHandler(appRouter);
-
-// Map old oRPC dot-notation paths used by E2B plugin to plain API handlers
-const INTERNAL_HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
-  "/api/rpc/internal.approvalRequest": approvalRequestHandler,
-  "/api/rpc/internal.authRequest": authRequestHandler,
-};
 
 function getCookieValue(cookieHeader: string, cookieName: string): string | null {
   const match = cookieHeader
@@ -74,15 +66,6 @@ function withNoStore(response: Response): Response {
 async function handleRequest(request: Request) {
   try {
     let response: Response | null = null;
-
-    // Route legacy plugin paths to plain API handlers
-    const url = new URL(request.url);
-    const internalHandler = INTERNAL_HANDLERS[url.pathname];
-    if (internalHandler) {
-      response = await internalHandler(request);
-      logUnauthorizedRpcRequest(request, response);
-      return withNoStore(response);
-    }
 
     const context = await createORPCContext({ headers: request.headers });
     const handlerResult = await handler.handle(request, {

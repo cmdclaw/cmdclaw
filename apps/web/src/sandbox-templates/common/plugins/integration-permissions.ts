@@ -386,16 +386,14 @@ async function requestApproval(params: {
   const APPROVAL_POLL_INTERVAL_MS = 1000;
   const APPROVAL_FALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
-  const serverSecret = process.env.CMDCLAW_SERVER_SECRET;
-  const conversationId = process.env.CONVERSATION_ID;
-  const sandboxId = process.env.SANDBOX_ID;
+  const callbackToken = process.env.CMDCLAW_GENERATION_CALLBACK_TOKEN;
   const generationId = process.env.GENERATION_ID;
 
-  if (serverUrls.length === 0 || !conversationId) {
+  if (serverUrls.length === 0 || !generationId) {
     const reason =
       serverUrls.length === 0
         ? "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)"
-        : "Missing CONVERSATION_ID";
+        : "Missing GENERATION_ID";
     console.error(`[Plugin] ${reason}`);
     return { error: reason };
   }
@@ -414,27 +412,25 @@ async function requestApproval(params: {
         error:
           lastError ??
           `Approval callback unreachable. Tried: ${serverUrls
-            .map((url) => `${url}/api/internal/approval-request`)
+            .map((url) => `${url}/api/internal/interrupts/create`)
             .join(", ")}`,
       };
     }
     const serverUrl = serverUrls[index]!;
     try {
-      const response = await fetch(`${serverUrl}/api/internal/approval-request`, {
+      const response = await fetch(`${serverUrl}/api/internal/interrupts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
         },
         body: JSON.stringify({
           generationId,
-          // Keep sandboxId optional; a placeholder value can break generation lookup.
-          sandboxId: sandboxId || undefined,
-          conversationId,
+          kind: "plugin_write",
           integration: params.integration,
           operation: params.operation,
           command: params.command,
           toolInput: params.toolInput,
-          authHeader: serverSecret ? `Bearer ${serverSecret}` : undefined,
         }),
       });
 
@@ -447,8 +443,13 @@ async function requestApproval(params: {
 
       const result = await response.json();
       return {
-        decision: result.decision || "deny",
-        toolUseId: typeof result.toolUseId === "string" ? result.toolUseId : undefined,
+        decision:
+          result.status === "accepted"
+            ? "allow"
+            : result.status === "rejected"
+              ? "deny"
+              : "pending",
+        toolUseId: typeof result.interruptId === "string" ? result.interruptId : undefined,
         expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : undefined,
       };
     } catch (error) {
@@ -480,17 +481,15 @@ async function requestApproval(params: {
     const pollResults = await Promise.all(
       serverUrls.map(async (serverUrl) => {
         try {
-          const response = await fetch(`${serverUrl}/api/internal/approval-status`, {
+          const response = await fetch(`${serverUrl}/api/internal/interrupts/status`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
             },
             body: JSON.stringify({
               generationId,
-              sandboxId: sandboxId || undefined,
-              conversationId,
-              toolUseId: created.toolUseId,
-              authHeader: serverSecret ? `Bearer ${serverSecret}` : undefined,
+              interruptId: created.toolUseId,
             }),
           });
 
@@ -503,9 +502,13 @@ async function requestApproval(params: {
           }
 
           const result = await response.json();
-          return result.decision === "allow" || result.decision === "deny"
-            ? (result.decision as "allow" | "deny")
-            : ("pending" as const);
+          return result.status === "accepted"
+            ? ("allow" as const)
+            : result.status === "rejected" ||
+                result.status === "expired" ||
+                result.status === "cancelled"
+              ? ("deny" as const)
+              : ("pending" as const);
         } catch (error) {
           console.error(
             `[Plugin] Approval status error via ${serverUrl}: ${error instanceof Error ? error.message : String(error)}`,
@@ -534,43 +537,47 @@ async function requestAuth(params: {
   integration: string;
   reason: string;
 }): Promise<{ success: boolean; tokens?: Record<string, string>; error?: string }> {
+  const AUTH_POLL_INTERVAL_MS = 1000;
+  const AUTH_FALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
-  const serverSecret = process.env.CMDCLAW_SERVER_SECRET;
-  const conversationId = process.env.CONVERSATION_ID;
-  const sandboxId = process.env.SANDBOX_ID;
+  const callbackToken = process.env.CMDCLAW_GENERATION_CALLBACK_TOKEN;
   const generationId = process.env.GENERATION_ID;
 
-  if (serverUrls.length === 0 || !conversationId) {
+  if (serverUrls.length === 0 || !generationId) {
     const reason =
       serverUrls.length === 0
         ? "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)"
-        : "Missing CONVERSATION_ID";
+        : "Missing GENERATION_ID";
     console.error(`[Plugin] ${reason}`);
     return { success: false, error: reason };
   }
 
-  const attempt = async (
+  const attemptCreate = async (
     index: number,
     lastError?: string,
-  ): Promise<{ success: boolean; tokens?: Record<string, string> }> => {
+  ): Promise<{ interruptId?: string; status?: string; expiresAt?: string; error?: string }> => {
     if (index >= serverUrls.length) {
-      console.error(`[Plugin] ${lastError ?? "Auth callback unreachable"}`);
-      return { success: false };
+      return {
+        error:
+          lastError ??
+          `Auth callback unreachable. Tried: ${serverUrls
+            .map((url) => `${url}/api/internal/interrupts/create`)
+            .join(", ")}`,
+      };
     }
     const serverUrl = serverUrls[index]!;
     try {
-      const response = await fetch(`${serverUrl}/api/internal/auth-request`, {
+      const response = await fetch(`${serverUrl}/api/internal/interrupts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
         },
         body: JSON.stringify({
           generationId,
-          sandboxId,
-          conversationId,
+          kind: "auth",
           integration: params.integration,
           reason: params.reason,
-          authHeader: serverSecret ? `Bearer ${serverSecret}` : undefined,
         }),
       });
 
@@ -578,30 +585,96 @@ async function requestAuth(params: {
         const bodyPreview = (await response.text()).slice(0, 200);
         const errorMessage = `Auth request failed via ${serverUrl}: ${response.status} ${bodyPreview}`;
         console.error(`[Plugin] ${errorMessage}`);
-        return attempt(index + 1, errorMessage);
+        return attemptCreate(index + 1, errorMessage);
       }
 
       const result = await response.json();
       return {
-        success: result.success || false,
-        tokens: result.tokens,
+        interruptId: typeof result.interruptId === "string" ? result.interruptId : undefined,
+        status: typeof result.status === "string" ? result.status : undefined,
+        expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : undefined,
       };
     } catch (error) {
       const errorMessage = `Auth request error via ${serverUrl}: ${error instanceof Error ? error.message : String(error)}`;
       console.error(`[Plugin] ${errorMessage}`);
-      return attempt(index + 1, errorMessage);
+      return attemptCreate(index + 1, errorMessage);
     }
   };
-  const result = await attempt(0);
-  if (result.success) {
-    return result;
+
+  const created = await attemptCreate(0);
+  if (created.error) {
+    return { success: false, error: created.error };
   }
-  return {
-    ...result,
-    error: `Auth callback unreachable or denied. Tried: ${serverUrls
-      .map((url) => `${url}/api/internal/auth-request`)
-      .join(", ")}`,
-  };
+  if (created.status === "accepted") {
+    return { success: true };
+  }
+  if (!created.interruptId) {
+    return { success: false, error: "Auth callback returned an invalid response" };
+  }
+
+  const start = Date.now();
+  const expiryMs = created.expiresAt ? Date.parse(created.expiresAt) : Number.NaN;
+  const pollUntilMs = Number.isFinite(expiryMs)
+    ? Math.max(expiryMs + 2_000, start + AUTH_POLL_INTERVAL_MS)
+    : start + AUTH_FALLBACK_TIMEOUT_MS;
+
+  while (Date.now() <= pollUntilMs) {
+    // eslint-disable-next-line no-await-in-loop -- polling by design
+    const pollResults = await Promise.all(
+      serverUrls.map(async (serverUrl) => {
+        try {
+          const response = await fetch(`${serverUrl}/api/internal/interrupts/status`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
+            },
+            body: JSON.stringify({
+              generationId,
+              interruptId: created.interruptId,
+            }),
+          });
+
+          if (!response.ok) {
+            const bodyPreview = (await response.text()).slice(0, 200);
+            console.error(
+              `[Plugin] Auth status failed via ${serverUrl}: ${response.status} ${bodyPreview}`,
+            );
+            return { status: "pending" as const };
+          }
+
+          const result = await response.json();
+          return {
+            status: result.status as string,
+            tokens:
+              typeof result.resolutionPayload === "object" && result.resolutionPayload
+                ? (result.resolutionPayload.tokens as Record<string, string> | undefined)
+                : undefined,
+          };
+        } catch (error) {
+          console.error(
+            `[Plugin] Auth status error via ${serverUrl}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return { status: "pending" as const };
+        }
+      }),
+    );
+    const accepted = pollResults.find((entry) => entry.status === "accepted");
+    if (accepted) {
+      return { success: true, tokens: accepted.tokens };
+    }
+    const rejected = pollResults.find(
+      (entry) =>
+        entry.status === "rejected" || entry.status === "expired" || entry.status === "cancelled",
+    );
+    if (rejected) {
+      return { success: false, error: `Auth request ${rejected.status}` };
+    }
+    // eslint-disable-next-line no-await-in-loop -- polling by design
+    await new Promise((resolve) => setTimeout(resolve, AUTH_POLL_INTERVAL_MS));
+  }
+
+  return { success: false, error: "Auth timed out while waiting for completion" };
 }
 
 /**

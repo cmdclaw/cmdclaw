@@ -42,48 +42,98 @@ const generationEventPayloadSchema = z.discriminatedUnion("type", [
     thinkingId: z.string(),
   }),
   z.object({
-    type: z.literal("pending_approval"),
+    type: z.literal("interrupt_pending"),
+    interruptId: z.string(),
     generationId: z.string(),
     conversationId: z.string(),
-    toolUseId: z.string(),
-    toolName: z.string(),
-    toolInput: z.unknown(),
-    integration: z.string(),
-    operation: z.string(),
-    command: z.string().optional(),
+    kind: z.enum(["plugin_write", "runtime_permission", "runtime_question", "auth"]),
+    status: z.enum(["pending", "accepted", "rejected", "expired", "cancelled"]),
+    providerToolUseId: z.string(),
+    display: z.object({
+      title: z.string(),
+      integration: z.string().optional(),
+      operation: z.string().optional(),
+      command: z.string().optional(),
+      toolInput: z.record(z.string(), z.unknown()).optional(),
+      questionSpec: z
+        .object({
+          questions: z.array(
+            z.object({
+              header: z.string(),
+              question: z.string(),
+              options: z.array(
+                z.object({
+                  label: z.string(),
+                  description: z.string().optional(),
+                }),
+              ),
+              multiple: z.boolean().optional(),
+              custom: z.boolean().optional(),
+            }),
+          ),
+        })
+        .optional(),
+      authSpec: z
+        .object({
+          integrations: z.array(z.string()),
+          reason: z.string().optional(),
+        })
+        .optional(),
+    }),
+    responsePayload: z
+      .object({
+        questionAnswers: z.array(z.array(z.string())).optional(),
+        connectedIntegrations: z.array(z.string()).optional(),
+        integration: z.string().optional(),
+      })
+      .optional(),
   }),
   z.object({
-    type: z.literal("approval_result"),
-    toolUseId: z.string(),
-    decision: z.enum(["approved", "denied"]),
-  }),
-  z.object({
-    type: z.literal("approval"),
-    toolUseId: z.string(),
-    toolName: z.string(),
-    toolInput: z.unknown(),
-    integration: z.string(),
-    operation: z.string(),
-    command: z.string().optional(),
-    status: z.enum(["approved", "denied"]),
-    questionAnswers: z.array(z.array(z.string())).optional(),
-  }),
-  z.object({
-    type: z.literal("auth_needed"),
+    type: z.literal("interrupt_resolved"),
+    interruptId: z.string(),
     generationId: z.string(),
     conversationId: z.string(),
-    integrations: z.array(z.string()),
-    reason: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("auth_progress"),
-    connected: z.string(),
-    remaining: z.array(z.string()),
-  }),
-  z.object({
-    type: z.literal("auth_result"),
-    success: z.boolean(),
-    integrations: z.array(z.string()).optional(),
+    kind: z.enum(["plugin_write", "runtime_permission", "runtime_question", "auth"]),
+    status: z.enum(["pending", "accepted", "rejected", "expired", "cancelled"]),
+    providerToolUseId: z.string(),
+    display: z.object({
+      title: z.string(),
+      integration: z.string().optional(),
+      operation: z.string().optional(),
+      command: z.string().optional(),
+      toolInput: z.record(z.string(), z.unknown()).optional(),
+      questionSpec: z
+        .object({
+          questions: z.array(
+            z.object({
+              header: z.string(),
+              question: z.string(),
+              options: z.array(
+                z.object({
+                  label: z.string(),
+                  description: z.string().optional(),
+                }),
+              ),
+              multiple: z.boolean().optional(),
+              custom: z.boolean().optional(),
+            }),
+          ),
+        })
+        .optional(),
+      authSpec: z
+        .object({
+          integrations: z.array(z.string()),
+          reason: z.string().optional(),
+        })
+        .optional(),
+    }),
+    responsePayload: z
+      .object({
+        questionAnswers: z.array(z.array(z.string())).optional(),
+        connectedIntegrations: z.array(z.string()).optional(),
+        integration: z.string().optional(),
+      })
+      .optional(),
   }),
   z.object({
     type: z.literal("done"),
