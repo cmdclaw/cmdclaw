@@ -361,7 +361,7 @@ function SkillEditorPageContent() {
 
     try {
       await deleteSkill.mutateAsync(skillId);
-      router.push("/skills");
+      router.push("/toolbox");
     } catch {
       setNotification({ type: "error", message: "Failed to delete skill" });
     }
@@ -706,7 +706,7 @@ function SkillEditorPageContent() {
       <div className="py-12 text-center">
         <p className="text-muted-foreground">Skill not found</p>
         <Button asChild className="mt-4">
-          <Link href="/skills">Back to Skills</Link>
+          <Link href="/toolbox">Back to Skills</Link>
         </Button>
       </div>
     );
@@ -718,11 +718,11 @@ function SkillEditorPageContent() {
   return (
     <div className="h-[calc(100dvh-5rem)]">
       {/* Skill copilot dual panel is disabled until it is ready. */}
-      <div className="flex h-full min-h-0 flex-col p-4 md:p-6">
+      <div className="flex h-full min-h-0 flex-col">
         {/* Header with back button and delete */}
         <div className="mb-6 flex shrink-0 items-center justify-between">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/skills">
+            <Link href="/toolbox">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -843,7 +843,7 @@ function SkillEditorPageContent() {
         </div>
 
         {/* File tabs - subtle style, above editor */}
-        <div className="border-border/50 mb-3 flex shrink-0 items-center gap-1 border-b">
+        <div className="border-border/50 mb-3 flex shrink-0 items-center gap-1 overflow-x-auto border-b">
           {/* Text files */}
           {skill.files
             .toSorted((a, b) => {

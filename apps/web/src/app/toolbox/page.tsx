@@ -1006,8 +1006,8 @@ function ToolboxPageContent() {
 
   return (
     <>
-      {/* Header */}
-      <div className="mb-10">
+      {/* Header - hidden on mobile */}
+      <div className="mb-10 hidden sm:block">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">Toolbox</h1>
@@ -1050,15 +1050,30 @@ function ToolboxPageContent() {
           ))}
         </AnimatedTabs>
 
-        <div className="border-border/50 bg-card flex w-full items-center gap-3 rounded-xl border px-4 py-2.5 shadow-sm sm:w-72">
-          <Search className="text-muted-foreground/50 size-4 shrink-0" />
-          <input
-            type="text"
-            value={search}
-            onChange={handleSearchChange}
-            placeholder="Search tools…"
-            className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
-          />
+        <div className="flex w-full items-center gap-2 sm:w-72">
+          <div className="border-border/50 bg-card flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5 shadow-sm">
+            <Search className="text-muted-foreground/50 size-4 shrink-0" />
+            <input
+              type="text"
+              value={search}
+              onChange={handleSearchChange}
+              placeholder="Search tools…"
+              className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
+            />
+          </div>
+          <Button
+            onClick={handleCreateSkill}
+            disabled={isCreating}
+            size="sm"
+            className="shrink-0 gap-1 sm:hidden"
+          >
+            {isCreating ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+            Create
+          </Button>
         </div>
       </div>
 

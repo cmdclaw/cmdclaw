@@ -3,7 +3,9 @@
 export default function SkillsLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-background min-h-screen">
-      <main className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">{children}</main>
+      <main className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 sm:px-8 sm:pt-10">
+        {children}
+      </main>
     </div>
   );
 }
