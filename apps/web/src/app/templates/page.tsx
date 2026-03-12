@@ -4,10 +4,11 @@ import { ArrowUp, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { filterTemplates, toggleMultiSelect, type TemplateItem } from "./templates-filters";
@@ -331,7 +332,9 @@ function FilterPill<T extends string>({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 function TemplatesPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
   const previewId = searchParams.get("preview");
 
   const [search, setSearch] = useState("");
@@ -372,12 +375,20 @@ function TemplatesPageContent() {
     setSearch(event.target.value);
   }, []);
 
+  useEffect(() => {
+    if (!isMobile || !previewId) {
+      return;
+    }
+
+    router.replace(`/template/${previewId}`, { scroll: false });
+  }, [isMobile, previewId, router]);
+
   return (
     <>
       <div className="bg-background min-h-screen">
-        <div className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">
-          {/* Header */}
-          <div className="mb-10">
+        <div className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
+          {/* Header – hidden on mobile to maximize template visibility */}
+          <div className="mb-10 hidden md:block">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">Templates</h1>
             <p className="text-muted-foreground mt-2 text-sm">
               Pre-built coworkers ready to deploy
@@ -385,7 +396,7 @@ function TemplatesPageContent() {
           </div>
 
           {/* Search */}
-          <div className="border-border/50 bg-card mb-8 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm">
+          <div className="border-border/50 bg-card mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm md:mb-8">
             <Search className="text-muted-foreground/50 size-4 shrink-0" />
             <input
               type="text"
@@ -397,10 +408,10 @@ function TemplatesPageContent() {
           </div>
 
           {/* Filters */}
-          <div className="mb-10 space-y-4">
+          <div className="mb-3 space-y-1.5 md:mb-10 md:space-y-4">
             {/* Industry pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
-              <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
+              <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
                 Industry
               </span>
               {INDUSTRIES.map((industry) => (
@@ -416,7 +427,7 @@ function TemplatesPageContent() {
 
             {/* Use case pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
-              <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
+              <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
                 Use case
               </span>
               {USE_CASES.map((useCase) => (
@@ -432,7 +443,7 @@ function TemplatesPageContent() {
 
             {/* Integration pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
-              <span className="text-muted-foreground/50 mr-2 w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase">
+              <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
                 App
               </span>
               {INTEGRATIONS_FILTER.map((integration) => (
@@ -449,7 +460,7 @@ function TemplatesPageContent() {
           </div>
 
           {/* Results count & clear */}
-          <div className="mb-5 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between md:mb-5">
             <p className="text-muted-foreground text-xs">
               {filtered.length} template{filtered.length !== 1 ? "s" : ""}
             </p>
@@ -477,7 +488,9 @@ function TemplatesPageContent() {
                   transition={TEMPLATE_CARD_MOTION.transition}
                 >
                   <Link
-                    href={`/templates?preview=${template.id}`}
+                    href={
+                      isMobile ? `/template/${template.id}` : `/templates?preview=${template.id}`
+                    }
                     scroll={false}
                     className="border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200"
                   >
@@ -522,7 +535,7 @@ function TemplatesPageContent() {
           )}
         </div>
       </div>
-      <TemplatePreviewModal templateId={previewId} />
+      {!isMobile && <TemplatePreviewModal templateId={previewId} />}
     </>
   );
 }
