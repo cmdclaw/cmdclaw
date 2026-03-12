@@ -47,6 +47,19 @@ function formatPart(part: MessagePart): string {
       .join("\n");
   }
 
+  if (part.type === "coworker_invocation") {
+    return [
+      `[coworker_invocation:${part.status}] @${part.username}`,
+      `name: ${part.name}`,
+      `message: ${part.message}`,
+      part.attachmentNames.length > 0 ? `attachments: ${part.attachmentNames.join(", ")}` : null,
+      `runId: ${part.runId}`,
+      `conversationId: ${part.conversationId}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   return [
     `[tool_call] ${part.name}`,
     part.integration ? `integration: ${part.integration}` : null,

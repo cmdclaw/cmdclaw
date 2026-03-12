@@ -1,62 +1,50 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  coworkerFindFirstMock,
-  coworkerRunFindManyMock,
-  coworkerRunFindFirstMock,
-  providerAuthFindFirstMock,
-  insertValuesMock,
-  updateWhereMock,
-  updateSetMock,
-  dbMock,
-  startCoworkerGenerationMock,
-  resolveDefaultOpencodeFreeModelMock,
-} = vi.hoisted(() => {
-  const coworkerFindFirstMock = vi.fn();
-  const coworkerRunFindManyMock = vi.fn();
-  const coworkerRunFindFirstMock = vi.fn();
-  const providerAuthFindFirstMock = vi.fn();
+process.env.BETTER_AUTH_SECRET = "test-secret";
+process.env.DATABASE_URL = "postgres://localhost/test";
+process.env.REDIS_URL = "redis://localhost:6379";
+process.env.OPENAI_API_KEY = "test-openai-key";
+process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
+process.env.SANDBOX_DEFAULT = "docker";
+process.env.ENCRYPTION_KEY =
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.CMDCLAW_SERVER_SECRET = "1".repeat(64);
+process.env.AWS_ENDPOINT_URL = "https://s3.example.com";
+process.env.AWS_ACCESS_KEY_ID = "test-access-key";
+process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
 
-  const insertValuesMock = vi.fn();
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+const coworkerFindFirstMock = vi.fn();
+const coworkerRunFindManyMock = vi.fn();
+const coworkerRunFindFirstMock = vi.fn();
+const providerAuthFindFirstMock = vi.fn();
 
-  const updateWhereMock = vi.fn();
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+const insertValuesMock = vi.fn();
+const insertMock = vi.fn(() => ({ values: insertValuesMock }));
 
-  const dbMock = {
-    query: {
-      coworker: {
-        findFirst: coworkerFindFirstMock,
-      },
-      coworkerRun: {
-        findMany: coworkerRunFindManyMock,
-        findFirst: coworkerRunFindFirstMock,
-      },
-      providerAuth: {
-        findFirst: providerAuthFindFirstMock,
-      },
+const updateWhereMock = vi.fn();
+const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
+const updateMock = vi.fn(() => ({ set: updateSetMock }));
+
+const dbMock = {
+  query: {
+    coworker: {
+      findFirst: coworkerFindFirstMock,
     },
-    insert: insertMock,
-    update: updateMock,
-  };
+    coworkerRun: {
+      findMany: coworkerRunFindManyMock,
+      findFirst: coworkerRunFindFirstMock,
+    },
+    providerAuth: {
+      findFirst: providerAuthFindFirstMock,
+    },
+  },
+  insert: insertMock,
+  update: updateMock,
+};
 
-  const startCoworkerGenerationMock = vi.fn();
-  const resolveDefaultOpencodeFreeModelMock = vi.fn();
-
-  return {
-    coworkerFindFirstMock,
-    coworkerRunFindManyMock,
-    coworkerRunFindFirstMock,
-    providerAuthFindFirstMock,
-    insertValuesMock,
-    updateWhereMock,
-    updateSetMock,
-    dbMock,
-    startCoworkerGenerationMock,
-    resolveDefaultOpencodeFreeModelMock,
-  };
-});
+const startCoworkerGenerationMock = vi.fn();
+const resolveDefaultOpencodeFreeModelMock = vi.fn();
+const FIXED_NOW_MS = Date.parse("2026-02-12T12:00:00.000Z");
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
@@ -72,13 +60,16 @@ vi.mock("../ai/opencode-models", () => ({
   resolveDefaultOpencodeFreeModel: resolveDefaultOpencodeFreeModelMock,
 }));
 
-import { triggerCoworkerRun } from "./coworker-service";
+let triggerCoworkerRun: typeof import("./coworker-service").triggerCoworkerRun;
 
 describe("triggerCoworkerRun", () => {
+  beforeAll(async () => {
+    ({ triggerCoworkerRun } = await import("./coworker-service"));
+  });
+
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-12T12:00:00.000Z"));
     vi.clearAllMocks();
+    vi.spyOn(Date, "now").mockReturnValue(FIXED_NOW_MS);
 
     coworkerFindFirstMock.mockResolvedValue({
       id: "wf-1",
@@ -191,6 +182,34 @@ describe("triggerCoworkerRun", () => {
         userId: "user-1",
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: ["custom-crm"],
+      }),
+    );
+  });
+
+  it("passes forwarded file attachments into the child coworker generation", async () => {
+    await triggerCoworkerRun({
+      coworkerId: "wf-1",
+      triggerPayload: { source: "chat_mention", message: "Transcribe this call" },
+      userId: "user-1",
+      userRole: "admin",
+      fileAttachments: [
+        {
+          name: "call.m4a",
+          mimeType: "audio/mp4",
+          dataUrl: "data:audio/mp4;base64,ZmFrZQ==",
+        },
+      ],
+    });
+
+    expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileAttachments: [
+          {
+            name: "call.m4a",
+            mimeType: "audio/mp4",
+            dataUrl: "data:audio/mp4;base64,ZmFrZQ==",
+          },
+        ],
       }),
     );
   });

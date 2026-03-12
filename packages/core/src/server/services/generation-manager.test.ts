@@ -1772,6 +1772,7 @@ describe("generationManager transitions", () => {
           type: "coworker",
         },
       ])
+      .mockResolvedValueOnce([{ id: "msg-coworker-user" }])
       .mockResolvedValueOnce([{ id: "gen-coworker" }]);
 
     const result = await generationManager.startCoworkerGeneration({

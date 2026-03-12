@@ -27,6 +27,24 @@ export type MessagePart =
       command?: string;
       status: "approved" | "denied";
       questionAnswers?: string[][];
+    }
+  | {
+      type: "coworker_invocation";
+      coworkerId: string;
+      username: string;
+      name: string;
+      runId: string;
+      conversationId: string;
+      generationId: string;
+      status:
+        | "running"
+        | "awaiting_approval"
+        | "awaiting_auth"
+        | "completed"
+        | "error"
+        | "cancelled";
+      attachmentNames: string[];
+      message: string;
     };
 
 export type AttachmentData = {

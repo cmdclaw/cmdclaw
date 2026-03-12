@@ -17,6 +17,10 @@ import {
   normalizeCoworkerAllowedSkillSlugs,
   splitCoworkerAllowedSkillSlugs,
 } from "../../lib/coworker-tool-policy";
+import {
+  getCoworkerCliSystemPrompt,
+  parseCoworkerInvocationEnvelope,
+} from "../../lib/coworker-runtime-cli";
 import { parseModelReference } from "../../lib/model-reference";
 import {
   listOpencodeFreeModels,
@@ -721,6 +725,37 @@ class GenerationManager {
 
   private isActiveGenerationStartError(error: unknown): boolean {
     return error instanceof Error && error.message.includes("Generation already in progress");
+  }
+
+  private async persistMessageAttachments(params: {
+    conversationId: string;
+    messageId: string;
+    attachments?: UserFileAttachment[];
+  }): Promise<void> {
+    const attachments = params.attachments;
+    if (!attachments || attachments.length === 0) {
+      return;
+    }
+
+    const { uploadToS3, ensureBucket } = await import("../storage/s3-client");
+    await ensureBucket();
+
+    await Promise.all(
+      attachments.map(async (attachment) => {
+        const base64Data = attachment.dataUrl.split(",")[1] || "";
+        const buffer = Buffer.from(base64Data, "base64");
+        const sanitizedFilename = attachment.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+        const storageKey = `attachments/${params.conversationId}/${params.messageId}/${Date.now()}-${sanitizedFilename}`;
+        await uploadToS3(storageKey, buffer, attachment.mimeType);
+        await db.insert(messageAttachment).values({
+          messageId: params.messageId,
+          filename: attachment.name,
+          mimeType: attachment.mimeType,
+          sizeBytes: buffer.length,
+          storageKey,
+        });
+      }),
+    );
   }
 
   async enqueueConversationMessage(params: {
@@ -1634,24 +1669,11 @@ class GenerationManager {
     // Upload user file attachments to S3 and save metadata
     if (fileAttachments && fileAttachments.length > 0) {
       try {
-        const { uploadToS3, ensureBucket } = await import("../storage/s3-client");
-        await ensureBucket();
-        await Promise.all(
-          fileAttachments.map(async (a) => {
-            const base64Data = a.dataUrl.split(",")[1] || "";
-            const buffer = Buffer.from(base64Data, "base64");
-            const sanitizedFilename = a.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-            const storageKey = `attachments/${conv.id}/${userMsg.id}/${Date.now()}-${sanitizedFilename}`;
-            await uploadToS3(storageKey, buffer, a.mimeType);
-            await db.insert(messageAttachment).values({
-              messageId: userMsg.id,
-              filename: a.name,
-              mimeType: a.mimeType,
-              sizeBytes: buffer.length,
-              storageKey,
-            });
-          }),
-        );
+        await this.persistMessageAttachments({
+          conversationId: conv.id,
+          messageId: userMsg.id,
+          attachments: fileAttachments,
+        });
         logServerEvent(
           "info",
           "START_GENERATION_PHASE_DONE",
@@ -1847,6 +1869,7 @@ class GenerationManager {
     allowedIntegrations: IntegrationType[];
     allowedCustomIntegrations?: string[];
     allowedSkillSlugs?: string[];
+    fileAttachments?: UserFileAttachment[];
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model } = params;
     const resolvedModel = await resolveCoworkerModel(model);
@@ -1866,11 +1889,26 @@ class GenerationManager {
       })
       .returning();
 
-    await db.insert(message).values({
-      conversationId: newConv.id,
-      role: "user",
-      content,
-    });
+    const [userMessage] = await db
+      .insert(message)
+      .values({
+        conversationId: newConv.id,
+        role: "user",
+        content,
+      })
+      .returning({ id: message.id });
+
+    if (!userMessage?.id) {
+      throw new Error("Failed to create coworker user message");
+    }
+
+    if (params.fileAttachments && params.fileAttachments.length > 0) {
+      await this.persistMessageAttachments({
+        conversationId: newConv.id,
+        messageId: userMessage.id,
+        attachments: params.fileAttachments,
+      });
+    }
 
     const [genRecord] = await db
       .insert(generation)
@@ -1884,6 +1922,7 @@ class GenerationManager {
           autoApprove: params.autoApprove,
           sandboxProvider: params.sandboxProvider,
           selectedPlatformSkillSlugs,
+          queuedFileAttachments: params.fileAttachments,
         }),
         contentParts: [],
         inputTokens: 0,
@@ -1936,6 +1975,7 @@ class GenerationManager {
       isNewConversation: true,
       model: resolvedModel,
       userMessageContent: content,
+      attachments: params.fileAttachments,
       assistantMessageIds: new Set(),
       messageRoles: new Map(),
       pendingMessageParts: new Map(),
@@ -3900,6 +3940,7 @@ class GenerationManager {
         "save them to /app or /home/user. Files created during your response will automatically ",
         "be made available for download in the chat interface.",
       ].join("");
+      const coworkerCliPrompt = !ctx.coworkerRunId ? getCoworkerCliSystemPrompt() : null;
       const coworkerPrompt = this.buildCoworkerPrompt(ctx);
       const coworkerBuilderPrompt = this.buildCoworkerBuilderPrompt(ctx);
       const integrationSkillDraftInstructions = this.getIntegrationSkillDraftInstructions();
@@ -3911,6 +3952,7 @@ class GenerationManager {
         modeBehaviorPrompt,
         fileShareInstructions,
         cliInstructions,
+        coworkerCliPrompt,
         skillsInstructions,
         selectedPlatformSkillInstructions,
         integrationSkillsInstructions,
@@ -5073,6 +5115,25 @@ class GenerationManager {
             tool_use_id: toolUseId,
             content: result,
           });
+          const coworkerInvocation = parseCoworkerInvocationEnvelope({
+            toolName: existingToolUse.name,
+            toolInput: existingToolUse.input,
+            toolResult: result,
+          });
+          if (coworkerInvocation) {
+            ctx.contentParts.push({
+              type: "coworker_invocation",
+              coworker_id: coworkerInvocation.coworkerId,
+              username: coworkerInvocation.username,
+              name: coworkerInvocation.name,
+              run_id: coworkerInvocation.runId,
+              conversation_id: coworkerInvocation.conversationId,
+              generation_id: coworkerInvocation.generationId,
+              status: coworkerInvocation.status,
+              attachment_names: coworkerInvocation.attachmentNames,
+              message: coworkerInvocation.message,
+            });
+          }
           await this.saveProgress(ctx);
           return;
         }

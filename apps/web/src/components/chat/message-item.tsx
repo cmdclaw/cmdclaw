@@ -10,6 +10,7 @@ import type { MessagePart, AttachmentData, SandboxFileData } from "./message-lis
 import { useChatAdvancedSettingsStore } from "./chat-advanced-settings-store";
 import { getTimingMetrics, type MessageTiming } from "./chat-performance-metrics";
 import { CollapsedTrace } from "./collapsed-trace";
+import { CoworkerInvocationCard } from "./coworker-invocation-card";
 import { MessageBubble } from "./message-bubble";
 import { collectQuestionApprovalToolUseIds } from "./question-approval-utils";
 import { ToolApprovalCard } from "./tool-approval-card";
@@ -152,6 +153,14 @@ export function MessageItem({
 
   const hasInterruptedMarker = useMemo(
     () => !!parts?.some((p) => p.type === "system" && p.content === "Interrupted by user"),
+    [parts],
+  );
+  const coworkerInvocations = useMemo(
+    () =>
+      (parts ?? []).filter(
+        (part): part is MessagePart & { type: "coworker_invocation" } =>
+          part.type === "coworker_invocation",
+      ),
     [parts],
   );
 
@@ -481,6 +490,24 @@ export function MessageItem({
       className="space-y-3 py-4"
     >
       {/* Show segmented trace if there are approvals, otherwise show collapsed trace */}
+      {coworkerInvocations.length > 0 && (
+        <div className="space-y-3">
+          {coworkerInvocations.map((invocation) => (
+            <CoworkerInvocationCard
+              key={invocation.runId}
+              coworkerId={invocation.coworkerId}
+              username={invocation.username}
+              name={invocation.name}
+              runId={invocation.runId}
+              conversationId={invocation.conversationId}
+              status={invocation.status}
+              attachmentNames={invocation.attachmentNames}
+              message={invocation.message}
+            />
+          ))}
+        </div>
+      )}
+
       {hasTrace &&
         segments.length > 0 &&
         (hasApprovals ? (
@@ -657,7 +684,7 @@ export function MessageItem({
       )}
 
       {/* If no text and no trace, show empty indicator */}
-      {!textContent && !hasTrace && !sandboxFiles?.length && (
+      {!textContent && !hasTrace && !sandboxFiles?.length && coworkerInvocations.length === 0 && (
         <div className="text-muted-foreground text-sm italic">Task completed</div>
       )}
     </div>

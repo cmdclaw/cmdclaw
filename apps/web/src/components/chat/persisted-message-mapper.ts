@@ -23,6 +23,24 @@ type PersistedContentPart =
       status: "approved" | "denied";
       question_answers?: string[][];
     }
+  | {
+      type: "coworker_invocation";
+      coworker_id: string;
+      username: string;
+      name: string;
+      run_id: string;
+      conversation_id: string;
+      generation_id: string;
+      status:
+        | "running"
+        | "awaiting_approval"
+        | "awaiting_auth"
+        | "completed"
+        | "error"
+        | "cancelled";
+      attachment_names?: string[];
+      message: string;
+    }
   | { type: "thinking"; id: string; content: string }
   | { type: "system"; content: string };
 
@@ -86,6 +104,20 @@ export function mapPersistedMessagesToChatMessages(
               command: part.command,
               status: part.status,
               questionAnswers: part.question_answers,
+            } as MessagePart;
+          }
+          if (part.type === "coworker_invocation") {
+            return {
+              type: "coworker_invocation",
+              coworkerId: part.coworker_id,
+              username: part.username,
+              name: part.name,
+              runId: part.run_id,
+              conversationId: part.conversation_id,
+              generationId: part.generation_id,
+              status: part.status,
+              attachmentNames: part.attachment_names ?? [],
+              message: part.message,
             } as MessagePart;
           }
 

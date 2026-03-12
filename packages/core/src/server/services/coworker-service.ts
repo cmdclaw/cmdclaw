@@ -21,6 +21,12 @@ import { getEnabledIntegrationTypes } from "../integrations/cli-env";
 import { generationManager } from "./generation-manager";
 import { generationInterruptService } from "./generation-interrupt-service";
 
+type CoworkerFileAttachment = {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
 const ACTIVE_COWORKER_RUN_STATUSES = ["running", "awaiting_approval", "awaiting_auth"] as const;
 const TERMINAL_GENERATION_STATUSES = ["completed", "cancelled", "error"] as const;
 const ORPHAN_RUN_GRACE_MS = 2 * 60 * 1000;
@@ -167,6 +173,7 @@ export async function triggerCoworkerRun(params: {
   triggerPayload: unknown;
   userId?: string;
   userRole?: string | null;
+  fileAttachments?: CoworkerFileAttachment[];
 }): Promise<{
   coworkerId: string;
   runId: string;
@@ -272,6 +279,7 @@ export async function triggerCoworkerRun(params: {
       allowedIntegrations,
       allowedCustomIntegrations,
       allowedSkillSlugs,
+      fileAttachments: params.fileAttachments,
     });
 
     generationId = startResult.generationId;

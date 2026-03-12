@@ -371,6 +371,18 @@ export type ContentPart =
       status: "approved" | "denied";
       question_answers?: string[][];
     }
+  | {
+      type: "coworker_invocation";
+      coworker_id: string;
+      username: string;
+      name: string;
+      run_id: string;
+      conversation_id: string;
+      generation_id: string;
+      status: "running" | "awaiting_approval" | "awaiting_auth" | "completed" | "error" | "cancelled";
+      attachment_names?: string[];
+      message: string;
+    }
   | { type: "thinking"; id: string; content: string }
   | { type: "system"; content: string };
 

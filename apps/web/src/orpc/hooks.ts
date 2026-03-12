@@ -775,11 +775,18 @@ export function useTriggerCoworker() {
   });
 }
 
-export function useCoworkerRun(id: string | undefined) {
+export function useCoworkerRun(
+  id: string | undefined,
+  options?: {
+    enabled?: boolean;
+    refetchInterval?: number | false;
+  },
+) {
   return useQuery({
     queryKey: ["coworker", "run", id],
     queryFn: () => client.coworker.getRun({ id: id! }),
-    enabled: !!id,
+    enabled: (options?.enabled ?? true) && !!id,
+    refetchInterval: options?.refetchInterval,
   });
 }
 
