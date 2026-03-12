@@ -166,18 +166,11 @@ describe("coworker-builder-service", () => {
       })
       .mockResolvedValueOnce({
         id: "wf-1",
-        builderConversationId: "conv-1",
-        name: "",
-        description: null,
-        username: null,
         prompt: "latest",
-        promptDo: null,
-        promptDont: null,
+        toolAccessMode: "all",
         triggerType: "manual",
         schedule: null,
         allowedIntegrations: ["github"],
-        allowedCustomIntegrations: [],
-        autoApprove: true,
         updatedAt: newDate,
       });
     mocks.returning.mockResolvedValueOnce([]);
@@ -193,6 +186,10 @@ describe("coworker-builder-service", () => {
     });
 
     expect(result.status).toBe("conflict");
+    if (result.status !== "conflict") {
+      return;
+    }
+    expect(result.coworker.updatedAt).toBe(newDate.toISOString());
   });
 
   it("rejects invalid trigger/schedule combinations", async () => {

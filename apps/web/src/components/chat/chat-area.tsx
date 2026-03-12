@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useVoiceRecording, blobToBase64 } from "@/hooks/use-voice-recording";
 import { isModelAccessibleForNewChat } from "@/lib/chat-model-access";
+import { normalizeChatModelReference } from "@/lib/chat-model-reference";
 import {
   createGenerationRuntime,
   type GenerationRuntime,
@@ -71,6 +72,7 @@ import {
 import { ActivityFeed, type ActivityItemData } from "./activity-feed";
 import { AuthRequestCard } from "./auth-request-card";
 import { BottomActionBar } from "./bottom-action-bar";
+import { mergePersistedConversationMessages } from "./chat-message-sync";
 import { useChatModelStore } from "./chat-model-store";
 import { formatDuration } from "./chat-performance-metrics";
 import { useChatSkillStore } from "./chat-skill-store";
@@ -525,6 +527,10 @@ export function ChatArea({
   const [localAutoApprove, setLocalAutoApprove] = useState(false);
   const selectedModel = useChatModelStore((state) => state.selectedModel);
   const setSelectedModel = useChatModelStore((state) => state.setSelectedModel);
+  const normalizedSelectedModel = useMemo(
+    () => normalizeChatModelReference(selectedModel),
+    [selectedModel],
+  );
   const [queueingEnabled, setQueueingEnabled] = useState(true);
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
   const [skillSearchQuery, setSkillSearchQuery] = useState("");
@@ -631,6 +637,10 @@ export function ChatArea({
       | null
       | undefined
   )?.model;
+  const normalizedConversationModel = useMemo(
+    () => normalizeChatModelReference(conversationModel),
+    [conversationModel],
+  );
   const conversationType = (
     existingConversation as
       | {
@@ -642,8 +652,8 @@ export function ChatArea({
   const isCoworkerConversation = conversationType === "coworker";
   const showModelSwitchWarning = Boolean(
     conversationId &&
-    conversationModel &&
-    selectedModel !== conversationModel &&
+    normalizedConversationModel &&
+    normalizedSelectedModel !== normalizedConversationModel &&
     !isCoworkerConversation,
   );
 
@@ -675,31 +685,41 @@ export function ChatArea({
   }, [isDiscoverOpen, isEmptyChat]);
 
   useEffect(() => {
+    if (!normalizedSelectedModel || normalizedSelectedModel === selectedModel) {
+      return;
+    }
+    setSelectedModel(normalizedSelectedModel);
+  }, [normalizedSelectedModel, selectedModel, setSelectedModel]);
+
+  useEffect(() => {
     if (conversationId) {
       return;
     }
 
     const shouldMigrateLegacyModel = shouldMigrateLegacyDefaultModel({
-      currentModel: selectedModel,
+      currentModel: normalizedSelectedModel,
       isOpenAIConnected,
     });
     const isAccessible = isModelAccessibleForNewChat({
-      model: selectedModel,
+      model: normalizedSelectedModel,
       isOpenAIConnected,
       availableOpencodeFreeModelIDs: (opencodeFreeModelsData?.models ?? []).map(
         (model) => model.id,
       ),
     });
 
-    if ((shouldMigrateLegacyModel || !isAccessible) && resolvedDefaultModel !== selectedModel) {
+    if (
+      (shouldMigrateLegacyModel || !isAccessible) &&
+      resolvedDefaultModel !== normalizedSelectedModel
+    ) {
       setSelectedModel(resolvedDefaultModel);
     }
   }, [
     conversationId,
     isOpenAIConnected,
+    normalizedSelectedModel,
     opencodeFreeModelsData,
     resolvedDefaultModel,
-    selectedModel,
     setSelectedModel,
   ]);
 
@@ -815,7 +835,7 @@ export function ChatArea({
         startedAtMs: startedAt,
         conversationId: currentConversationIdRef.current ?? null,
         generationId: currentGenerationIdRef.current ?? null,
-        model: selectedModel,
+        model: normalizedSelectedModel,
       });
 
       initWatchdogTimerRef.current = setTimeout(() => {
@@ -831,11 +851,11 @@ export function ChatArea({
           elapsedMs,
           conversationId: currentConversationIdRef.current ?? null,
           generationId: currentGenerationIdRef.current ?? null,
-          model: selectedModel,
+          model: normalizedSelectedModel,
         });
       }, 20_000);
     },
-    [posthog, resetInitTracking, selectedModel],
+    [normalizedSelectedModel, posthog, resetInitTracking],
   );
 
   const markInitSignal = useCallback(
@@ -860,11 +880,11 @@ export function ChatArea({
         elapsedMs,
         conversationId: currentConversationIdRef.current ?? null,
         generationId: currentGenerationIdRef.current ?? null,
-        model: selectedModel,
+        model: normalizedSelectedModel,
         ...metadata,
       });
     },
-    [posthog, selectedModel],
+    [normalizedSelectedModel, posthog],
   );
 
   const markInitMissingAtEnd = useCallback(
@@ -888,11 +908,11 @@ export function ChatArea({
         didTimeout: initTimeoutEventSentRef.current,
         conversationId: currentConversationIdRef.current ?? null,
         generationId: currentGenerationIdRef.current ?? null,
-        model: selectedModel,
+        model: normalizedSelectedModel,
         ...metadata,
       });
     },
-    [posthog, selectedModel],
+    [normalizedSelectedModel, posthog],
   );
 
   const streamElapsedMs = useMemo(() => {
@@ -923,7 +943,7 @@ export function ChatArea({
         status,
         conversationId: currentConversationIdRef.current ?? null,
         generationId: currentGenerationIdRef.current ?? null,
-        model: selectedModel,
+        model: normalizedSelectedModel,
       });
 
       if (status === "agent_init_ready") {
@@ -932,7 +952,7 @@ export function ChatArea({
         markInitMissingAtEnd("agent_init_failed");
       }
     },
-    [markInitMissingAtEnd, markInitSignal, posthog, selectedModel],
+    [markInitMissingAtEnd, markInitSignal, normalizedSelectedModel, posthog],
   );
 
   const syncFromRuntime = useCallback((runtime: GenerationRuntime) => {
@@ -1075,16 +1095,23 @@ export function ChatArea({
 
     // Sync model from existing conversation
     if (conv?.model) {
-      setSelectedModel(conv.model);
+      setSelectedModel(normalizeChatModelReference(conv.model));
     }
     if (typeof conv?.autoApprove === "boolean") {
       setLocalAutoApprove(conv.type === "coworker" ? false : conv.autoApprove);
     }
 
     if (conv?.messages) {
-      setMessages(conv.messages.map((m) => mapPersistedMessageToChatMessage(m)));
+      const persistedMessages = conv.messages.map((m) => mapPersistedMessageToChatMessage(m));
+      setMessages((prev) =>
+        mergePersistedConversationMessages({
+          currentMessages: prev,
+          persistedMessages,
+          preserveOptimisticMessages: isStreaming || currentGenerationIdRef.current !== undefined,
+        }),
+      );
     }
-  }, [existingConversation, conversationId, setSelectedModel]);
+  }, [existingConversation, conversationId, isStreaming, setSelectedModel]);
 
   useEffect(() => () => resetInitTracking(), [resetInitTracking]);
 
@@ -1648,7 +1675,7 @@ export function ChatArea({
         {
           conversationId: effectiveConversationId,
           content,
-          model: selectedModel,
+          model: normalizedSelectedModel,
           autoApprove: autoApproveEnabled,
           selectedPlatformSkillSlugs,
           fileAttachments: attachments,
@@ -1988,7 +2015,7 @@ export function ChatArea({
       queryClient,
       resetInitTracking,
       selectedSkillKeys,
-      selectedModel,
+      normalizedSelectedModel,
       startGeneration,
       submitApproval,
       syncFromRuntime,
@@ -2480,12 +2507,12 @@ export function ChatArea({
   const modelSelectorNode = useMemo(
     () => (
       <ModelSelector
-        selectedModel={selectedModel}
+        selectedModel={normalizedSelectedModel}
         onModelChange={setSelectedModel}
         disabled={isStreaming}
       />
     ),
-    [isStreaming, selectedModel, setSelectedModel],
+    [isStreaming, normalizedSelectedModel, setSelectedModel],
   );
   const autoApprovalNode = useMemo(
     () => (

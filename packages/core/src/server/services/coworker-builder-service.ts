@@ -503,7 +503,7 @@ export async function applyCoworkerBuilderPatch(params: {
     if (!latestUnknown) {
       throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
     }
-    const latest = coworkerBuilderRowSchema.parse(latestUnknown);
+    const latest = coworkerBuilderContextRowSchema.parse(latestUnknown);
     return {
       status: "conflict",
       coworker: toBuilderContext({

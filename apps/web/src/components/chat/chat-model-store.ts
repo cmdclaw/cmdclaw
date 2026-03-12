@@ -3,6 +3,7 @@
 import { resolveDefaultChatModel } from "@cmdclaw/core/lib/chat-model-defaults";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { normalizeChatModelReference } from "@/lib/chat-model-reference";
 
 const STORAGE_KEY = "chat-selected-model-v1";
 
@@ -14,9 +15,11 @@ type ChatModelState = {
 export const useChatModelStore = create<ChatModelState>()(
   persist(
     (set) => ({
-      selectedModel: resolveDefaultChatModel({ isOpenAIConnected: false }),
+      selectedModel: normalizeChatModelReference(
+        resolveDefaultChatModel({ isOpenAIConnected: false }),
+      ),
       setSelectedModel: (model) => {
-        const trimmed = model.trim();
+        const trimmed = normalizeChatModelReference(model);
         if (!trimmed) {
           return;
         }
