@@ -11,6 +11,7 @@ import {
   Play,
   ChevronDown,
   Circle,
+  Copy,
   Upload,
   FileText,
   X,
@@ -18,6 +19,10 @@ import {
   ArrowRight,
   Pencil,
   Trash2,
+  MessageSquare,
+  Wrench,
+  Info,
+  CirclePlay,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
@@ -55,6 +60,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import {
   INTEGRATION_DISPLAY_NAMES,
@@ -203,11 +209,21 @@ export default function CoworkerEditorPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
-  const [copiedForwardingField, setCopiedForwardingField] = useState<"coworkerAlias" | null>(null);
+  const [copiedForwardingField, setCopiedForwardingField] = useState<
+    "coworkerAlias" | "invokeHandle" | null
+  >(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<
-    "instruction" | "runs" | "docs" | "toolbox" | "details"
+    "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details"
   >("instruction");
+  const hasSetMobileDefaultRef = useRef(false);
+  useEffect(() => {
+    if (isMobile && !hasSetMobileDefaultRef.current) {
+      hasSetMobileDefaultRef.current = true;
+      setActiveTab("chat");
+    }
+  }, [isMobile]);
   const collapseToggleRef = useRef<(() => void) | null>(null);
   const handleClose = useCallback(() => {
     collapseToggleRef.current?.();
@@ -604,15 +620,18 @@ export default function CoworkerEditorPage() {
     setShowDisableAutoApproveDialog(false);
   }, []);
 
-  const handleCopyForwardingAddress = useCallback(async (value: string, field: "coworkerAlias") => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedForwardingField(field);
-      setTimeout(() => setCopiedForwardingField(null), 1500);
-    } catch (error) {
-      console.error("Failed to copy forwarding address:", error);
-    }
-  }, []);
+  const handleCopyForwardingAddress = useCallback(
+    async (value: string, field: "coworkerAlias" | "invokeHandle") => {
+      try {
+        await navigator.clipboard.writeText(value);
+        setCopiedForwardingField(field);
+        setTimeout(() => setCopiedForwardingField(null), 1500);
+      } catch (error) {
+        console.error("Failed to copy forwarding address:", error);
+      }
+    },
+    [],
+  );
 
   const handleCopyCoworkerAlias = useCallback(() => {
     if (!coworkerForwardingAddress) {
@@ -620,6 +639,14 @@ export default function CoworkerEditorPage() {
     }
     void handleCopyForwardingAddress(coworkerForwardingAddress, "coworkerAlias");
   }, [handleCopyForwardingAddress, coworkerForwardingAddress]);
+
+  const handleCopyInvokeHandle = useCallback(() => {
+    const value = username.trim();
+    if (!value) {
+      return;
+    }
+    void handleCopyForwardingAddress(`@${value}`, "invokeHandle");
+  }, [handleCopyForwardingAddress, username]);
 
   const handleCreateCoworkerAlias = useCallback(async () => {
     if (!coworkerId) {
@@ -746,6 +773,20 @@ export default function CoworkerEditorPage() {
     !hasAgentInstructions || status !== "on" || triggerCoworker.isPending || isStartingRun;
   const isRunning = triggerCoworker.isPending || isStartingRun;
 
+  type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details";
+  const handleMobileTabChange = useCallback(
+    (key: string) => {
+      setActiveTab(key as CoworkerTab);
+    },
+    [setActiveTab],
+  );
+  const handleOpenDeleteDialog = useCallback(() => {
+    setShowDeleteDialog(true);
+  }, []);
+  const handleNavigateToCoworkers = useCallback(() => {
+    router.push("/coworkers");
+  }, [router]);
+
   const chatPanel = useMemo(
     () => (
       <CoworkerChatPanel
@@ -815,6 +856,7 @@ export default function CoworkerEditorPage() {
         onToggleWeekDay={handleToggleWeekDay}
         onScheduleDayOfMonthChange={handleScheduleDayOfMonthChange}
         onCopyCoworkerAlias={handleCopyCoworkerAlias}
+        onCopyInvokeHandle={handleCopyInvokeHandle}
         onRotateCoworkerAlias={handleRotateCoworkerAlias}
         onDisableCoworkerAlias={handleDisableCoworkerAlias}
         onCreateCoworkerAlias={handleCreateCoworkerAlias}
@@ -883,6 +925,7 @@ export default function CoworkerEditorPage() {
       handleToggleWeekDay,
       handleScheduleDayOfMonthChange,
       handleCopyCoworkerAlias,
+      handleCopyInvokeHandle,
       handleRotateCoworkerAlias,
       handleDisableCoworkerAlias,
       handleCreateCoworkerAlias,
@@ -897,6 +940,184 @@ export default function CoworkerEditorPage() {
     return (
       <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+        {/* Mobile icon tab bar */}
+        <div className="border-border/40 flex items-center justify-between gap-1 border-b px-2 py-1.5">
+          <AnimatedTabs activeKey={activeTab} onTabChange={handleMobileTabChange} className="gap-0">
+            <AnimatedTab value="chat" className="px-2.5">
+              <MessageSquare className="h-4 w-4" aria-label="Chat" />
+            </AnimatedTab>
+            <AnimatedTab value="instruction" className="px-2.5">
+              <Pencil className="h-4 w-4" aria-label="Instruction" />
+            </AnimatedTab>
+            <AnimatedTab value="runs" className="px-2.5">
+              <Play className="h-4 w-4" aria-label="Runs" />
+            </AnimatedTab>
+            <AnimatedTab value="docs" className="px-2.5">
+              <FileText className="h-4 w-4" aria-label="Docs" />
+            </AnimatedTab>
+            <AnimatedTab value="toolbox" className="px-2.5">
+              <Wrench className="h-4 w-4" aria-label="Toolbox" />
+            </AnimatedTab>
+            <AnimatedTab value="details" className="px-2.5">
+              <Info className="h-4 w-4" aria-label="Details" />
+            </AnimatedTab>
+          </AnimatedTabs>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Switch checked={status === "on"} onCheckedChange={handleStatusChange} />
+            <button
+              type="button"
+              onClick={handleRunClick}
+              disabled={isRunDisabled}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:opacity-40"
+              aria-label="Run now"
+            >
+              {isRunning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CirclePlay className="h-4 w-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenDeleteDialog}
+              className="text-muted-foreground hover:text-destructive hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+              aria-label="Delete coworker"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNavigateToCoworkers}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        {/* Mobile content area */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {activeTab === "chat" ? (
+            chatPanel
+          ) : (
+            <CoworkerSettingsPanel
+              name={name}
+              description={description}
+              username={username}
+              isSaving={isSaving}
+              status={status}
+              autoApprove={autoApprove}
+              prompt={prompt}
+              availableSkills={availableSkills}
+              selectedSkillKeys={selectedSkillKeys}
+              isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
+              restrictTools={restrictTools}
+              allowedIntegrations={allowedIntegrations}
+              allIntegrationTypes={allIntegrationTypes}
+              integrationEntries={integrationEntries}
+              triggerType={triggerType}
+              triggers={triggers}
+              scheduleType={scheduleType}
+              intervalMinutes={intervalMinutes}
+              scheduleTime={scheduleTime}
+              scheduleDaysOfWeek={scheduleDaysOfWeek}
+              scheduleDayOfMonth={scheduleDayOfMonth}
+              localTimezone={localTimezone}
+              hasActiveForwardingAlias={hasActiveForwardingAlias}
+              coworkerForwardingAddress={coworkerForwardingAddress}
+              coworkerForwardingAlias={coworkerForwardingAlias}
+              isEmailTriggerPersisted={isEmailTriggerPersisted}
+              copiedForwardingField={copiedForwardingField}
+              runs={runs}
+              activeTab={activeTab}
+              isRunDisabled={isRunDisabled}
+              isRunning={isRunning}
+              createForwardingAlias={createForwardingAlias}
+              disableForwardingAlias={disableForwardingAlias}
+              rotateForwardingAlias={rotateForwardingAlias}
+              onTabChange={setActiveTab}
+              onRun={handleRunClick}
+              onNameChange={handleNameChange}
+              onDescriptionChange={handleDescriptionChange}
+              onUsernameChange={handleUsernameChange}
+              onStatusChange={handleStatusChange}
+              onAutoApproveChange={handleAutoApproveChange}
+              onPromptChange={handlePromptChange}
+              onClearSkills={handleClearSkills}
+              onToggleSkillChecked={handleToggleSkillChecked}
+              onRestrictToolsChange={handleRestrictToolsChange}
+              onSelectAllIntegrations={handleSelectAllIntegrations}
+              onClearIntegrations={handleClearIntegrations}
+              onToggleIntegrationChecked={handleToggleIntegrationChecked}
+              onTriggerTypeChange={setTriggerType}
+              onScheduleTypeChange={handleScheduleTypeChange}
+              onIntervalHoursChange={handleIntervalHoursChange}
+              onScheduleTimeChange={handleScheduleTimeChange}
+              onToggleWeekDay={handleToggleWeekDay}
+              onScheduleDayOfMonthChange={handleScheduleDayOfMonthChange}
+              onCopyCoworkerAlias={handleCopyCoworkerAlias}
+              onCopyInvokeHandle={handleCopyInvokeHandle}
+              onRotateCoworkerAlias={handleRotateCoworkerAlias}
+              onDisableCoworkerAlias={handleDisableCoworkerAlias}
+              onCreateCoworkerAlias={handleCreateCoworkerAlias}
+              onClose={handleClose}
+              showDeleteDialog={showDeleteDialog}
+              onShowDeleteDialogChange={setShowDeleteDialog}
+              onDelete={handleDelete}
+              isDeleting={deleteCoworker.isPending}
+              hideHeader
+            />
+          )}
+        </div>
+        <AlertDialog
+          open={showDisableAutoApproveDialog}
+          onOpenChange={setShowDisableAutoApproveDialog}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Turn off auto-approve?</AlertDialogTitle>
+              <AlertDialogDescription>
+                If you turn this off, coworker runs can stop and wait for manual approval on write
+                actions. The coworker might stay stuck until someone approves in the UI.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep on</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDisableAutoApprove}>Turn off</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete this coworker and all of its run history. This action
+                cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                disabled={deleteCoworker.isPending}
+                className="bg-destructive hover:bg-destructive/90 text-white"
+              >
+                {deleteCoworker.isPending ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : null}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }
@@ -918,6 +1139,7 @@ export default function CoworkerEditorPage() {
         left={chatPanel}
         right={settingsPanel}
         onCollapseToggleRef={collapseToggleRef}
+        hideMobileToggle
       />
       <AlertDialog
         open={showDisableAutoApproveDialog}
@@ -1062,7 +1284,7 @@ type CoworkerSettingsPanelProps = {
       }
     | undefined;
   isEmailTriggerPersisted: boolean;
-  copiedForwardingField: "coworkerAlias" | null;
+  copiedForwardingField: "coworkerAlias" | "invokeHandle" | null;
   runs:
     | Array<{
         id: string;
@@ -1072,13 +1294,13 @@ type CoworkerSettingsPanelProps = {
         errorMessage: string | null;
       }>
     | undefined;
-  activeTab: "instruction" | "runs" | "docs" | "toolbox" | "details";
+  activeTab: "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details";
   isRunDisabled: boolean;
   isRunning: boolean;
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
-  onTabChange: (tab: "instruction" | "runs" | "docs" | "toolbox" | "details") => void;
+  onTabChange: (tab: "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details") => void;
   onRun: (e: React.MouseEvent) => void;
   onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -1099,6 +1321,7 @@ type CoworkerSettingsPanelProps = {
   onToggleWeekDay: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onScheduleDayOfMonthChange: (value: string) => void;
   onCopyCoworkerAlias: () => void;
+  onCopyInvokeHandle: () => void;
   onRotateCoworkerAlias: () => void;
   onDisableCoworkerAlias: () => void;
   onCreateCoworkerAlias: () => void;
@@ -1107,6 +1330,7 @@ type CoworkerSettingsPanelProps = {
   onShowDeleteDialogChange: (open: boolean) => void;
   onDelete: () => void;
   isDeleting: boolean;
+  hideHeader?: boolean;
 };
 
 const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
@@ -1167,6 +1391,7 @@ function CoworkerSettingsPanel({
   onToggleWeekDay,
   onScheduleDayOfMonthChange,
   onCopyCoworkerAlias,
+  onCopyInvokeHandle,
   onRotateCoworkerAlias,
   onDisableCoworkerAlias,
   onCreateCoworkerAlias,
@@ -1175,6 +1400,7 @@ function CoworkerSettingsPanel({
   onShowDeleteDialogChange,
   onDelete,
   isDeleting,
+  hideHeader,
 }: CoworkerSettingsPanelProps) {
   const [coworkerModel, setCoworkerModel] = useState(DEFAULT_COWORKER_MODEL);
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
@@ -1224,7 +1450,7 @@ function CoworkerSettingsPanel({
   const handleTabChange = useCallback(
     (key: string) => {
       setSelectedRunId(null);
-      onTabChange(key as "instruction" | "runs" | "docs" | "toolbox" | "details");
+      onTabChange(key as "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details");
     },
     [onTabChange],
   );
@@ -1242,91 +1468,95 @@ function CoworkerSettingsPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Tab bar */}
-      <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange}>
-            <AnimatedTab value="instruction">Instruction</AnimatedTab>
-            <AnimatedTab value="runs">Runs</AnimatedTab>
-            <AnimatedTab value="docs">Docs</AnimatedTab>
-            <AnimatedTab value="toolbox">Toolbox</AnimatedTab>
-            <AnimatedTab value="details">Details</AnimatedTab>
-          </AnimatedTabs>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isSaving && <span className="text-muted-foreground shrink-0 text-xs">Saving…</span>}
-          <div className="flex items-center gap-1.5">
-            <AnimatePresence mode="wait">
-              <motion.span
-                key={status}
-                initial={statusTextMotionInitial}
-                animate={statusTextMotionAnimate}
-                exit={statusTextMotionExit}
-                transition={statusTextMotionTransition}
-                className={cn(
-                  "text-xs font-medium",
-                  status === "on" ? "text-green-600 dark:text-green-400" : "text-muted-foreground",
-                )}
-              >
-                {status === "on" ? "On" : "Off"}
-              </motion.span>
-            </AnimatePresence>
-            <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
+      {/* Tab bar — hidden on mobile where the parent provides its own */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange}>
+              <AnimatedTab value="instruction">Instruction</AnimatedTab>
+              <AnimatedTab value="runs">Runs</AnimatedTab>
+              <AnimatedTab value="docs">Docs</AnimatedTab>
+              <AnimatedTab value="toolbox">Toolbox</AnimatedTab>
+              <AnimatedTab value="details">Details</AnimatedTab>
+            </AnimatedTabs>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 px-3 text-xs font-medium"
-            onClick={onRun}
-            disabled={isRunDisabled}
-          >
-            {isRunning ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
-            Run now
-          </Button>
-          <button
-            type="button"
-            onClick={handleOpenDeleteDialog}
-            className="text-muted-foreground hover:text-destructive hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-            aria-label="Delete coworker"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-            aria-label="Close panel"
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <AlertDialog open={showDeleteDialog} onOpenChange={onShowDeleteDialogChange}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete this coworker and all of its run history. This action
-                  cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={onDelete}
-                  disabled={isDeleting}
-                  className="bg-destructive hover:bg-destructive/90 text-white"
+          <div className="flex shrink-0 items-center gap-2">
+            {isSaving && <span className="text-muted-foreground shrink-0 text-xs">Saving…</span>}
+            <div className="flex items-center gap-1.5">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={status}
+                  initial={statusTextMotionInitial}
+                  animate={statusTextMotionAnimate}
+                  exit={statusTextMotionExit}
+                  transition={statusTextMotionTransition}
+                  className={cn(
+                    "text-xs font-medium",
+                    status === "on"
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-muted-foreground",
+                  )}
                 >
-                  {isDeleting ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                  {status === "on" ? "On" : "Off"}
+                </motion.span>
+              </AnimatePresence>
+              <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 px-3 text-xs font-medium"
+              onClick={onRun}
+              disabled={isRunDisabled}
+            >
+              {isRunning ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+              Run now
+            </Button>
+            <button
+              type="button"
+              onClick={handleOpenDeleteDialog}
+              className="text-muted-foreground hover:text-destructive hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+              aria-label="Delete coworker"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+              aria-label="Close panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <AlertDialog open={showDeleteDialog} onOpenChange={onShowDeleteDialogChange}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete this coworker and all of its run history. This
+                    action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={onDelete}
+                    disabled={isDeleting}
+                    className="bg-destructive hover:bg-destructive/90 text-white"
+                  >
+                    {isDeleting ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
-      </div>
+      )}
       {/* Tab content — scrollable (or flex when showing inline run) */}
       <div
         className={cn(
@@ -1362,6 +1592,36 @@ function CoworkerSettingsPanel({
                 placeholder="my-coworker"
                 className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
               />
+            </div>
+
+            <div className="border-border/50 rounded-xl border px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                    Invoke in chat
+                  </label>
+                  <p className="mt-1.5 text-sm font-medium">
+                    {username.trim()
+                      ? `@${username.trim()}`
+                      : "Set a username to enable invocation"}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Mention this coworker in chat so the main agent can list coworkers and launch
+                    it.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 text-xs"
+                  onClick={onCopyInvokeHandle}
+                  disabled={!username.trim()}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copiedForwardingField === "invokeHandle" ? "Copied" : "Copy"}
+                </Button>
+              </div>
             </div>
 
             <div className="border-border/50 rounded-xl border px-4 py-3">
@@ -1412,7 +1672,12 @@ function CoworkerSettingsPanel({
             {/* Instruction editor modal */}
             <Dialog open={instructionModalOpen} onOpenChange={setInstructionModalOpen}>
               <DialogContent
-                className="flex h-[min(80dvh,700px)] w-[min(90vw,900px)] max-w-none flex-col gap-0 overflow-hidden p-0"
+                className={cn(
+                  "flex max-w-none flex-col gap-0 overflow-hidden p-0",
+                  hideHeader
+                    ? "h-dvh w-dvw rounded-none border-0"
+                    : "h-[min(80dvh,700px)] w-[min(90vw,900px)]",
+                )}
                 showCloseButton={false}
               >
                 <DialogHeader className="border-border/40 flex-row items-center justify-between border-b px-5 py-3.5">
@@ -1425,14 +1690,9 @@ function CoworkerSettingsPanel({
                     <X className="h-4 w-4" />
                   </button>
                 </DialogHeader>
-                <div className="grid flex-1 grid-cols-2 divide-x overflow-hidden">
-                  {/* Editor pane */}
-                  <div className="flex flex-col overflow-hidden">
-                    <div className="border-border/40 border-b px-4 py-2">
-                      <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                        Write
-                      </span>
-                    </div>
+                {hideHeader ? (
+                  /* Mobile: single pane editor, no side-by-side split */
+                  <div className="flex flex-1 flex-col overflow-hidden">
                     <textarea
                       className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
                       value={prompt}
@@ -1441,28 +1701,46 @@ function CoworkerSettingsPanel({
                       autoFocus
                     />
                   </div>
-                  {/* Preview pane */}
-                  <div className="bg-muted/20 flex flex-col overflow-hidden">
-                    <div className="border-border/40 border-b px-4 py-2">
-                      <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                        Preview
-                      </span>
+                ) : (
+                  <div className="grid flex-1 grid-cols-2 divide-x overflow-hidden">
+                    {/* Editor pane */}
+                    <div className="flex flex-col overflow-hidden">
+                      <div className="border-border/40 border-b px-4 py-2">
+                        <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                          Write
+                        </span>
+                      </div>
+                      <textarea
+                        className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
+                        value={prompt}
+                        onChange={onPromptChange}
+                        placeholder="Describe what this coworker should do…&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
+                        autoFocus
+                      />
                     </div>
-                    <div className="flex-1 overflow-y-auto px-4 py-3">
-                      {prompt ? (
-                        <div className="prose prose-sm dark:prose-invert prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-code:text-xs max-w-none text-sm leading-relaxed">
-                          <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>
-                            {prompt}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground/40 text-sm italic">
-                          Preview will appear here…
-                        </p>
-                      )}
+                    {/* Preview pane */}
+                    <div className="bg-muted/20 flex flex-col overflow-hidden">
+                      <div className="border-border/40 border-b px-4 py-2">
+                        <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                          Preview
+                        </span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto px-4 py-3">
+                        {prompt ? (
+                          <div className="prose prose-sm dark:prose-invert prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-code:text-xs max-w-none text-sm leading-relaxed">
+                            <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>
+                              {prompt}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground/40 text-sm italic">
+                            Preview will appear here…
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </DialogContent>
             </Dialog>
 

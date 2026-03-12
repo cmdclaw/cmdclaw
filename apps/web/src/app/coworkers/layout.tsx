@@ -23,17 +23,19 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      {/* Mobile hamburger for recent runs */}
-      <div className="flex h-12 items-center px-4 md:hidden">
-        <button
-          type="button"
-          onClick={openRecentDrawer}
-          className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md"
-          aria-label="Recent runs"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      </div>
+      {/* Mobile hamburger for recent runs — hidden in coworker editor which has its own mobile bar */}
+      {!isCoworkerEditorRoute && (
+        <div className="flex h-12 items-center px-4 md:hidden">
+          <button
+            type="button"
+            onClick={openRecentDrawer}
+            className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md"
+            aria-label="Recent runs"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
+      )}
 
       {isRunsRoute || isCoworkerEditorRoute ? (
         <div className="bg-background flex h-full min-h-0 w-full flex-1 overflow-hidden">
