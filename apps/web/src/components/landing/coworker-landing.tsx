@@ -629,6 +629,8 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
                     isRecording={isRecording}
                     isProcessing={isProcessingVoice}
                     error={voiceError}
+                    variant="hero"
+                    recordingLabel="Recording... Click the mic again to stop"
                   />
                 </div>
               )}

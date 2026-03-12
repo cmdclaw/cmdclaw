@@ -35,6 +35,7 @@ type PromptBarProps = {
   isRecording?: boolean;
   onStartRecording?: () => void;
   onStopRecording?: () => void;
+  voiceInteractionMode?: "press-to-talk" | "toggle";
 
   conversationId?: string;
   prefillRequest?: { id: string; text: string; mode?: "replace" | "append" } | null;
@@ -143,6 +144,7 @@ export function PromptBar({
   isRecording = false,
   onStartRecording,
   onStopRecording,
+  voiceInteractionMode = "press-to-talk",
   conversationId,
   prefillRequest,
   renderSkills,
@@ -462,11 +464,26 @@ export function PromptBar({
     },
     [isRecording, onStopRecording],
   );
+  const handleRecordToggle = useCallback(() => {
+    if (disabled && !isRecording) {
+      return;
+    }
+
+    if (isRecording) {
+      onStopRecording?.();
+      return;
+    }
+
+    if (!isStreaming) {
+      onStartRecording?.();
+    }
+  }, [disabled, isRecording, isStreaming, onStartRecording, onStopRecording]);
 
   // ── Derived ──
   const isHero = variant === "hero";
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !disabled && !isSubmitting;
   const showVoice = Boolean(onStartRecording && onStopRecording);
+  const isToggleVoice = voiceInteractionMode === "toggle";
 
   return (
     <div className={cn("w-full", className)}>
@@ -610,11 +627,14 @@ export function PromptBar({
             {showVoice && (
               <button
                 type="button"
-                onMouseDown={handleRecordMouseDown}
-                onMouseUp={handleRecordMouseUp}
-                onMouseLeave={handleRecordMouseLeave}
-                onTouchStart={handleRecordTouchStart}
-                onTouchEnd={handleRecordTouchEnd}
+                aria-label={isRecording ? "Stop voice recording" : "Start voice recording"}
+                aria-pressed={isToggleVoice ? isRecording : undefined}
+                onClick={isToggleVoice ? handleRecordToggle : undefined}
+                onMouseDown={isToggleVoice ? undefined : handleRecordMouseDown}
+                onMouseUp={isToggleVoice ? undefined : handleRecordMouseUp}
+                onMouseLeave={isToggleVoice ? undefined : handleRecordMouseLeave}
+                onTouchStart={isToggleVoice ? undefined : handleRecordTouchStart}
+                onTouchEnd={isToggleVoice ? undefined : handleRecordTouchEnd}
                 disabled={disabled && !isRecording}
                 className={cn(
                   "flex h-8 w-8 touch-none items-center justify-center rounded-lg transition-colors",

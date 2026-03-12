@@ -59,6 +59,7 @@ type BottomActionBarProps = {
   isRecording?: boolean;
   onStartRecording?: () => void;
   onStopRecording?: () => void;
+  voiceInteractionMode?: "press-to-talk" | "toggle";
   conversationId?: string;
   prefillRequest?: { id: string; text: string; mode?: "replace" | "append" } | null;
   renderSkills?: React.ReactNode;

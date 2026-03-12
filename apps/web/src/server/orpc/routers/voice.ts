@@ -1,7 +1,7 @@
 import { fal } from "@fal-ai/client";
 import { z } from "zod";
 import { env } from "@/env";
-import { protectedProcedure } from "../middleware";
+import { optionalAuthProcedure } from "../middleware";
 
 const transcribeInputSchema = z.object({
   audio: z.string(), // Base64 encoded audio data
@@ -110,7 +110,7 @@ async function transcribeWithNova3(input: z.infer<typeof transcribeInputSchema>)
   return result.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
 }
 
-const transcribe = protectedProcedure
+const transcribe = optionalAuthProcedure
   .input(transcribeInputSchema)
   .output(transcribeOutputSchema)
   .handler(async ({ input }) => {
