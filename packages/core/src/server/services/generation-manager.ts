@@ -1551,7 +1551,7 @@ class GenerationManager {
     const selectedPlatformSkillSlugs = await resolveSelectedPlatformSkillSlugs(
       params.selectedPlatformSkillSlugs,
     );
-    const builderCoworkerContext =
+    let builderCoworkerContext =
       conv.type === "coworker"
         ? await resolveCoworkerBuilderContextByConversation({
             database: db,
@@ -1609,6 +1609,13 @@ class GenerationManager {
             .update(coworker)
             .set(persistedMetadataUpdates)
             .where(eq(coworker.id, builderCoworkerContext.coworkerId));
+
+          builderCoworkerContext =
+            (await resolveCoworkerBuilderContextByConversation({
+              database: db,
+              userId,
+              conversationId: conv.id,
+            })) ?? builderCoworkerContext;
         }
       }
     }
@@ -5406,7 +5413,7 @@ class GenerationManager {
     if (approvalRequest.decision !== "pending") {
       return approvalRequest.decision;
     }
-    if (!approvalRequest.toolUseId) {
+    if (!approvalRequest.toolUseId || !approvalRequest.interruptId) {
       return "deny";
     }
 
@@ -5421,7 +5428,7 @@ class GenerationManager {
       // eslint-disable-next-line no-await-in-loop -- polling by design
       await new Promise((resolve) => setTimeout(resolve, 400));
       // eslint-disable-next-line no-await-in-loop -- polling by design
-      const status = await this.getPluginApprovalStatus(generationId, approvalRequest.toolUseId);
+      const status = await this.getPluginApprovalStatus(generationId, approvalRequest.interruptId);
       if (status !== "pending") {
         resolved = status;
       }
@@ -5442,7 +5449,12 @@ class GenerationManager {
       operation: string;
       command: string;
     },
-  ): Promise<{ decision: "allow" | "deny" | "pending"; toolUseId?: string; expiresAt?: string }> {
+  ): Promise<{
+    decision: "allow" | "deny" | "pending";
+    toolUseId?: string;
+    interruptId?: string;
+    expiresAt?: string;
+  }> {
     const genRecord = await db.query.generation.findFirst({
       where: eq(generation.id, generationId),
       with: { conversation: true },
@@ -5491,7 +5503,7 @@ class GenerationManager {
 
     await this.enqueueGenerationTimeout(generationId, "approval", expiresAt);
 
-    return { decision: "pending", toolUseId, expiresAt };
+    return { decision: "pending", toolUseId, interruptId: interrupt.id, expiresAt };
   }
 
   async requestAuthInterrupt(
@@ -5583,7 +5595,6 @@ class GenerationManager {
         APPROVAL_TIMEOUT_MS,
       );
       if (Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs) {
-        await generationInterruptService.expireInterrupt(interrupt.id);
         await this.processGenerationTimeout(generationId, "approval");
         return "deny";
       }

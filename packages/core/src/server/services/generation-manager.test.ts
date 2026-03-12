@@ -437,7 +437,7 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
 }
 
 function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
-  if (ctx.pendingApproval) {
+  if (ctx.status === "awaiting_approval" && ctx.pendingApproval) {
     const pendingApproval = ctx.pendingApproval as {
       toolUseId: string;
       toolName?: string;
@@ -446,6 +446,7 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
       operation?: string;
       command?: string;
       requestedAt?: string;
+      expiresAt?: string;
     };
     return {
       id: `interrupt-${pendingApproval.toolUseId}`,
@@ -470,14 +471,14 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
       providerToolUseId: pendingApproval.toolUseId,
       responsePayload: undefined,
       requestedAt: new Date(pendingApproval.requestedAt ?? "2026-03-11T15:00:00.000Z"),
-      expiresAt: null,
+      expiresAt: pendingApproval.expiresAt ? new Date(pendingApproval.expiresAt) : null,
       resolvedAt: null,
       requestedByUserId: null,
       resolvedByUserId: null,
     };
   }
 
-  if (ctx.pendingAuth) {
+  if (ctx.status === "awaiting_auth" && ctx.pendingAuth) {
     const pendingAuth = ctx.pendingAuth;
     return {
       id: `interrupt-auth-${ctx.id}`,
@@ -499,7 +500,7 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
         connectedIntegrations: pendingAuth.connectedIntegrations ?? [],
       },
       requestedAt: new Date(String(pendingAuth.requestedAt ?? "2026-03-11T15:00:00.000Z")),
-      expiresAt: null,
+      expiresAt: pendingAuth.expiresAt ? new Date(String(pendingAuth.expiresAt)) : null,
       resolvedAt: null,
       requestedByUserId: null,
       resolvedByUserId: null,
@@ -507,6 +508,33 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
   }
 
   return null;
+}
+
+function syncInterruptStateMocks(interrupt: {
+  kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
+  status: string;
+} | null): void {
+  const generationStatus =
+    !interrupt || interrupt.status !== "pending"
+      ? "running"
+      : interrupt.kind === "auth"
+        ? "awaiting_auth"
+        : "awaiting_approval";
+  const conversationStatus =
+    !interrupt || interrupt.status !== "pending"
+      ? "generating"
+      : interrupt.kind === "auth"
+        ? "awaiting_auth"
+        : "awaiting_approval";
+
+  updateSetMock({
+    status: generationStatus,
+    pendingApproval: null,
+    pendingAuth: null,
+  });
+  updateSetMock({
+    generationStatus: conversationStatus,
+  });
 }
 
 async function collectEvents(generator: AsyncGenerator<unknown>) {
@@ -549,6 +577,7 @@ describe("generationManager transitions", () => {
         resolvedByUserId: null,
       };
       interruptStore.set(interrupt.id, interrupt);
+      syncInterruptStateMocks(interrupt);
 
       const activeCtx = asTestManager().activeGenerations.get(input.generationId);
       if (activeCtx) {
@@ -559,6 +588,7 @@ describe("generationManager transitions", () => {
             integrations: input.display.authSpec?.integrations ?? [],
             connectedIntegrations: input.display.authSpec?.connectedIntegrations ?? [],
             requestedAt: interrupt.requestedAt.toISOString(),
+            expiresAt: interrupt.expiresAt?.toISOString(),
           };
         } else {
           activeCtx.pendingApproval = {
@@ -569,6 +599,7 @@ describe("generationManager transitions", () => {
             operation: input.display.operation ?? "unknown",
             command: input.display.command,
             requestedAt: interrupt.requestedAt.toISOString(),
+            expiresAt: interrupt.expiresAt?.toISOString(),
           };
         }
       }
@@ -630,8 +661,12 @@ describe("generationManager transitions", () => {
         : null;
     });
     resolveInterruptMock.mockImplementation(async (params: any) => {
+      const derivedMatch = [...asTestManager().activeGenerations.values()]
+        .map((ctx) => deriveInterruptFromCtx(ctx))
+        .find((entry) => entry?.id === params.interruptId);
       const existing =
         interruptStore.get(params.interruptId) ??
+        derivedMatch ??
         [...interruptStore.values()].find((entry) => entry.id === params.interruptId) ??
         null;
       if (!existing) {
@@ -647,11 +682,20 @@ describe("generationManager transitions", () => {
       interruptStore.set(resolved.id, resolved);
 
       const activeCtx = asTestManager().activeGenerations.get(resolved.generationId);
-      if (activeCtx?.currentInterruptId === resolved.id) {
+      const derivedInterrupt = activeCtx ? deriveInterruptFromCtx(activeCtx) : null;
+      if (
+        activeCtx &&
+        (activeCtx.currentInterruptId === resolved.id || derivedInterrupt?.id === resolved.id)
+      ) {
         activeCtx.currentInterruptId = undefined;
         activeCtx.pendingApproval = null;
         activeCtx.pendingAuth = null;
       }
+      const nextPending =
+        [...interruptStore.values()].find(
+          (entry) => entry.generationId === resolved.generationId && entry.status === "pending",
+        ) ?? null;
+      syncInterruptStateMocks(nextPending);
 
       return resolved;
     });
@@ -671,6 +715,7 @@ describe("generationManager transitions", () => {
         activeCtx.pendingApproval = null;
         activeCtx.pendingAuth = null;
       }
+      syncInterruptStateMocks(null);
     });
     projectInterruptEventMock.mockImplementation((interrupt: any) => ({
       interruptId: interrupt.id,
@@ -776,7 +821,7 @@ describe("generationManager transitions", () => {
     expect(finishSpy).not.toHaveBeenCalled();
   });
 
-  it("submits approval, persists running status, and emits approval_result", async () => {
+  it("submits approval, stores an approval content part, and emits interrupt resolution", async () => {
     const ctx = createCtx({
       status: "awaiting_approval",
       pendingApproval: {
@@ -803,15 +848,50 @@ describe("generationManager transitions", () => {
     const result = await generationManager.submitApproval(ctx.id, "tool-1", "approve", ctx.userId);
 
     expect(result).toBe(true);
-    expect(ctx.pendingApproval).not.toBeNull();
-    expect(ctx.status).toBe("awaiting_approval");
+    expect(ctx.pendingApproval).toBeNull();
 
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        pendingApproval: expect.objectContaining({
-          toolUseId: "tool-1",
-          decision: "allow",
-        }),
+        contentParts: [
+          expect.objectContaining({
+            type: "approval",
+            tool_use_id: "tool-1",
+            tool_name: "Bash",
+            tool_input: { command: "slack send" },
+            integration: "slack",
+            operation: "send",
+            status: "approved",
+          }),
+        ],
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "running",
+        pendingApproval: null,
+        pendingAuth: null,
+      }),
+    );
+    expect(resolveInterruptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "accepted",
+        resolvedByUserId: ctx.userId,
+      }),
+    );
+
+    const publishedPayloads = (publishGenerationStreamEventMock.mock.calls as unknown[][])
+      .map((call) => call[1] as { payload?: unknown } | undefined)
+      .filter((entry): entry is { payload?: unknown } => !!entry)
+      .map((entry) => entry.payload);
+
+    expect(publishedPayloads).toContainEqual(
+      expect.objectContaining({
+        type: "interrupt_resolved",
+        generationId: ctx.id,
+        conversationId: ctx.conversationId,
+        kind: "plugin_write",
+        status: "accepted",
+        providerToolUseId: "tool-1",
       }),
     );
   });
@@ -852,10 +932,18 @@ describe("generationManager transitions", () => {
     expect(result).toBe(true);
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        pendingApproval: expect.objectContaining({
-          toolUseId: "question-1",
-          decision: "allow",
-        }),
+        contentParts: [
+          expect.objectContaining({
+            type: "approval",
+            tool_use_id: "question-1",
+            tool_name: "Question",
+            tool_input: { id: "question-request-1" },
+            integration: "cmdclaw",
+            operation: "question",
+            command: "Choose one",
+            status: "approved",
+          }),
+        ],
       }),
     );
   });
@@ -897,11 +985,14 @@ describe("generationManager transitions", () => {
     expect(result).toBe(true);
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        pendingApproval: expect.objectContaining({
-          toolUseId: "question-3",
-          decision: "allow",
-          questionAnswers: [["Coding/Development"]],
-        }),
+        contentParts: [
+          expect.objectContaining({
+            type: "approval",
+            tool_use_id: "question-3",
+            question_answers: [["Coding/Development"]],
+            status: "approved",
+          }),
+        ],
       }),
     );
   });
@@ -937,10 +1028,13 @@ describe("generationManager transitions", () => {
     expect(result).toBe(true);
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        pendingApproval: expect.objectContaining({
-          toolUseId: "question-2",
-          decision: "deny",
-        }),
+        contentParts: [
+          expect.objectContaining({
+            type: "approval",
+            tool_use_id: "question-2",
+            status: "denied",
+          }),
+        ],
       }),
     );
   });
@@ -981,10 +1075,14 @@ describe("generationManager transitions", () => {
     expect(result).toBe(true);
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        pendingApproval: expect.objectContaining({
-          toolUseId: "permission-1",
-          decision: "allow",
-        }),
+        contentParts: [
+          expect.objectContaining({
+            type: "approval",
+            tool_use_id: "permission-1",
+            tool_name: "Bash",
+            status: "approved",
+          }),
+        ],
       }),
     );
   });
@@ -1172,6 +1270,12 @@ describe("generationManager transitions", () => {
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "paused",
+        isPaused: true,
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationStatus: "paused",
       }),
     );
     expect(updateSetMock).toHaveBeenCalledWith(
@@ -1182,11 +1286,11 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("tracks auth progress, then resumes and persists when all integrations connect", async () => {
+  it("accepts an auth interrupt and resumes persisted generation state", async () => {
     const ctx = createCtx({
       status: "awaiting_auth",
       pendingAuth: {
-        integrations: ["slack", "github"],
+        integrations: ["slack"],
         connectedIntegrations: [],
         requestedAt: new Date().toISOString(),
       },
@@ -1198,24 +1302,6 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce({
         id: ctx.id,
         conversationId: ctx.conversationId,
-        pendingAuth: {
-          integrations: ["slack", "github"],
-          connectedIntegrations: [],
-          requestedAt: new Date().toISOString(),
-        },
-        conversation: {
-          id: ctx.conversationId,
-          userId: ctx.userId,
-        },
-      })
-      .mockResolvedValueOnce({
-        id: ctx.id,
-        conversationId: ctx.conversationId,
-        pendingAuth: {
-          integrations: ["slack", "github"],
-          connectedIntegrations: ["slack"],
-          requestedAt: new Date().toISOString(),
-        },
         conversation: {
           id: ctx.conversationId,
           userId: ctx.userId,
@@ -1225,13 +1311,24 @@ describe("generationManager transitions", () => {
     const first = await generationManager.submitAuthResult(ctx.id, "slack", true, ctx.userId);
     expect(first).toBe(true);
 
-    const second = await generationManager.submitAuthResult(ctx.id, "github", true, ctx.userId);
-    expect(second).toBe(true);
-
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "running",
         pendingAuth: null,
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationStatus: "generating",
+      }),
+    );
+    expect(resolveInterruptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "accepted",
+        responsePayload: {
+          connectedIntegrations: ["slack"],
+          integration: "slack",
+        },
       }),
     );
   });
@@ -1272,7 +1369,12 @@ describe("generationManager transitions", () => {
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "cancelled",
-        pendingAuth: null,
+        completedAt: expect.any(Date),
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationStatus: "idle",
       }),
     );
   });
@@ -1351,6 +1453,7 @@ describe("generationManager transitions", () => {
     const mgr = asTestManager();
     const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
     const updatedAt = new Date("2026-03-12T10:00:00.000Z");
+    const refreshedUpdatedAt = new Date("2026-03-12T10:00:01.000Z");
 
     generationFindFirstMock.mockResolvedValueOnce(null);
     conversationFindFirstMock.mockResolvedValueOnce({
@@ -1384,7 +1487,16 @@ describe("generationManager transitions", () => {
         promptDo: null,
         promptDont: null,
       })
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "cw-1",
+        prompt: "",
+        toolAccessMode: "all",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["slack"],
+        updatedAt: refreshedUpdatedAt,
+      });
     insertReturningMock
       .mockResolvedValueOnce([{ id: "msg-user" }])
       .mockResolvedValueOnce([{ id: "gen-coworker-builder" }]);
@@ -1396,13 +1508,21 @@ describe("generationManager transitions", () => {
     });
 
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "Follow up with new inbound leads after every sales call",
-        description: "Follow up with new inbound leads after every sales call.",
-        username: "follow-up-with-new-inbound-leads-after-every-sales-call",
-      }),
+    const metadataUpdateCall = updateSetMock.mock.calls.find(
+      ([values]) =>
+        typeof values?.name === "string" && typeof values?.description === "string",
+    )?.[0] as { name: string; description: string; username?: string } | undefined;
+
+    expect(metadataUpdateCall).toMatchObject({
+      name: "Follow up with new inbound leads after every sales call",
+      description: "Follow up with new inbound leads after every sales call.",
+    });
+    expect(metadataUpdateCall?.username).toMatch(
+      /^follow-up-with-new-inbound-leads-after-every-sales-call/,
     );
+    expect(
+      mgr.activeGenerations.get("gen-coworker-builder")?.builderCoworkerContext?.updatedAt,
+    ).toBe(refreshedUpdatedAt.toISOString());
   });
 
   it("returns an empty queued-message list when conversation no longer exists", async () => {
@@ -1706,7 +1826,7 @@ describe("generationManager transitions", () => {
     expect(status).toEqual({
       status: "running",
       contentParts: [{ type: "text", text: "persisted" }],
-      pendingApproval: expect.objectContaining({ toolUseId: "tool-db" }),
+      pendingApproval: null,
       usage: { inputTokens: 6, outputTokens: 8 },
     });
   });
@@ -1725,7 +1845,7 @@ describe("generationManager transitions", () => {
     expect(status).toEqual({
       status: "paused",
       contentParts: [{ type: "text", text: "persisted" }],
-      pendingApproval: { toolUseId: "tool-db" },
+      pendingApproval: null,
       usage: { inputTokens: 9, outputTokens: 11 },
     });
   });
@@ -1877,15 +1997,25 @@ describe("generationManager transitions", () => {
         { type: "tool_result", toolName: "bash", result: "ok", toolUseId: "tool-1" },
         { type: "status_change", status: "awaiting_approval" },
         {
-          type: "pending_approval",
+          type: "interrupt_pending",
+          interruptId: "interrupt-tool-pending",
           generationId: "gen-1",
           conversationId: "conv-1",
-          toolUseId: "tool-pending",
-          toolName: "Bash",
-          toolInput: { command: "rm -rf /tmp/x" },
-          integration: "slack",
-          operation: "send",
-          command: "rm -rf /tmp/x",
+          kind: "plugin_write",
+          status: "pending",
+          providerToolUseId: "tool-pending",
+          display: {
+            title: "Bash",
+            toolInput: { command: "rm -rf /tmp/x" },
+            integration: "slack",
+            operation: "send",
+            command: "rm -rf /tmp/x",
+          },
+          responsePayload: undefined,
+        },
+        {
+          type: "status_change",
+          status: "cancelled",
         },
         {
           type: "cancelled",
@@ -2102,17 +2232,20 @@ describe("generationManager transitions", () => {
     const noPending = await generationManager.submitAuthResult(ctx.id, "slack", true, ctx.userId);
     expect(noPending).toBe(false);
 
-    const ctxWithPendingAuth = createCtx({ id: "gen-auth-fail" });
-    mgr.activeGenerations.set(ctxWithPendingAuth.id, ctxWithPendingAuth);
-    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
-    generationFindFirstMock.mockResolvedValueOnce({
-      id: ctxWithPendingAuth.id,
-      conversationId: ctxWithPendingAuth.conversationId,
+    const ctxWithPendingAuth = createCtx({
+      id: "gen-auth-fail",
+      status: "awaiting_auth",
       pendingAuth: {
         integrations: ["slack"],
         connectedIntegrations: [],
         requestedAt: new Date().toISOString(),
       },
+    });
+    mgr.activeGenerations.set(ctxWithPendingAuth.id, ctxWithPendingAuth);
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: ctxWithPendingAuth.id,
+      conversationId: ctxWithPendingAuth.conversationId,
       conversation: {
         id: ctxWithPendingAuth.conversationId,
         userId: ctxWithPendingAuth.userId,
@@ -2130,7 +2263,12 @@ describe("generationManager transitions", () => {
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "cancelled",
-        pendingAuth: null,
+        completedAt: expect.any(Date),
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationStatus: "idle",
       }),
     );
   });
@@ -2247,11 +2385,8 @@ describe("generationManager transitions", () => {
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "awaiting_approval",
-        pendingApproval: expect.objectContaining({
-          toolUseId: result.toolUseId,
-          integration: "slack",
-          operation: "send",
-        }),
+        pendingApproval: null,
+        pendingAuth: null,
       }),
     );
 
@@ -2261,15 +2396,21 @@ describe("generationManager transitions", () => {
       .map((entry) => entry.payload);
 
     expect(publishedPayloads).toContainEqual({
-      type: "pending_approval",
+      type: "interrupt_pending",
+      interruptId: `interrupt-${result.toolUseId}`,
       generationId: ctx.id,
       conversationId: ctx.conversationId,
-      toolUseId: result.toolUseId,
-      toolName: "Bash",
-      toolInput: { command: "slack send -c C123 -t hi" },
-      integration: "slack",
-      operation: "send",
-      command: "slack send -c C123 -t hi",
+      kind: "plugin_write",
+      status: "pending",
+      providerToolUseId: result.toolUseId,
+      display: {
+        title: "Bash",
+        toolInput: { command: "slack send -c C123 -t hi" },
+        integration: "slack",
+        operation: "send",
+        command: "slack send -c C123 -t hi",
+      },
+      responsePayload: undefined,
     });
   });
 
@@ -2313,17 +2454,23 @@ describe("generationManager transitions", () => {
         generationId: "gen-detached",
         conversationId: "conv-detached",
         sequence: 8,
-        eventType: "pending_approval",
+        eventType: "interrupt_pending",
         payload: {
-          type: "pending_approval",
+          type: "interrupt_pending",
+          interruptId: `interrupt-${result.toolUseId}`,
           generationId: "gen-detached",
           conversationId: "conv-detached",
-          toolUseId: result.toolUseId,
-          toolName: "Bash",
-          toolInput: { command: "slack send -c C123 -t hi" },
-          integration: "slack",
-          operation: "send",
-          command: "slack send -c C123 -t hi",
+          kind: "plugin_write",
+          status: "pending",
+          providerToolUseId: result.toolUseId,
+          display: {
+            title: "Bash",
+            toolInput: { command: "slack send -c C123 -t hi" },
+            integration: "slack",
+            operation: "send",
+            command: "slack send -c C123 -t hi",
+          },
+          responsePayload: undefined,
         },
       }),
     );
