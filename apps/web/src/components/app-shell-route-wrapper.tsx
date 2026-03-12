@@ -31,7 +31,8 @@ function getSidebarVisibility(pathname: string | null): SidebarVisibility | null
     pathname.startsWith("/toolbox") ||
     pathname.startsWith("/admin") ||
     pathname.startsWith("/instance") ||
-    pathname.startsWith("/search")
+    pathname.startsWith("/search") ||
+    pathname.startsWith("/bug-report")
   ) {
     return "always";
   }

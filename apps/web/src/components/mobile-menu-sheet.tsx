@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BugReportDialog } from "@/components/bug-report-dialog";
 import { authClient } from "@/lib/auth-client";
 import { clientEditionCapabilities } from "@/lib/edition";
 import { cn } from "@/lib/utils";
@@ -23,14 +22,14 @@ type MenuItemProps = {
 
 function MenuItem({ icon: Icon, label, href, onClick, destructive, badge }: MenuItemProps) {
   const classes = cn(
-    "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors",
+    "flex items-center justify-start gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors",
     destructive ? "text-destructive hover:bg-destructive/10" : "text-foreground/80 hover:bg-accent",
   );
 
   const content = (
     <>
       <Icon className="h-5 w-5 shrink-0" />
-      <span className="flex-1">{label}</span>
+      <span className="flex-1 text-left">{label}</span>
       {badge && <span className="text-xs font-semibold text-orange-500">{badge}</span>}
     </>
   );
@@ -58,7 +57,6 @@ type MobileMenuPanelProps = {
 export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
   const router = useRouter();
   const [session, setSession] = useState<SessionData>(null);
-  const [isBugReportOpen, setIsBugReportOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -99,8 +97,8 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
 
   const handleBugReportClick = useCallback(() => {
     onOpenChange(false);
-    setIsBugReportOpen(true);
-  }, [onOpenChange]);
+    router.push("/bug-report");
+  }, [onOpenChange, router]);
 
   const panelStyle = useMemo(
     () => ({ paddingBottom: "calc(4rem + var(--safe-area-inset-bottom))" }),
@@ -109,8 +107,6 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
 
   return (
     <>
-      <BugReportDialog open={isBugReportOpen} onOpenChange={setIsBugReportOpen} />
-
       {/* Backdrop */}
       {open && (
         <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={handleItemClick} />
