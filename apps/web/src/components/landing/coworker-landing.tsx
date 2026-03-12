@@ -7,12 +7,19 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { VoiceIndicator } from "@/components/chat/voice-indicator";
+import {
+  clearPendingCoworkerPrompt,
+  readPendingCoworkerPrompt,
+  writePendingCoworkerPrompt,
+} from "@/components/landing/pending-coworker-prompt";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
+import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { client } from "@/orpc/client";
-import { useCreateCoworker } from "@/orpc/hooks";
+import { useCreateCoworker, useTranscribe } from "@/orpc/hooks";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -377,9 +384,19 @@ type CoworkerLandingProps = {
 export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingProps) {
   const searchParams = useSearchParams();
   const createCoworker = useCreateCoworker();
+  const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
+  const { mutateAsync: transcribe } = useTranscribe();
   const [isCreating, setIsCreating] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [inputPrefillRequest, setInputPrefillRequest] = useState<{
+    id: string;
+    text: string;
+    mode?: "replace" | "append";
+  } | null>(null);
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [isAnonymous, setShowFooter] = useState(!initialHasSession);
+  const resumePendingPromptRef = useRef(false);
+  const isRecordingRef = useRef(false);
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
   const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
   const previewId = searchParams.get("preview");
@@ -423,16 +440,43 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
     [createCoworker],
   );
 
+  const redirectToLogin = useCallback(() => {
+    window.location.assign("/login?callbackUrl=%2Fcoworkers%2Fnew");
+  }, []);
+
   const handlePromptComposerSubmit = useCallback(
     async (text: string) => {
       if (isCreating) {
         return;
       }
+
       setIsCreating(true);
-      await doCreate({ prompt: "", initialMessage: text });
-      setIsCreating(false);
+      writePendingCoworkerPrompt(text);
+      let shouldClearPendingPrompt = true;
+
+      try {
+        const session = await authClient.getSession().catch(() => null);
+        const hasSession = Boolean(session?.data?.session && session?.data?.user);
+
+        if (!hasSession) {
+          shouldClearPendingPrompt = false;
+          redirectToLogin();
+          return;
+        }
+
+        const created = await doCreate({ prompt: "", initialMessage: text });
+        if (created) {
+          clearPendingCoworkerPrompt();
+          return;
+        }
+      } finally {
+        if (shouldClearPendingPrompt) {
+          clearPendingCoworkerPrompt();
+        }
+        setIsCreating(false);
+      }
     },
-    [doCreate, isCreating],
+    [doCreate, isCreating, redirectToLogin],
   );
 
   useEffect(() => {
@@ -457,6 +501,62 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (isAnonymous || isCreating || resumePendingPromptRef.current) {
+      return;
+    }
+
+    const pendingPrompt = readPendingCoworkerPrompt();
+    if (!pendingPrompt) {
+      return;
+    }
+
+    resumePendingPromptRef.current = true;
+    window.location.replace("/coworkers/new");
+  }, [isAnonymous, isCreating]);
+
+  const stopRecordingAndTranscribe = useCallback(async () => {
+    if (!isRecordingRef.current) {
+      return;
+    }
+    isRecordingRef.current = false;
+
+    const audioBlob = await stopRecording();
+    if (!audioBlob || audioBlob.size === 0) {
+      return;
+    }
+
+    setIsProcessingVoice(true);
+    try {
+      const base64Audio = await blobToBase64(audioBlob);
+      const result = await transcribe({
+        audio: base64Audio,
+        mimeType: audioBlob.type || "audio/webm",
+      });
+
+      if (result.text && result.text.trim()) {
+        setInputPrefillRequest({
+          id: `landing-voice-prefill-${Date.now()}`,
+          text: result.text.trim(),
+          mode: "append",
+        });
+      }
+    } catch (error) {
+      console.error("Landing transcription error:", error);
+    } finally {
+      setIsProcessingVoice(false);
+    }
+  }, [stopRecording, transcribe]);
+
+  const handleStartRecording = useCallback(() => {
+    if (isCreating || isProcessingVoice || isRecordingRef.current) {
+      return;
+    }
+
+    isRecordingRef.current = true;
+    void startRecording();
+  }, [isCreating, isProcessingVoice, startRecording]);
 
   return (
     <>
@@ -511,12 +611,27 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
               <PromptBar
                 onSubmit={handlePromptComposerSubmit}
                 isSubmitting={isCreating}
+                disabled={isCreating || isRecording || isProcessingVoice}
                 variant="hero"
                 placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
                 animatedPlaceholders={heroAnimatedPrompts}
                 richAnimatedPlaceholders={heroRichSegments}
                 onAnimatedPlaceholderIndexChange={setActivePromptIndex}
+                isRecording={isRecording}
+                onStartRecording={handleStartRecording}
+                onStopRecording={stopRecordingAndTranscribe}
+                voiceInteractionMode="toggle"
+                prefillRequest={inputPrefillRequest}
               />
+              {(isRecording || isProcessingVoice || voiceError) && (
+                <div className="mt-4">
+                  <VoiceIndicator
+                    isRecording={isRecording}
+                    isProcessing={isProcessingVoice}
+                    error={voiceError}
+                  />
+                </div>
+              )}
             </div>
           </section>
 
