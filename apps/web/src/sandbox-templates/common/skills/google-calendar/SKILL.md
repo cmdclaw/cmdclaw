@@ -5,7 +5,7 @@ description: Manage Google Calendar events. Use for listing, creating, updating,
 
 # Google Calendar
 
-CRUD operations on Google Calendar events.
+Read and write Google Calendar events, search for matching events, and compute free time windows.
 
 ## Environment Variables
 
@@ -16,6 +16,12 @@ CRUD operations on Google Calendar events.
 ```bash
 # List upcoming events
 google-calendar list [-l limit] [-t timeMin] [-m timeMax] [-c calendarId]
+
+# Search events by title, text, or attendee email
+google-calendar search [-q "sprint review"] [--attendee "samuel@example.com"] [--next] [-l limit] [-t timeMin] [-m timeMax] [-c calendarId]
+
+# Return free slots in a window
+google-calendar availability --from 2024-01-15T09:00:00Z --to 2024-01-15T18:00:00Z [--duration 30m] [--workday-start 09:00] [--workday-end 18:00] [-l limit] [-c calendarId]
 
 # Get event details
 google-calendar get <eventId> [-c calendarId]
@@ -41,10 +47,12 @@ google-calendar today [-c calendarId]
 
 ## Output Format
 
-JSON arrays. Example for `list`:
+JSON arrays for `list` and `search`. Example:
 
 ```json
 [
   { "id": "abc123", "summary": "Team Standup", "start": "2024-01-15T09:00:00-05:00", "end": "2024-01-15T09:30:00-05:00", "location": "Room 1" }
 ]
 ```
+
+`availability` returns a JSON object with `nextAvailable` and `slots`.

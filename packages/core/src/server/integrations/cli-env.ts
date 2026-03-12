@@ -251,7 +251,7 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 
 ## Google Calendar CLI [${statusTag("google_calendar")}]
 - google-calendar list [-t timeMin] [-m timeMax] [-l limit] [-c calendarId] - List events
-- google-calendar search -q <text> [-t timeMin] [-m timeMax] [-l limit] [-c calendarId] - Search matching events
+- google-calendar search [-q <text>] [--attendee <email>] [--next] [-t timeMin] [-m timeMax] [-l limit] [-c calendarId] - Search matching events
 - google-calendar availability --from <datetime> --to <datetime> [--duration 30m] [--workday-start HH:MM] [--workday-end HH:MM] [-l limit] [-c calendarId] - Return free slots
 - google-calendar get <eventId> [-c calendarId] - Get event details
 - google-calendar create --summary <title> --start <datetime> --end <datetime> [--description <text>] [--location <text>] [--attendees <a@x.com,b@y.com>] [-c calendarId]
