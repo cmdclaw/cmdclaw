@@ -38,7 +38,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <div className="bg-background min-h-full">
       <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
-        <div className="mb-6">
+        <div className="-mx-4 mb-6 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-x-visible md:px-0 [&::-webkit-scrollbar]:hidden">
           <AnimatedTabs activeKey={activeKey}>
             {settingsTabs.map((tab) => (
               <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>
