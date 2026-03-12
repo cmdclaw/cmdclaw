@@ -150,6 +150,24 @@ type PersistedContentPart =
       status: "approved" | "denied";
       question_answers?: string[][];
     }
+  | {
+      type: "coworker_invocation";
+      coworker_id: string;
+      username: string;
+      name: string;
+      run_id: string;
+      conversation_id: string;
+      generation_id: string;
+      status:
+        | "running"
+        | "awaiting_approval"
+        | "awaiting_auth"
+        | "completed"
+        | "error"
+        | "cancelled";
+      attachment_names?: string[];
+      message: string;
+    }
   | { type: "thinking"; id: string; content: string }
   | { type: "system"; content: string };
 
@@ -238,6 +256,20 @@ function mapPersistedMessageToChatMessage(m: PersistedConversationMessage): Mess
             command: p.command,
             status: p.status,
             questionAnswers: p.question_answers,
+          };
+        }
+        if (p.type === "coworker_invocation") {
+          return {
+            type: "coworker_invocation" as const,
+            coworkerId: p.coworker_id,
+            username: p.username,
+            name: p.name,
+            runId: p.run_id,
+            conversationId: p.conversation_id,
+            generationId: p.generation_id,
+            status: p.status,
+            attachmentNames: p.attachment_names ?? [],
+            message: p.message,
           };
         }
         return {
@@ -2644,7 +2676,7 @@ export function ChatArea({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto p-4"
+        className="h-0 flex-1 overflow-y-auto p-4"
       >
         <div className="mx-auto max-w-3xl">
           {showModelSwitchWarning && (
@@ -2659,9 +2691,7 @@ export function ChatArea({
               <span>{streamError}</span>
             </div>
           )}
-          {isEmptyChat ? (
-            <div className="h-[60vh]" />
-          ) : (
+          {isEmptyChat ? null : (
             <>
               <MessageList messages={messages} />
 
@@ -2818,7 +2848,7 @@ export function ChatArea({
         </div>
       </div>
 
-      <div className="bg-background p-4">
+      <div className="bg-background mt-auto shrink-0 p-4">
         <div className="mx-auto w-full max-w-4xl space-y-2">
           {isEmptyChat && (
             <div className="space-y-2">
