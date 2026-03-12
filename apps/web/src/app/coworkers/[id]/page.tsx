@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  CUSTOM_SKILL_PREFIX,
+  type CoworkerToolAccessMode,
+} from "@cmdclaw/core/lib/coworker-tool-policy";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@cmdclaw/core/lib/email-forwarding";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
@@ -12,11 +16,12 @@ import {
   X,
   ArrowRight,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -65,6 +70,7 @@ import {
   useCoworker,
   useCoworkerForwardingAlias,
   useUpdateCoworker,
+  useDeleteCoworker,
   useCoworkerRuns,
   useTriggerCoworker,
   useGetOrCreateBuilderConversation,
@@ -93,8 +99,10 @@ const instructionRemarkPlugins = [remarkGfm, remarkBreaks];
 const toolboxRevealInitial = { opacity: 0, y: -4 } as const;
 const toolboxRevealAnimate = { opacity: 1, y: 0 } as const;
 const toolboxRevealTransition = { duration: 0.15 } as const;
-const EMPTY_SELECTED_SKILL_KEYS: string[] = [];
-
+const statusTextMotionInitial = { opacity: 0, y: -4 } as const;
+const statusTextMotionAnimate = { opacity: 1, y: 0 } as const;
+const statusTextMotionExit = { opacity: 0, y: 4 } as const;
+const statusTextMotionTransition = { duration: 0.15 } as const;
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
     return "just now";
@@ -154,6 +162,7 @@ function CoworkerChatPanel({
 export default function CoworkerEditorPage() {
   const params = useParams<{ id: string }>();
   const coworkerId = params?.id;
+  const router = useRouter();
   const { isAdmin } = useIsAdmin();
   const { data: coworker, isLoading } = useCoworker(coworkerId);
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
@@ -165,17 +174,21 @@ export default function CoworkerEditorPage() {
   const disableForwardingAlias = useDisableCoworkerForwardingAlias();
   const rotateForwardingAlias = useRotateCoworkerForwardingAlias();
   const triggerCoworker = useTriggerCoworker();
+  const deleteCoworker = useDeleteCoworker();
   const getOrCreateBuilderConversation = useGetOrCreateBuilderConversation();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [username, setUsername] = useState("");
   const [triggerType, setTriggerType] = useState("manual");
   const [prompt, setPrompt] = useState("");
+  const [toolAccessMode, setToolAccessMode] = useState<CoworkerToolAccessMode>("all");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
-  const [restrictTools, setRestrictTools] = useState(false);
+  const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);
   const [status, setStatus] = useState<"on" | "off">("off");
   const [autoApprove, setAutoApprove] = useState(true);
   const [showDisableAutoApproveDialog, setShowDisableAutoApproveDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
   const [copiedForwardingField, setCopiedForwardingField] = useState<"coworkerAlias" | null>(null);
@@ -187,6 +200,20 @@ export default function CoworkerEditorPage() {
   const handleClose = useCallback(() => {
     collapseToggleRef.current?.();
   }, []);
+  const handleDelete = useCallback(() => {
+    if (!coworkerId) {
+      return;
+    }
+    deleteCoworker.mutate(coworkerId, {
+      onSuccess: () => {
+        toast.success("Coworker deleted");
+        router.push("/coworkers");
+      },
+      onError: () => {
+        toast.error("Failed to delete coworker");
+      },
+    });
+  }, [coworkerId, deleteCoworker, router]);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedEditorRef = useRef(false);
   const initializedCoworkerIdRef = useRef<string | null>(null);
@@ -235,12 +262,8 @@ export default function CoworkerEditorPage() {
     () => (coworkerId ? `coworker-builder:${coworkerId}` : "coworker-builder"),
     [coworkerId],
   );
-  const selectedSkillSlugsByScope = useChatSkillStore((state) => state.selectedSkillSlugsByScope);
   const setSelectedSkillSlugs = useChatSkillStore((state) => state.setSelectedSkillSlugs);
-  const selectedSkillKeys = useMemo(
-    () => selectedSkillSlugsByScope[skillSelectionScopeKey] ?? EMPTY_SELECTED_SKILL_KEYS,
-    [selectedSkillSlugsByScope, skillSelectionScopeKey],
-  );
+  const selectedSkillKeys = allowedSkillSlugs;
   const availableSkills = useMemo(
     () => [
       ...(platformSkills ?? []).map((skill) => ({
@@ -251,13 +274,14 @@ export default function CoworkerEditorPage() {
       ...((personalSkills ?? [])
         .filter((skill) => skill.enabled)
         .map((skill) => ({
-          key: `custom:${skill.name}`,
+          key: `${CUSTOM_SKILL_PREFIX}${skill.name}`,
           title: skill.displayName,
           source: "Custom" as const,
         })) ?? []),
     ],
     [personalSkills, platformSkills],
   );
+  const restrictTools = toolAccessMode === "selected";
 
   const buildSchedule = useCallback((): CoworkerSchedule | null => {
     if (triggerType !== "schedule") {
@@ -310,23 +334,29 @@ export default function CoworkerEditorPage() {
     return {
       id: coworkerId,
       name,
+      description,
+      username,
       status,
       triggerType,
       prompt,
       autoApprove,
-      allowedIntegrations: restrictTools ? allowedIntegrations : allIntegrationTypes,
+      toolAccessMode,
+      allowedIntegrations,
+      allowedSkillSlugs,
       schedule: buildSchedule(),
     };
   }, [
-    allIntegrationTypes,
     allowedIntegrations,
+    allowedSkillSlugs,
     autoApprove,
     buildSchedule,
+    description,
     name,
     prompt,
-    restrictTools,
     status,
+    toolAccessMode,
     triggerType,
+    username,
     coworkerId,
   ]);
 
@@ -335,6 +365,7 @@ export default function CoworkerEditorPage() {
       JSON.stringify({
         ...input,
         allowedIntegrations: [...input.allowedIntegrations].toSorted(),
+        allowedSkillSlugs: [...input.allowedSkillSlugs].toSorted(),
         schedule:
           input.schedule?.type === "weekly"
             ? {
@@ -383,20 +414,18 @@ export default function CoworkerEditorPage() {
     const coworkerAllowedIntegrations = (
       (coworker.allowedIntegrations ?? []) as IntegrationType[]
     ).filter((type): type is IntegrationType => availableIntegrationTypes.includes(type));
-    const hasRestriction =
-      coworkerAllowedIntegrations.length > 0 &&
-      coworkerAllowedIntegrations.length < availableIntegrationTypes.length;
     const payloadFromCoworker = {
       id: coworker.id,
       name: coworker.name,
+      description: coworker.description ?? "",
+      username: coworker.username ?? "",
       status: coworker.status,
       triggerType: coworker.triggerType,
       prompt: coworker.prompt,
       autoApprove: coworker.autoApprove ?? true,
-      allowedIntegrations:
-        hasRestriction || coworkerAllowedIntegrations.length === 0
-          ? coworkerAllowedIntegrations
-          : availableIntegrationTypes,
+      toolAccessMode: coworker.toolAccessMode,
+      allowedIntegrations: coworkerAllowedIntegrations,
+      allowedSkillSlugs: coworker.allowedSkillSlugs ?? [],
       schedule: (coworker.schedule as CoworkerSchedule | null) ?? null,
     } as const;
     const serverPayloadSignature = getCoworkerPayloadSignature(payloadFromCoworker);
@@ -420,14 +449,13 @@ export default function CoworkerEditorPage() {
     }
 
     setName(coworker.name);
+    setDescription(coworker.description ?? "");
+    setUsername(coworker.username ?? "");
     setTriggerType(coworker.triggerType);
     setPrompt(coworker.prompt);
-    setAllowedIntegrations(
-      hasRestriction || coworkerAllowedIntegrations.length === 0
-        ? coworkerAllowedIntegrations
-        : availableIntegrationTypes,
-    );
-    setRestrictTools(hasRestriction || coworkerAllowedIntegrations.length === 0);
+    setToolAccessMode(coworker.toolAccessMode);
+    setAllowedIntegrations(coworkerAllowedIntegrations);
+    setAllowedSkillSlugs(coworker.allowedSkillSlugs ?? []);
     setStatus(coworker.status);
     setAutoApprove(coworker.autoApprove ?? true);
 
@@ -452,6 +480,10 @@ export default function CoworkerEditorPage() {
     hasInitializedEditorRef.current = true;
     lastSavedPayloadRef.current = serverPayloadSignature;
   }, [coworker, getCoworkerPayloadSignature, getCoworkerUpdateInput]);
+
+  useEffect(() => {
+    setSelectedSkillSlugs(skillSelectionScopeKey, allowedSkillSlugs);
+  }, [allowedSkillSlugs, setSelectedSkillSlugs, skillSelectionScopeKey]);
 
   // Get or create builder conversation once coworker loads
   useEffect(() => {
@@ -486,6 +518,10 @@ export default function CoworkerEditorPage() {
     setDescription(event.target.value);
   }, []);
 
+  const handleUsernameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(event.target.value);
+  }, []);
+
   const handleScheduleTypeChange = useCallback((value: string) => {
     setScheduleType(value as "interval" | "daily" | "weekly" | "monthly");
   }, []);
@@ -517,17 +553,13 @@ export default function CoworkerEditorPage() {
     setPrompt(event.target.value);
   }, []);
 
-  const handleRestrictToolsChange = useCallback(
-    (checked: boolean) => {
-      if (checked) {
-        setRestrictTools(false);
-        setAllowedIntegrations(allIntegrationTypes);
-        return;
-      }
-      setRestrictTools(true);
-    },
-    [allIntegrationTypes],
-  );
+  const handleRestrictToolsChange = useCallback((checked: boolean) => {
+    if (checked) {
+      setToolAccessMode("all");
+      return;
+    }
+    setToolAccessMode("selected");
+  }, []);
 
   const handleSelectAllIntegrations = useCallback(() => {
     setAllowedIntegrations(allIntegrationTypes);
@@ -547,13 +579,13 @@ export default function CoworkerEditorPage() {
       const next = selectedSkillKeys.includes(skillKey)
         ? selectedSkillKeys.filter((key) => key !== skillKey)
         : [...selectedSkillKeys, skillKey];
-      setSelectedSkillSlugs(skillSelectionScopeKey, next);
+      setAllowedSkillSlugs(next);
     },
-    [selectedSkillKeys, setSelectedSkillSlugs, skillSelectionScopeKey],
+    [selectedSkillKeys],
   );
   const handleClearSkills = useCallback(() => {
-    setSelectedSkillSlugs(skillSelectionScopeKey, []);
-  }, [setSelectedSkillSlugs, skillSelectionScopeKey]);
+    setAllowedSkillSlugs([]);
+  }, []);
 
   const handleDisableAutoApprove = useCallback(() => {
     setAutoApprove(false);
@@ -643,16 +675,19 @@ export default function CoworkerEditorPage() {
     allowedIntegrations,
     autoApprove,
     buildSchedule,
+    description,
     name,
     persistCoworker,
     prompt,
-    restrictTools,
     scheduleDayOfMonth,
     scheduleDaysOfWeek,
     scheduleTime,
     scheduleType,
     status,
+    toolAccessMode,
     triggerType,
+    username,
+    allowedSkillSlugs,
     coworkerId,
   ]);
 
@@ -713,6 +748,7 @@ export default function CoworkerEditorPage() {
       <CoworkerSettingsPanel
         name={name}
         description={description}
+        username={username}
         isSaving={isSaving}
         status={status}
         autoApprove={autoApprove}
@@ -748,6 +784,7 @@ export default function CoworkerEditorPage() {
         onRun={handleRunClick}
         onNameChange={handleNameChange}
         onDescriptionChange={handleDescriptionChange}
+        onUsernameChange={handleUsernameChange}
         onStatusChange={handleStatusChange}
         onAutoApproveChange={handleAutoApproveChange}
         onPromptChange={handlePromptChange}
@@ -768,12 +805,17 @@ export default function CoworkerEditorPage() {
         onDisableCoworkerAlias={handleDisableCoworkerAlias}
         onCreateCoworkerAlias={handleCreateCoworkerAlias}
         onClose={handleClose}
+        showDeleteDialog={showDeleteDialog}
+        onShowDeleteDialogChange={setShowDeleteDialog}
+        onDelete={handleDelete}
+        isDeleting={deleteCoworker.isPending}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dep list tracks all panel props
     [
       name,
       description,
+      username,
       isSaving,
       status,
       autoApprove,
@@ -810,6 +852,7 @@ export default function CoworkerEditorPage() {
       handleRunClick,
       handleNameChange,
       handleDescriptionChange,
+      handleUsernameChange,
       handleStatusChange,
       handleAutoApproveChange,
       handlePromptChange,
@@ -829,6 +872,10 @@ export default function CoworkerEditorPage() {
       handleRotateCoworkerAlias,
       handleDisableCoworkerAlias,
       handleCreateCoworkerAlias,
+      showDeleteDialog,
+      setShowDeleteDialog,
+      handleDelete,
+      deleteCoworker.isPending,
     ],
   );
 
@@ -883,6 +930,7 @@ export default function CoworkerEditorPage() {
 type CoworkerSettingsPanelProps = {
   name: string;
   description: string;
+  username: string;
   isSaving: boolean;
   status: "on" | "off";
   autoApprove: boolean;
@@ -932,6 +980,7 @@ type CoworkerSettingsPanelProps = {
   onRun: (e: React.MouseEvent) => void;
   onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onUsernameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
   onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -952,6 +1001,10 @@ type CoworkerSettingsPanelProps = {
   onDisableCoworkerAlias: () => void;
   onCreateCoworkerAlias: () => void;
   onClose: () => void;
+  showDeleteDialog: boolean;
+  onShowDeleteDialogChange: (open: boolean) => void;
+  onDelete: () => void;
+  isDeleting: boolean;
 };
 
 const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
@@ -959,6 +1012,7 @@ const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
 function CoworkerSettingsPanel({
   name,
   description,
+  username,
   isSaving,
   status,
   autoApprove,
@@ -994,6 +1048,7 @@ function CoworkerSettingsPanel({
   onRun,
   onNameChange,
   onDescriptionChange,
+  onUsernameChange,
   onStatusChange,
   onAutoApproveChange,
   onPromptChange,
@@ -1014,6 +1069,10 @@ function CoworkerSettingsPanel({
   onDisableCoworkerAlias,
   onCreateCoworkerAlias,
   onClose,
+  showDeleteDialog,
+  onShowDeleteDialogChange,
+  onDelete,
+  isDeleting,
 }: CoworkerSettingsPanelProps) {
   const [coworkerModel, setCoworkerModel] = useState(DEFAULT_COWORKER_MODEL);
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
@@ -1055,6 +1114,10 @@ function CoworkerSettingsPanel({
     [onToggleSkillChecked],
   );
 
+  const handleOpenDeleteDialog = useCallback(() => {
+    onShowDeleteDialogChange(true);
+  }, [onShowDeleteDialogChange]);
+
   const handleTabChange = useCallback(
     (key: string) => {
       onTabChange(key as "instruction" | "runs" | "docs" | "toolbox" | "details");
@@ -1077,7 +1140,24 @@ function CoworkerSettingsPanel({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isSaving && <span className="text-muted-foreground shrink-0 text-xs">Saving…</span>}
-          <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
+          <div className="flex items-center gap-1.5">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={status}
+                initial={statusTextMotionInitial}
+                animate={statusTextMotionAnimate}
+                exit={statusTextMotionExit}
+                transition={statusTextMotionTransition}
+                className={cn(
+                  "text-xs font-medium",
+                  status === "on" ? "text-green-600 dark:text-green-400" : "text-muted-foreground",
+                )}
+              >
+                {status === "on" ? "On" : "Off"}
+              </motion.span>
+            </AnimatePresence>
+            <Switch checked={status === "on"} onCheckedChange={onStatusChange} />
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -1094,12 +1174,42 @@ function CoworkerSettingsPanel({
           </Button>
           <button
             type="button"
+            onClick={handleOpenDeleteDialog}
+            className="text-muted-foreground hover:text-destructive hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+            aria-label="Delete coworker"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
             aria-label="Close panel"
           >
             <X className="h-4 w-4" />
           </button>
+          <AlertDialog open={showDeleteDialog} onOpenChange={onShowDeleteDialogChange}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete this coworker and all of its run history. This action
+                  cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={onDelete}
+                  disabled={isDeleting}
+                  className="bg-destructive hover:bg-destructive/90 text-white"
+                >
+                  {isDeleting ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
       {/* Tab content — scrollable */}
@@ -1120,6 +1230,18 @@ function CoworkerSettingsPanel({
             </div>
 
             {/* Description card */}
+            <div className="border-border/50 rounded-xl border px-4 py-3">
+              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Username
+              </label>
+              <Input
+                value={username}
+                onChange={onUsernameChange}
+                placeholder="my-coworker"
+                className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+              />
+            </div>
+
             <div className="border-border/50 rounded-xl border px-4 py-3">
               <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                 Description
