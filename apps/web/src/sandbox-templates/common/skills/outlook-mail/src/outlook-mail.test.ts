@@ -29,6 +29,7 @@ describe("outlook-mail CLI", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Outlook Mail CLI - Commands");
     expect(result.stdout).toContain("list");
+    expect(result.stdout).toContain("search -q <query>");
     expect(result.stdout).toContain("unread");
   });
 
@@ -43,6 +44,19 @@ describe("outlook-mail CLI", () => {
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid --limit");
+  });
+
+  test("requires a query for search", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/outlook-mail/src/outlook-mail.ts",
+      ["search"],
+      {
+        OUTLOOK_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Required: outlook-mail search --query <search>");
   });
 
   test("fails send when body contains unsupported html tags", () => {

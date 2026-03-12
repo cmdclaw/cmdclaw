@@ -1,6 +1,6 @@
 ---
 name: outlook
-description: Read and send Outlook emails. Use for listing emails, reading content, counting unread, and sending messages.
+description: Read, search, and send Outlook emails. Use for listing emails, searching the mailbox, reading content, counting unread, and sending messages.
 ---
 
 # Outlook Mail
@@ -16,6 +16,9 @@ Read inbox emails, get email content, count unread emails, and send messages via
 ```bash
 # List emails
 outlook-mail list [-q "subject keyword"] [-l limit]
+
+# Search mailbox
+outlook-mail search -q "subject keyword" [-l limit]
 
 # Get full email content
 outlook-mail get <messageId>

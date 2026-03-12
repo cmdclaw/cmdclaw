@@ -21,7 +21,7 @@ const { positionals, values } = parseArgs({
     help: { type: "boolean", short: "h" },
     query: { type: "string", short: "q" },
     limit: { type: "string", short: "l", default: "10" },
-    scope: { type: "string", default: "inbox" },
+    scope: { type: "string" },
     "include-spam-trash": { type: "boolean", default: false },
     unread: { type: "boolean", default: false },
     to: { type: "string" },
@@ -67,16 +67,28 @@ function extractBody(part: GmailPart): string {
   return "";
 }
 
-function getScope(): MailScope {
-  const scope = values.scope;
+function parseLimit(): string {
+  const parsed = Number.parseInt(values.limit ?? "10", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("Invalid --limit. Expected a positive integer.");
+  }
+  return String(Math.min(parsed, 50));
+}
+
+function getScope(defaultScope: MailScope = "inbox"): MailScope {
+  const scope = values.scope ?? defaultScope;
   if (scope === "inbox" || scope === "all" || scope === "strict-all") {
     return scope;
   }
   throw new Error(`Invalid --scope "${scope}". Expected one of: inbox, all, strict-all.`);
 }
 
-function buildMessageListParams(maxResults: string, query?: string) {
-  const scope = getScope();
+function buildMessageListParams(
+  maxResults: string,
+  query?: string,
+  defaultScope: MailScope = "inbox",
+) {
+  const scope = getScope(defaultScope);
   const params = new URLSearchParams({ maxResults });
   if (query) {
     params.set("q", query);
@@ -89,7 +101,7 @@ function buildMessageListParams(maxResults: string, query?: string) {
 
 async function fetchMessageDetails(messages: Array<{ id: string }>) {
   const details = await Promise.all(
-    messages.slice(0, 20).map(async (msg: { id: string }) => {
+    messages.map(async (msg: { id: string }) => {
       const res = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
         { headers },
@@ -113,7 +125,33 @@ async function fetchMessageDetails(messages: Array<{ id: string }>) {
 }
 
 async function listEmails() {
-  const config = buildMessageListParams(values.limit || "10", values.query);
+  const config = buildMessageListParams(parseLimit(), values.query);
+
+  const listRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?${config.params}&includeSpamTrash=${String(config.includeSpamTrash)}`,
+    { headers },
+  );
+  if (!listRes.ok) {
+    throw new Error(await listRes.text());
+  }
+
+  const { messages = [] } = (await listRes.json()) as { messages?: Array<{ id: string }> };
+  if (messages.length === 0) {
+    return console.log("No emails found.");
+  }
+
+  const emails = await fetchMessageDetails(messages);
+
+  console.log(JSON.stringify(emails, null, 2));
+}
+
+async function searchEmails() {
+  const query = values.query?.trim();
+  if (!query) {
+    throw new Error("Required: google-gmail search --query <search>");
+  }
+
+  const config = buildMessageListParams(parseLimit(), query, "all");
 
   const listRes = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?${config.params}&includeSpamTrash=${String(config.includeSpamTrash)}`,
@@ -258,6 +296,8 @@ function showHelp() {
   console.log(`Google Gmail CLI - Commands:
   list [-q query] [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
                               List emails (default scope: inbox)
+  search -q <query> [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
+                              Search mailbox (default scope: all)
   latest [-q query] [--unread] [--scope inbox|all|strict-all] [--include-spam-trash]
                               Get latest email (default scope: inbox)
   get <messageId>             Get email content
@@ -280,6 +320,9 @@ async function main() {
     switch (command) {
       case "list":
         await listEmails();
+        break;
+      case "search":
+        await searchEmails();
         break;
       case "latest":
         await latestEmail();

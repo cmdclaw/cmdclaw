@@ -222,18 +222,20 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
   const instructions = `
 ## Google Gmail CLI [${statusTag("google_gmail")}]
 - google-gmail list [-q query] [-l limit] - List emails
+- google-gmail search -q <query> [-l limit] [--scope inbox|all|strict-all] - Search mailbox
 - google-gmail get <messageId> - Get full email content
 - google-gmail unread - Count unread emails
 - google-gmail draft --to <email> --subject <subject> --body <body>
 - google-gmail send --to <email> --subject <subject> --body <body>
-- Example: google-gmail list -q "is:unread" -l 5
+- Example: google-gmail search -q "from:boss" -l 5
 
 ## Outlook Mail CLI [${statusTag("outlook")}]
 - outlook-mail list [-q query] [-l limit] - List emails
+- outlook-mail search -q <query> [-l limit] - Search mailbox
 - outlook-mail get <messageId> - Get full email content
 - outlook-mail unread - Count unread emails
 - outlook-mail send --to <email> --subject <subject> --body <body>
-- Example: outlook-mail list -q "is:unread" -l 5
+- Example: outlook-mail search -q "invoice" -l 5
 
 ## Outlook Calendar CLI [${statusTag("outlook_calendar")}]
 - outlook-calendar list [-t timeMin] [-m timeMax] [-l limit] [-c calendarId] - List events

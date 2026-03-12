@@ -118,6 +118,14 @@ async function listEmails() {
   console.log(JSON.stringify(items, null, 2));
 }
 
+async function searchEmails() {
+  if (!values.query?.trim()) {
+    throw new Error("Required: outlook-mail search --query <search>");
+  }
+
+  await listEmails();
+}
+
 async function getEmail(messageId: string) {
   if (!messageId) {
     throw new Error("Required: outlook-mail get <messageId>");
@@ -240,6 +248,7 @@ async function sendEmail() {
 function showHelp() {
   console.log(`Outlook Mail CLI - Commands:
   list [-q query] [-l limit]         List emails
+  search -q <query> [-l limit]       Search mailbox
   get <messageId>                    Get email content
   unread [-q query] [-l limit]       Count unread emails
   send --to <email> --subject <subject> --body <body> [--cc <email>]
@@ -258,6 +267,9 @@ async function main() {
     switch (command) {
       case "list":
         await listEmails();
+        break;
+      case "search":
+        await searchEmails();
         break;
       case "get":
         await getEmail(args[0]);

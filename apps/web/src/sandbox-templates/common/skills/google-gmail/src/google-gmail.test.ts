@@ -29,8 +29,22 @@ describe("google-gmail CLI", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Google Gmail CLI - Commands");
     expect(result.stdout).toContain("latest");
+    expect(result.stdout).toContain("search -q <query>");
     expect(result.stdout).toContain("--scope inbox|all|strict-all");
     expect(result.stdout).toContain("draft --to <email> --subject <subject> --body <body>");
+  });
+
+  test("fails for invalid limit value", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/google-gmail/src/google-gmail.ts",
+      ["list", "--limit", "0"],
+      {
+        GMAIL_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Invalid --limit");
   });
 
   test("fails for unsupported scope value", () => {
@@ -44,6 +58,19 @@ describe("google-gmail CLI", () => {
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid --scope");
+  });
+
+  test("requires a query for search", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/google-gmail/src/google-gmail.ts",
+      ["search"],
+      {
+        GMAIL_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Required: google-gmail search --query <search>");
   });
 
   test("fails send when body contains unsupported html tags", () => {

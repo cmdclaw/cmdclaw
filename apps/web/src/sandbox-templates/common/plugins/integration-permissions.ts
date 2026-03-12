@@ -36,11 +36,11 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["send", "react", "upload"],
   },
   google_gmail: {
-    read: ["list", "get", "unread"],
+    read: ["list", "search", "get", "unread", "latest"],
     write: ["send"],
   },
   outlook: {
-    read: ["list", "get", "unread"],
+    read: ["list", "search", "get", "unread"],
     write: ["send"],
   },
   outlook_calendar: {

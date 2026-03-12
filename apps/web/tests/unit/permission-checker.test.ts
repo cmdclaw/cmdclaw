@@ -79,6 +79,20 @@ describe("parseBashCommand", () => {
       integrationName: "Google Drive",
       isWrite: false,
     });
+
+    expect(parseBashCommand('google-gmail search -q "from:boss"')).toEqual({
+      integration: "google_gmail",
+      operation: "search",
+      integrationName: "Gmail",
+      isWrite: false,
+    });
+
+    expect(parseBashCommand('outlook-mail search -q "invoice"')).toEqual({
+      integration: "outlook",
+      operation: "search",
+      integrationName: "Outlook Mail",
+      isWrite: false,
+    });
   });
 
   test("rejects legacy short aliases", () => {
@@ -148,6 +162,26 @@ describe("checkToolPermissions", () => {
 
   test("allows read commands with auth", () => {
     expect(checkToolPermissions("bash", { command: "github prs" }, ["github"])).toEqual({
+      allowed: true,
+      needsApproval: false,
+      needsAuth: false,
+    });
+  });
+
+  test("allows Gmail and Outlook mailbox search when auth exists", () => {
+    expect(
+      checkToolPermissions("bash", { command: 'google-gmail search -q "from:boss"' }, [
+        "google_gmail",
+      ]),
+    ).toEqual({
+      allowed: true,
+      needsApproval: false,
+      needsAuth: false,
+    });
+
+    expect(
+      checkToolPermissions("bash", { command: 'outlook-mail search -q "invoice"' }, ["outlook"]),
+    ).toEqual({
       allowed: true,
       needsApproval: false,
       needsAuth: false,
