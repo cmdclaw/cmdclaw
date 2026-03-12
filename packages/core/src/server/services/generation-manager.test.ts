@@ -1347,6 +1347,64 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("fills coworker metadata from the first builder user message before the prompt patch lands", async () => {
+    const mgr = asTestManager();
+    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+    const updatedAt = new Date("2026-03-12T10:00:00.000Z");
+
+    generationFindFirstMock.mockResolvedValueOnce(null);
+    conversationFindFirstMock.mockResolvedValueOnce({
+      id: "conv-coworker-builder",
+      userId: "user-1",
+      model: "anthropic/claude-sonnet-4-6",
+      autoApprove: false,
+      type: "coworker",
+    });
+    coworkerFindFirstMock
+      .mockResolvedValueOnce({
+        id: "cw-1",
+        prompt: "",
+        toolAccessMode: "all",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["slack"],
+        updatedAt,
+      })
+      .mockResolvedValueOnce({
+        id: "cw-1",
+        name: "",
+        description: null,
+        username: null,
+        prompt: "",
+        triggerType: "manual",
+        allowedIntegrations: ["slack"],
+        allowedCustomIntegrations: [],
+        schedule: null,
+        autoApprove: false,
+        promptDo: null,
+        promptDont: null,
+      })
+      .mockResolvedValueOnce(null);
+    insertReturningMock
+      .mockResolvedValueOnce([{ id: "msg-user" }])
+      .mockResolvedValueOnce([{ id: "gen-coworker-builder" }]);
+
+    await generationManager.startGeneration({
+      conversationId: "conv-coworker-builder",
+      content: "Follow up with new inbound leads after every sales call.",
+      userId: "user-1",
+    });
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Follow up with new inbound leads after every sales call",
+        description: "Follow up with new inbound leads after every sales call.",
+        username: "follow-up-with-new-inbound-leads-after-every-sales-call",
+      }),
+    );
+  });
+
   it("returns an empty queued-message list when conversation no longer exists", async () => {
     conversationFindFirstMock.mockResolvedValue(null);
 

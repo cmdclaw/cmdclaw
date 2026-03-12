@@ -12,6 +12,11 @@ import type {
 } from "../sandbox/core/types";
 import type { SandboxBackend } from "../sandbox/types";
 import { env } from "../../env";
+import {
+  CUSTOM_SKILL_PREFIX,
+  normalizeCoworkerAllowedSkillSlugs,
+  splitCoworkerAllowedSkillSlugs,
+} from "../../lib/coworker-tool-policy";
 import { parseModelReference } from "../../lib/model-reference";
 import {
   listOpencodeFreeModels,
@@ -85,6 +90,7 @@ import {
   resolveCoworkerBuilderContextByConversation,
   type CoworkerBuilderContext,
 } from "./coworker-builder-service";
+import { generateCoworkerMetadataOnFirstPromptFill } from "./coworker-metadata";
 import { createCommunityIntegrationSkill } from "./integration-skill-service";
 import { writeSessionTranscriptFromConversation } from "./memory-service";
 import { resolveSelectedPlatformSkillSlugs } from "./platform-skill-service";
@@ -260,6 +266,7 @@ interface GenerationContext {
   allowedIntegrations?: IntegrationType[];
   autoApprove: boolean;
   allowedCustomIntegrations?: string[];
+  allowedSkillSlugs?: string[];
   coworkerPrompt?: string;
   coworkerPromptDo?: string;
   coworkerPromptDont?: string;
@@ -497,6 +504,7 @@ function extractAssistantTextFromSessionMessagesPayload(payload: unknown): strin
 function buildExecutionPolicy(params: {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
+  allowedSkillSlugs?: string[];
   autoApprove: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
@@ -505,6 +513,7 @@ function buildExecutionPolicy(params: {
   return {
     allowedIntegrations: params.allowedIntegrations,
     allowedCustomIntegrations: params.allowedCustomIntegrations,
+    allowedSkillSlugs: params.allowedSkillSlugs,
     autoApprove: params.autoApprove,
     sandboxProvider: params.sandboxProvider,
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
@@ -1133,6 +1142,7 @@ class GenerationManager {
   ): {
     allowedIntegrations?: IntegrationType[];
     allowedCustomIntegrations?: string[];
+    allowedSkillSlugs?: string[];
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
     selectedPlatformSkillSlugs?: string[];
@@ -1148,6 +1158,7 @@ class GenerationManager {
     return {
       allowedIntegrations,
       allowedCustomIntegrations: policy?.allowedCustomIntegrations,
+      allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(policy?.allowedSkillSlugs),
       autoApprove: policy?.autoApprove ?? fallbackAutoApprove,
       sandboxProvider:
         policy?.sandboxProvider === "e2b" ||
@@ -1558,6 +1569,50 @@ class GenerationManager {
         content,
       })
       .returning();
+
+    if (builderCoworkerContext) {
+      const coworkerMetadataRow = await db.query.coworker.findFirst({
+        where: and(eq(coworker.id, builderCoworkerContext.coworkerId), eq(coworker.ownerId, userId)),
+        columns: {
+          id: true,
+          name: true,
+          description: true,
+          username: true,
+          prompt: true,
+          triggerType: true,
+          allowedIntegrations: true,
+          allowedCustomIntegrations: true,
+          schedule: true,
+          autoApprove: true,
+          promptDo: true,
+          promptDont: true,
+        },
+      });
+
+      if (coworkerMetadataRow) {
+        const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
+          database: db,
+          current: coworkerMetadataRow,
+          next: {
+            ...coworkerMetadataRow,
+            prompt: content,
+          },
+        });
+        const persistedMetadataUpdates = Object.fromEntries(
+          Object.entries(metadataUpdates).filter((entry): entry is [string, string] =>
+            typeof entry[1] === "string",
+          ),
+        );
+
+        if (Object.keys(persistedMetadataUpdates).length > 0) {
+          await db
+            .update(coworker)
+            .set(persistedMetadataUpdates)
+            .where(eq(coworker.id, builderCoworkerContext.coworkerId));
+        }
+      }
+    }
+
     logServerEvent(
       "info",
       "START_GENERATION_PHASE_DONE",
@@ -1784,9 +1839,13 @@ class GenerationManager {
     sandboxProvider?: "e2b" | "daytona" | "docker";
     allowedIntegrations: IntegrationType[];
     allowedCustomIntegrations?: string[];
+    allowedSkillSlugs?: string[];
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model } = params;
     const resolvedModel = await resolveCoworkerModel(model);
+    const normalizedAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(params.allowedSkillSlugs);
+    const { platformSkillSlugs } = splitCoworkerAllowedSkillSlugs(normalizedAllowedSkillSlugs);
+    const selectedPlatformSkillSlugs = await resolveSelectedPlatformSkillSlugs(platformSkillSlugs);
 
     const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
     const [newConv] = await db
@@ -1814,9 +1873,10 @@ class GenerationManager {
         executionPolicy: buildExecutionPolicy({
           allowedIntegrations: params.allowedIntegrations,
           allowedCustomIntegrations: params.allowedCustomIntegrations,
+          allowedSkillSlugs: normalizedAllowedSkillSlugs,
           autoApprove: params.autoApprove,
           sandboxProvider: params.sandboxProvider,
-          selectedPlatformSkillSlugs: undefined,
+          selectedPlatformSkillSlugs,
         }),
         contentParts: [],
         inputTokens: 0,
@@ -1878,12 +1938,13 @@ class GenerationManager {
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: params.autoApprove,
       allowedCustomIntegrations: params.allowedCustomIntegrations,
+      allowedSkillSlugs: normalizedAllowedSkillSlugs,
       coworkerPrompt: undefined,
       coworkerPromptDo: undefined,
       coworkerPromptDont: undefined,
       triggerPayload: undefined,
       builderCoworkerContext: null,
-      selectedPlatformSkillSlugs: undefined,
+      selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
       agentInitStartedAt: undefined,
@@ -1956,6 +2017,7 @@ class GenerationManager {
           columns: {
             allowedIntegrations: true,
             allowedCustomIntegrations: true,
+            allowedSkillSlugs: true,
             prompt: true,
             promptDo: true,
             promptDont: true,
@@ -1966,6 +2028,12 @@ class GenerationManager {
     const executionPolicy = this.getExecutionPolicyFromRecord(
       genRecord,
       linkedCoworker?.autoApprove ?? genRecord.conversation.autoApprove,
+    );
+    const linkedCoworkerAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(
+      linkedCoworker?.allowedSkillSlugs,
+    );
+    const linkedCoworkerPlatformSkillSlugs = linkedCoworkerAllowedSkillSlugs.filter(
+      (entry) => !entry.startsWith(CUSTOM_SKILL_PREFIX),
     );
     const builderCoworkerContext =
       genRecord.conversation.type === "coworker"
@@ -2019,12 +2087,18 @@ class GenerationManager {
         executionPolicy.allowedCustomIntegrations ??
         linkedCoworker?.allowedCustomIntegrations ??
         undefined,
+      allowedSkillSlugs:
+        executionPolicy.allowedSkillSlugs ??
+        linkedCoworkerAllowedSkillSlugs ??
+        undefined,
       coworkerPrompt: undefined,
       coworkerPromptDo: undefined,
       coworkerPromptDont: undefined,
       triggerPayload: undefined,
       builderCoworkerContext,
-      selectedPlatformSkillSlugs: executionPolicy.selectedPlatformSkillSlugs,
+      selectedPlatformSkillSlugs:
+        executionPolicy.selectedPlatformSkillSlugs ??
+        (linkedCoworkerPlatformSkillSlugs.length > 0 ? linkedCoworkerPlatformSkillSlugs : undefined),
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
       runtimeCallbackToken: genRecord.runtimeCallbackToken ?? undefined,
@@ -3356,6 +3430,7 @@ class GenerationManager {
         getEnabledIntegrationTypes(ctx.userId),
         userTimezonePromise,
       ]);
+      const { customSkillNames } = splitCoworkerAllowedSkillSlugs(ctx.allowedSkillSlugs ?? []);
 
       const allowedIntegrations = ctx.allowedIntegrations ?? enabledIntegrations;
 
@@ -3658,6 +3733,7 @@ class GenerationManager {
         userId: ctx.userId,
         allowedIntegrations: [...allowedIntegrations].toSorted(),
         allowedCustomIntegrations: [...(ctx.allowedCustomIntegrations ?? [])].toSorted(),
+        allowedSkillSlugs: [...(ctx.allowedSkillSlugs ?? [])].toSorted(),
         selectedPlatformSkillSlugs: [...(ctx.selectedPlatformSkillSlugs ?? [])].toSorted(),
         skills: enabledSkillRows
           .map((entry) => `${entry.name}:${entry.updatedAt.toISOString()}`)
@@ -3715,7 +3791,11 @@ class GenerationManager {
       try {
         if (!prePromptCacheHit) {
           const writeSkillsStartedAt = Date.now();
-          writtenSkills = await writeSkillsToSandbox(runtimeSandbox, ctx.userId);
+          writtenSkills = await writeSkillsToSandbox(
+            runtimeSandbox,
+            ctx.userId,
+            customSkillNames.length > 0 ? customSkillNames : undefined,
+          );
           markPrePromptStep("writeSkillsToSandboxMs", writeSkillsStartedAt);
 
           const writeCustomCliStartedAt = Date.now();
@@ -6119,6 +6199,7 @@ class GenerationManager {
         updatedAt: ctx.builderCoworkerContext.updatedAt,
         editable: {
           prompt: ctx.builderCoworkerContext.prompt,
+          toolAccessMode: ctx.builderCoworkerContext.toolAccessMode,
           triggerType: ctx.builderCoworkerContext.triggerType,
           schedule: ctx.builderCoworkerContext.schedule,
           allowedIntegrations: ctx.builderCoworkerContext.allowedIntegrations,
@@ -6131,10 +6212,10 @@ class GenerationManager {
     return [
       "## Coworker Builder Context (System)",
       "You are in coworker builder mode.",
-      "The coworker snapshot below is the latest server state. Only edit these fields: prompt, allowedIntegrations, triggerType, schedule.",
+      "The coworker snapshot below is the latest server state. Only edit these fields: prompt, toolAccessMode, allowedIntegrations, triggerType, schedule.",
       "If the user asks to change editable coworker fields, emit exactly one patch block in this format:",
       "```coworker_builder_patch",
-      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
+      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "toolAccessMode": "all|selected", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
       "```",
       "Rules:",
       "- Use baseUpdatedAt exactly from the snapshot below.",

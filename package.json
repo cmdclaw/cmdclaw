@@ -28,6 +28,7 @@
     "build:worker": "turbo build --filter=@cmdclaw/worker",
     "build:ws": "turbo build --filter=@cmdclaw/ws",
     "db:push": "bun run --cwd apps/web db:push",
+    "workflow": "bun run --cwd apps/web workflow",
     "db:seed": "bun run --cwd apps/web db:seed",
     "db:reset": "bun run --cwd apps/web db:reset",
     "db:studio": "bun run --cwd apps/web db:studio",

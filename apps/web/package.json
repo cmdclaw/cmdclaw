@@ -12,6 +12,7 @@
     "chat:e2b": "SANDBOX_DEFAULT=e2b bun run chat",
     "check": "bun run typecheck && bun run lint",
     "coworker": "bun scripts/coworker.ts",
+    "workflow": "bun scripts/coworker.ts",
     "daytona:build:dev": "bun src/sandbox-templates/daytona/build.dev.ts",
     "daytona:build:prod": "bun src/sandbox-templates/daytona/build.prod.ts",
     "daytona:cleanup": "bun scripts/daytona-cleanup.ts",

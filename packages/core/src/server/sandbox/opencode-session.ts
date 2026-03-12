@@ -814,6 +814,7 @@ export async function getOrCreateSessionForCloudProvider(
 export async function writeSkillsToSandbox(
   sandbox: OpenCodeSandbox,
   userId: string,
+  allowedSkillNames?: string[],
 ): Promise<string[]> {
   const skills = await db.query.skill.findMany({
     where: and(eq(skill.userId, userId), eq(skill.enabled, true)),
@@ -822,8 +823,12 @@ export async function writeSkillsToSandbox(
       documents: true,
     },
   });
+  const allowedSet =
+    allowedSkillNames && allowedSkillNames.length > 0 ? new Set(allowedSkillNames) : null;
+  const filteredSkills =
+    allowedSet === null ? skills : skills.filter((entry) => allowedSet.has(entry.name));
 
-  if (skills.length === 0) {
+  if (filteredSkills.length === 0) {
     return [];
   }
 
@@ -832,7 +837,7 @@ export async function writeSkillsToSandbox(
   const writtenSkills: string[] = [];
   let agentsContent = "# Custom Skills\n\n";
 
-  await skills.reduce<Promise<void>>(async (prev, s) => {
+  await filteredSkills.reduce<Promise<void>>(async (prev, s) => {
     await prev;
     const skillDir = `/app/.opencode/skills/${s.name}`;
     await sandbox.commands.run(`mkdir -p "${skillDir}"`);

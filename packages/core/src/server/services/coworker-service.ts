@@ -7,11 +7,17 @@ import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-p
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
+  customIntegrationCredential,
   generation,
   coworker,
   coworkerRun,
   coworkerRunEvent,
 } from "@cmdclaw/db/schema";
+import {
+  normalizeCoworkerAllowedSkillSlugs,
+  normalizeCoworkerToolAccessMode,
+} from "../../lib/coworker-tool-policy";
+import { getEnabledIntegrationTypes } from "../integrations/cli-env";
 import { generationManager } from "./generation-manager";
 import { generationInterruptService } from "./generation-interrupt-service";
 
@@ -223,10 +229,35 @@ export async function triggerCoworkerRun(params: {
   ].filter(Boolean);
   const userContent = coworkerSections.join("\n\n");
 
-  const allowedIntegrations = (wf.allowedIntegrations ?? []) as IntegrationType[];
-  const allowedCustomIntegrations = Array.isArray(wf.allowedCustomIntegrations)
-    ? wf.allowedCustomIntegrations.filter((value): value is string => typeof value === "string")
-    : [];
+  const toolAccessMode = normalizeCoworkerToolAccessMode(wf.toolAccessMode, wf.allowedIntegrations);
+  const allowedIntegrations =
+    toolAccessMode === "all"
+      ? await getEnabledIntegrationTypes(wf.ownerId)
+      : (wf.allowedIntegrations ?? []).filter(
+          (value): value is IntegrationType => typeof value === "string",
+        );
+  const allowedCustomIntegrations =
+    toolAccessMode === "all"
+      ? (
+          await db.query.customIntegrationCredential.findMany({
+            where: and(
+              eq(customIntegrationCredential.userId, wf.ownerId),
+              eq(customIntegrationCredential.enabled, true),
+            ),
+            with: {
+              customIntegration: {
+                columns: {
+                  slug: true,
+                },
+              },
+            },
+          })
+        ).map((entry) => entry.customIntegration.slug)
+      : Array.isArray(wf.allowedCustomIntegrations)
+        ? wf.allowedCustomIntegrations.filter((value): value is string => typeof value === "string")
+        : [];
+  const allowedSkillSlugs =
+    toolAccessMode === "all" ? undefined : normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs);
 
   let generationId: string;
   let conversationId: string;
@@ -240,6 +271,7 @@ export async function triggerCoworkerRun(params: {
       autoApprove: wf.autoApprove,
       allowedIntegrations,
       allowedCustomIntegrations,
+      allowedSkillSlugs,
     });
 
     generationId = startResult.generationId;

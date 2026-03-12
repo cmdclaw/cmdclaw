@@ -1,4 +1,11 @@
 import {
+  COWORKER_AVAILABLE_INTEGRATION_TYPES,
+  COWORKER_TOOL_ACCESS_MODES,
+  normalizeCoworkerAllowedSkillSlugs,
+  normalizeCoworkerToolAccessMode,
+  type CoworkerToolAccessMode,
+} from "@cmdclaw/core/lib/coworker-tool-policy";
+import {
   buildCoworkerForwardingAddress,
   EMAIL_FORWARDED_TRIGGER_TYPE,
   generateCoworkerAliasLocalPart,
@@ -7,6 +14,10 @@ import {
   applyCoworkerBuilderPatch,
   coworkerBuilderPatchSchema,
 } from "@cmdclaw/core/server/services/coworker-builder-service";
+import {
+  generateCoworkerMetadataOnFirstPromptFill,
+  normalizeAndEnsureUniqueCoworkerUsername,
+} from "@cmdclaw/core/server/services/coworker-metadata";
 import {
   removeCoworkerScheduleJob,
   syncCoworkerScheduleJob,
@@ -24,7 +35,6 @@ import {
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { generateCoworkerName } from "@/server/utils/generate-coworker-name";
 import { protectedProcedure } from "../middleware";
 
 const integrationTypeSchema = z.enum([
@@ -47,7 +57,8 @@ const integrationTypeSchema = z.enum([
   "reddit",
   "twitter",
 ]);
-const ALL_INTEGRATION_TYPES = [...integrationTypeSchema.options];
+const DEFAULT_COWORKER_INTEGRATIONS = [...COWORKER_AVAILABLE_INTEGRATION_TYPES];
+const toolAccessModeSchema = z.enum(COWORKER_TOOL_ACCESS_MODES);
 
 const triggerTypeSchema = z.string().min(1).max(128);
 const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
@@ -57,17 +68,44 @@ function getReceivingDomain(): string | null {
   return value && value.length > 0 ? value : null;
 }
 
-function buildFallbackCoworkerName(agentDescription: string): string {
-  const firstSentence = agentDescription
-    .split(/[\n.!?]/)[0]
-    ?.replace(/\s+/g, " ")
-    .trim();
-
-  if (firstSentence) {
-    return firstSentence.slice(0, 128);
+function normalizeDescriptionInput(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
   }
 
-  return "New Coworker";
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function resolveCoworkerUsername(params: {
+  database: unknown;
+  coworkerId: string;
+  username: string | null | undefined;
+}): Promise<string | null> {
+  if (typeof params.username !== "string") {
+    return null;
+  }
+
+  const trimmed = params.username.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = await normalizeAndEnsureUniqueCoworkerUsername({
+    database: params.database as {
+      query: { coworker: { findFirst: (args: unknown) => Promise<unknown> } };
+    },
+    coworkerId: params.coworkerId,
+    username: trimmed,
+  });
+
+  if (!normalized) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Username must contain letters, numbers, or hyphens",
+    });
+  }
+
+  return normalized;
 }
 
 // Schedule configuration schema
@@ -95,6 +133,102 @@ const scheduleSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+function getResolvedCoworkerToolPolicy(wf: {
+  toolAccessMode: CoworkerToolAccessMode | null;
+  allowedIntegrations: string[];
+  allowedSkillSlugs: string[] | null;
+}) {
+  return {
+    toolAccessMode: normalizeCoworkerToolAccessMode(wf.toolAccessMode, wf.allowedIntegrations),
+    allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs),
+  };
+}
+
+function isBlankMetadataValue(value: string | null | undefined): boolean {
+  return typeof value !== "string" || value.trim().length === 0;
+}
+
+async function ensureBuilderCoworkerMetadata(params: {
+  context: {
+    user: { id: string };
+    db: unknown;
+  };
+  wf: typeof coworker.$inferSelect;
+}): Promise<typeof coworker.$inferSelect> {
+  const { context, wf } = params;
+  const database = context.db as {
+    query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    update: (table: typeof coworker) => {
+      set: (
+        values: Partial<Pick<typeof coworker.$inferInsert, "name" | "description" | "username">>,
+      ) => {
+        where: (clause: unknown) => {
+          returning: () => Promise<Array<typeof coworker.$inferSelect>>;
+        };
+      };
+    };
+  };
+
+  if (!wf.builderConversationId || !wf.prompt?.trim()) {
+    return wf;
+  }
+
+  if (
+    !isBlankMetadataValue(wf.name) &&
+    !isBlankMetadataValue(wf.description) &&
+    !isBlankMetadataValue(wf.username)
+  ) {
+    return wf;
+  }
+
+  const coworkerQueryDatabase = database as {
+    query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+  };
+  const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
+    database: coworkerQueryDatabase,
+    current: {
+      id: wf.id,
+      name: wf.name,
+      description: wf.description,
+      username: wf.username,
+      prompt: "",
+      triggerType: wf.triggerType,
+      allowedIntegrations: wf.allowedIntegrations,
+      allowedCustomIntegrations: wf.allowedCustomIntegrations,
+      schedule: wf.schedule ?? null,
+      autoApprove: wf.autoApprove,
+      promptDo: wf.promptDo ?? null,
+      promptDont: wf.promptDont ?? null,
+    },
+    next: {
+      id: wf.id,
+      name: wf.name,
+      description: wf.description,
+      username: wf.username,
+      prompt: wf.prompt,
+      triggerType: wf.triggerType,
+      allowedIntegrations: wf.allowedIntegrations,
+      allowedCustomIntegrations: wf.allowedCustomIntegrations,
+      schedule: wf.schedule ?? null,
+      autoApprove: wf.autoApprove,
+      promptDo: wf.promptDo ?? null,
+      promptDont: wf.promptDont ?? null,
+    },
+  });
+
+  if (Object.keys(metadataUpdates).length === 0) {
+    return wf;
+  }
+
+  const [updated] = await database
+    .update(coworker)
+    .set(metadataUpdates)
+    .where(and(eq(coworker.id, wf.id), eq(coworker.ownerId, context.user.id)))
+    .returning();
+
+  return updated ?? { ...wf, ...metadataUpdates };
+}
+
 const list = protectedProcedure.handler(async ({ context }) => {
   const coworkers = await context.db.query.coworker.findMany({
     where: eq(coworker.ownerId, context.user.id),
@@ -102,22 +236,29 @@ const list = protectedProcedure.handler(async ({ context }) => {
   });
 
   const items = await Promise.all(
-    coworkers.map(async (wf) => {
+    coworkers.map(async (coworkerRow) => {
+      const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
       const runs = await context.db.query.coworkerRun.findMany({
         where: eq(coworkerRun.coworkerId, wf.id),
         orderBy: (run, { desc }) => [desc(run.startedAt)],
         limit: 20,
       });
       const lastRun = runs[0];
+      const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
 
       return {
         id: wf.id,
         name: wf.name,
+        description: wf.description,
+        username: wf.username,
         status: wf.status,
         autoApprove: wf.autoApprove,
         triggerType: wf.triggerType,
+        integrations: wf.allowedIntegrations,
+        toolAccessMode,
         allowedIntegrations: wf.allowedIntegrations,
         allowedCustomIntegrations: wf.allowedCustomIntegrations,
+        allowedSkillSlugs,
         schedule: wf.schedule,
         updatedAt: wf.updatedAt,
         lastRunStatus: lastRun?.status ?? null,
@@ -146,31 +287,38 @@ const list = protectedProcedure.handler(async ({ context }) => {
 const get = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const wf = await context.db.query.coworker.findFirst({
+    const coworkerRow = await context.db.query.coworker.findFirst({
       where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
     });
 
-    if (!wf) {
+    if (!coworkerRow) {
       throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
     }
+
+    const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
 
     const runs = await context.db.query.coworkerRun.findMany({
       where: eq(coworkerRun.coworkerId, wf.id),
       orderBy: (run, { desc }) => [desc(run.startedAt)],
       limit: 20,
     });
+    const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
 
     return {
       id: wf.id,
       name: wf.name,
+      description: wf.description,
+      username: wf.username,
       status: wf.status,
       autoApprove: wf.autoApprove,
       triggerType: wf.triggerType,
       prompt: wf.prompt,
       promptDo: wf.promptDo,
       promptDont: wf.promptDont,
+      toolAccessMode,
       allowedIntegrations: wf.allowedIntegrations,
       allowedCustomIntegrations: wf.allowedCustomIntegrations,
+      allowedSkillSlugs,
       schedule: wf.schedule,
       createdAt: wf.createdAt,
       updatedAt: wf.updatedAt,
@@ -188,43 +336,41 @@ const create = protectedProcedure
   .input(
     z.object({
       name: z.string().max(128).optional(),
+      description: z.string().max(280).nullish(),
+      username: z.string().max(128).nullish(),
       triggerType: triggerTypeSchema,
       prompt: z.string().max(20000),
       promptDo: z.string().max(2000).optional(),
       promptDont: z.string().max(2000).optional(),
       autoApprove: z.boolean().optional(),
-      allowedIntegrations: z.array(integrationTypeSchema).default(ALL_INTEGRATION_TYPES),
+      toolAccessMode: toolAccessModeSchema.default("all"),
+      allowedIntegrations: z.array(integrationTypeSchema).default(DEFAULT_COWORKER_INTEGRATIONS),
       allowedCustomIntegrations: z.array(z.string()).default([]),
+      allowedSkillSlugs: z.array(z.string()).default([]),
       schedule: scheduleSchema.nullish(),
     }),
   )
   .handler(async ({ input, context }) => {
+    const coworkerId = crypto.randomUUID();
+    const coworkerQueryDatabase = context.db as unknown as {
+      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    };
     const providedName = input.name?.trim();
-    const hasAgentDescription = input.prompt.trim().length > 0;
-    const generatedName =
-      (!providedName || providedName.length === 0) && hasAgentDescription
-        ? await generateCoworkerName({
-            agentDescription: input.prompt,
-            triggerType: input.triggerType,
-            allowedIntegrations: input.allowedIntegrations,
-            allowedCustomIntegrations: input.allowedCustomIntegrations,
-            schedule: input.schedule ?? null,
-            autoApprove: input.autoApprove ?? true,
-            promptDo: input.promptDo ?? null,
-            promptDont: input.promptDont ?? null,
-          })
-        : null;
-    const nameToSave =
-      providedName && providedName.length > 0
-        ? providedName
-        : hasAgentDescription
-          ? (generatedName ?? buildFallbackCoworkerName(input.prompt))
-          : "";
+    const nameToSave = providedName && providedName.length > 0 ? providedName : "";
+    const descriptionToSave = normalizeDescriptionInput(input.description);
+    const usernameToSave = await resolveCoworkerUsername({
+      database: coworkerQueryDatabase,
+      coworkerId,
+      username: input.username,
+    });
 
     const [created] = await context.db
       .insert(coworker)
       .values({
+        id: coworkerId,
         name: nameToSave,
+        description: descriptionToSave,
+        username: usernameToSave,
         ownerId: context.user.id,
         status: "on",
         triggerType: input.triggerType,
@@ -234,6 +380,8 @@ const create = protectedProcedure
         autoApprove: input.autoApprove ?? true,
         allowedIntegrations: input.allowedIntegrations,
         allowedCustomIntegrations: input.allowedCustomIntegrations,
+        toolAccessMode: input.toolAccessMode,
+        allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(input.allowedSkillSlugs),
         schedule: input.schedule ?? null,
       })
       .returning();
@@ -252,6 +400,8 @@ const create = protectedProcedure
     return {
       id: created.id,
       name: created.name,
+      description: created.description,
+      username: created.username,
       status: created.status,
     };
   });
@@ -261,14 +411,18 @@ const update = protectedProcedure
     z.object({
       id: z.string(),
       name: z.string().max(128).optional(),
+      description: z.string().max(280).nullish(),
+      username: z.string().max(128).nullish(),
       status: z.enum(["on", "off"]).optional(),
       triggerType: triggerTypeSchema.optional(),
       prompt: z.string().max(20000).optional(),
       promptDo: z.string().max(2000).nullish(),
       promptDont: z.string().max(2000).nullish(),
       autoApprove: z.boolean().optional(),
+      toolAccessMode: toolAccessModeSchema.optional(),
       allowedIntegrations: z.array(integrationTypeSchema).optional(),
       allowedCustomIntegrations: z.array(z.string()).optional(),
+      allowedSkillSlugs: z.array(z.string()).optional(),
       schedule: scheduleSchema.nullish(),
     }),
   )
@@ -282,31 +436,32 @@ const update = protectedProcedure
     }
 
     const updates: Partial<typeof coworker.$inferInsert> = {};
+    const nextPrompt = input.prompt ?? existing.prompt;
+    const nextName = input.name !== undefined ? input.name.trim() : (existing.name ?? "");
+    const nextDescription =
+      input.description !== undefined
+        ? normalizeDescriptionInput(input.description)
+        : existing.description;
+    const coworkerQueryDatabase = context.db as unknown as {
+      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    };
+    const nextUsername =
+      input.username !== undefined
+        ? await resolveCoworkerUsername({
+            database: coworkerQueryDatabase,
+            coworkerId: existing.id,
+            username: input.username,
+          })
+        : existing.username;
+
     if (input.name !== undefined) {
-      const providedName = input.name.trim();
-      if (providedName.length > 0) {
-        updates.name = providedName;
-      } else {
-        const nextPrompt = input.prompt ?? existing.prompt;
-        const hasAgentDescription = nextPrompt.trim().length > 0;
-        if (!hasAgentDescription) {
-          updates.name = "";
-        } else {
-          const generatedName = await generateCoworkerName({
-            agentDescription: nextPrompt,
-            triggerType: input.triggerType ?? existing.triggerType,
-            allowedIntegrations: input.allowedIntegrations ?? existing.allowedIntegrations,
-            allowedCustomIntegrations:
-              input.allowedCustomIntegrations ?? existing.allowedCustomIntegrations,
-            schedule: input.schedule === undefined ? existing.schedule : (input.schedule ?? null),
-            autoApprove: input.autoApprove ?? existing.autoApprove,
-            promptDo: input.promptDo === undefined ? existing.promptDo : (input.promptDo ?? null),
-            promptDont:
-              input.promptDont === undefined ? existing.promptDont : (input.promptDont ?? null),
-          });
-          updates.name = generatedName ?? buildFallbackCoworkerName(nextPrompt);
-        }
-      }
+      updates.name = nextName;
+    }
+    if (input.description !== undefined) {
+      updates.description = nextDescription;
+    }
+    if (input.username !== undefined) {
+      updates.username = nextUsername;
     }
     if (input.status !== undefined) {
       updates.status = input.status;
@@ -326,15 +481,56 @@ const update = protectedProcedure
     if (input.autoApprove !== undefined) {
       updates.autoApprove = input.autoApprove;
     }
+    if (input.toolAccessMode !== undefined) {
+      updates.toolAccessMode = input.toolAccessMode;
+    }
     if (input.allowedIntegrations !== undefined) {
       updates.allowedIntegrations = input.allowedIntegrations;
     }
     if (input.allowedCustomIntegrations !== undefined) {
       updates.allowedCustomIntegrations = input.allowedCustomIntegrations;
     }
+    if (input.allowedSkillSlugs !== undefined) {
+      updates.allowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(input.allowedSkillSlugs);
+    }
     if (input.schedule !== undefined) {
       updates.schedule = input.schedule ?? null;
     }
+
+    const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
+      database: coworkerQueryDatabase,
+      current: {
+        id: existing.id,
+        name: existing.name,
+        description: existing.description,
+        username: existing.username,
+        prompt: existing.prompt,
+        triggerType: existing.triggerType,
+        allowedIntegrations: existing.allowedIntegrations,
+        allowedCustomIntegrations: existing.allowedCustomIntegrations,
+        schedule: existing.schedule ?? null,
+        autoApprove: existing.autoApprove,
+        promptDo: existing.promptDo ?? null,
+        promptDont: existing.promptDont ?? null,
+      },
+      next: {
+        id: existing.id,
+        name: nextName,
+        description: nextDescription,
+        username: nextUsername,
+        prompt: nextPrompt,
+        triggerType: input.triggerType ?? existing.triggerType,
+        allowedIntegrations: input.allowedIntegrations ?? existing.allowedIntegrations,
+        allowedCustomIntegrations:
+          input.allowedCustomIntegrations ?? existing.allowedCustomIntegrations,
+        schedule: input.schedule === undefined ? existing.schedule : (input.schedule ?? null),
+        autoApprove: input.autoApprove ?? existing.autoApprove,
+        promptDo: input.promptDo === undefined ? existing.promptDo : (input.promptDo ?? null),
+        promptDont:
+          input.promptDont === undefined ? existing.promptDont : (input.promptDont ?? null),
+      },
+    });
+    Object.assign(updates, metadataUpdates);
 
     const result = await context.db
       .update(coworker)
@@ -408,7 +604,7 @@ const applyBuilderPatch = protectedProcedure
     });
 
     const result = await applyCoworkerBuilderPatch({
-      database: context.db,
+      database: context.db as unknown,
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
       coworkerId: input.coworkerId,

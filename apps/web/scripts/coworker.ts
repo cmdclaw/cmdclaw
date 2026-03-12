@@ -9,6 +9,7 @@ type ParsedArgs = {
   positionals: string[];
   message?: string;
   list?: boolean;
+  format?: "text" | "markdown" | "json";
   // Generic command flags
   payload?: string;
   watch: boolean;
@@ -184,6 +185,15 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.message = argv[i + 1];
         i += 1;
         break;
+      case "--format": {
+        const format = argv[i + 1];
+        if (format !== "text" && format !== "markdown" && format !== "json") {
+          throw new Error("--format must be one of: text, markdown, json");
+        }
+        args.format = format;
+        i += 1;
+        break;
+      }
       case "--model":
       case "-M":
         args.model = argv[i + 1];
@@ -314,6 +324,7 @@ function printHelp(): void {
   console.log("\nCommands:");
   console.log("  list                              List coworkers");
   console.log("  create                            Create coworker (flags below)");
+  console.log("  show <coworker-id>                Show full coworker details");
   console.log("  run <coworker-id>                 Trigger a coworker run");
   console.log("  logs <run-id>                     Show run events and transcript");
   console.log("  approve <run-id> <tool-use-id> <approve|deny>  Submit pending approval");
@@ -337,6 +348,8 @@ function printHelp(): void {
     "  --limit <n>                       Limit run list size for runs command (default 20)",
   );
   console.log("  --watch                           Poll run logs until terminal status");
+  console.log("\nShow flags:");
+  console.log("  --format <text|markdown|json>     Output format for show (default text)");
   console.log("\nCreate flags:");
   console.log("  -n, --name <name>                 Coworker name (required)");
   console.log("  -t, --trigger <type>              Trigger type (required)");
@@ -359,6 +372,151 @@ function printHelp(): void {
   console.log('  bun run coworker --message "send message in #bap-experiments every hour"\n');
 }
 
+type CoworkerDetails = {
+  id: string;
+  name: string;
+  description: string | null;
+  username: string | null;
+  status: string;
+  autoApprove: boolean;
+  triggerType: string;
+  prompt: string;
+  promptDo: string | null;
+  promptDont: string | null;
+  toolAccessMode: string;
+  allowedIntegrations: string[];
+  allowedCustomIntegrations: string[];
+  allowedSkillSlugs: string[];
+  schedule: unknown;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  runs: Array<{
+    id: string;
+    status: string;
+    startedAt: Date | string;
+    finishedAt: Date | string | null;
+    errorMessage: string | null;
+  }>;
+};
+
+function printCoworkerSummary(coworker: {
+  id: string;
+  name: string;
+  description: string | null;
+  username: string | null;
+  status: string;
+  triggerType: string;
+  schedule?: unknown;
+  lastRunStatus?: string | null;
+  lastRunAt?: Date | string | null;
+}): void {
+  const displayName = coworker.name.trim() || "(unnamed)";
+  const lastRun = coworker.lastRunStatus
+    ? ` | last run: ${statusBadge(coworker.lastRunStatus)} ${formatDate(coworker.lastRunAt)}`
+    : "";
+
+  console.log(`${statusBadge(coworker.status)} ${displayName}`);
+  console.log(`  id: ${coworker.id}`);
+  console.log(`  username: ${coworker.username ? `@${coworker.username}` : "-"}`);
+  console.log(`  description: ${coworker.description ?? "-"}`);
+  console.log(`  trigger: ${coworker.triggerType}${lastRun}`);
+  if (coworker.schedule) {
+    console.log(`  schedule: ${JSON.stringify(coworker.schedule)}`);
+  }
+  console.log("");
+}
+
+function formatCoworkerDetailsMarkdown(details: CoworkerDetails): string {
+  const lines = [
+    `# ${details.name.trim() || "Unnamed Coworker"}`,
+    "",
+    `- ID: \`${details.id}\``,
+    `- Status: ${details.status}`,
+    `- Username: ${details.username ? `@${details.username}` : "-"}`,
+    `- Description: ${details.description ?? "-"}`,
+    `- Trigger: ${details.triggerType}`,
+    `- Tool Access Mode: ${details.toolAccessMode}`,
+    `- Auto Approve: ${details.autoApprove ? "yes" : "no"}`,
+    `- Created: ${formatDate(details.createdAt)}`,
+    `- Updated: ${formatDate(details.updatedAt)}`,
+    `- Allowed Integrations: ${details.allowedIntegrations.join(", ") || "-"}`,
+    `- Custom Integrations: ${details.allowedCustomIntegrations.join(", ") || "-"}`,
+    `- Allowed Skills: ${details.allowedSkillSlugs.join(", ") || "-"}`,
+    "",
+    "## Prompt",
+    "",
+    details.prompt || "(empty)",
+  ];
+
+  if (details.promptDo) {
+    lines.push("", "## Prompt Do", "", details.promptDo);
+  }
+  if (details.promptDont) {
+    lines.push("", "## Prompt Don't", "", details.promptDont);
+  }
+  if (details.schedule) {
+    lines.push("", "## Schedule", "", "```json", JSON.stringify(details.schedule, null, 2), "```");
+  }
+  if (details.runs.length > 0) {
+    lines.push("", "## Recent Runs", "");
+    for (const run of details.runs) {
+      lines.push(
+        `- \`${run.id}\` ${statusBadge(run.status)} started ${formatDate(run.startedAt)}${run.finishedAt ? `, finished ${formatDate(run.finishedAt)}` : ""}${run.errorMessage ? `, error: ${run.errorMessage}` : ""}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function printCoworkerDetails(
+  details: CoworkerDetails,
+  format: ParsedArgs["format"] = "text",
+): void {
+  if (format === "json") {
+    console.log(JSON.stringify(details, null, 2));
+    return;
+  }
+
+  if (format === "markdown") {
+    console.log(formatCoworkerDetailsMarkdown(details));
+    return;
+  }
+
+  console.log(`${statusBadge(details.status)} ${details.name.trim() || "(unnamed)"}`);
+  console.log(`  id: ${details.id}`);
+  console.log(`  username: ${details.username ? `@${details.username}` : "-"}`);
+  console.log(`  description: ${details.description ?? "-"}`);
+  console.log(`  trigger: ${details.triggerType}`);
+  console.log(`  tool access: ${details.toolAccessMode}`);
+  console.log(`  auto approve: ${details.autoApprove ? "yes" : "no"}`);
+  console.log(`  created: ${formatDate(details.createdAt)}`);
+  console.log(`  updated: ${formatDate(details.updatedAt)}`);
+  console.log(`  allowed integrations: ${details.allowedIntegrations.join(", ") || "-"}`);
+  console.log(`  custom integrations: ${details.allowedCustomIntegrations.join(", ") || "-"}`);
+  console.log(`  allowed skills: ${details.allowedSkillSlugs.join(", ") || "-"}`);
+  console.log(`  prompt: ${details.prompt || "(empty)"}`);
+  if (details.promptDo) {
+    console.log(`  prompt do: ${details.promptDo}`);
+  }
+  if (details.promptDont) {
+    console.log(`  prompt don't: ${details.promptDont}`);
+  }
+  if (details.schedule) {
+    console.log(`  schedule: ${JSON.stringify(details.schedule)}`);
+  }
+  if (details.runs.length > 0) {
+    console.log("  recent runs:");
+    for (const run of details.runs) {
+      const finishedAt = run.finishedAt ? ` | finished ${formatDate(run.finishedAt)}` : "";
+      const errorMessage = run.errorMessage ? ` | error: ${run.errorMessage}` : "";
+      console.log(
+        `    - ${statusBadge(run.status)} ${run.id} | started ${formatDate(run.startedAt)}${finishedAt}${errorMessage}`,
+      );
+    }
+  }
+}
+
 async function listCoworkers(client: RouterClient<AppRouter>): Promise<void> {
   const coworkers = await client.coworker.list();
 
@@ -369,18 +527,18 @@ async function listCoworkers(client: RouterClient<AppRouter>): Promise<void> {
 
   console.log(`Coworkers (${coworkers.length}):\n`);
   for (const wf of coworkers) {
-    const lastRun = wf.lastRunStatus
-      ? ` | last run: ${statusBadge(wf.lastRunStatus)} ${formatDate(wf.lastRunAt)}`
-      : "";
-
-    console.log(`${statusBadge(wf.status)} ${wf.name}`);
-    console.log(`  id: ${wf.id}`);
-    console.log(`  trigger: ${wf.triggerType}${lastRun}`);
-    if (wf.schedule) {
-      console.log(`  schedule: ${JSON.stringify(wf.schedule)}`);
-    }
-    console.log("");
+    printCoworkerSummary(wf);
   }
+}
+
+async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
+  const coworkerId = args.positionals[0];
+  if (!coworkerId) {
+    throw new Error("Usage: bun run coworker show <coworker-id> [--format text|markdown|json]");
+  }
+
+  const coworker = await client.coworker.get({ id: coworkerId });
+  printCoworkerDetails(coworker, args.format);
 }
 
 async function createCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
@@ -408,9 +566,18 @@ async function createCoworker(client: RouterClient<AppRouter>, args: ParsedArgs)
     schedule: buildSchedule(args),
   });
 
-  console.log(`Created coworker ${created.name}`);
-  console.log(`  id: ${created.id}`);
-  console.log(`  status: ${statusBadge(created.status)}`);
+  console.log("Created coworker:");
+  printCoworkerSummary({
+    id: created.id,
+    name: created.name,
+    description: created.description,
+    username: created.username,
+    status: created.status,
+    triggerType: args.triggerType,
+    schedule: buildSchedule(args),
+    lastRunStatus: null,
+    lastRunAt: null,
+  });
 }
 
 async function runCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
@@ -669,14 +836,7 @@ async function startBuilderAgent(
 
   const updated = await client.coworker.get({ id: coworkerId });
   console.log("\nCoworker after builder run:");
-  console.log(`  id: ${updated.id}`);
-  console.log(`  name: ${updated.name}`);
-  console.log(`  trigger: ${updated.triggerType}`);
-  console.log(`  prompt: ${updated.prompt ? "(set)" : "(empty)"}`);
-  console.log(`  integrations: ${(updated.allowedIntegrations ?? []).join(", ") || "-"}`);
-  if (updated.schedule) {
-    console.log(`  schedule: ${JSON.stringify(updated.schedule)}`);
-  }
+  printCoworkerDetails(updated);
 }
 
 function getCloseLoopExampleGoal(): string {
@@ -795,6 +955,11 @@ async function main(): Promise<void> {
       case "create":
       case "new":
         await createCoworker(client, parsed);
+        break;
+      case "show":
+      case "get":
+      case "inspect":
+        await showCoworker(client, parsed);
         break;
       case "run":
       case "trigger":

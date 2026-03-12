@@ -30,8 +30,9 @@ function toLegacySandbox(sandbox: SandboxHandle) {
 export async function writeSkillsToSandbox(
   sandbox: SandboxHandle,
   userId: string,
+  allowedSkillNames?: string[],
 ): Promise<string[]> {
-  return writeSkillsToSandboxLegacy(toLegacySandbox(sandbox) as never, userId);
+  return writeSkillsToSandboxLegacy(toLegacySandbox(sandbox) as never, userId, allowedSkillNames);
 }
 
 export async function writeResolvedIntegrationSkillsToSandbox(

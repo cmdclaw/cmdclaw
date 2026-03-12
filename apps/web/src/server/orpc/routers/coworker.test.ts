@@ -15,13 +15,15 @@ const {
   triggerCoworkerRunMock,
   syncCoworkerScheduleJobMock,
   removeCoworkerScheduleJobMock,
-  generateCoworkerNameMock,
+  generateCoworkerMetadataOnFirstPromptFillMock,
+  normalizeAndEnsureUniqueCoworkerUsernameMock,
   applyCoworkerBuilderPatchMock,
 } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn(),
   syncCoworkerScheduleJobMock: vi.fn(),
   removeCoworkerScheduleJobMock: vi.fn(),
-  generateCoworkerNameMock: vi.fn(),
+  generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
+  normalizeAndEnsureUniqueCoworkerUsernameMock: vi.fn(),
   applyCoworkerBuilderPatchMock: vi.fn(),
 }));
 
@@ -38,8 +40,9 @@ vi.mock("@cmdclaw/core/server/services/coworker-scheduler", () => ({
   removeCoworkerScheduleJob: removeCoworkerScheduleJobMock,
 }));
 
-vi.mock("@/server/utils/generate-coworker-name", () => ({
-  generateCoworkerName: generateCoworkerNameMock,
+vi.mock("@cmdclaw/core/server/services/coworker-metadata", () => ({
+  generateCoworkerMetadataOnFirstPromptFill: generateCoworkerMetadataOnFirstPromptFillMock,
+  normalizeAndEnsureUniqueCoworkerUsername: normalizeAndEnsureUniqueCoworkerUsernameMock,
 }));
 
 vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
@@ -116,7 +119,13 @@ function createContext() {
 describe("coworkerRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    generateCoworkerNameMock.mockResolvedValue("Generated Coworker Name");
+    generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValue({});
+    normalizeAndEnsureUniqueCoworkerUsernameMock.mockImplementation(
+      async ({ username }: { username?: string | null }) => {
+        const trimmed = username?.trim();
+        return trimmed ? trimmed.toLowerCase().replace(/\s+/g, "-") : null;
+      },
+    );
     syncCoworkerScheduleJobMock.mockResolvedValue(undefined);
     removeCoworkerScheduleJobMock.mockResolvedValue(undefined);
     triggerCoworkerRunMock.mockResolvedValue({
@@ -144,7 +153,9 @@ describe("coworkerRouter", () => {
     context.mocks.insertReturningMock.mockResolvedValue([
       {
         id: "wf-1",
-        name: "Generated Coworker Name",
+        name: "",
+        description: null,
+        username: null,
         status: "on",
         triggerType: "schedule",
       },
@@ -168,7 +179,9 @@ describe("coworkerRouter", () => {
 
     expect(result).toEqual({
       id: "wf-1",
-      name: "Generated Coworker Name",
+      name: "",
+      description: null,
+      username: null,
       status: "on",
     });
     expect(syncCoworkerScheduleJobMock).toHaveBeenCalledWith(
@@ -186,6 +199,8 @@ describe("coworkerRouter", () => {
       {
         id: "wf-1",
         name: "Daily Coworker",
+        description: "Daily summary",
+        username: "daily-coworker",
         status: "on",
         autoApprove: true,
         triggerType: "schedule",
@@ -197,6 +212,8 @@ describe("coworkerRouter", () => {
       {
         id: "wf-2",
         name: "Manual Coworker",
+        description: null,
+        username: null,
         status: "off",
         autoApprove: false,
         triggerType: "manual",
@@ -229,9 +246,14 @@ describe("coworkerRouter", () => {
       {
         id: "wf-1",
         name: "Daily Coworker",
+        description: "Daily summary",
+        username: "daily-coworker",
         status: "on",
         autoApprove: true,
+        toolAccessMode: "selected",
+        allowedSkillSlugs: [],
         triggerType: "schedule",
+        integrations: ["slack"],
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: [],
         schedule: { type: "daily", time: "09:30", timezone: "UTC" },
@@ -251,9 +273,14 @@ describe("coworkerRouter", () => {
       {
         id: "wf-2",
         name: "Manual Coworker",
+        description: null,
+        username: null,
         status: "off",
         autoApprove: false,
+        toolAccessMode: "selected",
+        allowedSkillSlugs: [],
         triggerType: "manual",
+        integrations: ["github"],
         allowedIntegrations: ["github"],
         allowedCustomIntegrations: [],
         schedule: null,
@@ -272,8 +299,12 @@ describe("coworkerRouter", () => {
       id: "wf-1",
       ownerId: "user-1",
       name: "Coworker",
+      description: "Summarizes things",
+      username: "coworker",
       status: "on",
       autoApprove: true,
+      toolAccessMode: "selected",
+      allowedSkillSlugs: [],
       triggerType: "manual",
       prompt: "Prompt",
       promptDo: "Do this",
@@ -307,8 +338,12 @@ describe("coworkerRouter", () => {
     expect(result).toEqual({
       id: "wf-1",
       name: "Coworker",
+      description: "Summarizes things",
+      username: "coworker",
       status: "on",
       autoApprove: true,
+      toolAccessMode: "selected",
+      allowedSkillSlugs: [],
       triggerType: "manual",
       prompt: "Prompt",
       promptDo: "Do this",
@@ -331,6 +366,78 @@ describe("coworkerRouter", () => {
     expect(getRunsOrderBy).toEqual(["d:started-col"]);
   });
 
+  it("backfills missing builder metadata on get when prompt already exists", async () => {
+    const context = createContext();
+    const now = new Date("2026-03-12T10:00:00.000Z");
+    generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValueOnce({
+      description: "Summarizes the workflow.",
+      username: "summary-sentence",
+    });
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-builder-1",
+      name: "Builder Draft",
+      description: null,
+      username: null,
+      status: "on",
+      autoApprove: true,
+      toolAccessMode: "all",
+      allowedSkillSlugs: [],
+      triggerType: "manual",
+      prompt: "Summary sentence. another sentence",
+      promptDo: null,
+      promptDont: null,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    context.mocks.updateReturningMock.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        ownerId: "user-1",
+        builderConversationId: "conv-builder-1",
+        name: "Builder Draft",
+        description: "Summarizes the workflow.",
+        username: "summary-sentence",
+        status: "on",
+        autoApprove: true,
+        toolAccessMode: "all",
+        allowedSkillSlugs: [],
+        triggerType: "manual",
+        prompt: "Summary sentence. another sentence",
+        promptDo: null,
+        promptDont: null,
+        allowedIntegrations: ["slack"],
+        allowedCustomIntegrations: [],
+        schedule: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    context.db.query.coworkerRun.findMany.mockResolvedValue([]);
+
+    const result = await coworkerRouterAny.get({
+      input: { id: "wf-1" },
+      context,
+    });
+
+    expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "Summarizes the workflow.",
+        username: "summary-sentence",
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        description: "Summarizes the workflow.",
+        username: "summary-sentence",
+      }),
+    );
+  });
+
   it("returns NOT_FOUND when getting a missing coworker", async () => {
     const context = createContext();
     context.db.query.coworker.findFirst.mockResolvedValue(null);
@@ -349,6 +456,8 @@ describe("coworkerRouter", () => {
       {
         id: "wf-2",
         name: "Explicit Name",
+        description: null,
+        username: null,
         status: "on",
         triggerType: "manual",
       },
@@ -368,22 +477,25 @@ describe("coworkerRouter", () => {
     expect(result).toEqual({
       id: "wf-2",
       name: "Explicit Name",
+      description: null,
+      username: null,
       status: "on",
     });
     expect(context.mocks.insertValuesMock).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Explicit Name" }),
     );
-    expect(generateCoworkerNameMock).not.toHaveBeenCalled();
+    expect(generateCoworkerMetadataOnFirstPromptFillMock).not.toHaveBeenCalled();
     expect(syncCoworkerScheduleJobMock).not.toHaveBeenCalled();
   });
 
-  it("falls back to first prompt sentence when generated name is empty", async () => {
+  it("creates a coworker with blank metadata when no explicit values are provided", async () => {
     const context = createContext();
-    generateCoworkerNameMock.mockResolvedValueOnce(null);
     context.mocks.insertReturningMock.mockResolvedValue([
       {
         id: "wf-3",
-        name: "First sentence for fallback",
+        name: "",
+        description: null,
+        username: null,
         status: "on",
         triggerType: "manual",
       },
@@ -398,21 +510,28 @@ describe("coworkerRouter", () => {
         allowedCustomIntegrations: [],
       },
       context,
-    })) as { name: string };
+    })) as { name: string; description: string | null; username: string | null };
 
-    expect(result.name).toBe("First sentence for fallback");
+    expect(result).toEqual({
+      id: "wf-3",
+      name: "",
+      description: null,
+      username: null,
+      status: "on",
+    });
     expect(context.mocks.insertValuesMock).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "First sentence for fallback" }),
+      expect.objectContaining({ name: "", description: null, username: null }),
     );
   });
 
-  it("falls back to New Coworker when prompt has no leading sentence text", async () => {
+  it("normalizes and persists explicit username and description on create", async () => {
     const context = createContext();
-    generateCoworkerNameMock.mockResolvedValueOnce(null);
     context.mocks.insertReturningMock.mockResolvedValue([
       {
         id: "wf-4",
-        name: "New Coworker",
+        name: "Coworker",
+        description: "Handles follow-ups",
+        username: "team-helper",
         status: "on",
         triggerType: "manual",
       },
@@ -420,6 +539,9 @@ describe("coworkerRouter", () => {
 
     await coworkerRouterAny.create({
       input: {
+        name: "Coworker",
+        description: "  Handles follow-ups  ",
+        username: " Team Helper ",
         triggerType: "manual",
         prompt: "... \n!",
         autoApprove: true,
@@ -430,7 +552,11 @@ describe("coworkerRouter", () => {
     });
 
     expect(context.mocks.insertValuesMock).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "New Coworker" }),
+      expect.objectContaining({
+        name: "Coworker",
+        description: "Handles follow-ups",
+        username: "team-helper",
+      }),
     );
   });
 
@@ -439,7 +565,9 @@ describe("coworkerRouter", () => {
     context.mocks.insertReturningMock.mockResolvedValue([
       {
         id: "wf-1",
-        name: "Generated Coworker Name",
+        name: "",
+        description: null,
+        username: null,
         status: "on",
         triggerType: "schedule",
       },
@@ -689,16 +817,22 @@ describe("coworkerRouter", () => {
     expect(context.mocks.updateSetMock).toHaveBeenCalledWith(expect.objectContaining({ name: "" }));
   });
 
-  it("falls back to first prompt sentence when update name generation is empty", async () => {
+  it("fills missing metadata on first prompt transition from blank to non-blank", async () => {
     const context = createContext();
-    generateCoworkerNameMock.mockResolvedValueOnce(null);
+    generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValueOnce({
+      name: "Summary sentence",
+      description: "Summarizes the workflow.",
+      username: "summary-sentence",
+    });
     context.db.query.coworker.findFirst.mockResolvedValue({
       id: "wf-1",
       ownerId: "user-1",
-      name: "Coworker",
+      name: "",
+      description: null,
+      username: null,
       status: "on",
       triggerType: "manual",
-      prompt: "Original prompt",
+      prompt: "   ",
       promptDo: null,
       promptDont: null,
       autoApprove: true,
@@ -718,24 +852,74 @@ describe("coworkerRouter", () => {
     await coworkerRouterAny.update({
       input: {
         id: "wf-1",
-        name: "   ",
         prompt: "Summary sentence. another sentence",
       },
       context,
     });
 
     expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Summary sentence" }),
+      expect.objectContaining({
+        prompt: "Summary sentence. another sentence",
+        name: "Summary sentence",
+        description: "Summarizes the workflow.",
+        username: "summary-sentence",
+      }),
     );
   });
 
-  it("falls back to New Coworker when update prompt has no leading sentence text", async () => {
+  it("preserves explicit name on first prompt transition while filling other metadata", async () => {
     const context = createContext();
-    generateCoworkerNameMock.mockResolvedValueOnce(null);
+    generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValueOnce({
+      description: "Summarizes the workflow.",
+      username: "explicit-name",
+    });
     context.db.query.coworker.findFirst.mockResolvedValue({
       id: "wf-1",
       ownerId: "user-1",
-      name: "Coworker",
+      name: "",
+      description: null,
+      username: null,
+      status: "on",
+      triggerType: "manual",
+      prompt: "   ",
+      promptDo: null,
+      promptDont: null,
+      autoApprove: true,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+    });
+    context.mocks.updateReturningMock.mockResolvedValue([
+      {
+        id: "wf-1",
+        status: "on",
+        triggerType: "manual",
+        schedule: null,
+      },
+    ]);
+
+    await coworkerRouterAny.update({
+      input: { id: "wf-1", name: "Explicit Name", prompt: "... \n!" },
+      context,
+    });
+
+    expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Explicit Name",
+        description: "Summarizes the workflow.",
+        username: "explicit-name",
+      }),
+    );
+  });
+
+  it("does not generate metadata after the prompt was already non-empty", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      name: "Existing",
+      description: "Existing description",
+      username: "existing",
       status: "on",
       triggerType: "manual",
       prompt: "Original prompt",
@@ -756,12 +940,59 @@ describe("coworkerRouter", () => {
     ]);
 
     await coworkerRouterAny.update({
-      input: { id: "wf-1", name: "   ", prompt: "... \n!" },
+      input: { id: "wf-1", prompt: "Updated prompt" },
       context,
     });
 
+    expect(generateCoworkerMetadataOnFirstPromptFillMock).toHaveBeenCalled();
     expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "New Coworker" }),
+      expect.not.objectContaining({
+        name: expect.any(String),
+        description: expect.any(String),
+        username: expect.any(String),
+      }),
+    );
+  });
+
+  it("normalizes manual username edits before persisting", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      name: "Existing",
+      description: null,
+      username: null,
+      status: "on",
+      triggerType: "manual",
+      prompt: "Original prompt",
+      promptDo: null,
+      promptDont: null,
+      autoApprove: true,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+    });
+    context.mocks.updateReturningMock.mockResolvedValue([
+      {
+        id: "wf-1",
+        status: "on",
+        triggerType: "manual",
+        schedule: null,
+      },
+    ]);
+
+    await coworkerRouterAny.update({
+      input: { id: "wf-1", username: " Team Helper " },
+      context,
+    });
+
+    expect(normalizeAndEnsureUniqueCoworkerUsernameMock).toHaveBeenCalledWith({
+      database: context.db,
+      coworkerId: "wf-1",
+      username: "Team Helper",
+    });
+    expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({ username: "team-helper" }),
     );
   });
 

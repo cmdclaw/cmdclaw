@@ -13,6 +13,8 @@ import {
 } from "@/lib/generation-stream";
 import { client } from "./client";
 
+type CoworkerToolAccessMode = "all" | "selected";
+
 const STREAM_NOT_READY_ERROR =
   "Generation is still processing but cannot be streamed from this server yet. Please refresh shortly.";
 const STREAM_RETRY_DELAY_MS = 1500;
@@ -613,11 +615,14 @@ export function useCreateCoworker() {
   return useMutation({
     mutationFn: (input: {
       name?: string;
+      description?: string | null;
+      username?: string | null;
       triggerType: string;
       prompt: string;
       promptDo?: string;
       promptDont?: string;
       autoApprove?: boolean;
+      toolAccessMode?: CoworkerToolAccessMode;
       allowedIntegrations: (
         | "google_gmail"
         | "outlook"
@@ -638,6 +643,7 @@ export function useCreateCoworker() {
         | "reddit"
         | "twitter"
       )[];
+      allowedSkillSlugs?: string[];
     }) => client.coworker.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
@@ -658,12 +664,15 @@ export function useUpdateCoworker() {
     mutationFn: (input: {
       id: string;
       name?: string;
+      description?: string | null;
+      username?: string | null;
       status?: "on" | "off";
       triggerType?: string;
       prompt?: string;
       promptDo?: string | null;
       promptDont?: string | null;
       autoApprove?: boolean;
+      toolAccessMode?: CoworkerToolAccessMode;
       allowedIntegrations?: (
         | "google_gmail"
         | "outlook"
@@ -684,6 +693,7 @@ export function useUpdateCoworker() {
         | "reddit"
         | "twitter"
       )[];
+      allowedSkillSlugs?: string[];
       schedule?: CoworkerSchedule | null;
     }) => client.coworker.update(input),
     onSuccess: () => {
@@ -702,6 +712,7 @@ export function useApplyCoworkerBuilderPatch() {
       baseUpdatedAt: string;
       patch: {
         prompt?: string;
+        toolAccessMode?: CoworkerToolAccessMode;
         allowedIntegrations?: string[];
         triggerType?:
           | "manual"

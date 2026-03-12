@@ -472,6 +472,7 @@ export type PendingAuth = {
 export type GenerationExecutionPolicy = {
   allowedIntegrations?: string[];
   allowedCustomIntegrations?: string[];
+  allowedSkillSlugs?: string[];
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
@@ -732,6 +733,7 @@ export const integrationAuthStatusEnum = pgEnum("integration_auth_status", [
 // ========== COWORKER SCHEMA ==========
 
 export const coworkerStatusEnum = pgEnum("coworker_status", ["on", "off"]);
+export const coworkerToolAccessModeEnum = pgEnum("coworker_tool_access_mode", ["all", "selected"]);
 
 export const coworkerRunStatusEnum = pgEnum("coworker_run_status", [
   "running",
@@ -761,11 +763,15 @@ export const coworker = pgTable(
     status: coworkerStatusEnum("status").default("on").notNull(),
     triggerType: text("trigger_type").notNull(),
     prompt: text("prompt").notNull(),
+    description: text("description"),
+    username: text("username"),
     promptDo: text("prompt_do"),
     promptDont: text("prompt_dont"),
     autoApprove: boolean("auto_approve").default(true).notNull(),
+    toolAccessMode: coworkerToolAccessModeEnum("tool_access_mode"),
     allowedIntegrations: integrationTypeEnum("allowed_integrations").array().notNull(),
     allowedCustomIntegrations: text("allowed_custom_integrations").array().notNull().default([]),
+    allowedSkillSlugs: text("allowed_skill_slugs").array().notNull().default([]),
     // Schedule configuration for time-based triggers (JSON object)
     schedule: jsonb("schedule"),
     // Builder conversation for the coworker editor chat panel
@@ -781,6 +787,7 @@ export const coworker = pgTable(
   (table) => [
     index("coworker_owner_id_idx").on(table.ownerId),
     index("coworker_status_idx").on(table.status),
+    uniqueIndex("coworker_username_idx").on(table.username),
   ],
 );
 

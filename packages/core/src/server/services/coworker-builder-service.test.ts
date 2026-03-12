@@ -1,12 +1,19 @@
 import { ORPCError } from "@orpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { syncCoworkerScheduleJobMock } = vi.hoisted(() => ({
+const { syncCoworkerScheduleJobMock, generateCoworkerMetadataOnFirstPromptFillMock } = vi.hoisted(
+  () => ({
   syncCoworkerScheduleJobMock: vi.fn(),
-}));
+    generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
+  }),
+);
 
 vi.mock("./coworker-scheduler", () => ({
   syncCoworkerScheduleJob: syncCoworkerScheduleJobMock,
+}));
+
+vi.mock("./coworker-metadata", () => ({
+  generateCoworkerMetadataOnFirstPromptFill: generateCoworkerMetadataOnFirstPromptFillMock,
 }));
 
 import {
@@ -44,6 +51,7 @@ function createDbStub() {
 describe("coworker-builder-service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValue({});
   });
 
   it("extracts a valid coworker patch and strips it from assistant text", () => {
@@ -143,19 +151,33 @@ describe("coworker-builder-service", () => {
         id: "wf-1",
         ownerId: "user-1",
         builderConversationId: "conv-1",
+        name: "",
+        description: null,
+        username: null,
         prompt: "old",
+        promptDo: null,
+        promptDont: null,
         triggerType: "manual",
         schedule: null,
         allowedIntegrations: ["github"],
+        allowedCustomIntegrations: [],
+        autoApprove: true,
         updatedAt: oldDate,
       })
       .mockResolvedValueOnce({
         id: "wf-1",
         builderConversationId: "conv-1",
+        name: "",
+        description: null,
+        username: null,
         prompt: "latest",
+        promptDo: null,
+        promptDont: null,
         triggerType: "manual",
         schedule: null,
         allowedIntegrations: ["github"],
+        allowedCustomIntegrations: [],
+        autoApprove: true,
         updatedAt: newDate,
       });
     mocks.returning.mockResolvedValueOnce([]);
@@ -180,10 +202,17 @@ describe("coworker-builder-service", () => {
       id: "wf-1",
       ownerId: "user-1",
       builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
       prompt: "old",
+      promptDo: null,
+      promptDont: null,
       triggerType: "manual",
       schedule: null,
       allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
       updatedAt,
     });
 
@@ -206,10 +235,17 @@ describe("coworker-builder-service", () => {
       id: "wf-1",
       ownerId: "user-1",
       builderConversationId: "conv-expected",
+      name: "",
+      description: null,
+      username: null,
       prompt: "old",
+      promptDo: null,
+      promptDont: null,
       triggerType: "manual",
       schedule: null,
       allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
       updatedAt: new Date("2026-03-03T12:00:00.000Z"),
     });
 
@@ -234,10 +270,17 @@ describe("coworker-builder-service", () => {
       id: "wf-1",
       ownerId: "user-1",
       builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
       prompt: "old",
+      promptDo: null,
+      promptDont: null,
       triggerType: "manual",
       schedule: null,
       allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
       updatedAt,
     });
     mocks.returning.mockResolvedValueOnce([
@@ -268,5 +311,68 @@ describe("coworker-builder-service", () => {
     }
     expect(result.appliedChanges).toEqual(["prompt"]);
     expect(syncCoworkerScheduleJobMock).not.toHaveBeenCalled();
+  });
+
+  it("fills missing metadata when builder sets the first prompt", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+    generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValueOnce({
+      name: "Sales Follow Up",
+      description: "Follows up with leads after calls.",
+      username: "sales-follow-up",
+    });
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "   ",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "new prompt",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+
+    const result = await applyCoworkerBuilderPatch({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      conversationId: "conv-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      patch: { prompt: "new prompt" },
+    });
+
+    expect(mocks.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: "new prompt",
+        name: "Sales Follow Up",
+        description: "Follows up with leads after calls.",
+        username: "sales-follow-up",
+      }),
+    );
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") {
+      return;
+    }
+    expect(result.appliedChanges).toEqual(["name", "description", "username", "prompt"]);
   });
 });

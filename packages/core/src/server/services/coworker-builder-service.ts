@@ -2,7 +2,13 @@ import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z, type ZodIssue } from "zod";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
+import {
+  COWORKER_TOOL_ACCESS_MODES,
+  normalizeCoworkerToolAccessMode,
+  type CoworkerToolAccessMode,
+} from "../../lib/coworker-tool-policy";
 import { coworker } from "@cmdclaw/db/schema";
+import { generateCoworkerMetadataOnFirstPromptFill } from "./coworker-metadata";
 import { syncCoworkerScheduleJob } from "./coworker-scheduler";
 
 const BUILDER_ALLOWED_TRIGGER_TYPES = [
@@ -40,6 +46,7 @@ export const coworkerBuilderScheduleSchema = z.discriminatedUnion("type", [
 export const coworkerBuilderPatchSchema = z
   .object({
     prompt: z.string().max(20000).optional(),
+    toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).optional(),
     allowedIntegrations: z.array(z.string()).min(1).optional(),
     triggerType: z.enum(BUILDER_ALLOWED_TRIGGER_TYPES).optional(),
     schedule: coworkerBuilderScheduleSchema.nullable().optional(),
@@ -48,6 +55,7 @@ export const coworkerBuilderPatchSchema = z
   .refine(
     (value) =>
       value.prompt !== undefined ||
+      value.toolAccessMode !== undefined ||
       value.allowedIntegrations !== undefined ||
       value.triggerType !== undefined ||
       value.schedule !== undefined,
@@ -70,6 +78,7 @@ export type CoworkerBuilderContext = {
   coworkerId: string;
   updatedAt: string;
   prompt: string;
+  toolAccessMode: CoworkerToolAccessMode;
   triggerType: string;
   schedule: unknown;
   allowedIntegrations: string[];
@@ -98,16 +107,25 @@ const coworkerBuilderRowSchema = z.object({
   id: z.string(),
   ownerId: z.string().optional(),
   builderConversationId: z.string().nullable(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
   prompt: z.string(),
+  promptDo: z.string().nullable().optional(),
+  promptDont: z.string().nullable().optional(),
+  toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).nullable().optional(),
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
   allowedIntegrations: z.array(z.string()),
+  allowedCustomIntegrations: z.array(z.string()).optional(),
+  autoApprove: z.boolean().optional(),
   updatedAt: z.date(),
 });
 
 const coworkerBuilderContextRowSchema = z.object({
   id: z.string(),
   prompt: z.string(),
+  toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).nullable().optional(),
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
   allowedIntegrations: z.array(z.string()),
@@ -117,6 +135,7 @@ const coworkerBuilderContextRowSchema = z.object({
 const coworkerBuilderUpdatedRowSchema = z.object({
   id: z.string(),
   prompt: z.string(),
+  toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).nullable().optional(),
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
   allowedIntegrations: z.array(z.string()),
@@ -141,6 +160,7 @@ function normalizeIntegrations(input: string[]): string[] {
 function toBuilderContext(row: {
   id: string;
   prompt: string;
+  toolAccessMode: CoworkerToolAccessMode | null | undefined;
   triggerType: string;
   schedule: unknown;
   allowedIntegrations: string[];
@@ -150,6 +170,7 @@ function toBuilderContext(row: {
     coworkerId: row.id,
     updatedAt: row.updatedAt.toISOString(),
     prompt: row.prompt,
+    toolAccessMode: normalizeCoworkerToolAccessMode(row.toolAccessMode, row.allowedIntegrations),
     triggerType: row.triggerType,
     schedule: row.schedule,
     allowedIntegrations: row.allowedIntegrations,
@@ -176,6 +197,7 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
     columns: {
       id: true,
       prompt: true,
+      toolAccessMode: true,
       triggerType: true,
       schedule: true,
       allowedIntegrations: true,
@@ -191,6 +213,7 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
   return toBuilderContext({
     id: row.id,
     prompt: row.prompt,
+    toolAccessMode: row.toolAccessMode,
     triggerType: row.triggerType,
     schedule: row.schedule,
     allowedIntegrations: row.allowedIntegrations as string[],
@@ -199,22 +222,42 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
 }
 
 function buildChangedFields(params: {
-  current: {
-    prompt: string;
-    triggerType: string;
-    schedule: unknown;
-    allowedIntegrations: string[];
+    current: {
+      name: string;
+      description: string | null;
+      username: string | null;
+      prompt: string;
+      toolAccessMode: CoworkerToolAccessMode;
+      triggerType: string;
+      schedule: unknown;
+      allowedIntegrations: string[];
   };
   next: {
-    prompt: string;
-    triggerType: string;
-    schedule: unknown;
-    allowedIntegrations: string[];
+      name: string;
+      description: string | null;
+      username: string | null;
+      prompt: string;
+      toolAccessMode: CoworkerToolAccessMode;
+      triggerType: string;
+      schedule: unknown;
+      allowedIntegrations: string[];
   };
 }): string[] {
   const changed: string[] = [];
+  if (params.current.name !== params.next.name) {
+    changed.push("name");
+  }
+  if (params.current.description !== params.next.description) {
+    changed.push("description");
+  }
+  if (params.current.username !== params.next.username) {
+    changed.push("username");
+  }
   if (params.current.prompt !== params.next.prompt) {
     changed.push("prompt");
+  }
+  if (params.current.toolAccessMode !== params.next.toolAccessMode) {
+    changed.push("toolAccessMode");
   }
   if (params.current.triggerType !== params.next.triggerType) {
     changed.push("triggerType");
@@ -261,10 +304,18 @@ export async function applyCoworkerBuilderPatch(params: {
       id: true,
       ownerId: true,
       builderConversationId: true,
+      name: true,
+      description: true,
+      username: true,
       prompt: true,
+      promptDo: true,
+      promptDont: true,
+      toolAccessMode: true,
       triggerType: true,
       schedule: true,
       allowedIntegrations: true,
+      allowedCustomIntegrations: true,
+      autoApprove: true,
       updatedAt: true,
     },
   });
@@ -291,6 +342,9 @@ export async function applyCoworkerBuilderPatch(params: {
   }
 
   const nextTriggerType = params.patch.triggerType ?? existing.triggerType;
+  const nextToolAccessMode =
+    params.patch.toolAccessMode ??
+    normalizeCoworkerToolAccessMode(existing.toolAccessMode, existing.allowedIntegrations);
   const nextSchedule =
     params.patch.schedule !== undefined ? params.patch.schedule : (existing.schedule ?? null);
   const details: string[] = [];
@@ -317,7 +371,11 @@ export async function applyCoworkerBuilderPatch(params: {
   }
 
   const nextState = {
+    name: existing.name,
+    description: existing.description ?? null,
+    username: existing.username ?? null,
     prompt: params.patch.prompt ?? existing.prompt,
+    toolAccessMode: nextToolAccessMode,
     triggerType: nextTriggerType,
     schedule:
       nextTriggerType === "schedule"
@@ -327,10 +385,51 @@ export async function applyCoworkerBuilderPatch(params: {
           : (existing.schedule ?? null),
     allowedIntegrations: normalizedIntegrations ?? (existing.allowedIntegrations as string[]),
   };
+  const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
+    database,
+    current: {
+      id: existing.id,
+      name: existing.name,
+      description: existing.description ?? null,
+      username: existing.username ?? null,
+      prompt: existing.prompt,
+      triggerType: existing.triggerType,
+      allowedIntegrations: existing.allowedIntegrations as string[],
+      allowedCustomIntegrations: existing.allowedCustomIntegrations ?? [],
+      schedule: existing.schedule ?? null,
+      autoApprove: existing.autoApprove ?? true,
+      promptDo: existing.promptDo ?? null,
+      promptDont: existing.promptDont ?? null,
+    },
+    next: {
+      id: existing.id,
+      name: nextState.name,
+      description: nextState.description,
+      username: nextState.username,
+      prompt: nextState.prompt,
+      triggerType: nextState.triggerType,
+      allowedIntegrations: nextState.allowedIntegrations,
+      allowedCustomIntegrations: existing.allowedCustomIntegrations ?? [],
+      schedule: nextState.schedule,
+      autoApprove: existing.autoApprove ?? true,
+      promptDo: existing.promptDo ?? null,
+      promptDont: existing.promptDont ?? null,
+    },
+  });
+  nextState.name = metadataUpdates.name ?? nextState.name;
+  nextState.description = metadataUpdates.description ?? nextState.description;
+  nextState.username = metadataUpdates.username ?? nextState.username;
 
   const changedFields = buildChangedFields({
     current: {
+      name: existing.name,
+      description: existing.description ?? null,
+      username: existing.username ?? null,
       prompt: existing.prompt,
+      toolAccessMode: normalizeCoworkerToolAccessMode(
+        existing.toolAccessMode,
+        existing.allowedIntegrations as string[],
+      ),
       triggerType: existing.triggerType,
       schedule: existing.schedule ?? null,
       allowedIntegrations: existing.allowedIntegrations as string[],
@@ -344,6 +443,7 @@ export async function applyCoworkerBuilderPatch(params: {
       coworker: toBuilderContext({
         id: existing.id,
         prompt: existing.prompt,
+        toolAccessMode: existing.toolAccessMode,
         triggerType: existing.triggerType,
         schedule: existing.schedule ?? null,
         allowedIntegrations: existing.allowedIntegrations as string[],
@@ -356,7 +456,11 @@ export async function applyCoworkerBuilderPatch(params: {
   const updatedRowsUnknown = await database
     .update(coworker)
     .set({
+      name: nextState.name,
+      description: nextState.description,
+      username: nextState.username,
       prompt: nextState.prompt,
+      toolAccessMode: nextState.toolAccessMode,
       triggerType: nextState.triggerType,
       schedule: nextState.schedule,
       allowedIntegrations:
@@ -373,6 +477,7 @@ export async function applyCoworkerBuilderPatch(params: {
     .returning({
       id: coworker.id,
       prompt: coworker.prompt,
+      toolAccessMode: coworker.toolAccessMode,
       triggerType: coworker.triggerType,
       schedule: coworker.schedule,
       allowedIntegrations: coworker.allowedIntegrations,
@@ -388,6 +493,7 @@ export async function applyCoworkerBuilderPatch(params: {
       columns: {
         id: true,
         prompt: true,
+        toolAccessMode: true,
         triggerType: true,
         schedule: true,
         allowedIntegrations: true,
@@ -403,6 +509,7 @@ export async function applyCoworkerBuilderPatch(params: {
       coworker: toBuilderContext({
         id: latest.id,
         prompt: latest.prompt,
+        toolAccessMode: latest.toolAccessMode,
         triggerType: latest.triggerType,
         schedule: latest.schedule ?? null,
         allowedIntegrations: latest.allowedIntegrations as string[],
@@ -436,6 +543,7 @@ export async function applyCoworkerBuilderPatch(params: {
     coworker: toBuilderContext({
       id: updated.id,
       prompt: updated.prompt,
+      toolAccessMode: updated.toolAccessMode,
       triggerType: updated.triggerType,
       schedule: updated.schedule,
       allowedIntegrations: updated.allowedIntegrations as string[],
@@ -527,6 +635,11 @@ function normalizePatchCandidate(parsedUnknown: unknown): unknown {
 
   const nextPatch: Record<string, unknown> = { ...patch };
   nextPatch.triggerType = normalizeTriggerType(nextPatch.triggerType);
+  if (nextPatch.toolAccessMode === "restrict" || nextPatch.toolAccessMode === "selected") {
+    nextPatch.toolAccessMode = "selected";
+  } else if (nextPatch.toolAccessMode === "all") {
+    nextPatch.toolAccessMode = "all";
+  }
 
   if (!nextPatch.allowedIntegrations) {
     if (Array.isArray(nextPatch.integrations)) {
