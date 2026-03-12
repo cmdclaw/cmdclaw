@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Menu } from "lucide-react";
+import { Loader2, PanelLeftOpen } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
@@ -75,22 +75,22 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   // Show loading while checking onboarding status
   if (userLoading || (user && !user.onboardedAt)) {
     return (
-      <div className="bg-background flex h-screen items-center justify-center">
+      <div className="bg-background flex h-full min-h-0 items-center justify-center">
         <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   return (
-    <>
-      <header className="flex h-14 items-center gap-2 px-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden pb-[calc(3.5rem+var(--safe-area-inset-bottom))] md:pb-0">
+      <header className="bg-background flex shrink-0 items-center gap-2 px-4 pt-[max(0.5rem,var(--safe-area-inset-top))] pb-2 md:h-14 md:pt-0 md:pb-0">
         <button
           type="button"
           onClick={openRecentDrawer}
-          className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md md:hidden"
+          className="text-muted-foreground hover:text-foreground -ml-1 flex h-9 w-9 items-center justify-center rounded-xl md:hidden"
           aria-label="Recent chats"
         >
-          <Menu className="h-5 w-5" />
+          <PanelLeftOpen className="h-5 w-5" />
         </button>
         {isAdmin && liveConversationId && (
           <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
@@ -98,10 +98,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         <ChatCopyButton conversationId={liveConversationId} className="ml-auto" />
         <ChatShareControls conversationId={liveConversationId} />
       </header>
-      <div className="flex h-[calc(100vh-3.5rem-3.5rem)] flex-col overflow-hidden md:h-[calc(100vh-3.5rem)]">
-        {children}
-      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
       <MobileRecentDrawer open={recentDrawerOpen} onOpenChange={setRecentDrawerOpen} mode="chats" />
-    </>
+    </div>
   );
 }

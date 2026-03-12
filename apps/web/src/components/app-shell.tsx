@@ -1,10 +1,12 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBottomBar } from "@/components/mobile-bottom-bar";
 import { SelfhostControlPlaneGate } from "@/components/selfhost-control-plane-gate";
 import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 
 const APP_SHELL_CONTENT_STYLE: React.CSSProperties = { transform: "translateZ(0)" };
 
@@ -21,7 +23,9 @@ export function AppShell({
   sidebarVisibility = "always",
   initialHasSession = false,
 }: AppShellProps) {
+  const pathname = usePathname();
   const [showAuthenticatedSidebar, setShowAuthenticatedSidebar] = useState(initialHasSession);
+  const isChatRoute = pathname === "/chat" || pathname?.startsWith("/chat/");
 
   useEffect(() => {
     if (sidebarVisibility === "always") {
@@ -61,11 +65,14 @@ export function AppShell({
     (sidebarVisibility === "authenticated" && showAuthenticatedSidebar);
 
   return (
-    <div className="flex h-screen w-full">
+    <div className="flex h-dvh min-h-0 w-full overflow-hidden">
       <SelfhostControlPlaneGate />
       {showNav ? <AppSidebar /> : null}
       <div
-        className="app-shell-scroll-container relative h-full min-w-0 flex-1 overflow-auto pb-16 md:pb-0"
+        className={cn(
+          "app-shell-scroll-container relative h-full min-w-0 flex-1",
+          isChatRoute ? "overflow-hidden pb-0" : "overflow-auto pb-16 md:pb-0",
+        )}
         style={APP_SHELL_CONTENT_STYLE}
       >
         {children}

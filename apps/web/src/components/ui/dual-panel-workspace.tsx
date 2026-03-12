@@ -35,6 +35,8 @@ type DualPanelWorkspaceProps = {
   showExpandedCollapseButton?: boolean;
   /** Expose collapse toggle so child content can trigger it (e.g. an X close button inside the panel). */
   onCollapseToggleRef?: React.MutableRefObject<(() => void) | null>;
+  /** Hide the built-in mobile toggle buttons (useful when the parent provides its own mobile layout). */
+  hideMobileToggle?: boolean;
 };
 
 const DEFAULT_RIGHT_WIDTH = 48;
@@ -61,6 +63,7 @@ export function DualPanelWorkspace({
   collapsedLabel,
   showExpandedCollapseButton = true,
   onCollapseToggleRef,
+  hideMobileToggle = false,
 }: DualPanelWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mobilePanel, setMobilePanel] = useState<"left" | "right">("right");
@@ -201,56 +204,60 @@ export function DualPanelWorkspace({
 
   return (
     <div className={cn("flex min-h-0 w-full flex-1 flex-col", className)}>
-      <div className="mb-3 flex items-center gap-2 md:hidden">
-        <Button
-          type="button"
-          variant={mobilePanel === "left" ? "default" : "outline"}
-          size="sm"
-          onClick={switchToLeftPanel}
-        >
-          {leftTitle}
-        </Button>
-        <Button
-          type="button"
-          variant={mobilePanel === "right" ? "default" : "outline"}
-          size="sm"
-          onClick={switchToRightPanel}
-        >
-          {rightTitle}
-        </Button>
-      </div>
+      {!hideMobileToggle && (
+        <div className="mb-3 flex items-center gap-2 md:hidden">
+          <Button
+            type="button"
+            variant={mobilePanel === "left" ? "default" : "outline"}
+            size="sm"
+            onClick={switchToLeftPanel}
+          >
+            {leftTitle}
+          </Button>
+          <Button
+            type="button"
+            variant={mobilePanel === "right" ? "default" : "outline"}
+            size="sm"
+            onClick={switchToRightPanel}
+          >
+            {rightTitle}
+          </Button>
+        </div>
+      )}
 
-      <div className="flex min-h-0 flex-1 md:hidden">
-        {mobilePanel === "left" ? (
-          <section
-            className={cn(
-              "bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border",
-              leftPanelClassName,
-            )}
-          >
-            {showTitles && (
-              <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-                {leftTitle}
-              </div>
-            )}
-            <div className="flex min-h-0 flex-1 flex-col">{left}</div>
-          </section>
-        ) : (
-          <section
-            className={cn(
-              "bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border",
-              rightPanelClassName,
-            )}
-          >
-            {showTitles && (
-              <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-                {rightTitle}
-              </div>
-            )}
-            <div className="flex min-h-0 flex-1 flex-col">{right}</div>
-          </section>
-        )}
-      </div>
+      {!hideMobileToggle && (
+        <div className="flex min-h-0 flex-1 md:hidden">
+          {mobilePanel === "left" ? (
+            <section
+              className={cn(
+                "bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border",
+                leftPanelClassName,
+              )}
+            >
+              {showTitles && (
+                <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+                  {leftTitle}
+                </div>
+              )}
+              <div className="flex min-h-0 flex-1 flex-col">{left}</div>
+            </section>
+          ) : (
+            <section
+              className={cn(
+                "bg-background flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border",
+                rightPanelClassName,
+              )}
+            >
+              {showTitles && (
+                <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+                  {rightTitle}
+                </div>
+              )}
+              <div className="flex min-h-0 flex-1 flex-col">{right}</div>
+            </section>
+          )}
+        </div>
+      )}
 
       <div ref={containerRef} className="hidden min-h-0 flex-1 md:flex">
         <section
