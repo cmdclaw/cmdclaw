@@ -50,6 +50,7 @@ import {
   getEffectiveSeenMessageCount,
   hasUnreadConversationResults,
 } from "@/lib/conversation-seen";
+import { openNewChat } from "@/lib/open-new-chat";
 import {
   useConversationList,
   useDeleteConversation,
@@ -120,8 +121,7 @@ export function ChatSidebar() {
   );
 
   const handleCreateNewChat = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("new-chat"));
-    router.push("/chat");
+    openNewChat(router);
   }, [router]);
 
   const handleDeleteMenuClick = useCallback(

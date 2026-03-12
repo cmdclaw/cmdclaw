@@ -53,6 +53,7 @@ import {
   hasUnreadConversationResults,
 } from "@/lib/conversation-seen";
 import { clientEditionCapabilities } from "@/lib/edition";
+import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
@@ -123,11 +124,20 @@ type NavItem = {
   href: string;
 };
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({
+  item,
+  active,
+  onClick,
+}: {
+  item: NavItem;
+  active: boolean;
+  onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+}) {
   return (
     <Link
       href={item.href}
       prefetch={false}
+      onClick={onClick}
       className={cn(
         "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors",
         active
@@ -451,6 +461,14 @@ export function AppSidebar() {
     setAdminOpen((prev) => !prev);
   }, []);
 
+  const handleChatNavClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      openNewChat(router);
+    },
+    [router],
+  );
+
   return (
     <>
       <BugReportDialog open={reportOpen} onOpenChange={setReportOpen} />
@@ -526,7 +544,12 @@ export function AppSidebar() {
               <SectionLabel>Coworker</SectionLabel>
               <div className="flex flex-col gap-0.5">
                 {coworkerNavItems.map((item) => (
-                  <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    active={isActive(item.href)}
+                    onClick={item.href === "/chat" ? handleChatNavClick : undefined}
+                  />
                 ))}
               </div>
             </div>

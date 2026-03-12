@@ -2,9 +2,10 @@
 
 import { Cuboid, Home, LayoutTemplate, Menu, MessageSquare, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { MobileMenuPanel } from "@/components/mobile-menu-sheet";
+import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
 
 type BottomTab = {
@@ -26,6 +27,7 @@ const mobileBottomNavStyle = {
 
 export function MobileBottomBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isActive = useCallback(
@@ -48,6 +50,18 @@ export function MobileBottomBar() {
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
   }, []);
+
+  const handleTabClick = useCallback(
+    (href: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+      closeMenu();
+      if (href !== "/chat") {
+        return;
+      }
+      event.preventDefault();
+      openNewChat(router);
+    },
+    [closeMenu, router],
+  );
 
   return (
     <>
@@ -77,7 +91,7 @@ export function MobileBottomBar() {
                 key={tab.href}
                 href={tab.href}
                 prefetch={false}
-                onClick={closeMenu}
+                onClick={handleTabClick(tab.href)}
                 className={cn(
                   "flex flex-1 flex-col items-center gap-1 pt-3 pb-2 text-[11px] font-medium transition-colors",
                   active ? "text-foreground" : "text-muted-foreground",
