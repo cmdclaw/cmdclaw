@@ -1,13 +1,17 @@
 "use client";
 
-import { ArrowUp, Loader2, PenLine, Play } from "lucide-react";
+import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
+import { Loader2, PenLine, Play } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { VoiceIndicator } from "@/components/chat/voice-indicator";
+import { PromptBar } from "@/components/prompt-bar";
 import { Button } from "@/components/ui/button";
+import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import {
   INTEGRATION_LOGOS,
@@ -16,7 +20,13 @@ import {
 } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { client } from "@/orpc/client";
-import { useCreateCoworker, useCoworkerList } from "@/orpc/hooks";
+import {
+  useCreateCoworker,
+  useCoworkerList,
+  useIntegrationList,
+  useTranscribe,
+  useTriggerCoworker,
+} from "@/orpc/hooks";
 
 type CoworkerItem = {
   id: string;
@@ -25,82 +35,14 @@ type CoworkerItem = {
   description?: string | null;
   status: "on" | "off";
   triggerType: string;
-  integrations?: IntegrationType[];
+  toolAccessMode: CoworkerToolAccessMode;
+  allowedIntegrations?: IntegrationType[];
+  allowedSkillSlugs?: string[];
   recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
 };
 
 const DEFAULT_COWORKER_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
-
-// ─── Mock coworkers (for development) ────────────────────────────────────────
-
-const MOCK_COWORKERS: CoworkerItem[] = [
-  {
-    id: "mock-daily-digest",
-    name: "Morning email digest",
-    username: "daily_digest",
-    description:
-      "Summarizes unread emails from the last 24 hours and sends a clean digest with action items every morning at 8am.",
-    status: "on",
-    triggerType: "schedule",
-    integrations: ["google_gmail"],
-    recentRuns: [{ id: "r1", status: "completed", startedAt: new Date(Date.now() - 3600000) }],
-  },
-  {
-    id: "mock-lead-enrichment",
-    name: "Lead enrichment pipeline",
-    username: "lead_enricher",
-    description:
-      "Processes new rows from Google Sheets, finds decision-makers on LinkedIn, enriches contact data, and pushes to HubSpot.",
-    status: "on",
-    triggerType: "manual",
-    integrations: ["google_sheets", "linkedin", "hubspot"],
-    recentRuns: [{ id: "r2", status: "completed", startedAt: new Date(Date.now() - 86400000) }],
-  },
-  {
-    id: "mock-meeting-prep",
-    name: "Pre-meeting briefing",
-    username: "meeting_brief_bot",
-    description:
-      "When a new meeting is booked, researches the person and company on LinkedIn, checks HubSpot for history, and posts a briefing to Slack.",
-    status: "on",
-    triggerType: "webhook",
-    integrations: ["google_calendar", "linkedin", "hubspot", "slack"],
-    recentRuns: [{ id: "r3", status: "running", startedAt: new Date(Date.now() - 300000) }],
-  },
-  {
-    id: "mock-incident-alert",
-    name: "GitHub incident alerts",
-    username: "incident_watch",
-    description:
-      "When a critical issue is opened on GitHub, gathers related PRs and recent commits, then posts a rich summary to the #incidents Slack channel.",
-    status: "off",
-    triggerType: "webhook",
-    integrations: ["github", "slack"],
-    recentRuns: [],
-  },
-  {
-    id: "mock-campaign-report",
-    name: "Weekly campaign report",
-    username: "campaign_reporter",
-    description:
-      "Every Monday, pulls campaign metrics from HubSpot and Google Sheets, generates a performance summary, and posts to Slack.",
-    status: "on",
-    triggerType: "schedule",
-    integrations: ["hubspot", "google_sheets", "slack"],
-    recentRuns: [{ id: "r4", status: "completed", startedAt: new Date(Date.now() - 604800000) }],
-  },
-  {
-    id: "mock-churn-detection",
-    name: "Churn risk monitor",
-    username: "churn_sentinel",
-    description:
-      "Monitors usage data and support tickets daily. When churn risk is detected, notifies the CS team in Slack with full context and suggested actions.",
-    status: "on",
-    triggerType: "schedule",
-    integrations: ["hubspot", "slack", "google_gmail"],
-    recentRuns: [{ id: "r5", status: "completed", startedAt: new Date(Date.now() - 172800000) }],
-  },
-];
+const MAX_VISIBLE_TOOL_INDICATORS = 3;
 
 function formatDate(value?: Date | string | null) {
   if (!value) {
@@ -143,17 +85,48 @@ function getCoworkerDisplayName(name?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : "New Coworker";
 }
 
+function buildToolSummary(coworker: CoworkerItem, connectedIntegrationTypes: IntegrationType[]) {
+  const integrationTypes =
+    coworker.toolAccessMode === "all"
+      ? connectedIntegrationTypes
+      : (coworker.allowedIntegrations ?? []).filter((entry) =>
+          COWORKER_AVAILABLE_INTEGRATION_TYPES.includes(entry),
+        );
+  const skillCount =
+    coworker.toolAccessMode === "selected" ? (coworker.allowedSkillSlugs?.length ?? 0) : 0;
+  const visibleIntegrations = integrationTypes.slice(0, MAX_VISIBLE_TOOL_INDICATORS);
+  const remainingSlots = MAX_VISIBLE_TOOL_INDICATORS - visibleIntegrations.length;
+  const showSkillBadge = skillCount > 0 && remainingSlots > 0;
+  const coveredCount = visibleIntegrations.length + (showSkillBadge ? skillCount : 0);
+  const totalCount = integrationTypes.length + skillCount;
+
+  return {
+    visibleIntegrations,
+    skillCount,
+    showSkillBadge,
+    overflowCount: Math.max(0, totalCount - coveredCount),
+  };
+}
+
 function CoworkerCard({
   coworker,
+  connectedIntegrationTypes,
+  isRunning,
   onRun,
   onOpen,
 }: {
   coworker: CoworkerItem;
+  connectedIntegrationTypes: IntegrationType[];
+  isRunning: boolean;
   onRun: (coworker: CoworkerItem) => void;
   onOpen: (id: string) => void;
 }) {
   const isOn = coworker.status === "on";
   const recentRun = Array.isArray(coworker.recentRuns) ? coworker.recentRuns[0] : null;
+  const toolSummary = useMemo(
+    () => buildToolSummary(coworker, connectedIntegrationTypes),
+    [connectedIntegrationTypes, coworker],
+  );
 
   const handleRun = useCallback(
     (e: React.MouseEvent) => {
@@ -176,9 +149,6 @@ function CoworkerCard({
     },
     [onOpen, coworker.id],
   );
-
-  const integrations = coworker.integrations ?? [];
-
   return (
     <div
       tabIndex={0}
@@ -218,9 +188,9 @@ function CoworkerCard({
         <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
           {getTriggerLabel(coworker.triggerType)}
         </span>
-        {integrations.length > 0 && (
+        {toolSummary.visibleIntegrations.length > 0 && (
           <div className="flex items-center gap-1">
-            {integrations.map((key) => {
+            {toolSummary.visibleIntegrations.map((key) => {
               const logo = INTEGRATION_LOGOS[key];
               if (!logo) {
                 return null;
@@ -239,6 +209,16 @@ function CoworkerCard({
             })}
           </div>
         )}
+        {toolSummary.showSkillBadge ? (
+          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+            {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {toolSummary.overflowCount > 0 ? (
+          <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
+            +{toolSummary.overflowCount}
+          </span>
+        ) : null}
       </div>
 
       <div className="text-muted-foreground/70 text-xs">
@@ -261,9 +241,9 @@ function CoworkerCard({
           size="sm"
           className="h-7 gap-1.5 text-xs"
           onClick={handleRun}
-          disabled={!coworker.username}
+          disabled={isRunning}
         >
-          <Play className="size-3" />
+          {isRunning ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
           Run
         </Button>
         <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" asChild>
@@ -280,27 +260,56 @@ function CoworkerCard({
 export default function CoworkersPage() {
   const router = useRouter();
   const { data: coworkers, isLoading } = useCoworkerList();
+  const { data: integrations } = useIntegrationList();
   const createCoworker = useCreateCoworker();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [prompt, setPrompt] = useState("");
+  const triggerCoworker = useTriggerCoworker();
+  const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
+  const { mutateAsync: transcribe } = useTranscribe();
   const [isCreating, setIsCreating] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [inputPrefillRequest, setInputPrefillRequest] = useState<{
+    id: string;
+    text: string;
+    mode?: "replace" | "append";
+  } | null>(null);
+  const [runningCoworkerId, setRunningCoworkerId] = useState<string | null>(null);
+  const isRecordingRef = useRef(false);
   const coworkerList = useMemo(() => {
     const real = Array.isArray(coworkers) ? coworkers : [];
-    // Merge mock data with real coworkers for development
-    return [...real, ...MOCK_COWORKERS];
+    return real.map((entry) =>
+      Object.assign({}, entry, {
+        toolAccessMode: entry.toolAccessMode,
+        allowedIntegrations: (entry.allowedIntegrations ?? []) as IntegrationType[],
+        allowedSkillSlugs: entry.allowedSkillSlugs ?? [],
+      }),
+    );
   }, [coworkers]);
+  const connectedIntegrationTypes = useMemo(
+    () =>
+      (integrations ?? []).flatMap((entry) =>
+        entry.enabled &&
+        entry.setupRequired !== true &&
+        COWORKER_AVAILABLE_INTEGRATION_TYPES.includes(entry.type as IntegrationType)
+          ? ([entry.type as IntegrationType] as const)
+          : [],
+      ),
+    [integrations],
+  );
 
   const handleRunCoworker = useCallback(
-    (coworker: CoworkerItem) => {
-      const username = coworker.username?.trim();
-      if (!username) {
-        toast.error("Missing coworker username.");
-        return;
+    async (coworker: CoworkerItem) => {
+      setRunningCoworkerId(coworker.id);
+      try {
+        await triggerCoworker.mutateAsync({ id: coworker.id, payload: {} });
+        toast.success("Run started.");
+      } catch (error) {
+        console.error("Failed to trigger coworker:", error);
+        toast.error("Failed to start run.");
+      } finally {
+        setRunningCoworkerId(null);
       }
-      const query = new URLSearchParams({ prefill: `run @coworker-${username}` });
-      router.push(`/chat?${query.toString()}`);
     },
-    [router],
+    [triggerCoworker],
   );
   const handleOpenCoworker = useCallback(
     (id: string) => {
@@ -309,12 +318,47 @@ export default function CoworkersPage() {
     [router],
   );
 
-  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPrompt(e.target.value);
-    const el = e.target;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, []);
+  const stopRecordingAndTranscribe = useCallback(async () => {
+    if (!isRecordingRef.current) {
+      return;
+    }
+    isRecordingRef.current = false;
+
+    const audioBlob = await stopRecording();
+    if (!audioBlob || audioBlob.size === 0) {
+      return;
+    }
+
+    setIsProcessingVoice(true);
+    try {
+      const base64Audio = await blobToBase64(audioBlob);
+      const result = await transcribe({
+        audio: base64Audio,
+        mimeType: audioBlob.type || "audio/webm",
+      });
+
+      if (result.text && result.text.trim()) {
+        setInputPrefillRequest({
+          id: `coworker-voice-prefill-${Date.now()}`,
+          text: result.text.trim(),
+          mode: "append",
+        });
+      }
+    } catch (error) {
+      console.error("Coworker transcription error:", error);
+    } finally {
+      setIsProcessingVoice(false);
+    }
+  }, [stopRecording, transcribe]);
+
+  const handleStartRecording = useCallback(() => {
+    if (isCreating || isProcessingVoice || isRecordingRef.current) {
+      return;
+    }
+
+    isRecordingRef.current = true;
+    void startRecording();
+  }, [isCreating, isProcessingVoice, startRecording]);
 
   const doCreate = useCallback(
     async ({
@@ -332,6 +376,7 @@ export default function CoworkersPage() {
         name,
         triggerType,
         prompt: coworkerPrompt,
+        toolAccessMode: "all",
         allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
       });
 
@@ -357,28 +402,27 @@ export default function CoworkersPage() {
     [createCoworker],
   );
 
-  const handlePromptSubmit = useCallback(async () => {
-    const text = prompt.trim();
-    if (!text || isCreating) {
-      return;
-    }
-    setIsCreating(true);
-    try {
-      await doCreate({ initialMessage: text, name: "", prompt: "", triggerType: "manual" });
-    } catch {
-      toast.error("Failed to create coworker. Please try again.");
-      setIsCreating(false);
-    }
-  }, [doCreate, isCreating, prompt]);
+  const handlePromptSubmit = useCallback(
+    async (text: string) => {
+      const trimmedText = text.trim();
+      if (!trimmedText || isCreating || isProcessingVoice) {
+        return;
+      }
 
-  const handlePromptKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        void handlePromptSubmit();
+      setIsCreating(true);
+      try {
+        await doCreate({
+          initialMessage: trimmedText,
+          name: "",
+          prompt: "",
+          triggerType: "manual",
+        });
+      } catch {
+        toast.error("Failed to create coworker. Please try again.");
+        setIsCreating(false);
       }
     },
-    [handlePromptSubmit],
+    [doCreate, isCreating, isProcessingVoice],
   );
 
   return (
@@ -391,33 +435,27 @@ export default function CoworkersPage() {
           <p className="text-muted-foreground mb-6 text-center text-sm">
             Describe a task and we&apos;ll build it step by step
           </p>
-          <div className="border-border/50 bg-card rounded-2xl border p-4 shadow-sm">
-            <textarea
-              ref={textareaRef}
-              value={prompt}
-              onChange={handlePromptChange}
-              onKeyDown={handlePromptKeyDown}
-              placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
-              rows={2}
-              className="placeholder:text-muted-foreground/80 text-foreground min-h-12 w-full resize-none bg-transparent text-sm leading-relaxed outline-none"
-            />
-            <div className="mt-3 flex items-center justify-between">
-              <p className="text-muted-foreground/40 text-xs">⌘ Enter to send</p>
-              <Button
-                size="sm"
-                onClick={handlePromptSubmit}
-                disabled={!prompt.trim() || isCreating}
-                className="gap-1.5 rounded-lg px-3"
-              >
-                {isCreating ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <ArrowUp className="size-3.5" />
-                )}
-                Send
-              </Button>
+          <PromptBar
+            onSubmit={handlePromptSubmit}
+            isSubmitting={isCreating}
+            disabled={isCreating || isRecording || isProcessingVoice}
+            placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+            isRecording={isRecording}
+            onStartRecording={handleStartRecording}
+            onStopRecording={stopRecordingAndTranscribe}
+            voiceInteractionMode="toggle"
+            prefillRequest={inputPrefillRequest}
+          />
+          {(isRecording || isProcessingVoice || voiceError) && (
+            <div className="mt-4">
+              <VoiceIndicator
+                isRecording={isRecording}
+                isProcessing={isProcessingVoice}
+                error={voiceError}
+                recordingLabel="Recording... Click the mic again to stop"
+              />
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -435,6 +473,8 @@ export default function CoworkersPage() {
             <CoworkerCard
               key={wf.id}
               coworker={wf}
+              connectedIntegrationTypes={connectedIntegrationTypes}
+              isRunning={runningCoworkerId === wf.id}
               onRun={handleRunCoworker}
               onOpen={handleOpenCoworker}
             />
