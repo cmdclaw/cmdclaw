@@ -4,7 +4,7 @@ import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
@@ -15,6 +15,7 @@ import {
 } from "@/components/landing/pending-coworker-prompt";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
@@ -280,10 +281,10 @@ function IntegrationLogos({ integrations }: { integrations: IntegrationType[] })
   );
 }
 
-function TemplateCard({ template }: { template: TemplateItem }) {
+function TemplateCard({ template, isMobile }: { template: TemplateItem; isMobile: boolean }) {
   return (
     <Link
-      href={`/?preview=${template.id}`}
+      href={isMobile ? `/template/${template.id}` : `/?preview=${template.id}`}
       scroll={false}
       className="group border-border/60 bg-card relative flex min-h-[170px] w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150 hover:border-slate-300 hover:bg-slate-100"
     >
@@ -382,7 +383,9 @@ type CoworkerLandingProps = {
 };
 
 export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
   const createCoworker = useCreateCoworker();
   const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
@@ -515,6 +518,14 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
     resumePendingPromptRef.current = true;
     window.location.replace("/coworkers/new");
   }, [isAnonymous, isCreating]);
+
+  useEffect(() => {
+    if (!isMobile || !previewId) {
+      return;
+    }
+
+    router.replace(`/template/${previewId}`, { scroll: false });
+  }, [isMobile, previewId, router]);
 
   const stopRecordingAndTranscribe = useCallback(async () => {
     if (!isRecordingRef.current) {
@@ -655,12 +666,12 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {FEATURED_TEMPLATES.map((template) => (
-                <TemplateCard key={template.id} template={template} />
+                <TemplateCard key={template.id} template={template} isMobile={isMobile} />
               ))}
             </div>
           </section>
         </div>
-        <TemplatePreviewModal templateId={previewId} closeHref="/" />
+        {!isMobile && <TemplatePreviewModal templateId={previewId} closeHref="/" />}
       </div>
 
       {/* ── Footer ── */}

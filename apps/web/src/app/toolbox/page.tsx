@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { IconDisplay } from "@/components/ui/icon-picker";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   isUnipileMissingCredentialsError,
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
@@ -264,14 +265,14 @@ function toErrorMessage(error: unknown, fallback: string): string {
 // ─── Card components ────────────────────────────────────────────────────────────
 
 function IntegrationToolCard({
-  type,
   config,
+  href,
   integration,
   connectError,
   isPreviewOnly,
 }: {
-  type: IntegrationType;
   config: { name: string; description: string; icon: string };
+  href: string;
   integration: {
     id: string;
     type: string;
@@ -294,7 +295,7 @@ function IntegrationToolCard({
       transition={CARD_MOTION.transition}
     >
       <Link
-        href={`/toolbox?preview=integration:${type}`}
+        href={href}
         scroll={false}
         className={cn(
           "border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200",
@@ -562,6 +563,7 @@ function CustomToolCard({
 function ToolboxPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
   const { isAdmin } = useIsAdmin();
 
   // Integration hooks
@@ -876,6 +878,14 @@ function ToolboxPageContent() {
   // ─── Preview modal helpers ───────────────────────────────────────────────────
   const previewId = searchParams.get("preview");
 
+  useEffect(() => {
+    if (!isMobile || !previewId?.startsWith("integration:")) {
+      return;
+    }
+
+    router.replace(`/integrations/${previewId.slice("integration:".length)}`, { scroll: false });
+  }, [isMobile, previewId, router]);
+
   const getIntegrationConfig = useCallback((type: string) => integrationConfig[type], []);
 
   const getIntegration = useCallback(
@@ -1121,8 +1131,12 @@ function ToolboxPageContent() {
                     return (
                       <IntegrationToolCard
                         key={type}
-                        type={type}
                         config={config}
+                        href={
+                          isMobile
+                            ? `/integrations/${type}`
+                            : `/toolbox?preview=integration:${type}`
+                        }
                         integration={integration}
                         connectError={
                           !integration
@@ -1170,7 +1184,7 @@ function ToolboxPageContent() {
       )}
 
       <ToolboxPreviewModal
-        previewId={previewId}
+        previewId={isMobile && previewId?.startsWith("integration:") ? null : previewId}
         integrationProps={previewIntegrationProps}
         communitySkillProps={previewCommunitySkillProps}
       />

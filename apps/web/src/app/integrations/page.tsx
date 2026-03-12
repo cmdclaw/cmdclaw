@@ -12,7 +12,7 @@ import {
   Info,
 } from "lucide-react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo, useRef } from "react";
 import { useEffect, useState } from "react";
 import {
@@ -30,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsAdmin } from "@/hooks/use-is-admin";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { clientEditionCapabilities } from "@/lib/edition";
 import {
   isUnipileMissingCredentialsError,
@@ -394,6 +395,8 @@ function CustomIntegrationDeleteButton({
 }
 
 function IntegrationsPageContent() {
+  const router = useRouter();
+  const isMobile = useIsMobile();
   const showCustomIntegrations = false;
   const { isAdmin } = useIsAdmin();
   const searchParams = useSearchParams();
@@ -891,16 +894,34 @@ function IntegrationsPageContent() {
     setSearchQuery(event.target.value);
   }, []);
 
-  const handleCardClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    const type = event.currentTarget.dataset.integrationType as IntegrationType | undefined;
-    if (type) {
+  const handleCardClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const type = event.currentTarget.dataset.integrationType as IntegrationType | undefined;
+      if (!type) {
+        return;
+      }
+
+      if (isMobile) {
+        router.push(`/integrations/${type}`);
+        return;
+      }
+
       setSelectedCard(type);
-    }
-  }, []);
+    },
+    [isMobile, router],
+  );
 
   const handleCloseCard = useCallback(() => {
     setSelectedCard(null);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile || !selectedCard) {
+      return;
+    }
+
+    router.replace(`/integrations/${selectedCard}`);
+  }, [isMobile, router, selectedCard]);
 
   const handleDialogOpenChange = useCallback(
     (open: boolean) => {
@@ -1154,7 +1175,8 @@ function IntegrationsPageContent() {
       ) : (
         <>
           {/* Integration detail modal */}
-          {selectedCard &&
+          {!isMobile &&
+            selectedCard &&
             (() => {
               const type = selectedCard;
               const config = integrationConfig[type];
