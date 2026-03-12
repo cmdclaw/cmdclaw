@@ -91,6 +91,7 @@ type ActivitySegment = Omit<RuntimeActivitySegment, "items"> & {
 type Props = {
   conversationId?: string;
   forceCoworkerQuerySync?: boolean;
+  coworkerIdForSync?: string;
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
 };
@@ -491,6 +492,7 @@ const CHAT_DISCOVER_ITEM_VARIANTS = {
 export function ChatArea({
   conversationId,
   forceCoworkerQuerySync = false,
+  coworkerIdForSync,
   skillSelectionScopeKey: skillSelectionScopeKeyOverride,
   initialPrefillText,
 }: Props) {
@@ -639,7 +641,10 @@ export function ChatArea({
   )?.type;
   const isCoworkerConversation = conversationType === "coworker";
   const showModelSwitchWarning = Boolean(
-    conversationId && conversationModel && selectedModel !== conversationModel,
+    conversationId &&
+    conversationModel &&
+    selectedModel !== conversationModel &&
+    !isCoworkerConversation,
   );
 
   useEffect(() => {
@@ -1655,6 +1660,10 @@ export function ChatArea({
             }
             streamGenerationId = generationId;
             currentGenerationIdRef.current = generationId;
+            if (forceCoworkerQuerySync && coworkerIdForSync) {
+              queryClient.invalidateQueries({ queryKey: ["coworker"] });
+              queryClient.invalidateQueries({ queryKey: ["coworker", "get", coworkerIdForSync] });
+            }
             console.info(
               `[AgentInit][Client] generation_started generationId=${generationId} conversationId=${newConversationId}`,
             );
@@ -1970,6 +1979,7 @@ export function ChatArea({
       beginInitTracking,
       autoApproveEnabled,
       conversationId,
+      coworkerIdForSync,
       forceCoworkerQuerySync,
       handleInitStatusChange,
       markInitMissingAtEnd,

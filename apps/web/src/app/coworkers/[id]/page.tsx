@@ -14,6 +14,7 @@ import {
   Upload,
   FileText,
   X,
+  ArrowLeft,
   ArrowRight,
   Pencil,
   Trash2,
@@ -71,6 +72,7 @@ import {
   useCoworkerForwardingAlias,
   useUpdateCoworker,
   useDeleteCoworker,
+  useCoworkerRun,
   useCoworkerRuns,
   useTriggerCoworker,
   useGetOrCreateBuilderConversation,
@@ -102,6 +104,13 @@ const toolboxRevealTransition = { duration: 0.15 } as const;
 const statusTextMotionInitial = { opacity: 0, y: -4 } as const;
 const statusTextMotionAnimate = { opacity: 1, y: 0 } as const;
 const statusTextMotionExit = { opacity: 0, y: 4 } as const;
+const runViewerMotionInitial = { opacity: 0, x: 24 } as const;
+const runViewerMotionAnimate = { opacity: 1, x: 0 } as const;
+const runViewerMotionExit = { opacity: 0, x: 24 } as const;
+const runListMotionInitial = { opacity: 0, x: -24 } as const;
+const runListMotionAnimate = { opacity: 1, x: 0 } as const;
+const runListMotionExit = { opacity: 0, x: -24 } as const;
+const runMotionTransition = { duration: 0.2, ease: "easeOut" } as const;
 const statusTextMotionTransition = { duration: 0.15 } as const;
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
@@ -138,9 +147,11 @@ function formatRelativeTime(value?: Date | string | null) {
 
 function CoworkerChatPanel({
   conversationId,
+  coworkerId,
   skillSelectionScopeKey,
 }: {
   conversationId: string | null;
+  coworkerId: string;
   skillSelectionScopeKey: string;
 }) {
   if (!conversationId) {
@@ -154,6 +165,7 @@ function CoworkerChatPanel({
     <ChatArea
       conversationId={conversationId}
       forceCoworkerQuerySync
+      coworkerIdForSync={coworkerId}
       skillSelectionScopeKey={skillSelectionScopeKey}
     />
   );
@@ -724,6 +736,7 @@ export default function CoworkerEditorPage() {
   const handleRunClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      setActiveTab("runs");
       void handleRun();
     },
     [handleRun],
@@ -737,10 +750,11 @@ export default function CoworkerEditorPage() {
     () => (
       <CoworkerChatPanel
         conversationId={builderConversationId}
+        coworkerId={coworkerId ?? ""}
         skillSelectionScopeKey={skillSelectionScopeKey}
       />
     ),
-    [builderConversationId, skillSelectionScopeKey],
+    [builderConversationId, coworkerId, skillSelectionScopeKey],
   );
 
   const settingsPanel = useMemo(
@@ -927,6 +941,94 @@ export default function CoworkerEditorPage() {
   );
 }
 
+function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void }) {
+  const { data: run, isLoading } = useCoworkerRun(runId);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!run) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center gap-1.5 px-4 py-2">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Runs
+          </button>
+        </div>
+        <div className="text-muted-foreground px-4 text-xs">Run not found.</div>
+      </div>
+    );
+  }
+
+  if (!run.conversationId) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center gap-1.5 px-4 py-2">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Runs
+          </button>
+        </div>
+        <div className="px-4 py-2">
+          <p className="text-muted-foreground text-xs">
+            This run does not have a linked conversation.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-border/30 flex items-center gap-2 border-b px-4 py-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Runs
+        </button>
+        <Circle
+          className={cn(
+            "ml-1 h-1.5 w-1.5 shrink-0 fill-current",
+            run.status === "completed"
+              ? "text-emerald-500"
+              : run.status === "running" ||
+                  run.status === "awaiting_approval" ||
+                  run.status === "awaiting_auth"
+                ? "text-blue-500"
+                : run.status === "error" || run.status === "cancelled"
+                  ? "text-red-500"
+                  : "text-muted-foreground",
+          )}
+        />
+        <span className="text-foreground/70 text-xs">{getCoworkerRunStatusLabel(run.status)}</span>
+        <span className="text-muted-foreground ml-auto text-xs">
+          {formatRelativeTime(run.startedAt)}
+        </span>
+      </div>
+      <div className="bg-background flex min-h-0 flex-1 overflow-hidden">
+        <ChatArea conversationId={run.conversationId} />
+      </div>
+    </div>
+  );
+}
+
 type CoworkerSettingsPanelProps = {
   name: string;
   description: string;
@@ -1077,6 +1179,7 @@ function CoworkerSettingsPanel({
   const [coworkerModel, setCoworkerModel] = useState(DEFAULT_COWORKER_MODEL);
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
   const [triggerExpanded, setTriggerExpanded] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const handleOpenInstructionModal = useCallback(() => {
     setInstructionModalOpen(true);
@@ -1120,10 +1223,22 @@ function CoworkerSettingsPanel({
 
   const handleTabChange = useCallback(
     (key: string) => {
+      setSelectedRunId(null);
       onTabChange(key as "instruction" | "runs" | "docs" | "toolbox" | "details");
     },
     [onTabChange],
   );
+
+  const handleSelectRun = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const runId = e.currentTarget.dataset.runId;
+    if (runId) {
+      setSelectedRunId(runId);
+    }
+  }, []);
+
+  const handleBackToRuns = useCallback(() => {
+    setSelectedRunId(null);
+  }, []);
 
   return (
     <div className="flex h-full flex-col">
@@ -1212,8 +1327,15 @@ function CoworkerSettingsPanel({
           </AlertDialog>
         </div>
       </div>
-      {/* Tab content — scrollable */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Tab content — scrollable (or flex when showing inline run) */}
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          activeTab === "runs" && selectedRunId
+            ? "flex flex-col overflow-hidden"
+            : "overflow-y-auto",
+        )}
+      >
         {activeTab === "details" && (
           <div className="space-y-3 px-4 py-3">
             {/* Name card */}
@@ -1601,42 +1723,66 @@ function CoworkerSettingsPanel({
         )}
 
         {activeTab === "runs" && (
-          <div className="px-4 py-3">
-            {runs && runs.length > 0 ? (
-              <div className="-mx-1">
-                {runs.map((run) => (
-                  <Link
-                    key={run.id}
-                    href={`/coworkers/runs/${run.id}`}
-                    className="hover:bg-muted/40 flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors"
-                  >
-                    <Circle
-                      className={cn(
-                        "h-1.5 w-1.5 shrink-0 fill-current",
-                        run.status === "completed"
-                          ? "text-emerald-500"
-                          : run.status === "running" ||
-                              run.status === "awaiting_approval" ||
-                              run.status === "awaiting_auth"
-                            ? "text-blue-500"
-                            : run.status === "error" || run.status === "cancelled"
-                              ? "text-red-500"
-                              : "text-muted-foreground",
-                      )}
-                    />
-                    <span className="text-foreground/70 text-xs">
-                      {getCoworkerRunStatusLabel(run.status)}
-                    </span>
-                    <span className="text-muted-foreground ml-auto text-xs">
-                      {formatRelativeTime(run.startedAt)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
+          <AnimatePresence mode="wait" initial={false}>
+            {selectedRunId ? (
+              <motion.div
+                key="run-viewer"
+                initial={runViewerMotionInitial}
+                animate={runViewerMotionAnimate}
+                exit={runViewerMotionExit}
+                transition={runMotionTransition}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <InlineRunViewer runId={selectedRunId} onBack={handleBackToRuns} />
+              </motion.div>
             ) : (
-              <p className="text-muted-foreground text-xs">No runs yet.</p>
+              <motion.div
+                key="run-list"
+                initial={runListMotionInitial}
+                animate={runListMotionAnimate}
+                exit={runListMotionExit}
+                transition={runMotionTransition}
+                className="px-4 py-3"
+              >
+                {runs && runs.length > 0 ? (
+                  <div className="-mx-1">
+                    {runs.map((run) => (
+                      <button
+                        key={run.id}
+                        type="button"
+                        data-run-id={run.id}
+                        onClick={handleSelectRun}
+                        className="hover:bg-muted/40 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors"
+                      >
+                        <Circle
+                          className={cn(
+                            "h-1.5 w-1.5 shrink-0 fill-current",
+                            run.status === "completed"
+                              ? "text-emerald-500"
+                              : run.status === "running" ||
+                                  run.status === "awaiting_approval" ||
+                                  run.status === "awaiting_auth"
+                                ? "text-blue-500"
+                                : run.status === "error" || run.status === "cancelled"
+                                  ? "text-red-500"
+                                  : "text-muted-foreground",
+                          )}
+                        />
+                        <span className="text-foreground/70 text-xs">
+                          {getCoworkerRunStatusLabel(run.status)}
+                        </span>
+                        <span className="text-muted-foreground ml-auto text-xs">
+                          {formatRelativeTime(run.startedAt)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">No runs yet.</p>
+                )}
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         )}
 
         {activeTab === "docs" && (
