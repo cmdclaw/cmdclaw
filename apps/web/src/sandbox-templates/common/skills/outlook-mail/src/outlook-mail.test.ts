@@ -46,6 +46,20 @@ describe("outlook-mail CLI", () => {
     expect(result.combined).toContain("Invalid --limit");
   });
 
+  test("rejects queries on list", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/outlook-mail/src/outlook-mail.ts",
+      ["list", "--query", "invoice"],
+      {
+        OUTLOOK_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("outlook-mail list does not accept --query");
+    expect(result.combined).toContain("Use outlook-mail search instead");
+  });
+
   test("requires a query for search", () => {
     const result = runSkillCli(
       "src/sandbox-templates/common/skills/outlook-mail/src/outlook-mail.ts",

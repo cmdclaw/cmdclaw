@@ -47,6 +47,20 @@ describe("google-gmail CLI", () => {
     expect(result.combined).toContain("Invalid --limit");
   });
 
+  test("rejects queries on list", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/google-gmail/src/google-gmail.ts",
+      ["list", "--query", "from:boss"],
+      {
+        GMAIL_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("google-gmail list does not accept --query");
+    expect(result.combined).toContain("Use google-gmail search instead");
+  });
+
   test("fails for unsupported scope value", () => {
     const result = runSkillCli(
       "src/sandbox-templates/common/skills/google-gmail/src/google-gmail.ts",

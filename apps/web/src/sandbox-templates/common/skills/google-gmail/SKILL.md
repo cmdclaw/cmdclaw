@@ -15,8 +15,8 @@ Read inbox, get email content, count unread, fetch latest email, draft emails, a
 ## Commands
 
 ```bash
-# List emails (supports Gmail search syntax, defaults to Inbox)
-google-gmail list [-q "from:boss subject:urgent"] [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
+# List emails (defaults to Inbox)
+google-gmail list [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
 
 # Search mailbox (defaults to all mail except spam/trash)
 google-gmail search -q "from:boss subject:urgent" [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]

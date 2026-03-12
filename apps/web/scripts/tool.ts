@@ -64,7 +64,7 @@ function printHelp(): void {
   }
   console.log("\nExamples:");
   console.log("  bun run tool google-gmail --help");
-  console.log('  bun run tool google-gmail list -q "is:unread" -l 5');
+  console.log('  bun run tool google-gmail search -q "is:unread" -l 5');
   console.log('  bun run tool linkedin profile get "acme-user"\n');
 }
 

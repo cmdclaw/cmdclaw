@@ -76,6 +76,10 @@ async function graphRequest(path: string, init?: RequestInit): Promise<Response>
 }
 
 async function listEmails() {
+  if (values.query?.trim()) {
+    throw new Error("outlook-mail list does not accept --query. Use outlook-mail search instead.");
+  }
+
   const top = parseLimit();
   const params = new URLSearchParams({
     $top: String(top),
@@ -83,15 +87,8 @@ async function listEmails() {
     $orderby: "receivedDateTime desc",
   });
 
-  const headers: Record<string, string> = {};
-  if (values.query) {
-    params.set("$search", `"${sanitizeSearchQuery(values.query)}"`);
-    headers.ConsistencyLevel = "eventual";
-  }
-
   const res = await graphRequest(`/me/messages?${params.toString()}`, {
     method: "GET",
-    headers,
   });
 
   if (!res.ok) {
@@ -119,11 +116,46 @@ async function listEmails() {
 }
 
 async function searchEmails() {
-  if (!values.query?.trim()) {
+  const query = values.query?.trim();
+  if (!query) {
     throw new Error("Required: outlook-mail search --query <search>");
   }
 
-  await listEmails();
+  const top = parseLimit();
+  const params = new URLSearchParams({
+    $top: String(top),
+    $select: "id,subject,from,receivedDateTime,bodyPreview,isRead",
+    $orderby: "receivedDateTime desc",
+    $search: `"${sanitizeSearchQuery(query)}"`,
+  });
+
+  const res = await graphRequest(`/me/messages?${params.toString()}`, {
+    method: "GET",
+    headers: { ConsistencyLevel: "eventual" },
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
+  const payload = (await res.json()) as {
+    value?: Array<{
+      id?: string;
+      subject?: string;
+      bodyPreview?: string;
+      receivedDateTime?: string;
+      isRead?: boolean;
+      from?: { emailAddress?: { address?: string; name?: string } };
+    }>;
+  };
+
+  const items = (payload.value ?? []).map(mapMessage);
+  if (items.length === 0) {
+    console.log("No emails found.");
+    return;
+  }
+
+  console.log(JSON.stringify(items, null, 2));
 }
 
 async function getEmail(messageId: string) {
@@ -247,7 +279,7 @@ async function sendEmail() {
 
 function showHelp() {
   console.log(`Outlook Mail CLI - Commands:
-  list [-q query] [-l limit]         List emails
+  list [-l limit]                    List emails
   search -q <query> [-l limit]       Search mailbox
   get <messageId>                    Get email content
   unread [-q query] [-l limit]       Count unread emails

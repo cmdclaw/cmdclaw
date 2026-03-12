@@ -221,7 +221,8 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
   // Always include ALL integration instructions - auth will be requested on use if needed
   const instructions = `
 ## Google Gmail CLI [${statusTag("google_gmail")}]
-- google-gmail list [-q query] [-l limit] - List emails
+- Use search whenever you have a query; use list only to browse recent mail
+- google-gmail list [-l limit] - List emails
 - google-gmail search -q <query> [-l limit] [--scope inbox|all|strict-all] - Search mailbox
 - google-gmail get <messageId> - Get full email content
 - google-gmail unread - Count unread emails
@@ -230,7 +231,8 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 - Example: google-gmail search -q "from:boss" -l 5
 
 ## Outlook Mail CLI [${statusTag("outlook")}]
-- outlook-mail list [-q query] [-l limit] - List emails
+- Use search whenever you have a query; use list only to browse recent mail
+- outlook-mail list [-l limit] - List emails
 - outlook-mail search -q <query> [-l limit] - Search mailbox
 - outlook-mail get <messageId> - Get full email content
 - outlook-mail unread - Count unread emails
@@ -249,6 +251,8 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 
 ## Google Calendar CLI [${statusTag("google_calendar")}]
 - google-calendar list [-t timeMin] [-m timeMax] [-l limit] [-c calendarId] - List events
+- google-calendar search -q <text> [-t timeMin] [-m timeMax] [-l limit] [-c calendarId] - Search matching events
+- google-calendar availability --from <datetime> --to <datetime> [--duration 30m] [--workday-start HH:MM] [--workday-end HH:MM] [-l limit] [-c calendarId] - Return free slots
 - google-calendar get <eventId> [-c calendarId] - Get event details
 - google-calendar create --summary <title> --start <datetime> --end <datetime> [--description <text>] [--location <text>] [--attendees <a@x.com,b@y.com>] [-c calendarId]
 - google-calendar update <eventId> [--summary <title>] [--start <datetime>] [--end <datetime>] [--description <text>] [--location <text>] [-c calendarId]

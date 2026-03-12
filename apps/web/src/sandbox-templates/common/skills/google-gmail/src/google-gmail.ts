@@ -125,7 +125,11 @@ async function fetchMessageDetails(messages: Array<{ id: string }>) {
 }
 
 async function listEmails() {
-  const config = buildMessageListParams(parseLimit(), values.query);
+  if (values.query?.trim()) {
+    throw new Error("google-gmail list does not accept --query. Use google-gmail search instead.");
+  }
+
+  const config = buildMessageListParams(parseLimit());
 
   const listRes = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?${config.params}&includeSpamTrash=${String(config.includeSpamTrash)}`,
@@ -294,7 +298,7 @@ async function draftEmail() {
 
 function showHelp() {
   console.log(`Google Gmail CLI - Commands:
-  list [-q query] [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
+  list [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
                               List emails (default scope: inbox)
   search -q <query> [-l limit] [--scope inbox|all|strict-all] [--include-spam-trash]
                               Search mailbox (default scope: all)

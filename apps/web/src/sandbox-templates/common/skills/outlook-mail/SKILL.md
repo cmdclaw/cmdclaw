@@ -15,7 +15,7 @@ Read inbox emails, get email content, count unread emails, and send messages via
 
 ```bash
 # List emails
-outlook-mail list [-q "subject keyword"] [-l limit]
+outlook-mail list [-l limit]
 
 # Search mailbox
 outlook-mail search -q "subject keyword" [-l limit]
