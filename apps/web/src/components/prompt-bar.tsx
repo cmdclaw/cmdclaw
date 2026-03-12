@@ -535,6 +535,19 @@ export function PromptBar({
 
         {/* Textarea area */}
         <div className="relative px-5 pt-4 pb-2">
+          {/* Hidden measurer: sets min-height so the container fits the placeholder */}
+          {shouldAnimateRich && currentRichSegments && (
+            <div
+              className={cn(
+                "pointer-events-none invisible text-[15px] leading-relaxed",
+                isHero ? "min-h-[3.2rem]" : "min-h-[2.8rem]",
+              )}
+              aria-hidden
+            >
+              <RichPlaceholderOverlay segments={currentRichSegments} charPos={richCharPos} />
+            </div>
+          )}
+          {/* Visible placeholder overlay */}
           {shouldAnimateRich && currentRichSegments && (
             <div
               className="pointer-events-none absolute inset-0 px-5 pt-4 text-[15px] leading-relaxed text-slate-700/90"
@@ -552,7 +565,8 @@ export function PromptBar({
             disabled={disabled}
             rows={2}
             className={cn(
-              "relative z-10 w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none",
+              "w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none",
+              shouldAnimateRich ? "absolute inset-0 z-10 px-5 pt-4 pb-2" : "relative z-10",
               isHero
                 ? "min-h-[3.2rem] placeholder:text-slate-500/80 text-slate-950"
                 : "min-h-[2.8rem] placeholder:text-muted-foreground/40 text-foreground",
