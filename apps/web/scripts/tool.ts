@@ -15,15 +15,46 @@ type ParsedArgs = {
   toolArgs: string[];
 };
 
-const TOOL_SPECS: Record<string, ToolSpec> = {
-  linkedin: {
-    scriptPath: resolve(
-      fileURLToPath(new URL(".", import.meta.url)),
-      "../src/sandbox-templates/common/skills/linkedin/src/linkedin.ts",
-    ),
-    requiredEnv: ["UNIPILE_API_KEY", "UNIPILE_DSN", "LINKEDIN_ACCOUNT_ID"],
-  },
+const SKILLS_ROOT = resolve(
+  fileURLToPath(new URL(".", import.meta.url)),
+  "../src/sandbox-templates/common/skills",
+);
+
+const TOOL_ENV_REQUIREMENTS: Record<string, string[]> = {
+  airtable: ["AIRTABLE_ACCESS_TOKEN"],
+  discord: ["DISCORD_BOT_TOKEN"],
+  dynamics: ["DYNAMICS_ACCESS_TOKEN", "DYNAMICS_INSTANCE_URL"],
+  github: ["GITHUB_ACCESS_TOKEN"],
+  "google-calendar": ["GOOGLE_CALENDAR_ACCESS_TOKEN"],
+  "google-docs": ["GOOGLE_DOCS_ACCESS_TOKEN"],
+  "google-drive": ["GOOGLE_DRIVE_ACCESS_TOKEN"],
+  "google-gmail": ["GMAIL_ACCESS_TOKEN"],
+  "google-sheets": ["GOOGLE_SHEETS_ACCESS_TOKEN"],
+  hubspot: ["HUBSPOT_ACCESS_TOKEN"],
+  linear: ["LINEAR_ACCESS_TOKEN"],
+  linkedin: ["UNIPILE_API_KEY", "UNIPILE_DSN", "LINKEDIN_ACCOUNT_ID"],
+  notion: ["NOTION_ACCESS_TOKEN"],
+  "outlook-calendar": ["OUTLOOK_CALENDAR_ACCESS_TOKEN"],
+  "outlook-mail": ["OUTLOOK_ACCESS_TOKEN"],
+  reddit: ["REDDIT_ACCESS_TOKEN"],
+  salesforce: ["SALESFORCE_ACCESS_TOKEN", "SALESFORCE_INSTANCE_URL"],
+  slack: ["SLACK_ACCESS_TOKEN"],
+  twitter: ["TWITTER_ACCESS_TOKEN"],
 };
+
+const TOOL_SPECS = Object.fromEntries(
+  Object.entries(TOOL_ENV_REQUIREMENTS).map(([toolName, requiredEnv]) => [
+    toolName,
+    {
+      scriptPath: resolve(SKILLS_ROOT, toolName, "src", `${toolName}.ts`),
+      requiredEnv,
+    } satisfies ToolSpec,
+  ]),
+) satisfies Record<string, ToolSpec>;
+
+function isHelpRequest(args: string[]): boolean {
+  return args.includes("--help") || args.includes("-h");
+}
 
 function printHelp(): void {
   console.log("\nUsage: bun run tool <tool-name> [--server <url>] [tool args]\n");
@@ -32,9 +63,9 @@ function printHelp(): void {
     console.log(`  - ${toolName}`);
   }
   console.log("\nExamples:");
-  console.log("  bun run tool linkedin --help");
-  console.log("  bun run tool linkedin profile me");
-  console.log('  bun run linkedin profile get "acme-user"\n');
+  console.log("  bun run tool google-gmail --help");
+  console.log('  bun run tool google-gmail list -q "is:unread" -l 5');
+  console.log('  bun run tool linkedin profile get "acme-user"\n');
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -113,13 +144,18 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const cliEnv = await resolveCliEnv(parsed.serverUrl);
+  const toolHelpRequested = isHelpRequest(parsed.toolArgs);
+  let cliEnv: Record<string, string> = {};
 
-  const missingEnv = spec.requiredEnv.filter((key) => !cliEnv[key]);
-  if (missingEnv.length > 0) {
-    throw new Error(
-      `${toolName} is not fully configured for this user. Missing: ${missingEnv.join(", ")}`,
-    );
+  if (!toolHelpRequested) {
+    cliEnv = await resolveCliEnv(parsed.serverUrl);
+
+    const missingEnv = spec.requiredEnv.filter((key) => !cliEnv[key]);
+    if (missingEnv.length > 0) {
+      throw new Error(
+        `${toolName} is not fully configured for this user. Missing: ${missingEnv.join(", ")}`,
+      );
+    }
   }
 
   const child = spawn("bun", [spec.scriptPath, ...parsed.toolArgs], {
