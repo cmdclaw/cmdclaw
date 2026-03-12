@@ -20,7 +20,6 @@ import {
   Toolbox,
   Trash2,
   LayoutTemplate,
-  Workflow,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -52,6 +51,8 @@ import {
   getEffectiveSeenMessageCount,
   hasUnreadConversationResults,
 } from "@/lib/conversation-seen";
+import { flattenCoworkerRecentRuns } from "@/lib/coworker-recent-runs";
+import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { clientEditionCapabilities } from "@/lib/edition";
 import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
@@ -114,6 +115,15 @@ function formatRelativeShort(date: Date) {
   }
 
   return "now";
+}
+
+function formatRelativeShortNullable(value?: Date | string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? formatRelativeShort(date) : "—";
 }
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
@@ -310,7 +320,10 @@ export function AppSidebar() {
       ? [{ icon: Shield, label: "Instance", href: "/instance" }]
       : [];
 
-  const recentCoworkers = coworkers?.slice(0, 5) ?? [];
+  const recentCoworkerRuns = useMemo(
+    () => flattenCoworkerRecentRuns(coworkers).slice(0, 5),
+    [coworkers],
+  );
   const recentConversations = conversationData?.conversations ?? EMPTY_CONVERSATIONS;
   const unreadConversationCount = recentConversations.filter(
     (conversation) =>
@@ -749,27 +762,38 @@ export function AppSidebar() {
                         );
                       })
                     )
-                  ) : recentCoworkers.length === 0 ? (
+                  ) : recentCoworkerRuns.length === 0 ? (
                     <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
                       No runs yet
                     </div>
                   ) : (
-                    recentCoworkers.map((coworker) => (
-                      <Link
-                        key={coworker.id}
-                        href={`/coworkers/${coworker.id}`}
-                        prefetch={false}
-                        className={cn(
-                          "flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
-                          isActive(`/coworkers/${coworker.id}`)
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                        )}
-                      >
-                        <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                        <span className="truncate">{coworker.name || "Untitled"}</span>
-                      </Link>
-                    ))
+                    recentCoworkerRuns.map((run) => {
+                      const runPath = `/coworkers/runs/${run.id}`;
+
+                      return (
+                        <Link
+                          key={run.id}
+                          href={runPath}
+                          prefetch={false}
+                          className={cn(
+                            "flex min-h-10 flex-col justify-center rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                            pathname === runPath
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                          )}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
+                            <span className="text-sidebar-foreground/45 shrink-0 text-[11px]">
+                              {formatRelativeShortNullable(run.startedAt)}
+                            </span>
+                          </span>
+                          <span className="text-sidebar-foreground/45 truncate text-[11px]">
+                            {getCoworkerRunStatusLabel(run.status)}
+                          </span>
+                        </Link>
+                      );
+                    })
                   )}
                 </div>
               </div>

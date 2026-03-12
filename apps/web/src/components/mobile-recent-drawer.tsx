@@ -8,7 +8,6 @@ import {
   Pin,
   PinOff,
   Trash2,
-  Workflow,
   Check,
 } from "lucide-react";
 import Link from "next/link";
@@ -33,6 +32,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { hasUnreadConversationResults } from "@/lib/conversation-seen";
+import { flattenCoworkerRecentRuns } from "@/lib/coworker-recent-runs";
+import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
@@ -72,6 +73,15 @@ function formatRelativeShort(date: Date) {
   }
 
   return "now";
+}
+
+function formatRelativeShortNullable(value?: Date | string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? formatRelativeShort(date) : "—";
 }
 
 type ConversationListData = {
@@ -116,7 +126,7 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
   const [renameTitle, setRenameTitle] = useState("");
 
   const conversations = conversationData?.conversations ?? [];
-  const recentCoworkers = coworkers?.slice(0, 10) ?? [];
+  const recentCoworkerRuns = flattenCoworkerRecentRuns(coworkers).slice(0, 10);
   const unreadCount = conversations.filter(
     (c) => c.messageCount > (c.seenMessageCount ?? 0),
   ).length;
@@ -349,26 +359,37 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                   );
                 })
               )
-            ) : recentCoworkers.length === 0 ? (
+            ) : recentCoworkerRuns.length === 0 ? (
               <p className="text-muted-foreground px-4 py-6 text-center text-xs">No runs yet</p>
             ) : (
-              recentCoworkers.map((coworker) => (
-                <Link
-                  key={coworker.id}
-                  href={`/coworkers/${coworker.id}`}
-                  prefetch={false}
-                  onClick={handleClose}
-                  className={cn(
-                    "mx-2 flex items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors",
-                    isActive(`/coworkers/${coworker.id}`)
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground/70 hover:bg-accent/50",
-                  )}
-                >
-                  <Workflow className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                  <span className="truncate">{coworker.name || "Untitled"}</span>
-                </Link>
-              ))
+              recentCoworkerRuns.map((run) => {
+                const runPath = `/coworkers/runs/${run.id}`;
+
+                return (
+                  <Link
+                    key={run.id}
+                    href={runPath}
+                    prefetch={false}
+                    onClick={handleClose}
+                    className={cn(
+                      "mx-2 flex flex-col gap-1 rounded-md px-2 py-2 text-sm transition-colors",
+                      pathname === runPath
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground/70 hover:bg-accent/50",
+                    )}
+                  >
+                    <span className="flex w-full items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
+                      <span className="text-muted-foreground shrink-0 text-[11px]">
+                        {formatRelativeShortNullable(run.startedAt)}
+                      </span>
+                    </span>
+                    <span className="text-muted-foreground text-[11px]">
+                      {getCoworkerRunStatusLabel(run.status)}
+                    </span>
+                  </Link>
+                );
+              })
             )}
           </div>
         </SheetContent>
