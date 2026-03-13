@@ -4,6 +4,7 @@
 # next.js build output
 /.next
 /out
+next-env.d.ts
 
 # logs
 logs
