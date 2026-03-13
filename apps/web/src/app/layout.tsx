@@ -37,7 +37,7 @@ function BillingProviderWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export const metadata: Metadata = {
-  title: isSelfHostedEdition ? "CmdClaw Self-hosted" : "CmdClaw Cloud",
+  title: isSelfHostedEdition ? "CmdClaw Self-hosted" : "CmdClaw",
   description: isSelfHostedEdition ? "Your self-hosted CmdClaw deployment" : "Your AI Assistant",
   icons: {
     icon: [
