@@ -9,7 +9,7 @@ import { authClient } from "@/lib/auth-client";
 
 const posthogKey = env.NEXT_PUBLIC_POSTHOG_KEY;
 const posthogUiHost = "https://eu.posthog.com";
-const posthogProxyPath = "/_cmdclaw_lattice";
+const posthogProxyPath = "https://lattice.cmdclaw.com";
 const isPosthogEnabled = Boolean(posthogKey);
 
 if (isPosthogEnabled) {
