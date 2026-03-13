@@ -16,6 +16,7 @@ if (isPosthogEnabled) {
   posthogClientLib.init(posthogKey!, {
     api_host: posthogProxyPath,
     ui_host: posthogUiHost,
+    defaults: "2026-01-30",
     capture_pageview: false,
     capture_exceptions: {
       capture_unhandled_errors: true,
