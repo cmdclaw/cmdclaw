@@ -28,6 +28,8 @@
     "db:reset": "bun run --cwd ../../packages/db --env-file=../../apps/web/.env reset",
     "db:seed": "bun run --cwd ../../packages/db --env-file=../../apps/web/.env seed",
     "db:studio": "bun run --cwd ../../packages/db --env-file=../../apps/web/.env db:studio",
+    "db:studio:prod": "bun --env-file=.env scripts/db-studio.ts prod",
+    "db:studio:staging": "bun --env-file=.env scripts/db-studio.ts staging",
     "dev": "next dev",
     "dev:selfhost": "next dev --port 3001",
     "docker-up:local": "docker compose up",

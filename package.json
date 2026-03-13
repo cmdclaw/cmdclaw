@@ -32,6 +32,8 @@
     "db:seed": "bun run --cwd apps/web db:seed",
     "db:reset": "bun run --cwd apps/web db:reset",
     "db:studio": "bun run --cwd apps/web db:studio",
+    "db:studio:prod": "bun run --cwd apps/web db:studio:prod",
+    "db:studio:staging": "bun run --cwd apps/web db:studio:staging",
     "check:web": "turbo check --filter=@cmdclaw/web",
     "check:docs": "turbo check --filter=@cmdclaw/docs",
     "check:worker": "turbo check --filter=@cmdclaw/worker",
