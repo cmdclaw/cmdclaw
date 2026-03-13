@@ -1,0 +1,3 @@
+posthog_host            = "https://eu.posthog.com"
+posthog_organization_id = "your-organization-id"
+posthog_project_id      = "your-project-id"

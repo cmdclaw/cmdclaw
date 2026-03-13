@@ -29,5 +29,3 @@ terraform.rc
 
 # Logs
 *.log
-
-.claude
