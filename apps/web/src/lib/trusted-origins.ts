@@ -12,6 +12,7 @@ export function getTrustedOrigins(): string[] {
         "https://cmdclaw.ai",
         "https://www.cmdclaw.ai",
         "https://app.cmdclaw.ai",
+        "http://100.110.245.77:3000",
         `http://localhost:${localhostPort}`,
         `http://127.0.0.1:${localhostPort}`,
         "https://localcan.baptistecolle.com",
