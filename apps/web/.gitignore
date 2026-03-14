@@ -33,6 +33,7 @@ pnpm-debug.log*
 .claude
 
 .env
+.infisical.json
 certificates
 
 test-results/

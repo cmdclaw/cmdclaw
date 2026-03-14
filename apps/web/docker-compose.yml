@@ -3,13 +3,12 @@ name: cmdclaw-local
 services:
   database:
     image: pgvector/pgvector:pg16
-    container_name: cmdclaw-postgres-local
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: cmdclaw
     ports:
-      - "5432:5432"
+      - "${CMDCLAW_POSTGRES_PORT:-5433}:5432"
     volumes:
       - cmdclaw_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -21,9 +20,8 @@ services:
 
   redis:
     image: redis:8-alpine
-    container_name: cmdclaw-redis-local
     ports:
-      - "6379:6379"
+      - "${CMDCLAW_REDIS_PORT:-6380}:6379"
     volumes:
       - cmdclaw_redis_data:/data
     restart: unless-stopped
@@ -35,14 +33,13 @@ services:
 
   minio:
     image: minio/minio
-    container_name: cmdclaw-minio-local
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${CMDCLAW_MINIO_API_PORT:-9100}:9000"
+      - "${CMDCLAW_MINIO_CONSOLE_PORT:-9101}:9001"
     volumes:
       - cmdclaw_minio_data:/data
     restart: unless-stopped

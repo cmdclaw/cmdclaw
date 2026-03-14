@@ -5,6 +5,7 @@
   "scripts": {
     "auth:generate": "bun x @better-auth/cli@latest generate --output ../../packages/db/src/auth-schema.ts -y",
     "auth:inspect": "bun scripts/auth-inspect.ts",
+    "env": "infisical export --output-file=./.env",
     "build": "next build",
     "chat": "bun run chat:auth && bun scripts/chat.ts",
     "chat:auth": "bun --env-file=.env scripts/chat-auth.ts",
