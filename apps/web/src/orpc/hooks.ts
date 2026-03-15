@@ -934,6 +934,17 @@ export function useCompleteOnboarding() {
   });
 }
 
+export function useResetOnboarding() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.user.resetOnboarding(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+    },
+  });
+}
+
 export function useUserForwardingSettings() {
   return useQuery({
     queryKey: ["user", "forwarding"],

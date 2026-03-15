@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleHelp, Loader2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useChatAdvancedSettingsStore } from "@/components/chat/chat-advanced-settings-store";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
   useAddGoogleAccessAllowlistEntry,
   useGoogleAccessAllowlist,
   useRemoveGoogleAccessAllowlistEntry,
+  useResetOnboarding,
 } from "@/orpc/hooks";
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -21,9 +23,11 @@ function toErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const { data, isLoading, error } = useGoogleAccessAllowlist();
   const addEntry = useAddGoogleAccessAllowlistEntry();
   const removeEntry = useRemoveGoogleAccessAllowlistEntry();
+  const resetOnboarding = useResetOnboarding();
   const displayAdvancedMetrics = useChatAdvancedSettingsStore(
     (state) => state.displayAdvancedMetrics,
   );
@@ -88,6 +92,18 @@ export default function AdminPage() {
     },
     [handleRemove],
   );
+
+  const handleResetOnboarding = useCallback(async () => {
+    setActionMessage(null);
+    setActionError(null);
+
+    try {
+      await resetOnboarding.mutateAsync();
+      router.push("/onboarding/integrations");
+    } catch (err) {
+      setActionError(toErrorMessage(err, "Failed to reset onboarding."));
+    }
+  }, [resetOnboarding, router]);
 
   return (
     <div>
@@ -178,6 +194,34 @@ export default function AdminPage() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="bg-card mt-6 rounded-lg border p-6">
+        <h3 className="text-base font-semibold">Onboarding</h3>
+        <p className="text-muted-foreground mt-2 text-sm">
+          Clear your onboarding status and jump back into the onboarding flow from the start.
+        </p>
+
+        <div className="mt-4 rounded-lg border p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Reset current user onboarding</p>
+              <p className="text-muted-foreground text-sm">
+                Use this to re-run the onboarding experience on your current account.
+              </p>
+            </div>
+            <Button onClick={handleResetOnboarding} disabled={resetOnboarding.isPending}>
+              {resetOnboarding.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                "Reset my onboarding"
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-card mt-6 rounded-lg border p-6">

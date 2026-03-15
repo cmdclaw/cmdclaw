@@ -48,6 +48,13 @@ const completeOnboarding = protectedProcedure.handler(async ({ context }) => {
   return { success: true };
 });
 
+// Reset onboarding for the current user
+const resetOnboarding = protectedProcedure.handler(async ({ context }) => {
+  await context.db.update(user).set({ onboardedAt: null }).where(eq(user.id, context.user.id));
+
+  return { success: true };
+});
+
 const forwarding = protectedProcedure.handler(async ({ context }) => {
   const dbUser = await context.db.query.user.findFirst({
     where: eq(user.id, context.user.id),
@@ -139,6 +146,7 @@ const setTimezone = protectedProcedure
 export const userRouter = {
   me,
   completeOnboarding,
+  resetOnboarding,
   forwarding,
   setDefaultForwardedCoworker,
   setTimezone,
