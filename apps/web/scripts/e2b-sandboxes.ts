@@ -10,6 +10,7 @@ type SandboxRecord = {
   id?: string;
   templateId?: string;
   startedAt?: string | Date;
+  state?: "running" | "paused";
 };
 
 async function fetchSandboxes(): Promise<SandboxRecord[]> {
@@ -77,8 +78,11 @@ async function listCommand(): Promise<void> {
   for (const sandbox of sandboxes) {
     const sandboxId = getSandboxId(sandbox) ?? "<unknown-id>";
     const templateId = sandbox.templateId ?? "<unknown-template>";
+    const state = sandbox.state ?? "<unknown-state>";
     const startedAt = sandbox.startedAt ?? "<unknown-start-time>";
-    console.log(`- ${sandboxId} (template: ${templateId}, startedAt: ${startedAt})`);
+    console.log(
+      `- ${sandboxId} (state: ${state}, template: ${templateId}, startedAt: ${startedAt})`,
+    );
   }
 }
 
@@ -86,7 +90,7 @@ async function killAllCommand(): Promise<void> {
   const sandboxes = await fetchSandboxes();
 
   if (sandboxes.length === 0) {
-    console.log("No active sandboxes to kill.");
+    console.log("No sandboxes to kill.");
     return;
   }
 
