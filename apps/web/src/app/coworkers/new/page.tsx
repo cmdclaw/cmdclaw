@@ -37,6 +37,7 @@ export default function NewCoworkerPage() {
           name: "",
           triggerType: "manual",
           prompt: "",
+          model: DEFAULT_COWORKER_BUILDER_MODEL,
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 

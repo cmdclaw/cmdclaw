@@ -118,6 +118,7 @@ const runListMotionAnimate = { opacity: 1, x: 0 } as const;
 const runListMotionExit = { opacity: 0, x: -24 } as const;
 const runMotionTransition = { duration: 0.2, ease: "easeOut" } as const;
 const statusTextMotionTransition = { duration: 0.15 } as const;
+const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
     return "just now";
@@ -200,6 +201,7 @@ export default function CoworkerEditorPage() {
   const [username, setUsername] = useState("");
   const [triggerType, setTriggerType] = useState("manual");
   const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState(DEFAULT_COWORKER_MODEL);
   const [toolAccessMode, setToolAccessMode] = useState<CoworkerToolAccessMode>("all");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
   const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);
@@ -367,6 +369,7 @@ export default function CoworkerEditorPage() {
       status,
       triggerType,
       prompt,
+      model,
       autoApprove,
       toolAccessMode,
       allowedIntegrations,
@@ -379,6 +382,7 @@ export default function CoworkerEditorPage() {
     autoApprove,
     buildSchedule,
     description,
+    model,
     name,
     prompt,
     status,
@@ -450,6 +454,7 @@ export default function CoworkerEditorPage() {
       status: coworker.status,
       triggerType: coworker.triggerType,
       prompt: coworker.prompt,
+      model: coworker.model ?? DEFAULT_COWORKER_MODEL,
       autoApprove: coworker.autoApprove ?? true,
       toolAccessMode: coworker.toolAccessMode,
       allowedIntegrations: coworkerAllowedIntegrations,
@@ -481,6 +486,7 @@ export default function CoworkerEditorPage() {
     setUsername(coworker.username ?? "");
     setTriggerType(coworker.triggerType);
     setPrompt(coworker.prompt);
+    setModel(coworker.model ?? DEFAULT_COWORKER_MODEL);
     setToolAccessMode(coworker.toolAccessMode);
     setAllowedIntegrations(coworkerAllowedIntegrations);
     setAllowedSkillSlugs(coworker.allowedSkillSlugs ?? []);
@@ -715,6 +721,7 @@ export default function CoworkerEditorPage() {
     autoApprove,
     buildSchedule,
     description,
+    model,
     name,
     persistCoworker,
     prompt,
@@ -808,6 +815,7 @@ export default function CoworkerEditorPage() {
         status={status}
         autoApprove={autoApprove}
         prompt={prompt}
+        model={model}
         availableSkills={availableSkills}
         selectedSkillKeys={selectedSkillKeys}
         isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
@@ -843,6 +851,7 @@ export default function CoworkerEditorPage() {
         onStatusChange={handleStatusChange}
         onAutoApproveChange={handleAutoApproveChange}
         onPromptChange={handlePromptChange}
+        onModelChange={setModel}
         onClearSkills={handleClearSkills}
         onToggleSkillChecked={handleToggleSkillChecked}
         onRestrictToolsChange={handleRestrictToolsChange}
@@ -876,6 +885,7 @@ export default function CoworkerEditorPage() {
       status,
       autoApprove,
       prompt,
+      model,
       availableSkills,
       selectedSkillKeys,
       isPlatformSkillsLoading,
@@ -912,6 +922,7 @@ export default function CoworkerEditorPage() {
       handleStatusChange,
       handleAutoApproveChange,
       handlePromptChange,
+      setModel,
       handleClearSkills,
       handleToggleSkillChecked,
       handleRestrictToolsChange,
@@ -1015,6 +1026,7 @@ export default function CoworkerEditorPage() {
               status={status}
               autoApprove={autoApprove}
               prompt={prompt}
+              model={model}
               availableSkills={availableSkills}
               selectedSkillKeys={selectedSkillKeys}
               isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
@@ -1050,6 +1062,7 @@ export default function CoworkerEditorPage() {
               onStatusChange={handleStatusChange}
               onAutoApproveChange={handleAutoApproveChange}
               onPromptChange={handlePromptChange}
+              onModelChange={setModel}
               onClearSkills={handleClearSkills}
               onToggleSkillChecked={handleToggleSkillChecked}
               onRestrictToolsChange={handleRestrictToolsChange}
@@ -1259,6 +1272,7 @@ type CoworkerSettingsPanelProps = {
   status: "on" | "off";
   autoApprove: boolean;
   prompt: string;
+  model: string;
   availableSkills: { key: string; title: string; source: "Platform" | "Custom" }[];
   selectedSkillKeys: string[];
   isSkillsLoading: boolean;
@@ -1308,6 +1322,7 @@ type CoworkerSettingsPanelProps = {
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
   onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onModelChange: (model: string) => void;
   onClearSkills: () => void;
   onToggleSkillChecked: (skillKey: string) => void;
   onRestrictToolsChange: (checked: boolean) => void;
@@ -1333,8 +1348,6 @@ type CoworkerSettingsPanelProps = {
   hideHeader?: boolean;
 };
 
-const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
-
 function CoworkerSettingsPanel({
   name,
   description,
@@ -1343,6 +1356,7 @@ function CoworkerSettingsPanel({
   status,
   autoApprove,
   prompt,
+  model,
   availableSkills,
   selectedSkillKeys,
   isSkillsLoading,
@@ -1378,6 +1392,7 @@ function CoworkerSettingsPanel({
   onStatusChange,
   onAutoApproveChange,
   onPromptChange,
+  onModelChange,
   onClearSkills,
   onToggleSkillChecked,
   onRestrictToolsChange,
@@ -1402,7 +1417,6 @@ function CoworkerSettingsPanel({
   isDeleting,
   hideHeader,
 }: CoworkerSettingsPanelProps) {
-  const [coworkerModel, setCoworkerModel] = useState(DEFAULT_COWORKER_MODEL);
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
   const [triggerExpanded, setTriggerExpanded] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -1995,7 +2009,7 @@ function CoworkerSettingsPanel({
               <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                 Model
               </span>
-              <ModelSelector selectedModel={coworkerModel} onModelChange={setCoworkerModel} />
+              <ModelSelector selectedModel={model} onModelChange={onModelChange} />
             </div>
           </div>
         )}

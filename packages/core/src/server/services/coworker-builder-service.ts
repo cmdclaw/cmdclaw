@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z, type ZodIssue } from "zod";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
+import { parseModelReference } from "../../lib/model-reference";
 import {
   COWORKER_TOOL_ACCESS_MODES,
   normalizeCoworkerToolAccessMode,
@@ -18,6 +19,18 @@ const BUILDER_ALLOWED_TRIGGER_TYPES = [
   "gmail.new_email",
   "twitter.new_dm",
 ] as const;
+
+const modelReferenceSchema = z
+  .string()
+  .min(3)
+  .refine((value) => {
+    try {
+      parseModelReference(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Model must use provider/model format");
 
 export const coworkerBuilderScheduleSchema = z.discriminatedUnion("type", [
   z.object({
@@ -46,6 +59,7 @@ export const coworkerBuilderScheduleSchema = z.discriminatedUnion("type", [
 export const coworkerBuilderPatchSchema = z
   .object({
     prompt: z.string().max(20000).optional(),
+    model: modelReferenceSchema.optional(),
     toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).optional(),
     allowedIntegrations: z.array(z.string()).min(1).optional(),
     triggerType: z.enum(BUILDER_ALLOWED_TRIGGER_TYPES).optional(),
@@ -55,6 +69,7 @@ export const coworkerBuilderPatchSchema = z
   .refine(
     (value) =>
       value.prompt !== undefined ||
+      value.model !== undefined ||
       value.toolAccessMode !== undefined ||
       value.allowedIntegrations !== undefined ||
       value.triggerType !== undefined ||
@@ -78,6 +93,7 @@ export type CoworkerBuilderContext = {
   coworkerId: string;
   updatedAt: string;
   prompt: string;
+  model: string;
   toolAccessMode: CoworkerToolAccessMode;
   triggerType: string;
   schedule: unknown;
@@ -111,6 +127,7 @@ const coworkerBuilderRowSchema = z.object({
   description: z.string().nullable().optional(),
   username: z.string().nullable().optional(),
   prompt: z.string(),
+  model: z.string(),
   promptDo: z.string().nullable().optional(),
   promptDont: z.string().nullable().optional(),
   toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).nullable().optional(),
@@ -125,6 +142,7 @@ const coworkerBuilderRowSchema = z.object({
 const coworkerBuilderContextRowSchema = z.object({
   id: z.string(),
   prompt: z.string(),
+  model: z.string(),
   toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).nullable().optional(),
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
@@ -135,6 +153,7 @@ const coworkerBuilderContextRowSchema = z.object({
 const coworkerBuilderUpdatedRowSchema = z.object({
   id: z.string(),
   prompt: z.string(),
+  model: z.string(),
   toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).nullable().optional(),
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
@@ -160,6 +179,7 @@ function normalizeIntegrations(input: string[]): string[] {
 function toBuilderContext(row: {
   id: string;
   prompt: string;
+  model: string;
   toolAccessMode: CoworkerToolAccessMode | null | undefined;
   triggerType: string;
   schedule: unknown;
@@ -170,6 +190,7 @@ function toBuilderContext(row: {
     coworkerId: row.id,
     updatedAt: row.updatedAt.toISOString(),
     prompt: row.prompt,
+    model: row.model,
     toolAccessMode: normalizeCoworkerToolAccessMode(row.toolAccessMode, row.allowedIntegrations),
     triggerType: row.triggerType,
     schedule: row.schedule,
@@ -197,6 +218,7 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
     columns: {
       id: true,
       prompt: true,
+      model: true,
       toolAccessMode: true,
       triggerType: true,
       schedule: true,
@@ -213,6 +235,7 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
   return toBuilderContext({
     id: row.id,
     prompt: row.prompt,
+    model: row.model,
     toolAccessMode: row.toolAccessMode,
     triggerType: row.triggerType,
     schedule: row.schedule,
@@ -227,6 +250,7 @@ function buildChangedFields(params: {
       description: string | null;
       username: string | null;
       prompt: string;
+      model: string;
       toolAccessMode: CoworkerToolAccessMode;
       triggerType: string;
       schedule: unknown;
@@ -237,6 +261,7 @@ function buildChangedFields(params: {
       description: string | null;
       username: string | null;
       prompt: string;
+      model: string;
       toolAccessMode: CoworkerToolAccessMode;
       triggerType: string;
       schedule: unknown;
@@ -255,6 +280,9 @@ function buildChangedFields(params: {
   }
   if (params.current.prompt !== params.next.prompt) {
     changed.push("prompt");
+  }
+  if (params.current.model !== params.next.model) {
+    changed.push("model");
   }
   if (params.current.toolAccessMode !== params.next.toolAccessMode) {
     changed.push("toolAccessMode");
@@ -308,6 +336,7 @@ export async function applyCoworkerBuilderPatch(params: {
       description: true,
       username: true,
       prompt: true,
+      model: true,
       promptDo: true,
       promptDont: true,
       toolAccessMode: true,
@@ -375,6 +404,7 @@ export async function applyCoworkerBuilderPatch(params: {
     description: existing.description ?? null,
     username: existing.username ?? null,
     prompt: params.patch.prompt ?? existing.prompt,
+    model: params.patch.model ?? existing.model,
     toolAccessMode: nextToolAccessMode,
     triggerType: nextTriggerType,
     schedule:
@@ -430,6 +460,7 @@ export async function applyCoworkerBuilderPatch(params: {
         existing.toolAccessMode,
         existing.allowedIntegrations as string[],
       ),
+      model: existing.model,
       triggerType: existing.triggerType,
       schedule: existing.schedule ?? null,
       allowedIntegrations: existing.allowedIntegrations as string[],
@@ -443,6 +474,7 @@ export async function applyCoworkerBuilderPatch(params: {
       coworker: toBuilderContext({
         id: existing.id,
         prompt: existing.prompt,
+        model: existing.model,
         toolAccessMode: existing.toolAccessMode,
         triggerType: existing.triggerType,
         schedule: existing.schedule ?? null,
@@ -460,6 +492,7 @@ export async function applyCoworkerBuilderPatch(params: {
       description: nextState.description,
       username: nextState.username,
       prompt: nextState.prompt,
+      model: nextState.model,
       toolAccessMode: nextState.toolAccessMode,
       triggerType: nextState.triggerType,
       schedule: nextState.schedule,
@@ -477,6 +510,7 @@ export async function applyCoworkerBuilderPatch(params: {
     .returning({
       id: coworker.id,
       prompt: coworker.prompt,
+      model: coworker.model,
       toolAccessMode: coworker.toolAccessMode,
       triggerType: coworker.triggerType,
       schedule: coworker.schedule,
@@ -493,6 +527,7 @@ export async function applyCoworkerBuilderPatch(params: {
       columns: {
         id: true,
         prompt: true,
+        model: true,
         toolAccessMode: true,
         triggerType: true,
         schedule: true,
@@ -509,6 +544,7 @@ export async function applyCoworkerBuilderPatch(params: {
       coworker: toBuilderContext({
         id: latest.id,
         prompt: latest.prompt,
+        model: latest.model,
         toolAccessMode: latest.toolAccessMode,
         triggerType: latest.triggerType,
         schedule: latest.schedule ?? null,
@@ -543,6 +579,7 @@ export async function applyCoworkerBuilderPatch(params: {
     coworker: toBuilderContext({
       id: updated.id,
       prompt: updated.prompt,
+      model: updated.model,
       toolAccessMode: updated.toolAccessMode,
       triggerType: updated.triggerType,
       schedule: updated.schedule,

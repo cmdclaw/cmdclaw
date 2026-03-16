@@ -10,6 +10,7 @@ import {
   EMAIL_FORWARDED_TRIGGER_TYPE,
   generateCoworkerAliasLocalPart,
 } from "@cmdclaw/core/lib/email-forwarding";
+import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import {
   applyCoworkerBuilderPatch,
   coworkerBuilderPatchSchema,
@@ -59,6 +60,17 @@ const integrationTypeSchema = z.enum([
 ]);
 const DEFAULT_COWORKER_INTEGRATIONS = [...COWORKER_AVAILABLE_INTEGRATION_TYPES];
 const toolAccessModeSchema = z.enum(COWORKER_TOOL_ACCESS_MODES);
+const modelReferenceSchema = z
+  .string()
+  .min(3)
+  .refine((value) => {
+    try {
+      parseModelReference(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Model must use provider/model format");
 
 const triggerTypeSchema = z.string().min(1).max(128);
 const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
@@ -253,6 +265,7 @@ const list = protectedProcedure.handler(async ({ context }) => {
         username: wf.username,
         status: wf.status,
         autoApprove: wf.autoApprove,
+        model: wf.model,
         triggerType: wf.triggerType,
         integrations: wf.allowedIntegrations,
         toolAccessMode,
@@ -311,6 +324,7 @@ const get = protectedProcedure
       username: wf.username,
       status: wf.status,
       autoApprove: wf.autoApprove,
+      model: wf.model,
       triggerType: wf.triggerType,
       prompt: wf.prompt,
       promptDo: wf.promptDo,
@@ -340,6 +354,7 @@ const create = protectedProcedure
       username: z.string().max(128).nullish(),
       triggerType: triggerTypeSchema,
       prompt: z.string().max(20000),
+      model: modelReferenceSchema.default("anthropic/claude-sonnet-4-6"),
       promptDo: z.string().max(2000).optional(),
       promptDont: z.string().max(2000).optional(),
       autoApprove: z.boolean().optional(),
@@ -375,6 +390,7 @@ const create = protectedProcedure
         status: "on",
         triggerType: input.triggerType,
         prompt: input.prompt,
+        model: input.model,
         promptDo: input.promptDo,
         promptDont: input.promptDont,
         autoApprove: input.autoApprove ?? true,
@@ -416,6 +432,7 @@ const update = protectedProcedure
       status: z.enum(["on", "off"]).optional(),
       triggerType: triggerTypeSchema.optional(),
       prompt: z.string().max(20000).optional(),
+      model: modelReferenceSchema.optional(),
       promptDo: z.string().max(2000).nullish(),
       promptDont: z.string().max(2000).nullish(),
       autoApprove: z.boolean().optional(),
@@ -471,6 +488,9 @@ const update = protectedProcedure
     }
     if (input.prompt !== undefined) {
       updates.prompt = input.prompt;
+    }
+    if (input.model !== undefined) {
+      updates.model = input.model;
     }
     if (input.promptDo !== undefined) {
       updates.promptDo = input.promptDo ?? null;

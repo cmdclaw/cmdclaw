@@ -1,9 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import type { IntegrationType } from "../oauth/config";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "../../lib/chat-model-defaults";
-import { resolveDefaultOpencodeFreeModel } from "../ai/opencode-models";
-import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
@@ -37,19 +34,6 @@ const COWORKER_PREPARING_TIMEOUT_MS = (() => {
   }
   return Math.floor(seconds * 1000);
 })();
-
-async function resolveCoworkerDefaultModelForUser(userId: string): Promise<string> {
-  const configured = process.env.CMDCLAW_CHAT_MODEL?.trim();
-  if (configured) {
-    return resolveDefaultOpencodeFreeModel(configured);
-  }
-
-  if (await hasConnectedProviderAuthForUser(userId, "openai")) {
-    return DEFAULT_CONNECTED_CHATGPT_MODEL;
-  }
-
-  return resolveDefaultOpencodeFreeModel();
-}
 
 function mapGenerationStatusToCoworkerRunStatus(
   status: (typeof TERMINAL_GENERATION_STATUSES)[number],
@@ -269,11 +253,10 @@ export async function triggerCoworkerRun(params: {
   let generationId: string;
   let conversationId: string;
   try {
-    const coworkerModel = await resolveCoworkerDefaultModelForUser(wf.ownerId);
     const startResult = await generationManager.startCoworkerGeneration({
       coworkerRunId: run.id,
       content: userContent,
-      model: coworkerModel,
+      model: wf.model,
       userId: wf.ownerId,
       autoApprove: wf.autoApprove,
       allowedIntegrations,

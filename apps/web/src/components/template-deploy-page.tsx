@@ -40,6 +40,7 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
         const deployPayload = buildTemplateDeployPayload(template, promptTemplate);
         const result = await createCoworker.mutateAsync({
           ...deployPayload.createPayload,
+          model: DEFAULT_COWORKER_BUILDER_MODEL,
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 

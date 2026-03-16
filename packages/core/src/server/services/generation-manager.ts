@@ -1873,6 +1873,13 @@ class GenerationManager {
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model } = params;
     const resolvedModel = await resolveCoworkerModel(model);
+    const accessCheck = await this.checkModelAccessForUser({
+      userId,
+      model: resolvedModel,
+    });
+    if (!accessCheck.allowed) {
+      throw new Error(accessCheck.userMessage);
+    }
     const normalizedAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(params.allowedSkillSlugs);
     const { platformSkillSlugs } = splitCoworkerAllowedSkillSlugs(normalizedAllowedSkillSlugs);
     const selectedPlatformSkillSlugs = await resolveSelectedPlatformSkillSlugs(platformSkillSlugs);
@@ -6271,6 +6278,7 @@ class GenerationManager {
         updatedAt: ctx.builderCoworkerContext.updatedAt,
         editable: {
           prompt: ctx.builderCoworkerContext.prompt,
+          model: ctx.builderCoworkerContext.model,
           toolAccessMode: ctx.builderCoworkerContext.toolAccessMode,
           triggerType: ctx.builderCoworkerContext.triggerType,
           schedule: ctx.builderCoworkerContext.schedule,
@@ -6284,10 +6292,10 @@ class GenerationManager {
     return [
       "## Coworker Builder Context (System)",
       "You are in coworker builder mode.",
-      "The coworker snapshot below is the latest server state. Only edit these fields: prompt, toolAccessMode, allowedIntegrations, triggerType, schedule.",
+      "The coworker snapshot below is the latest server state. Only edit these fields: prompt, model, toolAccessMode, allowedIntegrations, triggerType, schedule.",
       "If the user asks to change editable coworker fields, emit exactly one patch block in this format:",
       "```coworker_builder_patch",
-      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "toolAccessMode": "all|selected", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
+      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "model": "anthropic/claude-sonnet-4-6", "toolAccessMode": "all|selected", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
       "```",
       "Rules:",
       "- Use baseUpdatedAt exactly from the snapshot below.",

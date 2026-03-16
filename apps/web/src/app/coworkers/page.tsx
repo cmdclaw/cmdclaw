@@ -480,6 +480,7 @@ export default function CoworkersPage() {
         name,
         triggerType,
         prompt: coworkerPrompt,
+        model: DEFAULT_COWORKER_BUILDER_MODEL,
         toolAccessMode: "all",
         allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
       });

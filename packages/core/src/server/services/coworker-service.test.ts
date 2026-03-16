@@ -16,7 +16,6 @@ process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
 const coworkerFindFirstMock = vi.fn();
 const coworkerRunFindManyMock = vi.fn();
 const coworkerRunFindFirstMock = vi.fn();
-const providerAuthFindFirstMock = vi.fn();
 
 const insertValuesMock = vi.fn();
 const insertMock = vi.fn(() => ({ values: insertValuesMock }));
@@ -34,16 +33,12 @@ const dbMock = {
       findMany: coworkerRunFindManyMock,
       findFirst: coworkerRunFindFirstMock,
     },
-    providerAuth: {
-      findFirst: providerAuthFindFirstMock,
-    },
   },
   insert: insertMock,
   update: updateMock,
 };
 
 const startCoworkerGenerationMock = vi.fn();
-const resolveDefaultOpencodeFreeModelMock = vi.fn();
 const FIXED_NOW_MS = Date.parse("2026-02-12T12:00:00.000Z");
 
 vi.mock("@cmdclaw/db/client", () => ({
@@ -54,10 +49,6 @@ vi.mock("./generation-manager", () => ({
   generationManager: {
     startCoworkerGeneration: startCoworkerGenerationMock,
   },
-}));
-
-vi.mock("../ai/opencode-models", () => ({
-  resolveDefaultOpencodeFreeModel: resolveDefaultOpencodeFreeModelMock,
 }));
 
 let triggerCoworkerRun: typeof import("./coworker-service").triggerCoworkerRun;
@@ -78,6 +69,7 @@ describe("triggerCoworkerRun", () => {
       autoApprove: true,
       allowedIntegrations: ["slack"],
       allowedCustomIntegrations: ["custom-crm"],
+      model: "anthropic/claude-sonnet-4-6",
       prompt: "Do the coworker",
       promptDo: "Do this",
       promptDont: "Do not do that",
@@ -85,7 +77,6 @@ describe("triggerCoworkerRun", () => {
 
     coworkerRunFindManyMock.mockResolvedValue([]);
     coworkerRunFindFirstMock.mockResolvedValue(null);
-    providerAuthFindFirstMock.mockResolvedValue(null);
 
     insertValuesMock.mockImplementation((values: unknown) => ({
       returning: vi.fn().mockResolvedValue([
@@ -105,10 +96,6 @@ describe("triggerCoworkerRun", () => {
       generationId: "gen-1",
       conversationId: "conv-1",
     });
-
-    resolveDefaultOpencodeFreeModelMock.mockImplementation((override?: string) =>
-      Promise.resolve(override ?? "opencode/glm-5-free"),
-    );
   });
 
   it("throws NOT_FOUND when coworker is missing", async () => {
@@ -127,6 +114,7 @@ describe("triggerCoworkerRun", () => {
       autoApprove: true,
       allowedIntegrations: [],
       allowedCustomIntegrations: [],
+      model: "anthropic/claude-sonnet-4-6",
       prompt: "",
       promptDo: null,
       promptDont: null,
@@ -178,7 +166,7 @@ describe("triggerCoworkerRun", () => {
     expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
       expect.objectContaining({
         coworkerRunId: "run-1",
-        model: "opencode/glm-5-free",
+        model: "anthropic/claude-sonnet-4-6",
         userId: "user-1",
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: ["custom-crm"],
@@ -214,8 +202,19 @@ describe("triggerCoworkerRun", () => {
     );
   });
 
-  it("prefers OpenAI default model when OpenAI is connected", async () => {
-    providerAuthFindFirstMock.mockResolvedValue({ id: "auth-1" });
+  it("uses the saved coworker model for the run", async () => {
+    coworkerFindFirstMock.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      status: "on",
+      autoApprove: true,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: ["custom-crm"],
+      model: "openai/gpt-5.2-codex",
+      prompt: "Do the coworker",
+      promptDo: "Do this",
+      promptDont: "Do not do that",
+    });
 
     await triggerCoworkerRun({
       coworkerId: "wf-1",
@@ -227,36 +226,6 @@ describe("triggerCoworkerRun", () => {
     expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "openai/gpt-5.2-codex",
-      }),
-    );
-    expect(resolveDefaultOpencodeFreeModelMock).not.toHaveBeenCalled();
-  });
-
-  it("uses CMDCLAW_CHAT_MODEL override when configured", async () => {
-    const previous = process.env.CMDCLAW_CHAT_MODEL;
-    process.env.CMDCLAW_CHAT_MODEL = "openai/gpt-4.1-mini";
-    providerAuthFindFirstMock.mockResolvedValue({ id: "auth-1" });
-    resolveDefaultOpencodeFreeModelMock.mockResolvedValue("openai/gpt-4.1-mini");
-
-    try {
-      await triggerCoworkerRun({
-        coworkerId: "wf-1",
-        triggerPayload: { source: "manual" },
-        userId: "user-1",
-        userRole: "admin",
-      });
-    } finally {
-      if (previous === undefined) {
-        delete process.env.CMDCLAW_CHAT_MODEL;
-      } else {
-        process.env.CMDCLAW_CHAT_MODEL = previous;
-      }
-    }
-
-    expect(resolveDefaultOpencodeFreeModelMock).toHaveBeenCalledWith("openai/gpt-4.1-mini");
-    expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: "openai/gpt-4.1-mini",
       }),
     );
   });

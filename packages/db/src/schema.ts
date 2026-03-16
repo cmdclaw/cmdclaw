@@ -775,6 +775,7 @@ export const coworker = pgTable(
     status: coworkerStatusEnum("status").default("on").notNull(),
     triggerType: text("trigger_type").notNull(),
     prompt: text("prompt").notNull(),
+    model: text("model").default("anthropic/claude-sonnet-4-6").notNull(),
     description: text("description"),
     username: text("username"),
     promptDo: text("prompt_do"),

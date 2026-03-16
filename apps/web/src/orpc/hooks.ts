@@ -619,6 +619,7 @@ export function useCreateCoworker() {
       username?: string | null;
       triggerType: string;
       prompt: string;
+      model?: string;
       promptDo?: string;
       promptDont?: string;
       autoApprove?: boolean;
@@ -669,6 +670,7 @@ export function useUpdateCoworker() {
       status?: "on" | "off";
       triggerType?: string;
       prompt?: string;
+      model?: string;
       promptDo?: string | null;
       promptDont?: string | null;
       autoApprove?: boolean;
@@ -712,6 +714,7 @@ export function useApplyCoworkerBuilderPatch() {
       baseUpdatedAt: string;
       patch: {
         prompt?: string;
+        model?: string;
         toolAccessMode?: CoworkerToolAccessMode;
         allowedIntegrations?: string[];
         triggerType?:

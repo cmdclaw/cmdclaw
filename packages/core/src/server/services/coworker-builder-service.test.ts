@@ -155,6 +155,7 @@ describe("coworker-builder-service", () => {
         description: null,
         username: null,
         prompt: "old",
+        model: "anthropic/claude-sonnet-4-6",
         promptDo: null,
         promptDont: null,
         triggerType: "manual",
@@ -167,6 +168,7 @@ describe("coworker-builder-service", () => {
       .mockResolvedValueOnce({
         id: "wf-1",
         prompt: "latest",
+        model: "anthropic/claude-sonnet-4-6",
         toolAccessMode: "all",
         triggerType: "manual",
         schedule: null,
@@ -203,6 +205,7 @@ describe("coworker-builder-service", () => {
       description: null,
       username: null,
       prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
       promptDo: null,
       promptDont: null,
       triggerType: "manual",
@@ -236,6 +239,7 @@ describe("coworker-builder-service", () => {
       description: null,
       username: null,
       prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
       promptDo: null,
       promptDont: null,
       triggerType: "manual",
@@ -271,6 +275,7 @@ describe("coworker-builder-service", () => {
       description: null,
       username: null,
       prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
       promptDo: null,
       promptDont: null,
       triggerType: "manual",
@@ -284,6 +289,7 @@ describe("coworker-builder-service", () => {
       {
         id: "wf-1",
         prompt: "new prompt",
+        model: "anthropic/claude-sonnet-4-6",
         triggerType: "manual",
         schedule: null,
         allowedIntegrations: ["github"],
@@ -327,6 +333,7 @@ describe("coworker-builder-service", () => {
       description: null,
       username: null,
       prompt: "   ",
+      model: "anthropic/claude-sonnet-4-6",
       promptDo: null,
       promptDont: null,
       triggerType: "manual",
@@ -340,6 +347,7 @@ describe("coworker-builder-service", () => {
       {
         id: "wf-1",
         prompt: "new prompt",
+        model: "anthropic/claude-sonnet-4-6",
         triggerType: "manual",
         schedule: null,
         allowedIntegrations: ["github"],
@@ -371,5 +379,62 @@ describe("coworker-builder-service", () => {
       return;
     }
     expect(result.appliedChanges).toEqual(["name", "description", "username", "prompt"]);
+  });
+
+  it("applies model changes and reports them", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "old",
+        model: "openai/gpt-5.2-codex",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+
+    const result = await applyCoworkerBuilderPatch({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      conversationId: "conv-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      patch: { model: "openai/gpt-5.2-codex" },
+    });
+
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") {
+      return;
+    }
+    expect(result.appliedChanges).toEqual(["model"]);
+    expect(mocks.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "openai/gpt-5.2-codex",
+      }),
+    );
   });
 });

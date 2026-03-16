@@ -1467,6 +1467,7 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce({
         id: "cw-1",
         prompt: "",
+        model: "anthropic/claude-sonnet-4-6",
         toolAccessMode: "all",
         triggerType: "manual",
         schedule: null,
@@ -1491,6 +1492,7 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce({
         id: "cw-1",
         prompt: "",
+        model: "anthropic/claude-sonnet-4-6",
         toolAccessMode: "all",
         triggerType: "manual",
         schedule: null,
@@ -1761,13 +1763,14 @@ describe("generationManager transitions", () => {
   it("starts coworker generation and keeps coworker context fields", async () => {
     const mgr = asTestManager();
     const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+    providerAuthFindFirstMock.mockResolvedValue({ id: "auth-openai" });
 
     insertReturningMock
       .mockResolvedValueOnce([
         {
           id: "conv-coworker",
           userId: "user-1",
-          model: "openai/gpt-4.1-mini",
+          model: "anthropic/claude-sonnet-4-6",
           autoApprove: true,
           type: "coworker",
         },
@@ -1782,7 +1785,7 @@ describe("generationManager transitions", () => {
       autoApprove: true,
       allowedIntegrations: ["github"],
       allowedCustomIntegrations: ["custom-slug"],
-      model: "openai/gpt-4.1-mini",
+      model: "anthropic/claude-sonnet-4-6",
     });
 
     expect(result).toEqual({
@@ -1799,6 +1802,21 @@ describe("generationManager transitions", () => {
       coworkerPromptDont: undefined,
       triggerPayload: undefined,
     });
+  });
+
+  it("rejects inaccessible saved coworker models before generation starts", async () => {
+    await expect(
+      generationManager.startCoworkerGeneration({
+        coworkerRunId: "wf-run-1",
+        content: "Create a weekly report",
+        userId: "user-1",
+        autoApprove: true,
+        allowedIntegrations: ["github"],
+        model: "openai/gpt-5.2-codex",
+      }),
+    ).rejects.toThrow(
+      "This ChatGPT model requires a connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+    );
   });
 
   it("returns status from database when context is active", async () => {
@@ -2508,6 +2526,7 @@ describe("generationManager transitions", () => {
           coworkerId: "wf-1",
           updatedAt: "2026-03-03T12:00:00.000Z",
           prompt: "Current coworker prompt",
+          model: "anthropic/claude-sonnet-4-6",
           triggerType: "manual",
           schedule: null,
           allowedIntegrations: ["github"],
@@ -2518,6 +2537,7 @@ describe("generationManager transitions", () => {
     expect(prompt).toContain("Coworker Builder Context");
     expect(prompt).toContain("coworker_builder_patch");
     expect(prompt).toContain('"coworkerId": "wf-1"');
+    expect(prompt).toContain('"model": "anthropic/claude-sonnet-4-6"');
   });
 
   it("runs OpenCode generation happy path and completes", async () => {

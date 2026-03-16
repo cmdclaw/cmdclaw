@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 void jestDomVitest;
 
@@ -82,7 +82,23 @@ vi.mock("@/components/chat/chat-area", () => ({
 }));
 
 vi.mock("@/components/chat/model-selector", () => ({
-  ModelSelector: () => <div>Model selector</div>,
+  ModelSelector: ({
+    selectedModel,
+    onModelChange,
+  }: {
+    selectedModel: string;
+    onModelChange: (model: string) => void;
+  }) => {
+    const handleClick = React.useCallback(() => {
+      onModelChange("openai/gpt-5.2-codex");
+    }, [onModelChange]);
+
+    return (
+      <button type="button" onClick={handleClick}>
+        Model selector: {selectedModel}
+      </button>
+    );
+  },
 }));
 
 vi.mock("@/components/chat/chat-skill-store", () => ({
@@ -203,6 +219,7 @@ vi.mock("@/orpc/hooks", () => ({
       autoApprove: true,
       triggerType: "manual",
       prompt: "Existing prompt",
+      model: "anthropic/claude-sonnet-4-6",
       promptDo: null,
       promptDont: null,
       allowedIntegrations: ["slack"],
@@ -246,10 +263,15 @@ describe("CoworkerEditorPage", () => {
     mockTriggerCoworkerMutateAsync.mockResolvedValue({ success: true });
   });
 
+  afterEach(() => {
+    cleanup();
+    vi.clearAllTimers();
+  });
+
   it("hydrates description and username and includes them in autosave updates", async () => {
     render(<CoworkerEditorPage />);
 
-    fireEvent.click(screen.getByText("Details"));
+    fireEvent.click(screen.getAllByText("Details")[0]!);
 
     expect(screen.getByDisplayValue("Existing description")).toBeInTheDocument();
     expect(screen.getByDisplayValue("existing-user")).toBeInTheDocument();
@@ -274,6 +296,33 @@ describe("CoworkerEditorPage", () => {
     );
   });
 
+  it("hydrates model and includes model changes in autosave updates", async () => {
+    render(<CoworkerEditorPage />);
+
+    expect(
+      screen.getAllByRole("button", {
+        name: /Model selector: anthropic\/claude-sonnet-4-6/i,
+      })[0],
+    ).toBeInTheDocument();
+
+    for (const button of screen.getAllByRole("button", {
+      name: /Model selector: anthropic\/claude-sonnet-4-6/i,
+    })) {
+      fireEvent.click(button);
+    }
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(mockUpdateCoworkerMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "cw-1",
+        model: "openai/gpt-5.2-codex",
+      }),
+    );
+  });
+
   it("switches to the runs tab when starting a run", () => {
     render(<CoworkerEditorPage />);
 
@@ -282,5 +331,30 @@ describe("CoworkerEditorPage", () => {
     fireEvent.click(screen.getAllByText("Run now")[0]!);
 
     expect(screen.getByText("No runs yet.")).toBeInTheDocument();
+  });
+
+  it("saves model changes before starting a run", async () => {
+    render(<CoworkerEditorPage />);
+    for (const button of screen.getAllByRole("button", {
+      name: /Model selector: anthropic\/claude-sonnet-4-6/i,
+    })) {
+      fireEvent.click(button);
+    }
+
+    fireEvent.click(screen.getAllByText("Run now")[0]!);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockUpdateCoworkerMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "openai/gpt-5.2-codex",
+      }),
+    );
+    expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });
+    expect(mockUpdateCoworkerMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTriggerCoworkerMutateAsync.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
   });
 });

@@ -414,6 +414,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
           triggerType:
             (opts.triggerType as "manual" | "schedule" | "email" | "webhook") ?? "manual",
           prompt: opts.prompt,
+          model: DEFAULT_COWORKER_BUILDER_MODEL,
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 
