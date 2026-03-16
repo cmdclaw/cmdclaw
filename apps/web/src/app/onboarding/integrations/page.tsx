@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -83,6 +83,7 @@ const otherIntegrations: IntegrationType[] = [
   "hubspot",
   "linkedin",
 ];
+const allIntegrations: IntegrationType[] = [...recommendedIntegrations, ...otherIntegrations];
 
 function OnboardingIntegrationsFallback() {
   return (
@@ -120,7 +121,7 @@ function IntegrationIconButton({
       onClick={handleClick}
       disabled={isConnected || isConnecting}
       className={cn(
-        "relative flex flex-col items-center gap-2 rounded-xl p-4 transition-all",
+        "relative flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all sm:gap-2 sm:p-4",
         "border hover:border-primary/50 hover:bg-muted/50",
         isConnected && "border-green-500/50 bg-green-500/5",
         isRecommended && !isConnected && "border-primary/30 bg-primary/5",
@@ -237,6 +238,10 @@ function OnboardingIntegrationsContent() {
     router.push("/chat");
   }, [completeOnboarding, router]);
 
+  const handleBack = useCallback(() => {
+    router.push("/onboarding/subscriptions");
+  }, [router]);
+
   const integrationsList = Array.isArray(integrations) ? integrations : [];
   const connectedIntegrations = new Set(integrationsList.map((i) => i.type));
 
@@ -245,25 +250,42 @@ function OnboardingIntegrationsContent() {
   }
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="mb-8 text-center">
-          <h1 className="mb-2 text-2xl font-semibold tracking-tight">Connect your tools</h1>
-          <p className="text-muted-foreground">
-            Connect your apps to let the AI assistant help you with tasks like reading emails,
-            scheduling meetings, and managing documents.
-          </p>
+    <>
+      <div className="mb-6 text-center sm:mb-8">
+        <h1 className="mb-2 text-xl font-semibold tracking-tight sm:text-2xl">
+          Connect your tools
+        </h1>
+        <p className="text-muted-foreground">
+          Connect your apps to let the AI assistant help you with tasks like reading emails,
+          scheduling meetings, and managing documents.
+        </p>
+      </div>
+
+      {errorMessage && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 p-4 text-red-700 dark:text-red-400">
+          <XCircle className="h-5 w-5" />
+          {errorMessage}
+        </div>
+      )}
+
+      <div className="bg-card mb-6 rounded-2xl border p-4 sm:p-6">
+        {/* Mobile: single flat grid, all items same size */}
+        <div className="grid grid-cols-3 gap-2 sm:hidden">
+          {allIntegrations.map((type) => (
+            <IntegrationIconButton
+              key={type}
+              type={type}
+              isRecommended={false}
+              isConnected={connectedIntegrations.has(type)}
+              isConnecting={connectingType === type}
+              onConnect={handleConnect}
+            />
+          ))}
         </div>
 
-        {errorMessage && (
-          <div className="mb-6 flex items-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 p-4 text-red-700 dark:text-red-400">
-            <XCircle className="h-5 w-5" />
-            {errorMessage}
-          </div>
-        )}
-
-        <div className="bg-card mb-6 rounded-2xl border p-6">
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {/* Desktop: recommended section + divider + other integrations */}
+        <div className="hidden sm:block">
+          <div className="mb-6 grid grid-cols-5 gap-3">
             {recommendedIntegrations.map((type) => (
               <IntegrationIconButton
                 key={type}
@@ -285,7 +307,7 @@ function OnboardingIntegrationsContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
+          <div className="grid grid-cols-8 gap-3">
             {otherIntegrations.map((type) => (
               <IntegrationIconButton
                 key={type}
@@ -298,17 +320,21 @@ function OnboardingIntegrationsContent() {
             ))}
           </div>
         </div>
-
-        <div className="flex justify-center gap-3">
-          <Button variant="ghost" onClick={handleSkip} disabled={completeOnboarding.isPending}>
-            Skip for now
-          </Button>
-          <Button onClick={handleContinue} disabled={completeOnboarding.isPending}>
-            {completeOnboarding.isPending ? "Loading..." : "Continue"}
-          </Button>
-        </div>
       </div>
-    </div>
+
+      <div className="flex justify-center gap-2 sm:gap-3">
+        <Button variant="ghost" onClick={handleBack} disabled={completeOnboarding.isPending}>
+          <ArrowLeft className="mr-1.5 h-4 w-4" />
+          Back
+        </Button>
+        <Button variant="ghost" onClick={handleSkip} disabled={completeOnboarding.isPending}>
+          Skip for now
+        </Button>
+        <Button onClick={handleContinue} disabled={completeOnboarding.isPending}>
+          {completeOnboarding.isPending ? "Loading..." : "Continue"}
+        </Button>
+      </div>
+    </>
   );
 }
 

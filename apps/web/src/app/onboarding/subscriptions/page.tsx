@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ClipboardCopy, ExternalLink, Loader2, Sparkles, X } from "lucide-react";
+import { CheckCircle2, ClipboardCopy, ExternalLink, Loader2, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useProviderAuthStatus, useConnectProvider, usePollProviderConnection } from "@/orpc/hooks";
-import { StepIndicator } from "../_components/step-indicator";
 
 type ProviderID = "openai";
 
@@ -62,7 +61,7 @@ function DeviceFlowPanel({
   onCancel: () => void;
 }) {
   return (
-    <div className="bg-card rounded-2xl border p-6">
+    <div className="bg-card rounded-2xl border p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">Enter this code to connect</p>
         <button
@@ -77,8 +76,8 @@ function DeviceFlowPanel({
         Open the verification page below and paste this code to authorize CmdClaw.
       </p>
 
-      <div className="bg-muted/60 mt-4 flex items-center justify-between rounded-xl px-5 py-4">
-        <span className="font-mono text-2xl font-semibold tracking-[0.2em]">
+      <div className="bg-muted/60 mt-4 flex items-center justify-between rounded-xl px-3 py-3 sm:px-5 sm:py-4">
+        <span className="font-mono text-xl font-semibold tracking-[0.15em] sm:text-2xl sm:tracking-[0.2em]">
           {deviceFlow.userCode}
         </span>
         <button
@@ -104,7 +103,7 @@ function DeviceFlowPanel({
         </button>
       </div>
 
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <a
           href="https://auth.openai.com/codex/device"
           target="_blank"
@@ -137,12 +136,12 @@ function ProviderCard({
   return (
     <div
       className={cn(
-        "bg-card rounded-2xl border p-6 transition-colors",
+        "bg-card rounded-2xl border p-4 transition-colors sm:p-6",
         isConnected && "border-green-500/40",
       )}
     >
-      <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-white shadow-sm dark:bg-gray-800">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-white shadow-sm sm:h-12 sm:w-12 sm:rounded-xl dark:bg-gray-800">
           <Image
             src={provider.logoUrl}
             alt={provider.logoAlt}
@@ -334,62 +333,56 @@ function OnboardingSubscriptionsContent() {
   }
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-xl">
-        <StepIndicator current={1} total={2} />
+    <>
+      <div className="mb-6 text-center sm:mb-8">
+        <h1 className="mb-2 text-xl font-semibold tracking-tight sm:text-2xl">
+          Bring your AI subscription
+        </h1>
+        <p className="text-muted-foreground">
+          Connect your existing AI account to unlock additional models at no extra cost on CmdClaw.
+        </p>
+      </div>
 
-        <div className="mb-8 text-center">
-          <div className="bg-primary/5 border-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border">
-            <Sparkles className="text-primary h-6 w-6" />
-          </div>
-          <h1 className="mb-2 text-2xl font-semibold tracking-tight">Bring your AI subscription</h1>
-          <p className="text-muted-foreground mx-auto max-w-md text-[15px]">
-            Connect your existing AI account to unlock additional models at no extra cost on
-            CmdClaw.
+      <div className="mb-4 space-y-4">
+        {deviceFlow ? (
+          <DeviceFlowPanel
+            deviceFlow={deviceFlow}
+            copySuccess={copySuccess}
+            onCopy={handleCopyDeviceCode}
+            onCancel={handleCancelDeviceFlow}
+          />
+        ) : (
+          <ProviderCard
+            isConnected={isConnected}
+            isConnecting={connectingProvider === "openai"}
+            onConnect={handleConnect}
+          />
+        )}
+      </div>
+
+      <div className="border-muted bg-muted/30 mb-6 rounded-xl border p-3.5">
+        <div className="flex items-start gap-2.5">
+          <Image
+            src="/integrations/anthropic.svg"
+            alt="Anthropic logo"
+            width={14}
+            height={14}
+            className="mt-0.5 h-3.5 w-auto shrink-0 dark:invert"
+          />
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Claude models are always available through CmdClaw. Connecting an AI account gives you
+            access to additional models from that provider.
           </p>
         </div>
-
-        <div className="mb-4 space-y-4">
-          {deviceFlow ? (
-            <DeviceFlowPanel
-              deviceFlow={deviceFlow}
-              copySuccess={copySuccess}
-              onCopy={handleCopyDeviceCode}
-              onCancel={handleCancelDeviceFlow}
-            />
-          ) : (
-            <ProviderCard
-              isConnected={isConnected}
-              isConnecting={connectingProvider === "openai"}
-              onConnect={handleConnect}
-            />
-          )}
-        </div>
-
-        <div className="border-muted bg-muted/30 mb-6 rounded-xl border p-3.5">
-          <div className="flex items-start gap-2.5">
-            <Image
-              src="/integrations/anthropic.svg"
-              alt="Anthropic logo"
-              width={14}
-              height={14}
-              className="mt-0.5 h-3.5 w-auto shrink-0 dark:invert"
-            />
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Claude models are always available through CmdClaw. Connecting an AI account gives you
-              access to additional models from that provider.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex justify-center gap-3">
-          <Button variant="ghost" onClick={handleSkip}>
-            Skip for now
-          </Button>
-          <Button onClick={handleContinue}>Continue</Button>
-        </div>
       </div>
-    </div>
+
+      <div className="flex justify-center gap-3">
+        <Button variant="ghost" onClick={handleSkip}>
+          Skip for now
+        </Button>
+        <Button onClick={handleContinue}>Continue</Button>
+      </div>
+    </>
   );
 }
 

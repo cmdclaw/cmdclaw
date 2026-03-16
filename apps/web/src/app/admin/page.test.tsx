@@ -102,7 +102,7 @@ describe("AdminPage", () => {
     await waitFor(() => {
       expect(resetOnboardingMutateAsyncMock).toHaveBeenCalledTimes(1);
     });
-    expect(mockRouterPush).toHaveBeenCalledWith("/onboarding/integrations");
+    expect(mockRouterPush).toHaveBeenCalledWith("/onboarding/subscriptions");
   });
 
   it("shows an inline error when onboarding reset fails", async () => {

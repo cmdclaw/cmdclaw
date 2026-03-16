@@ -1,7 +1,10 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { AppShell, type SidebarVisibility } from "@/components/app-shell";
+import { useCurrentUser } from "@/orpc/hooks";
 
 type AppShellRouteWrapperProps = {
   children: React.ReactNode;
@@ -40,12 +43,43 @@ function getSidebarVisibility(pathname: string | null): SidebarVisibility | null
   return null;
 }
 
+function OnboardingGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const { data: user, isLoading: userLoading } = useCurrentUser();
+
+  useEffect(() => {
+    if (!userLoading && user && !user.onboardedAt) {
+      router.replace("/onboarding/subscriptions");
+    }
+  }, [userLoading, user, router]);
+
+  if (userLoading || (user && !user.onboardedAt)) {
+    return (
+      <div className="bg-background flex h-screen items-center justify-center">
+        <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  return children;
+}
+
 export function AppShellRouteWrapper({ children, initialHasSession }: AppShellRouteWrapperProps) {
   const pathname = usePathname();
   const sidebarVisibility = getSidebarVisibility(pathname);
 
   if (!sidebarVisibility) {
     return children;
+  }
+
+  // "always" visibility means the user is on an authenticated route —
+  // enforce onboarding completion before rendering
+  if (sidebarVisibility === "always") {
+    return (
+      <AppShell sidebarVisibility={sidebarVisibility} initialHasSession={initialHasSession}>
+        <OnboardingGuard>{children}</OnboardingGuard>
+      </AppShell>
+    );
   }
 
   return (

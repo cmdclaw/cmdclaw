@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2, PanelLeftOpen } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { PanelLeftOpen } from "lucide-react";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
@@ -18,7 +18,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const [liveConversationId, setLiveConversationId] = useState<string | undefined>(
     routeConversationId,
   );
-  const router = useRouter();
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const setTimezoneMutation = useSetUserTimezone();
   const lastTimezoneSyncRef = useRef<string | null>(null);
@@ -45,12 +44,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
-    if (!userLoading && user && !user.onboardedAt) {
-      router.replace("/onboarding/integrations");
-    }
-  }, [user, userLoading, router]);
-
-  useEffect(() => {
     if (userLoading || !user) {
       return;
     }
@@ -71,15 +64,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       },
     });
   }, [userLoading, user, setTimezoneMutation]);
-
-  // Show loading while checking onboarding status
-  if (userLoading || (user && !user.onboardedAt)) {
-    return (
-      <div className="bg-background flex h-full min-h-0 items-center justify-center">
-        <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden pb-[calc(3.5rem+var(--safe-area-inset-bottom))] md:pb-0">

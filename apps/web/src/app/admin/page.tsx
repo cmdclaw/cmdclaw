@@ -99,7 +99,7 @@ export default function AdminPage() {
 
     try {
       await resetOnboarding.mutateAsync();
-      router.push("/onboarding/integrations");
+      router.push("/onboarding/subscriptions");
     } catch (err) {
       setActionError(toErrorMessage(err, "Failed to reset onboarding."));
     }
