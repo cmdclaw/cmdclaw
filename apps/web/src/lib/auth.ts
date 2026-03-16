@@ -1,4 +1,5 @@
 import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
+import { trackSignupFromSession } from "@cmdclaw/core/server/services/user-telemetry";
 import { db } from "@cmdclaw/db/client";
 import { authSchema } from "@cmdclaw/db/schema";
 import { autumn } from "autumn-js/better-auth";
@@ -113,6 +114,17 @@ export const auth = betterAuth({
             return { data: { ...user, role: "admin" } };
           }
           return { data: user };
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session, context) => {
+          try {
+            await trackSignupFromSession({ session, context });
+          } catch (error) {
+            console.error("[auth] failed to emit signup telemetry", error);
+          }
         },
       },
     },

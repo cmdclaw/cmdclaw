@@ -8,14 +8,12 @@ import { env } from "@/env";
 import { authClient } from "@/lib/auth-client";
 
 const posthogKey = env.NEXT_PUBLIC_POSTHOG_KEY;
-const posthogUiHost = "https://eu.posthog.com";
-const posthogProxyPath = "https://lattice.cmdclaw.com";
+const posthogProxyPath = env.NEXT_PUBLIC_POSTHOG_HOST;
 const isPosthogEnabled = Boolean(posthogKey);
 
 if (isPosthogEnabled) {
   posthogClientLib.init(posthogKey!, {
     api_host: posthogProxyPath,
-    ui_host: posthogUiHost,
     defaults: "2026-01-30",
     capture_pageview: false,
     capture_exceptions: {

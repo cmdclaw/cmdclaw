@@ -1,4 +1,5 @@
 import type { Session, User } from "better-auth";
+import { recordUserActiveToday } from "@cmdclaw/core/server/services/user-telemetry";
 import { os, ORPCError } from "@orpc/server";
 import type { ORPCContext } from "./context";
 
@@ -16,6 +17,14 @@ export const protectedProcedure = baseProcedure.use(async ({ context, next }) =>
   if (!context.user || !context.session) {
     console.error("[Auth Middleware] No user or session found");
     throw new ORPCError("UNAUTHORIZED", { message: "You must be logged in" });
+  }
+
+  try {
+    await recordUserActiveToday({
+      userId: context.user.id,
+    });
+  } catch (error) {
+    console.error("[Auth Middleware] Failed to record daily user activity", error);
   }
 
   try {
