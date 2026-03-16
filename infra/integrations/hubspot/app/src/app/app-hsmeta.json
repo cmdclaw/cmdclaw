@@ -10,6 +10,7 @@
       "type": "oauth",
       "redirectUrls": [
         "https://cmdclaw.ai/api/oauth/callback",
+        "https://staging.cmdclaw.ai/api/oauth/callback",
         "http://localhost:3000/api/oauth/callback"
       ],
       "requiredScopes": [
