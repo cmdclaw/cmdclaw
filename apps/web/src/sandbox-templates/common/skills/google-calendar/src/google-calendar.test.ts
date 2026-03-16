@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { runSkillCli } from "../../_test-utils/run-skill-cli";
-import { calculateAvailabilitySlots, filterSearchEvents } from "./google-calendar";
+import { calculateAvailabilitySlots, filterSearchEvents } from "./google-calendar-lib";
 
 describe("google-calendar CLI", () => {
   test("prints help text when auth env is missing", () => {
