@@ -255,8 +255,11 @@ vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("../sandbox/opencode-session", () => ({
-  getOrCreateSession: vi.fn(),
+vi.mock("../sandbox/core/orchestrator", () => ({
+  getOrCreateConversationRuntime: vi.fn(),
+}));
+
+vi.mock("../sandbox/prep/skills-prep", () => ({
   writeSkillsToSandbox: vi.fn(),
   getSkillsSystemPrompt: vi.fn(() => ""),
   writeResolvedIntegrationSkillsToSandbox: vi.fn(),
@@ -282,11 +285,11 @@ vi.mock("../ai/permission-checker", () => ({
   parseBashCommand: vi.fn(() => null),
 }));
 
-vi.mock("./memory-service", () => ({
+vi.mock("../sandbox/prep/memory-prep", () => ({
   buildMemorySystemPrompt: vi.fn(() => ""),
   readMemoryFile: vi.fn(),
   searchMemoryWithSessions: vi.fn(() => []),
-  syncMemoryToSandbox: vi.fn(),
+  syncMemoryFilesToSandbox: vi.fn(),
   writeMemoryEntry: vi.fn(),
   writeSessionTranscriptFromConversation: vi.fn(),
 }));
@@ -375,21 +378,21 @@ import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-pro
 import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
 import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
 import {
-  getOrCreateSession,
   writeSkillsToSandbox,
   getSkillsSystemPrompt,
   writeResolvedIntegrationSkillsToSandbox,
   getIntegrationSkillsSystemPrompt,
-} from "../sandbox/opencode-session";
+} from "../sandbox/prep/skills-prep";
+import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import {
   buildDefaultQuestionAnswers,
   buildQuestionCommand,
   generationManager,
 } from "./generation-manager";
 import {
-  syncMemoryToSandbox,
+  syncMemoryFilesToSandbox,
   buildMemorySystemPrompt,
-} from "./memory-service";
+} from "../sandbox/prep/memory-prep";
 import {
   uploadSandboxFile,
   collectNewSandboxFiles,
@@ -548,6 +551,40 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
   }
 
   return null;
+}
+
+function createConversationRuntimeMock(params: {
+  promptMock: ReturnType<typeof vi.fn>;
+  subscribeMock: ReturnType<typeof vi.fn>;
+  readFile?: ReturnType<typeof vi.fn>;
+}) {
+  return {
+    harnessClient: {
+      subscribe: params.subscribeMock,
+      prompt: params.promptMock,
+      abort: vi.fn().mockResolvedValue({ data: null, error: null }),
+      messages: vi.fn().mockResolvedValue({ data: [], error: null }),
+      getSession: vi.fn().mockResolvedValue({ data: null, error: null }),
+      createSession: vi.fn().mockResolvedValue({ data: { id: "session-1" }, error: null }),
+      replyPermission: vi.fn().mockResolvedValue(undefined),
+      replyQuestion: vi.fn().mockResolvedValue(undefined),
+      rejectQuestion: vi.fn().mockResolvedValue(undefined),
+    },
+    session: { id: "session-1" },
+    sandbox: {
+      provider: "e2b" as const,
+      sandboxId: "sandbox-1",
+      writeFile: vi.fn().mockResolvedValue(undefined),
+      readFile: params.readFile ?? vi.fn().mockRejectedValue(new Error("no cache")),
+      ensureDir: vi.fn().mockResolvedValue(undefined),
+      exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
+    },
+    metadata: {
+      sandboxProvider: "e2b" as const,
+      runtimeHarness: "opencode" as const,
+      runtimeProtocolVersion: "opencode-v2" as const,
+    },
+  };
 }
 
 function syncInterruptStateMocks(interrupt: {
@@ -2606,7 +2643,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("skills prompt");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue(["github"]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("integration skills prompt");
-    vi.mocked(syncMemoryToSandbox).mockResolvedValue([]);
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
     vi.mocked(buildMemorySystemPrompt).mockReturnValue("memory prompt");
     vi.mocked(collectNewSandboxFiles).mockResolvedValue([
       { path: "/app/out/report.txt", content: Buffer.from("report") },
@@ -2633,22 +2670,12 @@ describe("generationManager transitions", () => {
         { type: "session.idle", properties: {} },
       ]),
     });
-    vi.mocked(getOrCreateSession).mockResolvedValue({
-      client: {
-        event: { subscribe: subscribeMock },
-        session: { prompt: promptMock },
-      },
-      sessionId: "session-1",
-      sandbox: {
-        sandboxId: "sandbox-1",
-        files: {
-          write: vi.fn().mockResolvedValue(undefined),
-        },
-        commands: {
-          run: vi.fn().mockResolvedValue({}),
-        },
-      },
-    } as unknown as Awaited<ReturnType<typeof getOrCreateSession>>);
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
 
     const mgr = asTestManager();
     const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
@@ -2707,7 +2734,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
-    vi.mocked(syncMemoryToSandbox).mockResolvedValue([]);
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
     vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
     vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
 
@@ -2724,23 +2751,12 @@ describe("generationManager transitions", () => {
         { type: "session.idle", properties: {} },
       ]),
     });
-    vi.mocked(getOrCreateSession).mockResolvedValue({
-      client: {
-        event: { subscribe: subscribeMock },
-        session: { prompt: promptMock },
-      },
-      sessionId: "session-1",
-      sandbox: {
-        sandboxId: "sandbox-1",
-        files: {
-          write: vi.fn().mockResolvedValue(undefined),
-          read: vi.fn().mockRejectedValue(new Error("no cache")),
-        },
-        commands: {
-          run: vi.fn().mockResolvedValue({}),
-        },
-      },
-    } as unknown as Awaited<ReturnType<typeof getOrCreateSession>>);
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
 
     const mgr = asTestManager();
     const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
@@ -2778,7 +2794,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
-    vi.mocked(syncMemoryToSandbox).mockResolvedValue([]);
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
     vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
     vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
 
@@ -2821,18 +2837,12 @@ describe("generationManager transitions", () => {
         { type: "session.idle", properties: {} },
       ]),
     });
-    vi.mocked(getOrCreateSession).mockResolvedValue({
-      client: {
-        event: { subscribe: subscribeMock },
-        session: { prompt: promptMock },
-      },
-      sessionId: "session-1",
-      sandbox: {
-        sandboxId: "sandbox-1",
-        files: { write: vi.fn().mockResolvedValue(undefined) },
-        commands: { run: vi.fn().mockResolvedValue({}) },
-      },
-    } as unknown as Awaited<ReturnType<typeof getOrCreateSession>>);
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
 
     const mgr = asTestManager();
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);

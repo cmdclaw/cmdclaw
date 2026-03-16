@@ -271,8 +271,6 @@ describe("CoworkerEditorPage", () => {
   it("hydrates description and username and includes them in autosave updates", async () => {
     render(<CoworkerEditorPage />);
 
-    fireEvent.click(screen.getAllByText("Details")[0]!);
-
     expect(screen.getByDisplayValue("Existing description")).toBeInTheDocument();
     expect(screen.getByDisplayValue("existing-user")).toBeInTheDocument();
 
