@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   assertExitOk,
+  assertSandboxRowsUseProvider,
   ensureCliAuth,
   expectedUserEmail,
   extractConversationId,
   liveEnabled,
+  liveSandboxProvider,
   responseTimeoutMs,
   resolveLiveModel,
   runChatMessage,
@@ -36,6 +38,13 @@ describe.runIf(liveEnabled)("@live CLI chat", () => {
       expect(result.stdout).toContain("[auth]");
       expect(result.stdout).toContain("[conversation]");
       expect(result.stdout).not.toContain("[error]");
+      expect(result.stdout).toContain(`[sandbox] provider=${liveSandboxProvider}`);
+
+      await assertSandboxRowsUseProvider({
+        conversationIds: [extractConversationId(result.stdout)],
+        expectedProvider: liveSandboxProvider,
+        timeoutMs: responseTimeoutMs,
+      });
     },
   );
 

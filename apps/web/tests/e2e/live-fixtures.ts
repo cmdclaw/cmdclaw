@@ -1,15 +1,18 @@
-import { db } from "@cmdclaw/db/client";
-import { generation } from "@cmdclaw/db/schema";
 import { test as base, expect } from "@playwright/test";
-import { inArray } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { resolveLiveE2EModel } from "./live-chat-model";
+import {
+  assertSandboxRowsUseProvider,
+  liveSandboxProvider,
+  type SandboxProvider,
+} from "./live-sandbox";
 
 type LiveFixtures = {
-  e2bSandboxCleanup: void;
+  liveSandboxEnforcement: void;
 };
 type LiveWorkerFixtures = {
   liveChatModel: string;
+  liveSandboxProvider: SandboxProvider;
 };
 
 function collectNestedStringFields(payload: unknown, fieldName: string): string[] {
@@ -40,10 +43,6 @@ function collectNestedStringFields(payload: unknown, fieldName: string): string[
   return Array.from(values);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function killSandboxById(sandboxId: string): Promise<void> {
   const sandboxApi = Sandbox as unknown as {
     kill?: (id: string) => Promise<void>;
@@ -69,10 +68,55 @@ export const test = base.extend<LiveFixtures, LiveWorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  e2bSandboxCleanup: [
-    async ({ page }, provideCleanup) => {
+  liveSandboxProvider: [
+    async ({}, provideSandboxProvider) => {
+      await provideSandboxProvider(liveSandboxProvider);
+    },
+    { scope: "worker" },
+  ],
+  liveSandboxEnforcement: [
+    async ({ page, liveSandboxProvider }, provideCleanup) => {
       const conversationIds = new Set<string>();
       const generationIds = new Set<string>();
+      const startGenerationRoute = async (route: {
+        continue: (overrides?: {
+          headers?: Record<string, string>;
+          postData?: string;
+        }) => Promise<void>;
+        request: () => {
+          method: () => string;
+          postData: () => string | null;
+          headers: () => Record<string, string>;
+        };
+      }) => {
+        const request = route.request();
+        if (request.method() !== "POST") {
+          await route.continue();
+          return;
+        }
+
+        const rawBody = request.postData();
+        if (!rawBody) {
+          await route.continue();
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+          const body = { ...parsed, sandboxProvider: liveSandboxProvider };
+          const headers: Record<string, string> = {
+            ...request.headers(),
+            "content-type": "application/json",
+          };
+          delete headers["content-length"];
+          await route.continue({
+            headers,
+            postData: JSON.stringify(body),
+          });
+        } catch {
+          await route.continue();
+        }
+      };
       const onResponse = (response: {
         url: () => string;
         request: () => { method: () => string };
@@ -97,47 +141,33 @@ export const test = base.extend<LiveFixtures, LiveWorkerFixtures>({
           .catch(() => {});
       };
 
+      await page.route("**/*startGeneration*", startGenerationRoute);
       page.on("response", onResponse);
       await provideCleanup();
+      await page.unroute("**/*startGeneration*", startGenerationRoute);
       page.off("response", onResponse);
 
-      if ((conversationIds.size === 0 && generationIds.size === 0) || !process.env.E2B_API_KEY) {
+      if (conversationIds.size === 0 && generationIds.size === 0) {
         return;
       }
 
-      const resolveSandboxIds = async (attempt: number): Promise<string[]> => {
-        const [rowsByGeneration, rowsByConversation] = await Promise.all([
-          generationIds.size > 0
-            ? db.query.generation.findMany({
-                where: inArray(generation.id, Array.from(generationIds)),
-                columns: { sandboxId: true },
-              })
-            : Promise.resolve([]),
-          conversationIds.size > 0
-            ? db.query.generation.findMany({
-                where: inArray(generation.conversationId, Array.from(conversationIds)),
-                columns: { sandboxId: true },
-              })
-            : Promise.resolve([]),
-        ]);
+      const rows = await assertSandboxRowsUseProvider({
+        generationIds,
+        conversationIds,
+        expectedProvider: liveSandboxProvider,
+      });
 
-        const sandboxIds = Array.from(
-          new Set(
-            [...rowsByGeneration, ...rowsByConversation]
-              .map((row) => row.sandboxId)
-              .filter((sandboxId): sandboxId is string => Boolean(sandboxId)),
-          ),
-        );
+      if (liveSandboxProvider !== "e2b" || !process.env.E2B_API_KEY) {
+        return;
+      }
 
-        if (sandboxIds.length > 0 || attempt >= 5) {
-          return sandboxIds;
-        }
-
-        await sleep(1_000);
-        return resolveSandboxIds(attempt + 1);
-      };
-
-      const sandboxIds = await resolveSandboxIds(0);
+      const sandboxIds = Array.from(
+        new Set(
+          rows
+            .map((row) => row.sandboxId)
+            .filter((sandboxId): sandboxId is string => Boolean(sandboxId)),
+        ),
+      );
 
       if (sandboxIds.length === 0) {
         console.warn(

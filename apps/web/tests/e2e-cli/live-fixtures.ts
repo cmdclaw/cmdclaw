@@ -6,6 +6,11 @@ import { and, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { loadConfig, createRpcClient } from "../../scripts/lib/cli-shared";
 import { resolveLiveE2EModel } from "../e2e/live-chat-model";
+import {
+  assertSandboxRowsUseProvider,
+  liveSandboxProvider,
+  type SandboxProvider,
+} from "../e2e/live-sandbox";
 
 export const liveEnabled = process.env.E2E_LIVE === "1";
 export const defaultServerUrl = process.env.CMDCLAW_SERVER_URL ?? "http://localhost:3000";
@@ -259,6 +264,7 @@ export async function runChatMessage(args: {
   autoApprove?: boolean;
   questionAnswers?: string[];
   files?: string[];
+  sandboxProvider?: SandboxProvider;
   timeoutMs?: number;
 }): Promise<CommandResult> {
   const commandArgs = ["run", "chat", "--", "--message", args.message, "--no-validate"];
@@ -274,6 +280,8 @@ export async function runChatMessage(args: {
   if (args.autoApprove) {
     commandArgs.push("--auto-approve");
   }
+
+  commandArgs.push("--sandbox", args.sandboxProvider ?? liveSandboxProvider);
 
   for (const answer of args.questionAnswers ?? []) {
     commandArgs.push("--question-answer", answer);
@@ -863,3 +871,5 @@ export function parseSlackTimestamp(value: string): number {
 export async function closeDbPool(): Promise<void> {
   await closePool();
 }
+
+export { assertSandboxRowsUseProvider, liveSandboxProvider };
