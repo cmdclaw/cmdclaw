@@ -1567,7 +1567,7 @@ function CoworkerSettingsPanel({
           <div className="space-y-3 px-4 py-3">
             {/* Name & Username — side-by-side on desktop, stacked on mobile */}
             <div className={cn("gap-3", hideHeader ? "flex flex-col" : "grid grid-cols-2")}>
-              <div className="border-border/50 rounded-xl border px-4 py-3">
+              <div className="px-1 py-1">
                 <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                   Name
                 </label>
@@ -1578,23 +1578,26 @@ function CoworkerSettingsPanel({
                   className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
                 />
               </div>
-              <div className="border-border/50 rounded-xl border px-4 py-3">
+              <div className="px-1 py-1">
                 <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                   Username
                 </label>
-                <Input
-                  value={username}
-                  onChange={onUsernameChange}
-                  placeholder="my-coworker"
-                  className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-                />
+                <div className="mt-1.5 flex items-center">
+                  <span className="text-muted-foreground text-sm">@</span>
+                  <Input
+                    value={username}
+                    onChange={onUsernameChange}
+                    placeholder="my-coworker"
+                    className="border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Instruction preview card */}
             <button
               type="button"
-              className="group border-border/50 bg-card hover:border-border hover:bg-muted/30 relative w-full cursor-pointer rounded-xl border p-4 text-left transition-all"
+              className="group border-border/30 hover:border-border/50 hover:bg-muted/20 relative w-full cursor-pointer rounded-xl border p-4 text-left transition-all"
               onClick={handleOpenInstructionModal}
             >
               <div className="mb-2 flex items-center justify-between">
@@ -1611,7 +1614,7 @@ function CoworkerSettingsPanel({
                   <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1.5 prose-code:text-xs max-w-none text-sm leading-relaxed">
                     <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>{prompt}</ReactMarkdown>
                   </div>
-                  <div className="from-card group-hover:from-muted/30 pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
+                  <div className="from-background group-hover:from-muted/20 pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
                 </div>
               ) : (
                 <p className="text-muted-foreground/60 text-sm italic">
@@ -1696,10 +1699,10 @@ function CoworkerSettingsPanel({
             </Dialog>
 
             {/* Trigger card */}
-            <div className="border-border/50 rounded-xl border">
+            <div className="border-border/20 rounded-xl border">
               <button
                 type="button"
-                className="hover:bg-muted/30 flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors"
+                className="hover:bg-muted/20 flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors"
                 onClick={handleToggleTriggerExpanded}
               >
                 <div>
@@ -1929,7 +1932,7 @@ function CoworkerSettingsPanel({
             </div>
 
             {/* Approval policy card */}
-            <div className="border-border/50 flex items-center justify-between rounded-xl border px-4 py-3">
+            <div className="flex items-center justify-between px-4 py-3">
               <div>
                 <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                   Approval policy
@@ -1942,7 +1945,7 @@ function CoworkerSettingsPanel({
             </div>
 
             {/* Model card */}
-            <div className="border-border/50 flex items-center justify-between rounded-xl border px-4 py-3">
+            <div className="flex items-center justify-between px-4 py-3">
               <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                 Model
               </span>
@@ -1950,7 +1953,7 @@ function CoworkerSettingsPanel({
             </div>
 
             {/* Description card */}
-            <div className="border-border/50 rounded-xl border px-4 py-3">
+            <div className="px-4 py-3">
               <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                 Description
               </label>
