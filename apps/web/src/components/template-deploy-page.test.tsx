@@ -3,6 +3,7 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 
 void jestDomVitest;
 
@@ -89,7 +90,8 @@ If contact email exists, create a Gmail draft with friendly greeting, short summ
 Create a HubSpot task with subject 'Follow up on call with [Contact Name]', include summary + actions, and schedule for tomorrow at 9 AM.
 If contact exists, associate task to contact using HUBSPOT_DEFINED association type 204.
 If no contact is found, skip Gmail draft and still create the HubSpot task with the phone number in the body.`,
-        allowedIntegrations: expect.any(Array),
+        model: "anthropic/claude-sonnet-4-6",
+        allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
       });
     });
 
