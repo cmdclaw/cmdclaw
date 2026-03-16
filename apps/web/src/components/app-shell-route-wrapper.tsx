@@ -45,15 +45,16 @@ function getSidebarVisibility(pathname: string | null): SidebarVisibility | null
 
 function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { data: user, isLoading: userLoading } = useCurrentUser();
+  const { data: user, isLoading: userLoading, isFetching: userFetching } = useCurrentUser();
+  const shouldWaitForFreshUser = Boolean(user && !user.onboardedAt && userFetching);
 
   useEffect(() => {
-    if (!userLoading && user && !user.onboardedAt) {
+    if (!userLoading && !userFetching && user && !user.onboardedAt) {
       router.replace("/onboarding/subscriptions");
     }
-  }, [userLoading, user, router]);
+  }, [userFetching, userLoading, user, router]);
 
-  if (userLoading || (user && !user.onboardedAt)) {
+  if (userLoading || shouldWaitForFreshUser || (user && !user.onboardedAt)) {
     return (
       <div className="bg-background flex h-screen items-center justify-center">
         <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />

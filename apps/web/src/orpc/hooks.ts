@@ -922,14 +922,19 @@ export function useCurrentUser() {
   });
 }
 
+type CurrentUser = Awaited<ReturnType<typeof client.user.me>>;
+
 // Hook for completing onboarding
 export function useCompleteOnboarding() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => client.user.completeOnboarding(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user"] });
+    onSuccess: async () => {
+      queryClient.setQueryData<CurrentUser>(["user", "me"], (currentUser) =>
+        currentUser ? { ...currentUser, onboardedAt: new Date() } : currentUser,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["user", "me"] });
     },
   });
 }

@@ -230,12 +230,12 @@ function OnboardingIntegrationsContent() {
 
   const handleContinue = useCallback(async () => {
     await completeOnboarding.mutateAsync();
-    router.push("/chat");
+    router.push("/coworkers");
   }, [completeOnboarding, router]);
 
   const handleSkip = useCallback(async () => {
     await completeOnboarding.mutateAsync();
-    router.push("/chat");
+    router.push("/coworkers");
   }, [completeOnboarding, router]);
 
   const handleBack = useCallback(() => {
