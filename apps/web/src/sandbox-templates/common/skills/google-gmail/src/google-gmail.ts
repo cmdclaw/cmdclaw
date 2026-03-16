@@ -1,6 +1,5 @@
 import { parseArgs } from "util";
-import { prepareEmailHtmlBody } from "../../_shared/email-body-format";
-import { encodeRfc2047HeaderValue } from "./encode-rfc2047-header";
+import { buildRawEmail } from "./build-gmail-email";
 import { formatEmailDate } from "./format-email-date";
 
 const CLI_ARGS = process.argv.slice(2);
@@ -28,6 +27,7 @@ const { positionals, values } = parseArgs({
     subject: { type: "string" },
     body: { type: "string" },
     cc: { type: "string" },
+    attachment: { type: "string", multiple: true },
   },
 });
 
@@ -244,30 +244,33 @@ async function countUnread() {
   console.log(`Unread emails: ${resultSizeEstimate}`);
 }
 
-function buildRawEmail() {
+function getAttachmentPaths(): string[] {
+  const attachmentValue = values.attachment;
+  if (typeof attachmentValue === "string") {
+    return [attachmentValue];
+  }
+  if (Array.isArray(attachmentValue)) {
+    return attachmentValue.filter((entry): entry is string => typeof entry === "string");
+  }
+  return [];
+}
+
+async function buildOutgoingEmail() {
   if (!values.to || !values.subject || !values.body) {
-    console.error("Required: --to, --subject, --body");
-    process.exit(1);
+    throw new Error("Required: --to, --subject, --body");
   }
 
-  const { html } = prepareEmailHtmlBody(values.body);
-  const subject = encodeRfc2047HeaderValue(values.subject);
-  const emailLines = [
-    `To: ${values.to}`,
-    values.cc ? `Cc: ${values.cc}` : "",
-    `Subject: ${subject}`,
-    "Content-Type: text/html; charset=utf-8",
-    "",
-    html,
-  ]
-    .filter(Boolean)
-    .join("\r\n");
-
-  return Buffer.from(emailLines).toString("base64url");
+  return buildRawEmail({
+    attachmentPaths: getAttachmentPaths(),
+    body: values.body,
+    cc: values.cc,
+    subject: values.subject,
+    to: values.to,
+  });
 }
 
 async function sendEmail() {
-  const raw = buildRawEmail();
+  const raw = await buildOutgoingEmail();
   const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
@@ -282,7 +285,7 @@ async function sendEmail() {
 }
 
 async function draftEmail() {
-  const raw = buildRawEmail();
+  const raw = await buildOutgoingEmail();
   const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/drafts`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
@@ -307,8 +310,8 @@ function showHelp() {
   get <messageId>             Get email content
   unread [-q query] [--scope inbox|all|strict-all] [--include-spam-trash]
                               Count unread emails (default scope: inbox)
-  send --to <email> --subject <subject> --body <body> [--cc <email>]
-  draft --to <email> --subject <subject> --body <body> [--cc <email>]
+  send --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
+  draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
 
 Options:
   -h, --help                  Show this help message`);

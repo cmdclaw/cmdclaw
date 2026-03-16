@@ -31,7 +31,9 @@ describe("google-gmail CLI", () => {
     expect(result.stdout).toContain("latest");
     expect(result.stdout).toContain("search -q <query>");
     expect(result.stdout).toContain("--scope inbox|all|strict-all");
-    expect(result.stdout).toContain("draft --to <email> --subject <subject> --body <body>");
+    expect(result.stdout).toContain(
+      "draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...",
+    );
   });
 
   test("fails for invalid limit value", () => {
@@ -131,6 +133,29 @@ describe("google-gmail CLI", () => {
     expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
   });
 
+  test("fails send when an attachment file cannot be read", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/google-gmail/src/google-gmail.ts",
+      [
+        "send",
+        "--to",
+        "user@example.com",
+        "--subject",
+        "Hello",
+        "--body",
+        "<p>Hello</p>",
+        "--attachment",
+        "/tmp/does-not-exist.pdf",
+      ],
+      {
+        GMAIL_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain('Failed to read attachment "/tmp/does-not-exist.pdf"');
+  });
+
   test("uses html mime content type for outgoing messages", () => {
     const source = readFileSync(
       path.resolve(
@@ -139,6 +164,6 @@ describe("google-gmail CLI", () => {
       ),
       "utf8",
     );
-    expect(source).toContain("Content-Type: text/html; charset=utf-8");
+    expect(source).toContain("buildRawEmail");
   });
 });

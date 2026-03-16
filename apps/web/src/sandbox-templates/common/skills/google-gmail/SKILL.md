@@ -31,11 +31,13 @@ google-gmail get <messageId>
 google-gmail unread [-q "from:boss"] [--scope inbox|all|strict-all] [--include-spam-trash]
 
 # Draft an email
-google-gmail draft --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"]
+google-gmail draft --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"] [--attachment /tmp/report.pdf]
 
 # Send an email
-google-gmail send --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"]
+google-gmail send --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"] [--attachment /tmp/report.pdf]
 ```
+
+Use repeated `--attachment <path>` flags to include multiple files.
 
 ## Email Body Formatting
 
@@ -57,6 +59,12 @@ JSON arrays. Example for `list` / `search`:
 
 ```json
 [
-  { "id": "18d3f...", "subject": "Meeting Tomorrow", "from": "John <john@example.com>", "date": "2024-01-15 10:00:00", "snippet": "Preview text..." }
+  {
+    "id": "18d3f...",
+    "subject": "Meeting Tomorrow",
+    "from": "John <john@example.com>",
+    "date": "2024-01-15 10:00:00",
+    "snippet": "Preview text..."
+  }
 ]
 ```

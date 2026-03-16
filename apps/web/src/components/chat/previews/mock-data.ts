@@ -55,6 +55,7 @@ export const PREVIEW_MOCK_DATA: Record<string, PreviewMockData[]> = {
       label: "Send Email",
       args: {
         to: "john@example.com",
+        attachment: "/documents/q1-report.pdf",
         subject: "Project Update - Q1 Report",
         body: "Hi John,\n\nPlease find attached the Q1 report for your review.\n\nKey highlights:\n- Revenue increased by 15%\n- Customer satisfaction at 92%\n- New feature adoption rate of 78%\n\nLet me know if you have any questions.\n\nBest regards",
       },
@@ -64,6 +65,7 @@ export const PREVIEW_MOCK_DATA: Record<string, PreviewMockData[]> = {
       label: "Email with CC/BCC",
       args: {
         to: "team@example.com",
+        attachment: "/documents/sprint-notes.pdf",
         cc: "manager@example.com",
         bcc: "archive@example.com",
         subject: "Meeting Notes - Sprint Planning",
