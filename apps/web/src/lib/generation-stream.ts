@@ -52,6 +52,14 @@ export type SandboxFileData = {
   sizeBytes: number | null;
 };
 
+export type StatusChangeMetadata = {
+  sandboxProvider?: "e2b" | "daytona" | "docker";
+  runtimeHarness?: "opencode" | "agent-sdk";
+  runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
+  sandboxId?: string;
+  sessionId?: string;
+};
+
 export type DoneArtifactsData = {
   timing?: {
     sandboxStartupDurationMs?: number;
@@ -128,7 +136,7 @@ export type GenerationCallbacks = {
     conversationId: string;
     messageId?: string;
   }) => void | Promise<void>;
-  onStatusChange?: (status: string) => void | Promise<void>;
+  onStatusChange?: (status: string, metadata?: StatusChangeMetadata) => void | Promise<void>;
 };
 
 type RunGenerationStreamParams = {
@@ -278,7 +286,7 @@ export async function runGenerationStream(
         });
         break;
       case "status_change":
-        await callbacks.onStatusChange?.(event.status);
+        await callbacks.onStatusChange?.(event.status, event.metadata);
         break;
     }
   }

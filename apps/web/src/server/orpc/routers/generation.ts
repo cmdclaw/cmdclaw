@@ -213,6 +213,15 @@ const generationEventPayloadSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("status_change"),
     status: z.string(),
+    metadata: z
+      .object({
+        sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
+        runtimeHarness: z.enum(["opencode", "agent-sdk"]).optional(),
+        runtimeProtocolVersion: z.enum(["opencode-v2", "sandbox-agent-v1"]).optional(),
+        sandboxId: z.string().optional(),
+        sessionId: z.string().optional(),
+      })
+      .optional(),
   }),
   z.object({
     type: z.literal("sandbox_file"),

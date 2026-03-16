@@ -187,7 +187,17 @@ export type GenerationEvent =
       conversationId: string;
       messageId?: string;
     }
-  | { type: "status_change"; status: string };
+  | {
+      type: "status_change";
+      status: string;
+      metadata?: {
+        sandboxProvider?: "e2b" | "daytona" | "docker";
+        runtimeHarness?: "opencode" | "agent-sdk";
+        runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
+        sandboxId?: string;
+        sessionId?: string;
+      };
+    };
 
 export type GenerationStreamEvent = GenerationEvent & {
   cursor?: string;
@@ -3748,12 +3758,24 @@ class GenerationManager {
         this.broadcast(ctx, {
           type: "status_change",
           status: "agent_init_ready",
+          metadata: {
+            sandboxProvider: session.metadata.sandboxProvider,
+            runtimeHarness: session.metadata.runtimeHarness,
+            runtimeProtocolVersion: session.metadata.runtimeProtocolVersion,
+            sandboxId: runtimeSandbox.sandboxId,
+            sessionId,
+          },
         });
         const durationMs = ctx.agentInitReadyAt - agentInitStartedAt;
         logServerEvent(
           "info",
           "AGENT_INIT_READY",
-          { durationMs },
+          {
+            durationMs,
+            sandboxProvider: session.metadata.sandboxProvider,
+            runtimeHarness: session.metadata.runtimeHarness,
+            runtimeProtocolVersion: session.metadata.runtimeProtocolVersion,
+          },
           {
             source: "generation-manager",
             traceId: ctx.traceId,

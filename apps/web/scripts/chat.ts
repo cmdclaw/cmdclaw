@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream, existsSync, readFileSync } from "node:fs";
 import { basename, resolve, extname } from "node:path";
 import readline from "node:readline";
+import type { StatusChangeMetadata } from "@/lib/generation-stream";
 import type { AppRouter } from "@/server/orpc";
 import { createGenerationRuntime } from "@/lib/generation-runtime";
 import { runGenerationStream } from "@/lib/generation-stream";
@@ -201,6 +202,22 @@ function formatDurationMs(ms: number): string {
 function formatClockTime(ms: number): string {
   const date = new Date(ms);
   return date.toISOString().replace("T", " ").replace("Z", " UTC");
+}
+
+function formatStatusMetadata(metadata: StatusChangeMetadata | undefined): string | null {
+  if (!metadata) {
+    return null;
+  }
+
+  const parts = [
+    metadata.sandboxProvider ? `provider=${metadata.sandboxProvider}` : null,
+    metadata.runtimeHarness ? `harness=${metadata.runtimeHarness}` : null,
+    metadata.runtimeProtocolVersion ? `protocol=${metadata.runtimeProtocolVersion}` : null,
+    metadata.sandboxId ? `sandbox_id=${metadata.sandboxId}` : null,
+    metadata.sessionId ? `session_id=${metadata.sessionId}` : null,
+  ].filter((value): value is string => value !== null);
+
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 function isAuthIntegrationType(integration: string): integration is AuthIntegrationType {
@@ -759,13 +776,17 @@ async function runGeneration(
           streamedSandboxFileIds.add(file.fileId);
           process.stdout.write(`\n[file] ${file.filename} (${file.path})\n`);
         },
-        onStatusChange: (status) => {
+        onStatusChange: (status, metadata) => {
           const now = Date.now();
           const elapsedMs = Math.max(0, now - generationStartedAtMs);
           statusTimeline.push({ status, atMs: now, elapsedMs });
           process.stdout.write(
             `\n[status] ${status} @ ${formatClockTime(now)} (+${formatDurationMs(elapsedMs)})\n`,
           );
+          const metadataLine = formatStatusMetadata(metadata);
+          if (metadataLine) {
+            process.stdout.write(`[sandbox] ${metadataLine}\n`);
+          }
         },
         onDone: async (doneGenerationId, doneConversationId, messageId, _usage, artifacts) => {
           runtime.handleDone({

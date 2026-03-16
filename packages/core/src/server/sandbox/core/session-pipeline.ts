@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { createRuntimeHarnessClientFromOpencodeClient } from "../compat/opencode-client-shim";
 import {
-  getOrCreateSession,
+  getOrCreateSessionForCloudProvider,
   type OpenCodeSandbox,
   type OpenCodeSessionConfig,
 } from "../opencode-session";
@@ -44,12 +44,16 @@ export async function runConversationSessionPipeline(input: {
     integrationEnvs: input.context.integrationEnvs,
   };
 
-  const result = await getOrCreateSession(config, {
-    title: input.options?.title,
-    replayHistory: input.options?.replayHistory,
-    onLifecycle: input.options?.onLifecycle,
-    telemetry: input.options?.telemetry,
-  });
+  const result = await getOrCreateSessionForCloudProvider(
+    input.selection.sandboxProvider,
+    config,
+    {
+      title: input.options?.title,
+      replayHistory: input.options?.replayHistory,
+      onLifecycle: input.options?.onLifecycle,
+      telemetry: input.options?.telemetry,
+    },
+  );
 
   return {
     sandbox: toSandboxHandle(result.sandbox),
