@@ -11,7 +11,6 @@ import {
   Play,
   ChevronDown,
   Circle,
-  Copy,
   Upload,
   FileText,
   X,
@@ -21,7 +20,6 @@ import {
   Trash2,
   MessageSquare,
   Wrench,
-  Info,
   CirclePlay,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -216,9 +214,9 @@ export default function CoworkerEditorPage() {
   >(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<
-    "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details"
-  >("instruction");
+  const [activeTab, setActiveTab] = useState<"chat" | "instruction" | "runs" | "docs" | "toolbox">(
+    "instruction",
+  );
   const hasSetMobileDefaultRef = useRef(false);
   useEffect(() => {
     if (isMobile && !hasSetMobileDefaultRef.current) {
@@ -646,14 +644,6 @@ export default function CoworkerEditorPage() {
     void handleCopyForwardingAddress(coworkerForwardingAddress, "coworkerAlias");
   }, [handleCopyForwardingAddress, coworkerForwardingAddress]);
 
-  const handleCopyInvokeHandle = useCallback(() => {
-    const value = username.trim();
-    if (!value) {
-      return;
-    }
-    void handleCopyForwardingAddress(`@${value}`, "invokeHandle");
-  }, [handleCopyForwardingAddress, username]);
-
   const handleCreateCoworkerAlias = useCallback(async () => {
     if (!coworkerId) {
       return;
@@ -780,7 +770,7 @@ export default function CoworkerEditorPage() {
     !hasAgentInstructions || status !== "on" || triggerCoworker.isPending || isStartingRun;
   const isRunning = triggerCoworker.isPending || isStartingRun;
 
-  type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details";
+  type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox";
   const handleMobileTabChange = useCallback(
     (key: string) => {
       setActiveTab(key as CoworkerTab);
@@ -865,7 +855,6 @@ export default function CoworkerEditorPage() {
         onToggleWeekDay={handleToggleWeekDay}
         onScheduleDayOfMonthChange={handleScheduleDayOfMonthChange}
         onCopyCoworkerAlias={handleCopyCoworkerAlias}
-        onCopyInvokeHandle={handleCopyInvokeHandle}
         onRotateCoworkerAlias={handleRotateCoworkerAlias}
         onDisableCoworkerAlias={handleDisableCoworkerAlias}
         onCreateCoworkerAlias={handleCreateCoworkerAlias}
@@ -936,7 +925,6 @@ export default function CoworkerEditorPage() {
       handleToggleWeekDay,
       handleScheduleDayOfMonthChange,
       handleCopyCoworkerAlias,
-      handleCopyInvokeHandle,
       handleRotateCoworkerAlias,
       handleDisableCoworkerAlias,
       handleCreateCoworkerAlias,
@@ -975,9 +963,6 @@ export default function CoworkerEditorPage() {
             </AnimatedTab>
             <AnimatedTab value="toolbox" className="px-2.5">
               <Wrench className="h-4 w-4" aria-label="Toolbox" />
-            </AnimatedTab>
-            <AnimatedTab value="details" className="px-2.5">
-              <Info className="h-4 w-4" aria-label="Details" />
             </AnimatedTab>
           </AnimatedTabs>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -1076,7 +1061,6 @@ export default function CoworkerEditorPage() {
               onToggleWeekDay={handleToggleWeekDay}
               onScheduleDayOfMonthChange={handleScheduleDayOfMonthChange}
               onCopyCoworkerAlias={handleCopyCoworkerAlias}
-              onCopyInvokeHandle={handleCopyInvokeHandle}
               onRotateCoworkerAlias={handleRotateCoworkerAlias}
               onDisableCoworkerAlias={handleDisableCoworkerAlias}
               onCreateCoworkerAlias={handleCreateCoworkerAlias}
@@ -1247,9 +1231,11 @@ function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void 
                   run.status === "awaiting_approval" ||
                   run.status === "awaiting_auth"
                 ? "text-blue-500"
-                : run.status === "error" || run.status === "cancelled"
-                  ? "text-red-500"
-                  : "text-muted-foreground",
+                : run.status === "paused"
+                  ? "text-amber-500"
+                  : run.status === "error" || run.status === "cancelled"
+                    ? "text-red-500"
+                    : "text-muted-foreground",
           )}
         />
         <span className="text-foreground/70 text-xs">{getCoworkerRunStatusLabel(run.status)}</span>
@@ -1308,13 +1294,13 @@ type CoworkerSettingsPanelProps = {
         errorMessage: string | null;
       }>
     | undefined;
-  activeTab: "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details";
+  activeTab: "chat" | "instruction" | "runs" | "docs" | "toolbox";
   isRunDisabled: boolean;
   isRunning: boolean;
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
-  onTabChange: (tab: "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details") => void;
+  onTabChange: (tab: "chat" | "instruction" | "runs" | "docs" | "toolbox") => void;
   onRun: (e: React.MouseEvent) => void;
   onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -1336,7 +1322,6 @@ type CoworkerSettingsPanelProps = {
   onToggleWeekDay: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onScheduleDayOfMonthChange: (value: string) => void;
   onCopyCoworkerAlias: () => void;
-  onCopyInvokeHandle: () => void;
   onRotateCoworkerAlias: () => void;
   onDisableCoworkerAlias: () => void;
   onCreateCoworkerAlias: () => void;
@@ -1406,7 +1391,6 @@ function CoworkerSettingsPanel({
   onToggleWeekDay,
   onScheduleDayOfMonthChange,
   onCopyCoworkerAlias,
-  onCopyInvokeHandle,
   onRotateCoworkerAlias,
   onDisableCoworkerAlias,
   onCreateCoworkerAlias,
@@ -1464,7 +1448,7 @@ function CoworkerSettingsPanel({
   const handleTabChange = useCallback(
     (key: string) => {
       setSelectedRunId(null);
-      onTabChange(key as "chat" | "instruction" | "runs" | "docs" | "toolbox" | "details");
+      onTabChange(key as "chat" | "instruction" | "runs" | "docs" | "toolbox");
     },
     [onTabChange],
   );
@@ -1491,7 +1475,6 @@ function CoworkerSettingsPanel({
               <AnimatedTab value="runs">Runs</AnimatedTab>
               <AnimatedTab value="docs">Docs</AnimatedTab>
               <AnimatedTab value="toolbox">Toolbox</AnimatedTab>
-              <AnimatedTab value="details">Details</AnimatedTab>
             </AnimatedTabs>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -1580,80 +1563,34 @@ function CoworkerSettingsPanel({
             : "overflow-y-auto",
         )}
       >
-        {activeTab === "details" && (
+        {activeTab === "instruction" && (
           <div className="space-y-3 px-4 py-3">
-            {/* Name card */}
-            <div className="border-border/50 rounded-xl border px-4 py-3">
-              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Name
-              </label>
-              <Input
-                value={name}
-                onChange={onNameChange}
-                placeholder="New Coworker"
-                className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-              />
-            </div>
-
-            {/* Description card */}
-            <div className="border-border/50 rounded-xl border px-4 py-3">
-              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Username
-              </label>
-              <Input
-                value={username}
-                onChange={onUsernameChange}
-                placeholder="my-coworker"
-                className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-              />
-            </div>
-
-            <div className="border-border/50 rounded-xl border px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                    Invoke in chat
-                  </label>
-                  <p className="mt-1.5 text-sm font-medium">
-                    {username.trim()
-                      ? `@${username.trim()}`
-                      : "Set a username to enable invocation"}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    Mention this coworker in chat so the main agent can list coworkers and launch
-                    it.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 shrink-0 gap-1.5 text-xs"
-                  onClick={onCopyInvokeHandle}
-                  disabled={!username.trim()}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  {copiedForwardingField === "invokeHandle" ? "Copied" : "Copy"}
-                </Button>
+            {/* Name & Username — side-by-side on desktop, stacked on mobile */}
+            <div className={cn("gap-3", hideHeader ? "flex flex-col" : "grid grid-cols-2")}>
+              <div className="border-border/50 rounded-xl border px-4 py-3">
+                <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                  Name
+                </label>
+                <Input
+                  value={name}
+                  onChange={onNameChange}
+                  placeholder="New Coworker"
+                  className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                />
+              </div>
+              <div className="border-border/50 rounded-xl border px-4 py-3">
+                <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                  Username
+                </label>
+                <Input
+                  value={username}
+                  onChange={onUsernameChange}
+                  placeholder="my-coworker"
+                  className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                />
               </div>
             </div>
 
-            <div className="border-border/50 rounded-xl border px-4 py-3">
-              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Description
-              </label>
-              <textarea
-                className="text-foreground placeholder:text-muted-foreground/60 mt-1.5 min-h-[80px] w-full resize-none bg-transparent text-sm leading-relaxed focus:outline-none"
-                value={description}
-                onChange={onDescriptionChange}
-                placeholder="What does this coworker do?"
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === "instruction" && (
-          <div className="space-y-3 px-4 py-3">
             {/* Instruction preview card */}
             <button
               type="button"
@@ -2011,6 +1948,19 @@ function CoworkerSettingsPanel({
               </span>
               <ModelSelector selectedModel={model} onModelChange={onModelChange} />
             </div>
+
+            {/* Description card */}
+            <div className="border-border/50 rounded-xl border px-4 py-3">
+              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Description
+              </label>
+              <textarea
+                className="text-foreground placeholder:text-muted-foreground/60 mt-1.5 min-h-[80px] w-full resize-none bg-transparent text-sm leading-relaxed focus:outline-none"
+                value={description}
+                onChange={onDescriptionChange}
+                placeholder="What does this coworker do?"
+              />
+            </div>
           </div>
         )}
 
@@ -2055,9 +2005,11 @@ function CoworkerSettingsPanel({
                                   run.status === "awaiting_approval" ||
                                   run.status === "awaiting_auth"
                                 ? "text-blue-500"
-                                : run.status === "error" || run.status === "cancelled"
-                                  ? "text-red-500"
-                                  : "text-muted-foreground",
+                                : run.status === "paused"
+                                  ? "text-amber-500"
+                                  : run.status === "error" || run.status === "cancelled"
+                                    ? "text-red-500"
+                                    : "text-muted-foreground",
                           )}
                         />
                         <span className="text-foreground/70 text-xs">

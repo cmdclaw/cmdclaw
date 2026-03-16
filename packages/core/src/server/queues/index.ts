@@ -23,8 +23,10 @@ export const GENERATION_APPROVAL_TIMEOUT_JOB_NAME = "generation:approval-timeout
 export const GENERATION_AUTH_TIMEOUT_JOB_NAME = "generation:auth-timeout";
 export const GENERATION_PREPARING_STUCK_CHECK_JOB_NAME = "generation:preparing-stuck-check";
 export const GENERATION_STALE_REAPER_JOB_NAME = "generation:stale-reaper";
+export const PAUSED_SANDBOX_CLEANUP_JOB_NAME = "sandbox:paused-cleanup";
 export const CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME = "conversation:queued-message-process";
 export const SLACK_EVENT_JOB_NAME = "slack:event-callback";
+export const DAILY_TELEMETRY_DIGEST_JOB_NAME = "telemetry:daily-digest";
 
 export function buildQueueJobId(parts: Array<string | number | null | undefined>): string {
   const joined = parts
@@ -199,6 +201,13 @@ const handlers: Record<string, JobHandler> = {
       );
     }
   },
+  [PAUSED_SANDBOX_CLEANUP_JOB_NAME]: async () => {
+    const { cleanupPausedSandboxes } = await import("../services/paused-sandbox-cleanup");
+    const summary = await cleanupPausedSandboxes();
+    if (summary.cleaned > 0 || summary.skippedWithActiveLease > 0) {
+      console.info("[worker] paused sandbox cleanup summary", summary);
+    }
+  },
   [CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME]: async (job) => {
     const conversationId = job.data?.conversationId;
     if (!conversationId || typeof conversationId !== "string") {
@@ -215,6 +224,11 @@ const handlers: Record<string, JobHandler> = {
     }
     const { handleSlackEvent } = await import("../services/slack-bot");
     await handleSlackEvent(payload as Parameters<typeof handleSlackEvent>[0]);
+  },
+  [DAILY_TELEMETRY_DIGEST_JOB_NAME]: async () => {
+    const { postDailyTelemetryDigest } = await import("../services/telemetry-digest");
+    const summary = await postDailyTelemetryDigest();
+    console.info("[worker] posted daily telemetry digest", summary);
   },
 };
 

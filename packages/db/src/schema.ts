@@ -167,9 +167,34 @@ export const workspaceMember = pgTable(
   ],
 );
 
+export const userDailyActivity = pgTable(
+  "user_daily_activity",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    activityDate: date("activity_date").notNull(),
+    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+    source: text("source").default("web").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_daily_activity_user_date_idx").on(table.userId, table.activityDate),
+    index("user_daily_activity_date_idx").on(table.activityDate),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  dailyActivities: many(userDailyActivity),
   webPushSubscriptions: many(webPushSubscription),
   workspacesCreated: many(workspace),
   workspaceMemberships: many(workspaceMember),
@@ -226,6 +251,13 @@ export const workspaceMemberRelations = relations(workspaceMember, ({ one }) => 
   }),
   user: one(user, {
     fields: [workspaceMember.userId],
+    references: [user.id],
+  }),
+}));
+
+export const userDailyActivityRelations = relations(userDailyActivity, ({ one }) => ({
+  user: one(user, {
+    fields: [userDailyActivity.userId],
     references: [user.id],
   }),
 }));
@@ -331,6 +363,7 @@ export const conversation = pgTable(
     opencodeSessionId: text("opencode_session_id"),
     // OpenCode sandbox ID bound to this conversation
     opencodeSandboxId: text("opencode_sandbox_id"),
+    sandboxLastUserVisibleActionAt: timestamp("sandbox_last_user_visible_action_at"),
     // Last resolved sandbox provider used for this conversation
     lastSandboxProvider: text("last_sandbox_provider"),
     // Last resolved runtime harness used for this conversation
@@ -765,6 +798,7 @@ export const coworkerRunStatusEnum = pgEnum("coworker_run_status", [
   "running",
   "awaiting_approval",
   "awaiting_auth",
+  "paused",
   "completed",
   "error",
   "cancelled",

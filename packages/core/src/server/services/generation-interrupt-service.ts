@@ -190,6 +190,26 @@ class GenerationInterruptService {
     return this.resolveInterrupt({ interruptId, status: "expired" });
   }
 
+  async refreshInterruptExpiry(
+    interruptId: string,
+    expiresAt: Date,
+  ): Promise<GenerationInterruptRecord | null> {
+    const [updated] = await db
+      .update(generationInterrupt)
+      .set({
+        expiresAt,
+      })
+      .where(
+        and(
+          eq(generationInterrupt.id, interruptId),
+          eq(generationInterrupt.status, "pending"),
+        ),
+      )
+      .returning();
+
+    return updated ?? null;
+  }
+
   async cancelInterruptsForGeneration(generationId: string): Promise<void> {
     const pending = await this.listPendingInterruptsForGeneration(generationId);
     if (pending.length === 0) {

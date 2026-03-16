@@ -2,12 +2,14 @@ import { closePool } from "@cmdclaw/db/client";
 import {
   buildQueueJobId,
   GENERATION_STALE_REAPER_JOB_NAME,
+  PAUSED_SANDBOX_CLEANUP_JOB_NAME,
   getQueue,
   startQueues,
   stopQueues,
 } from "./server/queues";
 import { startGmailCoworkerWatcher } from "./server/services/coworker-gmail-watcher";
 import { reconcileScheduledCoworkerJobs } from "./server/services/coworker-scheduler";
+import { syncDailyTelemetryDigestJob } from "./server/services/telemetry-digest";
 import { startXDmCoworkerWatcher } from "./server/services/coworker-x-dm-watcher";
 
 export async function startWorkerRuntime(): Promise<void> {
@@ -22,7 +24,9 @@ export async function startWorkerRuntime(): Promise<void> {
   const stopGmailWatcher = startGmailCoworkerWatcher();
   const stopXDmWatcher = startXDmCoworkerWatcher();
   const staleReaperIntervalMs = 10 * 60 * 1000;
+  const pausedSandboxCleanupIntervalMs = 60 * 60 * 1000;
   let staleReaperInterval: ReturnType<typeof setInterval> | null = null;
+  let pausedSandboxCleanupInterval: ReturnType<typeof setInterval> | null = null;
   let shutdownPromise: Promise<void> | null = null;
 
   async function enqueueStaleGenerationReaperJob(): Promise<void> {
@@ -32,6 +36,19 @@ export async function startWorkerRuntime(): Promise<void> {
       {},
       {
         jobId: buildQueueJobId([GENERATION_STALE_REAPER_JOB_NAME, Date.now()]),
+        removeOnComplete: true,
+        removeOnFail: 200,
+      },
+    );
+  }
+
+  async function enqueuePausedSandboxCleanupJob(): Promise<void> {
+    const queue = getQueue();
+    await queue.add(
+      PAUSED_SANDBOX_CLEANUP_JOB_NAME,
+      {},
+      {
+        jobId: buildQueueJobId([PAUSED_SANDBOX_CLEANUP_JOB_NAME, Date.now()]),
         removeOnComplete: true,
         removeOnFail: 200,
       },
@@ -51,6 +68,10 @@ export async function startWorkerRuntime(): Promise<void> {
       if (staleReaperInterval) {
         clearInterval(staleReaperInterval);
         staleReaperInterval = null;
+      }
+      if (pausedSandboxCleanupInterval) {
+        clearInterval(pausedSandboxCleanupInterval);
+        pausedSandboxCleanupInterval = null;
       }
       await Promise.allSettled([
         stopQueues(worker, queueEvents, workerConnection, queueEventsConnection),
@@ -79,6 +100,13 @@ export async function startWorkerRuntime(): Promise<void> {
   }
 
   try {
+    await syncDailyTelemetryDigestJob();
+    console.log("[worker] synced daily telemetry digest schedule");
+  } catch (error) {
+    console.error("[worker] failed to sync daily telemetry digest schedule", error);
+  }
+
+  try {
     await enqueueStaleGenerationReaperJob();
   } catch (error) {
     console.error("[worker] failed to enqueue stale generation reaper job", error);
@@ -89,4 +117,16 @@ export async function startWorkerRuntime(): Promise<void> {
       console.error("[worker] failed to enqueue stale generation reaper job", error);
     });
   }, staleReaperIntervalMs);
+
+  try {
+    await enqueuePausedSandboxCleanupJob();
+  } catch (error) {
+    console.error("[worker] failed to enqueue paused sandbox cleanup job", error);
+  }
+
+  pausedSandboxCleanupInterval = setInterval(() => {
+    void enqueuePausedSandboxCleanupJob().catch((error) => {
+      console.error("[worker] failed to enqueue paused sandbox cleanup job", error);
+    });
+  }, pausedSandboxCleanupIntervalMs);
 }

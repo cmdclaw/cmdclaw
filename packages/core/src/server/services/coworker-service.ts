@@ -24,7 +24,12 @@ type CoworkerFileAttachment = {
   dataUrl: string;
 };
 
-const ACTIVE_COWORKER_RUN_STATUSES = ["running", "awaiting_approval", "awaiting_auth"] as const;
+const ACTIVE_COWORKER_RUN_STATUSES = [
+  "running",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+] as const;
 const TERMINAL_GENERATION_STATUSES = ["completed", "cancelled", "error"] as const;
 const ORPHAN_RUN_GRACE_MS = 2 * 60 * 1000;
 const COWORKER_PREPARING_TIMEOUT_MS = (() => {

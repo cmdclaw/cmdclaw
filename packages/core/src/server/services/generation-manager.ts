@@ -99,6 +99,7 @@ import { createCommunityIntegrationSkill } from "./integration-skill-service";
 import { writeSessionTranscriptFromConversation } from "./memory-service";
 import { resolveSelectedPlatformSkillSlugs } from "./platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-service";
+import { getSandboxSlotManager } from "./sandbox-slot-manager";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
 import { sendTaskDonePush } from "./web-push-service";
 import { generateConversationTitle } from "../utils/generate-title";
@@ -302,6 +303,8 @@ interface GenerationContext {
   streamTerminalPublishedAt?: number;
   lastCancellationCheckAt?: number;
   isFinalizing?: boolean;
+  sandboxSlotLeaseToken?: string;
+  sandboxSlotLeaseRenewId?: ReturnType<typeof setInterval>;
 }
 
 type ModelAccessCheckResult =
@@ -406,10 +409,10 @@ type GenerationTimeoutKind = "approval" | "auth";
 const STALE_REAPER_RUNNING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const STALE_REAPER_AWAITING_APPROVAL_MAX_AGE_MS = 30 * 60 * 1000;
 const STALE_REAPER_AWAITING_AUTH_MAX_AGE_MS = 60 * 60 * 1000;
-const STALE_REAPER_PAUSED_MAX_AGE_MS = 60 * 60 * 1000;
 const PENDING_MESSAGE_PARTS_MAX_PER_MESSAGE = 100;
 const PENDING_MESSAGE_PARTS_TTL_MS = 5 * 60 * 1000;
 const MAX_TOOL_RESULT_CONTENT_CHARS = 100_000;
+const SANDBOX_SLOT_RETRY_DELAY_MS = 2_000;
 const GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS = Number.parseInt(
   process.env.GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS ?? "180000",
   10,
@@ -1029,6 +1032,10 @@ class GenerationManager {
     if (ctx.authTimeoutId) {
       clearTimeout(ctx.authTimeoutId);
     }
+    if (ctx.sandboxSlotLeaseRenewId) {
+      clearInterval(ctx.sandboxSlotLeaseRenewId);
+      ctx.sandboxSlotLeaseRenewId = undefined;
+    }
 
     ctx.pendingMessageParts.clear();
 
@@ -1100,6 +1107,10 @@ class GenerationManager {
   private async enqueueGenerationRun(
     generationId: string,
     type: "chat" | "coworker",
+    options?: {
+      delayMs?: number;
+      dedupeKey?: string;
+    },
   ): Promise<void> {
     const queue = getQueue();
     const jobName = type === "coworker" ? COWORKER_GENERATION_JOB_NAME : CHAT_GENERATION_JOB_NAME;
@@ -1107,11 +1118,88 @@ class GenerationManager {
       jobName,
       { generationId },
       {
-        jobId: buildQueueJobId([jobName, generationId]),
+        jobId: buildQueueJobId([jobName, generationId, options?.dedupeKey]),
+        ...(options?.delayMs && options.delayMs > 0 ? { delay: options.delayMs } : {}),
         removeOnComplete: true,
         removeOnFail: 500,
       },
     );
+  }
+
+  private getGenerationRunType(ctx: Pick<GenerationContext, "coworkerRunId">): "chat" | "coworker" {
+    return ctx.coworkerRunId ? "coworker" : "chat";
+  }
+
+  private async touchConversationLastUserVisibleAction(conversationId: string): Promise<void> {
+    await db
+      .update(conversation)
+      .set({ sandboxLastUserVisibleActionAt: new Date() })
+      .where(eq(conversation.id, conversationId));
+  }
+
+  private async releaseSandboxSlotLease(ctx: GenerationContext): Promise<void> {
+    if (ctx.sandboxSlotLeaseRenewId) {
+      clearInterval(ctx.sandboxSlotLeaseRenewId);
+      ctx.sandboxSlotLeaseRenewId = undefined;
+    }
+    if (!ctx.sandboxSlotLeaseToken) {
+      return;
+    }
+
+    const token = ctx.sandboxSlotLeaseToken;
+    ctx.sandboxSlotLeaseToken = undefined;
+    await getSandboxSlotManager().releaseLease(ctx.id, token);
+  }
+
+  private async ensureSandboxSlotLease(
+    ctx: GenerationContext,
+    options?: {
+      allowWorkerRequeue?: boolean;
+    },
+  ): Promise<"acquired" | "requeued" | "waiting"> {
+    if (ctx.sandboxSlotLeaseToken) {
+      return "acquired";
+    }
+
+    const acquired = await getSandboxSlotManager().acquireLease(ctx.id);
+    if (acquired.granted) {
+      ctx.sandboxSlotLeaseToken = acquired.token;
+      ctx.sandboxSlotLeaseRenewId = setInterval(() => {
+        if (!ctx.sandboxSlotLeaseToken) {
+          return;
+        }
+        void getSandboxSlotManager().renewLease(ctx.id, ctx.sandboxSlotLeaseToken).catch((error) => {
+          console.error(`[GenerationManager] Failed to renew sandbox slot for generation ${ctx.id}:`, error);
+        });
+      }, 30_000);
+      return "acquired";
+    }
+
+    if ((options?.allowWorkerRequeue ?? false) && this.shouldDeferGenerationToWorker()) {
+      await this.enqueueGenerationRun(ctx.id, this.getGenerationRunType(ctx), {
+        delayMs: SANDBOX_SLOT_RETRY_DELAY_MS,
+        dedupeKey: `slot-${Date.now()}`,
+      });
+      this.evictActiveGenerationContext(ctx.id);
+      return "requeued";
+    }
+
+    return "waiting";
+  }
+
+  private async waitForSandboxSlotLease(
+    ctx: GenerationContext,
+    options?: {
+      allowWorkerRequeue?: boolean;
+    },
+  ): Promise<"acquired" | "requeued"> {
+    while (true) {
+      const status = await this.ensureSandboxSlotLease(ctx, options);
+      if (status === "acquired" || status === "requeued") {
+        return status;
+      }
+      await new Promise((resolve) => setTimeout(resolve, SANDBOX_SLOT_RETRY_DELAY_MS));
+    }
   }
 
   private async enqueueGenerationTimeout(
@@ -1734,6 +1822,7 @@ class GenerationManager {
       .set({
         generationStatus: "generating",
         currentGenerationId: genRecord.id,
+        sandboxLastUserVisibleActionAt: new Date(),
       })
       .where(eq(conversation.id, conv.id));
     await this.enqueuePreparingStuckCheck(genRecord.id);
@@ -1942,6 +2031,7 @@ class GenerationManager {
       .set({
         generationStatus: "generating",
         currentGenerationId: genRecord.id,
+        sandboxLastUserVisibleActionAt: new Date(),
       })
       .where(eq(conversation.id, newConv.id));
 
@@ -2229,6 +2319,7 @@ class GenerationManager {
         decision.decision,
         decision.questionAnswers,
       );
+      await this.runGeneration(ctx);
       return;
     }
 
@@ -2580,9 +2671,11 @@ class GenerationManager {
       .update(generation)
       .set({ cancelRequestedAt: new Date() })
       .where(eq(generation.id, generationId));
+    await getSandboxSlotManager().clearPendingRequest(generationId);
 
     const ctx = this.activeGenerations.get(generationId);
     if (ctx) {
+      await this.releaseSandboxSlotLease(ctx);
       ctx.abortController.abort();
     }
 
@@ -2608,9 +2701,20 @@ class GenerationManager {
       return false;
     }
 
-    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+    let pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
       generationId,
     );
+    if (pendingInterrupt) {
+      pendingInterrupt =
+        (await generationInterruptService.refreshInterruptExpiry(
+          pendingInterrupt.id,
+          new Date(
+            pendingInterrupt.kind === "auth"
+              ? computeExpiryIso(AUTH_TIMEOUT_MS)
+              : computeExpiryIso(APPROVAL_TIMEOUT_MS),
+          ),
+        )) ?? pendingInterrupt;
+    }
     const nextStatus: GenerationStatus = pendingInterrupt
       ? pendingInterrupt.kind === "auth"
         ? "awaiting_auth"
@@ -2634,6 +2738,7 @@ class GenerationManager {
             : nextStatus === "awaiting_approval"
               ? "awaiting_approval"
               : "awaiting_auth",
+        sandboxLastUserVisibleActionAt: new Date(),
       })
       .where(eq(conversation.id, genRecord.conversationId));
 
@@ -2700,7 +2805,6 @@ class GenerationManager {
       if (Number.isFinite(expiresAtMs) && now < expiresAtMs) {
         return;
       }
-      await generationInterruptService.expireInterrupt(pendingInterrupt.id);
 
       await db
         .update(generation)
@@ -2722,8 +2826,7 @@ class GenerationManager {
         await db
           .update(coworkerRun)
           .set({
-            status: "cancelled",
-            finishedAt: new Date(),
+            status: "paused",
           })
           .where(eq(coworkerRun.id, linkedCoworkerRun.id));
       }
@@ -2731,6 +2834,7 @@ class GenerationManager {
       const ctx = this.activeGenerations.get(generationId);
       if (ctx && ctx.status === "awaiting_approval") {
         ctx.status = "paused";
+        await this.releaseSandboxSlotLease(ctx);
         this.broadcast(ctx, { type: "status_change", status: "paused" });
         this.evictActiveGenerationContext(generationId);
       }
@@ -2751,22 +2855,19 @@ class GenerationManager {
     if (Number.isFinite(expiresAtMs) && now < expiresAtMs) {
       return;
     }
-    await generationInterruptService.expireInterrupt(pendingInterrupt.id);
 
     await db
       .update(generation)
       .set({
-        status: "cancelled",
-        completedAt: new Date(),
+        status: "paused",
+        isPaused: true,
       })
       .where(eq(generation.id, generationId));
 
     await db
       .update(conversation)
-      .set({ generationStatus: "idle" })
+      .set({ generationStatus: "paused" })
       .where(eq(conversation.id, genRecord.conversationId));
-
-    await this.enqueueConversationQueuedMessageProcess(genRecord.conversationId);
 
     const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
       where: eq(coworkerRun.generationId, generationId),
@@ -2775,19 +2876,15 @@ class GenerationManager {
     if (linkedCoworkerRun?.id) {
       await db
         .update(coworkerRun)
-        .set({ status: "cancelled", finishedAt: new Date() })
+        .set({ status: "paused" })
         .where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
 
     const ctx = this.activeGenerations.get(generationId);
     if (ctx && ctx.status === "awaiting_auth") {
-      ctx.status = "cancelled";
-      ctx.abortController.abort();
-      this.broadcast(ctx, {
-        type: "cancelled",
-        generationId: ctx.id,
-        conversationId: ctx.conversationId,
-      });
+      ctx.status = "paused";
+      await this.releaseSandboxSlotLease(ctx);
+      this.broadcast(ctx, { type: "status_change", status: "paused" });
       this.evictActiveGenerationContext(generationId);
     }
   }
@@ -2888,7 +2985,7 @@ class GenerationManager {
     const candidates = await db.query.generation.findMany({
       where: and(
         isNull(generation.completedAt),
-        inArray(generation.status, ["running", "awaiting_approval", "awaiting_auth", "paused"]),
+        inArray(generation.status, ["running", "awaiting_approval", "awaiting_auth"]),
         lt(
           generation.startedAt,
           new Date(
@@ -2897,7 +2994,6 @@ class GenerationManager {
                 STALE_REAPER_RUNNING_MAX_AGE_MS,
                 STALE_REAPER_AWAITING_APPROVAL_MAX_AGE_MS,
                 STALE_REAPER_AWAITING_AUTH_MAX_AGE_MS,
-                STALE_REAPER_PAUSED_MAX_AGE_MS,
               ),
           ),
         ),
@@ -2919,8 +3015,6 @@ class GenerationManager {
           return ageMs > STALE_REAPER_AWAITING_APPROVAL_MAX_AGE_MS;
         case "awaiting_auth":
           return ageMs > STALE_REAPER_AWAITING_AUTH_MAX_AGE_MS;
-        case "paused":
-          return ageMs > STALE_REAPER_PAUSED_MAX_AGE_MS;
         default:
           return false;
       }
@@ -3127,6 +3221,7 @@ class GenerationManager {
         contentParts: nextContentParts.length > 0 ? nextContentParts : null,
       })
       .where(eq(generation.id, generationId));
+    await this.touchConversationLastUserVisibleAction(genRecord.conversationId);
 
     const resolvedInterrupt = await generationInterruptService.resolveInterrupt({
       interruptId: interrupt.id,
@@ -3145,6 +3240,10 @@ class GenerationManager {
       if (resolvedInterrupt) {
         this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
       }
+    }
+
+    if (genRecord.status === "paused") {
+      return this.resumeGeneration(generationId, userId);
     }
 
     return true;
@@ -3388,9 +3487,22 @@ class GenerationManager {
         await this.handleSessionReset(ctx);
         return;
       }
+      if (await this.refreshCancellationSignal(ctx, { force: true })) {
+        await this.finishGeneration(ctx, "cancelled");
+        return;
+      }
+      const slotStatus = await this.waitForSandboxSlotLease(ctx, {
+        allowWorkerRequeue: true,
+      });
+      if (slotStatus === "requeued") {
+        return;
+      }
       return this.runOpenCodeGeneration(ctx);
     } finally {
       clearInterval(leaseRenewTimer);
+      await this.releaseSandboxSlotLease(ctx).catch((err) => {
+        console.error(`[GenerationManager] Failed to release sandbox slot for generation ${ctx.id}:`, err);
+      });
       await this.releaseGenerationLease(ctx.id, leaseToken).catch((err) => {
         console.error(`[GenerationManager] Failed to release lease for generation ${ctx.id}:`, err);
       });
@@ -4620,6 +4732,10 @@ class GenerationManager {
 
     let opencodeClient = liveClient;
     if (!opencodeClient) {
+      const slotStatus = await this.waitForSandboxSlotLease(ctx);
+      if (slotStatus === "requeued") {
+        return;
+      }
       const conv = await db.query.conversation.findFirst({
         where: eq(conversation.id, ctx.conversationId),
         columns: { title: true },
@@ -4715,6 +4831,10 @@ class GenerationManager {
         question.options[0]?.label ?? "default answer",
       ]) ?? [[]];
     if (!opencodeClient) {
+      const slotStatus = await this.waitForSandboxSlotLease(ctx);
+      if (slotStatus === "requeued") {
+        return;
+      }
       const conv = await db.query.conversation.findFirst({
         where: eq(conversation.id, ctx.conversationId),
         columns: { title: true },
@@ -5352,10 +5472,11 @@ class GenerationManager {
       .set({ generationStatus: "paused" })
       .where(eq(conversation.id, ctx.conversationId));
 
-    // Pause sandbox (if E2B supports it)
-    // Note: E2B pause/resume is a beta feature
-    // For now, we'll just keep the sandbox alive but paused in our state
+    if (ctx.coworkerRunId) {
+      await db.update(coworkerRun).set({ status: "paused" }).where(eq(coworkerRun.id, ctx.coworkerRunId));
+    }
 
+    await this.releaseSandboxSlotLease(ctx);
     this.broadcast(ctx, { type: "status_change", status: "paused" });
     this.evictActiveGenerationContext(ctx.id);
   }
@@ -5365,9 +5486,30 @@ class GenerationManager {
       return;
     }
 
-    console.log(`[GenerationManager] Auth timeout for generation ${ctx.id}, cancelling`);
+    console.log(`[GenerationManager] Auth timeout for generation ${ctx.id}, pausing sandbox`);
 
-    await this.finishGeneration(ctx, "cancelled");
+    ctx.status = "paused";
+
+    await db
+      .update(generation)
+      .set({
+        status: "paused",
+        isPaused: true,
+      })
+      .where(eq(generation.id, ctx.id));
+
+    await db
+      .update(conversation)
+      .set({ generationStatus: "paused" })
+      .where(eq(conversation.id, ctx.conversationId));
+
+    if (ctx.coworkerRunId) {
+      await db.update(coworkerRun).set({ status: "paused" }).where(eq(coworkerRun.id, ctx.coworkerRunId));
+    }
+
+    await this.releaseSandboxSlotLease(ctx);
+    this.broadcast(ctx, { type: "status_change", status: "paused" });
+    this.evictActiveGenerationContext(ctx.id);
   }
 
   /**
@@ -5406,6 +5548,7 @@ class GenerationManager {
       where: eq(coworkerRun.generationId, generationId),
       columns: { id: true },
     });
+    await this.touchConversationLastUserVisibleAction(conversationId);
 
     if (!success) {
       await generationInterruptService.resolveInterrupt({
@@ -5449,12 +5592,44 @@ class GenerationManager {
       resolvedByUserId: userId,
     });
 
+    if (genRecord.status === "paused") {
+      if (linkedCoworkerRun?.id) {
+        await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedCoworkerRun.id));
+      }
+      const activeCtx = this.activeGenerations.get(generationId);
+      if (activeCtx && resolvedInterrupt) {
+        if (activeCtx.currentInterruptId === resolvedInterrupt.id) {
+          activeCtx.currentInterruptId = undefined;
+        }
+        this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
+      }
+      return this.resumeGeneration(generationId, userId);
+    }
+
+    await db
+      .update(generation)
+      .set({
+        status: "running",
+        pendingAuth: null,
+        isPaused: false,
+      })
+      .where(eq(generation.id, generationId));
+
+    await db
+      .update(conversation)
+      .set({
+        generationStatus: "generating",
+        sandboxLastUserVisibleActionAt: new Date(),
+      })
+      .where(eq(conversation.id, conversationId));
+
     if (linkedCoworkerRun?.id) {
       await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
 
     const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx && resolvedInterrupt) {
+      activeCtx.status = "running";
       if (activeCtx.currentInterruptId === resolvedInterrupt.id) {
         activeCtx.currentInterruptId = undefined;
       }
@@ -5732,47 +5907,17 @@ class GenerationManager {
       return { success: false };
     }
 
-    const conversationId = genRecord.conversationId;
-    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
-      where: eq(coworkerRun.generationId, generationId),
-      columns: { id: true },
-    });
-    const expiresAt = computeExpiryIso(AUTH_TIMEOUT_MS);
-    const interrupt = await generationInterruptService.createInterrupt({
-      generationId,
-      conversationId,
-      kind: "auth",
-      display: {
-        title: "Connection Required",
-        authSpec: {
-          integrations: [request.integration],
-          reason: request.reason,
-        },
-      },
-      provider: "plugin",
-      providerToolUseId: `auth-${Date.now()}-${request.integration}`,
-      expiresAt: new Date(expiresAt),
-    });
-
-    if (linkedCoworkerRun?.id) {
-      await db
-        .update(coworkerRun)
-        .set({ status: "awaiting_auth" })
-        .where(eq(coworkerRun.id, linkedCoworkerRun.id));
+    const authRequest = await this.requestAuthInterrupt(generationId, request);
+    if (authRequest.status === "accepted") {
+      return genRecord.conversation.userId
+        ? { success: true, userId: genRecord.conversation.userId }
+        : { success: false };
     }
-    await this.enqueueGenerationTimeout(generationId, "auth", expiresAt);
-    const activeCtx = this.activeGenerations.get(generationId);
-    if (activeCtx) {
-      activeCtx.status = "awaiting_auth";
-      activeCtx.currentInterruptId = interrupt.id;
-      this.broadcast(activeCtx, this.projectInterruptPendingEvent(interrupt));
-    } else {
-      await this.publishDetachedGenerationStreamEvent({
-        generationId,
-        conversationId,
-        event: this.projectInterruptPendingEvent(interrupt),
-      });
+    const interrupt = await generationInterruptService.getInterrupt(authRequest.interruptId);
+    if (!interrupt) {
+      return { success: false };
     }
+    const expiresAt = authRequest.expiresAt ?? computeExpiryIso(AUTH_TIMEOUT_MS);
 
     let resolved: { success: boolean; userId?: string } | null = null;
     while (resolved === null) {
@@ -5835,6 +5980,8 @@ class GenerationManager {
       if (ctx.authTimeoutId) {
         clearTimeout(ctx.authTimeoutId);
       }
+      await this.releaseSandboxSlotLease(ctx);
+      await getSandboxSlotManager().clearPendingRequest(ctx.id);
 
       // NOTE: We set ctx.status AFTER publishing terminal events to Redis to avoid a race
       // where readers observe status changes before terminal events are available.

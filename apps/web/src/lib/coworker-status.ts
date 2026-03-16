@@ -4,6 +4,8 @@ export function getCoworkerRunStatusLabel(status: string): string {
       return "Waiting for user approval";
     case "awaiting_auth":
       return "Waiting for authentication";
+    case "paused":
+      return "Paused";
     default:
       return status.replaceAll("_", " ");
   }

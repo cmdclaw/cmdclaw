@@ -25,7 +25,7 @@ import {
 
 // Use custom template with OpenCode pre-installed
 const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
-const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const SANDBOX_TIMEOUT_MS = 60 * 1000;
 
 function resolveSandboxAppUrl(): string {
   const configuredUrl = env.E2B_CALLBACK_BASE_URL ?? env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
@@ -51,15 +51,33 @@ interface SandboxState {
 
 async function connectSandboxById(sandboxId: string): Promise<Sandbox | null> {
   const sandboxApi = Sandbox as unknown as {
-    connect?: (id: string) => Promise<Sandbox>;
+    connect?: (
+      id: string,
+      options?: {
+        timeoutMs?: number;
+      },
+    ) => Promise<Sandbox>;
   };
   if (!sandboxApi.connect) {
     return null;
   }
   try {
-    return await sandboxApi.connect(sandboxId);
+    const sandbox = await sandboxApi.connect(sandboxId, {
+      timeoutMs: SANDBOX_TIMEOUT_MS,
+    });
+    await applySandboxTimeout(sandbox);
+    return sandbox;
   } catch {
     return null;
+  }
+}
+
+async function applySandboxTimeout(sandbox: Sandbox): Promise<void> {
+  const timeoutApi = sandbox as Sandbox & {
+    setTimeout?: (timeoutMs: number) => Promise<unknown>;
+  };
+  if (typeof timeoutApi.setTimeout === "function") {
+    await timeoutApi.setTimeout(SANDBOX_TIMEOUT_MS);
   }
 }
 
@@ -265,7 +283,12 @@ export async function getOrCreateSandbox(
         ...config.integrationEnvs,
       },
       timeoutMs: SANDBOX_TIMEOUT_MS,
+      lifecycle: {
+        onTimeout: "pause",
+        autoResume: true,
+      },
     });
+    await applySandboxTimeout(sandbox);
   } catch (error) {
     logServerEvent(
       "error",
@@ -837,32 +860,13 @@ export async function injectProviderAuth(client: OpencodeClient, userId: string)
   }
 }
 
-/**
- * Kill a sandbox for a conversation
- */
-export async function killSandbox(conversationId: string): Promise<void> {
-  const latestWithSandbox = await db.query.generation.findFirst({
-    where: and(eq(generation.conversationId, conversationId), isNotNull(generation.sandboxId)),
-    orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
-    columns: { sandboxId: true },
-  });
-  if (!latestWithSandbox?.sandboxId) {
-    return;
-  }
-  const sandbox = await connectSandboxById(latestWithSandbox.sandboxId);
-  if (!sandbox) {
-    return;
-  }
-  const state: SandboxState = {
-    sandbox,
-    client: await createSandboxRuntimeClient({
-      serverUrl: `https://${sandbox.getHost(getSandboxServerPort())}`,
-    }),
-    serverUrl: `https://${sandbox.getHost(getSandboxServerPort())}`,
-    reused: true,
-  };
+async function killConnectedSandbox(
+  conversationId: string,
+  sandbox: Sandbox,
+  reason: "manual_kill" | "paused_cleanup",
+): Promise<void> {
   try {
-    await state.sandbox.kill();
+    await sandbox.kill();
     await db
       .update(conversation)
       .set({ opencodeSandboxId: null, opencodeSessionId: null })
@@ -871,14 +875,56 @@ export async function killSandbox(conversationId: string): Promise<void> {
       "VM_TERMINATED",
       {
         conversationId,
-        sandboxId: state.sandbox.sandboxId,
-        reason: "manual_kill",
+        sandboxId: sandbox.sandboxId,
+        reason,
       },
-      { source: "e2b", conversationId, sandboxId: state.sandbox.sandboxId },
+      { source: "e2b", conversationId, sandboxId: sandbox.sandboxId },
     );
   } catch (error) {
     console.error("[E2B] Failed to kill sandbox:", error);
   }
+}
+
+/**
+ * Kill a sandbox for a conversation
+ */
+export async function killSandbox(
+  conversationId: string,
+  reason: "manual_kill" | "paused_cleanup" = "manual_kill",
+): Promise<void> {
+  const conv = await db.query.conversation.findFirst({
+    where: eq(conversation.id, conversationId),
+    columns: { opencodeSandboxId: true },
+  });
+
+  const sandboxId =
+    conv?.opencodeSandboxId ??
+    (
+      await db.query.generation.findFirst({
+        where: and(eq(generation.conversationId, conversationId), isNotNull(generation.sandboxId)),
+        orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
+        columns: { sandboxId: true },
+      })
+    )?.sandboxId;
+
+  if (!sandboxId) {
+    await db
+      .update(conversation)
+      .set({ opencodeSandboxId: null, opencodeSessionId: null })
+      .where(eq(conversation.id, conversationId));
+    return;
+  }
+
+  const sandbox = await connectSandboxById(sandboxId);
+  if (!sandbox) {
+    await db
+      .update(conversation)
+      .set({ opencodeSandboxId: null, opencodeSessionId: null })
+      .where(eq(conversation.id, conversationId));
+    return;
+  }
+
+  await killConnectedSandbox(conversationId, sandbox, reason);
 }
 
 /**

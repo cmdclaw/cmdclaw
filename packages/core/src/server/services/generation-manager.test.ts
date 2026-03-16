@@ -86,6 +86,23 @@ const { isStatelessServerlessRuntimeMock } = vi.hoisted(() => ({
 }));
 
 const {
+  sandboxSlotAcquireMock,
+  sandboxSlotRenewMock,
+  sandboxSlotReleaseMock,
+  sandboxSlotClearPendingMock,
+} = vi.hoisted(() => ({
+  sandboxSlotAcquireMock: vi.fn(async () => ({
+    granted: true as const,
+    token: "slot-token",
+    activeCount: 1,
+    requestAtMs: Date.now(),
+  })),
+  sandboxSlotRenewMock: vi.fn(async () => true),
+  sandboxSlotReleaseMock: vi.fn(async () => undefined),
+  sandboxSlotClearPendingMock: vi.fn(async () => undefined),
+}));
+
+const {
   interruptStore,
   createInterruptMock,
   getInterruptMock,
@@ -93,6 +110,7 @@ const {
   listPendingInterruptsForGenerationMock,
   findPendingInterruptByToolUseIdMock,
   findPendingAuthInterruptByIntegrationMock,
+  refreshInterruptExpiryMock,
   resolveInterruptMock,
   expireInterruptMock,
   cancelInterruptsForGenerationMock,
@@ -185,6 +203,16 @@ const {
     return resolved;
   });
 
+  const refreshInterruptExpiryMock = vi.fn(async (interruptId: string, expiresAt: Date) => {
+    const existing = interruptStore.get(interruptId);
+    if (!existing) {
+      return null;
+    }
+    const refreshed = { ...existing, expiresAt };
+    interruptStore.set(refreshed.id, refreshed);
+    return refreshed;
+  });
+
   const expireInterruptMock = vi.fn(async (interruptId: string) =>
     resolveInterruptMock({ interruptId, status: "expired" }),
   );
@@ -206,6 +234,7 @@ const {
     listPendingInterruptsForGenerationMock,
     findPendingInterruptByToolUseIdMock,
     findPendingAuthInterruptByIntegrationMock,
+    refreshInterruptExpiryMock,
     resolveInterruptMock,
     expireInterruptMock,
     cancelInterruptsForGenerationMock,
@@ -311,11 +340,22 @@ vi.mock("./generation-interrupt-service", () => ({
     listPendingInterruptsForGeneration: listPendingInterruptsForGenerationMock,
     findPendingInterruptByToolUseId: findPendingInterruptByToolUseIdMock,
     findPendingAuthInterruptByIntegration: findPendingAuthInterruptByIntegrationMock,
+    refreshInterruptExpiry: refreshInterruptExpiryMock,
     resolveInterrupt: resolveInterruptMock,
     expireInterrupt: expireInterruptMock,
     cancelInterruptsForGeneration: cancelInterruptsForGenerationMock,
     projectInterruptEvent: projectInterruptEventMock,
   },
+}));
+
+vi.mock("./sandbox-slot-manager", () => ({
+  getSandboxSlotManager: () => ({
+    acquireLease: sandboxSlotAcquireMock,
+    renewLease: sandboxSlotRenewMock,
+    releaseLease: sandboxSlotReleaseMock,
+    clearPendingRequest: sandboxSlotClearPendingMock,
+    hasActiveLease: vi.fn(async () => false),
+  }),
 }));
 
 vi.mock("../redis/generation-event-bus", () => ({
@@ -759,6 +799,20 @@ describe("generationManager transitions", () => {
     uploadToS3Mock.mockReset();
     uploadToS3Mock.mockResolvedValue(undefined);
     queueAddMock.mockReset();
+    sandboxSlotAcquireMock.mockReset();
+    sandboxSlotAcquireMock.mockResolvedValue({
+      granted: true,
+      token: "slot-token",
+      activeCount: 1,
+      requestAtMs: Date.now(),
+    });
+    sandboxSlotRenewMock.mockReset();
+    sandboxSlotRenewMock.mockResolvedValue(true);
+    sandboxSlotReleaseMock.mockReset();
+    sandboxSlotReleaseMock.mockResolvedValue(undefined);
+    sandboxSlotClearPendingMock.mockReset();
+    sandboxSlotClearPendingMock.mockResolvedValue(undefined);
+    refreshInterruptExpiryMock.mockClear();
     delete process.env.KUMA_PUSH_URL;
 
     const mgr = asTestManager();
@@ -1280,8 +1334,7 @@ describe("generationManager transitions", () => {
     );
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "cancelled",
-        finishedAt: expect.any(Date),
+        status: "paused",
       }),
     );
   });
@@ -1333,7 +1386,7 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("cancels on auth timeout", async () => {
+  it("pauses on auth timeout", async () => {
     const ctx = createCtx();
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
@@ -1368,13 +1421,13 @@ describe("generationManager transitions", () => {
     expect(finishSpy).not.toHaveBeenCalled();
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "cancelled",
-        completedAt: expect.any(Date),
+        status: "paused",
+        isPaused: true,
       }),
     );
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        generationStatus: "idle",
+        generationStatus: "paused",
       }),
     );
   });
@@ -2844,9 +2897,9 @@ describe("generationManager transitions", () => {
 
     expect(summary).toEqual({
       scanned: 3,
-      stale: 2,
+      stale: 1,
       finalizedRunningAsError: 1,
-      finalizedOtherAsCancelled: 1,
+      finalizedOtherAsCancelled: 0,
     });
 
     expect(updateSetMock).toHaveBeenCalledWith(
@@ -2855,15 +2908,8 @@ describe("generationManager transitions", () => {
         completedAt: expect.any(Date),
       }),
     );
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "cancelled",
-        completedAt: expect.any(Date),
-      }),
-    );
-
     expect(mgr.activeGenerations.has("gen-stale-running")).toBe(false);
-    expect(mgr.activeGenerations.has("gen-stale-paused")).toBe(false);
+    expect(mgr.activeGenerations.has("gen-stale-paused")).toBe(true);
     expect(mgr.activeGenerations.has("gen-fresh-running")).toBe(true);
   });
 
