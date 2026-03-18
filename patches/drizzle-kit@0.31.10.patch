@@ -1,0 +1,52 @@
+diff --git a/bin.cjs b/bin.cjs
+index 07274ea6f53fd54a129b3d338892feda6e995cff..d7f2dcdbd29ad14af1ed98333e833f079e804989 100755
+--- a/bin.cjs
++++ b/bin.cjs
+@@ -17732,12 +17732,30 @@ WHERE
+             const checkConstraints = {};
+             const tableResponse = await getColumnsInfoQuery({ schema: tableSchema, table: tableName, db });
+             const tableConstraints = await db.query(
+-              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema
+-      FROM information_schema.table_constraints tc
+-      JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+-      JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+-        AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
+-      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}';`
++              `SELECT
++        att.attname::text AS column_name,
++        format_type(att.atttypid, att.atttypmod)::text AS data_type,
++        CASE con.contype
++          WHEN 'u' THEN 'UNIQUE'
++          WHEN 'p' THEN 'PRIMARY KEY'
++        END AS constraint_type,
++        con.conname::text AS constraint_name,
++        nsp.nspname::text AS constraint_schema,
++        cols.ordinality::int AS ordinal_position
++      FROM pg_catalog.pg_constraint con
++      JOIN pg_catalog.pg_class rel
++        ON rel.oid = con.conrelid
++      JOIN pg_catalog.pg_namespace nsp
++        ON nsp.oid = con.connamespace
++      JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS cols(attnum, ordinality)
++        ON true
++      JOIN pg_catalog.pg_attribute att
++        ON att.attrelid = con.conrelid
++       AND att.attnum = cols.attnum
++      WHERE rel.relname = '${tableName}'
++        AND nsp.nspname = '${tableSchema}'
++        AND con.contype IN ('u', 'p')
++      ORDER BY con.conname, cols.ordinality;`
+             );
+             const tableChecks = await db.query(`SELECT 
+ 						tc.constraint_name,
+@@ -17837,7 +17855,9 @@ WHERE
+               ];
+               foreignKeysToReturn[foreignKeyName].columnsTo = [...new Set(foreignKeysToReturn[foreignKeyName].columnsTo)];
+             }
+-            const uniqueConstrainsRows = tableConstraints.filter((mapRow) => mapRow.constraint_type === "UNIQUE");
++            const uniqueConstrainsRows = tableConstraints.filter((mapRow) => mapRow.constraint_type === "UNIQUE").sort(
++              (a2, b2) => a2.constraint_name === b2.constraint_name ? Number(a2.ordinal_position) - Number(b2.ordinal_position) : a2.constraint_name.localeCompare(b2.constraint_name)
++            );
+             for (const unqs of uniqueConstrainsRows) {
+               const columnName = unqs.column_name;
+               const constraintName = unqs.constraint_name;
