@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import {
@@ -620,6 +621,7 @@ export function useCreateCoworker() {
       triggerType: string;
       prompt: string;
       model?: string;
+      authSource?: ProviderAuthSource | null;
       promptDo?: string;
       promptDont?: string;
       autoApprove?: boolean;
@@ -671,6 +673,7 @@ export function useUpdateCoworker() {
       triggerType?: string;
       prompt?: string;
       model?: string;
+      authSource?: ProviderAuthSource | null;
       promptDo?: string | null;
       promptDont?: string | null;
       autoApprove?: boolean;
@@ -1139,6 +1142,13 @@ export function useProviderAuthStatus() {
   });
 }
 
+export function useAdminSharedProviderAuthStatus() {
+  return useQuery({
+    queryKey: ["adminSharedProviderAuth", "status"],
+    queryFn: () => client.adminSharedProviderAuth.status(),
+  });
+}
+
 // Hook for fetching free models available on OpenCode Zen
 export function useOpencodeFreeModels() {
   return useQuery({
@@ -1162,6 +1172,19 @@ export function usePollProviderConnection() {
   });
 }
 
+export function useConnectAdminSharedProvider() {
+  return useMutation({
+    mutationFn: (provider: "openai") => client.adminSharedProviderAuth.connect({ provider }),
+  });
+}
+
+export function usePollAdminSharedProviderConnection() {
+  return useMutation({
+    mutationFn: ({ provider, flowId }: { provider: "openai"; flowId: string }) =>
+      client.adminSharedProviderAuth.poll({ provider, flowId }),
+  });
+}
+
 // Hook for disconnecting a subscription provider
 export function useDisconnectProvider() {
   const queryClient = useQueryClient();
@@ -1169,6 +1192,18 @@ export function useDisconnectProvider() {
   return useMutation({
     mutationFn: (provider: SubscriptionProvider) => client.providerAuth.disconnect({ provider }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["providerAuth"] });
+    },
+  });
+}
+
+export function useDisconnectAdminSharedProvider() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (provider: "openai") => client.adminSharedProviderAuth.disconnect({ provider }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminSharedProviderAuth"] });
       queryClient.invalidateQueries({ queryKey: ["providerAuth"] });
     },
   });
@@ -1200,6 +1235,7 @@ export function useGeneration() {
         conversationId?: string;
         content: string;
         model?: string;
+        authSource?: ProviderAuthSource | null;
         autoApprove?: boolean;
         selectedPlatformSkillSlugs?: string[];
         fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];

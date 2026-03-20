@@ -3,16 +3,15 @@ import { eq, and, asc, isNotNull } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
-import { skill, message, providerAuth, conversation, generation } from "@cmdclaw/db/schema";
+import { skill, message, conversation, generation } from "@cmdclaw/db/schema";
+import type { ProviderAuthSource } from "../../lib/provider-auth-source";
+import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import {
   COMPACTION_SUMMARY_PREFIX,
   SESSION_BOUNDARY_PREFIX,
 } from "../services/session-constants";
 import { downloadFromS3 } from "../storage/s3-client";
-import { decrypt } from "../utils/encryption";
-import { getDelegatedProviderAuths } from "../control-plane/client";
-import { isSelfHostedEdition } from "../edition";
 import { logServerEvent, type ObservabilityContext } from "../utils/observability";
 import type { SandboxBackend, ExecuteResult } from "./types";
 import {
@@ -96,6 +95,7 @@ export interface SandboxConfig {
   userId?: string;
   anthropicApiKey: string;
   integrationEnvs?: Record<string, string>;
+  openAIAuthSource?: "user" | "shared" | null;
 }
 
 type SessionInitStage =
@@ -665,7 +665,9 @@ export async function getOrCreateSession(
 
   // Inject subscription provider tokens if userId is available
   if (config.userId) {
-    await injectProviderAuth(state.client, config.userId);
+    await injectProviderAuth(state.client, config.userId, {
+      openAIAuthSource: config.openAIAuthSource,
+    });
   }
 
   // Replay conversation history if needed
@@ -806,25 +808,33 @@ async function replayConversationHistory(
  * Called after sandbox creation to give OpenCode access to the user's
  * ChatGPT/Gemini/Kimi subscriptions.
  */
-export async function injectProviderAuth(client: OpencodeClient, userId: string): Promise<void> {
+export async function injectProviderAuth(
+  client: OpencodeClient,
+  userId: string,
+  options?: { openAIAuthSource?: ProviderAuthSource | null },
+): Promise<void> {
   try {
-    const auths = isSelfHostedEdition()
-      ? (await getDelegatedProviderAuths(userId)).map((auth) => ({
-          provider: auth.provider,
-          access: auth.accessToken,
-          refresh: auth.refreshToken ?? "",
-          expires: auth.expiresAt ?? Date.now(),
-        }))
-      : (
-          await db.query.providerAuth.findMany({
-            where: eq(providerAuth.userId, userId),
-          })
-        ).map((auth) => ({
-          provider: auth.provider,
-          access: decrypt(auth.accessToken),
-          refresh: auth.refreshToken ? decrypt(auth.refreshToken) : "",
-          expires: auth.expiresAt?.getTime() ?? Date.now(),
-        }));
+    const [openaiAuth, kimiAuth] = await Promise.all([
+      getResolvedProviderAuth({
+        userId,
+        provider: "openai",
+        authSource: options?.openAIAuthSource,
+      }),
+      getResolvedProviderAuth({
+        userId,
+        provider: "kimi",
+        authSource: "user",
+      }),
+    ]);
+
+    const auths = [openaiAuth, kimiAuth]
+      .filter((auth): auth is NonNullable<typeof auth> => Boolean(auth))
+      .map((auth) => ({
+        provider: auth.provider,
+        access: auth.accessToken,
+        refresh: auth.refreshToken ?? "",
+        expires: auth.expiresAt ?? Date.now(),
+      }));
     await Promise.all(
       auths.map(async (auth) => {
         try {

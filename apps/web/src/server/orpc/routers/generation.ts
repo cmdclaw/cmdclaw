@@ -1,4 +1,5 @@
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import { PROVIDER_AUTH_SOURCES } from "@cmdclaw/core/lib/provider-auth-source";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
 import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observability";
@@ -251,6 +252,7 @@ const modelReferenceSchema = z
       return false;
     }
   }, "Model must use provider/model format");
+const providerAuthSourceSchema = z.enum(PROVIDER_AUTH_SOURCES);
 
 const startGeneration = protectedProcedure
   .input(
@@ -258,6 +260,7 @@ const startGeneration = protectedProcedure
       conversationId: z.string().optional(),
       content: z.string().min(1).max(100000),
       model: modelReferenceSchema.optional(),
+      authSource: providerAuthSourceSchema.nullish(),
       autoApprove: z.boolean().optional(),
       sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
       selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
@@ -292,6 +295,7 @@ const startGeneration = protectedProcedure
         conversationId: input.conversationId,
         content: input.content,
         model: input.model,
+        authSource: input.authSource,
         userId: context.user.id,
         autoApprove: input.autoApprove,
         sandboxProvider: input.sandboxProvider,

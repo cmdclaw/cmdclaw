@@ -12,6 +12,10 @@ import {
 } from "@cmdclaw/core/lib/email-forwarding";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import {
+  normalizeModelAuthSource,
+  type ProviderAuthSource,
+} from "@cmdclaw/core/lib/provider-auth-source";
+import {
   applyCoworkerBuilderPatch,
   coworkerBuilderPatchSchema,
 } from "@cmdclaw/core/server/services/coworker-builder-service";
@@ -60,6 +64,7 @@ const integrationTypeSchema = z.enum([
 ]);
 const DEFAULT_COWORKER_INTEGRATIONS = [...COWORKER_AVAILABLE_INTEGRATION_TYPES];
 const toolAccessModeSchema = z.enum(COWORKER_TOOL_ACCESS_MODES);
+const providerAuthSourceSchema = z.enum(["user", "shared"]);
 const modelReferenceSchema = z
   .string()
   .min(3)
@@ -78,6 +83,16 @@ const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
 function getReceivingDomain(): string | null {
   const value = process.env.RESEND_RECEIVING_DOMAIN?.trim().toLowerCase();
   return value && value.length > 0 ? value : null;
+}
+
+function resolveCoworkerAuthSource(
+  model: string,
+  authSource?: ProviderAuthSource | null,
+): ProviderAuthSource | null {
+  return normalizeModelAuthSource({
+    model,
+    authSource,
+  });
 }
 
 function normalizeDescriptionInput(value: string | null | undefined): string | null {
@@ -266,6 +281,7 @@ const list = protectedProcedure.handler(async ({ context }) => {
         status: wf.status,
         autoApprove: wf.autoApprove,
         model: wf.model,
+        authSource: wf.authSource,
         triggerType: wf.triggerType,
         integrations: wf.allowedIntegrations,
         toolAccessMode,
@@ -325,6 +341,7 @@ const get = protectedProcedure
       status: wf.status,
       autoApprove: wf.autoApprove,
       model: wf.model,
+      authSource: wf.authSource,
       triggerType: wf.triggerType,
       prompt: wf.prompt,
       promptDo: wf.promptDo,
@@ -355,6 +372,7 @@ const create = protectedProcedure
       triggerType: triggerTypeSchema,
       prompt: z.string().max(20000),
       model: modelReferenceSchema.default("anthropic/claude-sonnet-4-6"),
+      authSource: providerAuthSourceSchema.nullish(),
       promptDo: z.string().max(2000).optional(),
       promptDont: z.string().max(2000).optional(),
       autoApprove: z.boolean().optional(),
@@ -367,6 +385,7 @@ const create = protectedProcedure
   )
   .handler(async ({ input, context }) => {
     const coworkerId = crypto.randomUUID();
+    const resolvedAuthSource = resolveCoworkerAuthSource(input.model, input.authSource);
     const coworkerQueryDatabase = context.db as unknown as {
       query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
     };
@@ -391,6 +410,7 @@ const create = protectedProcedure
         triggerType: input.triggerType,
         prompt: input.prompt,
         model: input.model,
+        authSource: resolvedAuthSource,
         promptDo: input.promptDo,
         promptDont: input.promptDont,
         autoApprove: input.autoApprove ?? true,
@@ -433,6 +453,7 @@ const update = protectedProcedure
       triggerType: triggerTypeSchema.optional(),
       prompt: z.string().max(20000).optional(),
       model: modelReferenceSchema.optional(),
+      authSource: providerAuthSourceSchema.nullish(),
       promptDo: z.string().max(2000).nullish(),
       promptDont: z.string().max(2000).nullish(),
       autoApprove: z.boolean().optional(),
@@ -491,6 +512,12 @@ const update = protectedProcedure
     }
     if (input.model !== undefined) {
       updates.model = input.model;
+      updates.authSource = resolveCoworkerAuthSource(
+        input.model,
+        input.authSource ?? existing.authSource,
+      );
+    } else if (input.authSource !== undefined) {
+      updates.authSource = resolveCoworkerAuthSource(existing.model, input.authSource);
     }
     if (input.promptDo !== undefined) {
       updates.promptDo = input.promptDo ?? null;
@@ -1041,7 +1068,7 @@ const getOrCreateBuilderConversation = protectedProcedure
   .handler(async ({ input, context }) => {
     const wf = await context.db.query.coworker.findFirst({
       where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-      columns: { id: true, name: true, builderConversationId: true },
+      columns: { id: true, name: true, builderConversationId: true, model: true, authSource: true },
     });
 
     if (!wf) {
@@ -1078,6 +1105,8 @@ const getOrCreateBuilderConversation = protectedProcedure
         userId: context.user.id,
         type: "coworker",
         title: `${wf.name || "Coworker"} – Chat`,
+        model: wf.model,
+        authSource: wf.authSource,
         autoApprove: false,
       })
       .returning({ id: conversation.id });

@@ -96,6 +96,7 @@ export interface OpenCodeSessionConfig {
   userId?: string;
   anthropicApiKey: string;
   integrationEnvs?: Record<string, string>;
+  openAIAuthSource?: "user" | "shared" | null;
 }
 
 type OpenCodeSessionResult = {
@@ -679,7 +680,9 @@ async function getOrCreateCloudSession(
   });
 
   if (config.userId) {
-    await injectProviderAuth(state.client, config.userId);
+    await injectProviderAuth(state.client, config.userId, {
+      openAIAuthSource: config.openAIAuthSource,
+    });
   }
 
   if (options?.replayHistory) {

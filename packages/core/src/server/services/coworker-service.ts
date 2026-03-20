@@ -262,6 +262,7 @@ export async function triggerCoworkerRun(params: {
       coworkerRunId: run.id,
       content: userContent,
       model: wf.model,
+      authSource: wf.authSource,
       userId: wf.ownerId,
       autoApprove: wf.autoApprove,
       allowedIntegrations,

@@ -42,6 +42,7 @@ export async function runConversationSessionPipeline(input: {
     userId: input.context.userId,
     anthropicApiKey: input.context.anthropicApiKey,
     integrationEnvs: input.context.integrationEnvs,
+    openAIAuthSource: input.context.openAIAuthSource,
   };
 
   const result = await getOrCreateSessionForCloudProvider(

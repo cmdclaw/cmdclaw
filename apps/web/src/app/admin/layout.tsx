@@ -9,12 +9,16 @@ import { clientEditionCapabilities } from "@/lib/edition";
 
 const adminTabs = [
   { key: "settings", label: "Settings", href: "/admin" },
+  { key: "subscriptions", label: "AI Subscriptions", href: "/admin/subscriptions" },
   { key: "credits", label: "Credits", href: "/admin/credits" },
   { key: "impersonation", label: "Impersonation", href: "/admin/impersonation" },
   { key: "whatsapp", label: "WhatsApp", href: "/admin/whatsapp" },
 ];
 
 function getActiveKey(pathname: string) {
+  if (pathname.startsWith("/admin/subscriptions")) {
+    return "subscriptions";
+  }
   if (pathname.startsWith("/admin/credits")) {
     return "credits";
   }

@@ -84,14 +84,14 @@ vi.mock("@/components/chat/chat-area", () => ({
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: ({
     selectedModel,
-    onModelChange,
+    onSelectionChange,
   }: {
     selectedModel: string;
-    onModelChange: (model: string) => void;
+    onSelectionChange: (input: { model: string; authSource?: "user" | "shared" | null }) => void;
   }) => {
     const handleClick = React.useCallback(() => {
-      onModelChange("openai/gpt-5.2-codex");
-    }, [onModelChange]);
+      onSelectionChange({ model: "openai/gpt-5.2-codex", authSource: "shared" });
+    }, [onSelectionChange]);
 
     return (
       <button type="button" onClick={handleClick}>
@@ -240,6 +240,12 @@ vi.mock("@/orpc/hooks", () => ({
     mutate: mockGetOrCreateBuilderConversationMutate,
   }),
   usePlatformSkillList: () => ({ data: [], isLoading: false }),
+  useProviderAuthStatus: () => ({
+    data: {
+      connected: {},
+      shared: { openai: { connectedAt: new Date("2026-03-12T10:00:00.000Z") } },
+    },
+  }),
   useSkillList: () => ({ data: [], isLoading: false }),
 }));
 

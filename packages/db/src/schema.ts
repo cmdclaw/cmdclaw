@@ -119,6 +119,7 @@ export const workspaceMembershipRoleEnum = pgEnum("workspace_membership_role", [
 ]);
 
 export const billingOwnerTypeEnum = pgEnum("billing_owner_type", ["user", "workspace"]);
+export const providerAuthSourceEnum = pgEnum("provider_auth_source", ["user", "shared"]);
 
 export const workspace = pgTable(
   "workspace",
@@ -208,6 +209,7 @@ export const userRelations = relations(user, ({ many }) => ({
   memorySettings: many(memorySettings),
   coworkers: many(coworker),
   providerAuths: many(providerAuth),
+  sharedProviderAuthsManaged: many(sharedProviderAuth),
   cloudAccountLinks: many(cloudAccountLink),
   devices: many(device),
   customIntegrations: many(customIntegration),
@@ -369,6 +371,7 @@ export const conversation = pgTable(
     // Last resolved runtime harness used for this conversation
     lastRuntimeHarness: text("last_runtime_harness"),
     model: text("model").default("claude-sonnet-4-6"),
+    authSource: providerAuthSourceEnum("auth_source"),
     // Generation tracking
     generationStatus: generationStatusEnum("generation_status").default("idle").notNull(),
     currentGenerationId: text("current_generation_id"),
@@ -824,6 +827,7 @@ export const coworker = pgTable(
     triggerType: text("trigger_type").notNull(),
     prompt: text("prompt").notNull(),
     model: text("model").default("anthropic/claude-sonnet-4-6").notNull(),
+    authSource: providerAuthSourceEnum("auth_source"),
     description: text("description"),
     username: text("username"),
     promptDo: text("prompt_do"),
@@ -1542,6 +1546,36 @@ export const providerAuth = pgTable(
 export const providerAuthRelations = relations(providerAuth, ({ one }) => ({
   user: one(user, {
     fields: [providerAuth.userId],
+    references: [user.id],
+  }),
+}));
+
+export const sharedProviderAuth = pgTable(
+  "shared_provider_auth",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    provider: text("provider").notNull(),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    managedByUserId: text("managed_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("shared_provider_auth_provider_idx").on(table.provider),
+    index("shared_provider_auth_managed_by_user_id_idx").on(table.managedByUserId),
+  ],
+);
+
+export const sharedProviderAuthRelations = relations(sharedProviderAuth, ({ one }) => ({
+  managedByUser: one(user, {
+    fields: [sharedProviderAuth.managedByUserId],
     references: [user.id],
   }),
 }));

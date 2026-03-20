@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import {
   CUSTOM_SKILL_PREFIX,
   type CoworkerToolAccessMode,
@@ -59,6 +60,7 @@ import { Switch } from "@/components/ui/switch";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import {
   INTEGRATION_DISPLAY_NAMES,
@@ -81,6 +83,7 @@ import {
   useTriggerCoworker,
   useGetOrCreateBuilderConversation,
   usePlatformSkillList,
+  useProviderAuthStatus,
   useSkillList,
   type CoworkerSchedule,
 } from "@/orpc/hooks";
@@ -184,6 +187,7 @@ export default function CoworkerEditorPage() {
   const { data: coworker, isLoading } = useCoworker(coworkerId);
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
   const { data: personalSkills, isLoading: isPersonalSkillsLoading } = useSkillList();
+  const { data: providerAuthStatus } = useProviderAuthStatus();
   const { data: coworkerForwardingAlias } = useCoworkerForwardingAlias(coworkerId);
   const { data: runs, refetch: refetchRuns } = useCoworkerRuns(coworkerId);
   const updateCoworker = useUpdateCoworker();
@@ -200,6 +204,7 @@ export default function CoworkerEditorPage() {
   const [triggerType, setTriggerType] = useState("manual");
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState(DEFAULT_COWORKER_MODEL);
+  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>(null);
   const [toolAccessMode, setToolAccessMode] = useState<CoworkerToolAccessMode>("all");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
   const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);
@@ -257,6 +262,13 @@ export default function CoworkerEditorPage() {
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri
   const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1);
+  const openAIAvailability = useMemo(
+    () => ({
+      user: Boolean(providerAuthStatus?.connected?.openai),
+      shared: Boolean(providerAuthStatus?.shared?.openai),
+    }),
+    [providerAuthStatus],
+  );
   const localTimezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     [],
@@ -368,6 +380,7 @@ export default function CoworkerEditorPage() {
       triggerType,
       prompt,
       model,
+      authSource: modelAuthSource,
       autoApprove,
       toolAccessMode,
       allowedIntegrations,
@@ -381,6 +394,7 @@ export default function CoworkerEditorPage() {
     buildSchedule,
     description,
     model,
+    modelAuthSource,
     name,
     prompt,
     status,
@@ -453,6 +467,7 @@ export default function CoworkerEditorPage() {
       triggerType: coworker.triggerType,
       prompt: coworker.prompt,
       model: coworker.model ?? DEFAULT_COWORKER_MODEL,
+      authSource: coworker.authSource ?? null,
       autoApprove: coworker.autoApprove ?? true,
       toolAccessMode: coworker.toolAccessMode,
       allowedIntegrations: coworkerAllowedIntegrations,
@@ -484,7 +499,12 @@ export default function CoworkerEditorPage() {
     setUsername(coworker.username ?? "");
     setTriggerType(coworker.triggerType);
     setPrompt(coworker.prompt);
-    setModel(coworker.model ?? DEFAULT_COWORKER_MODEL);
+    const normalizedModelSelection = normalizeChatModelSelection({
+      model: coworker.model ?? DEFAULT_COWORKER_MODEL,
+      authSource: coworker.authSource ?? null,
+    });
+    setModel(normalizedModelSelection.model || DEFAULT_COWORKER_MODEL);
+    setModelAuthSource(normalizedModelSelection.authSource);
     setToolAccessMode(coworker.toolAccessMode);
     setAllowedIntegrations(coworkerAllowedIntegrations);
     setAllowedSkillSlugs(coworker.allowedSkillSlugs ?? []);
@@ -553,6 +573,14 @@ export default function CoworkerEditorPage() {
   const handleUsernameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(event.target.value);
   }, []);
+
+  const handleModelSelectionChange = useCallback(
+    (input: { model: string; authSource?: ProviderAuthSource | null }) => {
+      setModel(input.model);
+      setModelAuthSource(input.authSource ?? null);
+    },
+    [],
+  );
 
   const handleScheduleTypeChange = useCallback((value: string) => {
     setScheduleType(value as "interval" | "daily" | "weekly" | "monthly");
@@ -806,6 +834,8 @@ export default function CoworkerEditorPage() {
         autoApprove={autoApprove}
         prompt={prompt}
         model={model}
+        modelAuthSource={modelAuthSource}
+        openAIAvailability={openAIAvailability}
         availableSkills={availableSkills}
         selectedSkillKeys={selectedSkillKeys}
         isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
@@ -841,7 +871,7 @@ export default function CoworkerEditorPage() {
         onStatusChange={handleStatusChange}
         onAutoApproveChange={handleAutoApproveChange}
         onPromptChange={handlePromptChange}
-        onModelChange={setModel}
+        onModelChange={handleModelSelectionChange}
         onClearSkills={handleClearSkills}
         onToggleSkillChecked={handleToggleSkillChecked}
         onRestrictToolsChange={handleRestrictToolsChange}
@@ -1012,6 +1042,8 @@ export default function CoworkerEditorPage() {
               autoApprove={autoApprove}
               prompt={prompt}
               model={model}
+              modelAuthSource={modelAuthSource}
+              openAIAvailability={openAIAvailability}
               availableSkills={availableSkills}
               selectedSkillKeys={selectedSkillKeys}
               isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
@@ -1047,7 +1079,7 @@ export default function CoworkerEditorPage() {
               onStatusChange={handleStatusChange}
               onAutoApproveChange={handleAutoApproveChange}
               onPromptChange={handlePromptChange}
-              onModelChange={setModel}
+              onModelChange={handleModelSelectionChange}
               onClearSkills={handleClearSkills}
               onToggleSkillChecked={handleToggleSkillChecked}
               onRestrictToolsChange={handleRestrictToolsChange}
@@ -1259,6 +1291,8 @@ type CoworkerSettingsPanelProps = {
   autoApprove: boolean;
   prompt: string;
   model: string;
+  modelAuthSource: ProviderAuthSource | null;
+  openAIAvailability: { user: boolean; shared: boolean };
   availableSkills: { key: string; title: string; source: "Platform" | "Custom" }[];
   selectedSkillKeys: string[];
   isSkillsLoading: boolean;
@@ -1308,7 +1342,7 @@ type CoworkerSettingsPanelProps = {
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
   onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  onModelChange: (model: string) => void;
+  onModelChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
   onClearSkills: () => void;
   onToggleSkillChecked: (skillKey: string) => void;
   onRestrictToolsChange: (checked: boolean) => void;
@@ -1342,6 +1376,8 @@ function CoworkerSettingsPanel({
   autoApprove,
   prompt,
   model,
+  modelAuthSource,
+  openAIAvailability,
   availableSkills,
   selectedSkillKeys,
   isSkillsLoading,
@@ -1949,7 +1985,12 @@ function CoworkerSettingsPanel({
               <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                 Model
               </span>
-              <ModelSelector selectedModel={model} onModelChange={onModelChange} />
+              <ModelSelector
+                selectedModel={model}
+                selectedAuthSource={modelAuthSource}
+                availability={openAIAvailability}
+                onSelectionChange={onModelChange}
+              />
             </div>
 
             {/* Description card */}

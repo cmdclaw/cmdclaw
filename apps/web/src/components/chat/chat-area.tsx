@@ -38,6 +38,10 @@ import { useVoiceRecording, blobToBase64 } from "@/hooks/use-voice-recording";
 import { isModelAccessibleForNewChat } from "@/lib/chat-model-access";
 import { normalizeChatModelReference } from "@/lib/chat-model-reference";
 import {
+  normalizeChatModelSelection,
+  resolveDefaultChatModelSelection,
+} from "@/lib/chat-model-selection";
+import {
   createGenerationRuntime,
   type GenerationRuntime,
   type RuntimeActivityStats,
@@ -558,7 +562,8 @@ export function ChatArea({
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [localAutoApprove, setLocalAutoApprove] = useState(false);
   const selectedModel = useChatModelStore((state) => state.selectedModel);
-  const setSelectedModel = useChatModelStore((state) => state.setSelectedModel);
+  const selectedAuthSource = useChatModelStore((state) => state.selectedAuthSource);
+  const setSelection = useChatModelStore((state) => state.setSelection);
   const normalizedSelectedModel = useMemo(
     () => normalizeChatModelReference(selectedModel),
     [selectedModel],
@@ -582,6 +587,7 @@ export function ChatArea({
   const toggleSelectedSkillSlug = useChatSkillStore((state) => state.toggleSelectedSkillSlug);
   const clearSelectedSkillSlugs = useChatSkillStore((state) => state.clearSelectedSkillSlugs);
   const connectedProviders = providerAuthStatus?.connected;
+  const sharedConnectedProviders = providerAuthStatus?.shared;
 
   // Segmented activity feed state
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
@@ -614,7 +620,16 @@ export function ChatArea({
   }, [queuedMessages]);
   const queuedMessageRef = useRef<QueuedMessage | null>(null);
   const autoApproveEnabled = useMemo(() => localAutoApprove, [localAutoApprove]);
-  const isOpenAIConnected = Boolean(connectedProviders?.openai);
+  const isUserOpenAIConnected = Boolean(connectedProviders?.openai);
+  const isSharedOpenAIConnected = Boolean(sharedConnectedProviders?.openai);
+  const isOpenAIConnected = isUserOpenAIConnected || isSharedOpenAIConnected;
+  const openAIAvailability = useMemo(
+    () => ({
+      user: isUserOpenAIConnected,
+      shared: isSharedOpenAIConnected,
+    }),
+    [isSharedOpenAIConnected, isUserOpenAIConnected],
+  );
   const suppressedQuestionToolUseIds = useMemo(
     () =>
       collectQuestionApprovalToolUseIds(
@@ -661,17 +676,40 @@ export function ChatArea({
       }),
     [isOpenAIConnected, opencodeFreeModelsData],
   );
+  const resolvedDefaultSelection = useMemo(
+    () =>
+      resolveDefaultChatModelSelection({
+        model: resolvedDefaultModel,
+        hasUserOpenAI: isUserOpenAIConnected,
+        hasSharedOpenAI: isSharedOpenAIConnected,
+      }),
+    [isSharedOpenAIConnected, isUserOpenAIConnected, resolvedDefaultModel],
+  );
   const conversationModel = (
     existingConversation as
       | {
           model?: string;
+          authSource?: "user" | "shared" | null;
         }
       | null
       | undefined
   )?.model;
-  const normalizedConversationModel = useMemo(
-    () => normalizeChatModelReference(conversationModel),
-    [conversationModel],
+  const conversationAuthSource = (
+    existingConversation as
+      | {
+          model?: string;
+          authSource?: "user" | "shared" | null;
+        }
+      | null
+      | undefined
+  )?.authSource;
+  const normalizedConversationSelection = useMemo(
+    () =>
+      normalizeChatModelSelection({
+        model: conversationModel,
+        authSource: conversationAuthSource,
+      }),
+    [conversationAuthSource, conversationModel],
   );
   const conversationType = (
     existingConversation as
@@ -684,8 +722,9 @@ export function ChatArea({
   const isCoworkerConversation = conversationType === "coworker";
   const showModelSwitchWarning = Boolean(
     conversationId &&
-    normalizedConversationModel &&
-    normalizedSelectedModel !== normalizedConversationModel &&
+    normalizedConversationSelection.model &&
+    (normalizedSelectedModel !== normalizedConversationSelection.model ||
+      selectedAuthSource !== normalizedConversationSelection.authSource) &&
     !isCoworkerConversation,
   );
 
@@ -720,8 +759,11 @@ export function ChatArea({
     if (!normalizedSelectedModel || normalizedSelectedModel === selectedModel) {
       return;
     }
-    setSelectedModel(normalizedSelectedModel);
-  }, [normalizedSelectedModel, selectedModel, setSelectedModel]);
+    setSelection({
+      model: normalizedSelectedModel,
+      authSource: selectedAuthSource,
+    });
+  }, [normalizedSelectedModel, selectedAuthSource, selectedModel, setSelection]);
 
   useEffect(() => {
     if (conversationId) {
@@ -734,7 +776,9 @@ export function ChatArea({
     });
     const isAccessible = isModelAccessibleForNewChat({
       model: normalizedSelectedModel,
-      isOpenAIConnected,
+      authSource: selectedAuthSource,
+      hasUserOpenAI: isUserOpenAIConnected,
+      hasSharedOpenAI: isSharedOpenAIConnected,
       availableOpencodeFreeModelIDs: (opencodeFreeModelsData?.models ?? []).map(
         (model) => model.id,
       ),
@@ -742,17 +786,21 @@ export function ChatArea({
 
     if (
       (shouldMigrateLegacyModel || !isAccessible) &&
-      resolvedDefaultModel !== normalizedSelectedModel
+      (resolvedDefaultSelection.model !== normalizedSelectedModel ||
+        resolvedDefaultSelection.authSource !== selectedAuthSource)
     ) {
-      setSelectedModel(resolvedDefaultModel);
+      setSelection(resolvedDefaultSelection);
     }
   }, [
     conversationId,
     isOpenAIConnected,
+    isSharedOpenAIConnected,
+    isUserOpenAIConnected,
     normalizedSelectedModel,
     opencodeFreeModelsData,
-    resolvedDefaultModel,
-    setSelectedModel,
+    resolvedDefaultSelection,
+    selectedAuthSource,
+    setSelection,
   ]);
 
   useEffect(() => {
@@ -1118,6 +1166,7 @@ export function ChatArea({
     const conv = existingConversation as
       | {
           model?: string;
+          authSource?: "user" | "shared" | null;
           autoApprove?: boolean;
           type?: "chat" | "coworker";
           messages?: PersistedConversationMessage[];
@@ -1127,7 +1176,10 @@ export function ChatArea({
 
     // Sync model from existing conversation
     if (conv?.model) {
-      setSelectedModel(normalizeChatModelReference(conv.model));
+      setSelection({
+        model: conv.model,
+        authSource: conv.authSource,
+      });
     }
     if (typeof conv?.autoApprove === "boolean") {
       setLocalAutoApprove(conv.type === "coworker" ? false : conv.autoApprove);
@@ -1143,7 +1195,7 @@ export function ChatArea({
         }),
       );
     }
-  }, [existingConversation, conversationId, isStreaming, setSelectedModel]);
+  }, [existingConversation, conversationId, isStreaming, setSelection]);
 
   useEffect(() => () => resetInitTracking(), [resetInitTracking]);
 
@@ -1708,6 +1760,7 @@ export function ChatArea({
           conversationId: effectiveConversationId,
           content,
           model: normalizedSelectedModel,
+          authSource: selectedAuthSource,
           autoApprove: autoApproveEnabled,
           selectedPlatformSkillSlugs,
           fileAttachments: attachments,
@@ -2048,6 +2101,7 @@ export function ChatArea({
       resetInitTracking,
       selectedSkillKeys,
       normalizedSelectedModel,
+      selectedAuthSource,
       startGeneration,
       submitApproval,
       syncFromRuntime,
@@ -2540,11 +2594,13 @@ export function ChatArea({
     () => (
       <ModelSelector
         selectedModel={normalizedSelectedModel}
-        onModelChange={setSelectedModel}
+        selectedAuthSource={selectedAuthSource}
+        availability={openAIAvailability}
+        onSelectionChange={setSelection}
         disabled={isStreaming}
       />
     ),
-    [isStreaming, normalizedSelectedModel, setSelectedModel],
+    [isStreaming, normalizedSelectedModel, openAIAvailability, selectedAuthSource, setSelection],
   );
   const autoApprovalNode = useMemo(
     () => (

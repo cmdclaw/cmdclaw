@@ -2,8 +2,6 @@ import { format, parseISO, isValid } from "date-fns";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import OpenAI from "openai";
-import { isSelfHostedEdition } from "../edition";
-import { getDelegatedProviderAuths } from "../control-plane/client";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
 import {
@@ -13,13 +11,12 @@ import {
   memoryFile,
   memorySettings,
   message,
-  providerAuth,
   sessionTranscript,
   sessionTranscriptChunk,
   type ContentPart,
 } from "@cmdclaw/db/schema";
+import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
-import { decrypt } from "../utils/encryption";
 import { generateConversationTitle } from "../utils/generate-title";
 
 export type MemoryFileType = "longterm" | "daily";
@@ -268,23 +265,11 @@ async function resolveMemorySettings(userId: string) {
 }
 
 async function getOpenAIApiKey(userId: string): Promise<string | null> {
-  if (isSelfHostedEdition()) {
-    const delegated = await getDelegatedProviderAuths(userId);
-    const openai = delegated.find((auth) => auth.provider === "openai");
-    return openai?.accessToken ?? env.OPENAI_API_KEY ?? null;
-  }
-
-  const auth = await db.query.providerAuth.findFirst({
-    where: and(eq(providerAuth.userId, userId), eq(providerAuth.provider, "openai")),
+  const auth = await getResolvedProviderAuth({
+    userId,
+    provider: "openai",
   });
-  if (auth) {
-    try {
-      return decrypt(auth.accessToken);
-    } catch {
-      return null;
-    }
-  }
-  return env.OPENAI_API_KEY || null;
+  return auth?.accessToken ?? env.OPENAI_API_KEY ?? null;
 }
 
 async function embedTexts(

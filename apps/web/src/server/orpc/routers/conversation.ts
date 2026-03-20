@@ -78,6 +78,7 @@ const get = protectedProcedure
       isShared: conv.isShared,
       shareToken: conv.shareToken,
       model: conv.model,
+      authSource: conv.authSource,
       autoApprove: conv.autoApprove,
       messages: conv.messages
         .filter((m) => m.role === "user" || m.role === "assistant")

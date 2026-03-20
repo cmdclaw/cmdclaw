@@ -1,4 +1,6 @@
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import { normalizeModelAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 
 const OPENAI_CHATGPT_MODEL_IDS = new Set([
   "gpt-5.1-codex-max",
@@ -10,7 +12,9 @@ const OPENAI_CHATGPT_MODEL_IDS = new Set([
 
 export function isModelAccessibleForNewChat(params: {
   model: string;
-  isOpenAIConnected: boolean;
+  authSource?: ProviderAuthSource | null;
+  hasUserOpenAI: boolean;
+  hasSharedOpenAI: boolean;
   availableOpencodeFreeModelIDs?: readonly string[];
 }): boolean {
   const model = params.model.trim();
@@ -30,7 +34,12 @@ export function isModelAccessibleForNewChat(params: {
   }
 
   if (parsed.providerID === "openai") {
-    return params.isOpenAIConnected && OPENAI_CHATGPT_MODEL_IDS.has(parsed.modelID);
+    const authSource = normalizeModelAuthSource({
+      model,
+      authSource: params.authSource,
+    });
+    const hasOpenAIAuth = authSource === "shared" ? params.hasSharedOpenAI : params.hasUserOpenAI;
+    return hasOpenAIAuth && OPENAI_CHATGPT_MODEL_IDS.has(parsed.modelID);
   }
 
   if (parsed.providerID === "opencode") {

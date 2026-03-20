@@ -6,16 +6,30 @@ describe("isModelAccessibleForNewChat", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "openai/gpt-5.2-codex",
-        isOpenAIConnected: false,
+        hasUserOpenAI: false,
+        hasSharedOpenAI: false,
       }),
     ).toBe(false);
   });
 
-  it("returns true for openai models when ChatGPT is connected", () => {
+  it("returns true for openai models when the personal ChatGPT source is connected", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "openai/gpt-5.2-codex",
-        isOpenAIConnected: true,
+        authSource: "user",
+        hasUserOpenAI: true,
+        hasSharedOpenAI: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for openai models when the shared ChatGPT source is connected", () => {
+    expect(
+      isModelAccessibleForNewChat({
+        model: "openai/gpt-5.2-codex",
+        authSource: "shared",
+        hasUserOpenAI: false,
+        hasSharedOpenAI: true,
       }),
     ).toBe(true);
   });
@@ -24,7 +38,9 @@ describe("isModelAccessibleForNewChat", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "openai/unknown",
-        isOpenAIConnected: true,
+        authSource: "user",
+        hasUserOpenAI: true,
+        hasSharedOpenAI: false,
       }),
     ).toBe(false);
   });
@@ -33,7 +49,8 @@ describe("isModelAccessibleForNewChat", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "opencode/glm-5-free",
-        isOpenAIConnected: false,
+        hasUserOpenAI: false,
+        hasSharedOpenAI: false,
         availableOpencodeFreeModelIDs: ["opencode/grok-code-fast-1"],
       }),
     ).toBe(false);

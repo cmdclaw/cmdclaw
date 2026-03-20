@@ -23,6 +23,10 @@ import {
 } from "../../lib/coworker-runtime-cli";
 import { parseModelReference } from "../../lib/model-reference";
 import {
+  normalizeModelAuthSource,
+  type ProviderAuthSource,
+} from "../../lib/provider-auth-source";
+import {
   listOpencodeFreeModels,
   resolveDefaultOpencodeFreeModel,
 } from "../ai/opencode-models";
@@ -126,6 +130,16 @@ async function resolveCoworkerModel(model?: string): Promise<string> {
   }
 
   return cachedDefaultCoworkerModelPromise;
+}
+
+function resolveModelAuthSource(params: {
+  model: string;
+  authSource?: ProviderAuthSource | null;
+}): ProviderAuthSource | null {
+  return normalizeModelAuthSource({
+    model: params.model,
+    authSource: params.authSource,
+  });
 }
 
 // Event types for generation stream
@@ -261,6 +275,7 @@ interface GenerationContext {
   saveDebounceId?: ReturnType<typeof setTimeout>;
   isNewConversation: boolean;
   model: string;
+  authSource?: ProviderAuthSource | null;
   userMessageContent: string;
   // File attachments from user
   attachments?: UserFileAttachment[];
@@ -1339,6 +1354,7 @@ class GenerationManager {
   private async checkModelAccessForUser(params: {
     userId: string;
     model: string;
+    authSource?: ProviderAuthSource | null;
   }): Promise<ModelAccessCheckResult> {
     const { providerID, modelID } = parseModelReference(params.model);
 
@@ -1360,13 +1376,19 @@ class GenerationManager {
     }
 
     if (providerID === "openai") {
-      const hasAuth = await hasConnectedProviderAuthForUser(params.userId, "openai");
+      const authSource = resolveModelAuthSource({
+        model: params.model,
+        authSource: params.authSource,
+      });
+      const hasAuth = await hasConnectedProviderAuthForUser(params.userId, "openai", authSource);
       if (!hasAuth) {
         return {
           allowed: false,
           reason: "openai_not_connected",
           userMessage:
-            "This ChatGPT model requires a connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+            authSource === "shared"
+              ? "This ChatGPT model requires the shared CmdClaw ChatGPT connection. Ask an admin to reconnect it, then retry."
+              : "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
         };
       }
       const allowedIDs = new Set(getProviderModels("openai").map((model) => model.id));
@@ -1537,6 +1559,7 @@ class GenerationManager {
     conversationId?: string;
     content: string;
     model?: string;
+    authSource?: ProviderAuthSource | null;
     userId: string;
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
@@ -1550,6 +1573,12 @@ class GenerationManager {
     if (requestedModel) {
       parseModelReference(requestedModel);
     }
+    const requestedAuthSource = requestedModel
+      ? resolveModelAuthSource({
+          model: requestedModel,
+          authSource: params.authSource,
+        })
+      : null;
     const traceId = createTraceId();
     const startGenerationStartedAt = Date.now();
     const logContext = {
@@ -1618,6 +1647,10 @@ class GenerationManager {
     } else {
       isNewConversation = true;
       const resolvedModel = requestedModel ?? DEFAULT_MODEL_REFERENCE;
+      const resolvedAuthSource = resolveModelAuthSource({
+        model: resolvedModel,
+        authSource: requestedAuthSource,
+      });
       const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
       const dbUser =
         "user" in db.query
@@ -1636,15 +1669,34 @@ class GenerationManager {
           title,
           type: "chat",
           model: resolvedModel,
+          authSource: resolvedAuthSource,
           autoApprove: false,
         })
         .returning();
       conv = newConv;
     }
     const resolvedModel = requestedModel ?? conv.model ?? DEFAULT_MODEL_REFERENCE;
+    const resolvedAuthSource = resolveModelAuthSource({
+      model: resolvedModel,
+      authSource: requestedAuthSource ?? conv.authSource,
+    });
+    if (requestedModel || conv.authSource !== resolvedAuthSource) {
+      const [updatedConv] = await db
+        .update(conversation)
+        .set({
+          model: resolvedModel,
+          authSource: resolvedAuthSource,
+        })
+        .where(eq(conversation.id, conv.id))
+        .returning();
+      if (updatedConv) {
+        conv = updatedConv;
+      }
+    }
     const accessCheck = await this.checkModelAccessForUser({
       userId,
       model: resolvedModel,
+      authSource: resolvedAuthSource,
     });
     if (!accessCheck.allowed) {
       logServerEvent(
@@ -1666,6 +1718,7 @@ class GenerationManager {
         phase: "model_access_validated",
         elapsedMs: Date.now() - startGenerationStartedAt,
         resolvedModel,
+        resolvedAuthSource,
       },
       { ...logContext, conversationId: conv.id },
     );
@@ -1889,6 +1942,10 @@ class GenerationManager {
       lastSaveAt: new Date(),
       isNewConversation,
       model: requestedModel ?? conv.model ?? DEFAULT_MODEL_REFERENCE,
+      authSource: resolveModelAuthSource({
+        model: requestedModel ?? conv.model ?? DEFAULT_MODEL_REFERENCE,
+        authSource: requestedAuthSource ?? conv.authSource,
+      }),
       userMessageContent: content,
       assistantMessageIds: new Set(),
       messageRoles: new Map(),
@@ -1962,6 +2019,7 @@ class GenerationManager {
     coworkerRunId: string;
     content: string;
     model?: string;
+    authSource?: ProviderAuthSource | null;
     userId: string;
     autoApprove: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
@@ -1972,9 +2030,14 @@ class GenerationManager {
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model } = params;
     const resolvedModel = await resolveCoworkerModel(model);
+    const resolvedAuthSource = resolveModelAuthSource({
+      model: resolvedModel,
+      authSource: params.authSource,
+    });
     const accessCheck = await this.checkModelAccessForUser({
       userId,
       model: resolvedModel,
+      authSource: resolvedAuthSource,
     });
     if (!accessCheck.allowed) {
       throw new Error(accessCheck.userMessage);
@@ -1991,6 +2054,7 @@ class GenerationManager {
         title: title || "Coworker run",
         type: "coworker",
         model: resolvedModel,
+        authSource: resolvedAuthSource,
         autoApprove: params.autoApprove,
       })
       .returning();
@@ -2081,6 +2145,7 @@ class GenerationManager {
       lastSaveAt: new Date(),
       isNewConversation: true,
       model: resolvedModel,
+      authSource: resolvedAuthSource,
       userMessageContent: content,
       attachments: params.fileAttachments,
       assistantMessageIds: new Set(),
@@ -2221,6 +2286,10 @@ class GenerationManager {
       lastSaveAt: new Date(),
       isNewConversation: false,
       model: genRecord.conversation.model ?? DEFAULT_MODEL_REFERENCE,
+      authSource: resolveModelAuthSource({
+        model: genRecord.conversation.model ?? DEFAULT_MODEL_REFERENCE,
+        authSource: genRecord.conversation.authSource,
+      }),
       userMessageContent: latestUserMessage?.content ?? "",
       attachments: executionPolicy.queuedFileAttachments,
       assistantMessageIds: new Set(),
@@ -3709,6 +3778,7 @@ class GenerationManager {
               conversationId: ctx.conversationId,
               generationId: ctx.id,
               userId: ctx.userId,
+              openAIAuthSource: ctx.authSource,
               anthropicApiKey: env.ANTHROPIC_API_KEY,
               integrationEnvs: filteredCliEnv,
             },
@@ -4767,6 +4837,7 @@ class GenerationManager {
           conversationId: ctx.conversationId,
           generationId: ctx.id,
           userId: ctx.userId,
+          openAIAuthSource: ctx.authSource,
           anthropicApiKey: env.ANTHROPIC_API_KEY || "",
           integrationEnvs: {},
         },
@@ -4866,6 +4937,7 @@ class GenerationManager {
           conversationId: ctx.conversationId,
           generationId: ctx.id,
           userId: ctx.userId,
+          openAIAuthSource: ctx.authSource,
           anthropicApiKey: env.ANTHROPIC_API_KEY || "",
           integrationEnvs: {},
         },
