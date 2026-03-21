@@ -14,7 +14,6 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
   const [reportError, setReportError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const resetForm = useCallback(() => {
     setReportMessage("");
@@ -91,15 +90,14 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col gap-4">
       <div className="flex-1">
         <textarea
-          ref={textareaRef}
           value={reportMessage}
           onChange={handleMessageChange}
           placeholder="Describe the bug..."
           autoFocus
-          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-[220px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+          className="border-input bg-background text-foreground placeholder:text-muted-foreground/80 focus:border-ring/60 min-h-[180px] w-full resize-none rounded-xl border px-4 py-3 text-[15px] leading-relaxed transition-[border-color,background-color] outline-none sm:min-h-[220px]"
         />
         <input
           ref={attachmentInputRef}
@@ -108,8 +106,8 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
           onChange={handleAttachmentChange}
         />
         {reportAttachment ? (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+          <div className="bg-muted/40 mt-3 flex items-center gap-2 rounded-lg border px-3 py-2">
+            <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs font-medium">
               {reportAttachment.name}
             </span>
             <button
@@ -123,11 +121,16 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
         ) : null}
         {reportError ? <p className="text-destructive mt-2 text-xs">{reportError}</p> : null}
       </div>
-      <div className="flex items-center gap-2 pt-4">
-        <Button type="button" variant="outline" onClick={openAttachmentPicker} className="flex-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={openAttachmentPicker}
+          className="h-11 flex-1 rounded-xl"
+        >
           Add attachment
         </Button>
-        <Button onClick={handleSubmit} disabled={isSubmitting} className="flex-1">
+        <Button onClick={handleSubmit} disabled={isSubmitting} className="h-11 flex-1 rounded-xl">
           {isSubmitting ? "Sending..." : "Send"}
         </Button>
       </div>
