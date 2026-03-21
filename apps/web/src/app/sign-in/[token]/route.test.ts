@@ -4,6 +4,13 @@ const { getMagicLinkRequestStateMock } = vi.hoisted(() => ({
   getMagicLinkRequestStateMock: vi.fn(),
 }));
 
+vi.mock("@/env", () => ({
+  env: {
+    APP_URL: "https://cmdclaw.ai",
+    NEXT_PUBLIC_APP_URL: "https://cmdclaw.ai",
+  },
+}));
+
 vi.mock("@/server/lib/magic-link-request-state", () => ({
   getMagicLinkRequestState: getMagicLinkRequestStateMock,
 }));
@@ -31,6 +38,27 @@ describe("GET /sign-in/[token]", () => {
     });
 
     const response = await GET(new Request("https://cmdclaw.ai/sign-in/abc123"), {
+      params: Promise.resolve({ token: "abc123" }),
+    });
+
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "https://cmdclaw.ai/api/auth/magic-link/verify?token=abc123&callbackURL=%2Fchat&newUserCallbackURL=%2Fwelcome&errorCallbackURL=%2Flogin%3Ferror%3Dmagic-link",
+    );
+  });
+
+  it("uses the public app origin instead of the internal request origin", async () => {
+    getMagicLinkRequestStateMock.mockResolvedValue({
+      tokenHash: "hash-1",
+      email: "pilot@cmdclaw.ai",
+      callbackUrl: "/chat",
+      newUserCallbackUrl: "/welcome",
+      errorCallbackUrl: "/login?error=magic-link",
+      expiresAt: new Date("2026-03-21T12:30:00.000Z"),
+      createdAt: new Date("2026-03-21T11:30:00.000Z"),
+    });
+
+    const response = await GET(new Request("https://0.0.0.0:8080/sign-in/abc123"), {
       params: Promise.resolve({ token: "abc123" }),
     });
 
