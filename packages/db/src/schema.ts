@@ -98,6 +98,20 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const magicLinkRequestState = pgTable(
+  "magic_link_request_state",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    email: text("email").notNull(),
+    callbackUrl: text("callback_url"),
+    newUserCallbackUrl: text("new_user_callback_url"),
+    errorCallbackUrl: text("error_callback_url"),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("magic_link_request_state_expires_at_idx").on(table.expiresAt)],
+);
+
 export const workspaceMembershipRoleEnum = pgEnum("workspace_membership_role", [
   "owner",
   "admin",
