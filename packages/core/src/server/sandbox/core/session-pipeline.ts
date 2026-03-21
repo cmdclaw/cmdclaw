@@ -40,6 +40,7 @@ export async function runConversationSessionPipeline(input: {
     conversationId: input.context.conversationId,
     generationId: input.context.generationId,
     userId: input.context.userId,
+    model: input.context.model,
     anthropicApiKey: input.context.anthropicApiKey,
     integrationEnvs: input.context.integrationEnvs,
     openAIAuthSource: input.context.openAIAuthSource,

@@ -367,8 +367,8 @@ function OnboardingSubscriptionsContent() {
             className="mt-0.5 h-3.5 w-auto shrink-0 dark:invert"
           />
           <p className="text-muted-foreground text-xs leading-relaxed">
-            Claude models are always available through CmdClaw. Connecting an AI account gives you
-            access to additional models from that provider.
+            CmdClaw Models already includes Claude Sonnet 4.6. Connect ChatGPT if you also want to
+            use your personal OpenAI-backed models.
           </p>
         </div>
       </div>

@@ -46,6 +46,7 @@ describe("runConversationSessionPipeline", () => {
         conversationId: "conv-1",
         generationId: "gen-1",
         userId: "user-1",
+        model: "anthropic/claude-sonnet-4-6",
         anthropicApiKey: "test-key",
       },
       selection: {
@@ -65,6 +66,7 @@ describe("runConversationSessionPipeline", () => {
         conversationId: "conv-1",
         generationId: "gen-1",
         userId: "user-1",
+        model: "anthropic/claude-sonnet-4-6",
         anthropicApiKey: "test-key",
         integrationEnvs: undefined,
       },

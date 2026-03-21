@@ -94,6 +94,7 @@ export interface OpenCodeSessionConfig {
   conversationId: string;
   generationId?: string;
   userId?: string;
+  model: string;
   anthropicApiKey: string;
   integrationEnvs?: Record<string, string>;
   openAIAuthSource?: "user" | "shared" | null;
@@ -154,10 +155,11 @@ function appendDaytonaAuth(url: string, token?: string): string {
 
 async function createDaytonaOpencodeClient(
   baseUrl: string,
+  model: string,
   token?: string,
 ): Promise<OpencodeClient> {
   if (!token) {
-    return createSandboxRuntimeClient({ serverUrl: baseUrl });
+    return createSandboxRuntimeClient({ serverUrl: baseUrl, model });
   }
   const authedFetch = (
     input: Parameters<typeof fetch>[0],
@@ -174,12 +176,18 @@ async function createDaytonaOpencodeClient(
 
   return createSandboxRuntimeClient({
     serverUrl: baseUrl,
+    model,
     fetch: authedFetch as typeof fetch,
   });
 }
 
-async function waitForServer(url: string, token?: string, maxWait = 30_000): Promise<void> {
-  const readinessUrl = appendDaytonaAuth(getSandboxReadinessUrl(url), token);
+async function waitForServer(
+  url: string,
+  model: string,
+  token?: string,
+  maxWait = 30_000,
+): Promise<void> {
+  const readinessUrl = appendDaytonaAuth(getSandboxReadinessUrl(url, model), token);
   const startedAt = Date.now();
   while (Date.now() - startedAt < maxWait) {
     try {
@@ -303,8 +311,8 @@ async function getOrCreateDockerSandbox(
     if (!container) {
       return null;
     }
-    const baseUrl = await resolveMappedRuntimeUrl(container, getSandboxServerPort());
-    const health = await fetch(getSandboxReadinessUrl(baseUrl), {
+    const baseUrl = await resolveMappedRuntimeUrl(container, getSandboxServerPort(config.model));
+    const health = await fetch(getSandboxReadinessUrl(baseUrl, config.model), {
       method: "GET",
     }).catch(() => null);
     if (!health?.ok) {
@@ -328,7 +336,10 @@ async function getOrCreateDockerSandbox(
     });
     return {
       sandbox: wrapDockerSandbox(validConversationContainer.container),
-      client: await createSandboxRuntimeClient({ serverUrl: validConversationContainer.baseUrl }),
+      client: await createSandboxRuntimeClient({
+        serverUrl: validConversationContainer.baseUrl,
+        model: config.model,
+      }),
       reused: true,
     };
   }
@@ -374,7 +385,10 @@ async function getOrCreateDockerSandbox(
     });
     return {
       sandbox: wrapDockerSandbox(validGenerationContainer.container),
-      client: await createSandboxRuntimeClient({ serverUrl: validGenerationContainer.baseUrl }),
+      client: await createSandboxRuntimeClient({
+        serverUrl: validGenerationContainer.baseUrl,
+        model: config.model,
+      }),
       reused: true,
     };
   }
@@ -389,7 +403,7 @@ async function getOrCreateDockerSandbox(
   });
 
   const imageTag = await ensureDockerRuntimeImage(docker);
-  const runtimePort = getSandboxServerPort();
+  const runtimePort = getSandboxServerPort(config.model);
   const created = await createRuntimeContainer({
     docker,
     imageTag,
@@ -418,7 +432,10 @@ async function getOrCreateDockerSandbox(
 
   await execInContainer({
     container: created,
-    command: getSandboxServerBackgroundStartCommand(created.id),
+    command: getSandboxServerBackgroundStartCommand({
+      sandboxId: created.id,
+      model: config.model,
+    }),
     cwd: "/app",
     timeoutMs: 10_000,
   });
@@ -429,7 +446,7 @@ async function getOrCreateDockerSandbox(
     sandboxId: created.id,
     serverUrl: baseUrl,
   });
-  await waitForServer(baseUrl);
+  await waitForServer(baseUrl, config.model);
 
   onLifecycle?.("opencode_ready", {
     conversationId: config.conversationId,
@@ -439,7 +456,7 @@ async function getOrCreateDockerSandbox(
 
   return {
     sandbox: wrapDockerSandbox(created),
-    client: await createSandboxRuntimeClient({ serverUrl: baseUrl }),
+    client: await createSandboxRuntimeClient({ serverUrl: baseUrl, model: config.model }),
     reused: false,
   };
 }
@@ -487,11 +504,14 @@ async function getOrCreateDaytonaSandbox(
     : null;
 
   if (fromConversation) {
-    const preview = await fromConversation.getPreviewLink(getSandboxServerPort());
+    const preview = await fromConversation.getPreviewLink(getSandboxServerPort(config.model));
     const baseUrl = preview.url;
-    const health = await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl), preview.token), {
-      method: "GET",
-    }).catch(() => null);
+    const health = await fetch(
+      appendDaytonaAuth(getSandboxReadinessUrl(baseUrl, config.model), preview.token),
+      {
+        method: "GET",
+      },
+    ).catch(() => null);
     if (health?.ok) {
       onLifecycle?.("sandbox_reused", {
         conversationId: config.conversationId,
@@ -499,7 +519,7 @@ async function getOrCreateDaytonaSandbox(
       });
       return {
         sandbox: wrapDaytonaSandbox(fromConversation),
-        client: await createDaytonaOpencodeClient(baseUrl, preview.token),
+        client: await createDaytonaOpencodeClient(baseUrl, config.model, preview.token),
         reused: true,
       };
     }
@@ -536,11 +556,14 @@ async function getOrCreateDaytonaSandbox(
     : null;
 
   if (fromGeneration) {
-    const preview = await fromGeneration.getPreviewLink(getSandboxServerPort());
+    const preview = await fromGeneration.getPreviewLink(getSandboxServerPort(config.model));
     const baseUrl = preview.url;
-    const health = await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl), preview.token), {
-      method: "GET",
-    }).catch(() => null);
+    const health = await fetch(
+      appendDaytonaAuth(getSandboxReadinessUrl(baseUrl, config.model), preview.token),
+      {
+        method: "GET",
+      },
+    ).catch(() => null);
     if (health?.ok) {
       onLifecycle?.("sandbox_reused", {
         conversationId: config.conversationId,
@@ -548,7 +571,7 @@ async function getOrCreateDaytonaSandbox(
       });
       return {
         sandbox: wrapDaytonaSandbox(fromGeneration),
-        client: await createDaytonaOpencodeClient(baseUrl, preview.token),
+        client: await createDaytonaOpencodeClient(baseUrl, config.model, preview.token),
         reused: true,
       };
     }
@@ -581,17 +604,22 @@ async function getOrCreateDaytonaSandbox(
   onLifecycle?.("opencode_starting", {
     conversationId: config.conversationId,
     sandboxId: created.id,
-    port: getSandboxServerPort(),
+    port: getSandboxServerPort(config.model),
   });
 
   await created.process.executeCommand(
-    `sh -lc ${escapeShell(getSandboxServerBackgroundStartCommand(created.id))}`,
+    `sh -lc ${escapeShell(
+      getSandboxServerBackgroundStartCommand({
+        sandboxId: created.id,
+        model: config.model,
+      }),
+    )}`,
     "/app",
     undefined,
     10,
   );
 
-  const preview = await created.getPreviewLink(getSandboxServerPort());
+  const preview = await created.getPreviewLink(getSandboxServerPort(config.model));
   const baseUrl = preview.url;
 
   onLifecycle?.("opencode_waiting_ready", {
@@ -600,7 +628,7 @@ async function getOrCreateDaytonaSandbox(
     serverUrl: preview.url,
   });
 
-  await waitForServer(baseUrl, preview.token);
+  await waitForServer(baseUrl, config.model, preview.token);
 
   onLifecycle?.("opencode_ready", {
     conversationId: config.conversationId,
@@ -610,7 +638,7 @@ async function getOrCreateDaytonaSandbox(
 
   return {
     sandbox: wrapDaytonaSandbox(created),
-    client: await createDaytonaOpencodeClient(baseUrl, preview.token),
+    client: await createDaytonaOpencodeClient(baseUrl, config.model, preview.token),
     reused: false,
   };
 }

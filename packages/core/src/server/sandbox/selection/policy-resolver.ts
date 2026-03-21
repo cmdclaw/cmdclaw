@@ -1,11 +1,14 @@
 import type { RuntimeSelection } from "../core/types";
+import { resolveSandboxAgentRuntimeForModel } from "../opencode-runtime";
 import { env } from "../../../env";
 
 export function resolveRuntimeSelection(input?: {
+  model?: string;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";
 }): RuntimeSelection {
   const sandboxProvider = input?.sandboxProviderOverride ?? env.SANDBOX_DEFAULT;
-  const runtimeHarness = env.SANDBOX_AGENT_RUNTIME === "agentsdk" ? "agent-sdk" : "opencode";
+  const runtime = input?.model ? resolveSandboxAgentRuntimeForModel(input.model) : "opencode";
+  const runtimeHarness = runtime === "agentsdk" ? "agent-sdk" : "opencode";
 
   return {
     sandboxProvider,

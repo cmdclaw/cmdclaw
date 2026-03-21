@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type SandboxProvider = "e2b" | "daytona" | "docker";
-type SandboxRuntime = "opencode" | "agentsdk";
 
 const originalSandboxEnv = {
   SANDBOX_DEFAULT: process.env.SANDBOX_DEFAULT,
-  SANDBOX_AGENT_RUNTIME: process.env.SANDBOX_AGENT_RUNTIME,
 };
 
 async function loadPolicyResolverModule() {
@@ -13,12 +11,8 @@ async function loadPolicyResolverModule() {
   return import("./policy-resolver");
 }
 
-function setSandboxEnv(params: {
-  sandboxDefault: SandboxProvider;
-  sandboxAgentRuntime: SandboxRuntime;
-}) {
+function setSandboxEnv(params: { sandboxDefault: SandboxProvider }) {
   process.env.SANDBOX_DEFAULT = params.sandboxDefault;
-  process.env.SANDBOX_AGENT_RUNTIME = params.sandboxAgentRuntime;
 }
 
 describe("resolveRuntimeSelection", () => {
@@ -28,50 +22,41 @@ describe("resolveRuntimeSelection", () => {
     } else {
       process.env.SANDBOX_DEFAULT = originalSandboxEnv.SANDBOX_DEFAULT;
     }
-
-    if (originalSandboxEnv.SANDBOX_AGENT_RUNTIME === undefined) {
-      delete process.env.SANDBOX_AGENT_RUNTIME;
-    } else {
-      process.env.SANDBOX_AGENT_RUNTIME = originalSandboxEnv.SANDBOX_AGENT_RUNTIME;
-    }
   });
 
-  it("maps opencode runtime", async () => {
+  it("maps openai models to the opencode runtime", async () => {
     setSandboxEnv({
       sandboxDefault: "e2b",
-      sandboxAgentRuntime: "opencode",
     });
 
     const { resolveRuntimeSelection } = await loadPolicyResolverModule();
-    expect(resolveRuntimeSelection()).toEqual({
+    expect(resolveRuntimeSelection({ model: "openai/gpt-5.4" })).toEqual({
       sandboxProvider: "e2b",
       runtimeHarness: "opencode",
       runtimeProtocolVersion: "opencode-v2",
     });
   });
 
-  it("maps sandbox-agent runtime", async () => {
+  it("maps anthropic models to the sandbox-agent runtime", async () => {
     setSandboxEnv({
       sandboxDefault: "daytona",
-      sandboxAgentRuntime: "agentsdk",
     });
 
     const { resolveRuntimeSelection } = await loadPolicyResolverModule();
-    expect(resolveRuntimeSelection()).toEqual({
+    expect(resolveRuntimeSelection({ model: "anthropic/claude-sonnet-4-6" })).toEqual({
       sandboxProvider: "daytona",
       runtimeHarness: "agent-sdk",
       runtimeProtocolVersion: "sandbox-agent-v1",
     });
   });
 
-  it("maps docker provider", async () => {
+  it("keeps opencode models on the opencode runtime", async () => {
     setSandboxEnv({
       sandboxDefault: "docker",
-      sandboxAgentRuntime: "opencode",
     });
 
     const { resolveRuntimeSelection } = await loadPolicyResolverModule();
-    expect(resolveRuntimeSelection()).toEqual({
+    expect(resolveRuntimeSelection({ model: "opencode/glm-5-free" })).toEqual({
       sandboxProvider: "docker",
       runtimeHarness: "opencode",
       runtimeProtocolVersion: "opencode-v2",

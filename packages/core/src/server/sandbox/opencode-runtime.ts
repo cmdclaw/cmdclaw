@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { env } from "../../env";
+import { parseModelReference } from "../../lib/model-reference";
 import type { SandboxAgentRuntime, SandboxSessionBridge } from "./runtime/types";
 import {
   createSandboxRuntimeClientByRuntime,
@@ -20,34 +20,40 @@ function joinUrlPath(baseUrl: string, path: string): string {
   return parsed.toString();
 }
 
-export function getSandboxAgentRuntime(): SandboxAgentRuntime {
-  return env.SANDBOX_AGENT_RUNTIME;
+export function resolveSandboxAgentRuntimeForModel(model: string): SandboxAgentRuntime {
+  const { providerID } = parseModelReference(model);
+  return providerID === "anthropic" ? "agentsdk" : "opencode";
 }
 
-export function getSandboxServerStartCommand(sandboxId: string): string {
-  const runtime = getSandboxAgentRuntime();
+export function getSandboxServerStartCommand(input: { sandboxId: string; model: string }): string {
+  const runtime = resolveSandboxAgentRuntimeForModel(input.model);
   const serverCommand =
     runtime === "agentsdk"
       ? `sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT}`
       : `opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0`;
-  return `export SANDBOX_ID=${sandboxId} && cd /app && ${serverCommand}`;
+  return `export SANDBOX_ID=${input.sandboxId} && cd /app && ${serverCommand}`;
 }
 
-export function getSandboxServerBackgroundStartCommand(sandboxId: string): string {
-  const runtime = getSandboxAgentRuntime();
+export function getSandboxServerBackgroundStartCommand(input: {
+  sandboxId: string;
+  model: string;
+}): string {
+  const runtime = resolveSandboxAgentRuntimeForModel(input.model);
   if (runtime === "agentsdk") {
-    return `export SANDBOX_ID=${sandboxId} && cd /app && nohup sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT} >/tmp/opencode.log 2>&1 &`;
+    return `export SANDBOX_ID=${input.sandboxId} && cd /app && nohup sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT} >/tmp/opencode.log 2>&1 &`;
   }
 
-  return `export SANDBOX_ID=${sandboxId} && cd /app && nohup opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0 >/tmp/opencode.log 2>&1 &`;
+  return `export SANDBOX_ID=${input.sandboxId} && cd /app && nohup opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0 >/tmp/opencode.log 2>&1 &`;
 }
 
-export function getSandboxServerPort(): number {
-  return getSandboxAgentRuntime() === "agentsdk" ? SANDBOX_AGENT_PORT : OPENCODE_PORT;
+export function getSandboxServerPort(model: string): number {
+  return resolveSandboxAgentRuntimeForModel(model) === "agentsdk"
+    ? SANDBOX_AGENT_PORT
+    : OPENCODE_PORT;
 }
 
-export function getSandboxReadinessUrl(serverUrl: string): string {
-  const runtime = getSandboxAgentRuntime();
+export function getSandboxReadinessUrl(serverUrl: string, model: string): string {
+  const runtime = resolveSandboxAgentRuntimeForModel(model);
   if (runtime === "agentsdk") {
     return joinUrlPath(serverUrl, "/v1/health");
   }
@@ -55,8 +61,8 @@ export function getSandboxReadinessUrl(serverUrl: string): string {
   return joinUrlPath(serverUrl, "/health");
 }
 
-export function getOpencodeClientBaseUrl(serverUrl: string): string {
-  const runtime = getSandboxAgentRuntime();
+export function getOpencodeClientBaseUrl(serverUrl: string, model: string): string {
+  const runtime = resolveSandboxAgentRuntimeForModel(model);
   if (runtime === "agentsdk") {
     return joinUrlPath(serverUrl, "/opencode");
   }
@@ -67,14 +73,16 @@ export { createSandboxOpencodeClient };
 
 export async function createSandboxRuntimeClient(options: {
   serverUrl: string;
+  model: string;
   fetch?: typeof fetch;
 }): Promise<OpencodeClient> {
+  const { model, ...adapterBaseOptions } = options;
   const sandboxAgentBaseUrl = options.serverUrl;
-  const opencodeBaseUrl = getOpencodeClientBaseUrl(options.serverUrl);
+  const opencodeBaseUrl = getOpencodeClientBaseUrl(options.serverUrl, model);
   return createSandboxRuntimeClientByRuntime({
-    runtime: getSandboxAgentRuntime(),
+    runtime: resolveSandboxAgentRuntimeForModel(model),
     options: {
-      ...options,
+      ...adapterBaseOptions,
       sandboxAgentBaseUrl,
       opencodeBaseUrl,
     },
@@ -83,14 +91,16 @@ export async function createSandboxRuntimeClient(options: {
 
 export async function createSandboxSessionBridge(options: {
   serverUrl: string;
+  model: string;
   fetch?: typeof fetch;
 }): Promise<SandboxSessionBridge> {
+  const { model, ...adapterBaseOptions } = options;
   const sandboxAgentBaseUrl = options.serverUrl;
-  const opencodeBaseUrl = getOpencodeClientBaseUrl(options.serverUrl);
+  const opencodeBaseUrl = getOpencodeClientBaseUrl(options.serverUrl, model);
   return createSandboxSessionBridgeByRuntime({
-    runtime: getSandboxAgentRuntime(),
+    runtime: resolveSandboxAgentRuntimeForModel(model),
     options: {
-      ...options,
+      ...adapterBaseOptions,
       sandboxAgentBaseUrl,
       opencodeBaseUrl,
     },

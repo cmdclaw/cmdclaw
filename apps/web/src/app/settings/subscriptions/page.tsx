@@ -408,8 +408,8 @@ export default function SubscriptionsPage() {
             className="mt-0.5 h-4 w-auto shrink-0 dark:invert"
           />
           <p className="text-muted-foreground text-xs">
-            Anthropic models (Claude) are always available through CmdClaw&apos;s platform.
-            Connecting an AI account gives you access to additional models from that provider.
+            CmdClaw Models already includes Claude Sonnet 4.6. Connecting your ChatGPT account adds
+            your personal OpenAI-backed models without using CmdClaw credits.
           </p>
         </div>
       </div>

@@ -16,10 +16,10 @@ import { logServerEvent, type ObservabilityContext } from "../utils/observabilit
 import type { SandboxBackend, ExecuteResult } from "./types";
 import {
   createSandboxRuntimeClient,
-  getSandboxAgentRuntime,
   getSandboxReadinessUrl,
   getSandboxServerPort,
   getSandboxServerStartCommand,
+  resolveSandboxAgentRuntimeForModel,
 } from "./opencode-runtime";
 
 // Use custom template with OpenCode pre-installed
@@ -93,6 +93,7 @@ export interface SandboxConfig {
   conversationId: string;
   generationId?: string;
   userId?: string;
+  model: string;
   anthropicApiKey: string;
   integrationEnvs?: Record<string, string>;
   openAIAuthSource?: "user" | "shared" | null;
@@ -128,8 +129,8 @@ function formatErrorMessage(error: unknown): string {
 /**
  * Wait for OpenCode server to be ready
  */
-async function waitForServer(url: string, maxWait = 30000): Promise<void> {
-  const readinessUrl = getSandboxReadinessUrl(url);
+async function waitForServer(url: string, model: string, maxWait = 30000): Promise<void> {
+  const readinessUrl = getSandboxReadinessUrl(url, model);
   const start = Date.now();
   let attempts = 0;
   let lastError: string | null = null;
@@ -183,17 +184,17 @@ export async function getOrCreateSandbox(
   if (conv?.opencodeSandboxId) {
     const connected = await connectSandboxById(conv.opencodeSandboxId);
     if (connected) {
-      const serverPort = getSandboxServerPort();
+      const serverPort = getSandboxServerPort(config.model);
       const serverUrl = `https://${connected.getHost(serverPort)}`;
-      const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
-        () => null,
-      );
+      const health = await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
+        method: "GET",
+      }).catch(() => null);
       if (health?.ok) {
         onLifecycle?.("sandbox_reused", {
           conversationId: config.conversationId,
           sandboxId: connected.sandboxId,
         });
-        const client = await createSandboxRuntimeClient({ serverUrl });
+        const client = await createSandboxRuntimeClient({ serverUrl, model: config.model });
         return {
           sandbox: connected,
           client,
@@ -231,17 +232,17 @@ export async function getOrCreateSandbox(
   if (persistedGeneration?.sandboxId) {
     const connected = await connectSandboxById(persistedGeneration.sandboxId);
     if (connected) {
-      const serverPort = getSandboxServerPort();
+      const serverPort = getSandboxServerPort(config.model);
       const serverUrl = `https://${connected.getHost(serverPort)}`;
-      const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
-        () => null,
-      );
+      const health = await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
+        method: "GET",
+      }).catch(() => null);
       if (health?.ok) {
         onLifecycle?.("sandbox_reused", {
           conversationId: config.conversationId,
           sandboxId: connected.sandboxId,
         });
-        const client = await createSandboxRuntimeClient({ serverUrl });
+        const client = await createSandboxRuntimeClient({ serverUrl, model: config.model });
         return {
           sandbox: connected,
           client,
@@ -344,41 +345,47 @@ export async function getOrCreateSandbox(
     {
       conversationId: config.conversationId,
       sandboxId: sandbox.sandboxId,
-      port: getSandboxServerPort(),
-      runtime: getSandboxAgentRuntime(),
+      port: getSandboxServerPort(config.model),
+      runtime: resolveSandboxAgentRuntimeForModel(config.model),
     },
     { ...telemetryContext, sandboxId: sandbox.sandboxId },
   );
   onLifecycle?.("opencode_starting", {
     conversationId: config.conversationId,
     sandboxId: sandbox.sandboxId,
-    port: getSandboxServerPort(),
+    port: getSandboxServerPort(config.model),
   });
   const stderrBuffer: string[] = [];
   try {
-    await sandbox.commands.run(getSandboxServerStartCommand(sandbox.sandboxId), {
-      background: true,
-      onStderr: (data) => {
-        const line = data.trim();
-        if (!line) {
-          return;
-        }
-        if (stderrBuffer.length >= 20) {
-          stderrBuffer.shift();
-        }
-        stderrBuffer.push(line);
-        logServerEvent(
-          "warn",
-          "OPENCODE_SERVER_STDERR",
-          {
-            conversationId: config.conversationId,
-            sandboxId: sandbox.sandboxId,
-            stderr: line,
-          },
-          { ...telemetryContext, sandboxId: sandbox.sandboxId },
-        );
+    await sandbox.commands.run(
+      getSandboxServerStartCommand({
+        sandboxId: sandbox.sandboxId,
+        model: config.model,
+      }),
+      {
+        background: true,
+        onStderr: (data) => {
+          const line = data.trim();
+          if (!line) {
+            return;
+          }
+          if (stderrBuffer.length >= 20) {
+            stderrBuffer.shift();
+          }
+          stderrBuffer.push(line);
+          logServerEvent(
+            "warn",
+            "OPENCODE_SERVER_STDERR",
+            {
+              conversationId: config.conversationId,
+              sandboxId: sandbox.sandboxId,
+              stderr: line,
+            },
+            { ...telemetryContext, sandboxId: sandbox.sandboxId },
+          );
+        },
       },
-    });
+    );
   } catch (error) {
     logServerEvent(
       "error",
@@ -394,7 +401,7 @@ export async function getOrCreateSandbox(
   }
 
   // Get the public URL for the sandbox port
-  const serverPort = getSandboxServerPort();
+  const serverPort = getSandboxServerPort(config.model);
   const serverUrl = `https://${sandbox.getHost(serverPort)}`;
   const serverReadyStart = Date.now();
   onLifecycle?.("opencode_waiting_ready", {
@@ -403,7 +410,7 @@ export async function getOrCreateSandbox(
     serverUrl,
   });
   try {
-    await waitForServer(serverUrl);
+    await waitForServer(serverUrl, config.model);
   } catch (error) {
     logServerEvent(
       "error",
@@ -422,7 +429,7 @@ export async function getOrCreateSandbox(
   }
 
   // Create SDK client pointing to sandbox's OpenCode server
-  const client = await createSandboxRuntimeClient({ serverUrl });
+  const client = await createSandboxRuntimeClient({ serverUrl, model: config.model });
 
   logLifecycle(
     "OPENCODE_SERVER_READY",
@@ -451,20 +458,21 @@ export async function getSandboxStateDurable(
 ): Promise<SandboxState | undefined> {
   const conv = await db.query.conversation.findFirst({
     where: eq(conversation.id, conversationId),
-    columns: { currentGenerationId: true, opencodeSandboxId: true },
+    columns: { currentGenerationId: true, model: true, opencodeSandboxId: true },
   });
+  const model = conv?.model ?? "anthropic/claude-sonnet-4-6";
   if (conv?.opencodeSandboxId) {
     const connectedByConversation = await connectSandboxById(conv.opencodeSandboxId);
     if (connectedByConversation) {
-      const serverPort = getSandboxServerPort();
+      const serverPort = getSandboxServerPort(model);
       const serverUrl = `https://${connectedByConversation.getHost(serverPort)}`;
-      const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
-        () => null,
-      );
+      const health = await fetch(getSandboxReadinessUrl(serverUrl, model), {
+        method: "GET",
+      }).catch(() => null);
       if (health?.ok) {
         return {
           sandbox: connectedByConversation,
-          client: await createSandboxRuntimeClient({ serverUrl }),
+          client: await createSandboxRuntimeClient({ serverUrl, model }),
           serverUrl,
           reused: true,
         };
@@ -503,18 +511,18 @@ export async function getSandboxStateDurable(
   if (!connected) {
     return undefined;
   }
-  const serverPort = getSandboxServerPort();
+  const serverPort = getSandboxServerPort(model);
   const serverUrl = `https://${connected.getHost(serverPort)}`;
-  const health = await fetch(getSandboxReadinessUrl(serverUrl), { method: "GET" }).catch(
-    () => null,
-  );
+  const health = await fetch(getSandboxReadinessUrl(serverUrl, model), {
+    method: "GET",
+  }).catch(() => null);
   if (!health?.ok) {
     return undefined;
   }
 
   const hydrated: SandboxState = {
     sandbox: connected,
-    client: await createSandboxRuntimeClient({ serverUrl }),
+    client: await createSandboxRuntimeClient({ serverUrl, model }),
     serverUrl,
     reused: true,
   };

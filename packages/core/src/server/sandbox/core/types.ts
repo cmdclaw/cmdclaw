@@ -175,6 +175,7 @@ export interface ConversationRuntimeContext {
   conversationId: string;
   generationId?: string;
   userId?: string;
+  model: string;
   anthropicApiKey: string;
   integrationEnvs?: Record<string, string>;
   openAIAuthSource?: "user" | "shared" | null;

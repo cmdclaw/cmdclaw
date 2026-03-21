@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { isModelAccessibleForNewChat } from "./chat-model-access";
 
 describe("isModelAccessibleForNewChat", () => {
+  it("returns true for anthropic models without any connected provider auth", () => {
+    expect(
+      isModelAccessibleForNewChat({
+        model: "anthropic/claude-sonnet-4-6",
+        hasUserOpenAI: false,
+        hasSharedOpenAI: false,
+      }),
+    ).toBe(true);
+  });
+
   it("returns false for openai models when ChatGPT is disconnected", () => {
     expect(
       isModelAccessibleForNewChat({

@@ -11,10 +11,10 @@ bun run dev
 
 See [SELF_HOSTING.md](./SELF_HOSTING.md) for the Docker Compose deployment.
 
-Optional sandbox runtime selector:
+Sandbox runtime is selected automatically from the chosen model:
 
-- `SANDBOX_AGENT_RUNTIME=agentsdk` (default): run `sandbox-agent` and connect via OpenCode-compatible `/opencode` endpoints.
-- `SANDBOX_AGENT_RUNTIME=opencode`: run the legacy `opencode serve` server.
+- `anthropic/*` models use the `agent-sdk` harness.
+- `openai/*` and `opencode/*` models use the `opencode` harness.
 
 ### Sandbox Architecture
 

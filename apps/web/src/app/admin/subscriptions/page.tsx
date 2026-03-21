@@ -61,7 +61,7 @@ export default function AdminSubscriptionsPage() {
 
           if (result.status === "connected") {
             await refetch();
-            toast.success("Shared ChatGPT connected.");
+            toast.success("Shared GPT-5.4 connected to CmdClaw Models.");
             setDeviceFlow(null);
             return;
           }
@@ -105,7 +105,7 @@ export default function AdminSubscriptionsPage() {
   const handleDisconnect = useCallback(async () => {
     try {
       await disconnectProvider.mutateAsync("openai");
-      toast.success("Shared ChatGPT disconnected.");
+      toast.success("Shared GPT-5.4 disconnected from CmdClaw Models.");
     } catch (error) {
       console.error("Failed to disconnect shared provider:", error);
       toast.error("Failed to disconnect. Please try again.");
@@ -146,9 +146,10 @@ export default function AdminSubscriptionsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Shared AI Subscriptions</h2>
+        <h2 className="text-xl font-semibold">Shared CmdClaw Models</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Connect a shared ChatGPT subscription that regular users can select as CmdClaw ChatGPT.
+          Claude Sonnet 4.6 is built into CmdClaw Models. Connect shared ChatGPT access to add
+          GPT-5.4 for every user in the shared model selector.
         </p>
       </div>
 
@@ -166,16 +167,30 @@ export default function AdminSubscriptionsPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold">ChatGPT</h3>
+                <h3 className="text-base font-semibold">CmdClaw Models</h3>
                 {isConnected ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    Shared connection active
+                    Shared GPT-5.4 active
                   </span>
                 ) : null}
               </div>
               <p className="text-muted-foreground mt-1 text-sm">
-                Makes ChatGPT available to all users through the model selector.
+                Claude Sonnet 4.6 is always available. Connecting ChatGPT here unlocks GPT-5.4 in
+                CmdClaw Models for all users.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {["Claude Sonnet 4.6", "GPT-5.4"].map((model) => (
+                  <span
+                    key={model}
+                    className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-[11px] font-medium"
+                  >
+                    {model}
+                  </span>
+                ))}
+              </div>
+              <p className="text-muted-foreground mt-3 text-xs">
+                GPT-5.4 uses the shared ChatGPT connection. Claude Sonnet 4.6 is CmdClaw-managed.
               </p>
             </div>
           </div>
@@ -208,9 +223,10 @@ export default function AdminSubscriptionsPage() {
 
         {deviceFlow ? (
           <div className="mt-6 rounded-xl border p-4">
-            <p className="text-sm font-medium">Finish ChatGPT connection</p>
+            <p className="text-sm font-medium">Finish GPT-5.4 shared connection</p>
             <p className="text-muted-foreground mt-1 text-sm">
-              Open the verification page and approve access for the shared CmdClaw subscription.
+              Open the verification page and approve ChatGPT access so GPT-5.4 becomes available in
+              CmdClaw Models.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button variant="outline" onClick={handleOpenVerificationPage}>

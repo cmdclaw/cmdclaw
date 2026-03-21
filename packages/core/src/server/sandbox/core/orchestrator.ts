@@ -15,6 +15,7 @@ export async function getOrCreateConversationRuntime(
   options?: ConversationRuntimeOptions,
 ): Promise<ConversationRuntimeResult> {
   const selection = resolveRuntimeSelection({
+    model: context.model,
     sandboxProviderOverride: options?.sandboxProviderOverride,
   });
 

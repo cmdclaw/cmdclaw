@@ -27,7 +27,6 @@ export const env = createEnv({
     // E2B Sandbox
     E2B_API_KEY: z.string().optional(),
     E2B_DAYTONA_SANDBOX_NAME: z.string().optional(),
-    SANDBOX_AGENT_RUNTIME: z.enum(["opencode", "agentsdk"]).default("agentsdk"),
     SANDBOX_DEFAULT: z.enum(["daytona", "e2b", "docker"]),
     DAYTONA_API_KEY: z.string().optional(),
     ANVIL_API_KEY: z.string().optional(),
@@ -138,7 +137,6 @@ export const env = createEnv({
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     E2B_API_KEY: process.env.E2B_API_KEY,
     E2B_DAYTONA_SANDBOX_NAME: process.env.E2B_DAYTONA_SANDBOX_NAME,
-    SANDBOX_AGENT_RUNTIME: process.env.SANDBOX_AGENT_RUNTIME,
     SANDBOX_DEFAULT: process.env.SANDBOX_DEFAULT,
     DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
     ANVIL_API_KEY: process.env.ANVIL_API_KEY,

@@ -1389,7 +1389,7 @@ class GenerationManager {
           reason: "openai_not_connected",
           userMessage:
             authSource === "shared"
-              ? "This ChatGPT model requires the shared CmdClaw ChatGPT connection. Ask an admin to reconnect it, then retry."
+              ? "This ChatGPT model requires the shared CmdClaw Models connection. Ask an admin to reconnect GPT-5.4, then retry."
               : "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
         };
       }
@@ -3794,6 +3794,7 @@ class GenerationManager {
               conversationId: ctx.conversationId,
               generationId: ctx.id,
               userId: ctx.userId,
+              model: ctx.model,
               openAIAuthSource: ctx.authSource,
               anthropicApiKey: env.ANTHROPIC_API_KEY,
               integrationEnvs: filteredCliEnv,
@@ -4853,6 +4854,7 @@ class GenerationManager {
           conversationId: ctx.conversationId,
           generationId: ctx.id,
           userId: ctx.userId,
+          model: ctx.model,
           openAIAuthSource: ctx.authSource,
           anthropicApiKey: env.ANTHROPIC_API_KEY || "",
           integrationEnvs: {},
@@ -4953,6 +4955,7 @@ class GenerationManager {
           conversationId: ctx.conversationId,
           generationId: ctx.id,
           userId: ctx.userId,
+          model: ctx.model,
           openAIAuthSource: ctx.authSource,
           anthropicApiKey: env.ANTHROPIC_API_KEY || "",
           integrationEnvs: {},
