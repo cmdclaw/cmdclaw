@@ -8,18 +8,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 void jestDomVitest;
 
 const {
+  mockCreateCoworkerMutateAsync,
   mockUpdateCoworkerMutateAsync,
   mockDeleteCoworkerMutateAsync,
+  mockGetOrCreateBuilderConversation,
+  mockStartGeneration,
   mockToastSuccess,
   mockToastError,
   mockRouterPush,
 } = vi.hoisted(() => ({
+  mockCreateCoworkerMutateAsync: vi.fn(),
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockDeleteCoworkerMutateAsync: vi.fn(),
+  mockGetOrCreateBuilderConversation: vi.fn(),
+  mockStartGeneration: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
   mockRouterPush: vi.fn(),
 }));
+
+const mockLocationAssign = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -42,7 +50,65 @@ vi.mock("@/components/chat/voice-indicator", () => ({
 }));
 
 vi.mock("@/components/prompt-bar", () => ({
-  PromptBar: () => <div>Prompt bar</div>,
+  PromptBar: ({
+    onSubmit,
+    renderModelSelector,
+  }: {
+    onSubmit: (text: string) => void;
+    renderModelSelector?: React.ReactNode;
+  }) => {
+    const buttonRef = React.useRef<HTMLButtonElement | null>(null);
+
+    React.useEffect(() => {
+      const button = buttonRef.current;
+      if (!button) {
+        return;
+      }
+
+      const handleSubmit = () => onSubmit("Build me a coworker");
+      button.addEventListener("click", handleSubmit);
+      return () => button.removeEventListener("click", handleSubmit);
+    }, [onSubmit]);
+
+    return (
+      <div>
+        <div>{renderModelSelector}</div>
+        <button ref={buttonRef} type="button">
+          Submit prompt
+        </button>
+      </div>
+    );
+  },
+}));
+
+vi.mock("@/components/chat/model-selector", () => ({
+  ModelSelector: ({
+    selectedModel,
+    onSelectionChange,
+  }: {
+    selectedModel: string;
+    onSelectionChange: (input: { model: string; authSource?: "user" | "shared" | null }) => void;
+  }) => {
+    const buttonRef = React.useRef<HTMLButtonElement | null>(null);
+
+    React.useEffect(() => {
+      const button = buttonRef.current;
+      if (!button) {
+        return;
+      }
+
+      const handleChange = () =>
+        onSelectionChange({ model: "openai/gpt-5.2-codex", authSource: "shared" });
+      button.addEventListener("click", handleChange);
+      return () => button.removeEventListener("click", handleChange);
+    }, [onSelectionChange]);
+
+    return (
+      <button ref={buttonRef} type="button">
+        Model selector: {selectedModel}
+      </button>
+    );
+  },
 }));
 
 vi.mock("@/components/ui/alert-dialog", () => ({
@@ -137,10 +203,10 @@ vi.mock("@/hooks/use-voice-recording", () => ({
 vi.mock("@/orpc/client", () => ({
   client: {
     coworker: {
-      getOrCreateBuilderConversation: vi.fn(),
+      getOrCreateBuilderConversation: mockGetOrCreateBuilderConversation,
     },
     generation: {
-      startGeneration: vi.fn(),
+      startGeneration: mockStartGeneration,
     },
   },
 }));
@@ -164,10 +230,13 @@ vi.mock("@/orpc/hooks", () => ({
     isLoading: false,
   }),
   useIntegrationList: () => ({ data: [] }),
-  useCreateCoworker: () => ({ mutateAsync: vi.fn() }),
+  useCreateCoworker: () => ({ mutateAsync: mockCreateCoworkerMutateAsync }),
   useTriggerCoworker: () => ({ mutateAsync: vi.fn() }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
   useDeleteCoworker: () => ({ mutateAsync: mockDeleteCoworkerMutateAsync }),
+  useProviderAuthStatus: () => ({
+    data: { connected: { openai: true }, shared: { openai: true } },
+  }),
   useTranscribe: () => ({ mutateAsync: vi.fn() }),
 }));
 
@@ -183,16 +252,29 @@ import CoworkersPage from "./page";
 describe("CoworkersPage", () => {
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {
+    mockCreateCoworkerMutateAsync.mockReset();
     mockUpdateCoworkerMutateAsync.mockReset();
     mockDeleteCoworkerMutateAsync.mockReset();
+    mockGetOrCreateBuilderConversation.mockReset();
+    mockStartGeneration.mockReset();
     mockToastSuccess.mockReset();
     mockToastError.mockReset();
     mockRouterPush.mockReset();
+    mockCreateCoworkerMutateAsync.mockResolvedValue({ id: "cw-new" });
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
     mockDeleteCoworkerMutateAsync.mockResolvedValue({ success: true });
+    mockGetOrCreateBuilderConversation.mockResolvedValue({ conversationId: "conv-1" });
+    mockStartGeneration.mockResolvedValue({ generationId: "gen-1" });
+    mockLocationAssign.mockReset();
+    vi.stubGlobal("location", {
+      ...window.location,
+      assign: mockLocationAssign,
+    });
   });
 
   it("turns off a coworker from the card context menu", async () => {
@@ -219,5 +301,32 @@ describe("CoworkersPage", () => {
       expect(mockDeleteCoworkerMutateAsync).toHaveBeenCalledWith("cw-1");
     });
     expect(mockToastSuccess).toHaveBeenCalledWith("Coworker deleted.");
+  });
+
+  it("creates a coworker with the selected builder model", async () => {
+    render(<CoworkersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /model selector:/i }));
+    fireEvent.click(screen.getByRole("button", { name: /submit prompt/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCoworkerMutateAsync).toHaveBeenCalledWith({
+        name: "",
+        triggerType: "manual",
+        prompt: "",
+        model: "openai/gpt-5.2-codex",
+        authSource: "shared",
+        toolAccessMode: "all",
+        allowedIntegrations: expect.any(Array),
+      });
+    });
+
+    expect(mockStartGeneration).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      content: "Build me a coworker",
+      model: "openai/gpt-5.2-codex",
+      authSource: "shared",
+      autoApprove: true,
+    });
   });
 });

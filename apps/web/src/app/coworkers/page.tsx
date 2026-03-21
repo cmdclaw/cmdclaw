@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
 import { Loader2, PenLine, Play, Power, Trash2 } from "lucide-react";
 import Image from "next/image";
@@ -8,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
 import { PromptBar } from "@/components/prompt-bar";
 import {
@@ -29,6 +31,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
+import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import {
   INTEGRATION_LOGOS,
@@ -42,6 +45,7 @@ import {
   useCoworkerList,
   useDeleteCoworker,
   useIntegrationList,
+  useProviderAuthStatus,
   useTranscribe,
   useTriggerCoworker,
   useUpdateCoworker,
@@ -317,6 +321,7 @@ export default function CoworkersPage() {
   const router = useRouter();
   const { data: coworkers, isLoading } = useCoworkerList();
   const { data: integrations } = useIntegrationList();
+  const { data: providerAuthStatus } = useProviderAuthStatus();
   const createCoworker = useCreateCoworker();
   const triggerCoworker = useTriggerCoworker();
   const updateCoworker = useUpdateCoworker();
@@ -334,6 +339,8 @@ export default function CoworkersPage() {
   const [statusCoworkerId, setStatusCoworkerId] = useState<string | null>(null);
   const [deletingCoworkerId, setDeletingCoworkerId] = useState<string | null>(null);
   const [coworkerPendingDelete, setCoworkerPendingDelete] = useState<CoworkerItem | null>(null);
+  const [model, setModel] = useState(DEFAULT_COWORKER_BUILDER_MODEL);
+  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>(null);
   const isRecordingRef = useRef(false);
   const coworkerList = useMemo(() => {
     const real = Array.isArray(coworkers) ? coworkers : [];
@@ -355,6 +362,13 @@ export default function CoworkersPage() {
           : [],
       ),
     [integrations],
+  );
+  const openAIAvailability = useMemo(
+    () => ({
+      user: Boolean(providerAuthStatus?.connected?.openai),
+      shared: Boolean(providerAuthStatus?.shared?.openai),
+    }),
+    [providerAuthStatus],
   );
 
   const handleRunCoworker = useCallback(
@@ -463,6 +477,38 @@ export default function CoworkersPage() {
     isRecordingRef.current = true;
     void startRecording();
   }, [isCreating, isProcessingVoice, startRecording]);
+  const handleModelChange = useCallback(
+    (input: { model: string; authSource?: ProviderAuthSource | null }) => {
+      const normalized = normalizeChatModelSelection(input);
+      if (!normalized.model) {
+        return;
+      }
+
+      setModel(normalized.model);
+      setModelAuthSource(normalized.authSource);
+    },
+    [],
+  );
+  const modelSelectorNode = useMemo(
+    () => (
+      <ModelSelector
+        selectedModel={model}
+        selectedAuthSource={modelAuthSource}
+        availability={openAIAvailability}
+        onSelectionChange={handleModelChange}
+        disabled={isCreating || isRecording || isProcessingVoice}
+      />
+    ),
+    [
+      handleModelChange,
+      isCreating,
+      isProcessingVoice,
+      isRecording,
+      model,
+      modelAuthSource,
+      openAIAvailability,
+    ],
+  );
 
   const doCreate = useCallback(
     async ({
@@ -480,7 +526,8 @@ export default function CoworkersPage() {
         name,
         triggerType,
         prompt: coworkerPrompt,
-        model: DEFAULT_COWORKER_BUILDER_MODEL,
+        model,
+        authSource: modelAuthSource,
         toolAccessMode: "all",
         allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
       });
@@ -494,7 +541,8 @@ export default function CoworkersPage() {
           await client.generation.startGeneration({
             conversationId,
             content: text,
-            model: DEFAULT_COWORKER_BUILDER_MODEL,
+            model,
+            authSource: modelAuthSource,
             autoApprove: true,
           });
         } catch (builderError) {
@@ -504,7 +552,7 @@ export default function CoworkersPage() {
 
       window.location.assign(`/coworkers/${result.id}`);
     },
-    [createCoworker],
+    [createCoworker, model, modelAuthSource],
   );
 
   const handlePromptSubmit = useCallback(
@@ -550,6 +598,7 @@ export default function CoworkersPage() {
             onStopRecording={stopRecordingAndTranscribe}
             voiceInteractionMode="toggle"
             prefillRequest={inputPrefillRequest}
+            renderModelSelector={modelSelectorNode}
           />
           {(isRecording || isProcessingVoice || voiceError) && (
             <div className="mt-4">

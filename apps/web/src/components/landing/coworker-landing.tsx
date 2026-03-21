@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -7,6 +8,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
 import {
   clearPendingCoworkerPrompt,
@@ -18,9 +20,10 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
+import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { client } from "@/orpc/client";
-import { useCreateCoworker, useTranscribe } from "@/orpc/hooks";
+import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -387,10 +390,14 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const createCoworker = useCreateCoworker();
+  const [hasSession, setHasSession] = useState(initialHasSession);
+  const { data: providerAuthStatus } = useProviderAuthStatus({ enabled: hasSession });
   const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
   const [isCreating, setIsCreating] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [model, setModel] = useState(DEFAULT_COWORKER_BUILDER_MODEL);
+  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>(null);
   const [inputPrefillRequest, setInputPrefillRequest] = useState<{
     id: string;
     text: string;
@@ -403,8 +410,47 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
   const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
   const previewId = searchParams.get("preview");
+  const openAIAvailability = useMemo(
+    () => ({
+      user: Boolean(providerAuthStatus?.connected?.openai),
+      shared: Boolean(providerAuthStatus?.shared?.openai),
+    }),
+    [providerAuthStatus],
+  );
 
   const activeExample = HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length];
+  const handleModelChange = useCallback(
+    (input: { model: string; authSource?: ProviderAuthSource | null }) => {
+      const normalized = normalizeChatModelSelection(input);
+      if (!normalized.model) {
+        return;
+      }
+
+      setModel(normalized.model);
+      setModelAuthSource(normalized.authSource);
+    },
+    [],
+  );
+  const modelSelectorNode = useMemo(
+    () => (
+      <ModelSelector
+        selectedModel={model}
+        selectedAuthSource={modelAuthSource}
+        availability={openAIAvailability}
+        onSelectionChange={handleModelChange}
+        disabled={isCreating || isRecording || isProcessingVoice}
+      />
+    ),
+    [
+      handleModelChange,
+      isCreating,
+      isProcessingVoice,
+      isRecording,
+      model,
+      modelAuthSource,
+      openAIAvailability,
+    ],
+  );
 
   const doCreate = useCallback(
     async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
@@ -414,7 +460,8 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
           triggerType:
             (opts.triggerType as "manual" | "schedule" | "email" | "webhook") ?? "manual",
           prompt: opts.prompt,
-          model: DEFAULT_COWORKER_BUILDER_MODEL,
+          model,
+          authSource: modelAuthSource,
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 
@@ -427,7 +474,8 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
             await client.generation.startGeneration({
               conversationId,
               content: initialMessage,
-              model: DEFAULT_COWORKER_BUILDER_MODEL,
+              model,
+              authSource: modelAuthSource,
               autoApprove: true,
             });
           } catch (error) {
@@ -441,7 +489,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
       }
       return true;
     },
-    [createCoworker],
+    [createCoworker, model, modelAuthSource],
   );
 
   const redirectToLogin = useCallback(() => {
@@ -493,10 +541,13 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
           return;
         }
 
-        setShowFooter(!(result?.data?.session && result?.data?.user));
+        const authenticated = Boolean(result?.data?.session && result?.data?.user);
+        setHasSession(authenticated);
+        setShowFooter(!authenticated);
       })
       .catch(() => {
         if (mounted) {
+          setHasSession(false);
           setShowFooter(true);
         }
       });
@@ -634,6 +685,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
                 onStopRecording={stopRecordingAndTranscribe}
                 voiceInteractionMode="toggle"
                 prefillRequest={inputPrefillRequest}
+                renderModelSelector={!isAnonymous ? modelSelectorNode : undefined}
               />
               {(isRecording || isProcessingVoice || voiceError) && (
                 <div className="mt-4">
