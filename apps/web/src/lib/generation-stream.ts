@@ -1,4 +1,6 @@
 import type { RouterClient } from "@orpc/server";
+import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import { normalizeGenerationError, type NormalizedGenerationError } from "@/lib/generation-errors";
 import type { AppRouter } from "../server/orpc";
 
 export type ToolUseData = {
@@ -130,7 +132,7 @@ export type GenerationCallbacks = {
     artifacts?: DoneArtifactsData,
   ) => void | Promise<void>;
   onStarted?: (generationId: string, conversationId: string) => void | Promise<void>;
-  onError?: (message: string) => void | Promise<void>;
+  onError?: (error: NormalizedGenerationError) => void | Promise<void>;
   onCancelled?: (data: {
     generationId: string;
     conversationId: string;
@@ -276,7 +278,9 @@ export async function runGenerationStream(
         );
         break;
       case "error":
-        await callbacks.onError?.(event.message);
+        await callbacks.onError?.(
+          normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
+        );
         break;
       case "cancelled":
         await callbacks.onCancelled?.({

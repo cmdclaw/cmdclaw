@@ -33,6 +33,7 @@ import {
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
+import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
   INTEGRATION_LOGOS,
   INTEGRATION_DISPLAY_NAMES,
@@ -547,6 +548,7 @@ export default function CoworkersPage() {
           });
         } catch (builderError) {
           console.error("Failed to start coworker builder generation:", builderError);
+          throw builderError;
         }
       }
 
@@ -570,8 +572,8 @@ export default function CoworkersPage() {
           prompt: "",
           triggerType: "manual",
         });
-      } catch {
-        toast.error("Failed to create coworker. Please try again.");
+      } catch (error) {
+        toast.error(normalizeGenerationError(error, "start_rpc").message);
         setIsCreating(false);
       }
     },

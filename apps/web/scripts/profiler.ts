@@ -354,8 +354,8 @@ async function runSingle(args: {
       onAuthResult: () => undefined,
       onSandboxFile: () => undefined,
       onStatusChange: () => undefined,
-      onError: (message) => {
-        throw new Error(message);
+      onError: (error) => {
+        throw new Error(error.message);
       },
       onCancelled: () => {
         throw new Error("Generation cancelled");

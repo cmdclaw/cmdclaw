@@ -7,6 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
@@ -21,6 +22,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
+import { normalizeGenerationError } from "@/lib/generation-errors";
 import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { client } from "@/orpc/client";
 import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
@@ -390,8 +392,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const createCoworker = useCreateCoworker();
-  const [hasSession, setHasSession] = useState(initialHasSession);
-  const { data: providerAuthStatus } = useProviderAuthStatus({ enabled: hasSession });
+  const { data: providerAuthStatus } = useProviderAuthStatus();
   const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
   const [isCreating, setIsCreating] = useState(false);
@@ -480,6 +481,8 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
             });
           } catch (error) {
             console.error("Failed to start coworker builder generation:", error);
+            toast.error(normalizeGenerationError(error, "start_rpc").message);
+            return false;
           }
         }
 
@@ -541,13 +544,10 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
           return;
         }
 
-        const authenticated = Boolean(result?.data?.session && result?.data?.user);
-        setHasSession(authenticated);
-        setShowFooter(!authenticated);
+        setShowFooter(!(result?.data?.session && result?.data?.user));
       })
       .catch(() => {
         if (mounted) {
-          setHasSession(false);
           setShowFooter(true);
         }
       });

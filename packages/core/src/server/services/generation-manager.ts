@@ -34,6 +34,7 @@ import { parseBashCommand } from "../ai/permission-checker";
 import { getProviderModels } from "../ai/subscription-providers";
 import { trackGenerationBilling } from "../billing/service";
 import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
+import { START_GENERATION_ERROR_CODES } from "../../lib/generation-errors";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
@@ -60,6 +61,7 @@ import {
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
+import { GenerationStartError } from "./generation-start-error";
 import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-prompt";
 import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
 import {
@@ -1614,9 +1616,11 @@ class GenerationManager {
         },
       });
       if (existing) {
-        throw new Error(
-          `Generation already in progress for this conversation (${existing.id}, status=${existing.status})`,
-        );
+        throw new GenerationStartError({
+          generationErrorCode: START_GENERATION_ERROR_CODES.ACTIVE_GENERATION_EXISTS,
+          rpcCode: "BAD_REQUEST",
+          message: `Generation already in progress for this conversation (${existing.id}, status=${existing.status})`,
+        });
       }
     }
     logServerEvent(
@@ -1638,10 +1642,18 @@ class GenerationManager {
         where: eq(conversation.id, params.conversationId),
       });
       if (!existing) {
-        throw new Error("Conversation not found");
+        throw new GenerationStartError({
+          generationErrorCode: START_GENERATION_ERROR_CODES.CONVERSATION_NOT_FOUND,
+          rpcCode: "NOT_FOUND",
+          message: "Conversation not found",
+        });
       }
       if (existing.userId !== userId) {
-        throw new Error("Access denied");
+        throw new GenerationStartError({
+          generationErrorCode: START_GENERATION_ERROR_CODES.ACCESS_DENIED,
+          rpcCode: "FORBIDDEN",
+          message: "Access denied",
+        });
       }
       conv = existing;
     } else {
@@ -1709,7 +1721,11 @@ class GenerationManager {
         },
         { ...logContext, conversationId: conv.id },
       );
-      throw new Error(accessCheck.userMessage);
+      throw new GenerationStartError({
+        generationErrorCode: START_GENERATION_ERROR_CODES.MODEL_ACCESS_DENIED,
+        rpcCode: "BAD_REQUEST",
+        message: accessCheck.userMessage,
+      });
     }
     logServerEvent(
       "info",

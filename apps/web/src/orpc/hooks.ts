@@ -1,8 +1,10 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
+import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
   runGenerationStream,
   type ToolUseData,
@@ -1283,12 +1285,12 @@ export function useGeneration() {
                 callbacks.onDone?.(generationId, conversationId, messageId, usage, artifacts);
                 queryClient.invalidateQueries({ queryKey: ["conversation"] });
               },
-              onError: (message) => {
-                if (isStreamNotReadyError(message)) {
+              onError: (error) => {
+                if (isStreamNotReadyError(error.message)) {
                   streamNotReady = true;
                   return;
                 }
-                callbacks.onError?.(message);
+                callbacks.onError?.(error);
               },
             },
           });
@@ -1311,7 +1313,9 @@ export function useGeneration() {
           }
 
           if (retries >= STREAM_MAX_RETRIES) {
-            callbacks.onError?.(STREAM_NOT_READY_ERROR);
+            callbacks.onError?.(
+              normalizeGenerationError(STREAM_NOT_READY_ERROR, GENERATION_ERROR_PHASES.STREAM),
+            );
             return currentGenerationId && currentConversationId
               ? {
                   generationId: currentGenerationId,
@@ -1333,12 +1337,19 @@ export function useGeneration() {
           return streamUntilDone();
         };
 
-        return streamUntilDone();
+        return await streamUntilDone();
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return null;
         }
-        callbacks.onError?.(error instanceof Error ? error.message : "Unknown error");
+        callbacks.onError?.(
+          normalizeGenerationError(
+            error,
+            currentGenerationId
+              ? GENERATION_ERROR_PHASES.STREAM
+              : GENERATION_ERROR_PHASES.START_RPC,
+          ),
+        );
         return null;
       } finally {
         abortControllerRef.current = null;
@@ -1378,12 +1389,12 @@ export function useGeneration() {
                 );
                 queryClient.invalidateQueries({ queryKey: ["conversation"] });
               },
-              onError: (message) => {
-                if (isStreamNotReadyError(message)) {
+              onError: (error) => {
+                if (isStreamNotReadyError(error.message)) {
                   streamNotReady = true;
                   return;
                 }
-                callbacks.onError?.(message);
+                callbacks.onError?.(error);
               },
             },
           });
@@ -1393,7 +1404,9 @@ export function useGeneration() {
           }
 
           if (retries >= STREAM_MAX_RETRIES) {
-            callbacks.onError?.(STREAM_NOT_READY_ERROR);
+            callbacks.onError?.(
+              normalizeGenerationError(STREAM_NOT_READY_ERROR, GENERATION_ERROR_PHASES.RECONNECT),
+            );
             return;
           }
 
@@ -1410,7 +1423,7 @@ export function useGeneration() {
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
-        callbacks.onError?.(error instanceof Error ? error.message : "Unknown error");
+        callbacks.onError?.(normalizeGenerationError(error, GENERATION_ERROR_PHASES.RECONNECT));
       } finally {
         abortControllerRef.current = null;
       }

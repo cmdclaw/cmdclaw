@@ -119,15 +119,28 @@ If no contact is found, skip Gmail draft and still create the HubSpot task with 
     expect(mockCreateCoworkerMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("still redirects when builder generation fails after create succeeds", async () => {
+  it("shows the normalized builder error when generation start fails", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    mockStartGeneration.mockRejectedValue(new Error("builder failed"));
+    mockStartGeneration.mockRejectedValue({
+      code: "BAD_REQUEST",
+      message:
+        "Selected ChatGPT model is not available for your current connection. Choose another model and retry.",
+      data: {
+        generationErrorCode: "model_access_denied",
+        phase: "start_rpc",
+      },
+    });
 
     render(<TemplateDeployPage templateId="call-follow-up" />);
 
     await waitFor(() => {
-      expect(assignMock).toHaveBeenCalledWith("/coworkers/cw-1");
+      expect(
+        screen.getByText(
+          "Selected ChatGPT model is not available for your current connection. Choose another model and retry.",
+        ),
+      ).toBeInTheDocument();
     });
+    expect(assignMock).not.toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
   });

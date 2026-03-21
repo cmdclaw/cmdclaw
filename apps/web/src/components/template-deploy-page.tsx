@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { normalizeGenerationError } from "@/lib/generation-errors";
 import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { findTemplateById } from "@/lib/template-data";
 import { buildTemplateDeployPayload } from "@/lib/template-deploy";
@@ -56,6 +57,12 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
           });
         } catch (builderError) {
           console.error("Failed to start coworker builder generation:", builderError);
+          if (cancelled) {
+            return;
+          }
+          startedRef.current = false;
+          setError(normalizeGenerationError(builderError, "start_rpc").message);
+          return;
         }
 
         window.location.assign(`/coworkers/${result.id}`);

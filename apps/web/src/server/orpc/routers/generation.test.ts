@@ -1,3 +1,8 @@
+import {
+  GENERATION_ERROR_PHASES,
+  START_GENERATION_ERROR_CODES,
+} from "@cmdclaw/core/lib/generation-errors";
+import { GenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function createProcedureStub() {
@@ -193,6 +198,35 @@ describe("generationRouter", () => {
       startedAt: "2026-02-25T07:40:22.751Z",
       errorMessage: "401 insufficient permissions",
       status: "error",
+    });
+  });
+
+  it("maps typed startGeneration failures to visible RPC errors", async () => {
+    generationManagerMock.startGeneration.mockRejectedValueOnce(
+      new GenerationStartError({
+        generationErrorCode: START_GENERATION_ERROR_CODES.MODEL_ACCESS_DENIED,
+        rpcCode: "BAD_REQUEST",
+        message:
+          "Selected ChatGPT model is not available for your current connection. Choose another model and retry.",
+      }),
+    );
+
+    await expect(
+      generationRouterAny.startGeneration({
+        input: {
+          content: "hello",
+          model: "openai/gpt-5.4-mini",
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Selected ChatGPT model is not available for your current connection. Choose another model and retry.",
+      data: {
+        generationErrorCode: START_GENERATION_ERROR_CODES.MODEL_ACCESS_DENIED,
+        phase: GENERATION_ERROR_PHASES.START_RPC,
+      },
     });
   });
 

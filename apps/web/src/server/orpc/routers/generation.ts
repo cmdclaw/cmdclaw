@@ -1,11 +1,13 @@
+import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import { PROVIDER_AUTH_SOURCES } from "@cmdclaw/core/lib/provider-auth-source";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
+import { isGenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
 import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observability";
 import { db } from "@cmdclaw/db/client";
 import { generation, conversation } from "@cmdclaw/db/schema";
-import { eventIterator } from "@orpc/server";
+import { eventIterator, ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { detectMessageLanguage } from "@/server/utils/detect-message-language";
@@ -326,9 +328,19 @@ const startGeneration = protectedProcedure
           elapsedMs: Date.now() - startedAt,
           conversationId: input.conversationId,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          generationErrorCode: isGenerationStartError(error) ? error.generationErrorCode : null,
         },
         logContext,
       );
+      if (isGenerationStartError(error)) {
+        throw new ORPCError(error.rpcCode, {
+          message: error.message,
+          data: {
+            generationErrorCode: error.generationErrorCode,
+            phase: GENERATION_ERROR_PHASES.START_RPC,
+          },
+        });
+      }
       throw error;
     }
   });

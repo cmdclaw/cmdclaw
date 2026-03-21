@@ -880,9 +880,9 @@ async function runGeneration(
             );
           }
         },
-        onError: (message) => {
+        onError: (error) => {
           runtime.handleError();
-          process.stdout.write(`\n[error] ${message}\n`);
+          process.stdout.write(`\n[error] ${error.message}\n`);
         },
         onCancelled: () => {
           runtime.handleCancelled();
