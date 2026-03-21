@@ -36,7 +36,11 @@ export function MobileBottomBar() {
         return pathname === "/";
       }
       if (href === "/chat") {
-        return pathname === "/chat" || pathname.startsWith("/chat/");
+        return (
+          pathname === "/chat" ||
+          pathname.startsWith("/chat/") ||
+          pathname.startsWith("/coworkers/runs/")
+        );
       }
       return pathname === href || pathname.startsWith(href + "/");
     },

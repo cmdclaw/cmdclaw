@@ -1,13 +1,8 @@
 "use client";
 
-import { Loader2, ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { SidebarTrigger } from "@/components/animate-ui/components/radix/sidebar";
 import { ChatArea } from "@/components/chat/chat-area";
-import { ChatCopyButton } from "@/components/chat/chat-copy-button";
-import { ChatShareControls } from "@/components/chat/chat-share-controls";
-import { Button } from "@/components/ui/button";
 import { useCoworkerRun } from "@/orpc/hooks";
 
 export default function CoworkerRunPage() {
@@ -17,76 +12,27 @@ export default function CoworkerRunPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-2 border-b px-3 py-2 sm:px-4">
-          <SidebarTrigger className="md:hidden" />
-          <div className="h-9 w-9" />
-          <div>
-            <h2 className="text-sm font-medium">Coworker run</h2>
-            <p className="text-muted-foreground font-mono text-xs">ID: {runId}</p>
-          </div>
-        </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
   }
 
   if (!run) {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex h-12 items-center gap-2 border-b px-3 sm:px-4">
-          <SidebarTrigger className="md:hidden" />
-          <span className="text-sm font-medium">Coworker run</span>
-        </div>
-        <div className="text-muted-foreground p-6 text-sm">Run not found.</div>
-      </div>
-    );
+    return <div className="text-muted-foreground p-6 text-sm">Run not found.</div>;
   }
 
   if (!run.conversationId) {
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-2 border-b px-3 py-2 sm:px-4">
-          <SidebarTrigger className="md:hidden" />
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={`/coworkers/${run.coworkerId}`}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <h2 className="text-sm font-medium">Coworker run</h2>
-        </div>
-        <div className="space-y-4 p-6">
-          <h3 className="text-lg font-semibold">Run details unavailable in chat view</h3>
-          <p className="text-muted-foreground text-sm">
-            This run does not have a linked conversation, so it cannot be opened in the chat
-            interface.
-          </p>
-        </div>
+      <div className="space-y-4 p-6">
+        <h3 className="text-lg font-semibold">Run details unavailable in chat view</h3>
+        <p className="text-muted-foreground text-sm">
+          This run does not have a linked conversation, so it cannot be opened in the chat
+          interface.
+        </p>
       </div>
     );
   }
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b px-3 py-2 sm:px-4">
-        <SidebarTrigger className="md:hidden" />
-        <Button variant="ghost" size="icon" asChild>
-          <Link href={`/coworkers/${run.coworkerId}`}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div>
-          <h2 className="text-sm font-medium">Coworker run</h2>
-          <p className="text-muted-foreground font-mono text-xs">ID: {run.id}</p>
-        </div>
-        <ChatCopyButton conversationId={run.conversationId} className="ml-auto" />
-        <ChatShareControls conversationId={run.conversationId} />
-      </div>
-      <div className="bg-background flex min-h-0 flex-1 overflow-hidden">
-        <ChatArea conversationId={run.conversationId} />
-      </div>
-    </div>
-  );
+  return <ChatArea conversationId={run.conversationId} />;
 }
