@@ -39,6 +39,7 @@ import {
   INTEGRATION_DISPLAY_NAMES,
   COWORKER_AVAILABLE_INTEGRATION_TYPES,
 } from "@/lib/integration-icons";
+import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { cn } from "@/lib/utils";
 import { client } from "@/orpc/client";
 import {
@@ -364,11 +365,12 @@ export default function CoworkersPage() {
       ),
     [integrations],
   );
-  const openAIAvailability = useMemo(
-    () => ({
-      user: Boolean(providerAuthStatus?.connected?.openai),
-      shared: Boolean(providerAuthStatus?.shared?.openai),
-    }),
+  const providerAvailability = useMemo(
+    () =>
+      buildProviderAuthAvailabilityByProvider({
+        connectedProviders: providerAuthStatus?.connected,
+        sharedConnectedProviders: providerAuthStatus?.shared,
+      }),
     [providerAuthStatus],
   );
 
@@ -495,7 +497,7 @@ export default function CoworkersPage() {
       <ModelSelector
         selectedModel={model}
         selectedAuthSource={modelAuthSource}
-        availability={openAIAvailability}
+        providerAvailability={providerAvailability}
         onSelectionChange={handleModelChange}
         disabled={isCreating || isRecording || isProcessingVoice}
       />
@@ -507,7 +509,7 @@ export default function CoworkersPage() {
       isRecording,
       model,
       modelAuthSource,
-      openAIAvailability,
+      providerAvailability,
     ],
   );
 

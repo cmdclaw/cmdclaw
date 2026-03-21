@@ -13,6 +13,7 @@ import {
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import {
   normalizeModelAuthSource,
+  providerSupportsAuthSource,
   type ProviderAuthSource,
 } from "@cmdclaw/core/lib/provider-auth-source";
 import {
@@ -89,6 +90,12 @@ function resolveCoworkerAuthSource(
   model: string,
   authSource?: ProviderAuthSource | null,
 ): ProviderAuthSource | null {
+  const { providerID } = parseModelReference(model);
+  if (authSource && !providerSupportsAuthSource(providerID, authSource)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Model provider "${providerID}" does not support auth source "${authSource}".`,
+    });
+  }
   return normalizeModelAuthSource({
     model,
     authSource,

@@ -1,9 +1,13 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type {
+  ProviderAuthAvailability,
+  ProviderAuthSource,
+} from "@cmdclaw/core/lib/provider-auth-source";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import {
   normalizeModelAuthSource,
-  resolveDefaultProviderAuthSource,
+  resolveDefaultProviderAuthSourceForAvailability,
 } from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthAvailabilityByProvider } from "./provider-auth-availability";
 import { normalizeChatModelReference } from "./chat-model-reference";
 
 export type ChatModelSelection = {
@@ -35,8 +39,7 @@ export function normalizeChatModelSelection(input: {
 
 export function resolveDefaultChatModelSelection(params: {
   model: string;
-  hasUserOpenAI: boolean;
-  hasSharedOpenAI: boolean;
+  providerAvailabilityByProvider?: ProviderAuthAvailabilityByProvider;
 }): ChatModelSelection {
   const normalized = normalizeChatModelSelection({
     model: params.model,
@@ -46,12 +49,14 @@ export function resolveDefaultChatModelSelection(params: {
   }
 
   const { providerID } = parseModelReference(normalized.model);
+  const availability: ProviderAuthAvailability = params.providerAvailabilityByProvider?.[
+    providerID
+  ] ?? { user: false, shared: false };
   return {
     model: normalized.model,
-    authSource: resolveDefaultProviderAuthSource({
+    authSource: resolveDefaultProviderAuthSourceForAvailability({
       providerID,
-      hasUserAuth: params.hasUserOpenAI,
-      hasSharedAuth: params.hasSharedOpenAI,
+      availability,
     }),
   };
 }

@@ -69,6 +69,10 @@ import {
   isComingSoonIntegration,
   type IntegrationType,
 } from "@/lib/integration-icons";
+import {
+  buildProviderAuthAvailabilityByProvider,
+  type ProviderAuthAvailabilityByProvider,
+} from "@/lib/provider-auth-availability";
 import { cn } from "@/lib/utils";
 import {
   useCreateCoworkerForwardingAlias,
@@ -262,11 +266,12 @@ export default function CoworkerEditorPage() {
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri
   const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1);
-  const openAIAvailability = useMemo(
-    () => ({
-      user: Boolean(providerAuthStatus?.connected?.openai),
-      shared: Boolean(providerAuthStatus?.shared?.openai),
-    }),
+  const providerAvailability = useMemo(
+    () =>
+      buildProviderAuthAvailabilityByProvider({
+        connectedProviders: providerAuthStatus?.connected,
+        sharedConnectedProviders: providerAuthStatus?.shared,
+      }),
     [providerAuthStatus],
   );
   const localTimezone = useMemo(
@@ -835,7 +840,7 @@ export default function CoworkerEditorPage() {
         prompt={prompt}
         model={model}
         modelAuthSource={modelAuthSource}
-        openAIAvailability={openAIAvailability}
+        providerAvailability={providerAvailability}
         availableSkills={availableSkills}
         selectedSkillKeys={selectedSkillKeys}
         isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
@@ -1043,7 +1048,7 @@ export default function CoworkerEditorPage() {
               prompt={prompt}
               model={model}
               modelAuthSource={modelAuthSource}
-              openAIAvailability={openAIAvailability}
+              providerAvailability={providerAvailability}
               availableSkills={availableSkills}
               selectedSkillKeys={selectedSkillKeys}
               isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
@@ -1292,7 +1297,7 @@ type CoworkerSettingsPanelProps = {
   prompt: string;
   model: string;
   modelAuthSource: ProviderAuthSource | null;
-  openAIAvailability: { user: boolean; shared: boolean };
+  providerAvailability: ProviderAuthAvailabilityByProvider;
   availableSkills: { key: string; title: string; source: "Platform" | "Custom" }[];
   selectedSkillKeys: string[];
   isSkillsLoading: boolean;
@@ -1377,7 +1382,7 @@ function CoworkerSettingsPanel({
   prompt,
   model,
   modelAuthSource,
-  openAIAvailability,
+  providerAvailability,
   availableSkills,
   selectedSkillKeys,
   isSkillsLoading,
@@ -1988,7 +1993,7 @@ function CoworkerSettingsPanel({
               <ModelSelector
                 selectedModel={model}
                 selectedAuthSource={modelAuthSource}
-                availability={openAIAvailability}
+                providerAvailability={providerAvailability}
                 onSelectionChange={onModelChange}
               />
             </div>

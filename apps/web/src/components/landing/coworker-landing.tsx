@@ -24,6 +24,7 @@ import { authClient } from "@/lib/auth-client";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { client } from "@/orpc/client";
 import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
 
@@ -411,11 +412,12 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
   const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
   const previewId = searchParams.get("preview");
-  const openAIAvailability = useMemo(
-    () => ({
-      user: Boolean(providerAuthStatus?.connected?.openai),
-      shared: Boolean(providerAuthStatus?.shared?.openai),
-    }),
+  const providerAvailability = useMemo(
+    () =>
+      buildProviderAuthAvailabilityByProvider({
+        connectedProviders: providerAuthStatus?.connected,
+        sharedConnectedProviders: providerAuthStatus?.shared,
+      }),
     [providerAuthStatus],
   );
 
@@ -437,7 +439,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
       <ModelSelector
         selectedModel={model}
         selectedAuthSource={modelAuthSource}
-        availability={openAIAvailability}
+        providerAvailability={providerAvailability}
         onSelectionChange={handleModelChange}
         disabled={isCreating || isRecording || isProcessingVoice}
       />
@@ -449,7 +451,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
       isRecording,
       model,
       modelAuthSource,
-      openAIAvailability,
+      providerAvailability,
     ],
   );
 

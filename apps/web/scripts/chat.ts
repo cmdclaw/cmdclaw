@@ -1,3 +1,4 @@
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import type { RouterClient } from "@orpc/server";
 import { resolveDefaultChatModel } from "@cmdclaw/core/lib/chat-model-defaults";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
@@ -10,6 +11,11 @@ import type { StatusChangeMetadata } from "@/lib/generation-stream";
 import type { AppRouter } from "@/server/orpc";
 import { createGenerationRuntime } from "@/lib/generation-runtime";
 import { runGenerationStream } from "@/lib/generation-stream";
+import {
+  formatModelSelection,
+  parseInteractiveModelCommand,
+  resolveCliModelSelection,
+} from "./lib/chat-model-source";
 import {
   DEFAULT_SERVER_URL,
   ask,
@@ -28,19 +34,22 @@ import {
 } from "./lib/question-approval";
 
 type Args = {
-  serverUrl?: string;
-  conversationId?: string;
-  message?: string;
-  model?: string;
-  sandboxProvider?: "e2b" | "daytona" | "docker";
-  token?: string;
-  files: string[];
-  autoApprove: boolean;
-  validatePersistence: boolean;
   authOnly: boolean;
+  authSource?: ProviderAuthSource | null;
+  autoApprove: boolean;
+  connectedProviderIds?: string[];
+  conversationId?: string;
+  files: string[];
   resetAuth: boolean;
   listModels: boolean;
+  message?: string;
+  model?: string;
   questionAnswers: string[];
+  sandboxProvider?: "e2b" | "daytona" | "docker";
+  serverUrl?: string;
+  sharedConnectedProviderIds?: string[];
+  token?: string;
+  validatePersistence: boolean;
 };
 
 const DEFAULT_CLIENT_ID = "cmdclaw-cli";
@@ -99,6 +108,16 @@ function parseArgs(argv: string[]): Args {
         args.model = argv[i + 1];
         i += 1;
         break;
+      case "--auth-source": {
+        const value = argv[i + 1];
+        if (value !== "user" && value !== "shared") {
+          console.error("Invalid --auth-source value. Use one of: user, shared");
+          process.exit(1);
+        }
+        args.authSource = value;
+        i += 1;
+        break;
+      }
       case "--sandbox": {
         const value = argv[i + 1];
         if (value !== "e2b" && value !== "daytona" && value !== "docker") {
@@ -164,8 +183,9 @@ function printHelp(): void {
   console.log(
     "  -M, --model <provider/model> Model reference (default prefers ChatGPT when connected)",
   );
+  console.log("  --auth-source <user|shared> Override model source when the provider supports it");
   console.log("  --sandbox <e2b|daytona|docker> Override sandbox provider for this generation");
-  console.log("  --list-models             List free model ids and exit");
+  console.log("  --list-models             List chat model options and exit");
   console.log("  --auto-approve            Auto-approve tool calls");
   console.log("  --no-validate             Skip persisted message validation");
   console.log("  -q, --question-answer <v> Pre-answer OpenCode question prompts (repeatable)");
@@ -177,8 +197,8 @@ function printHelp(): void {
   console.log("Interactive commands:");
   console.log("  /file <path>              Attach file before sending");
   console.log("  /model                    Show current model");
-  console.log("  /model <provider/model>   Switch model for next prompts");
-  console.log("  /models                   List free model ids\n");
+  console.log("  /model <provider/model> [--auth-source <user|shared>]   Switch model");
+  console.log("  /models                   List chat model options\n");
 }
 
 function formatToolResult(result: unknown): string {
@@ -488,29 +508,37 @@ async function runChatLoop(
     }
 
     if (input === "/model") {
-      console.log(`Current model: ${options.model ?? "auto"}`);
+      console.log(
+        `Current model: ${formatModelSelection({
+          model: options.model ?? "auto",
+          authSource: options.authSource,
+        })}`,
+      );
       return runStep();
     }
 
     if (input.startsWith("/model ")) {
-      const model = input.slice(7).trim();
-      if (!model) {
-        console.log("Usage: /model <provider/model>");
-        return runStep();
-      }
       try {
-        parseModelReference(model);
+        const parsed = parseInteractiveModelCommand(input.slice(7).trim());
+        parseModelReference(parsed.model);
+        const resolvedSelection = resolveCliModelSelection({
+          model: parsed.model,
+          authSource: parsed.authSource,
+          connectedProviderIds: options.connectedProviderIds,
+          sharedConnectedProviderIds: options.sharedConnectedProviderIds,
+        });
+        options.model = resolvedSelection.model;
+        options.authSource = resolvedSelection.authSource;
+        console.log(`Switched model to: ${formatModelSelection(resolvedSelection)}`);
       } catch (error) {
         console.log(error instanceof Error ? error.message : String(error));
         return runStep();
       }
-      options.model = model;
-      console.log(`Switched model to: ${options.model}`);
       return runStep();
     }
 
     if (input === "/models") {
-      await printFreeModels();
+      await printAvailableModels(options);
       return runStep();
     }
 
@@ -561,6 +589,7 @@ async function runGeneration(
         conversationId,
         content,
         model: options.model,
+        authSource: options.authSource,
         sandboxProvider: options.sandboxProvider,
         autoApprove: options.autoApprove,
         fileAttachments: attachments?.length ? attachments : undefined,
@@ -922,14 +951,22 @@ async function printAuthenticatedUser(client: RouterClient<AppRouter>): Promise<
   }
 }
 
+async function hydrateProviderAvailability(
+  client: RouterClient<AppRouter>,
+  args: Args,
+): Promise<{ freeModels: Awaited<ReturnType<typeof client.providerAuth.freeModels>> }> {
+  const [authStatus, freeModels] = await Promise.all([
+    client.providerAuth.status(),
+    client.providerAuth.freeModels(),
+  ]);
+  args.connectedProviderIds = Object.keys(authStatus.connected ?? {});
+  args.sharedConnectedProviderIds = Object.keys(authStatus.shared ?? {});
+  return { freeModels };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const requestedServerUrl = args.serverUrl || process.env.CMDCLAW_SERVER_URL || DEFAULT_SERVER_URL;
-
-  if (args.listModels) {
-    await printFreeModels();
-    process.exit(0);
-  }
 
   if (args.resetAuth) {
     clearConfig(requestedServerUrl);
@@ -959,30 +996,52 @@ async function main(): Promise<void> {
   }
 
   const client = createRpcClient(serverUrl, config.token);
+  let freeModels: Awaited<ReturnType<typeof client.providerAuth.freeModels>> | undefined;
 
   try {
+    const hydrated = await hydrateProviderAvailability(client, args);
+    freeModels = hydrated.freeModels;
     const overrideModel = args.model ?? process.env.CMDCLAW_CHAT_MODEL;
     if (overrideModel?.trim()) {
       const trimmedOverride = overrideModel.trim();
       parseModelReference(trimmedOverride);
-      args.model = trimmedOverride;
-    } else {
-      const [authStatus, freeModels] = await Promise.all([
-        client.providerAuth.status(),
-        client.providerAuth.freeModels(),
-      ]);
-      args.model = resolveDefaultChatModel({
-        isOpenAIConnected: "openai" in (authStatus.connected ?? {}),
-        availableOpencodeFreeModelIDs: freeModels.models.map((model) => model.id),
+      const resolvedSelection = resolveCliModelSelection({
+        model: trimmedOverride,
+        authSource: args.authSource,
+        connectedProviderIds: args.connectedProviderIds,
+        sharedConnectedProviderIds: args.sharedConnectedProviderIds,
       });
+      args.model = resolvedSelection.model;
+      args.authSource = resolvedSelection.authSource;
+    } else {
+      const defaultModel = resolveDefaultChatModel({
+        isOpenAIConnected:
+          (args.connectedProviderIds ?? []).includes("openai") ||
+          (args.sharedConnectedProviderIds ?? []).includes("openai"),
+        availableOpencodeFreeModelIDs: (freeModels?.models ?? []).map((model) => model.id),
+      });
+      const resolvedSelection = resolveCliModelSelection({
+        model: defaultModel,
+        connectedProviderIds: args.connectedProviderIds,
+        sharedConnectedProviderIds: args.sharedConnectedProviderIds,
+      });
+      args.model = resolvedSelection.model;
+      args.authSource = resolvedSelection.authSource;
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
-  console.log(`[model] ${args.model}`);
+  console.log(
+    `[model] ${formatModelSelection({ model: args.model ?? "auto", authSource: args.authSource })}`,
+  );
 
   await printAuthenticatedUser(client);
+
+  if (args.listModels) {
+    await printAvailableModels(args, freeModels?.models ?? undefined);
+    process.exit(0);
+  }
 
   if (args.message) {
     // Non-interactive: send a single message and exit
@@ -1015,21 +1074,36 @@ async function main(): Promise<void> {
   rl.close();
 }
 
-async function printFreeModels(): Promise<void> {
+async function printAvailableModels(
+  args: Pick<Args, "connectedProviderIds" | "sharedConnectedProviderIds">,
+  prefetchedFreeModels?: Awaited<ReturnType<typeof listOpencodeFreeModels>>,
+): Promise<void> {
   try {
-    const models = await listOpencodeFreeModels();
-    if (models.length === 0) {
-      console.log("No free OpenCode models found.");
-      return;
+    const freeModels = prefetchedFreeModels ?? (await listOpencodeFreeModels());
+    console.log("CmdClaw Models:");
+    console.log("- Claude Sonnet 4.6 (anthropic/claude-sonnet-4-6) [source=shared]");
+    const sharedOpenAIAvailable = (args.sharedConnectedProviderIds ?? []).includes("openai");
+    console.log(
+      `- GPT-5.4 (openai/gpt-5.4) [source=shared]${sharedOpenAIAvailable ? "" : " [unavailable]"}`,
+    );
+
+    const userOpenAIAvailable = (args.connectedProviderIds ?? []).includes("openai");
+    console.log("\nYour AI Accounts:");
+    if (userOpenAIAvailable) {
+      console.log("- GPT-5.4 (openai/gpt-5.4) [source=user]");
+    } else {
+      console.log("- ChatGPT not connected [source=user]");
     }
 
-    console.log(`Free OpenCode models (${models.length}):`);
-    for (const model of models) {
-      console.log(`- ${model.name} (${model.id})`);
+    if (freeModels.length > 0) {
+      console.log(`\nFree OpenCode Models (${freeModels.length}):`);
+      for (const model of freeModels) {
+        console.log(`- ${model.name} (${model.id})`);
+      }
     }
   } catch (error) {
     console.error(
-      `Failed to fetch free models: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to list models: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

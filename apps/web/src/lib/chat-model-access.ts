@@ -1,23 +1,31 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
-import { normalizeModelAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import {
+  normalizeModelAuthSource,
+  resolveProviderAuthAvailability,
+} from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthAvailabilityByProvider } from "./provider-auth-availability";
 
-const OPENAI_CHATGPT_MODEL_IDS = new Set([
-  "gpt-5.1-codex-max",
-  "gpt-5.1-codex-mini",
-  "gpt-5.2",
-  "gpt-5.2-codex",
-  "gpt-5.1-codex",
-  "gpt-5.4",
-  // "gpt-5.4-mini",
+const PROVIDER_MODEL_IDS_FOR_NEW_CHAT = new Map<string, Set<string>>([
+  ["anthropic", new Set(["claude-sonnet-4-6"])],
+  [
+    "openai",
+    new Set([
+      "gpt-5.1-codex-max",
+      "gpt-5.1-codex-mini",
+      "gpt-5.2",
+      "gpt-5.2-codex",
+      "gpt-5.1-codex",
+      "gpt-5.4",
+      // "gpt-5.4-mini",
+    ]),
+  ],
 ]);
 
 export function isModelAccessibleForNewChat(params: {
   model: string;
   authSource?: ProviderAuthSource | null;
-  hasUserOpenAI: boolean;
-  hasSharedOpenAI: boolean;
-  availableOpencodeFreeModelIDs?: readonly string[];
+  providerAvailabilityByProvider?: ProviderAuthAvailabilityByProvider;
 }): boolean {
   const model = params.model.trim();
   if (!model) {
@@ -31,23 +39,28 @@ export function isModelAccessibleForNewChat(params: {
     return false;
   }
 
-  if (parsed.providerID === "anthropic") {
-    return true;
-  }
-
-  if (parsed.providerID === "openai") {
-    const authSource = normalizeModelAuthSource({
-      model,
-      authSource: params.authSource,
-    });
-    const hasOpenAIAuth = authSource === "shared" ? params.hasSharedOpenAI : params.hasUserOpenAI;
-    return hasOpenAIAuth && OPENAI_CHATGPT_MODEL_IDS.has(parsed.modelID);
-  }
-
   if (parsed.providerID === "opencode") {
     // OpenCode Zen free models are intentionally hidden from new-chat selection for now.
     return false;
   }
 
-  return false;
+  const allowedModelIDs = PROVIDER_MODEL_IDS_FOR_NEW_CHAT.get(parsed.providerID);
+  if (!allowedModelIDs?.has(parsed.modelID)) {
+    return false;
+  }
+
+  const authSource = normalizeModelAuthSource({
+    model,
+    authSource: params.authSource,
+  });
+  if (authSource === null) {
+    return true;
+  }
+
+  const availability =
+    params.providerAvailabilityByProvider?.[parsed.providerID] ??
+    resolveProviderAuthAvailability({
+      providerID: parsed.providerID,
+    });
+  return availability[authSource];
 }

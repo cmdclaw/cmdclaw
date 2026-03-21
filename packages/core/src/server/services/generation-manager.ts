@@ -1,46 +1,8 @@
-import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
-import IORedis from "ioredis";
-import path from "path";
-import type { IntegrationType } from "../oauth/config";
-import type {
-  RuntimeEvent,
-  RuntimeHarnessClient,
-  RuntimePart,
-  RuntimePermissionRequest,
-  RuntimePromptPart,
-  RuntimeQuestionRequest,
-} from "../sandbox/core/types";
-import type { SandboxBackend } from "../sandbox/types";
-import { env } from "../../env";
-import {
-  CUSTOM_SKILL_PREFIX,
-  normalizeCoworkerAllowedSkillSlugs,
-  splitCoworkerAllowedSkillSlugs,
-} from "../../lib/coworker-tool-policy";
-import {
-  getCoworkerCliSystemPrompt,
-  parseCoworkerInvocationEnvelope,
-} from "../../lib/coworker-runtime-cli";
-import { parseModelReference } from "../../lib/model-reference";
-import {
-  normalizeModelAuthSource,
-  type ProviderAuthSource,
-} from "../../lib/provider-auth-source";
-import {
-  listOpencodeFreeModels,
-  resolveDefaultOpencodeFreeModel,
-} from "../ai/opencode-models";
-import { parseBashCommand } from "../ai/permission-checker";
-import { getProviderModels } from "../ai/subscription-providers";
-import { trackGenerationBilling } from "../billing/service";
-import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
-import { START_GENERATION_ERROR_CODES } from "../../lib/generation-errors";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
   conversationQueuedMessage,
   generation,
-  generationInterrupt,
   message,
   messageAttachment,
   skill,
@@ -56,12 +18,50 @@ import {
   type QueuedMessageAttachment,
 } from "@cmdclaw/db/schema";
 import { customIntegrationCredential } from "@cmdclaw/db/schema";
+import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
+import IORedis from "ioredis";
+import path from "path";
+import type { IntegrationType } from "../oauth/config";
+import type {
+  RuntimeEvent,
+  RuntimeHarnessClient,
+  RuntimePart,
+  RuntimePermissionRequest,
+  RuntimePromptPart,
+  RuntimeQuestionRequest,
+} from "../sandbox/core/types";
+import type { SandboxBackend } from "../sandbox/types";
+import { env } from "../../env";
+import {
+  getCoworkerCliSystemPrompt,
+  parseCoworkerInvocationEnvelope,
+} from "../../lib/coworker-runtime-cli";
+import {
+  CUSTOM_SKILL_PREFIX,
+  normalizeCoworkerAllowedSkillSlugs,
+  splitCoworkerAllowedSkillSlugs,
+} from "../../lib/coworker-tool-policy";
+import { START_GENERATION_ERROR_CODES } from "../../lib/generation-errors";
+import { parseModelReference } from "../../lib/model-reference";
+import {
+  getProviderAuthProviderID,
+  getProviderDisplayName,
+  normalizeModelAuthSource,
+  providerSupportsAuthSource,
+  resolveProviderAuthAvailability,
+  type ProviderAuthAvailability,
+  type ProviderAuthSource,
+} from "../../lib/provider-auth-source";
+import { listOpencodeFreeModels, resolveDefaultOpencodeFreeModel } from "../ai/opencode-models";
+import { parseBashCommand } from "../ai/permission-checker";
+import { getProviderModels } from "../ai/subscription-providers";
+import { trackGenerationBilling } from "../billing/service";
+import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
 import {
   getCliEnvForUser,
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
-import { GenerationStartError } from "./generation-start-error";
 import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-prompt";
 import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
 import {
@@ -84,16 +84,16 @@ import {
   type GenerationStreamEnvelope,
 } from "../redis/generation-event-bus";
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
-import {
-  buildMemorySystemPrompt,
-  syncMemoryFilesToSandbox,
-} from "../sandbox/prep/memory-prep";
+import { buildMemorySystemPrompt, syncMemoryFilesToSandbox } from "../sandbox/prep/memory-prep";
 import {
   getIntegrationSkillsSystemPrompt,
   getSkillsSystemPrompt,
   writeResolvedIntegrationSkillsToSandbox,
   writeSkillsToSandbox,
 } from "../sandbox/prep/skills-prep";
+import { generateConversationTitle } from "../utils/generate-title";
+import { createTraceId, logServerEvent } from "../utils/observability";
+import { isStatelessServerlessRuntime } from "../utils/runtime-platform";
 import {
   applyCoworkerBuilderPatch,
   extractCoworkerBuilderPatch,
@@ -101,6 +101,12 @@ import {
   type CoworkerBuilderContext,
 } from "./coworker-builder-service";
 import { generateCoworkerMetadataOnFirstPromptFill } from "./coworker-metadata";
+import {
+  generationInterruptService,
+  type GenerationInterruptEventPayload,
+  type GenerationInterruptRecord,
+} from "./generation-interrupt-service";
+import { GenerationStartError } from "./generation-start-error";
 import { createCommunityIntegrationSkill } from "./integration-skill-service";
 import { writeSessionTranscriptFromConversation } from "./memory-service";
 import { resolveSelectedPlatformSkillSlugs } from "./platform-skill-service";
@@ -108,15 +114,6 @@ import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-servic
 import { getSandboxSlotManager } from "./sandbox-slot-manager";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
 import { sendTaskDonePush } from "./web-push-service";
-import { generateConversationTitle } from "../utils/generate-title";
-import { createTraceId, logServerEvent } from "../utils/observability";
-import { isStatelessServerlessRuntime } from "../utils/runtime-platform";
-import {
-  generationInterruptService,
-  type GenerationInterruptEventPayload,
-  type GenerationInterruptKind,
-  type GenerationInterruptRecord,
-} from "./generation-interrupt-service";
 
 let cachedDefaultCoworkerModelPromise: Promise<string> | undefined;
 
@@ -1195,9 +1192,14 @@ class GenerationManager {
         if (!ctx.sandboxSlotLeaseToken) {
           return;
         }
-        void getSandboxSlotManager().renewLease(ctx.id, ctx.sandboxSlotLeaseToken).catch((error) => {
-          console.error(`[GenerationManager] Failed to renew sandbox slot for generation ${ctx.id}:`, error);
-        });
+        void getSandboxSlotManager()
+          .renewLease(ctx.id, ctx.sandboxSlotLeaseToken)
+          .catch((error) => {
+            console.error(
+              `[GenerationManager] Failed to renew sandbox slot for generation ${ctx.id}:`,
+              error,
+            );
+          });
       }, 30_000);
       return "acquired";
     }
@@ -1359,10 +1361,10 @@ class GenerationManager {
     authSource?: ProviderAuthSource | null;
   }): Promise<ModelAccessCheckResult> {
     const { providerID, modelID } = parseModelReference(params.model);
-
-    if (providerID === "anthropic") {
-      return { allowed: true };
-    }
+    const authSource = resolveModelAuthSource({
+      model: params.model,
+      authSource: params.authSource,
+    });
 
     if (providerID === "opencode") {
       const models = await listOpencodeFreeModels();
@@ -1377,53 +1379,49 @@ class GenerationManager {
       };
     }
 
-    if (providerID === "openai") {
-      const authSource = resolveModelAuthSource({
-        model: params.model,
-        authSource: params.authSource,
-      });
-      const hasAuth = await hasConnectedProviderAuthForUser(params.userId, "openai", authSource);
+    const authProviderID = getProviderAuthProviderID(providerID);
+    if (authSource !== null || authProviderID !== null) {
+      const availabilityChecks: ProviderAuthAvailability =
+        authProviderID === null
+          ? resolveProviderAuthAvailability({
+              providerID,
+            })
+          : {
+              user: await hasConnectedProviderAuthForUser(params.userId, authProviderID, "user"),
+              shared: await hasConnectedProviderAuthForUser(
+                params.userId,
+                authProviderID,
+                "shared",
+              ),
+            };
+      const hasAuth = authSource ? availabilityChecks[authSource] : true;
       if (!hasAuth) {
+        const providerLabel = getProviderDisplayName(providerID);
         return {
           allowed: false,
-          reason: "openai_not_connected",
+          reason: `${providerID}_not_connected`,
           userMessage:
             authSource === "shared"
-              ? "This ChatGPT model requires the shared CmdClaw Models connection. Ask an admin to reconnect GPT-5.4, then retry."
-              : "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+              ? `This ${providerLabel} model requires the shared workspace connection. Ask an admin to reconnect it, then retry.`
+              : `This ${providerLabel} model requires your connected account. Connect it in Settings > Connected AI Account, then retry.`,
         };
       }
-      const allowedIDs = new Set(getProviderModels("openai").map((model) => model.id));
+    }
+
+    if (authProviderID === "openai" || authProviderID === "kimi") {
+      const allowedIDs = new Set(getProviderModels(authProviderID).map((model) => model.id));
       if (!allowedIDs.has(modelID)) {
+        const providerLabel = getProviderDisplayName(providerID);
         return {
           allowed: false,
-          reason: "openai_model_not_allowed",
-          userMessage:
-            "Selected ChatGPT model is not available for your current connection. Choose another model and retry.",
+          reason: `${providerID}_model_not_allowed`,
+          userMessage: `Selected ${providerLabel} model is not available for your current connection. Choose another model and retry.`,
         };
       }
       return { allowed: true };
     }
 
-    if (providerID === "kimi-for-coding") {
-      const hasAuth = await hasConnectedProviderAuthForUser(params.userId, "kimi");
-      if (!hasAuth) {
-        return {
-          allowed: false,
-          reason: "kimi_not_connected",
-          userMessage:
-            "This Kimi model requires a connected Kimi API key in Settings > Connected AI Account.",
-        };
-      }
-      const allowedIDs = new Set(getProviderModels("kimi").map((model) => model.id));
-      if (!allowedIDs.has(modelID)) {
-        return {
-          allowed: false,
-          reason: "kimi_model_not_allowed",
-          userMessage:
-            "Selected Kimi model is not available for your current connection. Choose another model and retry.",
-        };
-      }
+    if (providerID === "anthropic") {
       return { allowed: true };
     }
 
@@ -1573,7 +1571,14 @@ class GenerationManager {
     const fileAttachments = params.fileAttachments;
     const requestedModel = model?.trim();
     if (requestedModel) {
-      parseModelReference(requestedModel);
+      const { providerID } = parseModelReference(requestedModel);
+      if (params.authSource && !providerSupportsAuthSource(providerID, params.authSource)) {
+        throw new GenerationStartError({
+          generationErrorCode: START_GENERATION_ERROR_CODES.MODEL_ACCESS_DENIED,
+          rpcCode: "BAD_REQUEST",
+          message: `Model provider "${providerID}" does not support auth source "${params.authSource}".`,
+        });
+      }
     }
     const requestedAuthSource = requestedModel
       ? resolveModelAuthSource({
@@ -1774,7 +1779,10 @@ class GenerationManager {
 
     if (builderCoworkerContext) {
       const coworkerMetadataRow = await db.query.coworker.findFirst({
-        where: and(eq(coworker.id, builderCoworkerContext.coworkerId), eq(coworker.ownerId, userId)),
+        where: and(
+          eq(coworker.id, builderCoworkerContext.coworkerId),
+          eq(coworker.ownerId, userId),
+        ),
         columns: {
           id: true,
           name: true,
@@ -1801,8 +1809,8 @@ class GenerationManager {
           },
         });
         const persistedMetadataUpdates = Object.fromEntries(
-          Object.entries(metadataUpdates).filter((entry): entry is [string, string] =>
-            typeof entry[1] === "string",
+          Object.entries(metadataUpdates).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
           ),
         );
 
@@ -2058,7 +2066,9 @@ class GenerationManager {
     if (!accessCheck.allowed) {
       throw new Error(accessCheck.userMessage);
     }
-    const normalizedAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(params.allowedSkillSlugs);
+    const normalizedAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(
+      params.allowedSkillSlugs,
+    );
     const { platformSkillSlugs } = splitCoworkerAllowedSkillSlugs(normalizedAllowedSkillSlugs);
     const selectedPlatformSkillSlugs = await resolveSelectedPlatformSkillSlugs(platformSkillSlugs);
 
@@ -2278,9 +2288,8 @@ class GenerationManager {
             conversationId: genRecord.conversationId,
           })
         : null;
-    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
-      generationId,
-    );
+    const pendingInterrupt =
+      await generationInterruptService.getPendingInterruptForGeneration(generationId);
 
     const ctx: GenerationContext = {
       id: genRecord.id,
@@ -2327,9 +2336,7 @@ class GenerationManager {
         linkedCoworker?.allowedCustomIntegrations ??
         undefined,
       allowedSkillSlugs:
-        executionPolicy.allowedSkillSlugs ??
-        linkedCoworkerAllowedSkillSlugs ??
-        undefined,
+        executionPolicy.allowedSkillSlugs ?? linkedCoworkerAllowedSkillSlugs ?? undefined,
       coworkerPrompt: undefined,
       coworkerPromptDo: undefined,
       coworkerPromptDont: undefined,
@@ -2337,7 +2344,9 @@ class GenerationManager {
       builderCoworkerContext,
       selectedPlatformSkillSlugs:
         executionPolicy.selectedPlatformSkillSlugs ??
-        (linkedCoworkerPlatformSkillSlugs.length > 0 ? linkedCoworkerPlatformSkillSlugs : undefined),
+        (linkedCoworkerPlatformSkillSlugs.length > 0
+          ? linkedCoworkerPlatformSkillSlugs
+          : undefined),
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
       runtimeCallbackToken: genRecord.runtimeCallbackToken ?? undefined,
@@ -2370,7 +2379,11 @@ class GenerationManager {
     this.activeGenerations.set(genRecord.id, ctx);
     this.markPhase(ctx, "generation_started");
     if (ctx.status === "awaiting_approval" && pendingInterrupt?.expiresAt) {
-      await this.enqueueGenerationTimeout(ctx.id, "approval", pendingInterrupt.expiresAt.toISOString());
+      await this.enqueueGenerationTimeout(
+        ctx.id,
+        "approval",
+        pendingInterrupt.expiresAt.toISOString(),
+      );
     }
     if (ctx.status === "awaiting_auth" && pendingInterrupt?.expiresAt) {
       await this.enqueueGenerationTimeout(ctx.id, "auth", pendingInterrupt.expiresAt.toISOString());
@@ -2796,9 +2809,8 @@ class GenerationManager {
       return false;
     }
 
-    let pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
-      generationId,
-    );
+    let pendingInterrupt =
+      await generationInterruptService.getPendingInterruptForGeneration(generationId);
     if (pendingInterrupt) {
       pendingInterrupt =
         (await generationInterruptService.refreshInterruptExpiry(
@@ -2857,10 +2869,18 @@ class GenerationManager {
 
     const runType: "chat" | "coworker" = linkedRun ? "coworker" : "chat";
     if (nextStatus === "awaiting_approval" && pendingInterrupt?.expiresAt) {
-      await this.enqueueGenerationTimeout(generationId, "approval", pendingInterrupt.expiresAt.toISOString());
+      await this.enqueueGenerationTimeout(
+        generationId,
+        "approval",
+        pendingInterrupt.expiresAt.toISOString(),
+      );
     }
     if (nextStatus === "awaiting_auth" && pendingInterrupt?.expiresAt) {
-      await this.enqueueGenerationTimeout(generationId, "auth", pendingInterrupt.expiresAt.toISOString());
+      await this.enqueueGenerationTimeout(
+        generationId,
+        "auth",
+        pendingInterrupt.expiresAt.toISOString(),
+      );
     }
     if (this.shouldDeferGenerationToWorker()) {
       await this.enqueueGenerationRun(generationId, runType);
@@ -2886,10 +2906,13 @@ class GenerationManager {
 
     const now = Date.now();
     if (kind === "approval") {
-      const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
-        generationId,
-      );
-      if (!pendingInterrupt || pendingInterrupt.kind === "auth" || genRecord.status !== "awaiting_approval") {
+      const pendingInterrupt =
+        await generationInterruptService.getPendingInterruptForGeneration(generationId);
+      if (
+        !pendingInterrupt ||
+        pendingInterrupt.kind === "auth" ||
+        genRecord.status !== "awaiting_approval"
+      ) {
         return;
       }
       const expiresAtMs = resolveExpiryMs(
@@ -2936,10 +2959,13 @@ class GenerationManager {
       return;
     }
 
-    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
-      generationId,
-    );
-    if (!pendingInterrupt || pendingInterrupt.kind !== "auth" || genRecord.status !== "awaiting_auth") {
+    const pendingInterrupt =
+      await generationInterruptService.getPendingInterruptForGeneration(generationId);
+    if (
+      !pendingInterrupt ||
+      pendingInterrupt.kind !== "auth" ||
+      genRecord.status !== "awaiting_auth"
+    ) {
       return;
     }
     const expiresAtMs = resolveExpiryMs(
@@ -3136,7 +3162,9 @@ class GenerationManager {
       "Generation was marked as stale by the worker reaper after exceeding max running age.";
 
     if (staleRunningIds.length > 0) {
-      await Promise.all(staleRunningIds.map((id) => generationInterruptService.cancelInterruptsForGeneration(id)));
+      await Promise.all(
+        staleRunningIds.map((id) => generationInterruptService.cancelInterruptsForGeneration(id)),
+      );
       await db
         .update(generation)
         .set({
@@ -3152,7 +3180,9 @@ class GenerationManager {
     }
 
     if (staleCancelledIds.length > 0) {
-      await Promise.all(staleCancelledIds.map((id) => generationInterruptService.cancelInterruptsForGeneration(id)));
+      await Promise.all(
+        staleCancelledIds.map((id) => generationInterruptService.cancelInterruptsForGeneration(id)),
+      );
       await db
         .update(generation)
         .set({
@@ -3322,7 +3352,9 @@ class GenerationManager {
       interruptId: interrupt.id,
       status: decision === "approve" ? "accepted" : "rejected",
       responsePayload:
-        normalizedQuestionAnswers.length > 0 ? { questionAnswers: normalizedQuestionAnswers } : undefined,
+        normalizedQuestionAnswers.length > 0
+          ? { questionAnswers: normalizedQuestionAnswers }
+          : undefined,
       resolvedByUserId: userId,
     });
 
@@ -3380,7 +3412,8 @@ class GenerationManager {
       return null;
     }
 
-    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(generationId);
+    const pendingInterrupt =
+      await generationInterruptService.getPendingInterruptForGeneration(generationId);
     const pendingApproval =
       pendingInterrupt && pendingInterrupt.kind !== "auth"
         ? {
@@ -3545,7 +3578,9 @@ class GenerationManager {
               ? (part.tool_input as Record<string, unknown>)
               : undefined,
         },
-        responsePayload: part.question_answers ? { questionAnswers: part.question_answers } : undefined,
+        responsePayload: part.question_answers
+          ? { questionAnswers: part.question_answers }
+          : undefined,
       };
     }
     return null;
@@ -3596,7 +3631,10 @@ class GenerationManager {
     } finally {
       clearInterval(leaseRenewTimer);
       await this.releaseSandboxSlotLease(ctx).catch((err) => {
-        console.error(`[GenerationManager] Failed to release sandbox slot for generation ${ctx.id}:`, err);
+        console.error(
+          `[GenerationManager] Failed to release sandbox slot for generation ${ctx.id}:`,
+          err,
+        );
       });
       await this.releaseGenerationLease(ctx.id, leaseToken).catch((err) => {
         console.error(`[GenerationManager] Failed to release lease for generation ${ctx.id}:`, err);
@@ -4937,10 +4975,9 @@ class GenerationManager {
     }
 
     let opencodeClient = liveClient;
-    let defaultAnswers =
-      interrupt?.display.questionSpec?.questions.map((question) => [
-        question.options[0]?.label ?? "default answer",
-      ]) ?? [[]];
+    let defaultAnswers = interrupt?.display.questionSpec?.questions.map((question) => [
+      question.options[0]?.label ?? "default answer",
+    ]) ?? [[]];
     if (!opencodeClient) {
       const slotStatus = await this.waitForSandboxSlotLease(ctx);
       if (slotStatus === "requeued") {
@@ -5586,7 +5623,10 @@ class GenerationManager {
       .where(eq(conversation.id, ctx.conversationId));
 
     if (ctx.coworkerRunId) {
-      await db.update(coworkerRun).set({ status: "paused" }).where(eq(coworkerRun.id, ctx.coworkerRunId));
+      await db
+        .update(coworkerRun)
+        .set({ status: "paused" })
+        .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
 
     await this.releaseSandboxSlotLease(ctx);
@@ -5617,7 +5657,10 @@ class GenerationManager {
       .where(eq(conversation.id, ctx.conversationId));
 
     if (ctx.coworkerRunId) {
-      await db.update(coworkerRun).set({ status: "paused" }).where(eq(coworkerRun.id, ctx.coworkerRunId));
+      await db
+        .update(coworkerRun)
+        .set({ status: "paused" })
+        .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
 
     await this.releaseSandboxSlotLease(ctx);
@@ -5648,10 +5691,12 @@ class GenerationManager {
       throw new Error("Access denied");
     }
 
-    const pendingInterrupt = await generationInterruptService.findPendingAuthInterruptByIntegration({
-      generationId,
-      integration,
-    });
+    const pendingInterrupt = await generationInterruptService.findPendingAuthInterruptByIntegration(
+      {
+        generationId,
+        integration,
+      },
+    );
     if (!pendingInterrupt) {
       return false;
     }
@@ -5707,7 +5752,10 @@ class GenerationManager {
 
     if (genRecord.status === "paused") {
       if (linkedCoworkerRun?.id) {
-        await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedCoworkerRun.id));
+        await db
+          .update(coworkerRun)
+          .set({ status: "running" })
+          .where(eq(coworkerRun.id, linkedCoworkerRun.id));
       }
       const activeCtx = this.activeGenerations.get(generationId);
       if (activeCtx && resolvedInterrupt) {
@@ -5737,7 +5785,10 @@ class GenerationManager {
       .where(eq(conversation.id, conversationId));
 
     if (linkedCoworkerRun?.id) {
-      await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedCoworkerRun.id));
+      await db
+        .update(coworkerRun)
+        .set({ status: "running" })
+        .where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
 
     const activeCtx = this.activeGenerations.get(generationId);
@@ -5868,7 +5919,9 @@ class GenerationManager {
       integration: string;
       reason?: string;
     },
-  ): Promise<{ interruptId: string; status: "pending"; expiresAt?: string } | { status: "accepted" }> {
+  ): Promise<
+    { interruptId: string; status: "pending"; expiresAt?: string } | { status: "accepted" }
+  > {
     const genRecord = await db.query.generation.findFirst({
       where: eq(generation.id, generationId),
       with: { conversation: true },
@@ -5938,7 +5991,9 @@ class GenerationManager {
     generationId: string,
     interruptId: string,
   ): Promise<"pending" | "allow" | "deny"> {
-    const genRecord = await db.query.generation.findFirst({ where: eq(generation.id, generationId) });
+    const genRecord = await db.query.generation.findFirst({
+      where: eq(generation.id, generationId),
+    });
     const interrupt = await generationInterruptService.getInterrupt(interruptId);
     if (!genRecord || !interrupt || interrupt.generationId !== generationId) {
       return "deny";

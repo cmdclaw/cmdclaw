@@ -47,8 +47,14 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 
 import { ModelSelector } from "./model-selector";
 
-const NO_PROVIDER_AUTH = { shared: false, user: false } as const;
-const SHARED_ONLY_AUTH = { shared: true, user: false } as const;
+const NO_PROVIDER_AUTH = {
+  anthropic: { shared: true, user: false },
+  openai: { shared: false, user: false },
+} as const;
+const SHARED_ONLY_AUTH = {
+  anthropic: { shared: true, user: false },
+  openai: { shared: true, user: false },
+} as const;
 
 describe("ModelSelector", () => {
   it("always shows CmdClaw Models with Claude available and GPT-5.4 locked without shared auth", () => {
@@ -57,8 +63,8 @@ describe("ModelSelector", () => {
     render(
       <ModelSelector
         selectedModel="anthropic/claude-sonnet-4-6"
-        selectedAuthSource={null}
-        availability={NO_PROVIDER_AUTH}
+        selectedAuthSource="shared"
+        providerAvailability={NO_PROVIDER_AUTH}
         onSelectionChange={onSelectionChange}
       />,
     );
@@ -77,7 +83,7 @@ describe("ModelSelector", () => {
       <ModelSelector
         selectedModel="openai/gpt-5.4"
         selectedAuthSource="shared"
-        availability={NO_PROVIDER_AUTH}
+        providerAvailability={NO_PROVIDER_AUTH}
         onSelectionChange={onSelectionChange}
       />,
     );
@@ -86,7 +92,7 @@ describe("ModelSelector", () => {
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       model: "anthropic/claude-sonnet-4-6",
-      authSource: null,
+      authSource: "shared",
     });
   });
 
@@ -96,8 +102,8 @@ describe("ModelSelector", () => {
     render(
       <ModelSelector
         selectedModel="anthropic/claude-sonnet-4-6"
-        selectedAuthSource={null}
-        availability={NO_PROVIDER_AUTH}
+        selectedAuthSource="shared"
+        providerAvailability={NO_PROVIDER_AUTH}
         onSelectionChange={onSelectionChange}
       />,
     );
@@ -113,8 +119,8 @@ describe("ModelSelector", () => {
     render(
       <ModelSelector
         selectedModel="anthropic/claude-sonnet-4-6"
-        selectedAuthSource={null}
-        availability={SHARED_ONLY_AUTH}
+        selectedAuthSource="shared"
+        providerAvailability={SHARED_ONLY_AUTH}
         onSelectionChange={onSelectionChange}
       />,
     );

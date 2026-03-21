@@ -54,6 +54,7 @@ import {
   isUnipileMissingCredentialsError,
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
 } from "@/lib/integration-errors";
+import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { client } from "@/orpc/client";
 import {
   useConversation,
@@ -567,9 +568,17 @@ export function ChatArea({
   const selectedModel = useChatModelStore((state) => state.selectedModel);
   const selectedAuthSource = useChatModelStore((state) => state.selectedAuthSource);
   const setSelection = useChatModelStore((state) => state.setSelection);
+  const normalizedSelectedSelection = useMemo(
+    () =>
+      normalizeChatModelSelection({
+        model: selectedModel,
+        authSource: selectedAuthSource,
+      }),
+    [selectedAuthSource, selectedModel],
+  );
   const normalizedSelectedModel = useMemo(
-    () => normalizeChatModelReference(selectedModel),
-    [selectedModel],
+    () => normalizedSelectedSelection.model || normalizeChatModelReference(selectedModel),
+    [normalizedSelectedSelection.model, selectedModel],
   );
   const [queueingEnabled, setQueueingEnabled] = useState(true);
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
@@ -626,12 +635,13 @@ export function ChatArea({
   const isUserOpenAIConnected = Boolean(connectedProviders?.openai);
   const isSharedOpenAIConnected = Boolean(sharedConnectedProviders?.openai);
   const isOpenAIConnected = isUserOpenAIConnected || isSharedOpenAIConnected;
-  const openAIAvailability = useMemo(
-    () => ({
-      user: isUserOpenAIConnected,
-      shared: isSharedOpenAIConnected,
-    }),
-    [isSharedOpenAIConnected, isUserOpenAIConnected],
+  const providerAvailability = useMemo(
+    () =>
+      buildProviderAuthAvailabilityByProvider({
+        connectedProviders,
+        sharedConnectedProviders,
+      }),
+    [connectedProviders, sharedConnectedProviders],
   );
   const suppressedQuestionToolUseIds = useMemo(
     () =>
@@ -685,10 +695,9 @@ export function ChatArea({
     () =>
       resolveDefaultChatModelSelection({
         model: resolvedDefaultModel,
-        hasUserOpenAI: isUserOpenAIConnected,
-        hasSharedOpenAI: isSharedOpenAIConnected,
+        providerAvailabilityByProvider: providerAvailability,
       }),
-    [isSharedOpenAIConnected, isUserOpenAIConnected, resolvedDefaultModel],
+    [providerAvailability, resolvedDefaultModel],
   );
   const conversationModel = (
     existingConversation as
@@ -761,14 +770,15 @@ export function ChatArea({
   }, [isDiscoverOpen, isEmptyChat]);
 
   useEffect(() => {
-    if (!normalizedSelectedModel || normalizedSelectedModel === selectedModel) {
+    if (
+      !normalizedSelectedSelection.model ||
+      (normalizedSelectedSelection.model === selectedModel &&
+        normalizedSelectedSelection.authSource === selectedAuthSource)
+    ) {
       return;
     }
-    setSelection({
-      model: normalizedSelectedModel,
-      authSource: selectedAuthSource,
-    });
-  }, [normalizedSelectedModel, selectedAuthSource, selectedModel, setSelection]);
+    setSelection(normalizedSelectedSelection);
+  }, [normalizedSelectedSelection, selectedAuthSource, selectedModel, setSelection]);
 
   useEffect(() => {
     if (conversationId) {
@@ -782,11 +792,7 @@ export function ChatArea({
     const isAccessible = isModelAccessibleForNewChat({
       model: normalizedSelectedModel,
       authSource: selectedAuthSource,
-      hasUserOpenAI: isUserOpenAIConnected,
-      hasSharedOpenAI: isSharedOpenAIConnected,
-      availableOpencodeFreeModelIDs: (opencodeFreeModelsData?.models ?? []).map(
-        (model) => model.id,
-      ),
+      providerAvailabilityByProvider: providerAvailability,
     });
     const isHiddenOpencodeModel = normalizedSelectedModel.startsWith("opencode/");
 
@@ -800,10 +806,8 @@ export function ChatArea({
   }, [
     conversationId,
     isOpenAIConnected,
-    isSharedOpenAIConnected,
-    isUserOpenAIConnected,
     normalizedSelectedModel,
-    opencodeFreeModelsData,
+    providerAvailability,
     resolvedDefaultSelection,
     selectedAuthSource,
     setSelection,
@@ -2636,12 +2640,12 @@ export function ChatArea({
       <ModelSelector
         selectedModel={normalizedSelectedModel}
         selectedAuthSource={selectedAuthSource}
-        availability={openAIAvailability}
+        providerAvailability={providerAvailability}
         onSelectionChange={setSelection}
         disabled={isStreaming}
       />
     ),
-    [isStreaming, normalizedSelectedModel, openAIAvailability, selectedAuthSource, setSelection],
+    [isStreaming, normalizedSelectedModel, providerAvailability, selectedAuthSource, setSelection],
   );
   const autoApprovalNode = useMemo(
     () => (

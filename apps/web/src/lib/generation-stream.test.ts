@@ -2,6 +2,35 @@ import { describe, expect, it, vi } from "vitest";
 import { runGenerationStream } from "./generation-stream";
 
 describe("runGenerationStream", () => {
+  it("forwards authSource to startGeneration", async () => {
+    const startGeneration = vi.fn().mockResolvedValue({
+      generationId: "gen-1",
+      conversationId: "conv-1",
+    });
+    const client = {
+      generation: {
+        startGeneration,
+        subscribeGeneration: vi.fn().mockResolvedValue((async function* () {})()),
+      },
+    };
+
+    await runGenerationStream({
+      client: client as never,
+      input: {
+        content: "hi",
+        model: "openai/gpt-5.4",
+        authSource: "user",
+      },
+      callbacks: {},
+    });
+
+    expect(startGeneration).toHaveBeenCalledWith({
+      content: "hi",
+      model: "openai/gpt-5.4",
+      authSource: "user",
+    });
+  });
+
   it("forwards status metadata to onStatusChange", async () => {
     const onStatusChange = vi.fn();
     const client = {

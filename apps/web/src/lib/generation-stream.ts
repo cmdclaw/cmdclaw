@@ -1,3 +1,4 @@
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import type { RouterClient } from "@orpc/server";
 import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import { normalizeGenerationError, type NormalizedGenerationError } from "@/lib/generation-errors";
@@ -101,6 +102,7 @@ export type GenerationStartInput = {
   conversationId?: string;
   content: string;
   model?: string;
+  authSource?: ProviderAuthSource | null;
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];

@@ -1,8 +1,13 @@
 "use client";
 
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import {
+  getEmptyProviderAuthAvailability,
+  type ProviderAuthSource,
+} from "@cmdclaw/core/lib/provider-auth-source";
 import { Check, ChevronDown, Lock } from "lucide-react";
 import { useCallback } from "react";
+import type { ProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,12 +19,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type ModelOption = {
+  authSource: ProviderAuthSource | null;
   id: string;
   name: string;
-};
-
-type CmdClawModelOption = ModelOption & {
-  requiresSharedAuth: boolean;
 };
 
 type SortToken = { type: "text"; value: string } | { type: "number"; value: number };
@@ -72,21 +74,22 @@ function sortModels<T extends ModelOption>(models: T[]): T[] {
   return models.toSorted((a, b) => compareModelNames(a.name, b.name));
 }
 
-const CMDCLAW_MODELS: CmdClawModelOption[] = [
+const CMDCLAW_MODELS: ModelOption[] = [
   {
+    authSource: "shared",
     id: "anthropic/claude-sonnet-4-6",
     name: "Claude Sonnet 4.6",
-    requiresSharedAuth: false,
   },
   {
+    authSource: "shared",
     id: "openai/gpt-5.4",
     name: "GPT-5.4",
-    requiresSharedAuth: true,
   },
 ];
 
 const PERSONAL_CHATGPT_MODELS: ModelOption[] = [
   {
+    authSource: "user",
     id: "openai/gpt-5.4",
     name: "GPT-5.4",
   },
@@ -98,33 +101,26 @@ const SORTED_PERSONAL_CHATGPT_MODELS = sortModels(PERSONAL_CHATGPT_MODELS);
 type Props = {
   selectedModel: string;
   selectedAuthSource: ProviderAuthSource | null;
-  availability: {
-    user: boolean;
-    shared: boolean;
-  };
+  providerAvailability: ProviderAuthAvailabilityByProvider;
   onSelectionChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
   disabled?: boolean;
 };
 
-type CmdClawSectionProps = {
-  availability: Props["availability"];
+type ModelSectionProps = {
+  models: ModelOption[];
   selectedModel: string;
   selectedAuthSource: ProviderAuthSource | null;
+  providerAvailability: ProviderAuthAvailabilityByProvider;
   onSelectionChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
 };
 
-type PersonalSectionProps = {
-  selectedModel: string;
-  selectedAuthSource: ProviderAuthSource | null;
-  onSelectionChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
-};
-
-function CmdClawModelsSection({
-  availability,
+function ModelSection({
+  models,
   selectedModel,
   selectedAuthSource,
+  providerAvailability,
   onSelectionChange,
-}: CmdClawSectionProps) {
+}: ModelSectionProps) {
   const handleModelSelect = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       const modelId = event.currentTarget.dataset.modelId;
@@ -142,87 +138,50 @@ function CmdClawModelsSection({
     [onSelectionChange],
   );
 
-  return (
-    <>
-      <DropdownMenuLabel>CmdClaw Models</DropdownMenuLabel>
-      {SORTED_CMDCLAW_MODELS.map((model) => {
-        const isLocked = model.requiresSharedAuth && !availability.shared;
-        const isSelected = model.requiresSharedAuth
-          ? selectedModel === model.id && selectedAuthSource === "shared"
-          : selectedModel === model.id;
+  return models.map((model) => {
+    const { providerID } = parseModelReference(model.id);
+    const availability = providerAvailability[providerID] ?? getEmptyProviderAuthAvailability();
+    const isLocked = model.authSource ? !availability[model.authSource] : false;
+    const isSelected =
+      selectedModel === model.id &&
+      (model.authSource === null
+        ? selectedAuthSource === null
+        : selectedAuthSource === model.authSource);
 
-        return (
-          <DropdownMenuItem
-            key={`cmdclaw-${model.id}`}
-            data-testid={`chat-model-option-cmdclaw-${model.id}`}
-            data-model-id={model.id}
-            data-auth-source={model.requiresSharedAuth ? "shared" : ""}
-            disabled={isLocked}
-            onClick={handleModelSelect}
-          >
-            <span className="flex-1">{model.name}</span>
-            {isLocked ? <Lock className="text-muted-foreground h-3.5 w-3.5" /> : null}
-            {isSelected ? <Check className="text-foreground h-3.5 w-3.5" /> : null}
-          </DropdownMenuItem>
-        );
-      })}
-    </>
-  );
-}
-
-function PersonalChatGPTSection({
-  selectedModel,
-  selectedAuthSource,
-  onSelectionChange,
-}: PersonalSectionProps) {
-  const handleModelSelect = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      const modelId = event.currentTarget.dataset.modelId;
-      if (!modelId) {
-        return;
-      }
-
-      onSelectionChange({
-        model: modelId,
-        authSource: "user",
-      });
-    },
-    [onSelectionChange],
-  );
-
-  return (
-    <>
-      <DropdownMenuLabel>Your ChatGPT</DropdownMenuLabel>
-      {SORTED_PERSONAL_CHATGPT_MODELS.map((model) => (
-        <DropdownMenuItem
-          key={`user-${model.id}`}
-          data-testid={`chat-model-option-user-${model.id}`}
-          data-model-id={model.id}
-          onClick={handleModelSelect}
-        >
-          <span className="flex-1">{model.name}</span>
-          {selectedModel === model.id && selectedAuthSource === "user" ? (
-            <Check className="text-foreground h-3.5 w-3.5" />
-          ) : null}
-        </DropdownMenuItem>
-      ))}
-    </>
-  );
+    return (
+      <DropdownMenuItem
+        key={`${model.authSource ?? "none"}-${model.id}`}
+        data-testid={`chat-model-option-${model.authSource === "user" ? "user" : "cmdclaw"}-${model.id}`}
+        data-model-id={model.id}
+        data-auth-source={model.authSource ?? ""}
+        disabled={isLocked}
+        onClick={handleModelSelect}
+      >
+        <span className="flex-1">{model.name}</span>
+        {isLocked ? <Lock className="text-muted-foreground h-3.5 w-3.5" /> : null}
+        {isSelected ? <Check className="text-foreground h-3.5 w-3.5" /> : null}
+      </DropdownMenuItem>
+    );
+  });
 }
 
 export function ModelSelector({
   selectedModel,
   selectedAuthSource,
-  availability,
+  providerAvailability,
   onSelectionChange,
   disabled,
 }: Props) {
   const allModels = [...CMDCLAW_MODELS, ...PERSONAL_CHATGPT_MODELS];
-  const currentModel = allModels.find((model) => model.id === selectedModel);
+  const currentModel =
+    allModels.find(
+      (model) => model.id === selectedModel && model.authSource === selectedAuthSource,
+    ) ?? allModels.find((model) => model.id === selectedModel);
   const displayName = currentModel?.name ?? selectedModel;
   const openSubscriptions = useCallback(() => {
     window.location.href = "/settings/subscriptions";
   }, []);
+  const openAIAvailability = providerAvailability.openai ?? getEmptyProviderAuthAvailability();
 
   return (
     <DropdownMenu>
@@ -239,21 +198,28 @@ export function ModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <CmdClawModelsSection
-          availability={availability}
+        <DropdownMenuLabel>CmdClaw Models</DropdownMenuLabel>
+        <ModelSection
+          models={SORTED_CMDCLAW_MODELS}
           selectedModel={selectedModel}
           selectedAuthSource={selectedAuthSource}
+          providerAvailability={providerAvailability}
           onSelectionChange={onSelectionChange}
         />
 
         <DropdownMenuSeparator />
 
-        {availability.user ? (
-          <PersonalChatGPTSection
-            selectedModel={selectedModel}
-            selectedAuthSource={selectedAuthSource}
-            onSelectionChange={onSelectionChange}
-          />
+        {openAIAvailability.user ? (
+          <>
+            <DropdownMenuLabel>Your ChatGPT</DropdownMenuLabel>
+            <ModelSection
+              models={SORTED_PERSONAL_CHATGPT_MODELS}
+              selectedModel={selectedModel}
+              selectedAuthSource={selectedAuthSource}
+              providerAvailability={providerAvailability}
+              onSelectionChange={onSelectionChange}
+            />
+          </>
         ) : (
           <>
             <DropdownMenuLabel className="flex items-center gap-1.5">

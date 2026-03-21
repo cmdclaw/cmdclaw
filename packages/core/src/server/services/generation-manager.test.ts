@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  updateWhereMock,
   updateReturningMock,
   updateSetMock,
   insertReturningMock,
@@ -55,7 +54,6 @@ const {
   };
 
   return {
-    updateWhereMock,
     updateReturningMock,
     updateSetMock,
     insertReturningMock,
@@ -158,7 +156,9 @@ const {
     return interrupt;
   });
 
-  const getInterruptMock = vi.fn(async (interruptId: string) => interruptStore.get(interruptId) ?? null);
+  const getInterruptMock = vi.fn(
+    async (interruptId: string) => interruptStore.get(interruptId) ?? null,
+  );
 
   const getPendingInterruptForGenerationMock = vi.fn(async (generationId: string) => {
     const pending = [...interruptStore.values()].find(
@@ -380,6 +380,7 @@ vi.mock("../redis/generation-event-bus", () => ({
   getLatestGenerationStreamEnvelope: getLatestGenerationStreamEnvelopeMock,
 }));
 
+import { env } from "../../env";
 import {
   getCliEnvForUser,
   getCliInstructionsWithCustom,
@@ -387,29 +388,22 @@ import {
 } from "../integrations/cli-env";
 import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-prompt";
 import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
+import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
+import { syncMemoryFilesToSandbox, buildMemorySystemPrompt } from "../sandbox/prep/memory-prep";
 import {
   writeSkillsToSandbox,
   getSkillsSystemPrompt,
   writeResolvedIntegrationSkillsToSandbox,
   getIntegrationSkillsSystemPrompt,
 } from "../sandbox/prep/skills-prep";
-import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
+import { logServerEvent } from "../utils/observability";
 import {
   buildDefaultQuestionAnswers,
   buildQuestionCommand,
   generationManager,
 } from "./generation-manager";
-import {
-  syncMemoryFilesToSandbox,
-  buildMemorySystemPrompt,
-} from "../sandbox/prep/memory-prep";
-import {
-  uploadSandboxFile,
-  collectNewSandboxFiles,
-} from "./sandbox-file-service";
-import { logServerEvent } from "../utils/observability";
-import { env } from "../../env";
+import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-service";
 
 type GenerationCtx = {
   id: string;
@@ -598,10 +592,12 @@ function createConversationRuntimeMock(params: {
   };
 }
 
-function syncInterruptStateMocks(interrupt: {
-  kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
-  status: string;
-} | null): void {
+function syncInterruptStateMocks(
+  interrupt: {
+    kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
+    status: string;
+  } | null,
+): void {
   const generationStatus =
     !interrupt || interrupt.status !== "pending"
       ? "running"
@@ -694,7 +690,9 @@ describe("generationManager transitions", () => {
 
       return interrupt;
     });
-    getInterruptMock.mockImplementation(async (interruptId: string) => interruptStore.get(interruptId) ?? null);
+    getInterruptMock.mockImplementation(
+      async (interruptId: string) => interruptStore.get(interruptId) ?? null,
+    );
     getPendingInterruptForGenerationMock.mockImplementation(async (generationId: string) => {
       const stored = [...interruptStore.values()].find(
         (interrupt) => interrupt.generationId === generationId && interrupt.status === "pending",
@@ -877,10 +875,7 @@ describe("generationManager transitions", () => {
         {
           header: "Goal",
           question: "What do you want me to ask you about?",
-          options: [
-            { label: "Project task (Recommended)" },
-            { label: "Preferences" },
-          ],
+          options: [{ label: "Project task (Recommended)" }, { label: "Preferences" }],
         },
         {
           header: "Format",
@@ -1401,15 +1396,14 @@ describe("generationManager transitions", () => {
 
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
-    generationFindFirstMock
-      .mockResolvedValueOnce({
-        id: ctx.id,
-        conversationId: ctx.conversationId,
-        conversation: {
-          id: ctx.conversationId,
-          userId: ctx.userId,
-        },
-      });
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: ctx.id,
+      conversationId: ctx.conversationId,
+      conversation: {
+        id: ctx.conversationId,
+        userId: ctx.userId,
+      },
+    });
 
     const first = await generationManager.submitAuthResult(ctx.id, "slack", true, ctx.userId);
     expect(first).toBe(true);
@@ -1614,8 +1608,7 @@ describe("generationManager transitions", () => {
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     const metadataUpdateCall = updateSetMock.mock.calls.find(
-      ([values]) =>
-        typeof values?.name === "string" && typeof values?.description === "string",
+      ([values]) => typeof values?.name === "string" && typeof values?.description === "string",
     )?.[0] as { name: string; description: string; username?: string } | undefined;
 
     expect(metadataUpdateCall).toMatchObject({
@@ -1657,7 +1650,7 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce([{ id: "msg-user" }])
       .mockResolvedValueOnce([{ id: "gen-openai" }]);
 
-    providerAuthFindFirstMock.mockResolvedValue({ id: "auth-openai" });
+    sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-openai" });
 
     await generationManager.startGeneration({
       content: "hi",
@@ -1859,8 +1852,52 @@ describe("generationManager transitions", () => {
         model: "openai/gpt-5.2-codex",
       }),
     ).rejects.toThrow(
-      "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+      "This ChatGPT model requires the shared workspace connection. Ask an admin to reconnect it, then retry.",
     );
+  });
+
+  it("uses shared auth when explicitly requested for a dual-source provider", async () => {
+    const mgr = asTestManager();
+    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+    sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-openai" });
+
+    insertReturningMock
+      .mockResolvedValueOnce([
+        {
+          id: "conv-openai-shared",
+          userId: "user-1",
+          model: "openai/gpt-5.2-codex",
+          authSource: "shared",
+          autoApprove: false,
+          type: "chat",
+        },
+      ])
+      .mockResolvedValueOnce([{ id: "msg-user" }])
+      .mockResolvedValueOnce([{ id: "gen-openai-shared" }]);
+
+    await generationManager.startGeneration({
+      content: "hello",
+      userId: "user-1",
+      model: "openai/gpt-5.2-codex",
+      authSource: "shared",
+    });
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(mgr.activeGenerations.get("gen-openai-shared")).toMatchObject({
+      authSource: "shared",
+      model: "openai/gpt-5.2-codex",
+    });
+  });
+
+  it("rejects unsupported auth sources for shared-only providers", async () => {
+    await expect(
+      generationManager.startGeneration({
+        content: "hello",
+        userId: "user-1",
+        model: "anthropic/claude-sonnet-4-6",
+        authSource: "user",
+      }),
+    ).rejects.toThrow('Model provider "anthropic" does not support auth source "user".');
   });
 
   it("starts coworker generation and keeps coworker context fields", async () => {
@@ -1918,7 +1955,7 @@ describe("generationManager transitions", () => {
         model: "openai/gpt-5.2-codex",
       }),
     ).rejects.toThrow(
-      "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+      "This ChatGPT model requires the shared workspace connection. Ask an admin to reconnect it, then retry.",
     );
   });
 

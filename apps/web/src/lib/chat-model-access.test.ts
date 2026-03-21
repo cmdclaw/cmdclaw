@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { isModelAccessibleForNewChat } from "./chat-model-access";
 
 describe("isModelAccessibleForNewChat", () => {
-  it("returns true for anthropic models without any connected provider auth", () => {
+  const noProviderAvailability = {
+    anthropic: { user: false, shared: true },
+    openai: { user: false, shared: false },
+  } as const;
+
+  it("returns true for anthropic models with shared provider capability", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "anthropic/claude-sonnet-4-6",
-        hasUserOpenAI: false,
-        hasSharedOpenAI: false,
+        providerAvailabilityByProvider: noProviderAvailability,
       }),
     ).toBe(true);
   });
@@ -16,8 +20,7 @@ describe("isModelAccessibleForNewChat", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "openai/gpt-5.4",
-        hasUserOpenAI: false,
-        hasSharedOpenAI: false,
+        providerAvailabilityByProvider: noProviderAvailability,
       }),
     ).toBe(false);
   });
@@ -27,8 +30,9 @@ describe("isModelAccessibleForNewChat", () => {
       isModelAccessibleForNewChat({
         model: "openai/gpt-5.4",
         authSource: "user",
-        hasUserOpenAI: true,
-        hasSharedOpenAI: false,
+        providerAvailabilityByProvider: {
+          openai: { user: true, shared: false },
+        },
       }),
     ).toBe(true);
   });
@@ -38,8 +42,9 @@ describe("isModelAccessibleForNewChat", () => {
       isModelAccessibleForNewChat({
         model: "openai/gpt-5.4",
         authSource: "shared",
-        hasUserOpenAI: false,
-        hasSharedOpenAI: true,
+        providerAvailabilityByProvider: {
+          openai: { user: false, shared: true },
+        },
       }),
     ).toBe(true);
   });
@@ -49,8 +54,9 @@ describe("isModelAccessibleForNewChat", () => {
       isModelAccessibleForNewChat({
         model: "openai/unknown",
         authSource: "user",
-        hasUserOpenAI: true,
-        hasSharedOpenAI: false,
+        providerAvailabilityByProvider: {
+          openai: { user: true, shared: false },
+        },
       }),
     ).toBe(false);
   });
@@ -59,8 +65,7 @@ describe("isModelAccessibleForNewChat", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "opencode/glm-5-free",
-        hasUserOpenAI: false,
-        hasSharedOpenAI: false,
+        providerAvailabilityByProvider: noProviderAvailability,
       }),
     ).toBe(false);
   });
