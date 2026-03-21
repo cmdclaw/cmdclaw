@@ -37,7 +37,9 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
         </div>
       )}
 
-      {isRunsRoute || isCoworkerEditorRoute ? (
+      {isRunsRoute ? (
+        children
+      ) : isCoworkerEditorRoute ? (
         <div className="bg-background flex h-full min-h-0 w-full flex-1 overflow-hidden">
           {children}
         </div>
