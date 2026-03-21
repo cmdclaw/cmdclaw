@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { useOpencodeFreeModels } from "@/orpc/hooks";
+// import { useOpencodeFreeModels } from "@/orpc/hooks";
 
 type ModelOption = {
   id: string;
@@ -82,35 +82,17 @@ const ANTHROPIC_MODELS: ModelOption[] = [
 
 const OPENAI_MODELS: ModelOption[] = [
   {
-    id: "openai/gpt-5.1-codex-max",
-    name: "GPT-5.1 Codex Max",
+    id: "openai/gpt-5.4",
+    name: "GPT-5.4",
     provider: "openai",
     providerLabel: "ChatGPT",
   },
-  {
-    id: "openai/gpt-5.1-codex-mini",
-    name: "GPT-5.1 Codex Mini",
-    provider: "openai",
-    providerLabel: "ChatGPT",
-  },
-  {
-    id: "openai/gpt-5.2",
-    name: "GPT-5.2",
-    provider: "openai",
-    providerLabel: "ChatGPT",
-  },
-  {
-    id: "openai/gpt-5.2-codex",
-    name: "GPT-5.2 Codex",
-    provider: "openai",
-    providerLabel: "ChatGPT",
-  },
-  {
-    id: "openai/gpt-5.1-codex",
-    name: "GPT-5.1 Codex",
-    provider: "openai",
-    providerLabel: "ChatGPT",
-  },
+  // {
+  //   id: "openai/gpt-5.4-mini",
+  //   name: "GPT-5.4 Mini",
+  //   provider: "openai",
+  //   providerLabel: "ChatGPT",
+  // },
 ];
 
 const SORTED_ANTHROPIC_MODELS = sortModels(ANTHROPIC_MODELS);
@@ -184,18 +166,21 @@ export function ModelSelector({
   onSelectionChange,
   disabled,
 }: Props) {
-  const { data: freeModelsData } = useOpencodeFreeModels();
-
-  const zenModels: ModelOption[] = sortModels(
-    (freeModelsData?.models ?? []).map((model) => ({
-      id: model.id,
-      name: model.name,
-      provider: "opencode",
-      providerLabel: "OpenCode Zen",
-    })),
-  );
-
-  const allModels = [...ANTHROPIC_MODELS, ...OPENAI_MODELS, ...zenModels];
+  // const { data: freeModelsData } = useOpencodeFreeModels();
+  // const zenModels: ModelOption[] = sortModels(
+  //   (freeModelsData?.models ?? []).map((model) => ({
+  //     id: model.id,
+  //     name: model.name,
+  //     provider: "opencode",
+  //     providerLabel: "OpenCode Zen",
+  //   })),
+  // );
+  // OpenCode Zen free models are intentionally hidden from the selector for now.
+  const allModels = [
+    ...ANTHROPIC_MODELS,
+    ...OPENAI_MODELS,
+    // ...zenModels,
+  ];
 
   const currentModel = allModels.find((m) => m.id === selectedModel);
   const displayName = currentModel?.name ?? selectedModel;
@@ -242,6 +227,7 @@ export function ModelSelector({
           </DropdownMenuItem>
         ))}
 
+        {/*
         {zenModels.length > 0 ? (
           <>
             <DropdownMenuSeparator />
@@ -261,6 +247,7 @@ export function ModelSelector({
             ))}
           </>
         ) : null}
+        */}
 
         <DropdownMenuSeparator />
         {availability.shared ? (

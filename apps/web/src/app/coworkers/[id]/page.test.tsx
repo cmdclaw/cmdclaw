@@ -90,7 +90,7 @@ vi.mock("@/components/chat/model-selector", () => ({
     onSelectionChange: (input: { model: string; authSource?: "user" | "shared" | null }) => void;
   }) => {
     const handleClick = React.useCallback(() => {
-      onSelectionChange({ model: "openai/gpt-5.2-codex", authSource: "shared" });
+      onSelectionChange({ model: "openai/gpt-5.4", authSource: "shared" });
     }, [onSelectionChange]);
 
     return (
@@ -322,7 +322,7 @@ describe("CoworkerEditorPage", () => {
     expect(mockUpdateCoworkerMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "cw-1",
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
       }),
     );
   });
@@ -353,7 +353,7 @@ describe("CoworkerEditorPage", () => {
 
     expect(mockUpdateCoworkerMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
       }),
     );
     expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });

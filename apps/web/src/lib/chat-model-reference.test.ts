@@ -13,6 +13,6 @@ describe("normalizeChatModelReference", () => {
   });
 
   it("upgrades legacy openai ids", () => {
-    expect(normalizeChatModelReference("gpt-5.2-codex")).toBe("openai/gpt-5.2-codex");
+    expect(normalizeChatModelReference("gpt-5.4-mini")).toBe("openai/gpt-5.4-mini");
   });
 });

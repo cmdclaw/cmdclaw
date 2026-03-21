@@ -4,6 +4,7 @@ import {
   resolveDefaultChatModel,
   shouldMigrateLegacyDefaultModel,
 } from "@cmdclaw/core/lib/chat-model-defaults";
+import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -41,6 +42,7 @@ import {
   normalizeChatModelSelection,
   resolveDefaultChatModelSelection,
 } from "@/lib/chat-model-selection";
+import { normalizeGenerationError, type NormalizedGenerationError } from "@/lib/generation-errors";
 import {
   createGenerationRuntime,
   type GenerationRuntime,
@@ -131,6 +133,7 @@ const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
 const EMPTY_SELECTED_SKILLS: string[] = [];
 const EMPTY_ACTIVITY_ITEMS: ActivityItemData[] = [];
 const CUSTOM_SKILL_PREFIX = "custom:";
+const DEFAULT_VISIBLE_CHAT_MODEL = "anthropic/claude-sonnet-4-6";
 
 type PersistedContentPart =
   | { type: "text"; text: string }
@@ -668,12 +671,14 @@ export function ChatArea({
   }, [segments, suppressedQuestionToolUseIds]);
   const resolvedDefaultModel = useMemo(
     () =>
-      resolveDefaultChatModel({
-        isOpenAIConnected,
-        availableOpencodeFreeModelIDs: (opencodeFreeModelsData?.models ?? []).map(
-          (model) => model.id,
-        ),
-      }),
+      isOpenAIConnected
+        ? resolveDefaultChatModel({
+            isOpenAIConnected,
+            availableOpencodeFreeModelIDs: (opencodeFreeModelsData?.models ?? []).map(
+              (model) => model.id,
+            ),
+          })
+        : DEFAULT_VISIBLE_CHAT_MODEL,
     [isOpenAIConnected, opencodeFreeModelsData],
   );
   const resolvedDefaultSelection = useMemo(
@@ -783,9 +788,10 @@ export function ChatArea({
         (model) => model.id,
       ),
     });
+    const isHiddenOpencodeModel = normalizedSelectedModel.startsWith("opencode/");
 
     if (
-      (shouldMigrateLegacyModel || !isAccessible) &&
+      (shouldMigrateLegacyModel || !isAccessible || isHiddenOpencodeModel) &&
       (resolvedDefaultSelection.model !== normalizedSelectedModel ||
         resolvedDefaultSelection.authSource !== selectedAuthSource)
     ) {
@@ -1030,9 +1036,17 @@ export function ChatArea({
         markInitSignal("agent_init_ready");
       } else if (status === "agent_init_failed") {
         markInitMissingAtEnd("agent_init_failed");
+        setStreamingParts([]);
+        setStreamingSandboxFiles([]);
+        setIsStreaming(false);
+        setTraceStatus("complete");
+        setStreamError("Agent initialization failed. Please retry.");
+        currentGenerationIdRef.current = undefined;
+        runtimeRef.current = null;
+        resetInitTracking();
       }
     },
-    [markInitMissingAtEnd, markInitSignal, normalizedSelectedModel, posthog],
+    [markInitMissingAtEnd, markInitSignal, normalizedSelectedModel, posthog, resetInitTracking],
   );
 
   const syncFromRuntime = useCallback((runtime: GenerationRuntime) => {
@@ -1051,6 +1065,70 @@ export function ChatArea({
     setStreamingSandboxFiles(snapshot.sandboxFiles as SandboxFileData[]);
     setTraceStatus(snapshot.traceStatus);
   }, []);
+
+  const clearActiveGenerationUi = useCallback(() => {
+    setStreamingParts([]);
+    setStreamingSandboxFiles([]);
+    setIsStreaming(false);
+    setTraceStatus("complete");
+    currentGenerationIdRef.current = undefined;
+    runtimeRef.current = null;
+    resetInitTracking();
+  }, [resetInitTracking]);
+
+  const handleVisibleGenerationError = useCallback(
+    (error: NormalizedGenerationError, runtime?: GenerationRuntime | null) => {
+      if (runtime) {
+        runtime.handleError();
+        syncFromRuntime(runtime);
+      }
+
+      console.error("Generation error:", error);
+      posthog?.capture("generation_error_visible", {
+        phase: error.phase,
+        generationErrorCode: error.code,
+        transportCode: error.transportCode ?? null,
+        message: error.message,
+        conversationId: currentConversationIdRef.current ?? null,
+        generationId: currentGenerationIdRef.current ?? null,
+        model: normalizedSelectedModel,
+      });
+      markInitMissingAtEnd("error", {
+        message: error.message,
+        phase: error.phase,
+        generationErrorCode: error.code,
+        transportCode: error.transportCode ?? null,
+      });
+      clearActiveGenerationUi();
+      setStreamError(error.message);
+    },
+    [
+      clearActiveGenerationUi,
+      markInitMissingAtEnd,
+      normalizedSelectedModel,
+      posthog,
+      syncFromRuntime,
+    ],
+  );
+
+  const handleGenerationDoneUi = useCallback(() => {
+    setStreamingParts([]);
+    setStreamingSandboxFiles([]);
+    setIsStreaming(false);
+    setSegments([]);
+    setTraceStatus("complete");
+    setStreamError(null);
+    currentGenerationIdRef.current = undefined;
+    runtimeRef.current = null;
+    resetInitTracking();
+  }, [resetInitTracking]);
+
+  const handleGenerationCancelledUi = useCallback(() => {
+    setIsStreaming(false);
+    currentGenerationIdRef.current = undefined;
+    runtimeRef.current = null;
+    resetInitTracking();
+  }, [resetInitTracking]);
 
   const upsertMessageById = useCallback((nextMessage: Message) => {
     setMessages((prev) => {
@@ -1514,15 +1592,7 @@ export function ChatArea({
             timing,
           };
           upsertMessageById(fallbackAssistant);
-          setStreamingParts([]);
-          setStreamingSandboxFiles([]);
-          setIsStreaming(false);
-          setSegments([]);
-          setTraceStatus("complete");
-          setStreamError(null);
-          currentGenerationIdRef.current = undefined;
-          runtimeRef.current = null;
-          resetInitTracking();
+          handleGenerationDoneUi();
           const hydratedAssistant = await hydrateAssistantMessage(
             newConversationId,
             messageId,
@@ -1551,15 +1621,7 @@ export function ChatArea({
             return;
           }
           acceptFurtherEvents = false;
-          runtime.handleError();
-          syncFromRuntime(runtime);
-          console.error("Generation error:", message);
-          markInitMissingAtEnd("error", { message });
-          setIsStreaming(false);
-          setStreamError(message || "Streaming failed. Please retry.");
-          currentGenerationIdRef.current = undefined;
-          runtimeRef.current = null;
-          resetInitTracking();
+          handleVisibleGenerationError(message, runtime);
         },
         onCancelled: (data) => {
           if (
@@ -1578,10 +1640,7 @@ export function ChatArea({
             persistInterruptedRuntimeMessage(runtime, data.messageId);
           }
           markInitMissingAtEnd("cancelled");
-          setIsStreaming(false);
-          currentGenerationIdRef.current = undefined;
-          runtimeRef.current = null;
-          resetInitTracking();
+          handleGenerationCancelledUi();
         },
       });
     }
@@ -1596,6 +1655,8 @@ export function ChatArea({
     handleInitStatusChange,
     markInitMissingAtEnd,
     markInitSignal,
+    handleGenerationCancelledUi,
+    handleGenerationDoneUi,
     persistInterruptedRuntimeMessage,
     queryClient,
     resetInitTracking,
@@ -1603,6 +1664,7 @@ export function ChatArea({
     subscribeToGeneration,
     syncFromRuntime,
     syncConversationForNewChat,
+    handleVisibleGenerationError,
     hydrateAssistantMessage,
     isStreamEventForActiveScope,
     upsertMessageById,
@@ -1612,8 +1674,13 @@ export function ChatArea({
     if (activeGeneration?.status !== "error") {
       return;
     }
-    setStreamError(activeGeneration.errorMessage || "Streaming failed. Please retry.");
-  }, [activeGeneration?.errorMessage, activeGeneration?.status]);
+    handleVisibleGenerationError(
+      normalizeGenerationError(
+        activeGeneration.errorMessage,
+        GENERATION_ERROR_PHASES.PERSISTED_ERROR,
+      ),
+    );
+  }, [activeGeneration?.errorMessage, activeGeneration?.status, handleVisibleGenerationError]);
 
   // Track if user is near bottom of scroll
   const handleScroll = useCallback(() => {
@@ -2001,15 +2068,7 @@ export function ChatArea({
               timing,
             };
             upsertMessageById(fallbackAssistant);
-            setStreamingParts([]);
-            setStreamingSandboxFiles([]);
-            setIsStreaming(false);
-            setSegments([]); // Clear segments when done
-            setTraceStatus("complete");
-            setStreamError(null);
-            currentGenerationIdRef.current = undefined;
-            runtimeRef.current = null;
-            resetInitTracking();
+            handleGenerationDoneUi();
             const hydratedAssistant = await hydrateAssistantMessage(
               newConversationId,
               messageId,
@@ -2043,24 +2102,7 @@ export function ChatArea({
               return;
             }
             acceptFurtherEvents = false;
-            runtime.handleError();
-            syncFromRuntime(runtime);
-            console.error("Generation error:", message);
-            markInitMissingAtEnd("error", { message });
-            setIsStreaming(false);
-            setStreamError(message || "Streaming failed. Please retry.");
-            currentGenerationIdRef.current = undefined;
-            runtimeRef.current = null;
-            resetInitTracking();
-            // Add error message
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `error-${Date.now()}`,
-                role: "assistant",
-                content: `Error: ${typeof message === "string" ? message : JSON.stringify(message, null, 2)}`,
-              },
-            ]);
+            handleVisibleGenerationError(message, runtime);
           },
           onCancelled: (data) => {
             if (
@@ -2079,10 +2121,7 @@ export function ChatArea({
               persistInterruptedRuntimeMessage(runtime, data.messageId);
             }
             markInitMissingAtEnd("cancelled");
-            setIsStreaming(false);
-            currentGenerationIdRef.current = undefined;
-            runtimeRef.current = null;
-            resetInitTracking();
+            handleGenerationCancelledUi();
           },
         },
       );
@@ -2096,9 +2135,10 @@ export function ChatArea({
       handleInitStatusChange,
       markInitMissingAtEnd,
       markInitSignal,
+      handleGenerationCancelledUi,
+      handleGenerationDoneUi,
       persistInterruptedRuntimeMessage,
       queryClient,
-      resetInitTracking,
       selectedSkillKeys,
       normalizedSelectedModel,
       selectedAuthSource,
@@ -2106,6 +2146,7 @@ export function ChatArea({
       submitApproval,
       syncFromRuntime,
       syncConversationForNewChat,
+      handleVisibleGenerationError,
       hydrateAssistantMessage,
       isStreamEventForActiveScope,
       upsertMessageById,

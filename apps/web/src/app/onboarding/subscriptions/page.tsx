@@ -30,11 +30,8 @@ const PROVIDERS = [
     logoAlt: "OpenAI logo",
     logoClassName: "dark:invert",
     models: [
-      "GPT-5.1 Codex Max",
-      "GPT-5.1 Codex Mini",
-      "GPT-5.2",
-      "GPT-5.2 Codex",
-      "GPT-5.1 Codex",
+      "GPT-5.4",
+      // "GPT-5.4 Mini",
     ],
   },
 ];

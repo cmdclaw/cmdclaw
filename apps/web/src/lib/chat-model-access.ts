@@ -8,6 +8,8 @@ const OPENAI_CHATGPT_MODEL_IDS = new Set([
   "gpt-5.2",
   "gpt-5.2-codex",
   "gpt-5.1-codex",
+  "gpt-5.4",
+  // "gpt-5.4-mini",
 ]);
 
 export function isModelAccessibleForNewChat(params: {
@@ -43,11 +45,8 @@ export function isModelAccessibleForNewChat(params: {
   }
 
   if (parsed.providerID === "opencode") {
-    const available = params.availableOpencodeFreeModelIDs;
-    if (!available || available.length === 0) {
-      return true;
-    }
-    return available.includes(model);
+    // OpenCode Zen free models are intentionally hidden from new-chat selection for now.
+    return false;
   }
 
   return false;

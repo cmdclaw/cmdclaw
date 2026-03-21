@@ -1,5 +1,7 @@
 const LEGACY_MODEL_PROVIDER_MAP = new Map<string, string>([
   ["claude-sonnet-4-6", "anthropic/claude-sonnet-4-6"],
+  ["gpt-5.4", "openai/gpt-5.4"],
+  ["gpt-5.4-mini", "openai/gpt-5.4-mini"],
   ["gpt-5.1-codex-max", "openai/gpt-5.1-codex-max"],
   ["gpt-5.1-codex-mini", "openai/gpt-5.1-codex-mini"],
   ["gpt-5.2", "openai/gpt-5.2"],

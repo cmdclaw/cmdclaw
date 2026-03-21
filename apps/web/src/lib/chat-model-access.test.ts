@@ -5,7 +5,7 @@ describe("isModelAccessibleForNewChat", () => {
   it("returns false for openai models when ChatGPT is disconnected", () => {
     expect(
       isModelAccessibleForNewChat({
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
         hasUserOpenAI: false,
         hasSharedOpenAI: false,
       }),
@@ -15,7 +15,7 @@ describe("isModelAccessibleForNewChat", () => {
   it("returns true for openai models when the personal ChatGPT source is connected", () => {
     expect(
       isModelAccessibleForNewChat({
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
         authSource: "user",
         hasUserOpenAI: true,
         hasSharedOpenAI: false,
@@ -26,7 +26,7 @@ describe("isModelAccessibleForNewChat", () => {
   it("returns true for openai models when the shared ChatGPT source is connected", () => {
     expect(
       isModelAccessibleForNewChat({
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
         authSource: "shared",
         hasUserOpenAI: false,
         hasSharedOpenAI: true,
@@ -45,13 +45,12 @@ describe("isModelAccessibleForNewChat", () => {
     ).toBe(false);
   });
 
-  it("validates opencode models against fetched model list when available", () => {
+  it("returns false for opencode models while they are hidden from the selector", () => {
     expect(
       isModelAccessibleForNewChat({
         model: "opencode/glm-5-free",
         hasUserOpenAI: false,
         hasSharedOpenAI: false,
-        availableOpencodeFreeModelIDs: ["opencode/grok-code-fast-1"],
       }),
     ).toBe(false);
   });
