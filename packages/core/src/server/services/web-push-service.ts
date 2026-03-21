@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import webpush from "web-push";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
-import { webPushSubscription } from "@cmdclaw/db/schema";
+import { user, webPushSubscription } from "@cmdclaw/db/schema";
 
 type StoredPushSubscription = {
   endpoint: string;
@@ -81,6 +81,17 @@ export async function sendTaskDonePush({
   content,
 }: TaskDonePushInput): Promise<void> {
   if (!ensureWebPushConfigured()) {
+    return;
+  }
+
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: {
+      taskDonePushEnabled: true,
+    },
+  });
+
+  if (!dbUser?.taskDonePushEnabled) {
     return;
   }
 

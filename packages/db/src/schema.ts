@@ -22,6 +22,7 @@ export const user = pgTable("user", {
   image: text("image"),
   phoneNumber: text("phone_number"),
   timezone: text("timezone"),
+  taskDonePushEnabled: boolean("task_done_push_enabled").default(false).notNull(),
   defaultForwardedCoworkerId: text("default_forwarded_coworker_id"),
   activeWorkspaceId: text("active_workspace_id"),
   billingPlanId: text("billing_plan_id").default("free").notNull(),

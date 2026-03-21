@@ -2,9 +2,17 @@
 
 import { useEffect } from "react";
 import { setupBrowserPushNotifications } from "@/lib/browser-push";
+import { useCurrentUser } from "@/orpc/hooks";
 
 export function DesktopNotificationPermissionGate() {
+  const { data: currentUser } = useCurrentUser();
+  const taskDonePushEnabled = currentUser?.taskDonePushEnabled ?? false;
+
   useEffect(() => {
+    if (!taskDonePushEnabled) {
+      return;
+    }
+
     const requestPermission = () => {
       void setupBrowserPushNotifications();
     };
@@ -22,7 +30,7 @@ export function DesktopNotificationPermissionGate() {
       window.removeEventListener("pointerdown", requestPermission, true);
       window.removeEventListener("keydown", requestPermission, true);
     };
-  }, []);
+  }, [taskDonePushEnabled]);
 
   return null;
 }

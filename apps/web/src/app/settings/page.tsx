@@ -8,8 +8,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { Switch } from "@/components/ui/switch";
 import { authClient } from "@/lib/auth-client";
-import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
+import {
+  setupBrowserPushNotifications,
+  unregisterBrowserPushSubscription,
+} from "@/lib/browser-push";
+import { useCurrentUser, useSetTaskDonePushEnabled, useSetUserTimezone } from "@/orpc/hooks";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 
@@ -129,8 +134,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [removingPhone, setRemovingPhone] = useState(false);
   const [timezoneInput, setTimezoneInput] = useState("");
+  const [isUpdatingTaskDonePush, setIsUpdatingTaskDonePush] = useState(false);
   const { data: currentUser } = useCurrentUser();
   const setUserTimezone = useSetUserTimezone();
+  const setTaskDonePushEnabled = useSetTaskDonePushEnabled();
   const browserTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "", []);
   const timezoneSelectStyles = useTimezoneSelectStyles();
 
@@ -259,8 +266,40 @@ export default function SettingsPage() {
       });
   }, [browserTimezone, setUserTimezone]);
 
+  const handleTaskDonePushToggle = useCallback(
+    async (enabled: boolean) => {
+      setIsUpdatingTaskDonePush(true);
+
+      try {
+        await setTaskDonePushEnabled.mutateAsync(enabled);
+        if (enabled) {
+          const result = await setupBrowserPushNotifications();
+          if (result === "subscribed") {
+            toast.success("Task completion notifications enabled");
+          } else if (result === "permission-denied") {
+            toast.error("Browser notification permission was denied");
+          } else if (result === "unsupported") {
+            toast.error("Browser push notifications are not supported here");
+          } else {
+            toast.error("Notifications were enabled, but browser push setup did not complete");
+          }
+        } else {
+          await unregisterBrowserPushSubscription();
+          toast.success("Task completion notifications disabled");
+        }
+      } catch (error) {
+        console.error("Failed to update task completion notifications:", error);
+        toast.error("Failed to update notifications");
+      } finally {
+        setIsUpdatingTaskDonePush(false);
+      }
+    },
+    [setTaskDonePushEnabled],
+  );
+
   const user = sessionData?.user;
   const savedTimezone = currentUser?.timezone ?? "";
+  const taskDonePushEnabled = currentUser?.taskDonePushEnabled ?? false;
   const timezoneDiffers =
     Boolean(savedTimezone) && Boolean(browserTimezone) && savedTimezone !== browserTimezone;
 
@@ -377,6 +416,23 @@ export default function SettingsPage() {
                 </Button>
               </div>
             ) : null}
+          </div>
+
+          <div className="rounded-lg border p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <label className="block text-sm font-medium">Task completion notifications</label>
+                <p className="text-muted-foreground text-sm">
+                  Enable browser push notifications when a CmdClaw task finishes. Off by default.
+                </p>
+              </div>
+              <Switch
+                checked={taskDonePushEnabled}
+                onCheckedChange={handleTaskDonePushToggle}
+                disabled={isUpdatingTaskDonePush}
+                aria-label="Enable task completion notifications"
+              />
+            </div>
           </div>
 
           {/* Email forwarding settings intentionally hidden for now. */}

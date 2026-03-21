@@ -8,6 +8,14 @@ type PushConfig = {
   publicKey: string | null;
 };
 
+export type BrowserPushSetupResult =
+  | "subscribed"
+  | "unsupported"
+  | "unauthenticated"
+  | "permission-denied"
+  | "config-unavailable"
+  | "registration-unavailable";
+
 type PushCapableServiceWorkerRegistration = ServiceWorkerRegistration & {
   pushManager: PushManager;
 };
@@ -78,14 +86,14 @@ function toSubscriptionPayload(subscription: PushSubscriptionJSON) {
   };
 }
 
-export async function setupBrowserPushNotifications(): Promise<void> {
+export async function setupBrowserPushNotifications(): Promise<BrowserPushSetupResult> {
   if (!supportsPushApi()) {
-    return;
+    return "unsupported";
   }
 
   const session = await authClient.getSession();
   if (!session?.data?.session || !session.data.user) {
-    return;
+    return "unauthenticated";
   }
 
   const permission =
@@ -94,22 +102,22 @@ export async function setupBrowserPushNotifications(): Promise<void> {
       : window.Notification.permission;
 
   if (permission !== "granted") {
-    return;
+    return "permission-denied";
   }
 
   const pushConfig = await getPushConfig();
   if (!pushConfig?.supported || !pushConfig.publicKey) {
-    return;
+    return "config-unavailable";
   }
 
   const registration = await registerServiceWorker();
   if (!registration) {
-    return;
+    return "registration-unavailable";
   }
 
   const pushRegistration = asPushCapableRegistration(registration);
   if (!pushRegistration) {
-    return;
+    return "registration-unavailable";
   }
 
   const existingSubscription = await pushRegistration.pushManager.getSubscription();
@@ -118,7 +126,7 @@ export async function setupBrowserPushNotifications(): Promise<void> {
     if (payload) {
       await client.notification.savePushSubscription(payload);
     }
-    return;
+    return "subscribed";
   }
 
   const subscription = await pushRegistration.pushManager.subscribe({
@@ -128,10 +136,11 @@ export async function setupBrowserPushNotifications(): Promise<void> {
 
   const payload = toSubscriptionPayload(subscription.toJSON());
   if (!payload) {
-    return;
+    return "registration-unavailable";
   }
 
   await client.notification.savePushSubscription(payload);
+  return "subscribed";
 }
 
 export async function unregisterBrowserPushSubscription(): Promise<void> {
