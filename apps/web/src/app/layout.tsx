@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import type React from "react";
 import { AutumnProvider } from "autumn-js/react";
 import { Geist, Geist_Mono } from "next/font/google";
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { AppShellRouteWrapper } from "@/components/app-shell-route-wrapper";
 import { DesktopNotificationPermissionGate } from "@/components/desktop-notification-permission-gate";
 import { PostHogClientProvider } from "@/components/posthog-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { env } from "@/env";
+import { auth } from "@/lib/auth";
 import { ORPCProvider } from "@/orpc/provider";
 // oxlint-disable-next-line import/no-unassigned-import
 import "./globals.css";
@@ -55,10 +56,11 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cookieStore = await cookies();
-  const hasSessionCookie =
-    cookieStore.has("__Secure-better-auth.session_token") ||
-    cookieStore.has("better-auth.session_token");
+  const requestHeaders = await headers();
+  const sessionData = await auth.api.getSession({
+    headers: requestHeaders,
+  });
+  const hasSession = Boolean(sessionData?.session && sessionData?.user);
 
   return (
     <html lang="en">
@@ -70,9 +72,7 @@ export default async function RootLayout({
           <ORPCProvider>
             <BillingProviderWrapper>
               <DesktopNotificationPermissionGate />
-              <AppShellRouteWrapper initialHasSession={hasSessionCookie}>
-                {children}
-              </AppShellRouteWrapper>
+              <AppShellRouteWrapper initialHasSession={hasSession}>{children}</AppShellRouteWrapper>
               <Toaster />
             </BillingProviderWrapper>
           </ORPCProvider>

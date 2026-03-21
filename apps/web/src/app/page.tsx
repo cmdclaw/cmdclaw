@@ -1,11 +1,13 @@
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { CoworkerLanding } from "@/components/landing/coworker-landing";
+import { auth } from "@/lib/auth";
 
 export default async function Home() {
-  const cookieStore = await cookies();
-  const initialHasSession =
-    cookieStore.has("__Secure-better-auth.session_token") ||
-    cookieStore.has("better-auth.session_token");
+  const requestHeaders = await headers();
+  const sessionData = await auth.api.getSession({
+    headers: requestHeaders,
+  });
+  const initialHasSession = Boolean(sessionData?.session && sessionData?.user);
 
   return <CoworkerLanding initialHasSession={initialHasSession} />;
 }

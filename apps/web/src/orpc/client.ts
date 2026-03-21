@@ -15,6 +15,15 @@ let loginRedirectInFlight = false;
 
 type SessionCheckResult = "session_present" | "session_missing" | "check_failed";
 
+function shouldSkipLoginRedirect(pathname: string): boolean {
+  return (
+    pathname === "/" ||
+    pathname === "/templates" ||
+    pathname === "/template" ||
+    pathname.startsWith("/template/")
+  );
+}
+
 function getRequestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") {
     return input;
@@ -63,6 +72,10 @@ async function fetchWithAuthRedirect(
     });
 
     if (sessionCheck === "session_missing" && !loginRedirectInFlight) {
+      if (shouldSkipLoginRedirect(window.location.pathname)) {
+        return response;
+      }
+
       loginRedirectInFlight = true;
       const callbackUrl = encodeURIComponent(window.location.pathname + window.location.search);
       window.location.href = `/login?callbackUrl=${callbackUrl}`;
