@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   updateWhereMock,
+  updateReturningMock,
   updateSetMock,
   insertReturningMock,
   insertValuesMock,
@@ -13,10 +14,12 @@ const {
   coworkerRunFindFirstMock,
   coworkerFindFirstMock,
   providerAuthFindFirstMock,
+  sharedProviderAuthFindFirstMock,
   queueAddMock,
   dbMock,
 } = vi.hoisted(() => {
-  const updateWhereMock = vi.fn();
+  const updateReturningMock = vi.fn();
+  const updateWhereMock = vi.fn(() => ({ returning: updateReturningMock }));
   const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
   const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
@@ -31,6 +34,7 @@ const {
   const coworkerRunFindFirstMock = vi.fn();
   const coworkerFindFirstMock = vi.fn();
   const providerAuthFindFirstMock = vi.fn();
+  const sharedProviderAuthFindFirstMock = vi.fn();
   const queueAddMock = vi.fn();
 
   const dbMock = {
@@ -42,6 +46,7 @@ const {
       coworkerRun: { findFirst: coworkerRunFindFirstMock },
       coworker: { findFirst: coworkerFindFirstMock },
       providerAuth: { findFirst: providerAuthFindFirstMock, findMany: vi.fn(() => []) },
+      sharedProviderAuth: { findFirst: sharedProviderAuthFindFirstMock },
       skill: { findMany: vi.fn(() => []) },
       customIntegrationCredential: { findMany: vi.fn(() => []) },
     },
@@ -51,6 +56,7 @@ const {
 
   return {
     updateWhereMock,
+    updateReturningMock,
     updateSetMock,
     insertReturningMock,
     insertValuesMock,
@@ -62,6 +68,7 @@ const {
     coworkerRunFindFirstMock,
     coworkerFindFirstMock,
     providerAuthFindFirstMock,
+    sharedProviderAuthFindFirstMock,
     queueAddMock,
     dbMock,
   };
@@ -253,6 +260,10 @@ vi.mock("../../env", () => ({
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
+}));
+
+vi.mock("../utils/encryption", () => ({
+  decrypt: vi.fn((value: string) => value),
 }));
 
 vi.mock("../sandbox/core/orchestrator", () => ({
@@ -804,7 +815,8 @@ describe("generationManager transitions", () => {
       display: interrupt.display,
       responsePayload: interrupt.responsePayload,
     }));
-    updateWhereMock.mockResolvedValue(undefined);
+    updateReturningMock.mockReset();
+    updateReturningMock.mockResolvedValue([]);
     insertValuesMock.mockReset();
     insertReturningMock.mockReset();
     insertValuesMock.mockImplementation(() => ({
@@ -829,6 +841,7 @@ describe("generationManager transitions", () => {
     coworkerRunFindFirstMock.mockResolvedValue(null);
     coworkerFindFirstMock.mockResolvedValue(null);
     providerAuthFindFirstMock.mockResolvedValue(null);
+    sharedProviderAuthFindFirstMock.mockResolvedValue(null);
     vi.mocked(getPreferredCloudSandboxProvider).mockReturnValue("e2b");
     isStatelessServerlessRuntimeMock.mockReturnValue(false);
     ensureBucketMock.mockReset();
@@ -1846,7 +1859,7 @@ describe("generationManager transitions", () => {
         model: "openai/gpt-5.2-codex",
       }),
     ).rejects.toThrow(
-      "This ChatGPT model requires a connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+      "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
     );
   });
 
@@ -1905,7 +1918,7 @@ describe("generationManager transitions", () => {
         model: "openai/gpt-5.2-codex",
       }),
     ).rejects.toThrow(
-      "This ChatGPT model requires a connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
+      "This ChatGPT model requires your connected ChatGPT account. Connect it in Settings > Connected AI Account, then retry.",
     );
   });
 

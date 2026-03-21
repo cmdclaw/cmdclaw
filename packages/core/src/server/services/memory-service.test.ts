@@ -7,6 +7,7 @@ const {
   messageFindManyMock,
   memorySettingsFindFirstMock,
   providerAuthFindFirstMock,
+  sharedProviderAuthFindFirstMock,
   sessionTranscriptFindManyMock,
   dbExecuteMock,
   dbInsertMock,
@@ -19,6 +20,7 @@ const {
   const messageFindManyMock = vi.fn();
   const memorySettingsFindFirstMock = vi.fn();
   const providerAuthFindFirstMock = vi.fn();
+  const sharedProviderAuthFindFirstMock = vi.fn();
   const sessionTranscriptFindManyMock = vi.fn();
 
   const dbExecuteMock = vi.fn();
@@ -45,6 +47,9 @@ const {
       providerAuth: {
         findFirst: providerAuthFindFirstMock,
       },
+      sharedProviderAuth: {
+        findFirst: sharedProviderAuthFindFirstMock,
+      },
       sessionTranscript: {
         findFirst: vi.fn(),
         findMany: sessionTranscriptFindManyMock,
@@ -63,6 +68,7 @@ const {
     messageFindManyMock,
     memorySettingsFindFirstMock,
     providerAuthFindFirstMock,
+    sharedProviderAuthFindFirstMock,
     sessionTranscriptFindManyMock,
     dbExecuteMock,
     dbInsertMock,
@@ -280,6 +286,7 @@ describe("searchMemoryWithSessions", () => {
     });
 
     providerAuthFindFirstMock.mockResolvedValue(null);
+    sharedProviderAuthFindFirstMock.mockResolvedValue(null);
 
     dbExecuteMock
       .mockResolvedValueOnce({

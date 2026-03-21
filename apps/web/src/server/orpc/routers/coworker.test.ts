@@ -60,6 +60,7 @@ const coworkerRouterAny = coworkerRouter as unknown as Record<
   string,
   (args: unknown) => Promise<unknown>
 >;
+const DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
 
 function createContext() {
   const insertReturningMock = vi.fn();
@@ -165,6 +166,7 @@ describe("coworkerRouter", () => {
       input: {
         triggerType: "schedule",
         prompt: "Daily task",
+        model: DEFAULT_MODEL,
         autoApprove: true,
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: [],
@@ -468,6 +470,7 @@ describe("coworkerRouter", () => {
         name: "  Explicit Name  ",
         triggerType: "manual",
         prompt: "Prompt text",
+        model: DEFAULT_MODEL,
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: [],
       },
@@ -505,6 +508,7 @@ describe("coworkerRouter", () => {
       input: {
         triggerType: "manual",
         prompt: "First sentence for fallback. second sentence",
+        model: DEFAULT_MODEL,
         autoApprove: true,
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: [],
@@ -544,6 +548,7 @@ describe("coworkerRouter", () => {
         username: " Team Helper ",
         triggerType: "manual",
         prompt: "... \n!",
+        model: DEFAULT_MODEL,
         autoApprove: true,
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: [],
@@ -579,6 +584,7 @@ describe("coworkerRouter", () => {
         input: {
           triggerType: "schedule",
           prompt: "Daily task",
+          model: DEFAULT_MODEL,
           autoApprove: true,
           allowedIntegrations: ["slack"],
           allowedCustomIntegrations: [],
