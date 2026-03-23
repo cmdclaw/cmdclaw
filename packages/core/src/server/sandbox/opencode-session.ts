@@ -410,7 +410,6 @@ async function getOrCreateDockerSandbox(
     runtimePort,
     env: {
       ANTHROPIC_API_KEY: config.anthropicApiKey,
-      CLAUDE_API_KEY: env.CLAUDE_API_KEY || "",
       ANVIL_API_KEY: env.ANVIL_API_KEY || "",
       APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
       CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
@@ -588,7 +587,6 @@ async function getOrCreateDaytonaSandbox(
     snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
     envVars: {
       ANTHROPIC_API_KEY: config.anthropicApiKey,
-      CLAUDE_API_KEY: env.CLAUDE_API_KEY || "",
       ANVIL_API_KEY: env.ANVIL_API_KEY || "",
       APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
       CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
