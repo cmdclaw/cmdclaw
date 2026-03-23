@@ -42,6 +42,8 @@ function getLocation(response: Response) {
 describe("GET /api/control-plane/auth/callback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
     isControlPlaneEnabledMock.mockReturnValue(true);
     consumeControlPlaneAuthStateMock.mockResolvedValue({
       state: "state-1",
@@ -75,6 +77,20 @@ describe("GET /api/control-plane/auth/callback", () => {
     );
   });
 
+  it("uses APP_URL for login redirects when the request host is internal", async () => {
+    process.env.APP_URL = "https://app.example.com";
+    consumeControlPlaneAuthStateMock.mockResolvedValue(null);
+
+    const response = await GET(
+      new Request("https://0.0.0.0:8080/api/control-plane/auth/callback?code=code-1&state=state-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "https://app.example.com/login?callbackUrl=%2Fchat&error=invalid_state",
+    );
+  });
+
   it("creates a local session and redirects to the requested page", async () => {
     const response = await GET(
       new Request(
@@ -92,5 +108,16 @@ describe("GET /api/control-plane/auth/callback", () => {
     expect(createLocalSessionRedirectResponseMock).toHaveBeenCalled();
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe("http://selfhost.local/chat");
+  });
+
+  it("uses APP_URL for the post-login redirect when the request host is internal", async () => {
+    process.env.APP_URL = "https://app.example.com";
+
+    const response = await GET(
+      new Request("https://0.0.0.0:8080/api/control-plane/auth/callback?code=code-1&state=state-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe("https://app.example.com/chat");
   });
 });

@@ -101,6 +101,8 @@ function getLocation(response: Response): string {
 describe("GET /api/oauth/callback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
     getSessionMock.mockResolvedValue({ user: { id: "user-1" } });
     fetchDynamicsInstancesMock.mockResolvedValue([
       {
@@ -132,6 +134,16 @@ describe("GET /api/oauth/callback", () => {
 
   it("redirects with missing_params when code/state are missing", async () => {
     const request = new NextRequest("https://app.example.com/api/oauth/callback");
+
+    const response = await GET(request);
+
+    expect(getLocation(response)).toBe("https://app.example.com/integrations?error=missing_params");
+  });
+
+  it("uses APP_URL for early redirects when request host is internal", async () => {
+    process.env.APP_URL = "https://app.example.com";
+
+    const request = new NextRequest("https://0.0.0.0:8080/api/oauth/callback");
 
     const response = await GET(request);
 
@@ -309,6 +321,37 @@ describe("GET /api/oauth/callback", () => {
     expect(location).toContain("generation_id=gen-1");
     expect(location).toContain("success=true");
     expect(submitAuthResultMock).toHaveBeenCalledWith("gen-1", "google_sheets", true, "user-1");
+  });
+
+  it("normalizes internal redirect targets from OAuth state to APP_URL", async () => {
+    process.env.APP_URL = "https://app.example.com";
+
+    const state = encodeState({
+      userId: "user-1",
+      type: "outlook",
+      redirectUrl: "https://0.0.0.0:8080/toolbox?auth_complete=outlook&generation_id=gen-1",
+    });
+
+    mswServer.use(
+      http.post("https://oauth.example.com/token", () =>
+        HttpResponse.json({
+          access_token: "outlook-token",
+          refresh_token: "outlook-refresh",
+          expires_in: 3600,
+        }),
+      ),
+    );
+
+    const request = new NextRequest(
+      `https://0.0.0.0:8080/api/oauth/callback?code=abc&state=${state}`,
+    );
+
+    const response = await GET(request);
+
+    expect(getLocation(response)).toBe(
+      "https://app.example.com/toolbox?auth_complete=outlook&generation_id=gen-1&success=true",
+    );
+    expect(submitAuthResultMock).toHaveBeenCalledWith("gen-1", "outlook", true, "user-1");
   });
 
   it("merges Salesforce instance_url into metadata", async () => {

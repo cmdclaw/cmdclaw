@@ -5,6 +5,7 @@ import {
 } from "@cmdclaw/core/server/ai/subscription-providers";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { consumePending } from "@/server/ai/pending-oauth";
 import { storeProviderTokens } from "@/server/orpc/routers/provider-auth";
 
@@ -20,7 +21,7 @@ export async function GET(
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const settingsUrl = new URL("/settings/subscriptions", request.url);
+  const settingsUrl = buildRequestAwareUrl("/settings/subscriptions", request);
 
   // Handle OAuth errors
   if (error) {

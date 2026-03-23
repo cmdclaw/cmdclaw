@@ -47,6 +47,8 @@ function getLocation(response: Response) {
 describe("GET /api/control-plane/auth/authorize", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
     getValidAuthRequestMock.mockResolvedValue({
       code: "code-1",
       localState: "state-1",
@@ -60,6 +62,20 @@ describe("GET /api/control-plane/auth/authorize", () => {
 
     const response = await GET(
       new Request("https://cloud.example.com/api/control-plane/auth/authorize?code=code-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "https://cloud.example.com/login?callbackUrl=%2Fapi%2Fcontrol-plane%2Fauth%2Fauthorize%3Fcode%3Dcode-1",
+    );
+  });
+
+  it("uses APP_URL for login redirects when the request host is internal", async () => {
+    process.env.APP_URL = "https://cloud.example.com";
+    requireCloudSessionMock.mockResolvedValue(null);
+
+    const response = await GET(
+      new Request("https://0.0.0.0:8080/api/control-plane/auth/authorize?code=code-1"),
     );
 
     expect(response.status).toBe(307);

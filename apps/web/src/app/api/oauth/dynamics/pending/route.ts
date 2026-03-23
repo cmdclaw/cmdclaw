@@ -4,6 +4,7 @@ import { integration } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { getRequestAwareOrigin } from "@/lib/request-aware-url";
 
 type DynamicsInstance = {
   id: string;
@@ -43,7 +44,7 @@ function buildInstanceScope(instanceUrl: string): string {
 }
 
 function getRedirectBaseUrl(request: Request): string {
-  return process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+  return getRequestAwareOrigin(request);
 }
 
 export async function GET(request: Request) {

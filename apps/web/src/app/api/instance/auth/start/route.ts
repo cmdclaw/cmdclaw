@@ -1,10 +1,11 @@
 import { startCloudAuth } from "@cmdclaw/core/server/control-plane/client";
 import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { NextResponse } from "next/server";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
 
 function buildLoginRedirect(requestUrl: string, callbackUrl: string, error: string) {
-  const loginUrl = new URL("/login", requestUrl);
+  const loginUrl = buildRequestAwareUrl("/login", requestUrl);
   loginUrl.searchParams.set("callbackUrl", callbackUrl);
   loginUrl.searchParams.set("error", error);
   return NextResponse.redirect(loginUrl);

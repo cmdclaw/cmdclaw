@@ -2,6 +2,7 @@ import { db } from "@cmdclaw/db/client";
 import { controlPlaneLinkRequest } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import {
   assertCloudControlPlaneEnabled,
   getValidLinkRequest,
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
 
     const sessionData = await requireCloudSession(request);
     if (!sessionData?.user?.id) {
-      const loginUrl = new URL("/login", request.url);
+      const loginUrl = buildRequestAwareUrl("/login", request);
       loginUrl.searchParams.set("callbackUrl", url.pathname + url.search);
       return NextResponse.redirect(loginUrl);
     }

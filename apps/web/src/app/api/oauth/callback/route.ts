@@ -5,18 +5,8 @@ import { integration, integrationToken } from "@cmdclaw/db/schema";
 import { eq, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";
 import { fetchDynamicsInstances } from "@/server/integrations/dynamics";
-
-function getRequestAwareBaseUrl(request: NextRequest): string {
-  const requestOrigin = new URL(request.url).origin;
-  const hostname = request.nextUrl.hostname;
-  const isInternalHost =
-    hostname === "0.0.0.0" || hostname === "127.0.0.1" || hostname === "localhost";
-  if (!isInternalHost) {
-    return requestOrigin;
-  }
-  return process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? requestOrigin;
-}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -26,11 +16,13 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("OAuth error:", error);
-    return NextResponse.redirect(new URL(`/integrations?error=${error}`, request.url));
+    return NextResponse.redirect(buildRequestAwareUrl(`/integrations?error=${error}`, request));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/integrations?error=missing_params", request.url));
+    return NextResponse.redirect(
+      buildRequestAwareUrl("/integrations?error=missing_params", request),
+    );
   }
 
   // Get session
@@ -39,7 +31,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (!sessionData?.user) {
-    return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
+    return NextResponse.redirect(buildRequestAwareUrl("/login?error=unauthorized", request));
   }
 
   // Parse state
@@ -55,13 +47,15 @@ export async function GET(request: NextRequest) {
   try {
     stateData = JSON.parse(Buffer.from(state, "base64url").toString());
   } catch {
-    return NextResponse.redirect(new URL("/integrations?error=invalid_state", request.url));
+    return NextResponse.redirect(
+      buildRequestAwareUrl("/integrations?error=invalid_state", request),
+    );
   }
 
   // Helper to build redirect URL with the correct base path
   const buildRedirectUrl = (params: string) => {
     const baseUrl = stateData.redirectUrl || "/integrations";
-    const redirectUrl = new URL(baseUrl, request.url);
+    const redirectUrl = buildRequestAwareUrl(baseUrl, request);
     const extraParams = new URLSearchParams(params);
     for (const [key, value] of extraParams.entries()) {
       redirectUrl.searchParams.set(key, value);
@@ -71,7 +65,7 @@ export async function GET(request: NextRequest) {
 
   const resolveAuthResumeContext = (): { generationId?: string; integration?: string } => {
     try {
-      const redirectUrl = new URL(stateData.redirectUrl, request.url);
+      const redirectUrl = buildRequestAwareUrl(stateData.redirectUrl, request);
       return {
         generationId: redirectUrl.searchParams.get("generation_id") ?? undefined,
         integration: redirectUrl.searchParams.get("auth_complete") ?? undefined,
@@ -262,7 +256,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (stateData.type === "dynamics" && !isDynamicsInstanceScopedAuth) {
-      const dynamicsRedirect = new URL("/integrations", getRequestAwareBaseUrl(request));
+      const dynamicsRedirect = new URL("/integrations", getRequestAwareOrigin(request));
       dynamicsRedirect.searchParams.set("dynamics_select", "true");
       const authResume = resolveAuthResumeContext();
       if (authResume.generationId) {

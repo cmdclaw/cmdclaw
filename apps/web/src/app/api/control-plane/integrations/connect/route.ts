@@ -1,5 +1,6 @@
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { NextResponse } from "next/server";
+import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";
 import { assertCloudControlPlaneEnabled, requireCloudSession } from "@/server/control-plane/auth";
 import { generateLinkedInAuthUrl } from "@/server/integrations/unipile";
 
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
     const sessionData = await requireCloudSession(request);
     if (!sessionData?.user?.id) {
       const url = new URL(request.url);
-      const loginUrl = new URL("/login", request.url);
+      const loginUrl = buildRequestAwareUrl("/login", request);
       loginUrl.searchParams.set("callbackUrl", url.pathname + url.search);
       return NextResponse.redirect(loginUrl);
     }
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Unsupported integration type" }, { status: 400 });
     }
 
-    const redirectUrl = `${url.origin}/integrations`;
+    const redirectUrl = new URL("/integrations", getRequestAwareOrigin(request)).toString();
     if (type === "linkedin") {
       const authUrl = await generateLinkedInAuthUrl(sessionData.user.id, redirectUrl);
       return NextResponse.redirect(authUrl);

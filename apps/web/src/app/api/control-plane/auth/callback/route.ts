@@ -4,6 +4,7 @@ import {
 } from "@cmdclaw/core/server/control-plane/client";
 import { consumeControlPlaneAuthState } from "@cmdclaw/core/server/control-plane/local-auth";
 import { NextResponse } from "next/server";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
 import {
   createLocalSessionRedirectResponse,
@@ -11,7 +12,7 @@ import {
 } from "@/server/control-plane/selfhost-auth";
 
 function redirectToLogin(requestUrl: string, callbackUrl: string, error: string) {
-  const loginUrl = new URL("/login", requestUrl);
+  const loginUrl = buildRequestAwareUrl("/login", requestUrl);
   loginUrl.searchParams.set("callbackUrl", callbackUrl);
   loginUrl.searchParams.set("error", error);
   return NextResponse.redirect(loginUrl);
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   try {
     const identity = await exchangeCloudAuth(code);
     const userId = await resolveOrCreateLocalUserFromCloudIdentity(identity);
-    const redirectUrl = new URL(callbackUrl, request.url);
+    const redirectUrl = buildRequestAwareUrl(callbackUrl, request);
     return createLocalSessionRedirectResponse({
       userId,
       redirectUrl,

@@ -26,6 +26,8 @@ function getLocation(response: Response) {
 describe("GET /api/instance/auth/start", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
     isSelfHostedEditionMock.mockReturnValue(true);
     startCloudAuthMock.mockResolvedValue(
       "https://cloud.example.com/api/control-plane/auth/authorize?code=code-1",
@@ -54,6 +56,20 @@ describe("GET /api/instance/auth/start", () => {
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe(
       "http://selfhost.local/login?callbackUrl=%2Fchat&error=cloud_auth_not_available",
+    );
+  });
+
+  it("uses APP_URL for login redirects when the request host is internal", async () => {
+    process.env.APP_URL = "https://app.example.com";
+    isSelfHostedEditionMock.mockReturnValue(false);
+
+    const response = await GET(
+      new Request("https://0.0.0.0:8080/api/instance/auth/start?callbackUrl=%2Fchat"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "https://app.example.com/login?callbackUrl=%2Fchat&error=cloud_auth_not_available",
     );
   });
 });

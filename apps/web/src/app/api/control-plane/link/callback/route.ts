@@ -8,6 +8,7 @@ import {
 } from "@cmdclaw/core/server/control-plane/local-links";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   });
 
   if (!sessionData?.user?.id) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = buildRequestAwareUrl("/login", request);
     loginUrl.searchParams.set("callbackUrl", url.pathname + url.search);
     return NextResponse.redirect(loginUrl);
   }
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const redirectUrl = new URL(linkState.returnPath || "/integrations", request.url);
+  const redirectUrl = buildRequestAwareUrl(linkState.returnPath || "/integrations", request);
   redirectUrl.searchParams.set("cloudLinked", "1");
   return NextResponse.redirect(redirectUrl);
 }

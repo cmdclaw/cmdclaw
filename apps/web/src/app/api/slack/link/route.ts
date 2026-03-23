@@ -3,6 +3,7 @@ import { slackUserLink } from "@cmdclaw/db/schema";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -20,9 +21,8 @@ export async function GET(request: Request) {
 
   if (!sessionData?.session) {
     // Redirect to login with return URL
-    const appUrl = url.origin;
     const returnUrl = encodeURIComponent(url.pathname + url.search);
-    return NextResponse.redirect(`${appUrl}/login?redirect=${returnUrl}`);
+    return NextResponse.redirect(buildRequestAwareUrl(`/login?redirect=${returnUrl}`, request));
   }
 
   const userId = sessionData.session.userId;

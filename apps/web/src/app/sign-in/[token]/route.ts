@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import { env } from "@/env";
+import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";
 import { getMagicLinkRequestState } from "@/server/lib/magic-link-request-state";
 
-function getAppOrigin(requestUrl: string) {
-  return env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? new URL(requestUrl).origin;
-}
-
 function redirectToLoginError(requestUrl: string) {
-  return NextResponse.redirect(new URL("/login?error=magic-link", getAppOrigin(requestUrl)));
+  return NextResponse.redirect(buildRequestAwareUrl("/login?error=magic-link", requestUrl));
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
@@ -18,7 +14,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     return redirectToLoginError(request.url);
   }
 
-  const verificationUrl = new URL("/api/auth/magic-link/verify", getAppOrigin(request.url));
+  const verificationUrl = new URL(
+    "/api/auth/magic-link/verify",
+    getRequestAwareOrigin(request.url),
+  );
   verificationUrl.searchParams.set("token", token);
 
   if (requestState.callbackUrl) {
