@@ -18,9 +18,11 @@ type SessionCheckResult = "session_present" | "session_missing" | "check_failed"
 function shouldSkipLoginRedirect(pathname: string): boolean {
   return (
     pathname === "/" ||
+    pathname === "/login" ||
     pathname === "/templates" ||
     pathname === "/template" ||
-    pathname.startsWith("/template/")
+    pathname.startsWith("/template/") ||
+    pathname.startsWith("/api/auth")
   );
 }
 
