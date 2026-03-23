@@ -1,14 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getMagicLinkRequestStateMock } = vi.hoisted(() => ({
   getMagicLinkRequestStateMock: vi.fn(),
-}));
-
-vi.mock("@/env", () => ({
-  env: {
-    APP_URL: "https://cmdclaw.ai",
-    NEXT_PUBLIC_APP_URL: "https://cmdclaw.ai",
-  },
 }));
 
 vi.mock("@/server/lib/magic-link-request-state", () => ({
@@ -26,6 +19,12 @@ function getLocation(response: Response): string {
 }
 
 describe("GET /sign-in/[token]", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
+  });
+
   it("redirects to Better Auth verify with the stored callback params", async () => {
     getMagicLinkRequestStateMock.mockResolvedValue({
       tokenHash: "hash-1",
@@ -48,6 +47,8 @@ describe("GET /sign-in/[token]", () => {
   });
 
   it("uses the public app origin instead of the internal request origin", async () => {
+    process.env.APP_URL = "https://cmdclaw.ai";
+
     getMagicLinkRequestStateMock.mockResolvedValue({
       tokenHash: "hash-1",
       email: "pilot@cmdclaw.ai",
