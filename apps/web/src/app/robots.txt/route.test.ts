@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-const envMock = {
-  CMDCLAW_EDITION: "cloud",
-};
+const { envMock } = vi.hoisted(() => ({
+  envMock: {
+    CMDCLAW_EDITION: "cloud",
+  },
+}));
 
 vi.mock("@/env", () => ({
   env: envMock,
