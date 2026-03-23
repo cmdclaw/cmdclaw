@@ -4,6 +4,7 @@ FROM oven/bun:1.3.9 AS deps
 WORKDIR /app
 RUN bun --version
 COPY package.json bun.lock turbo.json tsconfig.json ./
+COPY patches ./patches
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/desktop/package.json ./apps/desktop/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
