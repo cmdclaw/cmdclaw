@@ -1863,6 +1863,54 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("skips queued generation rehydration when the runtime has been rebound to another generation", async () => {
+    const mgr = asTestManager();
+    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-stale",
+      status: "running",
+      conversationId: "conv-queued",
+      runtimeId: "runtime-1",
+      conversation: {
+        id: "conv-queued",
+        userId: "user-1",
+        autoApprove: false,
+        model: "anthropic/claude-sonnet-4-6",
+      },
+      contentParts: [],
+      pendingApproval: null,
+      pendingAuth: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      startedAt: new Date(),
+      executionPolicy: {
+        autoApprove: false,
+      },
+    });
+    getRuntimeMock.mockResolvedValueOnce({
+      id: "runtime-1",
+      conversationId: "conv-queued",
+      callbackToken: "runtime-token",
+      sandboxProvider: null,
+      runtimeHarness: null,
+      runtimeProtocolVersion: null,
+      sandboxId: null,
+      sessionId: null,
+      status: "active",
+      activeGenerationId: "gen-other",
+      activeTurnSeq: 2,
+      lastBoundAt: null,
+      createdAt: new Date("2026-03-11T15:00:00.000Z"),
+      updatedAt: new Date("2026-03-11T15:00:00.000Z"),
+    });
+
+    await generationManager.runQueuedGeneration("gen-stale");
+
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(mgr.activeGenerations.has("gen-stale")).toBe(false);
+  });
+
   it("reports stuck preparing generations and pushes to kuma", async () => {
     process.env.KUMA_PUSH_URL = "https://kuma.example/push/abc";
     generationFindFirstMock.mockResolvedValueOnce({

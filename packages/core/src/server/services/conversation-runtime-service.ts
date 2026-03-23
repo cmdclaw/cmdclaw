@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@cmdclaw/db/client";
 import { conversation, conversationRuntime, generation } from "@cmdclaw/db/schema";
 
@@ -46,38 +46,27 @@ export const conversationRuntimeService = {
     generationId: string;
   }): Promise<BindRuntimeToGenerationResult> {
     return await db.transaction(async (tx) => {
-      let runtime = await tx.query.conversationRuntime.findFirst({
-        where: eq(conversationRuntime.conversationId, params.conversationId),
-      });
-      if (!runtime) {
-        const createdRows = await tx
-          .insert(conversationRuntime)
-          .values({
-            conversationId: params.conversationId,
-            callbackToken: crypto.randomUUID(),
-            status: "active",
-            activeTurnSeq: 0,
-          })
-          .returning();
-        const created = createdRows[0];
-        if (!created) {
-          throw new Error(
-            `Failed to create conversation runtime for conversation ${params.conversationId}`,
-          );
-        }
-        runtime = created;
-      }
-      const nextTurnSeq = runtime.activeTurnSeq + 1;
+      await tx
+        .insert(conversationRuntime)
+        .values({
+          conversationId: params.conversationId,
+          callbackToken: crypto.randomUUID(),
+          status: "active",
+          activeTurnSeq: 0,
+        })
+        .onConflictDoNothing({
+          target: conversationRuntime.conversationId,
+        });
 
       const updatedRows = await tx
         .update(conversationRuntime)
         .set({
           activeGenerationId: params.generationId,
-          activeTurnSeq: nextTurnSeq,
+          activeTurnSeq: sql`${conversationRuntime.activeTurnSeq} + 1`,
           status: "active",
           lastBoundAt: new Date(),
         })
-        .where(eq(conversationRuntime.id, runtime.id))
+        .where(eq(conversationRuntime.conversationId, params.conversationId))
         .returning({
           id: conversationRuntime.id,
           callbackToken: conversationRuntime.callbackToken,
@@ -86,7 +75,9 @@ export const conversationRuntimeService = {
       const updatedRuntime = updatedRows[0];
 
       if (!updatedRuntime) {
-        throw new Error(`Failed to bind runtime ${runtime.id} to generation ${params.generationId}`);
+        throw new Error(
+          `Failed to bind runtime for conversation ${params.conversationId} to generation ${params.generationId}`,
+        );
       }
 
       await tx

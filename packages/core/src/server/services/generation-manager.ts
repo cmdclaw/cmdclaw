@@ -2368,6 +2368,31 @@ class GenerationManager {
       ? await conversationRuntimeService.getRuntime(genRecord.runtimeId)
       : await conversationRuntimeService.getRuntimeForConversation(genRecord.conversationId);
 
+    if (
+      genRecord.runtimeId &&
+      (!runtimeRecord ||
+        runtimeRecord.status !== "active" ||
+        runtimeRecord.activeGenerationId !== genRecord.id)
+    ) {
+      logServerEvent(
+        "warn",
+        "QUEUED_GENERATION_RUNTIME_STALE",
+        {
+          generationId: genRecord.id,
+          runtimeId: genRecord.runtimeId,
+          runtimeStatus: runtimeRecord?.status ?? null,
+          runtimeActiveGenerationId: runtimeRecord?.activeGenerationId ?? null,
+        },
+        {
+          source: "generation-manager",
+          generationId: genRecord.id,
+          conversationId: genRecord.conversationId,
+          userId: genRecord.conversation.userId,
+        },
+      );
+      return;
+    }
+
     const ctx: GenerationContext = {
       id: genRecord.id,
       traceId: createTraceId(),
