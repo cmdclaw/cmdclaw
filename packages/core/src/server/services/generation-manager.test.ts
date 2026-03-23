@@ -1485,7 +1485,7 @@ describe("generationManager transitions", () => {
         {
           id: "conv-new",
           userId: "user-1",
-          model: "anthropic/claude-sonnet-4-6",
+          model: "anthropic/claude-opus-4-1",
           autoApprove: false,
           type: "chat",
         },
@@ -1519,7 +1519,7 @@ describe("generationManager transitions", () => {
     conversationFindFirstMock.mockResolvedValueOnce({
       id: "conv-existing",
       userId: "user-1",
-      model: "anthropic/claude-sonnet-4-6",
+      model: "anthropic/claude-opus-4-1",
       autoApprove: true,
       type: "chat",
     });
@@ -1556,7 +1556,7 @@ describe("generationManager transitions", () => {
     conversationFindFirstMock.mockResolvedValueOnce({
       id: "conv-coworker-builder",
       userId: "user-1",
-      model: "anthropic/claude-sonnet-4-6",
+      model: "anthropic/claude-opus-4-1",
       autoApprove: false,
       type: "coworker",
     });
@@ -1564,7 +1564,7 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce({
         id: "cw-1",
         prompt: "",
-        model: "anthropic/claude-sonnet-4-6",
+        model: "anthropic/claude-opus-4-1",
         toolAccessMode: "all",
         triggerType: "manual",
         schedule: null,
@@ -1589,7 +1589,7 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce({
         id: "cw-1",
         prompt: "",
-        model: "anthropic/claude-sonnet-4-6",
+        model: "anthropic/claude-opus-4-1",
         toolAccessMode: "all",
         triggerType: "manual",
         schedule: null,
@@ -1681,7 +1681,7 @@ describe("generationManager transitions", () => {
         {
           id: "conv-new",
           userId: "user-1",
-          model: "anthropic/claude-sonnet-4-6",
+          model: "anthropic/claude-opus-4-1",
           autoApprove: false,
           type: "chat",
         },
@@ -1910,7 +1910,7 @@ describe("generationManager transitions", () => {
         {
           id: "conv-coworker",
           userId: "user-1",
-          model: "anthropic/claude-sonnet-4-6",
+          model: "anthropic/claude-opus-4-1",
           autoApprove: true,
           type: "coworker",
         },
@@ -1925,7 +1925,7 @@ describe("generationManager transitions", () => {
       autoApprove: true,
       allowedIntegrations: ["github"],
       allowedCustomIntegrations: ["custom-slug"],
-      model: "anthropic/claude-sonnet-4-6",
+      model: "anthropic/claude-opus-4-1",
     });
 
     expect(result).toEqual({
