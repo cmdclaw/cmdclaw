@@ -6,6 +6,7 @@ import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
+  conversationRuntime,
   memoryChunk,
   memoryEntry,
   memoryFile,
@@ -621,6 +622,12 @@ export async function writeSessionTranscriptFromConversation(input: {
   if (!convo) {
     return null;
   }
+  const runtime = await db.query.conversationRuntime.findFirst({
+    where: eq(conversationRuntime.conversationId, input.conversationId),
+    columns: {
+      sessionId: true,
+    },
+  });
 
   const messages = await db.query.message.findMany({
     where: eq(message.conversationId, input.conversationId),
@@ -683,7 +690,7 @@ export async function writeSessionTranscriptFromConversation(input: {
     title: transcriptTitle,
     metadata: [
       ["conversation_id", input.conversationId],
-      ["session_id", convo.opencodeSessionId],
+      ["session_id", runtime?.sessionId ?? null],
       ["source", input.source || "session_boundary"],
       ["messages", messagesForTranscript.length],
       ["started_at", startedAt ? startedAt.toISOString() : null],
@@ -695,7 +702,7 @@ export async function writeSessionTranscriptFromConversation(input: {
   return writeSessionTranscript({
     userId: input.userId,
     conversationId: input.conversationId,
-    sessionId: convo.opencodeSessionId,
+    sessionId: runtime?.sessionId ?? null,
     title: transcriptTitle,
     slug: title || null,
     date: endedAt ?? new Date(),

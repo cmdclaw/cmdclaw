@@ -73,7 +73,9 @@ RUN npm install -g @sandbox-agent/cli@0.2.x \
 COPY common/opencode.json /app/opencode.json
 COPY common/plugins /app/.opencode/plugins
 COPY common/tools /app/.opencode/tools
+COPY common/lib /app/.opencode/lib
 COPY common/skills /app/.agents/skills
+COPY common/lib /app/.agents/lib
 COPY common/setup.sh /app/setup.sh
 
 RUN mkdir -p /app/.claude \

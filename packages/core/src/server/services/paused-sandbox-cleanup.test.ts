@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { conversationFindManyMock } = vi.hoisted(() => ({
-  conversationFindManyMock: vi.fn(),
+const { selectMock } = vi.hoisted(() => ({
+  selectMock: vi.fn(),
 }));
 
 const { hasActiveLeaseMock } = vi.hoisted(() => ({
@@ -14,11 +14,7 @@ const { killSandboxMock } = vi.hoisted(() => ({
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: {
-    query: {
-      conversation: {
-        findMany: conversationFindManyMock,
-      },
-    },
+    select: selectMock,
   },
 }));
 
@@ -36,7 +32,7 @@ import { cleanupPausedSandboxes } from "./paused-sandbox-cleanup";
 
 describe("cleanupPausedSandboxes", () => {
   beforeEach(() => {
-    conversationFindManyMock.mockReset();
+    selectMock.mockReset();
     hasActiveLeaseMock.mockReset();
     hasActiveLeaseMock.mockResolvedValue(false);
     killSandboxMock.mockReset();
@@ -44,12 +40,18 @@ describe("cleanupPausedSandboxes", () => {
   });
 
   it("kills paused sandboxes older than 24h when no active slot lease exists", async () => {
-    conversationFindManyMock.mockResolvedValue([
-      {
-        id: "conv-1",
-        currentGenerationId: "gen-1",
-      },
-    ]);
+    const selectChain = {
+      from: vi.fn(() => selectChain),
+      innerJoin: vi.fn(() => selectChain),
+      where: vi.fn(async () => [
+        {
+          runtimeId: "rt-1",
+          activeGenerationId: "gen-1",
+          conversationId: "conv-1",
+        },
+      ]),
+    };
+    selectMock.mockReturnValue(selectChain);
 
     const summary = await cleanupPausedSandboxes();
 
@@ -62,12 +64,18 @@ describe("cleanupPausedSandboxes", () => {
   });
 
   it("skips cleanup while the current generation still owns a slot lease", async () => {
-    conversationFindManyMock.mockResolvedValue([
-      {
-        id: "conv-1",
-        currentGenerationId: "gen-1",
-      },
-    ]);
+    const selectChain = {
+      from: vi.fn(() => selectChain),
+      innerJoin: vi.fn(() => selectChain),
+      where: vi.fn(async () => [
+        {
+          runtimeId: "rt-1",
+          activeGenerationId: "gen-1",
+          conversationId: "conv-1",
+        },
+      ]),
+    };
+    selectMock.mockReturnValue(selectChain);
     hasActiveLeaseMock.mockResolvedValue(true);
 
     const summary = await cleanupPausedSandboxes();

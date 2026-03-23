@@ -4,7 +4,7 @@ import { db } from "@cmdclaw/db/client";
 import { coworker } from "@cmdclaw/db/schema";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
-import { authorizeRuntimeGeneration } from "../_auth";
+import { authorizeRuntimeTurn } from "../../../runtime/_auth";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,8 @@ const attachmentSchema = z.object({
 });
 
 const requestSchema = z.object({
-  generationId: z.string().min(1),
+  runtimeId: z.string().min(1),
+  turnSeq: z.number().int().positive(),
   username: z.string().min(1),
   message: z.string().min(1),
   attachments: z.array(attachmentSchema).max(5).optional(),
@@ -28,11 +29,15 @@ export async function POST(request: Request) {
       return Response.json({ error: "invalid_request" }, { status: 400 });
     }
 
-    const authorized = await authorizeRuntimeGeneration({
-      generationId: parsed.data.generationId,
+    const authorized = await authorizeRuntimeTurn({
+      runtimeId: parsed.data.runtimeId,
+      turnSeq: parsed.data.turnSeq,
       authorizationHeader: request.headers.get("authorization"),
     });
-    if (!authorized) {
+    if (!authorized.ok) {
+      if (authorized.reason === "stale_turn") {
+        return Response.json({ error: "stale_turn" }, { status: 409 });
+      }
       return Response.json({ error: "invalid_callback_token" }, { status: 401 });
     }
 

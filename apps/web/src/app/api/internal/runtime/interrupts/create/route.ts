@@ -4,13 +4,15 @@ import { db } from "@cmdclaw/db/client";
 import { generation } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { authorizeRuntimeTurn } from "../../_auth";
 
 export const runtime = "nodejs";
 
 const interruptCreateSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("plugin_write"),
-    generationId: z.string().min(1),
+    runtimeId: z.string().min(1),
+    turnSeq: z.number().int().positive(),
     integration: z.enum([
       "google_gmail",
       "outlook",
@@ -37,7 +39,8 @@ const interruptCreateSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("auth"),
-    generationId: z.string().min(1),
+    runtimeId: z.string().min(1),
+    turnSeq: z.number().int().positive(),
     integration: z.enum([
       "google_gmail",
       "outlook",
@@ -62,19 +65,19 @@ const interruptCreateSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-async function verifyGenerationCallbackToken(
-  generationId: string,
-  requestAuthHeader: string | null,
-): Promise<boolean> {
-  const token = requestAuthHeader?.replace(/^Bearer\s+/i, "").trim();
-  if (!token) {
-    return false;
+function buildAuthErrorResponse(
+  reason: "invalid_token" | "runtime_not_found" | "runtime_not_active" | "stale_turn",
+): Response {
+  if (reason === "stale_turn") {
+    return Response.json({ error: "stale_turn" }, { status: 409 });
   }
-  const record = await db.query.generation.findFirst({
-    where: eq(generation.id, generationId),
-    columns: { runtimeCallbackToken: true },
-  });
-  return !!record?.runtimeCallbackToken && record.runtimeCallbackToken === token;
+  if (reason === "runtime_not_found") {
+    return Response.json({ error: "runtime_not_found" }, { status: 404 });
+  }
+  if (reason === "runtime_not_active") {
+    return Response.json({ error: "runtime_not_active" }, { status: 409 });
+  }
+  return Response.json({ error: "invalid_callback_token" }, { status: 401 });
 }
 
 export async function POST(request: Request) {
@@ -85,17 +88,17 @@ export async function POST(request: Request) {
     }
     const input = parsed.data;
 
-    if (
-      !(await verifyGenerationCallbackToken(
-        input.generationId,
-        request.headers.get("authorization"),
-      ))
-    ) {
-      return Response.json({ error: "invalid_callback_token" }, { status: 401 });
+    const authorized = await authorizeRuntimeTurn({
+      runtimeId: input.runtimeId,
+      turnSeq: input.turnSeq,
+      authorizationHeader: request.headers.get("authorization"),
+    });
+    if (!authorized.ok) {
+      return buildAuthErrorResponse(authorized.reason);
     }
 
     const generationRecord = await db.query.generation.findFirst({
-      where: eq(generation.id, input.generationId),
+      where: eq(generation.id, authorized.generationId),
       with: { conversation: true },
     });
     if (!generationRecord) {
@@ -103,14 +106,14 @@ export async function POST(request: Request) {
     }
 
     const allowedIntegrations = await generationManager.getAllowedIntegrationsForGeneration(
-      input.generationId,
+      authorized.generationId,
     );
     if (Array.isArray(allowedIntegrations) && !allowedIntegrations.includes(input.integration)) {
       return Response.json({ error: "integration_not_allowed" }, { status: 403 });
     }
 
     if (input.kind === "plugin_write") {
-      const created = await generationManager.requestPluginApproval(input.generationId, {
+      const created = await generationManager.requestPluginApproval(authorized.generationId, {
         integration: input.integration,
         operation: input.operation,
         command: input.command ?? "",
@@ -125,7 +128,7 @@ export async function POST(request: Request) {
       }
 
       const interrupt = await generationInterruptService.findPendingInterruptByToolUseId({
-        generationId: input.generationId,
+        generationId: authorized.generationId,
         providerToolUseId: created.toolUseId,
       });
       if (!interrupt) {
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const created = await generationManager.requestAuthInterrupt(input.generationId, {
+    const created = await generationManager.requestAuthInterrupt(authorized.generationId, {
       integration: input.integration,
       reason: input.reason,
     });
@@ -150,7 +153,7 @@ export async function POST(request: Request) {
 
     return Response.json(created);
   } catch (error) {
-    console.error("[Internal] interrupt create error:", error);
+    console.error("[Internal] runtime interrupt create error:", error);
     return Response.json({ error: "internal_error" }, { status: 500 });
   }
 }

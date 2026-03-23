@@ -1,10 +1,10 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type Dockerode from "dockerode";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { ObservabilityContext } from "../utils/observability";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
-import { conversation, generation, message, skill, type ContentPart } from "@cmdclaw/db/schema";
+import { conversationRuntime, message, skill, type ContentPart } from "@cmdclaw/db/schema";
 import {
   canConnectDockerDaemon,
   createDockerClient,
@@ -34,6 +34,7 @@ import {
   getSandboxServerPort,
   getSandboxServerBackgroundStartCommand,
 } from "./opencode-runtime";
+import { conversationRuntimeService } from "../services/conversation-runtime-service";
 
 const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
 
@@ -111,6 +112,31 @@ interface OpenCodeSessionProvider {
     config: OpenCodeSessionConfig,
     options?: OpenCodeSessionOptions,
   ): Promise<OpenCodeSessionResult>;
+}
+
+async function getConversationRuntimeState(conversationId: string): Promise<{
+  runtimeId: string;
+  sandboxId: string | null;
+  sessionId: string | null;
+} | null> {
+  const runtime = await db.query.conversationRuntime.findFirst({
+    where: eq(conversationRuntime.conversationId, conversationId),
+    columns: {
+      id: true,
+      sandboxId: true,
+      sessionId: true,
+    },
+  });
+
+  if (!runtime) {
+    return null;
+  }
+
+  return {
+    runtimeId: runtime.id,
+    sandboxId: runtime.sandboxId,
+    sessionId: runtime.sessionId,
+  };
 }
 
 type DaytonaSandboxLike = {
@@ -301,11 +327,7 @@ async function getOrCreateDockerSandbox(
   }
 
   onLifecycle?.("sandbox_checking_cache", { conversationId: config.conversationId });
-
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, config.conversationId),
-    columns: { currentGenerationId: true, opencodeSandboxId: true },
-  });
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
 
   const connectAndValidate = async (container: Dockerode.Container | null) => {
     if (!container) {
@@ -324,8 +346,8 @@ async function getOrCreateDockerSandbox(
     };
   };
 
-  const fromConversation = conv?.opencodeSandboxId
-    ? await connectDockerSandboxById(docker, conv.opencodeSandboxId)
+  const fromConversation = runtimeState?.sandboxId
+    ? await connectDockerSandboxById(docker, runtimeState.sandboxId)
     : null;
 
   const validConversationContainer = await connectAndValidate(fromConversation);
@@ -344,57 +366,11 @@ async function getOrCreateDockerSandbox(
     };
   }
 
-  if (conv?.opencodeSandboxId) {
+  if (runtimeState?.sandboxId) {
     if (fromConversation) {
       await removeContainerBestEffort(fromConversation);
     }
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
-  }
-
-  const persistedGeneration = conv?.currentGenerationId
-    ? await db.query.generation.findFirst({
-        where: and(
-          eq(generation.id, conv.currentGenerationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        columns: { sandboxId: true },
-      })
-    : await db.query.generation.findFirst({
-        where: and(
-          eq(generation.conversationId, config.conversationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
-        columns: { sandboxId: true },
-      });
-
-  const fromGeneration = persistedGeneration?.sandboxId
-    ? await connectDockerSandboxById(docker, persistedGeneration.sandboxId)
-    : null;
-
-  const validGenerationContainer = await connectAndValidate(fromGeneration);
-  if (validGenerationContainer) {
-    onLifecycle?.("sandbox_reused", {
-      conversationId: config.conversationId,
-      sandboxId: validGenerationContainer.container.id,
-    });
-    return {
-      sandbox: wrapDockerSandbox(validGenerationContainer.container),
-      client: await createSandboxRuntimeClient({
-        serverUrl: validGenerationContainer.baseUrl,
-        model: config.model,
-      }),
-      reused: true,
-    };
-  }
-
-  if (fromGeneration) {
-    await removeContainerBestEffort(fromGeneration);
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
   }
 
   onLifecycle?.("sandbox_creating", {
@@ -414,7 +390,6 @@ async function getOrCreateDockerSandbox(
       APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
       CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
       CONVERSATION_ID: config.conversationId,
-      GENERATION_ID: config.generationId ?? "",
       ...config.integrationEnvs,
     },
   });
@@ -493,14 +468,10 @@ async function getOrCreateDaytonaSandbox(
   reused: boolean;
 }> {
   onLifecycle?.("sandbox_checking_cache", { conversationId: config.conversationId });
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
 
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, config.conversationId),
-    columns: { currentGenerationId: true, opencodeSandboxId: true },
-  });
-
-  const fromConversation = conv?.opencodeSandboxId
-    ? await connectDaytonaSandboxById(conv.opencodeSandboxId)
+  const fromConversation = runtimeState?.sandboxId
+    ? await connectDaytonaSandboxById(runtimeState.sandboxId)
     : null;
 
   if (fromConversation) {
@@ -525,56 +496,8 @@ async function getOrCreateDaytonaSandbox(
     }
   }
 
-  if (conv?.opencodeSandboxId) {
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
-  }
-
-  const persistedGeneration = conv?.currentGenerationId
-    ? await db.query.generation.findFirst({
-        where: and(
-          eq(generation.id, conv.currentGenerationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        columns: { sandboxId: true },
-      })
-    : await db.query.generation.findFirst({
-        where: and(
-          eq(generation.conversationId, config.conversationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
-        columns: { sandboxId: true },
-      });
-
-  const fromGeneration = persistedGeneration?.sandboxId
-    ? await connectDaytonaSandboxById(persistedGeneration.sandboxId)
-    : null;
-
-  if (fromGeneration) {
-    const preview = await fromGeneration.getPreviewLink(getSandboxServerPort(config.model));
-    const baseUrl = preview.url;
-    const health = await fetch(
-      appendDaytonaAuth(getSandboxReadinessUrl(baseUrl, config.model), preview.token),
-      {
-        method: "GET",
-      },
-    ).catch(() => null);
-    if (health?.ok) {
-      onLifecycle?.("sandbox_reused", {
-        conversationId: config.conversationId,
-        sandboxId: fromGeneration.id,
-      });
-      return {
-        sandbox: wrapDaytonaSandbox(fromGeneration),
-        client: await createDaytonaOpencodeClient(baseUrl, config.model, preview.token),
-        reused: true,
-      };
-    }
+  if (runtimeState?.sandboxId) {
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
   }
 
   onLifecycle?.("sandbox_creating", {
@@ -591,7 +514,6 @@ async function getOrCreateDaytonaSandbox(
       APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
       CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
       CONVERSATION_ID: config.conversationId,
-      GENERATION_ID: config.generationId ?? "",
       ...config.integrationEnvs,
     },
   })) as DaytonaSandboxLike;
@@ -656,11 +578,9 @@ async function getOrCreateCloudSession(
   }>,
 ): Promise<OpenCodeSessionResult> {
   const state = await getOrCreateSandbox(config, options?.onLifecycle);
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, config.conversationId),
-    columns: { opencodeSessionId: true },
-  });
-  const existingSessionId = conv?.opencodeSessionId ?? null;
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
+  const runtimeId = runtimeState?.runtimeId ?? null;
+  const existingSessionId = runtimeState?.sessionId ?? null;
 
   if (existingSessionId && state.reused) {
     const existingSession = await state.client.session.get({ sessionID: existingSessionId });
@@ -677,15 +597,19 @@ async function getOrCreateCloudSession(
       };
     }
 
-    await db
-      .update(conversation)
-      .set({ opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
+    if (runtimeId) {
+      await db
+        .update(conversationRuntime)
+        .set({ sessionId: null })
+        .where(eq(conversationRuntime.id, runtimeId));
+    }
   } else if (existingSessionId && !state.reused) {
-    await db
-      .update(conversation)
-      .set({ opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
+    if (runtimeId) {
+      await db
+        .update(conversationRuntime)
+        .set({ sessionId: null })
+        .where(eq(conversationRuntime.id, runtimeId));
+    }
   }
 
   options?.onLifecycle?.("session_creating", {

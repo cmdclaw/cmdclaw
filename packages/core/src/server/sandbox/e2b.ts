@@ -3,10 +3,11 @@ import { eq, and, asc, isNotNull } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
-import { skill, message, conversation, generation } from "@cmdclaw/db/schema";
+import { skill, message, conversation, conversationRuntime } from "@cmdclaw/db/schema";
 import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
+import { conversationRuntimeService } from "../services/conversation-runtime-service";
 import {
   COMPACTION_SUMMARY_PREFIX,
   SESSION_BOUNDARY_PREFIX,
@@ -46,6 +47,37 @@ interface SandboxState {
   client: OpencodeClient;
   serverUrl: string;
   reused: boolean;
+}
+
+async function getConversationRuntimeState(conversationId: string): Promise<{
+  runtimeId: string;
+  sandboxId: string | null;
+  sessionId: string | null;
+  model: string;
+} | null> {
+  const row = await db
+    .select({
+      runtimeId: conversationRuntime.id,
+      sandboxId: conversationRuntime.sandboxId,
+      sessionId: conversationRuntime.sessionId,
+      model: conversation.model,
+    })
+    .from(conversationRuntime)
+    .innerJoin(conversation, eq(conversation.id, conversationRuntime.conversationId))
+    .where(eq(conversationRuntime.conversationId, conversationId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    runtimeId: row.runtimeId,
+    sandboxId: row.sandboxId,
+    sessionId: row.sessionId,
+    model: row.model ?? "anthropic/claude-sonnet-4-6",
+  };
 }
 
 async function connectSandboxById(sandboxId: string): Promise<Sandbox | null> {
@@ -176,13 +208,10 @@ export async function getOrCreateSandbox(
     conversationId: config.conversationId,
   });
 
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, config.conversationId),
-    columns: { currentGenerationId: true, opencodeSandboxId: true },
-  });
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
 
-  if (conv?.opencodeSandboxId) {
-    const connected = await connectSandboxById(conv.opencodeSandboxId);
+  if (runtimeState?.sandboxId) {
+    const connected = await connectSandboxById(runtimeState.sandboxId);
     if (connected) {
       const serverPort = getSandboxServerPort(config.model);
       const serverUrl = `https://${connected.getHost(serverPort)}`;
@@ -204,53 +233,7 @@ export async function getOrCreateSandbox(
       }
     }
 
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
-  }
-
-  const persistedGeneration = conv?.currentGenerationId
-    ? await db.query.generation.findFirst({
-        where: and(
-          eq(generation.id, conv.currentGenerationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        columns: { sandboxId: true },
-      })
-    : await db.query.generation.findFirst({
-        where: and(
-          eq(generation.conversationId, config.conversationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
-        columns: { sandboxId: true },
-      });
-
-  if (persistedGeneration?.sandboxId) {
-    const connected = await connectSandboxById(persistedGeneration.sandboxId);
-    if (connected) {
-      const serverPort = getSandboxServerPort(config.model);
-      const serverUrl = `https://${connected.getHost(serverPort)}`;
-      const health = await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
-        method: "GET",
-      }).catch(() => null);
-      if (health?.ok) {
-        onLifecycle?.("sandbox_reused", {
-          conversationId: config.conversationId,
-          sandboxId: connected.sandboxId,
-        });
-        const client = await createSandboxRuntimeClient({ serverUrl, model: config.model });
-        return {
-          sandbox: connected,
-          client,
-          serverUrl,
-          reused: true,
-        };
-      }
-    }
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
   }
 
   // Create new sandbox
@@ -280,7 +263,6 @@ export async function getOrCreateSandbox(
         APP_URL: resolveSandboxAppUrl(),
         CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
         CONVERSATION_ID: config.conversationId,
-        GENERATION_ID: config.generationId ?? "",
         ...config.integrationEnvs,
       },
       timeoutMs: SANDBOX_TIMEOUT_MS,
@@ -456,13 +438,10 @@ export async function getOrCreateSandbox(
 export async function getSandboxStateDurable(
   conversationId: string,
 ): Promise<SandboxState | undefined> {
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, conversationId),
-    columns: { currentGenerationId: true, model: true, opencodeSandboxId: true },
-  });
-  const model = conv?.model ?? "anthropic/claude-sonnet-4-6";
-  if (conv?.opencodeSandboxId) {
-    const connectedByConversation = await connectSandboxById(conv.opencodeSandboxId);
+  const runtimeState = await getConversationRuntimeState(conversationId);
+  const model = runtimeState?.model ?? "anthropic/claude-sonnet-4-6";
+  if (runtimeState?.sandboxId) {
+    const connectedByConversation = await connectSandboxById(runtimeState.sandboxId);
     if (connectedByConversation) {
       const serverPort = getSandboxServerPort(model);
       const serverUrl = `https://${connectedByConversation.getHost(serverPort)}`;
@@ -479,36 +458,17 @@ export async function getSandboxStateDurable(
       }
     }
 
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, conversationId));
-  }
-
-  const gen = conv?.currentGenerationId
-    ? await db.query.generation.findFirst({
-        where: and(
-          eq(generation.id, conv.currentGenerationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        columns: { sandboxId: true },
-      })
-    : await db.query.generation.findFirst({
-        where: and(
-          eq(generation.conversationId, conversationId),
-          isNotNull(generation.sandboxId),
-          eq(generation.status, "running"),
-        ),
-        orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
-        columns: { sandboxId: true },
-      });
-  if (!gen?.sandboxId) {
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
     return undefined;
   }
 
-  const connected = await connectSandboxById(gen.sandboxId);
+  if (!runtimeState?.sandboxId) {
+    return undefined;
+  }
+
+  const connected = await connectSandboxById(runtimeState.sandboxId);
   if (!connected) {
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
     return undefined;
   }
   const serverPort = getSandboxServerPort(model);
@@ -517,6 +477,7 @@ export async function getSandboxStateDurable(
     method: "GET",
   }).catch(() => null);
   if (!health?.ok) {
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
     return undefined;
   }
 
@@ -559,11 +520,9 @@ export async function getOrCreateSession(
   );
 
   const state = await getOrCreateSandbox(config, options?.onLifecycle, telemetryContext);
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, config.conversationId),
-    columns: { opencodeSessionId: true },
-  });
-  const existingSessionId = conv?.opencodeSessionId ?? null;
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
+  const runtimeId = runtimeState?.runtimeId ?? null;
+  const existingSessionId = runtimeState?.sessionId ?? null;
 
   // Reuse existing session only if we also reused the sandbox that owns it,
   // and the session ID is still valid on that sandbox's OpenCode server.
@@ -609,10 +568,12 @@ export async function getOrCreateSession(
         sessionId: existingSessionId,
       },
     );
-    await db
-      .update(conversation)
-      .set({ opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
+    if (runtimeId) {
+      await db
+        .update(conversationRuntime)
+        .set({ sessionId: null })
+        .where(eq(conversationRuntime.id, runtimeId));
+    }
   } else if (existingSessionId && !state.reused) {
     logLifecycle(
       "SESSION_REUSE_SKIPPED_SANDBOX_REPLACED",
@@ -627,10 +588,12 @@ export async function getOrCreateSession(
         sessionId: existingSessionId,
       },
     );
-    await db
-      .update(conversation)
-      .set({ opencodeSessionId: null })
-      .where(eq(conversation.id, config.conversationId));
+    if (runtimeId) {
+      await db
+        .update(conversationRuntime)
+        .set({ sessionId: null })
+        .where(eq(conversationRuntime.id, runtimeId));
+    }
   }
 
   // Create a new session
@@ -879,16 +842,14 @@ export async function injectProviderAuth(
 }
 
 async function killConnectedSandbox(
+  runtimeId: string,
   conversationId: string,
   sandbox: Sandbox,
   reason: "manual_kill" | "paused_cleanup",
 ): Promise<void> {
   try {
     await sandbox.kill();
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, conversationId));
+    await conversationRuntimeService.markRuntimeDead(runtimeId);
     logLifecycle(
       "VM_TERMINATED",
       {
@@ -910,47 +871,34 @@ export async function killSandbox(
   conversationId: string,
   reason: "manual_kill" | "paused_cleanup" = "manual_kill",
 ): Promise<void> {
-  const conv = await db.query.conversation.findFirst({
-    where: eq(conversation.id, conversationId),
-    columns: { opencodeSandboxId: true },
-  });
-
-  const sandboxId =
-    conv?.opencodeSandboxId ??
-    (
-      await db.query.generation.findFirst({
-        where: and(eq(generation.conversationId, conversationId), isNotNull(generation.sandboxId)),
-        orderBy: (fields, operators) => [operators.desc(fields.startedAt)],
-        columns: { sandboxId: true },
-      })
-    )?.sandboxId;
+  const runtimeState = await getConversationRuntimeState(conversationId);
+  const sandboxId = runtimeState?.sandboxId ?? null;
 
   if (!sandboxId) {
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, conversationId));
     return;
   }
 
   const sandbox = await connectSandboxById(sandboxId);
   if (!sandbox) {
-    await db
-      .update(conversation)
-      .set({ opencodeSandboxId: null, opencodeSessionId: null })
-      .where(eq(conversation.id, conversationId));
+    if (runtimeState) {
+      await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
+    }
     return;
   }
 
-  await killConnectedSandbox(conversationId, sandbox, reason);
+  if (!runtimeState) {
+    return;
+  }
+
+  await killConnectedSandbox(runtimeState.runtimeId, conversationId, sandbox, reason);
 }
 
 /**
  * Cleanup all sandboxes (call on server shutdown)
  */
 export async function cleanupAllSandboxes(): Promise<void> {
-  const knownSandboxes = await db.query.generation.findMany({
-    where: isNotNull(generation.sandboxId),
+  const knownSandboxes = await db.query.conversationRuntime.findMany({
+    where: isNotNull(conversationRuntime.sandboxId),
     columns: { sandboxId: true },
   });
   const uniqueSandboxIds = Array.from(

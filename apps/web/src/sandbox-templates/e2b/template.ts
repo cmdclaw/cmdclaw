@@ -30,9 +30,10 @@ export const template = Template({
   .setWorkdir("/app")
   // Copy OpenCode config, plugins, and custom tools
   .copy(`${COMMON_ROOT}/opencode.json`, "/app/opencode.json")
-  .runCmd("mkdir -p /app/.opencode/plugins /app/.opencode/tools")
+  .runCmd("mkdir -p /app/.opencode/plugins /app/.opencode/tools /app/.opencode/lib")
   .copy(`${COMMON_ROOT}/plugins`, "/app/.opencode/plugins")
   .copy(`${COMMON_ROOT}/tools`, "/app/.opencode/tools")
+  .copy(`${COMMON_ROOT}/lib`, "/app/.opencode/lib")
   // Prewarm both runtimes to avoid first-request overhead
   .runCmd("mkdir -p $HOME/.config/opencode /app/.opencode $HOME/.cache/opencode")
   .runCmd("cp /app/opencode.json /app/.opencode/opencode.json")
@@ -45,6 +46,7 @@ export const template = Template({
   // Copy skills into .claude/skills
   .runCmd("mkdir -p /app/.agents /app/.claude")
   .copy(`${COMMON_ROOT}/skills`, "/app/.agents/skills")
+  .copy(`${COMMON_ROOT}/lib`, "/app/.agents/lib")
   // symlink for claude
   .runCmd("ln -sfn /app/.agents/skills /app/.claude/skills")
   // Copy setup script

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { readRuntimeContext } from "../../../lib/runtime-context";
 
 type AttachmentPayload = {
   name: string;
@@ -67,17 +68,17 @@ async function readAttachment(filePath: string): Promise<AttachmentPayload> {
 
 async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
   const appUrl = getRequiredEnv("APP_URL");
-  const generationId = getRequiredEnv("GENERATION_ID");
-  const callbackToken = getRequiredEnv("CMDCLAW_GENERATION_CALLBACK_TOKEN");
+  const runtimeContext = await readRuntimeContext();
 
   const response = await fetch(`${appUrl}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${callbackToken}`,
+      Authorization: `Bearer ${runtimeContext.callbackToken}`,
     },
     body: JSON.stringify({
-      generationId,
+      runtimeId: runtimeContext.runtimeId,
+      turnSeq: runtimeContext.turnSeq,
       ...body,
     }),
   });

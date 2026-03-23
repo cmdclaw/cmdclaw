@@ -386,14 +386,10 @@ async function requestApproval(params: {
   const APPROVAL_POLL_INTERVAL_MS = 1000;
   const APPROVAL_FALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
-  const callbackToken = process.env.CMDCLAW_GENERATION_CALLBACK_TOKEN;
-  const generationId = process.env.GENERATION_ID;
+  const runtimeContext = await readRuntimeContext();
 
-  if (serverUrls.length === 0 || !generationId) {
-    const reason =
-      serverUrls.length === 0
-        ? "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)"
-        : "Missing GENERATION_ID";
+  if (serverUrls.length === 0) {
+    const reason = "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)";
     console.error(`[Plugin] ${reason}`);
     return { error: reason };
   }
@@ -412,20 +408,21 @@ async function requestApproval(params: {
         error:
           lastError ??
           `Approval callback unreachable. Tried: ${serverUrls
-            .map((url) => `${url}/api/internal/interrupts/create`)
+            .map((url) => `${url}/api/internal/runtime/interrupts/create`)
             .join(", ")}`,
       };
     }
     const serverUrl = serverUrls[index]!;
     try {
-      const response = await fetch(`${serverUrl}/api/internal/interrupts/create`, {
+      const response = await fetch(`${serverUrl}/api/internal/runtime/interrupts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
+          Authorization: `Bearer ${runtimeContext.callbackToken}`,
         },
         body: JSON.stringify({
-          generationId,
+          runtimeId: runtimeContext.runtimeId,
+          turnSeq: runtimeContext.turnSeq,
           kind: "plugin_write",
           integration: params.integration,
           operation: params.operation,
@@ -481,14 +478,15 @@ async function requestApproval(params: {
     const pollResults = await Promise.all(
       serverUrls.map(async (serverUrl) => {
         try {
-          const response = await fetch(`${serverUrl}/api/internal/interrupts/status`, {
+          const response = await fetch(`${serverUrl}/api/internal/runtime/interrupts/status`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
+              Authorization: `Bearer ${runtimeContext.callbackToken}`,
             },
             body: JSON.stringify({
-              generationId,
+              runtimeId: runtimeContext.runtimeId,
+              turnSeq: runtimeContext.turnSeq,
               interruptId: created.toolUseId,
             }),
           });
@@ -540,14 +538,10 @@ async function requestAuth(params: {
   const AUTH_POLL_INTERVAL_MS = 1000;
   const AUTH_FALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
-  const callbackToken = process.env.CMDCLAW_GENERATION_CALLBACK_TOKEN;
-  const generationId = process.env.GENERATION_ID;
+  const runtimeContext = await readRuntimeContext();
 
-  if (serverUrls.length === 0 || !generationId) {
-    const reason =
-      serverUrls.length === 0
-        ? "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)"
-        : "Missing GENERATION_ID";
+  if (serverUrls.length === 0) {
+    const reason = "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)";
     console.error(`[Plugin] ${reason}`);
     return { success: false, error: reason };
   }
@@ -561,20 +555,21 @@ async function requestAuth(params: {
         error:
           lastError ??
           `Auth callback unreachable. Tried: ${serverUrls
-            .map((url) => `${url}/api/internal/interrupts/create`)
+            .map((url) => `${url}/api/internal/runtime/interrupts/create`)
             .join(", ")}`,
       };
     }
     const serverUrl = serverUrls[index]!;
     try {
-      const response = await fetch(`${serverUrl}/api/internal/interrupts/create`, {
+      const response = await fetch(`${serverUrl}/api/internal/runtime/interrupts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
+          Authorization: `Bearer ${runtimeContext.callbackToken}`,
         },
         body: JSON.stringify({
-          generationId,
+          runtimeId: runtimeContext.runtimeId,
+          turnSeq: runtimeContext.turnSeq,
           kind: "auth",
           integration: params.integration,
           reason: params.reason,
@@ -623,14 +618,15 @@ async function requestAuth(params: {
     const pollResults = await Promise.all(
       serverUrls.map(async (serverUrl) => {
         try {
-          const response = await fetch(`${serverUrl}/api/internal/interrupts/status`, {
+          const response = await fetch(`${serverUrl}/api/internal/runtime/interrupts/status`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(callbackToken ? { Authorization: `Bearer ${callbackToken}` } : {}),
+              Authorization: `Bearer ${runtimeContext.callbackToken}`,
             },
             body: JSON.stringify({
-              generationId,
+              runtimeId: runtimeContext.runtimeId,
+              turnSeq: runtimeContext.turnSeq,
               interruptId: created.interruptId,
             }),
           });
@@ -796,3 +792,4 @@ export const IntegrationPermissionsPlugin = async () => {
 
 // Default export for OpenCode plugin loader
 export default IntegrationPermissionsPlugin;
+import { readRuntimeContext } from "../lib/runtime-context";

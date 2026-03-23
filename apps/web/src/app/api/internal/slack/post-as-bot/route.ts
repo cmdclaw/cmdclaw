@@ -1,5 +1,5 @@
 import { db } from "@cmdclaw/db/client";
-import { conversation, coworker, coworkerRun } from "@cmdclaw/db/schema";
+import { conversationRuntime, coworker, coworkerRun } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { env } from "@/env";
 
@@ -136,11 +136,13 @@ export async function POST(request: Request) {
   }
 
   if (conversationId) {
-    const conv = await db.query.conversation.findFirst({
-      where: eq(conversation.id, conversationId),
-      columns: { currentGenerationId: true },
+    const runtime = await db.query.conversationRuntime.findFirst({
+      where: eq(conversationRuntime.conversationId, conversationId),
+      columns: {
+        activeGenerationId: true,
+      },
     });
-    const currentGenerationId = conv?.currentGenerationId ?? undefined;
+    const currentGenerationId = runtime?.activeGenerationId ?? undefined;
     if (!currentGenerationId) {
       return Response.json(
         { ok: false, error: "No active generation for conversation" },

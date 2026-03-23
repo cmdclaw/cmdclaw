@@ -1,12 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const authorizeRuntimeGenerationMock = vi.fn();
+const authorizeRuntimeTurnMock = vi.fn();
 const coworkerFindFirstMock = vi.fn();
 const coworkerFindManyMock = vi.fn();
 const triggerCoworkerRunMock = vi.fn();
 
-vi.mock("../_auth", () => ({
-  authorizeRuntimeGeneration: authorizeRuntimeGenerationMock,
+vi.mock("../../../runtime/_auth", () => ({
+  authorizeRuntimeTurn: authorizeRuntimeTurnMock,
 }));
 
 vi.mock("@cmdclaw/db/client", () => ({
@@ -44,7 +44,10 @@ describe("POST /api/internal/coworkers/runtime/invoke", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    authorizeRuntimeGenerationMock.mockResolvedValue({
+    authorizeRuntimeTurnMock.mockResolvedValue({
+      ok: true,
+      runtimeId: "rt-1",
+      turnSeq: 2,
       generationId: "gen-1",
       conversationId: "conv-1",
       userId: "user-1",
@@ -71,7 +74,8 @@ describe("POST /api/internal/coworkers/runtime/invoke", () => {
         Authorization: "Bearer runtime-token",
       },
       body: JSON.stringify({
-        generationId: "gen-1",
+        runtimeId: "rt-1",
+        turnSeq: 2,
         username: "@linkedin-digest",
         message: "Review these LinkedIn messages",
         attachments: [
@@ -121,5 +125,32 @@ describe("POST /api/internal/coworkers/runtime/invoke", () => {
         message: "Review these LinkedIn messages",
       },
     });
+  });
+
+  it("returns stale_turn when the runtime callback is for an older turn", async () => {
+    authorizeRuntimeTurnMock.mockResolvedValue({
+      ok: false,
+      reason: "stale_turn",
+    });
+
+    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/invoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer runtime-token",
+      },
+      body: JSON.stringify({
+        runtimeId: "rt-1",
+        turnSeq: 1,
+        username: "@linkedin-digest",
+        message: "Review these LinkedIn messages",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "stale_turn" });
+    expect(triggerCoworkerRunMock).not.toHaveBeenCalled();
   });
 });

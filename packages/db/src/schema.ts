@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   pgTable,
   text,
   timestamp,
@@ -350,6 +351,12 @@ export const generationInterruptStatusEnum = pgEnum("generation_interrupt_status
   "cancelled",
 ]);
 
+export const conversationRuntimeStatusEnum = pgEnum("conversation_runtime_status", [
+  "active",
+  "recycled",
+  "dead",
+]);
+
 export const conversationTypeEnum = pgEnum("conversation_type", ["chat", "coworker"]);
 
 export const conversation = pgTable(
@@ -362,10 +369,6 @@ export const conversation = pgTable(
     workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "set null" }),
     type: conversationTypeEnum("type").default("chat").notNull(),
     title: text("title").default("New conversation"),
-    // OpenCode session ID for resuming conversations
-    opencodeSessionId: text("opencode_session_id"),
-    // OpenCode sandbox ID bound to this conversation
-    opencodeSandboxId: text("opencode_sandbox_id"),
     sandboxLastUserVisibleActionAt: timestamp("sandbox_last_user_visible_action_at"),
     // Last resolved sandbox provider used for this conversation
     lastSandboxProvider: text("last_sandbox_provider"),
@@ -396,6 +399,41 @@ export const conversation = pgTable(
     index("conversation_workspace_id_idx").on(table.workspaceId),
     index("conversation_created_at_idx").on(table.createdAt),
     uniqueIndex("conversation_share_token_idx").on(table.shareToken),
+  ],
+);
+
+export const conversationRuntime = pgTable(
+  "conversation_runtime",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    callbackToken: text("callback_token").notNull(),
+    sandboxProvider: text("sandbox_provider"),
+    runtimeHarness: text("runtime_harness"),
+    runtimeProtocolVersion: text("runtime_protocol_version"),
+    sandboxId: text("sandbox_id"),
+    sessionId: text("session_id"),
+    status: conversationRuntimeStatusEnum("status").default("active").notNull(),
+    activeGenerationId: text("active_generation_id").references((): AnyPgColumn => generation.id, {
+      onDelete: "set null",
+    }),
+    activeTurnSeq: integer("active_turn_seq").default(0).notNull(),
+    lastBoundAt: timestamp("last_bound_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("conversation_runtime_conversation_id_idx").on(table.conversationId),
+    uniqueIndex("conversation_runtime_callback_token_idx").on(table.callbackToken),
+    index("conversation_runtime_status_idx").on(table.status),
+    index("conversation_runtime_active_generation_id_idx").on(table.activeGenerationId),
   ],
 );
 
@@ -592,6 +630,9 @@ export const generation = pgTable(
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversation.id, { onDelete: "cascade" }),
+    runtimeId: text("runtime_id").references((): AnyPgColumn => conversationRuntime.id, {
+      onDelete: "set null",
+    }),
     // Set when message is saved on completion
     messageId: text("message_id").references(() => message.id, {
       onDelete: "set null",
@@ -605,7 +646,6 @@ export const generation = pgTable(
     pendingAuth: jsonb("pending_auth").$type<PendingAuth>(),
     // Execution policy snapshot for durable worker restarts
     executionPolicy: jsonb("execution_policy").$type<GenerationExecutionPolicy>(),
-    runtimeCallbackToken: text("runtime_callback_token"),
     // E2B state
     sandboxId: text("sandbox_id"),
     // Resolved execution metadata for deterministic resume/debugging
@@ -623,6 +663,7 @@ export const generation = pgTable(
   },
   (table) => [
     index("generation_conversation_id_idx").on(table.conversationId),
+    index("generation_runtime_id_idx").on(table.runtimeId),
     index("generation_status_idx").on(table.status),
   ],
 );
@@ -636,6 +677,9 @@ export const generationInterrupt = pgTable(
     generationId: text("generation_id")
       .notNull()
       .references(() => generation.id, { onDelete: "cascade" }),
+    runtimeId: text("runtime_id")
+      .notNull()
+      .references((): AnyPgColumn => conversationRuntime.id, { onDelete: "cascade" }),
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversation.id, { onDelete: "cascade" }),
@@ -645,6 +689,7 @@ export const generationInterrupt = pgTable(
     provider: text("provider").notNull(),
     providerRequestId: text("provider_request_id"),
     providerToolUseId: text("provider_tool_use_id").notNull(),
+    turnSeq: integer("turn_seq").notNull(),
     responsePayload: jsonb("response_payload").$type<GenerationInterruptResponsePayload>(),
     requestedAt: timestamp("requested_at").defaultNow().notNull(),
     expiresAt: timestamp("expires_at"),
@@ -658,6 +703,7 @@ export const generationInterrupt = pgTable(
   },
   (table) => [
     index("generation_interrupt_generation_id_idx").on(table.generationId),
+    index("generation_interrupt_runtime_id_idx").on(table.runtimeId),
     index("generation_interrupt_conversation_id_idx").on(table.conversationId),
     index("generation_interrupt_status_idx").on(table.status),
     uniqueIndex("generation_interrupt_provider_tool_use_id_idx").on(table.providerToolUseId),
@@ -996,8 +1042,25 @@ export const conversationRelations = relations(conversation, ({ one, many }) => 
   }),
   messages: many(message),
   generations: many(generation),
+  runtime: one(conversationRuntime, {
+    fields: [conversation.id],
+    references: [conversationRuntime.conversationId],
+  }),
   billingLedgers: many(billingLedger),
   queuedMessages: many(conversationQueuedMessage),
+}));
+
+export const conversationRuntimeRelations = relations(conversationRuntime, ({ one, many }) => ({
+  conversation: one(conversation, {
+    fields: [conversationRuntime.conversationId],
+    references: [conversation.id],
+  }),
+  activeGeneration: one(generation, {
+    fields: [conversationRuntime.activeGenerationId],
+    references: [generation.id],
+  }),
+  generations: many(generation),
+  interrupts: many(generationInterrupt),
 }));
 
 export const messageAttachment = pgTable(
@@ -1080,6 +1143,10 @@ export const generationRelations = relations(generation, ({ one }) => ({
   conversation: one(conversation, {
     fields: [generation.conversationId],
     references: [conversation.id],
+  }),
+  runtime: one(conversationRuntime, {
+    fields: [generation.runtimeId],
+    references: [conversationRuntime.id],
   }),
   message: one(message, {
     fields: [generation.messageId],

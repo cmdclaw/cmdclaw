@@ -45,6 +45,7 @@ import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "../../lib/chat-model-defaults";
 import { START_GENERATION_ERROR_CODES } from "../../lib/generation-errors";
 import { isAdminOnlyChatModel } from "../../lib/chat-model-policy";
 import { parseModelReference } from "../../lib/model-reference";
+import { CMDCLAW_RUNTIME_CONTEXT_PATH, type RuntimeContextFile } from "../../lib/runtime-context";
 import {
   getProviderAuthProviderID,
   getProviderDisplayName,
@@ -115,7 +116,45 @@ import { resolveSelectedPlatformSkillSlugs } from "./platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-service";
 import { getSandboxSlotManager } from "./sandbox-slot-manager";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
+import { conversationRuntimeService } from "./conversation-runtime-service";
 import { sendTaskDonePush } from "./web-push-service";
+
+function escapeShellArg(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+async function writeRuntimeContextToSandbox(
+  runtimeSandbox: {
+    exec: (
+      command: string,
+      opts?: { timeoutMs?: number; env?: Record<string, string> },
+    ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  },
+  runtimeContext: RuntimeContextFile,
+): Promise<void> {
+  const payload = Buffer.from(JSON.stringify(runtimeContext, null, 2), "utf8").toString("base64");
+  const targetPath = CMDCLAW_RUNTIME_CONTEXT_PATH;
+  const targetDir = path.posix.dirname(targetPath);
+  const tempPath = `${targetPath}.next`;
+  const command = [
+    `mkdir -p ${escapeShellArg(targetDir)}`,
+    "python3 - <<'PY'",
+    "import base64",
+    "from pathlib import Path",
+    `payload = ${JSON.stringify(payload)}`,
+    `target_path = Path(${JSON.stringify(targetPath)})`,
+    `temp_path = Path(${JSON.stringify(tempPath)})`,
+    "temp_path.write_bytes(base64.b64decode(payload))",
+    "temp_path.replace(target_path)",
+    "PY",
+  ].join("\n");
+  const result = await runtimeSandbox.exec(command, { timeoutMs: 15_000 });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Runtime context write failed (exit=${result.exitCode}): ${result.stderr || result.stdout || "unknown error"}`,
+    );
+  }
+}
 
 let cachedDefaultCoworkerModelPromise: Promise<string> | undefined;
 
@@ -268,6 +307,8 @@ interface GenerationContext {
   authResolver?: (result: { success: boolean; userId?: string }) => void;
   currentInterruptId?: string;
   runtimeCallbackToken?: string;
+  runtimeId?: string;
+  runtimeTurnSeq?: number;
   usage: { inputTokens: number; outputTokens: number; totalCostUsd: number };
   sessionId?: string;
   errorMessage?: string;
@@ -1893,7 +1934,6 @@ class GenerationManager {
     }
 
     // Create generation record
-    const runtimeCallbackToken = crypto.randomUUID();
     const [genRecord] = await db
       .insert(generation)
       .values({
@@ -1906,12 +1946,15 @@ class GenerationManager {
           selectedPlatformSkillSlugs,
           queuedFileAttachments: fileAttachments,
         }),
-        runtimeCallbackToken,
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
       })
       .returning();
+    const runtimeBinding = await conversationRuntimeService.bindGenerationToRuntime({
+      conversationId: conv.id,
+      generationId: genRecord.id,
+    });
     logServerEvent(
       "info",
       "START_GENERATION_PHASE_DONE",
@@ -1919,6 +1962,8 @@ class GenerationManager {
         phase: "generation_record_created",
         elapsedMs: Date.now() - startGenerationStartedAt,
         generationId: genRecord.id,
+        runtimeId: runtimeBinding.runtimeId,
+        turnSeq: runtimeBinding.turnSeq,
       },
       { ...logContext, conversationId: conv.id, generationId: genRecord.id },
     );
@@ -2003,7 +2048,9 @@ class GenerationManager {
       selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
-      runtimeCallbackToken,
+      runtimeCallbackToken: runtimeBinding.callbackToken,
+      runtimeId: runtimeBinding.runtimeId,
+      runtimeTurnSeq: runtimeBinding.turnSeq,
       agentInitStartedAt: undefined,
       agentInitReadyAt: undefined,
       agentInitFailedAt: undefined,
@@ -2145,6 +2192,10 @@ class GenerationManager {
         outputTokens: 0,
       })
       .returning();
+    const runtimeBinding = await conversationRuntimeService.bindGenerationToRuntime({
+      conversationId: newConv.id,
+      generationId: genRecord.id,
+    });
 
     await db
       .update(conversation)
@@ -2212,6 +2263,9 @@ class GenerationManager {
       selectedPlatformSkillSlugs,
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
+      runtimeCallbackToken: runtimeBinding.callbackToken,
+      runtimeId: runtimeBinding.runtimeId,
+      runtimeTurnSeq: runtimeBinding.turnSeq,
       agentInitStartedAt: undefined,
       agentInitReadyAt: undefined,
       agentInitFailedAt: undefined,
@@ -2310,6 +2364,9 @@ class GenerationManager {
         : null;
     const pendingInterrupt =
       await generationInterruptService.getPendingInterruptForGeneration(generationId);
+    const runtimeRecord = genRecord.runtimeId
+      ? await conversationRuntimeService.getRuntime(genRecord.runtimeId)
+      : await conversationRuntimeService.getRuntimeForConversation(genRecord.conversationId);
 
     const ctx: GenerationContext = {
       id: genRecord.id,
@@ -2369,7 +2426,9 @@ class GenerationManager {
           : undefined),
       userStagedFilePaths: new Set(),
       uploadedSandboxFileIds: new Set(),
-      runtimeCallbackToken: genRecord.runtimeCallbackToken ?? undefined,
+      runtimeCallbackToken: runtimeRecord?.callbackToken ?? undefined,
+      runtimeId: runtimeRecord?.id ?? genRecord.runtimeId ?? undefined,
+      runtimeTurnSeq: pendingInterrupt?.turnSeq ?? runtimeRecord?.activeTurnSeq,
       agentInitStartedAt: undefined,
       agentInitReadyAt: undefined,
       agentInitFailedAt: undefined,
@@ -2632,7 +2691,9 @@ class GenerationManager {
               for (let i = observedParts.length; i < latestParts.length; i += 1) {
                 const partEvent = this.emitReplayPartEvent(
                   latest.id,
+                  latest.runtimeId ?? null,
                   latest.conversationId,
+                  1,
                   latestParts[i],
                   latestParts,
                 );
@@ -3531,7 +3592,9 @@ class GenerationManager {
 
   private emitReplayPartEvent(
     generationId: string,
+    runtimeId: string | null,
     conversationId: string,
+    turnSeq: number,
     part: ContentPart,
     allParts: ContentPart[],
   ): GenerationStreamEvent | null {
@@ -3581,7 +3644,9 @@ class GenerationManager {
         type: "interrupt_resolved",
         interruptId: `approval-part:${generationId}:${part.tool_use_id}`,
         generationId,
+        runtimeId: runtimeId ?? generationId,
         conversationId,
+        turnSeq,
         kind:
           part.operation === "question" || (part.question_answers?.length ?? 0) > 0
             ? "runtime_question"
@@ -3707,10 +3772,13 @@ class GenerationManager {
       content: `${SESSION_BOUNDARY_PREFIX}\n${new Date().toISOString()}`,
     });
 
-    await db
-      .update(conversation)
-      .set({ opencodeSessionId: null })
-      .where(eq(conversation.id, ctx.conversationId));
+    if (ctx.runtimeId) {
+      await conversationRuntimeService.updateRuntimeSession({
+        runtimeId: ctx.runtimeId,
+        sessionId: null,
+        sandboxId: ctx.sandboxId ?? null,
+      });
+    }
 
     ctx.sessionId = undefined;
 
@@ -3791,9 +3859,6 @@ class GenerationManager {
       if (dbUser?.timezone) {
         filteredCliEnv.CMDCLAW_USER_TIMEZONE = dbUser.timezone;
       }
-      if (ctx.runtimeCallbackToken) {
-        filteredCliEnv.CMDCLAW_GENERATION_CALLBACK_TOKEN = ctx.runtimeCallbackToken;
-      }
 
       // Get conversation for existing session info
       const conv = await db.query.conversation.findFirst({
@@ -3845,6 +3910,9 @@ class GenerationManager {
       let client: RuntimeHarnessClient;
       let sessionId: string;
       let runtimeSandbox: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["sandbox"];
+      let runtimeMetadata:
+        | Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["metadata"]
+        | undefined;
       try {
         const session = await withTimeout(
           getOrCreateConversationRuntime(
@@ -3898,6 +3966,7 @@ class GenerationManager {
         client = session.harnessClient;
         sessionId = session.session.id;
         runtimeSandbox = session.sandbox;
+        runtimeMetadata = session.metadata;
         ctx.agentInitReadyAt = Date.now();
         this.markPhase(ctx, "agent_init_ready");
         this.broadcast(ctx, {
@@ -3968,15 +4037,17 @@ class GenerationManager {
         .set({ sandboxId: runtimeSandbox.sandboxId })
         .where(eq(generation.id, ctx.id));
 
-      // Persist reusable IDs immediately so follow-up turns can reuse session/sandbox
-      // even if the current turn is interrupted before completion.
-      await db
-        .update(conversation)
-        .set({
-          opencodeSessionId: ctx.sessionId,
-          opencodeSandboxId: ctx.sandboxId ?? null,
-        })
-        .where(eq(conversation.id, ctx.conversationId));
+      if (ctx.runtimeId) {
+        await conversationRuntimeService.updateRuntimeSession({
+          runtimeId: ctx.runtimeId,
+          sandboxId: ctx.sandboxId ?? null,
+          sessionId: ctx.sessionId ?? null,
+          sandboxProvider: runtimeMetadata?.sandboxProvider,
+          runtimeHarness: runtimeMetadata?.runtimeHarness,
+          runtimeProtocolVersion: runtimeMetadata?.runtimeProtocolVersion,
+          status: "active",
+        });
+      }
 
       // Record marker time for file collection and store sandbox reference
       ctx.generationMarkerTime = Date.now();
@@ -4033,6 +4104,22 @@ class GenerationManager {
       } catch (err) {
         console.error("[GenerationManager] Failed to sync memory to sandbox:", err);
         memoryInstructions = buildMemorySystemPrompt();
+      }
+
+      if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
+        try {
+          const writeRuntimeContextStartedAt = Date.now();
+          const runtimeContext: RuntimeContextFile = {
+            runtimeId: ctx.runtimeId,
+            turnSeq: ctx.runtimeTurnSeq,
+            callbackToken: ctx.runtimeCallbackToken,
+            updatedAt: new Date().toISOString(),
+          };
+          await writeRuntimeContextToSandbox(runtimeSandbox, runtimeContext);
+          markPrePromptStep("writeRuntimeContextMs", writeRuntimeContextStartedAt);
+        } catch (error) {
+          console.error("[GenerationManager] Failed to write runtime context to sandbox:", error);
+        }
       }
 
       const metadataQueryStartedAt = Date.now();
@@ -4813,10 +4900,15 @@ class GenerationManager {
       | { kind: "question"; request: RuntimeQuestionRequest; defaultAnswers: string[][] },
     pendingApproval: PendingApproval,
   ): Promise<void> {
+    if (!ctx.runtimeId || !ctx.runtimeTurnSeq) {
+      throw new Error(`Missing runtime binding for generation ${ctx.id}`);
+    }
     const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
     const interrupt = await generationInterruptService.createInterrupt({
       generationId: ctx.id,
+      runtimeId: ctx.runtimeId,
       conversationId: ctx.conversationId,
+      turnSeq: ctx.runtimeTurnSeq,
       kind: openCodeRequest.kind === "question" ? "runtime_question" : "runtime_permission",
       display: {
         title: pendingApproval.toolName,
@@ -5889,17 +5981,26 @@ class GenerationManager {
     if (!genRecord) {
       return { decision: "deny" };
     }
+    if (!genRecord.runtimeId) {
+      return { decision: "deny" };
+    }
 
     const policy = this.getExecutionPolicyFromRecord(genRecord, genRecord.conversation.autoApprove);
     if (policy.autoApprove ?? genRecord.conversation.autoApprove) {
       return { decision: "allow" };
+    }
+    const runtimeRecord = await conversationRuntimeService.getRuntime(genRecord.runtimeId);
+    if (!runtimeRecord) {
+      return { decision: "deny" };
     }
 
     const toolUseId = `plugin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
     const interrupt = await generationInterruptService.createInterrupt({
       generationId,
+      runtimeId: runtimeRecord.id,
       conversationId: genRecord.conversationId,
+      turnSeq: runtimeRecord.activeTurnSeq,
       kind: "plugin_write",
       display: {
         title: "Bash",
@@ -5949,6 +6050,9 @@ class GenerationManager {
     if (!genRecord) {
       return { status: "accepted" };
     }
+    if (!genRecord.runtimeId) {
+      return { status: "accepted" };
+    }
 
     const existing = await generationInterruptService.findPendingAuthInterruptByIntegration({
       generationId,
@@ -5961,11 +6065,17 @@ class GenerationManager {
         expiresAt: existing.expiresAt?.toISOString(),
       };
     }
+    const runtimeRecord = await conversationRuntimeService.getRuntime(genRecord.runtimeId);
+    if (!runtimeRecord) {
+      return { status: "accepted" };
+    }
 
     const expiresAt = computeExpiryIso(AUTH_TIMEOUT_MS);
     const interrupt = await generationInterruptService.createInterrupt({
       generationId,
+      runtimeId: runtimeRecord.id,
       conversationId: genRecord.conversationId,
+      turnSeq: runtimeRecord.activeTurnSeq,
       kind: "auth",
       display: {
         title: "Connection Required",
@@ -6179,15 +6289,12 @@ class GenerationManager {
       const shouldPersistErrorAssistantMessage = status === "error";
 
       if (status === "completed" || status === "cancelled" || shouldPersistErrorAssistantMessage) {
-        // Update session ID
-        if (status === "completed" && ctx.sessionId) {
-          await db
-            .update(conversation)
-            .set({
-              opencodeSessionId: ctx.sessionId,
-              opencodeSandboxId: ctx.sandboxId ?? null,
-            })
-            .where(eq(conversation.id, ctx.conversationId));
+        if (status === "completed" && ctx.runtimeId) {
+          await conversationRuntimeService.updateRuntimeSession({
+            runtimeId: ctx.runtimeId,
+            sessionId: ctx.sessionId ?? null,
+            sandboxId: ctx.sandboxId ?? null,
+          });
         }
 
         // Auto-collect any new files created during generation (direct mode only)
@@ -6342,6 +6449,13 @@ class GenerationManager {
             status === "completed" ? "complete" : status === "error" ? "error" : "idle",
         })
         .where(eq(conversation.id, ctx.conversationId));
+
+      if (ctx.runtimeId) {
+        await conversationRuntimeService.clearActiveGeneration({
+          runtimeId: ctx.runtimeId,
+          generationId: ctx.id,
+        });
+      }
 
       if (status === "completed") {
         try {

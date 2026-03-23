@@ -4,6 +4,7 @@ const {
   memoryFileFindFirstMock,
   memoryEntryFindManyMock,
   conversationFindFirstMock,
+  conversationRuntimeFindFirstMock,
   messageFindManyMock,
   memorySettingsFindFirstMock,
   providerAuthFindFirstMock,
@@ -17,6 +18,7 @@ const {
   const memoryFileFindFirstMock = vi.fn();
   const memoryEntryFindManyMock = vi.fn();
   const conversationFindFirstMock = vi.fn();
+  const conversationRuntimeFindFirstMock = vi.fn();
   const messageFindManyMock = vi.fn();
   const memorySettingsFindFirstMock = vi.fn();
   const providerAuthFindFirstMock = vi.fn();
@@ -37,6 +39,9 @@ const {
       },
       conversation: {
         findFirst: conversationFindFirstMock,
+      },
+      conversationRuntime: {
+        findFirst: conversationRuntimeFindFirstMock,
       },
       message: {
         findMany: messageFindManyMock,
@@ -65,6 +70,7 @@ const {
     memoryFileFindFirstMock,
     memoryEntryFindManyMock,
     conversationFindFirstMock,
+    conversationRuntimeFindFirstMock,
     messageFindManyMock,
     memorySettingsFindFirstMock,
     providerAuthFindFirstMock,
@@ -188,6 +194,9 @@ describe("writeSessionTranscriptFromConversation", () => {
     });
 
     generateConversationTitleMock.mockResolvedValue("Session Summary");
+    conversationRuntimeFindFirstMock.mockResolvedValue({
+      sessionId: "session-1",
+    });
 
     insertValuesFn = vi.fn((values: unknown) => {
       if (Array.isArray(values) || !values || typeof values !== "object") {
@@ -211,7 +220,6 @@ describe("writeSessionTranscriptFromConversation", () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
       userId: "user-1",
-      opencodeSessionId: "session-1",
     });
 
     messageFindManyMock.mockResolvedValue([

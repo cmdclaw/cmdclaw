@@ -26,7 +26,9 @@ export type GenerationInterruptRecord = typeof generationInterrupt.$inferSelect;
 export type GenerationInterruptEventPayload = {
   interruptId: string;
   generationId: string;
+  runtimeId: string;
   conversationId: string;
+  turnSeq: number;
   kind: GenerationInterruptKind;
   status: GenerationInterruptStatus;
   providerToolUseId: string;
@@ -55,7 +57,9 @@ function getConversationStatusForInterrupt(
 class GenerationInterruptService {
   async createInterrupt(input: {
     generationId: string;
+    runtimeId: string;
     conversationId: string;
+    turnSeq: number;
     kind: GenerationInterruptKind;
     display: GenerationInterruptDisplay;
     provider: "plugin" | "opencode";
@@ -78,7 +82,9 @@ class GenerationInterruptService {
       .insert(generationInterrupt)
       .values({
         generationId: input.generationId,
+        runtimeId: input.runtimeId,
         conversationId: input.conversationId,
+        turnSeq: input.turnSeq,
         kind: input.kind,
         status: "pending",
         display: input.display,
@@ -239,7 +245,9 @@ class GenerationInterruptService {
     return {
       interruptId: interrupt.id,
       generationId: interrupt.generationId,
+      runtimeId: interrupt.runtimeId,
       conversationId: interrupt.conversationId,
+      turnSeq: interrupt.turnSeq,
       kind: interrupt.kind,
       status: interrupt.status,
       providerToolUseId: interrupt.providerToolUseId,

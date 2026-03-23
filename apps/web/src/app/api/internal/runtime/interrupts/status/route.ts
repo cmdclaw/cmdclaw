@@ -4,27 +4,29 @@ import { db } from "@cmdclaw/db/client";
 import { generation } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { authorizeRuntimeTurn } from "../../_auth";
 
 export const runtime = "nodejs";
 
 const interruptStatusSchema = z.object({
-  generationId: z.string().min(1),
+  runtimeId: z.string().min(1),
+  turnSeq: z.number().int().positive(),
   interruptId: z.string().min(1),
 });
 
-async function verifyGenerationCallbackToken(
-  generationId: string,
-  requestAuthHeader: string | null,
-): Promise<boolean> {
-  const token = requestAuthHeader?.replace(/^Bearer\s+/i, "").trim();
-  if (!token) {
-    return false;
+function buildAuthErrorResponse(
+  reason: "invalid_token" | "runtime_not_found" | "runtime_not_active" | "stale_turn",
+): Response {
+  if (reason === "stale_turn") {
+    return Response.json({ error: "stale_turn" }, { status: 409 });
   }
-  const record = await db.query.generation.findFirst({
-    where: eq(generation.id, generationId),
-    columns: { runtimeCallbackToken: true },
-  });
-  return !!record?.runtimeCallbackToken && record.runtimeCallbackToken === token;
+  if (reason === "runtime_not_found") {
+    return Response.json({ error: "runtime_not_found" }, { status: 404 });
+  }
+  if (reason === "runtime_not_active") {
+    return Response.json({ error: "runtime_not_active" }, { status: 409 });
+  }
+  return Response.json({ error: "invalid_callback_token" }, { status: 401 });
 }
 
 export async function POST(request: Request) {
@@ -35,23 +37,28 @@ export async function POST(request: Request) {
     }
     const input = parsed.data;
 
-    if (
-      !(await verifyGenerationCallbackToken(
-        input.generationId,
-        request.headers.get("authorization"),
-      ))
-    ) {
-      return Response.json({ error: "invalid_callback_token" }, { status: 401 });
+    const authorized = await authorizeRuntimeTurn({
+      runtimeId: input.runtimeId,
+      turnSeq: input.turnSeq,
+      authorizationHeader: request.headers.get("authorization"),
+    });
+    if (!authorized.ok) {
+      return buildAuthErrorResponse(authorized.reason);
     }
 
     const interrupt = await generationInterruptService.getInterrupt(input.interruptId);
-    if (!interrupt || interrupt.generationId !== input.generationId) {
+    if (
+      !interrupt ||
+      interrupt.generationId !== authorized.generationId ||
+      interrupt.runtimeId !== authorized.runtimeId ||
+      interrupt.turnSeq !== authorized.turnSeq
+    ) {
       return Response.json({ error: "interrupt_not_found" }, { status: 404 });
     }
 
     if (interrupt.kind === "auth" && interrupt.status === "accepted") {
       const generationRecord = await db.query.generation.findFirst({
-        where: eq(generation.id, input.generationId),
+        where: eq(generation.id, interrupt.generationId),
         with: { conversation: true },
       });
       const integration =
@@ -76,7 +83,7 @@ export async function POST(request: Request) {
       resolutionPayload: interrupt.responsePayload ?? undefined,
     });
   } catch (error) {
-    console.error("[Internal] interrupt status error:", error);
+    console.error("[Internal] runtime interrupt status error:", error);
     return Response.json({ error: "internal_error" }, { status: 500 });
   }
 }

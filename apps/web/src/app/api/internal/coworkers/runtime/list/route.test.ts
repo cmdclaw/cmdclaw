@@ -1,10 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const authorizeRuntimeGenerationMock = vi.fn();
+const authorizeRuntimeTurnMock = vi.fn();
 const coworkerFindManyMock = vi.fn();
 
-vi.mock("../_auth", () => ({
-  authorizeRuntimeGeneration: authorizeRuntimeGenerationMock,
+vi.mock("../../../runtime/_auth", () => ({
+  authorizeRuntimeTurn: authorizeRuntimeTurnMock,
 }));
 
 vi.mock("@cmdclaw/db/client", () => ({
@@ -26,7 +26,10 @@ describe("POST /api/internal/coworkers/runtime/list", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    authorizeRuntimeGenerationMock.mockResolvedValue({
+    authorizeRuntimeTurnMock.mockResolvedValue({
+      ok: true,
+      runtimeId: "rt-1",
+      turnSeq: 2,
       generationId: "gen-1",
       conversationId: "conv-1",
       userId: "user-1",
@@ -57,7 +60,8 @@ describe("POST /api/internal/coworkers/runtime/list", () => {
         Authorization: "Bearer runtime-token",
       },
       body: JSON.stringify({
-        generationId: "gen-1",
+        runtimeId: "rt-1",
+        turnSeq: 2,
       }),
     });
 
@@ -76,5 +80,29 @@ describe("POST /api/internal/coworkers/runtime/list", () => {
         },
       ],
     });
+  });
+
+  it("returns stale_turn when the runtime binding is out of date", async () => {
+    authorizeRuntimeTurnMock.mockResolvedValue({
+      ok: false,
+      reason: "stale_turn",
+    });
+
+    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/list", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer runtime-token",
+      },
+      body: JSON.stringify({
+        runtimeId: "rt-1",
+        turnSeq: 1,
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "stale_turn" });
   });
 });

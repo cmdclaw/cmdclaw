@@ -5,6 +5,7 @@ const {
   updateSetMock,
   insertReturningMock,
   insertValuesMock,
+  conversationRuntimeFindFirstMock,
   generationFindFirstMock,
   generationFindManyMock,
   messageFindFirstMock,
@@ -25,6 +26,7 @@ const {
   const insertReturningMock = vi.fn();
   const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
   const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const conversationRuntimeFindFirstMock = vi.fn();
   const generationFindFirstMock = vi.fn();
   const generationFindManyMock = vi.fn();
   const messageFindFirstMock = vi.fn();
@@ -38,6 +40,7 @@ const {
 
   const dbMock = {
     query: {
+      conversationRuntime: { findFirst: conversationRuntimeFindFirstMock },
       generation: { findFirst: generationFindFirstMock, findMany: generationFindManyMock },
       message: { findFirst: messageFindFirstMock },
       conversation: { findFirst: conversationFindFirstMock },
@@ -58,6 +61,7 @@ const {
     updateSetMock,
     insertReturningMock,
     insertValuesMock,
+    conversationRuntimeFindFirstMock,
     generationFindFirstMock,
     generationFindManyMock,
     messageFindFirstMock,
@@ -254,6 +258,22 @@ const { ensureBucketMock, uploadToS3Mock } = vi.hoisted(() => ({
   uploadToS3Mock: vi.fn(),
 }));
 
+const {
+  bindGenerationToRuntimeMock,
+  getRuntimeForConversationMock,
+  getRuntimeMock,
+  updateRuntimeSessionMock,
+  clearActiveGenerationMock,
+  markRuntimeDeadMock,
+} = vi.hoisted(() => ({
+  bindGenerationToRuntimeMock: vi.fn(),
+  getRuntimeForConversationMock: vi.fn(),
+  getRuntimeMock: vi.fn(),
+  updateRuntimeSessionMock: vi.fn(),
+  clearActiveGenerationMock: vi.fn(),
+  markRuntimeDeadMock: vi.fn(),
+}));
+
 vi.mock("../../env", () => ({
   env: {},
 }));
@@ -359,6 +379,18 @@ vi.mock("./generation-interrupt-service", () => ({
     expireInterrupt: expireInterruptMock,
     cancelInterruptsForGeneration: cancelInterruptsForGenerationMock,
     projectInterruptEvent: projectInterruptEventMock,
+  },
+}));
+
+vi.mock("./conversation-runtime-service", () => ({
+  conversationRuntimeService: {
+    bindGenerationToRuntime: bindGenerationToRuntimeMock,
+    getRuntimeForConversation: getRuntimeForConversationMock,
+    getRuntime: getRuntimeMock,
+    updateRuntimeSession: updateRuntimeSessionMock,
+    clearActiveGeneration: clearActiveGenerationMock,
+    markRuntimeDead: markRuntimeDeadMock,
+    authorizeRuntimeTurn: vi.fn(),
   },
 }));
 
@@ -474,6 +506,8 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
     isNewConversation: false,
     model: "openai/gpt-4",
     userMessageContent: "hello",
+    runtimeId: "runtime-1",
+    runtimeTurnSeq: 1,
     assistantMessageIds: new Set(),
     messageRoles: new Map(),
     pendingMessageParts: new Map(),
@@ -499,7 +533,9 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
     return {
       id: `interrupt-${pendingApproval.toolUseId}`,
       generationId: ctx.id,
+      runtimeId: ctx.runtimeId ?? "runtime-1",
       conversationId: ctx.conversationId,
+      turnSeq: ctx.runtimeTurnSeq ?? 1,
       kind:
         pendingApproval.operation === "question" || pendingApproval.operation === "permission"
           ? pendingApproval.operation === "question"
@@ -531,7 +567,9 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
     return {
       id: `interrupt-auth-${ctx.id}`,
       generationId: ctx.id,
+      runtimeId: ctx.runtimeId ?? "runtime-1",
       conversationId: ctx.conversationId,
+      turnSeq: ctx.runtimeTurnSeq ?? 1,
       kind: "auth",
       status: "pending",
       display: {
@@ -646,7 +684,9 @@ describe("generationManager transitions", () => {
       const interrupt = {
         id: `interrupt-${input.providerToolUseId ?? input.kind}`,
         generationId: input.generationId,
+        runtimeId: input.runtimeId ?? "runtime-1",
         conversationId: input.conversationId,
+        turnSeq: input.turnSeq ?? 1,
         kind: input.kind,
         status: "pending",
         display: input.display,
@@ -806,7 +846,9 @@ describe("generationManager transitions", () => {
     projectInterruptEventMock.mockImplementation((interrupt: any) => ({
       interruptId: interrupt.id,
       generationId: interrupt.generationId,
+      runtimeId: interrupt.runtimeId ?? "runtime-1",
       conversationId: interrupt.conversationId,
+      turnSeq: interrupt.turnSeq ?? 1,
       kind: interrupt.kind,
       status: interrupt.status,
       providerToolUseId: interrupt.providerToolUseId,
@@ -815,8 +857,60 @@ describe("generationManager transitions", () => {
     }));
     updateReturningMock.mockReset();
     updateReturningMock.mockResolvedValue([]);
+    conversationRuntimeFindFirstMock.mockReset();
+    conversationRuntimeFindFirstMock.mockResolvedValue(null);
     insertValuesMock.mockReset();
     insertReturningMock.mockReset();
+    bindGenerationToRuntimeMock.mockReset();
+    bindGenerationToRuntimeMock.mockResolvedValue({
+      runtimeId: "runtime-1",
+      callbackToken: "runtime-token",
+      turnSeq: 1,
+    });
+    getRuntimeForConversationMock.mockReset();
+    getRuntimeForConversationMock.mockResolvedValue({
+      id: "runtime-1",
+      conversationId: "conv-1",
+      callbackToken: "runtime-token",
+      sandboxProvider: null,
+      runtimeHarness: null,
+      runtimeProtocolVersion: null,
+      sandboxId: null,
+      sessionId: null,
+      status: "active",
+      activeGenerationId: "gen-1",
+      activeTurnSeq: 1,
+      lastBoundAt: null,
+      createdAt: new Date("2026-03-11T15:00:00.000Z"),
+      updatedAt: new Date("2026-03-11T15:00:00.000Z"),
+    });
+    getRuntimeMock.mockReset();
+    getRuntimeMock.mockImplementation(async (runtimeId?: string) =>
+      runtimeId
+        ? {
+            id: runtimeId,
+            conversationId: "conv-1",
+            callbackToken: "runtime-token",
+            sandboxProvider: null,
+            runtimeHarness: null,
+            runtimeProtocolVersion: null,
+            sandboxId: null,
+            sessionId: null,
+            status: "active",
+            activeGenerationId: "gen-1",
+            activeTurnSeq: 1,
+            lastBoundAt: null,
+            createdAt: new Date("2026-03-11T15:00:00.000Z"),
+            updatedAt: new Date("2026-03-11T15:00:00.000Z"),
+          }
+        : null,
+    );
+    updateRuntimeSessionMock.mockReset();
+    updateRuntimeSessionMock.mockResolvedValue(undefined);
+    clearActiveGenerationMock.mockReset();
+    clearActiveGenerationMock.mockResolvedValue(undefined);
+    markRuntimeDeadMock.mockReset();
+    markRuntimeDeadMock.mockResolvedValue(undefined);
     insertValuesMock.mockImplementation(() => ({
       returning: insertReturningMock,
     }));
@@ -1334,6 +1428,7 @@ describe("generationManager transitions", () => {
         return {
           id: ctx.id,
           conversationId: ctx.conversationId,
+          runtimeId: "runtime-1",
           status: "awaiting_approval",
           pendingApproval: stalePendingApproval,
           conversation: {
@@ -1346,6 +1441,7 @@ describe("generationManager transitions", () => {
       return {
         id: ctx.id,
         conversationId: ctx.conversationId,
+        runtimeId: "runtime-1",
         status: "awaiting_approval",
         pendingApproval: stalePendingApproval,
         conversation: {
@@ -1399,6 +1495,7 @@ describe("generationManager transitions", () => {
     generationFindFirstMock.mockResolvedValueOnce({
       id: ctx.id,
       conversationId: ctx.conversationId,
+      runtimeId: "runtime-1",
       conversation: {
         id: ctx.conversationId,
         userId: ctx.userId,
@@ -1443,6 +1540,7 @@ describe("generationManager transitions", () => {
     generationFindFirstMock.mockImplementation(async () => ({
       id: ctx.id,
       conversationId: ctx.conversationId,
+      runtimeId: "runtime-1",
       status: "awaiting_auth",
       pendingAuth: stalePendingAuth,
       conversation: {
@@ -2159,7 +2257,9 @@ describe("generationManager transitions", () => {
           type: "interrupt_pending",
           interruptId: "interrupt-tool-pending",
           generationId: "gen-1",
+          runtimeId: "runtime-1",
           conversationId: "conv-1",
+          turnSeq: 1,
           kind: "plugin_write",
           status: "pending",
           providerToolUseId: "tool-pending",
@@ -2454,6 +2554,7 @@ describe("generationManager transitions", () => {
     generationFindFirstMock.mockResolvedValueOnce({
       id: ctx.id,
       conversationId: ctx.conversationId,
+      runtimeId: "runtime-1",
       conversation: {
         id: ctx.conversationId,
         userId: ctx.userId,
@@ -2478,6 +2579,7 @@ describe("generationManager transitions", () => {
     generationFindFirstMock.mockResolvedValue({
       id: ctx.id,
       conversationId: ctx.conversationId,
+      runtimeId: "runtime-1",
       conversation: {
         id: ctx.conversationId,
         userId: ctx.userId,
@@ -2515,6 +2617,7 @@ describe("generationManager transitions", () => {
     generationFindFirstMock.mockResolvedValue({
       id: ctx.id,
       conversationId: ctx.conversationId,
+      runtimeId: "runtime-1",
       conversation: {
         id: ctx.conversationId,
         userId: ctx.userId,
@@ -2558,7 +2661,9 @@ describe("generationManager transitions", () => {
       type: "interrupt_pending",
       interruptId: `interrupt-${result.toolUseId}`,
       generationId: ctx.id,
+      runtimeId: "runtime-1",
       conversationId: ctx.conversationId,
+      turnSeq: 1,
       kind: "plugin_write",
       status: "pending",
       providerToolUseId: result.toolUseId,
@@ -2577,6 +2682,7 @@ describe("generationManager transitions", () => {
     generationFindFirstMock.mockResolvedValue({
       id: "gen-detached",
       conversationId: "conv-detached",
+      runtimeId: "runtime-1",
       conversation: {
         id: "conv-detached",
         userId: "user-1",
@@ -2618,7 +2724,9 @@ describe("generationManager transitions", () => {
           type: "interrupt_pending",
           interruptId: `interrupt-${result.toolUseId}`,
           generationId: "gen-detached",
+          runtimeId: "runtime-1",
           conversationId: "conv-detached",
+          turnSeq: 1,
           kind: "plugin_write",
           status: "pending",
           providerToolUseId: result.toolUseId,
