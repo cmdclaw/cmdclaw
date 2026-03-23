@@ -276,7 +276,6 @@ export async function getOrCreateSandbox(
     sandbox = await Sandbox.create(TEMPLATE_NAME, {
       envs: {
         ANTHROPIC_API_KEY: config.anthropicApiKey,
-        CLAUDE_API_KEY: env.CLAUDE_API_KEY || "",
         ANVIL_API_KEY: env.ANVIL_API_KEY || "",
         APP_URL: resolveSandboxAppUrl(),
         CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
