@@ -24,6 +24,7 @@ export const GENERATION_AUTH_TIMEOUT_JOB_NAME = "generation:auth-timeout";
 export const GENERATION_PREPARING_STUCK_CHECK_JOB_NAME = "generation:preparing-stuck-check";
 export const GENERATION_STALE_REAPER_JOB_NAME = "generation:stale-reaper";
 export const PAUSED_SANDBOX_CLEANUP_JOB_NAME = "sandbox:paused-cleanup";
+export const CONVERSATION_LOADING_CLEANUP_JOB_NAME = "conversation:loading-cleanup";
 export const CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME = "conversation:queued-message-process";
 export const SLACK_EVENT_JOB_NAME = "slack:event-callback";
 export const DAILY_TELEMETRY_DIGEST_JOB_NAME = "telemetry:daily-digest";
@@ -206,6 +207,15 @@ const handlers: Record<string, JobHandler> = {
     const summary = await cleanupPausedSandboxes();
     if (summary.cleaned > 0 || summary.skippedWithActiveLease > 0) {
       console.info("[worker] paused sandbox cleanup summary", summary);
+    }
+  },
+  [CONVERSATION_LOADING_CLEANUP_JOB_NAME]: async () => {
+    const { cleanupStaleConversationLoadingStates } = await import(
+      "../services/conversation-loading-cleanup"
+    );
+    const summary = await cleanupStaleConversationLoadingStates();
+    if (summary.stale > 0) {
+      console.warn("[worker] stale conversation loading cleanup summary", summary);
     }
   },
   [CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME]: async (job) => {

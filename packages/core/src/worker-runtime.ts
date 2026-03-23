@@ -1,12 +1,14 @@
 import { closePool } from "@cmdclaw/db/client";
 import {
   buildQueueJobId,
+  CONVERSATION_LOADING_CLEANUP_JOB_NAME,
   GENERATION_STALE_REAPER_JOB_NAME,
   PAUSED_SANDBOX_CLEANUP_JOB_NAME,
   getQueue,
   startQueues,
   stopQueues,
 } from "./server/queues";
+import { syncConversationLoadingCleanupJob } from "./server/services/conversation-loading-cleanup";
 import { startGmailCoworkerWatcher } from "./server/services/coworker-gmail-watcher";
 import { reconcileScheduledCoworkerJobs } from "./server/services/coworker-scheduler";
 import { syncDailyTelemetryDigestJob } from "./server/services/telemetry-digest";
@@ -49,6 +51,19 @@ export async function startWorkerRuntime(): Promise<void> {
       {},
       {
         jobId: buildQueueJobId([PAUSED_SANDBOX_CLEANUP_JOB_NAME, Date.now()]),
+        removeOnComplete: true,
+        removeOnFail: 200,
+      },
+    );
+  }
+
+  async function enqueueConversationLoadingCleanupJob(): Promise<void> {
+    const queue = getQueue();
+    await queue.add(
+      CONVERSATION_LOADING_CLEANUP_JOB_NAME,
+      {},
+      {
+        jobId: buildQueueJobId([CONVERSATION_LOADING_CLEANUP_JOB_NAME, Date.now()]),
         removeOnComplete: true,
         removeOnFail: 200,
       },
@@ -107,6 +122,13 @@ export async function startWorkerRuntime(): Promise<void> {
   }
 
   try {
+    await syncConversationLoadingCleanupJob();
+    console.log("[worker] synced conversation loading cleanup schedule");
+  } catch (error) {
+    console.error("[worker] failed to sync conversation loading cleanup schedule", error);
+  }
+
+  try {
     await enqueueStaleGenerationReaperJob();
   } catch (error) {
     console.error("[worker] failed to enqueue stale generation reaper job", error);
@@ -129,4 +151,10 @@ export async function startWorkerRuntime(): Promise<void> {
       console.error("[worker] failed to enqueue paused sandbox cleanup job", error);
     });
   }, pausedSandboxCleanupIntervalMs);
+
+  try {
+    await enqueueConversationLoadingCleanupJob();
+  } catch (error) {
+    console.error("[worker] failed to enqueue conversation loading cleanup job", error);
+  }
 }
