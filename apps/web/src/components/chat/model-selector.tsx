@@ -17,9 +17,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 
 type ModelOption = {
   authSource: ProviderAuthSource | null;
+  adminOnly?: boolean;
   id: string;
   name: string;
 };
@@ -77,13 +79,14 @@ function sortModels<T extends ModelOption>(models: T[]): T[] {
 const CMDCLAW_MODELS: ModelOption[] = [
   {
     authSource: "shared",
-    id: "anthropic/claude-sonnet-4-6",
-    name: "Claude Sonnet 4.6",
-  },
-  {
-    authSource: "shared",
     id: "openai/gpt-5.4",
     name: "GPT-5.4",
+  },
+  {
+    adminOnly: true,
+    authSource: "shared",
+    id: "anthropic/claude-sonnet-4-6",
+    name: "Claude Sonnet 4.6",
   },
 ];
 
@@ -95,7 +98,7 @@ const PERSONAL_CHATGPT_MODELS: ModelOption[] = [
   },
 ];
 
-const SORTED_CMDCLAW_MODELS = sortModels(CMDCLAW_MODELS);
+const USER_VISIBLE_CMDCLAW_MODELS = CMDCLAW_MODELS.filter((model) => !model.adminOnly);
 const SORTED_PERSONAL_CHATGPT_MODELS = sortModels(PERSONAL_CHATGPT_MODELS);
 
 type Props = {
@@ -172,6 +175,8 @@ export function ModelSelector({
   onSelectionChange,
   disabled,
 }: Props) {
+  const { isAdmin } = useIsAdmin();
+  const visibleCmdClawModels = isAdmin ? CMDCLAW_MODELS : USER_VISIBLE_CMDCLAW_MODELS;
   const allModels = [...CMDCLAW_MODELS, ...PERSONAL_CHATGPT_MODELS];
   const currentModel =
     allModels.find(
@@ -200,7 +205,7 @@ export function ModelSelector({
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel>CmdClaw Models</DropdownMenuLabel>
         <ModelSection
-          models={SORTED_CMDCLAW_MODELS}
+          models={visibleCmdClawModels}
           selectedModel={selectedModel}
           selectedAuthSource={selectedAuthSource}
           providerAvailability={providerAvailability}

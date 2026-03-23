@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 void jestDomVitest;
 
+const { mockIsAdmin } = vi.hoisted(() => ({
+  mockIsAdmin: vi.fn(() => false),
+}));
+
 afterEach(() => {
   cleanup();
 });
@@ -45,6 +49,10 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   ),
 }));
 
+vi.mock("@/hooks/use-is-admin", () => ({
+  useIsAdmin: () => ({ isAdmin: mockIsAdmin(), isLoading: false }),
+}));
+
 import { ModelSelector } from "./model-selector";
 
 const NO_PROVIDER_AUTH = {
@@ -57,27 +65,9 @@ const SHARED_ONLY_AUTH = {
 } as const;
 
 describe("ModelSelector", () => {
-  it("always shows CmdClaw Models with Claude available and GPT-5.4 locked without shared auth", () => {
+  it("shows GPT-5.4 and hides Claude Sonnet 4.6 for non-admins", () => {
     const onSelectionChange = vi.fn();
-
-    render(
-      <ModelSelector
-        selectedModel="anthropic/claude-sonnet-4-6"
-        selectedAuthSource="shared"
-        providerAvailability={NO_PROVIDER_AUTH}
-        onSelectionChange={onSelectionChange}
-      />,
-    );
-
-    expect(screen.getByText("CmdClaw Models")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
-    ).toBeEnabled();
-    expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4")).toBeDisabled();
-  });
-
-  it("selects Claude Sonnet 4.6 without a shared auth source", () => {
-    const onSelectionChange = vi.fn();
+    mockIsAdmin.mockReturnValue(false);
 
     render(
       <ModelSelector
@@ -88,20 +78,38 @@ describe("ModelSelector", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"));
-
-    expect(onSelectionChange).toHaveBeenCalledWith({
-      model: "anthropic/claude-sonnet-4-6",
-      authSource: "shared",
-    });
+    expect(screen.getByText("CmdClaw Models")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4")).toBeDisabled();
+    expect(
+      screen.queryByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
+    ).not.toBeInTheDocument();
   });
 
-  it("does not allow selecting shared GPT-5.4 when shared auth is unavailable", () => {
+  it("shows Claude Sonnet 4.6 for admins", () => {
     const onSelectionChange = vi.fn();
+    mockIsAdmin.mockReturnValue(true);
 
     render(
       <ModelSelector
         selectedModel="anthropic/claude-sonnet-4-6"
+        selectedAuthSource="shared"
+        providerAvailability={NO_PROVIDER_AUTH}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
+    ).toBeEnabled();
+  });
+
+  it("does not allow selecting shared GPT-5.4 when shared auth is unavailable", () => {
+    const onSelectionChange = vi.fn();
+    mockIsAdmin.mockReturnValue(false);
+
+    render(
+      <ModelSelector
+        selectedModel="openai/gpt-5.4"
         selectedAuthSource="shared"
         providerAvailability={NO_PROVIDER_AUTH}
         onSelectionChange={onSelectionChange}
@@ -115,10 +123,11 @@ describe("ModelSelector", () => {
 
   it("selects shared GPT-5.4 when shared auth is available", () => {
     const onSelectionChange = vi.fn();
+    mockIsAdmin.mockReturnValue(false);
 
     render(
       <ModelSelector
-        selectedModel="anthropic/claude-sonnet-4-6"
+        selectedModel="openai/gpt-5.4"
         selectedAuthSource="shared"
         providerAvailability={SHARED_ONLY_AUTH}
         onSelectionChange={onSelectionChange}

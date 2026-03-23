@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -50,7 +51,7 @@ type HeroPromptExample = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_COWORKER_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 // Brandfetch CDN icon URLs (fetched via Brand API)
 const BF = {
   salesforce:
@@ -399,7 +400,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   const [isCreating, setIsCreating] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [model, setModel] = useState(DEFAULT_COWORKER_BUILDER_MODEL);
-  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>(null);
+  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const [inputPrefillRequest, setInputPrefillRequest] = useState<{
     id: string;
     text: string;

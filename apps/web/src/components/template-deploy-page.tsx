@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { normalizeGenerationError } from "@/lib/generation-errors";
@@ -9,7 +10,7 @@ import { buildTemplateDeployPayload } from "@/lib/template-deploy";
 import { client } from "@/orpc/client";
 import { useCreateCoworker } from "@/orpc/hooks";
 
-const DEFAULT_COWORKER_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 
 export function TemplateDeployPage({ templateId }: { templateId: string }) {
   const createCoworker = useCreateCoworker();
@@ -42,6 +43,7 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
         const result = await createCoworker.mutateAsync({
           ...deployPayload.createPayload,
           model: DEFAULT_COWORKER_BUILDER_MODEL,
+          authSource: "shared",
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 
@@ -53,6 +55,7 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
             conversationId,
             content: deployPayload.initialBuilderMessage,
             model: DEFAULT_COWORKER_BUILDER_MODEL,
+            authSource: "shared",
             autoApprove: true,
           });
         } catch (builderError) {

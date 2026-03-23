@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,7 +13,7 @@ import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { client } from "@/orpc/client";
 import { useCreateCoworker } from "@/orpc/hooks";
 
-const DEFAULT_COWORKER_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 
 export default function NewCoworkerPage() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function NewCoworkerPage() {
           triggerType: "manual",
           prompt: "",
           model: DEFAULT_COWORKER_BUILDER_MODEL,
+          authSource: "shared",
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 
@@ -51,6 +53,7 @@ export default function NewCoworkerPage() {
             conversationId,
             content: pendingPrompt,
             model: DEFAULT_COWORKER_BUILDER_MODEL,
+            authSource: "shared",
             autoApprove: true,
           });
         } catch (error) {

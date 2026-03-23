@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
 import { Loader2, PenLine, Play, Power, Trash2 } from "lucide-react";
 import Image from "next/image";
@@ -66,7 +67,7 @@ type CoworkerItem = {
   recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
 };
 
-const DEFAULT_COWORKER_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 const MAX_VISIBLE_TOOL_INDICATORS = 3;
 
 function formatDate(value?: Date | string | null) {
@@ -342,7 +343,7 @@ export default function CoworkersPage() {
   const [deletingCoworkerId, setDeletingCoworkerId] = useState<string | null>(null);
   const [coworkerPendingDelete, setCoworkerPendingDelete] = useState<CoworkerItem | null>(null);
   const [model, setModel] = useState(DEFAULT_COWORKER_BUILDER_MODEL);
-  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>(null);
+  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const isRecordingRef = useRef(false);
   const coworkerList = useMemo(() => {
     const real = Array.isArray(coworkers) ? coworkers : [];

@@ -60,6 +60,10 @@ vi.mock("@/hooks/use-voice-recording", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-is-admin", () => ({
+  useIsAdmin: () => ({ isAdmin: false, isLoading: false }),
+}));
+
 vi.mock("@/lib/chat-model-access", () => ({
   isModelAccessibleForNewChat: () => true,
 }));

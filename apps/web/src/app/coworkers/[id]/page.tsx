@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import {
   CUSTOM_SKILL_PREFIX,
   type CoworkerToolAccessMode,
@@ -123,7 +124,7 @@ const runListMotionAnimate = { opacity: 1, x: 0 } as const;
 const runListMotionExit = { opacity: 0, x: -24 } as const;
 const runMotionTransition = { duration: 0.2, ease: "easeOut" } as const;
 const statusTextMotionTransition = { duration: 0.15 } as const;
-const DEFAULT_COWORKER_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_COWORKER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
     return "just now";
@@ -208,7 +209,7 @@ export default function CoworkerEditorPage() {
   const [triggerType, setTriggerType] = useState("manual");
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState(DEFAULT_COWORKER_MODEL);
-  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>(null);
+  const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const [toolAccessMode, setToolAccessMode] = useState<CoworkerToolAccessMode>("all");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
   const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);

@@ -1,3 +1,5 @@
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import { isAdminOnlyChatModel } from "@cmdclaw/core/lib/chat-model-policy";
 import {
   COWORKER_AVAILABLE_INTEGRATION_TYPES,
   COWORKER_TOOL_ACCESS_MODES,
@@ -80,6 +82,14 @@ const modelReferenceSchema = z
 
 const triggerTypeSchema = z.string().min(1).max(128);
 const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
+
+function assertModelAllowedForRole(model: string, role: string | null | undefined): void {
+  if (isAdminOnlyChatModel(model) && role !== "admin") {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Claude Sonnet 4.6 is only available to admins.",
+    });
+  }
+}
 
 function getReceivingDomain(): string | null {
   const value = process.env.RESEND_RECEIVING_DOMAIN?.trim().toLowerCase();
@@ -378,7 +388,7 @@ const create = protectedProcedure
       username: z.string().max(128).nullish(),
       triggerType: triggerTypeSchema,
       prompt: z.string().max(20000),
-      model: modelReferenceSchema.default("anthropic/claude-sonnet-4-6"),
+      model: modelReferenceSchema.default(DEFAULT_CONNECTED_CHATGPT_MODEL),
       authSource: providerAuthSourceSchema.nullish(),
       promptDo: z.string().max(2000).optional(),
       promptDont: z.string().max(2000).optional(),
@@ -392,6 +402,11 @@ const create = protectedProcedure
   )
   .handler(async ({ input, context }) => {
     const coworkerId = crypto.randomUUID();
+    const dbUser = await context.db.query.user.findFirst({
+      where: eq(user.id, context.user.id),
+      columns: { role: true },
+    });
+    assertModelAllowedForRole(input.model, dbUser?.role);
     const resolvedAuthSource = resolveCoworkerAuthSource(input.model, input.authSource);
     const coworkerQueryDatabase = context.db as unknown as {
       query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
@@ -478,6 +493,14 @@ const update = protectedProcedure
 
     if (!existing) {
       throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
+    }
+
+    if (input.model !== undefined) {
+      const dbUser = await context.db.query.user.findFirst({
+        where: eq(user.id, context.user.id),
+        columns: { role: true },
+      });
+      assertModelAllowedForRole(input.model, dbUser?.role);
     }
 
     const updates: Partial<typeof coworker.$inferInsert> = {};

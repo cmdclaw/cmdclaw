@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_CONNECTED_CHATGPT_MODEL,
   resolveDefaultChatModel,
   shouldMigrateLegacyDefaultModel,
 } from "@cmdclaw/core/lib/chat-model-defaults";
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useVoiceRecording, blobToBase64 } from "@/hooks/use-voice-recording";
 import { isModelAccessibleForNewChat } from "@/lib/chat-model-access";
 import { normalizeChatModelReference } from "@/lib/chat-model-reference";
@@ -134,7 +136,7 @@ const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
 const EMPTY_SELECTED_SKILLS: string[] = [];
 const EMPTY_ACTIVITY_ITEMS: ActivityItemData[] = [];
 const CUSTOM_SKILL_PREFIX = "custom:";
-const DEFAULT_VISIBLE_CHAT_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_VISIBLE_CHAT_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 
 type PersistedContentPart =
   | { type: "text"; text: string }
@@ -554,6 +556,7 @@ export function ChatArea({
   const { data: activeGeneration } = useActiveGeneration(conversationId);
   const { data: providerAuthStatus } = useProviderAuthStatus();
   const { data: opencodeFreeModelsData } = useOpencodeFreeModels();
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
 
   // Track current generation ID
   const currentGenerationIdRef = useRef<string | undefined>(undefined);
@@ -781,7 +784,7 @@ export function ChatArea({
   }, [normalizedSelectedSelection, selectedAuthSource, selectedModel, setSelection]);
 
   useEffect(() => {
-    if (conversationId) {
+    if (conversationId || isAdminLoading) {
       return;
     }
 
@@ -792,6 +795,7 @@ export function ChatArea({
     const isAccessible = isModelAccessibleForNewChat({
       model: normalizedSelectedModel,
       authSource: selectedAuthSource,
+      isAdmin,
       providerAvailabilityByProvider: providerAvailability,
     });
     const isHiddenOpencodeModel = normalizedSelectedModel.startsWith("opencode/");
@@ -805,6 +809,8 @@ export function ChatArea({
     }
   }, [
     conversationId,
+    isAdmin,
+    isAdminLoading,
     isOpenAIConnected,
     normalizedSelectedModel,
     providerAvailability,

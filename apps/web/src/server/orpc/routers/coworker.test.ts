@@ -60,7 +60,7 @@ const coworkerRouterAny = coworkerRouter as unknown as Record<
   string,
   (args: unknown) => Promise<unknown>
 >;
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_MODEL = "openai/gpt-5.4";
 
 function createContext() {
   const insertReturningMock = vi.fn();
@@ -113,6 +113,8 @@ function createContext() {
       deleteReturningMock,
     },
   };
+
+  context.db.query.user.findFirst.mockResolvedValue({ role: "member" });
 
   return context;
 }
@@ -528,6 +530,26 @@ describe("coworkerRouter", () => {
     );
   });
 
+  it("rejects admin-only Claude model on create for non-admin users", async () => {
+    const context = createContext();
+
+    await expect(
+      coworkerRouterAny.create({
+        input: {
+          triggerType: "manual",
+          prompt: "Prompt text",
+          model: "anthropic/claude-sonnet-4-6",
+          allowedIntegrations: ["slack"],
+          allowedCustomIntegrations: [],
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Claude Sonnet 4.6 is only available to admins.",
+    });
+  });
+
   it("normalizes and persists explicit username and description on create", async () => {
     const context = createContext();
     context.mocks.insertReturningMock.mockResolvedValue([
@@ -649,6 +671,39 @@ describe("coworkerRouter", () => {
         context,
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("rejects admin-only Claude model on update for non-admin users", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      name: "Coworker",
+      status: "on",
+      triggerType: "manual",
+      prompt: "Prompt",
+      promptDo: null,
+      promptDont: null,
+      autoApprove: true,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+      model: DEFAULT_MODEL,
+      authSource: "shared",
+    });
+
+    await expect(
+      coworkerRouterAny.update({
+        input: {
+          id: "wf-1",
+          model: "anthropic/claude-sonnet-4-6",
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Claude Sonnet 4.6 is only available to admins.",
+    });
   });
 
   it("returns INTERNAL_SERVER_ERROR when schedule sync fails during update", async () => {

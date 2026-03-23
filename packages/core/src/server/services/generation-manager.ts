@@ -41,7 +41,9 @@ import {
   normalizeCoworkerAllowedSkillSlugs,
   splitCoworkerAllowedSkillSlugs,
 } from "../../lib/coworker-tool-policy";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "../../lib/chat-model-defaults";
 import { START_GENERATION_ERROR_CODES } from "../../lib/generation-errors";
+import { isAdminOnlyChatModel } from "../../lib/chat-model-policy";
 import { parseModelReference } from "../../lib/model-reference";
 import {
   getProviderAuthProviderID,
@@ -354,7 +356,7 @@ type PrePromptCacheRecord = {
 };
 
 const PRE_PROMPT_CACHE_PATH = "/app/.opencode/pre-prompt-cache.json";
-const DEFAULT_MODEL_REFERENCE = "anthropic/claude-sonnet-4-6";
+const DEFAULT_MODEL_REFERENCE = DEFAULT_CONNECTED_CHATGPT_MODEL;
 const COWORKER_BUILDER_AUTO_APPLY_ENABLED = process.env.COWORKER_BUILDER_AUTO_APPLY !== "0";
 
 async function getDoneArtifacts(messageId: string): Promise<
@@ -1377,6 +1379,24 @@ class GenerationManager {
         userMessage:
           "Selected OpenCode model is no longer available. Choose another model and retry.",
       };
+    }
+
+    if (isAdminOnlyChatModel(params.model)) {
+      const dbUser =
+        "user" in db.query
+          ? await db.query.user.findFirst({
+              where: eq(user.id, params.userId),
+              columns: { role: true },
+            })
+          : null;
+      if (dbUser?.role !== "admin") {
+        return {
+          allowed: false,
+          reason: "admin_only_model",
+          userMessage:
+            "Claude Sonnet 4.6 is only available to admins. Choose another model and retry.",
+        };
+      }
     }
 
     const authProviderID = getProviderAuthProviderID(providerID);
@@ -6610,7 +6630,7 @@ class GenerationManager {
       "The coworker snapshot below is the latest server state. Only edit these fields: prompt, model, toolAccessMode, allowedIntegrations, triggerType, schedule.",
       "If the user asks to change editable coworker fields, emit exactly one patch block in this format:",
       "```coworker_builder_patch",
-      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "model": "anthropic/claude-sonnet-4-6", "toolAccessMode": "all|selected", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
+      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "model": "openai/gpt-5.4", "toolAccessMode": "all|selected", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
       "```",
       "Rules:",
       "- Use baseUpdatedAt exactly from the snapshot below.",

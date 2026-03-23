@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { resolveDefaultChatModel } from "@cmdclaw/core/lib/chat-model-defaults";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
@@ -18,10 +18,10 @@ export const useChatModelStore = create<ChatModelState>()(
   persist(
     (set) => ({
       selectedModel: normalizeChatModelSelection({
-        model: resolveDefaultChatModel({ isOpenAIConnected: false }),
+        model: DEFAULT_CONNECTED_CHATGPT_MODEL,
       }).model,
       selectedAuthSource: normalizeChatModelSelection({
-        model: resolveDefaultChatModel({ isOpenAIConnected: false }),
+        model: DEFAULT_CONNECTED_CHATGPT_MODEL,
       }).authSource,
       setSelection: (input) => {
         const normalized = normalizeChatModelSelection(input);

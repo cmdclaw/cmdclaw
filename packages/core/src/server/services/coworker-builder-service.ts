@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z, type ZodIssue } from "zod";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
+import { isAdminOnlyChatModel } from "../../lib/chat-model-policy";
 import { parseModelReference } from "../../lib/model-reference";
 import {
   COWORKER_TOOL_ACCESS_MODES,
@@ -390,6 +391,13 @@ export async function applyCoworkerBuilderPatch(params: {
   }
   if (nextTriggerType === "twitter.new_dm" && params.userRole !== "admin") {
     details.push("twitter.new_dm trigger requires admin role");
+  }
+  if (
+    params.patch.model !== undefined &&
+    isAdminOnlyChatModel(params.patch.model) &&
+    params.userRole !== "admin"
+  ) {
+    details.push("Claude Sonnet 4.6 model requires admin role");
   }
   if (details.length > 0) {
     return {

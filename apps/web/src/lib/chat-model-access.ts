@@ -1,4 +1,5 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import { isAdminOnlyChatModel } from "@cmdclaw/core/lib/chat-model-policy";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import {
   normalizeModelAuthSource,
@@ -26,9 +27,14 @@ export function isModelAccessibleForNewChat(params: {
   model: string;
   authSource?: ProviderAuthSource | null;
   providerAvailabilityByProvider?: ProviderAuthAvailabilityByProvider;
+  isAdmin?: boolean;
 }): boolean {
   const model = params.model.trim();
   if (!model) {
+    return false;
+  }
+
+  if (isAdminOnlyChatModel(model) && params.isAdmin !== true) {
     return false;
   }
 
