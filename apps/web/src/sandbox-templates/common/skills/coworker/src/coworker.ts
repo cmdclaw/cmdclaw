@@ -14,6 +14,7 @@ function usage(): never {
   console.error(
     "  coworker invoke --username <username> --message <text> [--attachment <path>]... [--json]",
   );
+  console.error("  coworker patch <coworker-id> --base-updated-at <iso> --patch <json> [--json]");
   process.exit(1);
 }
 
@@ -216,6 +217,68 @@ async function main(): Promise<void> {
     );
     console.log(`runId: ${String(record.runId ?? "")}`);
     console.log(`conversationId: ${String(record.conversationId ?? "")}`);
+    return;
+  }
+
+  if (command === "patch") {
+    const coworkerId = args[1] ?? "";
+    let baseUpdatedAt = "";
+    let patch = "";
+
+    for (let index = 2; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === "--json") {
+        continue;
+      }
+      if (arg === "--base-updated-at") {
+        baseUpdatedAt = args[index + 1] ?? "";
+        index += 1;
+        continue;
+      }
+      if (arg === "--patch") {
+        patch = args[index + 1] ?? "";
+        index += 1;
+        continue;
+      }
+
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+
+    if (!coworkerId || !baseUpdatedAt.trim() || !patch.trim()) {
+      usage();
+    }
+
+    let parsedPatch: unknown;
+    try {
+      parsedPatch = JSON.parse(patch);
+    } catch {
+      throw new Error("Invalid JSON for --patch");
+    }
+
+    const response = (await postJson("/api/internal/coworkers/runtime/patch", {
+      coworkerId,
+      baseUpdatedAt: baseUpdatedAt.trim(),
+      patch: parsedPatch,
+    })) as { patch?: unknown };
+
+    const patchResult = response?.patch ?? response;
+    if (wantsJson) {
+      printJson(patchResult);
+      return;
+    }
+
+    if (!patchResult || typeof patchResult !== "object") {
+      console.log("Coworker patch submitted.");
+      return;
+    }
+
+    const record = patchResult as Record<string, unknown>;
+    console.log(String(record.message ?? "Coworker patch submitted."));
+    if (Array.isArray(record.details) && record.details.length > 0) {
+      for (const detail of record.details) {
+        console.log(`- ${String(detail)}`);
+      }
+    }
     return;
   }
 

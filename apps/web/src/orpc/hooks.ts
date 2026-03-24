@@ -709,13 +709,12 @@ export function useUpdateCoworker() {
   });
 }
 
-export function useApplyCoworkerBuilderPatch() {
+export function usePatchCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: {
       coworkerId: string;
-      conversationId: string;
       baseUpdatedAt: string;
       patch: {
         prompt?: string;
@@ -752,7 +751,7 @@ export function useApplyCoworkerBuilderPatch() {
             }
           | null;
       };
-    }) => client.coworker.applyBuilderPatch(input),
+    }) => client.coworker.patch(input),
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
       queryClient.invalidateQueries({ queryKey: ["coworker", "get", input.coworkerId] });

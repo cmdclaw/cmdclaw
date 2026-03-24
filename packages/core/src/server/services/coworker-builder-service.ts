@@ -1,6 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
-import { z, type ZodIssue } from "zod";
+import { z } from "zod";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
 import { isAdminOnlyChatModel } from "../../lib/chat-model-policy";
 import { parseModelReference } from "../../lib/model-reference";
@@ -80,14 +80,6 @@ export const coworkerBuilderPatchSchema = z
     },
   );
 
-export const coworkerBuilderPatchEnvelopeSchema = z
-  .object({
-    baseUpdatedAt: z.string().datetime({ offset: true }),
-    patch: coworkerBuilderPatchSchema,
-  })
-  .strict();
-
-export type CoworkerBuilderPatchEnvelope = z.infer<typeof coworkerBuilderPatchEnvelopeSchema>;
 export type CoworkerBuilderPatch = z.infer<typeof coworkerBuilderPatchSchema>;
 
 export type CoworkerBuilderContext = {
@@ -103,7 +95,7 @@ export type CoworkerBuilderContext = {
 
 type DatabaseLike = unknown;
 
-type CoworkerBuilderApplyResult =
+export type CoworkerPatchApplyResult =
   | {
       status: "applied";
       coworker: CoworkerBuilderContext;
@@ -303,15 +295,14 @@ function buildChangedFields(params: {
   return changed;
 }
 
-export async function applyCoworkerBuilderPatch(params: {
+export async function applyCoworkerPatch(params: {
   database: DatabaseLike;
   userId: string;
   userRole: string | null;
   coworkerId: string;
-  conversationId: string;
   baseUpdatedAt: string;
   patch: CoworkerBuilderPatch;
-}): Promise<CoworkerBuilderApplyResult> {
+}): Promise<CoworkerPatchApplyResult> {
   const database = params.database as {
     query: {
       coworker: {
@@ -354,10 +345,6 @@ export async function applyCoworkerBuilderPatch(params: {
     throw new ORPCError("NOT_FOUND", { message: "Coworker builder context not found" });
   }
   const existing = coworkerBuilderRowSchema.parse(existingUnknown);
-
-  if (existing.builderConversationId !== params.conversationId) {
-    throw new ORPCError("NOT_FOUND", { message: "Coworker builder context not found" });
-  }
 
   const normalizedIntegrations =
     params.patch.allowedIntegrations !== undefined
@@ -511,7 +498,6 @@ export async function applyCoworkerBuilderPatch(params: {
       and(
         eq(coworker.id, existing.id),
         eq(coworker.ownerId, params.userId),
-        eq(coworker.builderConversationId, params.conversationId),
         eq(coworker.updatedAt, new Date(params.baseUpdatedAt)),
       ),
     )
@@ -595,204 +581,5 @@ export async function applyCoworkerBuilderPatch(params: {
       updatedAt: updated.updatedAt,
     }),
     appliedChanges: changedFields,
-  };
-}
-
-type CoworkerPatchExtractionResult =
-  | {
-      status: "none";
-      sanitizedText: string;
-    }
-  | {
-      status: "invalid";
-      sanitizedText: string;
-      message: string;
-      rawPatch?: string;
-    }
-  | {
-      status: "ok";
-      sanitizedText: string;
-      envelope: CoworkerBuilderPatchEnvelope;
-    };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function normalizeTriggerType(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-  if (value === "email_forwarded") {
-    return EMAIL_FORWARDED_TRIGGER_TYPE;
-  }
-  if (value === "hourly") {
-    return "schedule";
-  }
-  return value;
-}
-
-function normalizeSchedule(value: unknown): unknown {
-  const record = asRecord(value);
-  if (!record) {
-    return value;
-  }
-
-  if (record.type === "interval" && typeof record.intervalHours === "number") {
-    return {
-      type: "interval",
-      intervalMinutes: Math.trunc(record.intervalHours * 60),
-    };
-  }
-
-  if (
-    typeof record.cron === "string" &&
-    (record.cron.trim() === "0 * * * *" || record.cron.trim() === "0 */1 * * *")
-  ) {
-    return {
-      type: "interval",
-      intervalMinutes: 60,
-    };
-  }
-
-  if (record.frequency === "hourly" || record.repeat === "hourly") {
-    return {
-      type: "interval",
-      intervalMinutes: 60,
-    };
-  }
-
-  return value;
-}
-
-function normalizePatchCandidate(parsedUnknown: unknown): unknown {
-  const envelope = asRecord(parsedUnknown);
-  if (!envelope) {
-    return parsedUnknown;
-  }
-  const patch = asRecord(envelope.patch);
-  if (!patch) {
-    return parsedUnknown;
-  }
-
-  const nextPatch: Record<string, unknown> = { ...patch };
-  nextPatch.triggerType = normalizeTriggerType(nextPatch.triggerType);
-  if (nextPatch.toolAccessMode === "restrict" || nextPatch.toolAccessMode === "selected") {
-    nextPatch.toolAccessMode = "selected";
-  } else if (nextPatch.toolAccessMode === "all") {
-    nextPatch.toolAccessMode = "all";
-  }
-
-  if (!nextPatch.allowedIntegrations) {
-    if (Array.isArray(nextPatch.integrations)) {
-      nextPatch.allowedIntegrations = nextPatch.integrations;
-    } else if (Array.isArray(nextPatch.tools)) {
-      nextPatch.allowedIntegrations = nextPatch.tools;
-    }
-  }
-  delete nextPatch.integrations;
-  delete nextPatch.tools;
-
-  if (nextPatch.triggerType === "schedule" && nextPatch.schedule === undefined) {
-    nextPatch.schedule = { type: "interval", intervalMinutes: 60 };
-  }
-  if (nextPatch.schedule !== undefined) {
-    nextPatch.schedule = normalizeSchedule(nextPatch.schedule);
-  }
-
-  return {
-    ...envelope,
-    patch: nextPatch,
-  };
-}
-
-function formatIssues(issues: ZodIssue[]): string {
-  return issues
-    .map((issue) => {
-      const path = issue.path.length > 0 ? issue.path.join(".") : "root";
-      return `${path}: ${issue.message}`;
-    })
-    .join("; ");
-}
-
-function removePatchBlocks(text: string): string {
-  return text
-    .replace(/```coworker_builder_patch\s*[\s\S]*?```/gi, "")
-    .replace(/<coworker_builder_patch>[\s\S]*?<\/coworker_builder_patch>/gi, "")
-    .trim();
-}
-
-export function extractCoworkerBuilderPatch(text: string): CoworkerPatchExtractionResult {
-  const fenceRegex = /```coworker_builder_patch\s*([\s\S]*?)```/gi;
-  const tagRegex = /<coworker_builder_patch>([\s\S]*?)<\/coworker_builder_patch>/gi;
-
-  const matches: string[] = [];
-  for (const match of text.matchAll(fenceRegex)) {
-    matches.push(match[1] ?? "");
-  }
-  for (const match of text.matchAll(tagRegex)) {
-    matches.push(match[1] ?? "");
-  }
-
-  const sanitizedText = removePatchBlocks(text);
-  if (matches.length === 0) {
-    return {
-      status: "none",
-      sanitizedText,
-    };
-  }
-  if (matches.length > 1) {
-    return {
-      status: "invalid",
-      sanitizedText,
-      message: "Multiple coworker patch blocks detected",
-      rawPatch: matches.join("\n\n---\n\n").slice(0, 800),
-    };
-  }
-
-  let parsedUnknown: unknown;
-  try {
-    parsedUnknown = JSON.parse(matches[0] ?? "");
-  } catch {
-    return {
-      status: "invalid",
-      sanitizedText,
-      message: "Coworker patch block is not valid JSON",
-      rawPatch: (matches[0] ?? "").slice(0, 800),
-    };
-  }
-
-  const normalizedCandidate = normalizePatchCandidate(parsedUnknown);
-  let parsed = coworkerBuilderPatchEnvelopeSchema.safeParse(normalizedCandidate);
-
-  if (!parsed.success) {
-    const normalizedRecord = asRecord(normalizedCandidate);
-    const patch = normalizedRecord ? asRecord(normalizedRecord.patch) : null;
-    if (patch && patch.triggerType !== "schedule" && patch.schedule !== undefined) {
-      const withoutSchedule = {
-        ...normalizedRecord,
-        patch: { ...patch },
-      };
-      delete (withoutSchedule.patch as Record<string, unknown>).schedule;
-      parsed = coworkerBuilderPatchEnvelopeSchema.safeParse(withoutSchedule);
-    }
-  }
-
-  if (!parsed.success) {
-    return {
-      status: "invalid",
-      sanitizedText,
-      message: formatIssues(parsed.error.issues),
-      rawPatch: JSON.stringify(normalizedCandidate).slice(0, 800),
-    };
-  }
-
-  return {
-    status: "ok",
-    sanitizedText,
-    envelope: parsed.data,
   };
 }

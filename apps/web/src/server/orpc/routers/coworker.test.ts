@@ -17,14 +17,14 @@ const {
   removeCoworkerScheduleJobMock,
   generateCoworkerMetadataOnFirstPromptFillMock,
   normalizeAndEnsureUniqueCoworkerUsernameMock,
-  applyCoworkerBuilderPatchMock,
+  applyCoworkerPatchMock,
 } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn(),
   syncCoworkerScheduleJobMock: vi.fn(),
   removeCoworkerScheduleJobMock: vi.fn(),
   generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
   normalizeAndEnsureUniqueCoworkerUsernameMock: vi.fn(),
-  applyCoworkerBuilderPatchMock: vi.fn(),
+  applyCoworkerPatchMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -51,7 +51,7 @@ vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
   >("@cmdclaw/core/server/services/coworker-builder-service");
   return {
     ...actual,
-    applyCoworkerBuilderPatch: applyCoworkerBuilderPatchMock,
+    applyCoworkerPatch: applyCoworkerPatchMock,
   };
 });
 
@@ -137,7 +137,7 @@ describe("coworkerRouter", () => {
       generationId: "gen-1",
       conversationId: "conv-1",
     });
-    applyCoworkerBuilderPatchMock.mockResolvedValue({
+    applyCoworkerPatchMock.mockResolvedValue({
       status: "applied",
       coworker: {
         coworkerId: "wf-1",
@@ -1189,10 +1189,9 @@ describe("coworkerRouter", () => {
     const context = createContext();
     context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
 
-    const result = await coworkerRouterAny.applyBuilderPatch({
+    const result = await coworkerRouterAny.patch({
       input: {
         coworkerId: "wf-1",
-        conversationId: "conv-builder",
         baseUpdatedAt: "2026-03-03T12:00:00.000Z",
         patch: { prompt: "new prompt" },
       },
@@ -1211,11 +1210,10 @@ describe("coworkerRouter", () => {
       },
       appliedChanges: ["prompt"],
     });
-    expect(applyCoworkerBuilderPatchMock).toHaveBeenCalledWith(
+    expect(applyCoworkerPatchMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userRole: "admin",
         coworkerId: "wf-1",
-        conversationId: "conv-builder",
       }),
     );
   });

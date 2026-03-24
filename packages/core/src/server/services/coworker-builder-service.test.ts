@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { syncCoworkerScheduleJobMock, generateCoworkerMetadataOnFirstPromptFillMock } = vi.hoisted(
@@ -17,9 +16,7 @@ vi.mock("./coworker-metadata", () => ({
 }));
 
 import {
-  applyCoworkerBuilderPatch,
-  extractCoworkerBuilderPatch,
-  coworkerBuilderPatchEnvelopeSchema,
+  applyCoworkerPatch,
 } from "./coworker-builder-service";
 
 function createDbStub() {
@@ -52,93 +49,6 @@ describe("coworker-builder-service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     generateCoworkerMetadataOnFirstPromptFillMock.mockResolvedValue({});
-  });
-
-  it("extracts a valid coworker patch and strips it from assistant text", () => {
-    const result = extractCoworkerBuilderPatch(
-      [
-        "Updated your coworker.",
-        "```coworker_builder_patch",
-        '{"baseUpdatedAt":"2026-03-03T12:00:00.000Z","patch":{"prompt":"new prompt"}}',
-        "```",
-      ].join("\n"),
-    );
-
-    expect(result.status).toBe("ok");
-    if (result.status !== "ok") {
-      return;
-    }
-    expect(result.envelope.patch.prompt).toBe("new prompt");
-    expect(result.sanitizedText).toBe("Updated your coworker.");
-  });
-
-  it("rejects malformed patch content", () => {
-    const result = extractCoworkerBuilderPatch(
-      '```coworker_builder_patch\n{"baseUpdatedAt":"oops"}\n```',
-    );
-    expect(result.status).toBe("invalid");
-  });
-
-  it("normalizes common hourly patch aliases", () => {
-    const result = extractCoworkerBuilderPatch(
-      [
-        "```coworker_builder_patch",
-        JSON.stringify({
-          baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-          patch: {
-            triggerType: "hourly",
-            integrations: ["slack"],
-            schedule: { cron: "0 * * * *" },
-          },
-        }),
-        "```",
-      ].join("\n"),
-    );
-
-    expect(result.status).toBe("ok");
-    if (result.status !== "ok") {
-      return;
-    }
-
-    expect(result.envelope.patch.triggerType).toBe("schedule");
-    expect(result.envelope.patch.allowedIntegrations).toEqual(["slack"]);
-    expect(result.envelope.patch.schedule).toEqual({
-      type: "interval",
-      intervalMinutes: 60,
-    });
-  });
-
-  it("drops invalid schedule when trigger is not schedule", () => {
-    const result = extractCoworkerBuilderPatch(
-      [
-        "```coworker_builder_patch",
-        JSON.stringify({
-          baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-          patch: {
-            triggerType: "manual",
-            prompt: "keep manual",
-            schedule: { cron: "invalid cron" },
-          },
-        }),
-        "```",
-      ].join("\n"),
-    );
-
-    expect(result.status).toBe("ok");
-    if (result.status !== "ok") {
-      return;
-    }
-    expect(result.envelope.patch.triggerType).toBe("manual");
-    expect(result.envelope.patch.schedule).toBeUndefined();
-  });
-
-  it("enforces strict envelope schema", () => {
-    const parsed = coworkerBuilderPatchEnvelopeSchema.safeParse({
-      baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-      patch: { prompt: "x" },
-      extra: true,
-    });
-    expect(parsed.success).toBe(false);
   });
 
   it("returns conflict on stale baseUpdatedAt", async () => {
@@ -177,12 +87,11 @@ describe("coworker-builder-service", () => {
       });
     mocks.returning.mockResolvedValueOnce([]);
 
-    const result = await applyCoworkerBuilderPatch({
+    const result = await applyCoworkerPatch({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
-      conversationId: "conv-1",
       baseUpdatedAt: oldDate.toISOString(),
       patch: { prompt: "new prompt" },
     });
@@ -216,51 +125,16 @@ describe("coworker-builder-service", () => {
       updatedAt,
     });
 
-    const result = await applyCoworkerBuilderPatch({
+    const result = await applyCoworkerPatch({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
-      conversationId: "conv-1",
       baseUpdatedAt: updatedAt.toISOString(),
       patch: { triggerType: "schedule" },
     });
 
     expect(result.status).toBe("validation_error");
-  });
-
-  it("enforces builder conversation linkage", async () => {
-    const { db, mocks } = createDbStub();
-    mocks.findFirst.mockResolvedValueOnce({
-      id: "wf-1",
-      ownerId: "user-1",
-      builderConversationId: "conv-expected",
-      name: "",
-      description: null,
-      username: null,
-      prompt: "old",
-      model: "anthropic/claude-sonnet-4-6",
-      promptDo: null,
-      promptDont: null,
-      triggerType: "manual",
-      schedule: null,
-      allowedIntegrations: ["github"],
-      allowedCustomIntegrations: [],
-      autoApprove: true,
-      updatedAt: new Date("2026-03-03T12:00:00.000Z"),
-    });
-
-    await expect(
-      applyCoworkerBuilderPatch({
-        database: db as never,
-        userId: "user-1",
-        userRole: "admin",
-        coworkerId: "wf-1",
-        conversationId: "conv-other",
-        baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-        patch: { prompt: "new" },
-      }),
-    ).rejects.toBeInstanceOf(ORPCError);
   });
 
   it("applies prompt changes and reports changed fields", async () => {
@@ -298,12 +172,11 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerBuilderPatch({
+    const result = await applyCoworkerPatch({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
-      conversationId: "conv-1",
       baseUpdatedAt: updatedAt.toISOString(),
       patch: { prompt: "new prompt" },
     });
@@ -356,12 +229,11 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerBuilderPatch({
+    const result = await applyCoworkerPatch({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
-      conversationId: "conv-1",
       baseUpdatedAt: updatedAt.toISOString(),
       patch: { prompt: "new prompt" },
     });
@@ -416,12 +288,11 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerBuilderPatch({
+    const result = await applyCoworkerPatch({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
-      conversationId: "conv-1",
       baseUpdatedAt: updatedAt.toISOString(),
       patch: { model: "openai/gpt-5.2-codex" },
     });

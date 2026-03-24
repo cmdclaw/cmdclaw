@@ -2842,6 +2842,7 @@ describe("generationManager transitions", () => {
           updatedAt: "2026-03-03T12:00:00.000Z",
           prompt: "Current coworker prompt",
           model: "anthropic/claude-sonnet-4-6",
+          toolAccessMode: "selected",
           triggerType: "manual",
           schedule: null,
           allowedIntegrations: ["github"],
@@ -2850,7 +2851,7 @@ describe("generationManager transitions", () => {
     );
 
     expect(prompt).toContain("Coworker Builder Context");
-    expect(prompt).toContain("coworker_builder_patch");
+    expect(prompt).toContain("coworker patch");
     expect(prompt).toContain('"coworkerId": "wf-1"');
     expect(prompt).toContain('"model": "anthropic/claude-sonnet-4-6"');
   });

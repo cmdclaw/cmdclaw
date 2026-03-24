@@ -34,6 +34,8 @@ import type { SandboxBackend } from "../sandbox/types";
 import { env } from "../../env";
 import {
   getCoworkerCliSystemPrompt,
+  type CoworkerPatchApplyEnvelope,
+  parseCoworkerPatchApplyEnvelope,
   parseCoworkerInvocationEnvelope,
 } from "../../lib/coworker-runtime-cli";
 import {
@@ -101,8 +103,6 @@ import { generateConversationTitle } from "../utils/generate-title";
 import { createTraceId, logServerEvent } from "../utils/observability";
 import { isStatelessServerlessRuntime } from "../utils/runtime-platform";
 import {
-  applyCoworkerBuilderPatch,
-  extractCoworkerBuilderPatch,
   resolveCoworkerBuilderContextByConversation,
   type CoworkerBuilderContext,
 } from "./coworker-builder-service";
@@ -405,7 +405,6 @@ type PrePromptCacheRecord = {
 
 const PRE_PROMPT_CACHE_PATH = "/app/.opencode/pre-prompt-cache.json";
 const DEFAULT_MODEL_REFERENCE = DEFAULT_CONNECTED_CHATGPT_MODEL;
-const COWORKER_BUILDER_AUTO_APPLY_ENABLED = process.env.COWORKER_BUILDER_AUTO_APPLY !== "0";
 
 async function getDoneArtifacts(messageId: string): Promise<
   | {
@@ -4675,7 +4674,6 @@ class GenerationManager {
           console.error("[GenerationManager] Failed to import integration skill drafts:", error);
         }
       }
-      await this.tryAutoApplyCoworkerBuilderPatch(ctx);
 
       // Collect new files created in the sandbox during generation
       let uploadedSandboxFileCount = 0;
@@ -5564,6 +5562,14 @@ class GenerationManager {
               attachment_names: coworkerInvocation.attachmentNames,
               message: coworkerInvocation.message,
             });
+          }
+          const coworkerPatchApply = parseCoworkerPatchApplyEnvelope({
+            toolName: existingToolUse.name,
+            toolInput: existingToolUse.input,
+            toolResult: result,
+          });
+          if (coworkerPatchApply) {
+            this.applyCoworkerPatchEnvelope(ctx, coworkerPatchApply);
           }
           await this.saveProgress(ctx);
           return;
@@ -6821,15 +6827,13 @@ class GenerationManager {
       "## Coworker Builder Context (System)",
       "You are in coworker builder mode.",
       "The coworker snapshot below is the latest server state. Only edit these fields: prompt, model, toolAccessMode, allowedIntegrations, triggerType, schedule.",
-      "If the user asks to change editable coworker fields, emit exactly one patch block in this format:",
-      "```coworker_builder_patch",
-      '{ "baseUpdatedAt": "ISO_TIMESTAMP", "patch": { "prompt": "...", "model": "openai/gpt-5.4", "toolAccessMode": "all|selected", "allowedIntegrations": ["github"], "triggerType": "manual|schedule|email.forwarded|gmail.new_email|twitter.new_dm", "schedule": null|{...} } }',
-      "```",
+      "If the user asks to change editable coworker fields, apply them by running the coworker CLI instead of describing a patch in assistant text.",
+      "Use this command shape:",
+      `coworker patch ${ctx.builderCoworkerContext.coworkerId} --base-updated-at ${escapeShellArg(ctx.builderCoworkerContext.updatedAt)} --patch '<json>' --json`,
       "Rules:",
       "- Use baseUpdatedAt exactly from the snapshot below.",
-      "- Include only fields that should change.",
-      "- Do not include any extra top-level keys.",
-      "- The patch block must be strict JSON (double quotes, no comments, no trailing commas).",
+      "- The --patch value must be strict JSON with only the fields that should change.",
+      "- Do not include extra top-level envelope keys inside --patch.",
       "- Supported schedule formats:",
       '  - {"type":"interval","intervalMinutes":60..10080}',
       '  - {"type":"daily","time":"HH:MM","timezone":"Area/City"}',
@@ -6837,25 +6841,13 @@ class GenerationManager {
       '  - {"type":"monthly","time":"HH:MM","dayOfMonth":1..31,"timezone":"Area/City"}',
       "- If triggerType is schedule, include a valid schedule object.",
       "- If triggerType is not schedule, omit schedule unless explicitly asked to clear it with null.",
-      '- For concrete coworker requests (for example: "send a message in #channel every hour"), emit a patch block in the same response, even if you also ask a follow-up question.',
+      '- For concrete coworker requests (for example: "send a message in #channel every hour"), run `coworker patch ... --json` in the same turn, even if you also ask a follow-up question.',
       "- If information is missing, apply a best-effort default patch first, then ask a follow-up question.",
       '- Best-effort defaults: set triggerType=schedule with schedule {"type":"interval","intervalMinutes":60} for "every hour", and set prompt to a concise executable instruction.',
-      "- If no editable coworker change is requested, do not emit a patch block.",
+      "- If no editable coworker change is requested, do not run coworker patch.",
       "Snapshot:",
       snapshot,
     ].join("\n");
-  }
-
-  private sanitizeContentPartsAfterCoworkerPatchExtraction(ctx: GenerationContext): void {
-    ctx.contentParts = ctx.contentParts
-      .map((part) => {
-        if (part.type !== "text") {
-          return part;
-        }
-        const extracted = extractCoworkerBuilderPatch(part.text);
-        return { ...part, text: extracted.sanitizedText };
-      })
-      .filter((part) => part.type !== "text" || part.text.trim().length > 0);
   }
 
   private appendSystemEvent(
@@ -6873,89 +6865,21 @@ class GenerationManager {
     });
   }
 
-  private async tryAutoApplyCoworkerBuilderPatch(ctx: GenerationContext): Promise<void> {
-    if (!ctx.builderCoworkerContext) {
-      return;
-    }
+  private applyCoworkerPatchEnvelope(
+    ctx: GenerationContext,
+    envelope: CoworkerPatchApplyEnvelope,
+  ): void {
+    const coworkerId = envelope.coworkerId;
 
-    const extraction = extractCoworkerBuilderPatch(ctx.assistantContent);
-    ctx.assistantContent = extraction.sanitizedText;
-    this.sanitizeContentPartsAfterCoworkerPatchExtraction(ctx);
-
-    if (extraction.status === "none") {
-      return;
-    }
-
-    const coworkerId = ctx.builderCoworkerContext.coworkerId;
-
-    if (!COWORKER_BUILDER_AUTO_APPLY_ENABLED) {
-      const content =
-        "Coworker patch detected, but auto-apply is currently disabled by feature flag.";
-      this.appendSystemEvent(ctx, { content, coworkerId });
-      logServerEvent(
-        "warn",
-        "COWORKER_PATCH_APPLY_SKIPPED",
-        { reason: "feature_flag_disabled", coworkerId },
-        {
-          source: "generation-manager",
-          traceId: ctx.traceId,
-          generationId: ctx.id,
-          conversationId: ctx.conversationId,
-          userId: ctx.userId,
-        },
-      );
-      return;
-    }
-
-    if (extraction.status === "invalid") {
-      const content = `Coworker patch failed: ${extraction.message}`;
-      this.appendSystemEvent(ctx, { content, coworkerId });
-      logServerEvent(
-        "warn",
-        "COWORKER_PATCH_PARSE_FAILED",
-        {
-          coworkerId,
-          error: extraction.message,
-          rawPatch: extraction.rawPatch,
-        },
-        {
-          source: "generation-manager",
-          traceId: ctx.traceId,
-          generationId: ctx.id,
-          conversationId: ctx.conversationId,
-          userId: ctx.userId,
-        },
-      );
-      return;
-    }
-
-    const dbUser = await db.query.user.findFirst({
-      where: eq(user.id, ctx.userId),
-      columns: { role: true },
-    });
-
-    const applyResult = await applyCoworkerBuilderPatch({
-      database: db,
-      userId: ctx.userId,
-      userRole: dbUser?.role ?? null,
-      coworkerId,
-      conversationId: ctx.conversationId,
-      baseUpdatedAt: extraction.envelope.baseUpdatedAt,
-      patch: extraction.envelope.patch,
-    });
-
-    if (applyResult.status === "applied") {
-      ctx.builderCoworkerContext = applyResult.coworker;
-      const changed =
-        applyResult.appliedChanges.length > 0 ? applyResult.appliedChanges.join(", ") : "none";
-      const content = `Coworker updated by chat (${changed}).`;
-      this.appendSystemEvent(ctx, { content, coworkerId });
+    if (envelope.status === "applied") {
+      ctx.builderCoworkerContext = envelope.coworker;
+      this.appendSystemEvent(ctx, { content: envelope.message, coworkerId });
       logServerEvent(
         "info",
         "COWORKER_PATCH_APPLIED",
         {
           coworkerId,
-          changedFields: applyResult.appliedChanges,
+          changedFields: envelope.appliedChanges,
         },
         {
           source: "generation-manager",
@@ -6968,11 +6892,9 @@ class GenerationManager {
       return;
     }
 
-    if (applyResult.status === "conflict") {
-      ctx.builderCoworkerContext = applyResult.coworker;
-      const content =
-        "Coworker patch was not applied because the coworker changed. Please retry with latest state.";
-      this.appendSystemEvent(ctx, { content, coworkerId });
+    if (envelope.status === "conflict") {
+      ctx.builderCoworkerContext = envelope.coworker;
+      this.appendSystemEvent(ctx, { content: envelope.message, coworkerId });
       logServerEvent(
         "warn",
         "COWORKER_PATCH_CONFLICT",
@@ -6988,12 +6910,14 @@ class GenerationManager {
       return;
     }
 
-    const content = `Coworker patch validation failed: ${applyResult.details.join("; ")}`;
-    this.appendSystemEvent(ctx, { content, coworkerId });
+    this.appendSystemEvent(ctx, {
+      content: `${envelope.message}: ${envelope.details.join("; ")}`,
+      coworkerId,
+    });
     logServerEvent(
       "warn",
       "COWORKER_PATCH_VALIDATION_FAILED",
-      { coworkerId, details: applyResult.details },
+      { coworkerId, details: envelope.details },
       {
         source: "generation-manager",
         traceId: ctx.traceId,

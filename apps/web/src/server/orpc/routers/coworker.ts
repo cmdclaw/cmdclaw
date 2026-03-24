@@ -19,7 +19,7 @@ import {
   type ProviderAuthSource,
 } from "@cmdclaw/core/lib/provider-auth-source";
 import {
-  applyCoworkerBuilderPatch,
+  applyCoworkerPatch,
   coworkerBuilderPatchSchema,
 } from "@cmdclaw/core/server/services/coworker-builder-service";
 import {
@@ -665,11 +665,10 @@ const del = protectedProcedure
     return { success: true };
   });
 
-const applyBuilderPatch = protectedProcedure
+const patch = protectedProcedure
   .input(
     z.object({
       coworkerId: z.string(),
-      conversationId: z.string(),
       baseUpdatedAt: z.string().datetime({ offset: true }),
       patch: coworkerBuilderPatchSchema,
     }),
@@ -680,12 +679,11 @@ const applyBuilderPatch = protectedProcedure
       columns: { role: true },
     });
 
-    const result = await applyCoworkerBuilderPatch({
+    const result = await applyCoworkerPatch({
       database: context.db as unknown,
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
       coworkerId: input.coworkerId,
-      conversationId: input.conversationId,
       baseUpdatedAt: input.baseUpdatedAt,
       patch: input.patch,
     });
@@ -1158,7 +1156,7 @@ export const coworkerRouter = {
   get,
   create,
   update,
-  applyBuilderPatch,
+  patch,
   delete: del,
   trigger,
   getRun,

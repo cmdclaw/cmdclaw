@@ -1,4 +1,6 @@
 import type { RouterClient } from "@orpc/server";
+import { buildCoworkerPatchApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
+import { coworkerBuilderPatchSchema } from "@cmdclaw/core/server/services/coworker-builder-service";
 import type { AppRouter } from "@/server/orpc";
 import { formatPersistedChatTranscript } from "../src/components/chat/chat-transcript";
 import { DEFAULT_SERVER_URL, createRpcClient, loadConfig } from "./lib/cli-shared";
@@ -9,6 +11,7 @@ type ParsedArgs = {
   positionals: string[];
   message?: string;
   list?: boolean;
+  json?: boolean;
   format?: "text" | "markdown" | "json";
   // Generic command flags
   payload?: string;
@@ -30,6 +33,8 @@ type ParsedArgs = {
   scheduleDays?: number[];
   scheduleDayOfMonth?: number;
   model?: string;
+  baseUpdatedAt?: string;
+  patch?: string;
 };
 
 type CoworkerIntegrationType =
@@ -203,8 +208,19 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "-h":
         printHelp();
         process.exit(0);
+      case "--json":
+        args.json = true;
+        break;
       case "--list":
         args.list = true;
+        break;
+      case "--base-updated-at":
+        args.baseUpdatedAt = argv[i + 1];
+        i += 1;
+        break;
+      case "--patch":
+        args.patch = argv[i + 1];
+        i += 1;
         break;
       default:
         if (arg?.startsWith("-")) {
@@ -319,11 +335,13 @@ function printHelp(): void {
     "  -m, --message <text>              Build/update a coworker from one message (default mode)",
   );
   console.log("  --list                            List coworkers (shortcut)");
+  console.log("  --json                            Emit JSON for supported commands");
   console.log("  -M, --model <provider/model>      Optional model override for builder agent");
   console.log("  -h, --help                        Show help");
   console.log("\nCommands:");
   console.log("  list                              List coworkers");
   console.log("  create                            Create coworker (flags below)");
+  console.log("  patch <coworker-id>               Apply a coworker patch");
   console.log("  show <coworker-id>                Show full coworker details");
   console.log("  run <coworker-id>                 Trigger a coworker run");
   console.log("  logs <run-id>                     Show run events and transcript");
@@ -368,6 +386,9 @@ function printHelp(): void {
   console.log("Builder flags:");
   console.log("  --message <text>                  Natural-language coworker objective");
   console.log("  -M, --model <provider/model>      Optional generation model override");
+  console.log("\nPatch flags:");
+  console.log("  --base-updated-at <iso>           Required optimistic concurrency timestamp");
+  console.log("  --patch <json>                    JSON patch payload");
   console.log("\nExample:");
   console.log('  bun run coworker --message "send message in #bap-experiments every hour"\n');
 }
@@ -517,8 +538,13 @@ function printCoworkerDetails(
   }
 }
 
-async function listCoworkers(client: RouterClient<AppRouter>): Promise<void> {
+async function listCoworkers(client: RouterClient<AppRouter>, args?: ParsedArgs): Promise<void> {
   const coworkers = await client.coworker.list();
+
+  if (args?.json) {
+    console.log(JSON.stringify(coworkers, null, 2));
+    return;
+  }
 
   if (coworkers.length === 0) {
     console.log("No coworkers found.");
@@ -539,6 +565,62 @@ async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): 
 
   const coworker = await client.coworker.get({ id: coworkerId });
   printCoworkerDetails(coworker, args.format);
+}
+
+function parsePatchInput(rawPatch: string | undefined) {
+  if (!rawPatch?.trim()) {
+    throw new Error("patch requires --patch");
+  }
+
+  let parsedUnknown: unknown;
+  try {
+    parsedUnknown = JSON.parse(rawPatch);
+  } catch {
+    throw new Error("Invalid JSON for --patch");
+  }
+
+  return coworkerBuilderPatchSchema.parse(parsedUnknown);
+}
+
+async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
+  const coworkerId = args.positionals[0];
+  if (!coworkerId) {
+    throw new Error(
+      "Usage: bun run coworker patch <coworker-id> --base-updated-at <iso> --patch <json> [--json]",
+    );
+  }
+  if (!args.baseUpdatedAt?.trim()) {
+    throw new Error("patch requires --base-updated-at");
+  }
+
+  const result = await client.coworker.patch({
+    coworkerId,
+    baseUpdatedAt: args.baseUpdatedAt.trim(),
+    patch: parsePatchInput(args.patch),
+  });
+
+  const envelope = buildCoworkerPatchApplyEnvelope({
+    coworkerId,
+    result,
+  });
+
+  if (args.json) {
+    console.log(JSON.stringify(envelope, null, 2));
+    return;
+  }
+
+  console.log(envelope.message);
+  if (envelope.status === "applied" || envelope.status === "conflict") {
+    console.log("");
+    printCoworkerDetails({
+      ...(await client.coworker.get({ id: coworkerId })),
+    });
+    return;
+  }
+
+  if (envelope.details.length > 0) {
+    console.log(envelope.details.join("\n"));
+  }
 }
 
 async function createCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
@@ -935,7 +1017,7 @@ async function main(): Promise<void> {
 
   try {
     if (!parsed.command && parsed.list) {
-      await listCoworkers(client);
+      await listCoworkers(client, parsed);
       return;
     }
     if (!parsed.command && parsed.message?.trim()) {
@@ -950,7 +1032,10 @@ async function main(): Promise<void> {
     switch (parsed.command) {
       case "list":
       case "ls":
-        await listCoworkers(client);
+        await listCoworkers(client, parsed);
+        break;
+      case "patch":
+        await patchCoworker(client, parsed);
         break;
       case "create":
       case "new":
