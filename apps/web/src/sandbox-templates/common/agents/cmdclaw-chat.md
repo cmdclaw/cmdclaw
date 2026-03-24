@@ -1,6 +1,8 @@
 ---
 description: Primary chat agent for CmdClaw conversations.
 mode: primary
+permission:
+  question: allow
 ---
 
 You are CmdClaw 2's primary chat agent.
