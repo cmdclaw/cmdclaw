@@ -1,8 +1,9 @@
 import type { Headers as TarHeader } from "tar-stream";
 import Dockerode from "dockerode";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -13,6 +14,8 @@ const TEMPLATE_ROOT = path.join(process.cwd(), "src", "sandbox-templates");
 const COMMON_TEMPLATE_ROOT = path.join(TEMPLATE_ROOT, "common");
 const DOCKERFILE_RUNTIME_RELATIVE = "docker/Dockerfile.runtime";
 const DOCKERFILE_RUNTIME_ABSOLUTE = path.join(TEMPLATE_ROOT, DOCKERFILE_RUNTIME_RELATIVE);
+const DOCKER_BUILD_TIMEOUT_MS = 15 * 60 * 1000;
+const DOCKER_BUILD_TRANSCRIPT_LIMIT = 200;
 
 async function listFilesRecursive(rootDir: string): Promise<string[]> {
   const entries = await readdir(rootDir, { withFileTypes: true });
@@ -54,77 +57,132 @@ async function computeTemplateHash(): Promise<string> {
   return hasher.digest("hex");
 }
 
-async function addPathToTar(
-  pack: tar.Pack,
-  absolutePath: string,
-  relativePath: string,
-): Promise<void> {
-  const entryStat = await stat(absolutePath);
-  if (entryStat.isDirectory()) {
-    const children = await readdir(absolutePath);
-    await Promise.all(
-      children.map(async (name) => {
-        const childAbs = path.join(absolutePath, name);
-        const childRel = relativePath ? `${relativePath}/${name}` : name;
-        await addPathToTar(pack, childAbs, childRel);
-      }),
-    );
-    return;
+function pushDockerTranscriptLine(transcript: string[], line: string): void {
+  transcript.push(line);
+  if (transcript.length > DOCKER_BUILD_TRANSCRIPT_LIMIT) {
+    transcript.shift();
   }
+}
 
-  if (!entryStat.isFile()) {
-    return;
-  }
+function formatDockerBuildErrorMessage(input: {
+  imageTag: string;
+  error: unknown;
+  transcript: string[];
+}): string {
+  const message = input.error instanceof Error ? input.error.message : String(input.error);
+  const transcriptBlock =
+    input.transcript.length > 0
+      ? `\nRecent Docker build output:\n${input.transcript.join("\n")}`
+      : "";
+  return `Failed to build Docker runtime image ${input.imageTag}: ${message}${transcriptBlock}`;
+}
 
-  const fileContent = await readFile(absolutePath);
+async function buildDockerRuntimeImageWithCli(imageTag: string): Promise<void> {
+  const transcript: string[] = [];
+
   await new Promise<void>((resolve, reject) => {
-    pack.entry(
+    const dockerfilePath = path.join(TEMPLATE_ROOT, DOCKERFILE_RUNTIME_RELATIVE);
+    const child = spawn(
+      "docker",
+      ["build", "--progress=plain", "-t", imageTag, "-f", dockerfilePath, TEMPLATE_ROOT],
       {
-        name: relativePath,
-        mode: entryStat.mode & 0o777,
-        mtime: entryStat.mtime,
-      },
-      fileContent,
-      (error?: Error | null) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
+        stdio: ["ignore", "pipe", "pipe"],
       },
     );
-  });
-}
 
-async function createTemplateContextTarStream(): Promise<NodeJS.ReadableStream> {
-  const pack = tar.pack();
-  const topLevelEntries = await readdir(TEMPLATE_ROOT);
-  await Promise.all(
-    topLevelEntries.map(async (entry) => {
-      await addPathToTar(pack, path.join(TEMPLATE_ROOT, entry), entry);
-    }),
-  );
-  pack.finalize();
-  return pack;
-}
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
 
-async function followProgress(stream: NodeJS.ReadableStream, docker: Dockerode): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    docker.modem.followProgress(
-      stream,
-      (error: Error | null) => {
-        if (error) {
-          reject(error);
-          return;
+    const clearBuildTimeout = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+    };
+
+    const refreshTimeout = () => {
+      clearBuildTimeout();
+      timeout = setTimeout(() => {
+        child.kill("SIGTERM");
+        reject(
+          new Error(
+            formatDockerBuildErrorMessage({
+              imageTag,
+              error: `Timed out after ${DOCKER_BUILD_TIMEOUT_MS}ms while waiting for docker build`,
+              transcript,
+            }),
+          ),
+        );
+      }, DOCKER_BUILD_TIMEOUT_MS);
+    };
+
+    const appendChunk = (chunk: Buffer | string, source: "stdout" | "stderr") => {
+      refreshTimeout();
+      const next = (source === "stdout" ? stdoutBuffer : stderrBuffer) + chunk.toString("utf8");
+      const lines = next.split("\n");
+      const remainder = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trimEnd();
+        if (trimmed.length > 0) {
+          pushDockerTranscriptLine(transcript, trimmed);
         }
+      }
+      if (source === "stdout") {
+        stdoutBuffer = remainder;
+      } else {
+        stderrBuffer = remainder;
+      }
+    };
+
+    const flushBuffers = () => {
+      const pending = [stdoutBuffer, stderrBuffer];
+      for (const entry of pending) {
+        const trimmed = entry.trim();
+        if (trimmed.length > 0) {
+          pushDockerTranscriptLine(transcript, trimmed);
+        }
+      }
+      stdoutBuffer = "";
+      stderrBuffer = "";
+    };
+
+    const fail = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearBuildTimeout();
+      flushBuffers();
+      reject(new Error(formatDockerBuildErrorMessage({ imageTag, error, transcript })));
+    };
+
+    refreshTimeout();
+    child.stdout.on("data", (chunk) => appendChunk(chunk, "stdout"));
+    child.stderr.on("data", (chunk) => appendChunk(chunk, "stderr"));
+    child.on("error", (error) => fail(error));
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearBuildTimeout();
+      flushBuffers();
+      if (code === 0) {
         resolve();
-      },
-      (event: { error?: string; stream?: string }) => {
-        if (event.error) {
-          reject(new Error(event.error));
-        }
-      },
-    );
+        return;
+      }
+      reject(
+        new Error(
+          formatDockerBuildErrorMessage({
+            imageTag,
+            error: `docker build exited with code ${code ?? "unknown"}`,
+            transcript,
+          }),
+        ),
+      );
+    });
   });
 }
 
@@ -167,13 +225,7 @@ export async function ensureDockerRuntimeImage(docker = createDockerClient()): P
     return imageTag;
   }
 
-  const context = await createTemplateContextTarStream();
-  const buildStream = await docker.buildImage(context, {
-    t: imageTag,
-    dockerfile: DOCKERFILE_RUNTIME_RELATIVE,
-  });
-
-  await followProgress(buildStream, docker);
+  await buildDockerRuntimeImageWithCli(imageTag);
   return imageTag;
 }
 
