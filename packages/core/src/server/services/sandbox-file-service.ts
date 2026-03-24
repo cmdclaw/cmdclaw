@@ -41,6 +41,15 @@ const EXCLUDED_PATTERNS = [
   "bun.lockb",
 ];
 
+function isSandboxTerminatedError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("terminated") || message.includes("vm terminated");
+}
+
 function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
@@ -137,6 +146,10 @@ export async function collectNewSandboxFiles(
   try {
     result = await sandbox.execute(findCmd);
   } catch (err) {
+    if (isSandboxTerminatedError(err)) {
+      console.warn("[SandboxFileService] Skipping file scan because the sandbox is terminated");
+      return [];
+    }
     console.error("[SandboxFileService] Failed to find new files:", err);
     return [];
   }
@@ -168,6 +181,12 @@ export async function collectNewSandboxFiles(
         const content = await readSandboxFileAsBuffer(sandbox, filePath);
         return { path: filePath, content };
       } catch (err) {
+        if (isSandboxTerminatedError(err)) {
+          console.warn(
+            `[SandboxFileService] Skipping file read because the sandbox is terminated: ${filePath}`,
+          );
+          return null;
+        }
         // Skip files we can't read
         console.warn(`[SandboxFileService] Could not read file ${filePath}:`, err);
         return null;
@@ -198,6 +217,12 @@ export async function collectNewE2BFiles(
   try {
     result = await sandbox.commands.run(findCmd);
   } catch (err) {
+    if (isSandboxTerminatedError(err)) {
+      console.warn(
+        "[SandboxFileService] Skipping E2B file scan because the sandbox is terminated",
+      );
+      return [];
+    }
     console.error("[SandboxFileService] Failed to find new files in E2B:", err);
     return [];
   }
@@ -229,6 +254,12 @@ export async function collectNewE2BFiles(
         const content = await readE2BSandboxFileAsBuffer(sandbox, filePath);
         return { path: filePath, content };
       } catch (err) {
+        if (isSandboxTerminatedError(err)) {
+          console.warn(
+            `[SandboxFileService] Skipping E2B file read because the sandbox is terminated: ${filePath}`,
+          );
+          return null;
+        }
         // Skip files we can't read
         console.warn(`[SandboxFileService] Could not read E2B file ${filePath}:`, err);
         return null;
