@@ -35,6 +35,7 @@
     "docker-up:local": "docker compose up",
     "e2b:build:dev": "bun src/sandbox-templates/e2b/build.dev.ts",
     "e2b:build:prod": "bun src/sandbox-templates/e2b/build.prod.ts",
+    "e2b:build:staging": "bun src/sandbox-templates/e2b/build.staging.ts",
     "e2b:sandbox": "bun scripts/test-sandbox.ts",
     "e2b:sandboxes:kill-all": "bun scripts/e2b-sandboxes.ts kill-all",
     "e2b:sandboxes:list": "bun scripts/e2b-sandboxes.ts list",

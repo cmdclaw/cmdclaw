@@ -3,15 +3,14 @@ import { Template, defaultBuildLogger } from "e2b";
 import path from "path";
 import { template } from "./template";
 
-// Load .env from parent directory
 config({ path: path.join(process.cwd(), ".env") });
 
 async function main() {
-  console.log("Building production template...");
+  console.log("Building staging template...");
   console.log("Template source:", path.join(process.cwd(), "src/sandbox-templates"));
 
   const result = await Template.build(template, {
-    alias: "cmdclaw-agent-prod",
+    alias: "cmdclaw-agent-staging",
     cpuCount: 2,
     memoryMB: 2048,
     onBuildLogs: defaultBuildLogger(),
@@ -22,8 +21,8 @@ async function main() {
 
   console.log("\nTemplate built successfully!");
   console.log("Template ID:", result.templateId);
-  console.log("Alias: cmdclaw-agent-prod");
-  console.log("\nUse with: Sandbox.create('cmdclaw-agent-prod')");
+  console.log("Alias: cmdclaw-agent-staging");
+  console.log("\nUse with: Sandbox.create('cmdclaw-agent-staging')");
 }
 
 main().catch((error) => {
