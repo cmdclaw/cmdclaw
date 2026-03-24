@@ -1,29 +1,54 @@
 #!/usr/bin/env bun
 /**
- * Test script for E2B sandbox with Google Gmail and Slack integration
+ * Interactive E2B sandbox helper.
  *
  * Usage:
- *   bun e2b:sandbox
+ *   bun run e2b:sandbox
+ *   bun run e2b:sandbox -- --sandbox-id <sandbox-id>
+ *   bun run e2b:sandbox -- --conversation-id <conversation-id>
+ *   bun run e2b:sandbox -- --run-id <coworker-run-id>
+ *   bun run e2b:sandbox -- --builder-coworker-id <coworker-id>
  *
- * Automatically loads integration tokens from the database for the configured user.
+ * Create mode automatically loads integration tokens from the database for the configured user.
+ * Attach mode reconnects to an existing E2B sandbox without creating a new one.
  */
 
+import { closePool, db } from "@cmdclaw/db/client";
 import * as schema from "@cmdclaw/db/schema";
-// Load env
 import * as dotenvConfig from "dotenv/config";
-import { eq, and } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { and, eq } from "drizzle-orm";
 import { Sandbox } from "e2b";
-import { Pool } from "pg";
 import { createInterface } from "readline";
 
 void dotenvConfig;
 
 const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
-const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-const TEST_USER_EMAIL = "collebaptiste@gmail.com";
+const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
+const DEFAULT_CREATE_USER_EMAIL = "collebaptiste@gmail.com";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
+
+type ParsedArgs = {
+  sandboxId?: string;
+  conversationId?: string;
+  runId?: string;
+  builderCoworkerId?: string;
+  userEmail: string;
+  help: boolean;
+};
+
+type SandboxSource = "new" | "sandbox_id" | "conversation_id" | "run_id" | "builder_coworker_id";
+
+type ExistingSandboxTarget = {
+  sandboxId: string;
+  conversationId: string | null;
+  sessionId: string | null;
+  runtimeId: string | null;
+  sandboxProvider: string | null;
+  model: string | null;
+  source: SandboxSource;
+  sourceId: string;
+};
 
 const ENV_VAR_MAP: Record<IntegrationType, string> = {
   google_gmail: "GMAIL_ACCESS_TOKEN",
@@ -53,6 +78,120 @@ function normalizeInteractiveCommand(cmd: string): string {
     return `OPENCODE_CONFIG=/app/opencode.json ${trimmed}`;
   }
   return trimmed;
+}
+
+function requireArgValue(argv: string[], index: number, flag: string): string {
+  const value = argv[index];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
+}
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = {
+    userEmail: DEFAULT_CREATE_USER_EMAIL,
+    help: false,
+  };
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+
+    switch (arg) {
+      case "--sandbox-id":
+        args.sandboxId = requireArgValue(argv, i + 1, arg);
+        i += 1;
+        break;
+      case "--conversation-id":
+        args.conversationId = requireArgValue(argv, i + 1, arg);
+        i += 1;
+        break;
+      case "--run-id":
+        args.runId = requireArgValue(argv, i + 1, arg);
+        i += 1;
+        break;
+      case "--builder-coworker-id":
+        args.builderCoworkerId = requireArgValue(argv, i + 1, arg);
+        i += 1;
+        break;
+      case "--user-email":
+        args.userEmail = requireArgValue(argv, i + 1, arg);
+        i += 1;
+        break;
+      case "--help":
+      case "-h":
+        args.help = true;
+        break;
+      default:
+        throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  const attachSelectors = [
+    args.sandboxId,
+    args.conversationId,
+    args.runId,
+    args.builderCoworkerId,
+  ].filter((value): value is string => Boolean(value));
+
+  if (attachSelectors.length > 1) {
+    throw new Error(
+      "Use only one attach selector: --sandbox-id, --conversation-id, --run-id, or --builder-coworker-id.",
+    );
+  }
+
+  return args;
+}
+
+function printUsage(): void {
+  console.log(`
+Usage:
+  bun run e2b:sandbox
+  bun run e2b:sandbox -- --sandbox-id <sandbox-id>
+  bun run e2b:sandbox -- --conversation-id <conversation-id>
+  bun run e2b:sandbox -- --run-id <coworker-run-id>
+  bun run e2b:sandbox -- --builder-coworker-id <coworker-id>
+
+Options:
+  --sandbox-id <id>            Attach directly to an existing E2B sandbox
+  --conversation-id <id>       Attach via a chat or coworker conversation runtime
+  --run-id <id>                Attach via a coworker run
+  --builder-coworker-id <id>   Attach via a coworker builder conversation
+  --user-email <email>         User email for create mode token injection
+  --help                       Show this help
+`);
+}
+
+function isAttachMode(args: ParsedArgs): boolean {
+  return Boolean(args.sandboxId || args.conversationId || args.runId || args.builderCoworkerId);
+}
+
+async function connectSandboxById(sandboxId: string): Promise<Sandbox> {
+  const sandboxApi = Sandbox as unknown as {
+    connect?: (
+      id: string,
+      options?: {
+        timeoutMs?: number;
+      },
+    ) => Promise<Sandbox>;
+  };
+
+  if (!sandboxApi.connect) {
+    throw new Error("Sandbox.connect is not available in this E2B SDK version.");
+  }
+
+  const sandbox = await sandboxApi.connect(sandboxId, {
+    timeoutMs: SANDBOX_TIMEOUT_MS,
+  });
+
+  const timeoutApi = sandbox as Sandbox & {
+    setTimeout?: (timeoutMs: number) => Promise<unknown>;
+  };
+  if (typeof timeoutApi.setTimeout === "function") {
+    await timeoutApi.setTimeout(SANDBOX_TIMEOUT_MS);
+  }
+
+  return sandbox;
 }
 
 async function runInteractiveCommandWithPty(sandbox: Sandbox, cmd: string): Promise<number> {
@@ -99,7 +238,6 @@ async function runInteractiveCommandWithPty(sandbox: Sandbox, cmd: string): Prom
       if (b === 0x1b && i + 1 < merged.length) {
         const next = merged[i + 1];
 
-        // OSC response (eg: ESC ] 11;rgb:.... BEL or ESC \)
         if (next === 0x5d) {
           let j = i + 2;
           while (
@@ -130,7 +268,6 @@ async function runInteractiveCommandWithPty(sandbox: Sandbox, cmd: string): Prom
           continue;
         }
 
-        // CSI response (eg: ESC [ ? ... $y)
         if (next === 0x5b) {
           let j = i + 2;
           while (j < merged.length && (merged[j] < 0x40 || merged[j] > 0x7e)) {
@@ -167,8 +304,6 @@ async function runInteractiveCommandWithPty(sandbox: Sandbox, cmd: string): Prom
 
   const stdinHandler = (chunk: Buffer | string) => {
     if (typeof chunk === "string") {
-      // Some terminal capability/color probe responses can leak as text when readline is active.
-      // Ignore those so they are not injected back into the remote TUI as user input.
       if (/(?:^|])11;rgb:[0-9a-f/]+/i.test(chunk) || /\?\d+(?:;\d+)*\$[a-z]/i.test(chunk)) {
         return;
       }
@@ -214,129 +349,275 @@ async function runInteractiveCommandWithPty(sandbox: Sandbox, cmd: string): Prom
 }
 
 async function getIntegrationTokens(userEmail: string): Promise<Record<string, string>> {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const db = drizzle(pool, { schema });
+  const [foundUser] = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.email, userEmail))
+    .limit(1);
 
-  try {
-    // Find user by email
-    const [foundUser] = await db
-      .select({ id: schema.user.id })
-      .from(schema.user)
-      .where(eq(schema.user.email, userEmail))
-      .limit(1);
-
-    if (!foundUser) {
-      console.error(`User not found: ${userEmail}`);
-      return {};
-    }
-
-    // Get all enabled integrations with their tokens
-    const results = await db
-      .select({
-        type: schema.integration.type,
-        accessToken: schema.integrationToken.accessToken,
-      })
-      .from(schema.integration)
-      .innerJoin(
-        schema.integrationToken,
-        eq(schema.integration.id, schema.integrationToken.integrationId),
-      )
-      .where(
-        and(eq(schema.integration.userId, foundUser.id), eq(schema.integration.enabled, true)),
-      );
-
-    const envVars: Record<string, string> = {};
-    for (const row of results) {
-      const envVar = ENV_VAR_MAP[row.type as IntegrationType];
-      if (envVar) {
-        envVars[envVar] = row.accessToken;
-      }
-    }
-
-    return envVars;
-  } finally {
-    await pool.end();
+  if (!foundUser) {
+    console.error(`User not found: ${userEmail}`);
+    return {};
   }
+
+  const results = await db
+    .select({
+      type: schema.integration.type,
+      accessToken: schema.integrationToken.accessToken,
+    })
+    .from(schema.integration)
+    .innerJoin(
+      schema.integrationToken,
+      eq(schema.integration.id, schema.integrationToken.integrationId),
+    )
+    .where(and(eq(schema.integration.userId, foundUser.id), eq(schema.integration.enabled, true)));
+
+  const envVars: Record<string, string> = {};
+  for (const row of results) {
+    const envVar = ENV_VAR_MAP[row.type as IntegrationType];
+    if (envVar) {
+      envVars[envVar] = row.accessToken;
+    }
+  }
+
+  return envVars;
 }
 
-async function main() {
-  // Validate required env vars
-  if (!process.env.E2B_API_KEY) {
-    console.error("Error: E2B_API_KEY environment variable required");
-    process.exit(1);
+async function getRuntimeTargetByConversationId(
+  conversationId: string,
+): Promise<ExistingSandboxTarget | null> {
+  const runtime = await db.query.conversationRuntime.findFirst({
+    where: eq(schema.conversationRuntime.conversationId, conversationId),
+    columns: {
+      id: true,
+      sandboxId: true,
+      sessionId: true,
+      sandboxProvider: true,
+    },
+  });
+
+  if (!runtime?.sandboxId) {
+    return null;
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("Error: ANTHROPIC_API_KEY environment variable required");
-    process.exit(1);
+  const convo = await db.query.conversation.findFirst({
+    where: eq(schema.conversation.id, conversationId),
+    columns: {
+      model: true,
+    },
+  });
+
+  return {
+    sandboxId: runtime.sandboxId,
+    conversationId,
+    sessionId: runtime.sessionId,
+    runtimeId: runtime.id,
+    sandboxProvider: runtime.sandboxProvider,
+    model: convo?.model ?? null,
+    source: "conversation_id",
+    sourceId: conversationId,
+  };
+}
+
+async function getRuntimeTargetBySandboxId(
+  sandboxId: string,
+): Promise<ExistingSandboxTarget | null> {
+  const runtime = await db.query.conversationRuntime.findFirst({
+    where: eq(schema.conversationRuntime.sandboxId, sandboxId),
+    columns: {
+      id: true,
+      conversationId: true,
+      sandboxId: true,
+      sessionId: true,
+      sandboxProvider: true,
+    },
+  });
+
+  if (!runtime?.sandboxId) {
+    return null;
+  }
+
+  const convo = await db.query.conversation.findFirst({
+    where: eq(schema.conversation.id, runtime.conversationId),
+    columns: {
+      model: true,
+    },
+  });
+
+  return {
+    sandboxId: runtime.sandboxId,
+    conversationId: runtime.conversationId,
+    sessionId: runtime.sessionId,
+    runtimeId: runtime.id,
+    sandboxProvider: runtime.sandboxProvider,
+    model: convo?.model ?? null,
+    source: "sandbox_id",
+    sourceId: sandboxId,
+  };
+}
+
+async function resolveAttachTarget(args: ParsedArgs): Promise<ExistingSandboxTarget> {
+  if (args.sandboxId) {
+    if (!process.env.DATABASE_URL) {
+      return {
+        sandboxId: args.sandboxId,
+        conversationId: null,
+        sessionId: null,
+        runtimeId: null,
+        sandboxProvider: "e2b",
+        model: null,
+        source: "sandbox_id",
+        sourceId: args.sandboxId,
+      };
+    }
+
+    return (
+      (await getRuntimeTargetBySandboxId(args.sandboxId)) ?? {
+        sandboxId: args.sandboxId,
+        conversationId: null,
+        sessionId: null,
+        runtimeId: null,
+        sandboxProvider: "e2b",
+        model: null,
+        source: "sandbox_id",
+        sourceId: args.sandboxId,
+      }
+    );
   }
 
   if (!process.env.DATABASE_URL) {
-    console.error("Error: DATABASE_URL environment variable required");
-    process.exit(1);
+    throw new Error(
+      "DATABASE_URL environment variable required when resolving sandbox by conversation, run, or builder.",
+    );
   }
 
-  console.log(`Loading integration tokens for ${TEST_USER_EMAIL}...`);
-  const integrationEnvs = await getIntegrationTokens(TEST_USER_EMAIL);
-
-  // Build environment variables for the sandbox
-  const envs: Record<string, string> = {
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    ...integrationEnvs,
-  };
-
-  // Log which integrations are enabled
-  if (integrationEnvs.GMAIL_ACCESS_TOKEN) {
-    console.log("✓ Google Gmail integration enabled");
-  } else {
-    console.log("○ Google Gmail integration not found in database");
+  if (args.conversationId) {
+    const target = await getRuntimeTargetByConversationId(args.conversationId);
+    if (!target) {
+      throw new Error(`No active sandbox runtime found for conversation ${args.conversationId}.`);
+    }
+    return target;
   }
 
-  if (integrationEnvs.SLACK_ACCESS_TOKEN) {
-    console.log("✓ Slack integration enabled");
-  } else {
-    console.log("○ Slack integration not found in database");
+  if (args.runId) {
+    const run = await db.query.coworkerRun.findFirst({
+      where: eq(schema.coworkerRun.id, args.runId),
+      columns: {
+        generationId: true,
+      },
+    });
+
+    if (!run?.generationId) {
+      throw new Error(`Coworker run ${args.runId} does not have a generation to attach to.`);
+    }
+
+    const generation = await db.query.generation.findFirst({
+      where: eq(schema.generation.id, run.generationId),
+      columns: {
+        conversationId: true,
+      },
+    });
+
+    if (!generation?.conversationId) {
+      throw new Error(`Coworker run ${args.runId} has no linked conversation.`);
+    }
+
+    const target = await getRuntimeTargetByConversationId(generation.conversationId);
+    if (!target) {
+      throw new Error(`No active sandbox runtime found for coworker run ${args.runId}.`);
+    }
+
+    return {
+      ...target,
+      source: "run_id",
+      sourceId: args.runId,
+    };
   }
 
-  if (integrationEnvs.NOTION_ACCESS_TOKEN) {
-    console.log("✓ Notion integration enabled");
+  if (args.builderCoworkerId) {
+    const coworker = await db.query.coworker.findFirst({
+      where: eq(schema.coworker.id, args.builderCoworkerId),
+      columns: {
+        builderConversationId: true,
+      },
+    });
+
+    if (!coworker?.builderConversationId) {
+      throw new Error(
+        `Coworker ${args.builderCoworkerId} does not have a builder conversation to attach to.`,
+      );
+    }
+
+    const target = await getRuntimeTargetByConversationId(coworker.builderConversationId);
+    if (!target) {
+      throw new Error(
+        `No active sandbox runtime found for builder coworker ${args.builderCoworkerId}.`,
+      );
+    }
+
+    return {
+      ...target,
+      source: "builder_coworker_id",
+      sourceId: args.builderCoworkerId,
+    };
   }
 
-  if (integrationEnvs.LINEAR_ACCESS_TOKEN) {
-    console.log("✓ Linear integration enabled");
+  throw new Error("No attach target provided.");
+}
+
+function assertE2BTarget(target: ExistingSandboxTarget): void {
+  if (target.sandboxProvider && target.sandboxProvider !== "e2b") {
+    throw new Error(
+      `Sandbox ${target.sandboxId} is using provider "${target.sandboxProvider}", not "e2b".`,
+    );
   }
+}
 
-  if (integrationEnvs.GITHUB_ACCESS_TOKEN) {
-    console.log("✓ GitHub integration enabled");
-  }
+function printSandboxInfo(target: ExistingSandboxTarget, mode: "create" | "attach"): void {
+  console.log("");
+  console.log(mode === "create" ? "Sandbox ready:" : "Attached to sandbox:");
+  console.log(`  sandboxId: ${target.sandboxId}`);
+  console.log(`  source: ${target.source} (${target.sourceId})`);
+  console.log(`  conversationId: ${target.conversationId ?? "<unknown>"}`);
+  console.log(`  runtimeId: ${target.runtimeId ?? "<unknown>"}`);
+  console.log(`  sessionId: ${target.sessionId ?? "<unknown>"}`);
+  console.log(`  provider: ${target.sandboxProvider ?? "e2b"}`);
+  console.log(`  model: ${target.model ?? "<unknown>"}`);
+}
 
-  if (integrationEnvs.AIRTABLE_ACCESS_TOKEN) {
-    console.log("✓ Airtable integration enabled");
-  }
-
-  console.log(`\nCreating sandbox from template: ${TEMPLATE_NAME}...`);
-
-  const bootStart = Date.now();
-  const sandbox = await Sandbox.create(TEMPLATE_NAME, {
-    envs,
-    timeoutMs: SANDBOX_TIMEOUT_MS,
-  });
-  const bootDurationMs = Date.now() - bootStart;
-
-  console.log(`✓ Sandbox created: ${sandbox.sandboxId}`);
-  console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
-  console.log("\nAvailable CLI commands in sandbox:");
-  console.log("  google-gmail list|get|unread|send  - Gmail operations");
-  console.log("  slack channels|history|send|search|users - Slack operations");
-  console.log("  claude -p <prompt>          - Run Claude Code\n");
-
-  // Interactive REPL
+async function startRepl(
+  sandbox: Sandbox,
+  target: ExistingSandboxTarget,
+  mode: "create" | "attach",
+): Promise<void> {
   const makeReadline = () =>
     createInterface({
       input: process.stdin,
       output: process.stdout,
     });
   let rl = makeReadline();
+  let shuttingDown = false;
+
+  const shutdown = async (action: "detach" | "kill"): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    rl.close();
+
+    try {
+      if (action === "kill") {
+        console.log("\nKilling sandbox...");
+        await sandbox.kill();
+      } else {
+        console.log("\nDetaching from sandbox...");
+      }
+    } finally {
+      await closePool().catch(() => undefined);
+      console.log("Goodbye!");
+      process.exit(0);
+    }
+  };
 
   const prompt = () => {
     rl.question("sandbox> ", async (input) => {
@@ -348,11 +629,8 @@ async function main() {
       }
 
       if (cmd === "exit" || cmd === "quit") {
-        console.log("Killing sandbox...");
-        await sandbox.kill();
-        console.log("Goodbye!");
-        rl.close();
-        process.exit(0);
+        await shutdown(mode === "create" ? "kill" : "detach");
+        return;
       }
 
       if (cmd === "help") {
@@ -362,10 +640,23 @@ Commands:
   google-gmail <cmd>   - Gmail CLI (list, get, unread, send)
   slack <cmd>          - Slack CLI (channels, history, send, search, users)
   claude -p <prompt>   - Run Claude Code
+  info                 - Show resolved sandbox metadata
   env                  - Show environment variables
-  exit/quit            - Kill sandbox and exit
+  kill                 - Kill sandbox and exit
+  exit/quit            - ${mode === "create" ? "Kill sandbox and exit" : "Detach and exit"}
 `);
         prompt();
+        return;
+      }
+
+      if (cmd === "info") {
+        printSandboxInfo(target, mode);
+        prompt();
+        return;
+      }
+
+      if (cmd === "kill") {
+        await shutdown("kill");
         return;
       }
 
@@ -403,16 +694,118 @@ Commands:
   console.log('Type "help" for available commands, "exit" to quit.\n');
   prompt();
 
-  // Handle SIGINT (Ctrl+C)
   process.on("SIGINT", async () => {
-    console.log("\nKilling sandbox...");
-    await sandbox.kill();
-    console.log("Goodbye!");
-    process.exit(0);
+    await shutdown(mode === "create" ? "kill" : "detach");
   });
 }
 
-main().catch((error) => {
+function printAvailableCommands(): void {
+  console.log("\nAvailable CLI commands in sandbox:");
+  console.log("  google-gmail list|get|unread|send  - Gmail operations");
+  console.log("  slack channels|history|send|search|users - Slack operations");
+  console.log("  claude -p <prompt>          - Run Claude Code\n");
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+
+  if (args.help) {
+    printUsage();
+    return;
+  }
+
+  if (!process.env.E2B_API_KEY) {
+    throw new Error("E2B_API_KEY environment variable required");
+  }
+
+  if (isAttachMode(args)) {
+    const target = await resolveAttachTarget(args);
+    assertE2BTarget(target);
+    await closePool().catch(() => undefined);
+
+    console.log(`Connecting to existing sandbox ${target.sandboxId}...`);
+    const sandbox = await connectSandboxById(target.sandboxId);
+    console.log(`✓ Connected to sandbox: ${sandbox.sandboxId}`);
+    printSandboxInfo(target, "attach");
+    printAvailableCommands();
+    await startRepl(sandbox, target, "attach");
+    return;
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY environment variable required");
+  }
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL environment variable required");
+  }
+
+  console.log(`Loading integration tokens for ${args.userEmail}...`);
+  const integrationEnvs = await getIntegrationTokens(args.userEmail);
+  await closePool().catch(() => undefined);
+
+  const envs: Record<string, string> = {
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    ...integrationEnvs,
+  };
+
+  if (integrationEnvs.GMAIL_ACCESS_TOKEN) {
+    console.log("✓ Google Gmail integration enabled");
+  } else {
+    console.log("○ Google Gmail integration not found in database");
+  }
+
+  if (integrationEnvs.SLACK_ACCESS_TOKEN) {
+    console.log("✓ Slack integration enabled");
+  } else {
+    console.log("○ Slack integration not found in database");
+  }
+
+  if (integrationEnvs.NOTION_ACCESS_TOKEN) {
+    console.log("✓ Notion integration enabled");
+  }
+
+  if (integrationEnvs.LINEAR_ACCESS_TOKEN) {
+    console.log("✓ Linear integration enabled");
+  }
+
+  if (integrationEnvs.GITHUB_ACCESS_TOKEN) {
+    console.log("✓ GitHub integration enabled");
+  }
+
+  if (integrationEnvs.AIRTABLE_ACCESS_TOKEN) {
+    console.log("✓ Airtable integration enabled");
+  }
+
+  console.log(`\nCreating sandbox from template: ${TEMPLATE_NAME}...`);
+
+  const bootStart = Date.now();
+  const sandbox = await Sandbox.create(TEMPLATE_NAME, {
+    envs,
+    timeoutMs: SANDBOX_TIMEOUT_MS,
+  });
+  const bootDurationMs = Date.now() - bootStart;
+
+  const target: ExistingSandboxTarget = {
+    sandboxId: sandbox.sandboxId,
+    conversationId: null,
+    sessionId: null,
+    runtimeId: null,
+    sandboxProvider: "e2b",
+    model: null,
+    source: "new",
+    sourceId: TEMPLATE_NAME,
+  };
+
+  console.log(`✓ Sandbox created: ${sandbox.sandboxId}`);
+  console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
+  printSandboxInfo(target, "create");
+  printAvailableCommands();
+  await startRepl(sandbox, target, "create");
+}
+
+main().catch(async (error) => {
+  await closePool().catch(() => undefined);
   console.error("Fatal error:", error);
   process.exit(1);
 });
