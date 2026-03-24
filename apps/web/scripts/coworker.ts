@@ -1,6 +1,11 @@
 import type { RouterClient } from "@orpc/server";
 import { buildCoworkerPatchApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
 import { coworkerBuilderPatchSchema } from "@cmdclaw/core/server/services/coworker-builder-service";
+import { db, closePool } from "@cmdclaw/db/client";
+import { conversation, coworkerRun } from "@cmdclaw/db/schema";
+import { eq } from "drizzle-orm";
+import { readFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
 import type { AppRouter } from "@/server/orpc";
 import { formatPersistedChatTranscript } from "../src/components/chat/chat-transcript";
 import { DEFAULT_SERVER_URL, createRpcClient, loadConfig } from "./lib/cli-shared";
@@ -16,6 +21,7 @@ type ParsedArgs = {
   // Generic command flags
   payload?: string;
   watch: boolean;
+  debug: boolean;
   watchIntervalSeconds: number;
   limit?: number;
   // Create flags
@@ -35,6 +41,8 @@ type ParsedArgs = {
   model?: string;
   baseUpdatedAt?: string;
   patch?: string;
+  filePath?: string;
+  description?: string;
 };
 
 type CoworkerIntegrationType =
@@ -87,6 +95,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
     positionals: [],
     watch: false,
+    debug: false,
     watchIntervalSeconds: 2,
   };
 
@@ -106,6 +115,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--watch":
         args.watch = true;
+        break;
+      case "--debug":
+        args.debug = true;
         break;
       case "--watch-interval": {
         const parsed = Number(argv[i + 1]);
@@ -222,6 +234,14 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.patch = argv[i + 1];
         i += 1;
         break;
+      case "--file":
+        args.filePath = argv[i + 1];
+        i += 1;
+        break;
+      case "--description":
+        args.description = argv[i + 1];
+        i += 1;
+        break;
       default:
         if (arg?.startsWith("-")) {
           throw new Error(`Unknown flag: ${arg}`);
@@ -254,6 +274,51 @@ function formatDate(value: Date | string | null | undefined): string {
   }
   const date = typeof value === "string" ? new Date(value) : value;
   return date.toLocaleString();
+}
+
+function inferMimeType(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case ".mp3":
+      return "audio/mpeg";
+    case ".wav":
+      return "audio/wav";
+    case ".m4a":
+      return "audio/mp4";
+    case ".mp4":
+      return "video/mp4";
+    case ".mov":
+      return "video/quicktime";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".pdf":
+      return "application/pdf";
+    case ".json":
+      return "application/json";
+    case ".csv":
+      return "text/csv";
+    case ".txt":
+    case ".md":
+      return "text/plain";
+    case ".doc":
+      return "application/msword";
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".xls":
+      return "application/vnd.ms-excel";
+    case ".xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case ".svg":
+      return "image/svg+xml";
+    case ".gif":
+      return "image/gif";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function statusBadge(status: string): string {
@@ -341,25 +406,31 @@ function printHelp(): void {
   console.log("\nCommands:");
   console.log("  list                              List coworkers");
   console.log("  create                            Create coworker (flags below)");
-  console.log("  patch <coworker-id>               Apply a coworker patch");
-  console.log("  show <coworker-id>                Show full coworker details");
-  console.log("  run <coworker-id>                 Trigger a coworker run");
+  console.log("  patch <coworker-id|@username>     Apply a coworker patch");
+  console.log(
+    "  upload-document <coworker-id|@username> Upload a persistent document for future runs",
+  );
+  console.log("  show <coworker-id|@username>      Show full coworker details");
+  console.log("  run <coworker-id|@username>       Trigger a coworker run");
   console.log("  logs <run-id>                     Show run events and transcript");
   console.log("  approve <run-id> <tool-use-id> <approve|deny>  Submit pending approval");
   console.log(
-    "  builder <coworker-id>               Run coworker builder agent on an existing coworker",
+    "  builder <coworker-id|@username>     Run coworker builder agent on an existing coworker",
   );
   console.log(
     "  close-loop                          Create a draft coworker and let builder agent configure it",
   );
   console.log("  close-loop-example                  Example: hourly post in #bap-experiments");
   console.log("\nAliases:");
-  console.log("  trigger <coworker-id>             Alias of run");
+  console.log("  trigger <coworker-id|@username>   Alias of run");
   console.log("  show-run <run-id>                 Alias of logs");
-  console.log("  runs <coworker-id>                List recent runs for a coworker");
+  console.log("  runs <coworker-id|@username>      List recent runs for a coworker");
   console.log("\nRun flags:");
   console.log("  -P, --payload <json>              JSON payload for run/trigger");
   console.log("  --watch                           Poll until run reaches terminal status");
+  console.log(
+    "  --debug                           Trigger a fresh run and tail run, transcript, and final DB state",
+  );
   console.log("  --watch-interval <seconds>        Polling interval for --watch (default 2)");
   console.log("\nLogs/Runs flags:");
   console.log(
@@ -389,6 +460,9 @@ function printHelp(): void {
   console.log("\nPatch flags:");
   console.log("  --base-updated-at <iso>           Required optimistic concurrency timestamp");
   console.log("  --patch <json>                    JSON patch payload");
+  console.log("\nUpload Document flags:");
+  console.log("  --file <path>                     Local file path to upload");
+  console.log("  --description <text>              Optional document notes");
   console.log("\nExample:");
   console.log('  bun run coworker --message "send message in #bap-experiments every hour"\n');
 }
@@ -400,6 +474,8 @@ type CoworkerDetails = {
   username: string | null;
   status: string;
   autoApprove: boolean;
+  model: string;
+  authSource: string | null;
   triggerType: string;
   prompt: string;
   promptDo: string | null;
@@ -509,6 +585,8 @@ function printCoworkerDetails(
   console.log(`  username: ${details.username ? `@${details.username}` : "-"}`);
   console.log(`  description: ${details.description ?? "-"}`);
   console.log(`  trigger: ${details.triggerType}`);
+  console.log(`  model: ${details.model}`);
+  console.log(`  auth source: ${details.authSource ?? "-"}`);
   console.log(`  tool access: ${details.toolAccessMode}`);
   console.log(`  auto approve: ${details.autoApprove ? "yes" : "no"}`);
   console.log(`  created: ${formatDate(details.createdAt)}`);
@@ -557,12 +635,46 @@ async function listCoworkers(client: RouterClient<AppRouter>, args?: ParsedArgs)
   }
 }
 
-async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
-  const coworkerId = args.positionals[0];
-  if (!coworkerId) {
-    throw new Error("Usage: bun run coworker show <coworker-id> [--format text|markdown|json]");
+function isCoworkerUsernameReference(value: string): boolean {
+  return value.trim().startsWith("@");
+}
+
+async function resolveCoworkerReference(
+  client: RouterClient<AppRouter>,
+  reference: string,
+): Promise<string> {
+  const trimmed = reference.trim();
+  if (!trimmed) {
+    throw new Error("Coworker reference cannot be empty.");
   }
 
+  if (!isCoworkerUsernameReference(trimmed)) {
+    return trimmed;
+  }
+
+  const username = trimmed.slice(1).trim().toLowerCase();
+  if (!username) {
+    throw new Error("Coworker username cannot be empty.");
+  }
+
+  const coworkers = await client.coworker.list();
+  const matched = coworkers.find((coworker) => coworker.username === username);
+  if (!matched) {
+    throw new Error(`Coworker @${username} not found.`);
+  }
+
+  return matched.id;
+}
+
+async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
+  const coworkerRef = args.positionals[0];
+  if (!coworkerRef) {
+    throw new Error(
+      "Usage: bun run coworker show <coworker-id|@username> [--format text|markdown|json]",
+    );
+  }
+
+  const coworkerId = await resolveCoworkerReference(client, coworkerRef);
   const coworker = await client.coworker.get({ id: coworkerId });
   printCoworkerDetails(coworker, args.format);
 }
@@ -583,16 +695,17 @@ function parsePatchInput(rawPatch: string | undefined) {
 }
 
 async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
-  const coworkerId = args.positionals[0];
-  if (!coworkerId) {
+  const coworkerRef = args.positionals[0];
+  if (!coworkerRef) {
     throw new Error(
-      "Usage: bun run coworker patch <coworker-id> --base-updated-at <iso> --patch <json> [--json]",
+      "Usage: bun run coworker patch <coworker-id|@username> --base-updated-at <iso> --patch <json> [--json]",
     );
   }
   if (!args.baseUpdatedAt?.trim()) {
     throw new Error("patch requires --base-updated-at");
   }
 
+  const coworkerId = await resolveCoworkerReference(client, coworkerRef);
   const result = await client.coworker.patch({
     coworkerId,
     baseUpdatedAt: args.baseUpdatedAt.trim(),
@@ -621,6 +734,42 @@ async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs):
   if (envelope.details.length > 0) {
     console.log(envelope.details.join("\n"));
   }
+}
+
+async function uploadCoworkerDocumentCommand(
+  client: RouterClient<AppRouter>,
+  args: ParsedArgs,
+): Promise<void> {
+  const coworkerRef = args.positionals[0];
+  if (!coworkerRef) {
+    throw new Error(
+      "Usage: bun run coworker upload-document <coworker-id|@username> --file <path> [--description <text>] [--json]",
+    );
+  }
+  if (!args.filePath?.trim()) {
+    throw new Error("upload-document requires --file");
+  }
+
+  const coworkerId = await resolveCoworkerReference(client, coworkerRef);
+  const filePath = args.filePath.trim();
+  const content = await readFile(filePath);
+  const result = await client.coworker.uploadDocument({
+    coworkerId,
+    filename: basename(filePath),
+    mimeType: inferMimeType(filePath),
+    content: content.toString("base64"),
+    description: args.description,
+  });
+
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`Uploaded ${result.filename} to coworker ${coworkerId}`);
+  console.log(`  document id: ${result.id}`);
+  console.log(`  mime type: ${result.mimeType}`);
+  console.log(`  size: ${result.sizeBytes} bytes`);
 }
 
 async function createCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
@@ -663,9 +812,17 @@ async function createCoworker(client: RouterClient<AppRouter>, args: ParsedArgs)
 }
 
 async function runCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
-  const coworkerId = args.positionals[0];
-  if (!coworkerId) {
-    throw new Error("Usage: bun run coworker run <coworker-id> [--payload <json>] [--watch]");
+  const coworkerRef = args.positionals[0];
+  if (!coworkerRef) {
+    throw new Error(
+      "Usage: bun run coworker run <coworker-id|@username> [--payload <json>] [--watch] [--debug]",
+    );
+  }
+
+  const coworkerId = await resolveCoworkerReference(client, coworkerRef);
+  const coworker = args.debug ? await client.coworker.get({ id: coworkerId }) : null;
+  if (coworker) {
+    printDebugCoworkerSnapshot(coworker);
   }
 
   const payload = parsePayload(args.payload);
@@ -676,18 +833,294 @@ async function runCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): P
   console.log(`  generation id: ${result.generationId}`);
   console.log(`  conversation id: ${result.conversationId}`);
 
+  if (args.debug) {
+    console.log("\n[debug] Monitoring fresh run using current saved coworker definition.\n");
+    await debugCoworkerRun(
+      client,
+      {
+        coworkerId: result.coworkerId,
+        runId: result.runId,
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      },
+      args.watchIntervalSeconds,
+    );
+    return;
+  }
+
   if (args.watch) {
     console.log("\nWatching logs... (Ctrl+C to stop)\n");
     await printRunLogs(client, result.runId, true, args.watchIntervalSeconds);
   }
 }
 
-async function listRuns(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
-  const coworkerId = args.positionals[0];
-  if (!coworkerId) {
-    throw new Error("Usage: bun run coworker runs <coworker-id> [--limit <n>]");
+type DebugControl = {
+  stopRequested: boolean;
+  cleanupStarted: boolean;
+  signalCount: number;
+};
+
+type ContentPartLike =
+  | {
+      type?: unknown;
+      id?: unknown;
+      name?: unknown;
+      input?: unknown;
+      tool_use_id?: unknown;
+      text?: unknown;
+      content?: unknown;
+    }
+  | Record<string, unknown>;
+
+function printPrefixedBlock(prefix: string, content: string): void {
+  for (const line of content.split("\n")) {
+    console.log(`${prefix} ${line}`);
+  }
+}
+
+function printDebugCoworkerSnapshot(details: CoworkerDetails): void {
+  console.log("[debug] Current coworker definition");
+  console.log(`[debug] id: ${details.id}`);
+  console.log(`[debug] name: ${details.name}`);
+  console.log(`[debug] updated: ${formatDate(details.updatedAt)}`);
+  console.log(`[debug] trigger: ${details.triggerType}`);
+  console.log(`[debug] model: ${details.model}`);
+  console.log(`[debug] auth source: ${details.authSource ?? "-"}`);
+  console.log(`[debug] auto approve: ${details.autoApprove ? "yes" : "no"}`);
+  console.log(`[debug] tool access: ${details.toolAccessMode}`);
+  console.log(`[debug] allowed integrations: ${details.allowedIntegrations.join(", ") || "-"}`);
+  console.log(
+    `[debug] custom integrations: ${details.allowedCustomIntegrations.join(", ") || "-"}`,
+  );
+  console.log(`[debug] allowed skills: ${details.allowedSkillSlugs.join(", ") || "-"}`);
+  console.log("[debug] prompt:");
+  printPrefixedBlock("[debug]", details.prompt || "(empty)");
+  if (details.promptDo) {
+    console.log("[debug] prompt do:");
+    printPrefixedBlock("[debug]", details.promptDo);
+  }
+  if (details.promptDont) {
+    console.log("[debug] prompt don't:");
+    printPrefixedBlock("[debug]", details.promptDont);
+  }
+  console.log("");
+}
+
+function createDebugControl(): {
+  control: DebugControl;
+  dispose: () => void;
+} {
+  const control: DebugControl = {
+    stopRequested: false,
+    cleanupStarted: false,
+    signalCount: 0,
+  };
+
+  const onInterrupt = () => {
+    control.signalCount += 1;
+    if (control.signalCount === 1) {
+      control.stopRequested = true;
+      console.log(
+        "\n[debug] Interrupt received, stopping live tail and printing final DB snapshot...",
+      );
+      return;
+    }
+    if (control.cleanupStarted) {
+      console.log("\n[debug] Second interrupt received during cleanup, exiting immediately.");
+      process.exit(130);
+    }
+  };
+
+  process.on("SIGINT", onInterrupt);
+
+  return {
+    control,
+    dispose: () => {
+      process.off("SIGINT", onInterrupt);
+    },
+  };
+}
+
+function summarizeFinalContentParts(parts: unknown[] | null | undefined): Array<string> {
+  const items = Array.isArray(parts) ? (parts as ContentPartLike[]) : [];
+  const pickLast = (predicate: (part: ContentPartLike) => boolean) => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const part = items[index];
+      if (predicate(part)) {
+        return part;
+      }
+    }
+    return null;
+  };
+
+  const summaries: Array<string> = [];
+  const lastToolUse = pickLast((part) => part.type === "tool_use");
+  if (lastToolUse) {
+    summaries.push(
+      `last tool_use: ${String(lastToolUse.name ?? "unknown")} ${JSON.stringify(lastToolUse.input ?? {})}`,
+    );
+  }
+  const lastToolResult = pickLast((part) => part.type === "tool_result");
+  if (lastToolResult) {
+    summaries.push(`last tool_result: ${String(lastToolResult.content ?? "")}`);
+  }
+  const lastText = pickLast((part) => part.type === "text");
+  if (lastText) {
+    summaries.push(`last text: ${String(lastText.text ?? "")}`);
+  }
+  return summaries;
+}
+
+async function printFinalDbSnapshot(runId: string): Promise<void> {
+  try {
+    const run = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.id, runId),
+      with: { generation: true },
+    });
+    if (!run) {
+      console.warn(`[db] Run ${runId} not found.`);
+      return;
+    }
+
+    const linkedConversation = run.generation?.conversationId
+      ? await db.query.conversation.findFirst({
+          where: eq(conversation.id, run.generation.conversationId),
+        })
+      : null;
+
+    console.log("");
+    console.log("[db] Final persisted snapshot");
+    console.log(`[db] run.id: ${run.id}`);
+    console.log(`[db] run.status: ${run.status}`);
+    console.log(`[db] run.startedAt: ${formatDate(run.startedAt)}`);
+    console.log(`[db] run.finishedAt: ${formatDate(run.finishedAt)}`);
+    console.log(`[db] run.errorMessage: ${run.errorMessage ?? "-"}`);
+    console.log(`[db] run.triggerPayload: ${JSON.stringify(run.triggerPayload ?? {})}`);
+
+    if (run.generation) {
+      console.log(`[db] generation.id: ${run.generation.id}`);
+      console.log(`[db] generation.status: ${run.generation.status}`);
+      console.log(`[db] generation.completedAt: ${formatDate(run.generation.completedAt)}`);
+      console.log(`[db] generation.errorMessage: ${run.generation.errorMessage ?? "-"}`);
+      console.log(
+        `[db] generation.pendingApproval: ${run.generation.pendingApproval ? "present" : "null"}`,
+      );
+      console.log(
+        `[db] generation.pendingAuth: ${run.generation.pendingAuth ? "present" : "null"}`,
+      );
+      console.log(`[db] generation.sandboxId: ${run.generation.sandboxId ?? "-"}`);
+      console.log(`[db] generation.sandboxProvider: ${run.generation.sandboxProvider ?? "-"}`);
+      console.log(`[db] generation.runtimeHarness: ${run.generation.runtimeHarness ?? "-"}`);
+      console.log(
+        `[db] generation.runtimeProtocolVersion: ${run.generation.runtimeProtocolVersion ?? "-"}`,
+      );
+      const partSummaries = summarizeFinalContentParts(run.generation.contentParts);
+      if (partSummaries.length > 0) {
+        for (const summary of partSummaries) {
+          printPrefixedBlock("[db]", summary);
+        }
+      }
+    } else {
+      console.log("[db] generation: -");
+    }
+
+    if (linkedConversation) {
+      console.log(`[db] conversation.id: ${linkedConversation.id}`);
+      console.log(`[db] conversation.generationStatus: ${linkedConversation.generationStatus}`);
+      console.log(
+        `[db] conversation.currentGenerationId: ${linkedConversation.currentGenerationId ?? "-"}`,
+      );
+      console.log(`[db] conversation.updatedAt: ${formatDate(linkedConversation.updatedAt)}`);
+    } else {
+      console.log("[db] conversation: -");
+    }
+  } catch (error) {
+    console.warn(
+      `[db] Failed to load final snapshot: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function debugCoworkerRun(
+  client: RouterClient<AppRouter>,
+  params: {
+    coworkerId: string;
+    runId: string;
+    generationId: string;
+    conversationId: string;
+  },
+  watchIntervalSeconds: number,
+): Promise<void> {
+  const { runId } = params;
+  const seenEventIds = new Set<string>();
+  let previousStatus = "";
+  let lastTranscript = "";
+  const { control, dispose } = createDebugControl();
+
+  try {
+    while (!control.stopRequested) {
+      // eslint-disable-next-line no-await-in-loop -- polling loop needs sequential fetches
+      const run = await client.coworker.getRun({ id: runId });
+
+      if (run.status !== previousStatus) {
+        console.log(`[run] status: ${previousStatus || "-"} -> ${run.status}`);
+        console.log(`[run] started: ${formatDate(run.startedAt)}`);
+        if (run.finishedAt) {
+          console.log(`[run] finished: ${formatDate(run.finishedAt)}`);
+        }
+        if (run.errorMessage) {
+          printPrefixedBlock("[run]", `error: ${run.errorMessage}`);
+        }
+        previousStatus = run.status;
+      }
+
+      const unseenEvents = run.events.filter((event) => !seenEventIds.has(event.id));
+      for (const event of unseenEvents) {
+        seenEventIds.add(event.id);
+        console.log(`[run] event ${event.type} @ ${formatDate(event.createdAt)}`);
+        printPrefixedBlock("[run]", JSON.stringify(event.payload, null, 2));
+      }
+
+      if (run.conversationId) {
+        try {
+          // eslint-disable-next-line no-await-in-loop -- polling loop needs sequential fetches
+          const runConversation = await client.conversation.get({ id: run.conversationId });
+          const transcript = formatConversationTranscript(runConversation.messages);
+          if (transcript && transcript !== lastTranscript) {
+            const label = lastTranscript ? "updated transcript" : "transcript";
+            console.log(`[transcript] ${label}`);
+            printPrefixedBlock("[transcript]", transcript);
+            lastTranscript = transcript;
+          }
+        } catch (error) {
+          console.error(
+            `[transcript] Failed to load transcript: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      if (TERMINAL_STATUSES.has(run.status)) {
+        break;
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- polling loop waits between sequential fetches
+      await sleep(watchIntervalSeconds * 1000);
+    }
+  } finally {
+    dispose();
   }
 
+  control.cleanupStarted = true;
+  await printFinalDbSnapshot(runId);
+}
+
+async function listRuns(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
+  const coworkerRef = args.positionals[0];
+  if (!coworkerRef) {
+    throw new Error("Usage: bun run coworker runs <coworker-id|@username> [--limit <n>]");
+  }
+
+  const coworkerId = await resolveCoworkerReference(client, coworkerRef);
   const runs = await client.coworker.listRuns({
     coworkerId,
     limit: args.limit ?? 20,
@@ -889,6 +1322,10 @@ async function streamGenerationUntilTerminal(
   return "done";
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function startBuilderAgent(
   client: RouterClient<AppRouter>,
   params: {
@@ -931,14 +1368,15 @@ function getCloseLoopExampleGoal(): string {
 }
 
 async function runBuilderCommand(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
-  const coworkerId = args.positionals[0];
-  if (!coworkerId) {
-    throw new Error("Usage: bun run coworker builder <coworker-id> --message <text>");
+  const coworkerRef = args.positionals[0];
+  if (!coworkerRef) {
+    throw new Error("Usage: bun run coworker builder <coworker-id|@username> --message <text>");
   }
   if (!args.message?.trim()) {
     throw new Error("builder requires --message");
   }
 
+  const coworkerId = await resolveCoworkerReference(client, coworkerRef);
   await startBuilderAgent(client, {
     coworkerId,
     goal: args.message.trim(),
@@ -990,10 +1428,6 @@ async function runCloseLoopCommand(
   });
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function main(): Promise<void> {
   let parsed: ParsedArgs;
 
@@ -1037,6 +1471,9 @@ async function main(): Promise<void> {
       case "patch":
         await patchCoworker(client, parsed);
         break;
+      case "upload-document":
+        await uploadCoworkerDocumentCommand(client, parsed);
+        break;
       case "create":
       case "new":
         await createCoworker(client, parsed);
@@ -1076,6 +1513,8 @@ async function main(): Promise<void> {
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
+  } finally {
+    await closePool().catch(() => undefined);
   }
 }
 

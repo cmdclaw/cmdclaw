@@ -26,3 +26,42 @@ In this codebase, an example of"closing the loop" is:
 5. Iterate immediately until the prompt result matches expected behavior.
 
 That is a closed loop because implementation, runtime execution, and verification happen continuously in one workflow.
+
+## Coworker debug loop
+
+For coworker debugging, the equivalent runner is `bun run coworker`, not `bun run chat coworker`.
+
+Use this loop when you want to reproduce a coworker issue and watch it live:
+
+1. Start a fresh coworker run from the current saved definition and monitor it in one session:
+   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun run coworker run <coworker-id> --debug`
+2. If you already have a run id, tail only that run:
+   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun run coworker logs <run-id> --watch`
+3. Run a chat control case through the same runtime to compare behavior:
+   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun run chat --message "<repro prompt>" --model openai/gpt-5.4 --auto-approve`
+4. Inspect the persisted DB state directly if you want a separate raw query:
+   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun -e 'import { db } from "@cmdclaw/db/client"; import { coworkerRun } from "@cmdclaw/db/schema"; import { eq } from "drizzle-orm"; const id = "<run-id>"; console.log(JSON.stringify(await db.query.coworkerRun.findFirst({ where: eq(coworkerRun.id, id), with: { generation: true } }), null, 2)); process.exit(0);'`
+
+### Current stuck-run repro
+
+For the Slack failure investigated here:
+
+- Coworker id:
+  `483b3289-ee99-48f4-b43f-31741d1c890b`
+- Existing stuck run:
+  `36196da2-7cb1-4971-ab42-fc1317226107`
+- Chat control prompt:
+  `Send the word test to Slack channel C0AN8M0VA75 as bot using the Slack tool. Do not use any fallback. If it fails, explain the failure.`
+
+Expected signal for the bug:
+
+1. The coworker stream shows a failed Slack `send` tool result.
+2. No approval is pending.
+3. No final assistant text is produced.
+4. The coworker run and linked generation remain `running`.
+
+Expected signal for the control:
+
+1. Chat shows the same Slack error.
+2. Chat produces a final explanation.
+3. The chat generation finishes normally.
