@@ -149,7 +149,7 @@ export default function AdminSubscriptionsPage() {
         <h2 className="text-xl font-semibold">Shared CmdClaw Models</h2>
         <p className="text-muted-foreground mt-1 text-sm">
           Claude Sonnet 4.6 is built into CmdClaw Models. Connect shared ChatGPT access to add
-          GPT-5.4 for every user in the shared model selector.
+          GPT-5.4 and GPT-5.4 Mini for every user in the shared model selector.
         </p>
       </div>
 
@@ -171,16 +171,16 @@ export default function AdminSubscriptionsPage() {
                 {isConnected ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    Shared GPT-5.4 active
+                    Shared ChatGPT models active
                   </span>
                 ) : null}
               </div>
               <p className="text-muted-foreground mt-1 text-sm">
-                Claude Sonnet 4.6 is always available. Connecting ChatGPT here unlocks GPT-5.4 in
-                CmdClaw Models for all users.
+                Claude Sonnet 4.6 is always available. Connecting ChatGPT here unlocks GPT-5.4 and
+                GPT-5.4 Mini in CmdClaw Models for all users.
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {["Claude Sonnet 4.6", "GPT-5.4"].map((model) => (
+                {["Claude Sonnet 4.6", "GPT-5.4", "GPT-5.4 Mini"].map((model) => (
                   <span
                     key={model}
                     className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-[11px] font-medium"
@@ -190,7 +190,8 @@ export default function AdminSubscriptionsPage() {
                 ))}
               </div>
               <p className="text-muted-foreground mt-3 text-xs">
-                GPT-5.4 uses the shared ChatGPT connection. Claude Sonnet 4.6 is CmdClaw-managed.
+                GPT-5.4 and GPT-5.4 Mini use the shared ChatGPT connection. Claude Sonnet 4.6 is
+                CmdClaw-managed.
               </p>
             </div>
           </div>
@@ -223,10 +224,10 @@ export default function AdminSubscriptionsPage() {
 
         {deviceFlow ? (
           <div className="mt-6 rounded-xl border p-4">
-            <p className="text-sm font-medium">Finish GPT-5.4 shared connection</p>
+            <p className="text-sm font-medium">Finish shared ChatGPT connection</p>
             <p className="text-muted-foreground mt-1 text-sm">
-              Open the verification page and approve ChatGPT access so GPT-5.4 becomes available in
-              CmdClaw Models.
+              Open the verification page and approve ChatGPT access so GPT-5.4 and GPT-5.4 Mini
+              become available in CmdClaw Models.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button variant="outline" onClick={handleOpenVerificationPage}>

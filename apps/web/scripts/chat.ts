@@ -1086,11 +1086,15 @@ async function printAvailableModels(
     console.log(
       `- GPT-5.4 (openai/gpt-5.4) [source=shared]${sharedOpenAIAvailable ? "" : " [unavailable]"}`,
     );
+    console.log(
+      `- GPT-5.4 Mini (openai/gpt-5.4-mini) [source=shared]${sharedOpenAIAvailable ? "" : " [unavailable]"}`,
+    );
 
     const userOpenAIAvailable = (args.connectedProviderIds ?? []).includes("openai");
     console.log("\nYour AI Accounts:");
     if (userOpenAIAvailable) {
       console.log("- GPT-5.4 (openai/gpt-5.4) [source=user]");
+      console.log("- GPT-5.4 Mini (openai/gpt-5.4-mini) [source=user]");
     } else {
       console.log("- ChatGPT not connected [source=user]");
     }

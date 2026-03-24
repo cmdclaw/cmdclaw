@@ -10,6 +10,7 @@ describe("subscription-providers", () => {
       "gpt-5.2-codex",
       "gpt-5.1-codex",
       "gpt-5.4",
+      "gpt-5.4-mini",
     ]);
   });
 });

@@ -83,6 +83,11 @@ const CMDCLAW_MODELS: ModelOption[] = [
     name: "GPT-5.4",
   },
   {
+    authSource: "shared",
+    id: "openai/gpt-5.4-mini",
+    name: "GPT-5.4 Mini",
+  },
+  {
     adminOnly: true,
     authSource: "shared",
     id: "anthropic/claude-sonnet-4-6",
@@ -95,6 +100,11 @@ const PERSONAL_CHATGPT_MODELS: ModelOption[] = [
     authSource: "user",
     id: "openai/gpt-5.4",
     name: "GPT-5.4",
+  },
+  {
+    authSource: "user",
+    id: "openai/gpt-5.4-mini",
+    name: "GPT-5.4 Mini",
   },
 ];
 

@@ -63,9 +63,13 @@ const SHARED_ONLY_AUTH = {
   anthropic: { shared: true, user: false },
   openai: { shared: true, user: false },
 } as const;
+const USER_ONLY_AUTH = {
+  anthropic: { shared: true, user: false },
+  openai: { shared: false, user: true },
+} as const;
 
 describe("ModelSelector", () => {
-  it("shows GPT-5.4 and hides Claude Sonnet 4.6 for non-admins", () => {
+  it("shows shared GPT-5.4 variants and hides Claude Sonnet 4.6 for non-admins", () => {
     const onSelectionChange = vi.fn();
     mockIsAdmin.mockReturnValue(false);
 
@@ -80,6 +84,7 @@ describe("ModelSelector", () => {
 
     expect(screen.getByText("CmdClaw Models")).toBeInTheDocument();
     expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4")).toBeDisabled();
+    expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4-mini")).toBeDisabled();
     expect(
       screen.queryByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
     ).not.toBeInTheDocument();
@@ -139,6 +144,27 @@ describe("ModelSelector", () => {
     expect(onSelectionChange).toHaveBeenCalledWith({
       model: "openai/gpt-5.4",
       authSource: "shared",
+    });
+  });
+
+  it("selects personal GPT-5.4 Mini when user auth is available", () => {
+    const onSelectionChange = vi.fn();
+    mockIsAdmin.mockReturnValue(false);
+
+    render(
+      <ModelSelector
+        selectedModel="openai/gpt-5.4-mini"
+        selectedAuthSource="user"
+        providerAvailability={USER_ONLY_AUTH}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("chat-model-option-user-openai/gpt-5.4-mini"));
+
+    expect(onSelectionChange).toHaveBeenCalledWith({
+      model: "openai/gpt-5.4-mini",
+      authSource: "user",
     });
   });
 });

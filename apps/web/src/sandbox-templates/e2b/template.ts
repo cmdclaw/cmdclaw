@@ -1,4 +1,5 @@
 import { Template } from "e2b";
+import { OPENCODE_VERSION } from "../common/versions";
 
 const COMMON_ROOT = "common";
 
@@ -21,7 +22,7 @@ export const template = Template({
   .runCmd("curl -fsSL https://bun.sh/install | bash")
   .runCmd("sudo ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
   // Install OpenCode runtime + tsx for TypeScript CLI tools
-  .runCmd("$HOME/.bun/bin/bun install -g opencode-ai tsx")
+  .runCmd(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx`)
   .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
   .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
   // Install Agent Sandbox SDK runtime (OpenCode compatibility at /opencode)

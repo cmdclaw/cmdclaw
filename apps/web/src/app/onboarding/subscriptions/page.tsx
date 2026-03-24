@@ -29,10 +29,7 @@ const PROVIDERS = [
     logoUrl: "/integrations/openai.svg",
     logoAlt: "OpenAI logo",
     logoClassName: "dark:invert",
-    models: [
-      "GPT-5.4",
-      // "GPT-5.4 Mini",
-    ],
+    models: ["GPT-5.4", "GPT-5.4 Mini"],
   },
 ];
 

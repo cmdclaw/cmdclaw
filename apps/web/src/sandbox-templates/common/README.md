@@ -2,6 +2,8 @@
 
 Shared files used by both E2B and Daytona sandbox builds.
 
+The sandbox runtime currently pins OpenCode to `1.3.0`.
+
 ## Contents
 
 - `agents/` - Project-local OpenCode agent definitions.
