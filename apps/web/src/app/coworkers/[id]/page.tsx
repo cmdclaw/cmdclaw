@@ -777,17 +777,16 @@ export default function CoworkerEditorPage() {
         return;
       }
 
-      const result = await triggerCoworker.mutateAsync({ id: coworkerId, payload: {} });
+      await triggerCoworker.mutateAsync({ id: coworkerId, payload: {} });
       toast.success("Run started.");
       void refetchRuns();
-      router.push(`/coworkers/runs/${result.runId}`);
     } catch (error) {
       console.error("Failed to run coworker:", error);
       toast.error("Failed to start run.");
     } finally {
       setIsStartingRun(false);
     }
-  }, [isStartingRun, persistCoworker, refetchRuns, router, triggerCoworker, coworkerId]);
+  }, [isStartingRun, persistCoworker, refetchRuns, triggerCoworker, coworkerId]);
 
   const hasAgentInstructions = prompt.trim().length > 0;
   const coworkerDisplayName = coworker?.name?.trim().length ? coworker.name : "New Coworker";
@@ -795,6 +794,7 @@ export default function CoworkerEditorPage() {
   const handleRunClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      setActiveTab("runs");
       void handleRun();
     },
     [handleRun],

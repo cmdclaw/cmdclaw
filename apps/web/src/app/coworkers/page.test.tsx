@@ -334,7 +334,7 @@ describe("CoworkersPage", () => {
     });
   });
 
-  it("navigates to the created run when running a coworker from the card", async () => {
+  it("navigates to the runs page when running a coworker from the card", async () => {
     render(<CoworkersPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /^run$/i }));
@@ -342,6 +342,6 @@ describe("CoworkersPage", () => {
     await waitFor(() => {
       expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });
     });
-    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs/run-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs");
   });
 });
