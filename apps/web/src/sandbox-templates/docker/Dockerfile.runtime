@@ -71,6 +71,7 @@ RUN npm install -g @sandbox-agent/cli@0.2.x \
   && sandbox-agent install-agent opencode
 
 COPY common/opencode.json /app/opencode.json
+COPY common/agents /app/.opencode/agents
 COPY common/plugins /app/.opencode/plugins
 COPY common/tools /app/.opencode/tools
 COPY common/lib /app/.opencode/lib

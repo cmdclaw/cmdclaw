@@ -4,6 +4,7 @@ Shared files used by both E2B and Daytona sandbox builds.
 
 ## Contents
 
+- `agents/` - Project-local OpenCode agent definitions.
 - `skills/` - Built-in platform and integration skills.
 - `plugins/` - OpenCode plugins shared by providers.
 - `tools/` - OpenCode custom tools shared by providers.

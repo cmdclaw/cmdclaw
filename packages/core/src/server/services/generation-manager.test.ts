@@ -418,8 +418,11 @@ import {
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
-import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-prompt";
-import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
+import {
+  CMDCLAW_CHAT_AGENT_ID,
+  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
+  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
+} from "../prompts/opencode-agent-ids";
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
 import { syncMemoryFilesToSandbox, buildMemorySystemPrompt } from "../sandbox/prep/memory-prep";
@@ -2917,9 +2920,9 @@ describe("generationManager transitions", () => {
     await mgr.runOpenCodeGeneration(ctx);
 
     expect(promptMock).toHaveBeenCalledTimes(1);
-    const promptArg = promptMock.mock.calls[0]?.[0] as { system?: string };
-    expect(promptArg.system).not.toContain(getCoworkerSystemBehaviorPrompt());
-    expect(promptArg.system).toContain(getChatSystemBehaviorPrompt() || "");
+    const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
+    expect(promptArg.agent).toBe(CMDCLAW_CHAT_AGENT_ID);
+    expect(promptArg.system).toContain("## File Sharing");
     expect(vi.mocked(collectNewSandboxFiles)).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(Number),
@@ -2930,7 +2933,77 @@ describe("generationManager transitions", () => {
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
   });
 
-  it("adds coworker autonomy behavior prompt only for coworker runs", async () => {
+  it("routes coworker builder prompts to the builder agent and keeps builder context in system", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-builder",
+      title: "Coworker Builder",
+      opencodeSessionId: "session-existing",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({
+      type: "none",
+    });
+
+    const ctx = createCtx({
+      id: "gen-builder-opencode",
+      conversationId: "conv-builder",
+      backendType: "opencode",
+      model: "anthropic/claude-sonnet-4-6",
+      userMessageContent: "Make this coworker run every hour",
+      builderCoworkerContext: {
+        coworkerId: "wf-1",
+        updatedAt: "2026-03-03T12:00:00.000Z",
+        prompt: "Current coworker prompt",
+        model: "anthropic/claude-sonnet-4-6",
+        toolAccessMode: "selected",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+      },
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
+    expect(promptArg.agent).toBe(CMDCLAW_COWORKER_BUILDER_AGENT_ID);
+    expect(promptArg.system).toContain("## Coworker Builder Context (System)");
+    expect(promptArg.system).toContain('"coworkerId": "wf-1"');
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
+  it("routes coworker runs to the runner agent", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
     vi.mocked(getCliEnvForUser).mockResolvedValue({});
@@ -2984,9 +3057,9 @@ describe("generationManager transitions", () => {
     await mgr.runOpenCodeGeneration(ctx);
 
     expect(promptMock).toHaveBeenCalledTimes(1);
-    const promptArg = promptMock.mock.calls[0]?.[0] as { system?: string };
-    expect(promptArg.system).toContain(getCoworkerSystemBehaviorPrompt());
-    expect(promptArg.system).toContain("Do not ask clarifying questions.");
+    const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
+    expect(promptArg.agent).toBe(CMDCLAW_COWORKER_RUNNER_AGENT_ID);
+    expect(promptArg.system).not.toContain("Do not ask clarifying questions.");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 

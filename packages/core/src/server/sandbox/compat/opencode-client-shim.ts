@@ -14,6 +14,7 @@ export function createRuntimeHarnessClientFromOpencodeClient(
       const result = await client.session.prompt({
         sessionID: input.sessionID,
         parts: input.parts as never,
+        ...(input.agent ? { agent: input.agent } : {}),
         ...(input.system ? { system: input.system } : {}),
         ...(input.model ? { model: input.model as never } : {}),
         ...(input.noReply ? { noReply: input.noReply } : {}),

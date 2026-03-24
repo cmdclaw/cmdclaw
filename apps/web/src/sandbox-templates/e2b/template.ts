@@ -30,7 +30,10 @@ export const template = Template({
   .setWorkdir("/app")
   // Copy OpenCode config, plugins, and custom tools
   .copy(`${COMMON_ROOT}/opencode.json`, "/app/opencode.json")
-  .runCmd("mkdir -p /app/.opencode/plugins /app/.opencode/tools /app/.opencode/lib")
+  .runCmd(
+    "mkdir -p /app/.opencode/agents /app/.opencode/plugins /app/.opencode/tools /app/.opencode/lib",
+  )
+  .copy(`${COMMON_ROOT}/agents`, "/app/.opencode/agents")
   .copy(`${COMMON_ROOT}/plugins`, "/app/.opencode/plugins")
   .copy(`${COMMON_ROOT}/tools`, "/app/.opencode/tools")
   .copy(`${COMMON_ROOT}/lib`, "/app/.opencode/lib")

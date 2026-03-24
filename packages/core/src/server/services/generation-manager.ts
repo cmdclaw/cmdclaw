@@ -65,8 +65,11 @@ import {
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
-import { getChatSystemBehaviorPrompt } from "../prompts/chat-system-behavior-prompt";
-import { getCoworkerSystemBehaviorPrompt } from "../prompts/coworker-system-behavior-prompt";
+import {
+  CMDCLAW_CHAT_AGENT_ID,
+  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
+  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
+} from "../prompts/opencode-agent-ids";
 import {
   buildQueueJobId,
   CHAT_GENERATION_JOB_NAME,
@@ -4331,7 +4334,6 @@ class GenerationManager {
 
       // Build system prompt
       const baseSystemPrompt = "You are CmdClaw, an AI agent that helps do work.";
-      const modeBehaviorPrompt = this.buildModeBehaviorPrompt(ctx);
       const fileShareInstructions = [
         "## File Sharing",
         "When you create files that the user needs (PDFs, images, documents, code files, etc.), ",
@@ -4345,9 +4347,9 @@ class GenerationManager {
       const selectedPlatformSkillInstructions = getSelectedPlatformSkillPrompt(
         ctx.selectedPlatformSkillSlugs,
       );
+      const agent = this.resolveOpencodeAgentId(ctx);
       const systemPromptParts = [
         baseSystemPrompt,
-        modeBehaviorPrompt,
         fileShareInstructions,
         cliInstructions,
         coworkerCliPrompt,
@@ -4492,6 +4494,7 @@ class GenerationManager {
       const promptPromise = client.prompt({
         sessionID: sessionId,
         parts: promptParts,
+        agent,
         system: systemPrompt,
         model: modelConfig,
       });
@@ -6950,12 +6953,18 @@ class GenerationManager {
     );
   }
 
-  private buildModeBehaviorPrompt(ctx: GenerationContext): string | null {
+  private resolveOpencodeAgentId(
+    ctx: Pick<GenerationContext, "coworkerRunId" | "builderCoworkerContext">,
+  ): string {
     if (ctx.coworkerRunId) {
-      return getCoworkerSystemBehaviorPrompt();
+      return CMDCLAW_COWORKER_RUNNER_AGENT_ID;
     }
 
-    return getChatSystemBehaviorPrompt();
+    if (ctx.builderCoworkerContext) {
+      return CMDCLAW_COWORKER_BUILDER_AGENT_ID;
+    }
+
+    return CMDCLAW_CHAT_AGENT_ID;
   }
 
   private async recordCoworkerRunEvent(

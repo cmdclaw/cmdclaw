@@ -4,6 +4,7 @@ const COMMON_ROOT = "src/sandbox-templates/common";
 
 export const image = Image.debianSlim()
   .addLocalFile(`${COMMON_ROOT}/opencode.json`, "/app/opencode.json")
+  .addLocalDir(`${COMMON_ROOT}/agents`, "/app/.opencode/agents")
   .addLocalDir(`${COMMON_ROOT}/plugins`, "/app/.opencode/plugins")
   .addLocalDir(`${COMMON_ROOT}/tools`, "/app/.opencode/tools")
   .addLocalDir(`${COMMON_ROOT}/lib`, "/app/.opencode/lib")

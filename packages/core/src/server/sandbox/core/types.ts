@@ -133,6 +133,7 @@ export interface RuntimeHarnessClient {
   prompt(input: {
     sessionID: string;
     parts: RuntimePromptPart[];
+    agent?: string;
     system?: string;
     model?: unknown;
     noReply?: boolean;
