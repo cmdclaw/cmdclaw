@@ -379,8 +379,9 @@ export default function CoworkersPage() {
     async (coworker: CoworkerItem) => {
       setRunningCoworkerId(coworker.id);
       try {
-        await triggerCoworker.mutateAsync({ id: coworker.id, payload: {} });
+        const result = await triggerCoworker.mutateAsync({ id: coworker.id, payload: {} });
         toast.success("Run started.");
+        router.push(`/coworkers/runs/${result.runId}`);
       } catch (error) {
         console.error("Failed to trigger coworker:", error);
         toast.error("Failed to start run.");
@@ -388,7 +389,7 @@ export default function CoworkersPage() {
         setRunningCoworkerId(null);
       }
     },
-    [triggerCoworker],
+    [router, triggerCoworker],
   );
   const handleOpenCoworker = useCallback(
     (id: string) => {

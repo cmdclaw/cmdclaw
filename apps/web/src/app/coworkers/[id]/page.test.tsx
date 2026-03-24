@@ -12,11 +12,13 @@ const {
   mockGetOrCreateBuilderConversationMutate,
   mockSetSelectedSkillSlugs,
   mockTriggerCoworkerMutateAsync,
+  mockRouterPush,
 } = vi.hoisted(() => ({
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockGetOrCreateBuilderConversationMutate: vi.fn(),
   mockSetSelectedSkillSlugs: vi.fn(),
   mockTriggerCoworkerMutateAsync: vi.fn(),
+  mockRouterPush: vi.fn(),
 }));
 
 function MockContainer({ children }: { children: React.ReactNode }) {
@@ -46,7 +48,7 @@ function MockSwitch({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "cw-1" }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
 }));
 
 vi.mock("next/image", () => ({
@@ -265,8 +267,9 @@ describe("CoworkerEditorPage", () => {
     mockGetOrCreateBuilderConversationMutate.mockReset();
     mockSetSelectedSkillSlugs.mockReset();
     mockTriggerCoworkerMutateAsync.mockReset();
+    mockRouterPush.mockReset();
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
-    mockTriggerCoworkerMutateAsync.mockResolvedValue({ success: true });
+    mockTriggerCoworkerMutateAsync.mockResolvedValue({ runId: "run-1" });
   });
 
   afterEach(() => {
@@ -327,14 +330,16 @@ describe("CoworkerEditorPage", () => {
     );
   });
 
-  it("switches to the runs tab when starting a run", () => {
+  it("navigates to the created run when starting a run", async () => {
     render(<CoworkerEditorPage />);
-
-    expect(screen.queryByText("No runs yet.")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByText("Run now")[0]!);
 
-    expect(screen.getByText("No runs yet.")).toBeInTheDocument();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs/run-1");
   });
 
   it("saves model changes before starting a run", async () => {

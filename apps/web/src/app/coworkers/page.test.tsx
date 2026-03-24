@@ -11,6 +11,7 @@ const {
   mockCreateCoworkerMutateAsync,
   mockUpdateCoworkerMutateAsync,
   mockDeleteCoworkerMutateAsync,
+  mockTriggerCoworkerMutateAsync,
   mockGetOrCreateBuilderConversation,
   mockStartGeneration,
   mockToastSuccess,
@@ -20,6 +21,7 @@ const {
   mockCreateCoworkerMutateAsync: vi.fn(),
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockDeleteCoworkerMutateAsync: vi.fn(),
+  mockTriggerCoworkerMutateAsync: vi.fn(),
   mockGetOrCreateBuilderConversation: vi.fn(),
   mockStartGeneration: vi.fn(),
   mockToastSuccess: vi.fn(),
@@ -231,7 +233,7 @@ vi.mock("@/orpc/hooks", () => ({
   }),
   useIntegrationList: () => ({ data: [] }),
   useCreateCoworker: () => ({ mutateAsync: mockCreateCoworkerMutateAsync }),
-  useTriggerCoworker: () => ({ mutateAsync: vi.fn() }),
+  useTriggerCoworker: () => ({ mutateAsync: mockTriggerCoworkerMutateAsync }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
   useDeleteCoworker: () => ({ mutateAsync: mockDeleteCoworkerMutateAsync }),
   useProviderAuthStatus: () => ({
@@ -260,6 +262,7 @@ describe("CoworkersPage", () => {
     mockCreateCoworkerMutateAsync.mockReset();
     mockUpdateCoworkerMutateAsync.mockReset();
     mockDeleteCoworkerMutateAsync.mockReset();
+    mockTriggerCoworkerMutateAsync.mockReset();
     mockGetOrCreateBuilderConversation.mockReset();
     mockStartGeneration.mockReset();
     mockToastSuccess.mockReset();
@@ -268,6 +271,7 @@ describe("CoworkersPage", () => {
     mockCreateCoworkerMutateAsync.mockResolvedValue({ id: "cw-new" });
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
     mockDeleteCoworkerMutateAsync.mockResolvedValue({ success: true });
+    mockTriggerCoworkerMutateAsync.mockResolvedValue({ runId: "run-1" });
     mockGetOrCreateBuilderConversation.mockResolvedValue({ conversationId: "conv-1" });
     mockStartGeneration.mockResolvedValue({ generationId: "gen-1" });
     mockLocationAssign.mockReset();
@@ -328,5 +332,16 @@ describe("CoworkersPage", () => {
       authSource: "shared",
       autoApprove: true,
     });
+  });
+
+  it("navigates to the created run when running a coworker from the card", async () => {
+    render(<CoworkersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^run$/i }));
+
+    await waitFor(() => {
+      expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });
+    });
+    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs/run-1");
   });
 });
