@@ -22,6 +22,8 @@ export const slackPostVerifyTimeoutMs = Number(
   process.env.E2E_SLACK_POST_VERIFY_TIMEOUT_MS ?? "30000",
 );
 export const gmailPollIntervalMs = Number(process.env.E2E_GMAIL_POLL_INTERVAL_MS ?? "2500");
+export const transientRetryCount = Number(process.env.E2E_TRANSIENT_RETRY_COUNT ?? "1");
+export const transientRetryDelayMs = Number(process.env.E2E_TRANSIENT_RETRY_DELAY_MS ?? "2000");
 
 export const expectedUserEmail = "baptiste@heybap.com";
 export const sourceChannelName = "cmdclaw-experiments";
@@ -259,6 +261,14 @@ export function extractConversationId(output: string): string {
   return requireMatch(output, /\[conversation\]\s+([^\s]+)/, output);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hasTransientOpencodeReadinessFailure(result: CommandResult): boolean {
+  return result.stdout.includes("[error] OpenCode server failed readiness check");
+}
+
 export async function runChatMessage(args: {
   message: string;
   model?: string;
@@ -293,7 +303,18 @@ export async function runChatMessage(args: {
     commandArgs.push("--file", file);
   }
 
-  return runBunCommand(commandArgs, args.timeoutMs ?? commandTimeoutMs);
+  const timeoutMs = args.timeoutMs ?? commandTimeoutMs;
+  const runAttempt = async (attempt: number): Promise<CommandResult> => {
+    const result = await runBunCommand(commandArgs, timeoutMs);
+    if (!hasTransientOpencodeReadinessFailure(result) || attempt >= transientRetryCount) {
+      return result;
+    }
+
+    await sleep(transientRetryDelayMs);
+    return runAttempt(attempt + 1);
+  };
+
+  return runAttempt(0);
 }
 
 export function encodeUtf16Be(text: string): Buffer {

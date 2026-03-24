@@ -27,6 +27,9 @@ export default defineConfig({
     ],
     environment: "node",
     setupFiles: ["src/test/vitest.setup.ts"],
+    hookTimeout: liveE2EEnabled ? 120_000 : undefined,
+    fileParallelism: liveE2EEnabled ? false : undefined,
+    maxWorkers: liveE2EEnabled ? 1 : undefined,
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
