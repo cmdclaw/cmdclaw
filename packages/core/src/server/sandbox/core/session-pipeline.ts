@@ -52,6 +52,7 @@ export async function runConversationSessionPipeline(input: {
     {
       title: input.options?.title,
       replayHistory: input.options?.replayHistory,
+      allowSnapshotRestore: input.options?.allowSnapshotRestore,
       onLifecycle: input.options?.onLifecycle,
       telemetry: input.options?.telemetry,
     },

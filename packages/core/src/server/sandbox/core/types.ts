@@ -185,6 +185,7 @@ export interface ConversationRuntimeContext {
 export interface ConversationRuntimeOptions {
   title?: string;
   replayHistory?: boolean;
+  allowSnapshotRestore?: boolean;
   onLifecycle?: SessionLifecycleCallback;
   telemetry?: Record<string, unknown>;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";

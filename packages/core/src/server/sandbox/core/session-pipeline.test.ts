@@ -13,7 +13,7 @@ vi.mock("../compat/opencode-client-shim", () => ({
 
 describe("runConversationSessionPipeline", () => {
   beforeEach(() => {
-    vi.resetModules();
+    vi.resetAllMocks();
     getOrCreateSessionForCloudProviderMock.mockReset();
     createRuntimeHarnessClientFromOpencodeClientMock.mockReset();
   });
@@ -57,6 +57,7 @@ describe("runConversationSessionPipeline", () => {
       options: {
         title: "Conversation",
         replayHistory: true,
+        allowSnapshotRestore: true,
       },
     });
 
@@ -73,6 +74,7 @@ describe("runConversationSessionPipeline", () => {
       {
         title: "Conversation",
         replayHistory: true,
+        allowSnapshotRestore: true,
         onLifecycle: undefined,
         telemetry: undefined,
       },

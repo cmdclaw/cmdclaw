@@ -437,6 +437,30 @@ export const conversationRuntime = pgTable(
   ],
 );
 
+export const conversationSessionSnapshot = pgTable(
+  "conversation_session_snapshot",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    storageKey: text("storage_key").notNull(),
+    exportedAt: timestamp("exported_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("conversation_session_snapshot_conversation_id_idx").on(table.conversationId),
+    index("conversation_session_snapshot_exported_at_idx").on(table.exportedAt),
+  ],
+);
+
 // Content part types for interleaved message structure
 export type ContentPart =
   | { type: "text"; text: string }
@@ -1046,6 +1070,10 @@ export const conversationRelations = relations(conversation, ({ one, many }) => 
     fields: [conversation.id],
     references: [conversationRuntime.conversationId],
   }),
+  sessionSnapshot: one(conversationSessionSnapshot, {
+    fields: [conversation.id],
+    references: [conversationSessionSnapshot.conversationId],
+  }),
   billingLedgers: many(billingLedger),
   queuedMessages: many(conversationQueuedMessage),
 }));
@@ -1062,6 +1090,16 @@ export const conversationRuntimeRelations = relations(conversationRuntime, ({ on
   generations: many(generation),
   interrupts: many(generationInterrupt),
 }));
+
+export const conversationSessionSnapshotRelations = relations(
+  conversationSessionSnapshot,
+  ({ one }) => ({
+    conversation: one(conversation, {
+      fields: [conversationSessionSnapshot.conversationId],
+      references: [conversation.id],
+    }),
+  }),
+);
 
 export const messageAttachment = pgTable(
   "message_attachment",

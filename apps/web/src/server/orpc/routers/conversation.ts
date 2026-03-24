@@ -1,4 +1,5 @@
 import { writeSessionTranscriptFromConversation } from "@cmdclaw/core/server/services/memory-service";
+import { clearConversationSessionSnapshot } from "@cmdclaw/core/server/services/opencode-session-snapshot-service";
 import { conversation, message, messageAttachment, sandboxFile } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, desc, and, isNull, asc, sql } from "drizzle-orm";
@@ -368,6 +369,12 @@ const del = protectedProcedure
       });
     } catch (err) {
       console.error("[Conversation] Failed to write session transcript on delete:", err);
+    }
+
+    try {
+      await clearConversationSessionSnapshot(input.id);
+    } catch (err) {
+      console.error("[Conversation] Failed to clear session snapshot on delete:", err);
     }
 
     const result = await context.db

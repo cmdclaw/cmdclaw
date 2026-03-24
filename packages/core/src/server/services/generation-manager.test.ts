@@ -94,6 +94,13 @@ const { isStatelessServerlessRuntimeMock } = vi.hoisted(() => ({
   isStatelessServerlessRuntimeMock: vi.fn(() => false),
 }));
 
+const { saveConversationSessionSnapshotMock, clearConversationSessionSnapshotMock } = vi.hoisted(
+  () => ({
+    saveConversationSessionSnapshotMock: vi.fn(),
+    clearConversationSessionSnapshotMock: vi.fn(),
+  }),
+);
+
 const {
   sandboxSlotAcquireMock,
   sandboxSlotRenewMock,
@@ -333,6 +340,11 @@ vi.mock("./sandbox-file-service", () => ({
 vi.mock("../storage/s3-client", () => ({
   ensureBucket: ensureBucketMock,
   uploadToS3: uploadToS3Mock,
+}));
+
+vi.mock("./opencode-session-snapshot-service", () => ({
+  saveConversationSessionSnapshot: saveConversationSessionSnapshotMock,
+  clearConversationSessionSnapshot: clearConversationSessionSnapshotMock,
 }));
 
 vi.mock("./integration-skill-service", () => ({
@@ -682,6 +694,10 @@ describe("generationManager transitions", () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    saveConversationSessionSnapshotMock.mockReset();
+    saveConversationSessionSnapshotMock.mockResolvedValue(undefined);
+    clearConversationSessionSnapshotMock.mockReset();
+    clearConversationSessionSnapshotMock.mockResolvedValue(undefined);
     interruptStore.clear();
     createInterruptMock.mockImplementation(async (input: any) => {
       const interrupt = {
@@ -2919,6 +2935,12 @@ describe("generationManager transitions", () => {
 
     await mgr.runOpenCodeGeneration(ctx);
 
+    expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        allowSnapshotRestore: true,
+      }),
+    );
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
     expect(promptArg.agent).toBe(CMDCLAW_CHAT_AGENT_ID);
@@ -3154,6 +3176,50 @@ describe("generationManager transitions", () => {
     );
     expect(ctx.contentParts).toEqual(
       expect.arrayContaining([{ type: "thinking", id: "reason-1", content: "plan more" }]),
+    );
+  });
+
+  it("disables snapshot restore when resuming an OpenCode approval decision", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-approval",
+      title: "Conversation",
+    });
+    getInterruptMock.mockResolvedValue({
+      id: "interrupt-approval",
+      kind: "runtime_permission",
+      providerRequestId: "request-1",
+      providerToolUseId: "tool-1",
+      display: {},
+    });
+
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock: vi.fn(),
+        subscribeMock: vi.fn(),
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    vi.spyOn(mgr as never, "waitForSandboxSlotLease").mockResolvedValue("granted" as never);
+
+    await (mgr as any).applyOpenCodeApprovalDecision(
+      createCtx({
+        id: "gen-approval",
+        conversationId: "conv-approval",
+        runtimeId: "runtime-1",
+        userId: "user-1",
+        model: "openai/gpt-5.2-codex",
+      }),
+      "interrupt-approval",
+      "allow",
+    );
+
+    expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        allowSnapshotRestore: false,
+        replayHistory: false,
+      }),
     );
   });
 

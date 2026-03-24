@@ -8,6 +8,7 @@ import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
+import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
 import {
   COMPACTION_SUMMARY_PREFIX,
   SESSION_BOUNDARY_PREFIX,
@@ -499,6 +500,7 @@ export async function getOrCreateSession(
   options?: {
     title?: string;
     replayHistory?: boolean;
+    allowSnapshotRestore?: boolean;
     onLifecycle?: SessionInitLifecycleCallback;
     telemetry?: ObservabilityContext;
   },
@@ -593,6 +595,76 @@ export async function getOrCreateSession(
         .update(conversationRuntime)
         .set({ sessionId: null })
         .where(eq(conversationRuntime.id, runtimeId));
+    }
+  }
+
+  if (!state.reused && options?.allowSnapshotRestore !== false) {
+    try {
+      const restoredSnapshot = await restoreConversationSessionSnapshot({
+        conversationId: config.conversationId,
+        sandbox: {
+          exec: async (command, opts) => {
+            const result = await state.sandbox.commands.run(command, {
+              timeoutMs: opts?.timeoutMs,
+              envs: opts?.env,
+              background: opts?.background,
+              onStderr: opts?.onStderr,
+            });
+            return {
+              exitCode: result.exitCode ?? 0,
+              stdout: result.stdout ?? "",
+              stderr: result.stderr ?? "",
+            };
+          },
+          writeFile: async (path, content) => {
+            await state.sandbox.files.write(path, content);
+          },
+        },
+        client: state.client,
+      });
+      if (restoredSnapshot) {
+        if (config.userId) {
+          await injectProviderAuth(state.client, config.userId, {
+            openAIAuthSource: config.openAIAuthSource,
+          });
+        }
+        options?.onLifecycle?.("session_reused", {
+          conversationId: config.conversationId,
+          sessionId: restoredSnapshot.sessionId,
+          sandboxId: state.sandbox.sandboxId,
+          restoredFromSnapshot: true,
+        });
+        logLifecycle(
+          "SESSION_RESTORED_FROM_SNAPSHOT",
+          {
+            conversationId: config.conversationId,
+            sessionId: restoredSnapshot.sessionId,
+            sandboxId: state.sandbox.sandboxId,
+            durationMs: Date.now() - sessionInitStartedAt,
+          },
+          {
+            ...telemetryContext,
+            sandboxId: state.sandbox.sandboxId,
+            sessionId: restoredSnapshot.sessionId,
+          },
+        );
+        options?.onLifecycle?.("session_init_completed", {
+          conversationId: config.conversationId,
+          sessionId: restoredSnapshot.sessionId,
+          durationMs: Date.now() - sessionInitStartedAt,
+          restoredFromSnapshot: true,
+        });
+        return {
+          client: state.client,
+          sessionId: restoredSnapshot.sessionId,
+          sandbox: state.sandbox,
+        };
+      }
+    } catch (error) {
+      console.warn(
+        `[E2B] Failed to restore snapshot for conversation ${config.conversationId}:`,
+        error,
+      );
     }
   }
 

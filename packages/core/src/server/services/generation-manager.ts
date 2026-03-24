@@ -115,6 +115,10 @@ import {
 import { GenerationStartError } from "./generation-start-error";
 import { createCommunityIntegrationSkill } from "./integration-skill-service";
 import { writeSessionTranscriptFromConversation } from "./memory-service";
+import {
+  clearConversationSessionSnapshot,
+  saveConversationSessionSnapshot,
+} from "./opencode-session-snapshot-service";
 import { resolveSelectedPlatformSkillSlugs } from "./platform-skill-service";
 import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-service";
 import { getSandboxSlotManager } from "./sandbox-slot-manager";
@@ -3794,6 +3798,12 @@ class GenerationManager {
       console.error("[GenerationManager] Failed to write session transcript:", err);
     }
 
+    try {
+      await clearConversationSessionSnapshot(ctx.conversationId);
+    } catch (err) {
+      console.error("[GenerationManager] Failed to clear session snapshot:", err);
+    }
+
     await db.insert(message).values({
       conversationId: ctx.conversationId,
       role: "system",
@@ -3957,6 +3967,7 @@ class GenerationManager {
               sandboxProviderOverride: ctx.sandboxProviderOverride,
               title: conv?.title || "Conversation",
               replayHistory: hasExistingMessages,
+              allowSnapshotRestore: true,
               telemetry: {
                 source: "generation-manager",
                 traceId: ctx.traceId,
@@ -4976,6 +4987,7 @@ class GenerationManager {
         .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
     await this.enqueueGenerationTimeout(ctx.id, "approval", expiresAt);
+    await this.saveSessionSnapshotIfPossible(ctx, "awaiting_approval");
 
     this.broadcast(ctx, this.projectInterruptPendingEvent(interrupt));
 
@@ -5041,6 +5053,7 @@ class GenerationManager {
           sandboxProviderOverride: ctx.sandboxProviderOverride,
           title: conv?.title || "Conversation",
           replayHistory: false,
+          allowSnapshotRestore: false,
         },
       );
       opencodeClient = resumedSession.harnessClient;
@@ -5141,6 +5154,7 @@ class GenerationManager {
           sandboxProviderOverride: ctx.sandboxProviderOverride,
           title: conv?.title || "Conversation",
           replayHistory: false,
+          allowSnapshotRestore: false,
         },
       );
       opencodeClient = resumedSession.harnessClient;
@@ -6049,6 +6063,7 @@ class GenerationManager {
       activeCtx.status = "awaiting_approval";
       activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, pendingApprovalEvent);
+      await this.saveSessionSnapshotIfPossible(activeCtx, "plugin_awaiting_approval");
     } else {
       await this.publishDetachedGenerationStreamEvent({
         generationId,
@@ -6133,6 +6148,7 @@ class GenerationManager {
       activeCtx.status = "awaiting_auth";
       activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, this.projectInterruptPendingEvent(interrupt));
+      await this.saveSessionSnapshotIfPossible(activeCtx, "awaiting_auth");
     } else {
       await this.publishDetachedGenerationStreamEvent({
         generationId,
@@ -6281,6 +6297,39 @@ class GenerationManager {
     }
     await this.processGenerationTimeout(generationId, "auth");
     return { success: false };
+  }
+
+  private async saveSessionSnapshotIfPossible(
+    ctx: Pick<GenerationContext, "conversationId" | "sessionId" | "sandbox">,
+    reason: string,
+  ): Promise<void> {
+    if (!ctx.sessionId || !ctx.sandbox) {
+      return;
+    }
+
+    try {
+      await saveConversationSessionSnapshot({
+        conversationId: ctx.conversationId,
+        sessionId: ctx.sessionId,
+        sandbox: {
+          exec: (command, opts) =>
+            ctx.sandbox!.execute(command, {
+              timeout: opts?.timeoutMs,
+              env: opts?.env,
+            }),
+          writeFile: (path, content) =>
+            ctx.sandbox!.writeFile(
+              path,
+              typeof content === "string" ? content : new Uint8Array(content),
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        `[GenerationManager] Failed to save session snapshot (${reason}) for conversation ${ctx.conversationId}:`,
+        error,
+      );
+    }
   }
 
   private async finishGeneration(
@@ -6484,6 +6533,8 @@ class GenerationManager {
           generationId: ctx.id,
         });
       }
+
+      await this.saveSessionSnapshotIfPossible(ctx, `finish:${status}`);
 
       if (status === "completed") {
         try {
