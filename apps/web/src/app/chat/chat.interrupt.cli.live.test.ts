@@ -1,7 +1,8 @@
 import { db } from "@cmdclaw/db/client";
 import { conversation, message, user } from "@cmdclaw/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, like } from "drizzle-orm";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   assertExitOk,
@@ -78,63 +79,44 @@ async function runChatCommand(args: string[], timeoutMs: number): Promise<Comman
   });
 }
 
-async function listActiveGenerationIds(userId: string): Promise<Set<string>> {
-  const rows = await db.query.conversation.findMany({
-    where: eq(conversation.userId, userId),
-    columns: {
-      currentGenerationId: true,
-      generationStatus: true,
-    },
-  });
-
-  return new Set(
-    rows
-      .filter((row) =>
-        row.currentGenerationId
-          ? ["generating", "awaiting_approval", "awaiting_auth", "paused"].includes(
-              row.generationStatus,
-            )
-          : false,
-      )
-      .map((row) => row.currentGenerationId as string),
-  );
-}
-
-async function waitForNewActiveGeneration(args: {
-  userId: string;
-  existingIds: Set<string>;
+async function waitForPromptGeneration(args: {
+  promptToken: string;
   timeoutMs: number;
 }): Promise<{ conversationId: string; generationId: string }> {
   const deadline = Date.now() + args.timeoutMs;
   const poll = async (): Promise<{ conversationId: string; generationId: string }> => {
     if (Date.now() >= deadline) {
-      throw new Error("Timed out waiting for a newly started active generation.");
+      throw new Error("Timed out waiting for the prompt-specific generation to become active.");
     }
 
-    const rows = await db.query.conversation.findMany({
-      where: eq(conversation.userId, args.userId),
+    const promptMessage = await db.query.message.findFirst({
+      where: and(eq(message.role, "user"), like(message.content, `%${args.promptToken}%`)),
+      columns: {
+        conversationId: true,
+      },
+      orderBy: (fields) => [desc(fields.createdAt)],
+    });
+
+    if (!promptMessage?.conversationId) {
+      await sleep(250);
+      return poll();
+    }
+
+    const active = await db.query.conversation.findFirst({
+      where: eq(conversation.id, promptMessage.conversationId),
       columns: {
         id: true,
         currentGenerationId: true,
         generationStatus: true,
-        updatedAt: true,
       },
-      orderBy: (fields) => [desc(fields.updatedAt), desc(fields.createdAt)],
     });
 
-    const active = rows.find((row) => {
-      if (!row.currentGenerationId) {
-        return false;
-      }
-      if (args.existingIds.has(row.currentGenerationId)) {
-        return false;
-      }
-      return ["generating", "awaiting_approval", "awaiting_auth", "paused"].includes(
-        row.generationStatus,
-      );
-    });
-
-    if (active?.currentGenerationId) {
+    if (
+      active?.currentGenerationId &&
+      ["generating", "awaiting_approval", "awaiting_auth", "paused"].includes(
+        active.generationStatus,
+      )
+    ) {
       return {
         conversationId: active.id,
         generationId: active.currentGenerationId,
@@ -165,20 +147,20 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
         throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
       }
 
-      const existingActiveIds = await listActiveGenerationIds(dbUser.id);
+      const interruptToken = `interrupt-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 
-      const prompt =
+      const promptBase =
         process.env.E2E_CHAT_INTERRUPT_PROMPT ??
         "Print numbers from 1 to 10000, one per line, and do not summarize.";
+      const prompt = `${promptBase}\nInterrupt token: ${interruptToken}`;
 
       const runPromise = runChatCommand(
         ["run", "chat", "--", "--message", prompt, "--model", liveModel, "--no-validate"],
         Math.max(responseTimeoutMs, 180_000),
       );
 
-      const target = await waitForNewActiveGeneration({
-        userId: dbUser.id,
-        existingIds: existingActiveIds,
+      const target = await waitForPromptGeneration({
+        promptToken: interruptToken,
         timeoutMs: 90_000,
       });
 

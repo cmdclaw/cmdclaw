@@ -65,8 +65,13 @@ describe.runIf(liveEnabled)("@live CLI chat", () => {
           }),
       });
 
-      expect(result.stdout).toContain("[status] awaiting_auth");
       expect(result.stdout).toContain("[auth_needed] google_sheets");
+      expect(result.stdout).toContain(
+        "[auth_action] Browser opened. Complete auth in the browser.",
+      );
+      expect(result.stdout).toContain(
+        "[auth_action] Non-interactive mode: cannot submit auth result automatically.",
+      );
       expect(result.stdout).toContain("[conversation]");
     },
   );

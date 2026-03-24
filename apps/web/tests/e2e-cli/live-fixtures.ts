@@ -51,6 +51,8 @@ type SlackMessage = {
 type SlackApiResponse = {
   ok?: boolean;
   error?: string;
+  ts?: string;
+  message?: SlackMessage;
   channels?: Array<{ id?: string; name?: string }>;
   messages?: SlackMessage[];
   response_metadata?: { next_cursor?: string };
@@ -426,6 +428,17 @@ export async function readLatestMessage(
   token: string,
   channelId: string,
 ): Promise<{ ts: string; text: string }> {
+  const message = await readLatestMessageOrNull(token, channelId);
+  if (!message) {
+    throw new Error("Could not find a readable latest message in Slack channel history.");
+  }
+  return message;
+}
+
+export async function readLatestMessageOrNull(
+  token: string,
+  channelId: string,
+): Promise<{ ts: string; text: string } | null> {
   const payload = await slackApi(token, "conversations.history", {
     channel: channelId,
     limit: 30,
@@ -442,10 +455,31 @@ export async function readLatestMessage(
   });
 
   if (!message?.ts || !message.text) {
-    throw new Error("Could not find a readable latest message in Slack channel history.");
+    return null;
   }
 
   return { ts: message.ts, text: normalizeWhitespace(message.text) };
+}
+
+export async function postSlackMessage(
+  token: string,
+  channelId: string,
+  text: string,
+): Promise<{ ts: string; text: string }> {
+  const payload = await slackApi(token, "chat.postMessage", {
+    channel: channelId,
+    text,
+  });
+
+  const ts = payload.ts?.trim() ?? "";
+  if (!ts) {
+    throw new Error("Slack API chat.postMessage succeeded without a message timestamp.");
+  }
+
+  return {
+    ts,
+    text: normalizeWhitespace(payload.message?.text ?? text),
+  };
 }
 
 export async function findEchoMessageAfterTs(args: {

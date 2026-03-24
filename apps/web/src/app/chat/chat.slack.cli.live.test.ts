@@ -10,7 +10,7 @@ import {
   liveEnabled,
   parseSlackTimestamp,
   pollSlackEchoMessage,
-  readLatestMessage,
+  readLatestMessageOrNull,
   responseTimeoutMs,
   resolveChannelId,
   resolveLiveModel,
@@ -18,6 +18,7 @@ import {
   slackPostVerifyTimeoutMs,
   sourceChannelName,
   targetChannelName,
+  postSlackMessage,
 } from "../../../tests/e2e-cli/live-fixtures";
 
 let liveModel = "";
@@ -39,9 +40,16 @@ describe.runIf(liveEnabled)("@live CLI chat slack", () => {
       const slackAccessToken = await getSlackAccessTokenForExpectedUser();
       const sourceChannelId = await resolveChannelId(slackAccessToken, sourceChannelName);
       const targetChannelId = await resolveChannelId(slackAccessToken, targetChannelName);
-      const latestSourceMessage = await readLatestMessage(slackAccessToken, sourceChannelId);
-      const latestTargetBeforePrompt = await readLatestMessage(slackAccessToken, targetChannelId);
-      const latestTargetBeforePromptTs = parseSlackTimestamp(latestTargetBeforePrompt.ts);
+      const seedMessage = await postSlackMessage(
+        slackAccessToken,
+        sourceChannelId,
+        `slack-source-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+      );
+      const latestTargetBeforePrompt = await readLatestMessageOrNull(
+        slackAccessToken,
+        targetChannelId,
+      );
+      const latestTargetBeforePromptTs = parseSlackTimestamp(latestTargetBeforePrompt?.ts ?? "0");
 
       const marker = `slack-e2e-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
       const result = await runChatMessage({
@@ -66,7 +74,7 @@ describe.runIf(liveEnabled)("@live CLI chat slack", () => {
       expect(postedText).not.toBe("");
       expect(postedText.includes(echoPrefix)).toBeTruthy();
       expect(postedText.includes(marker)).toBeTruthy();
-      expect(postedText.includes(latestSourceMessage.text)).toBeTruthy();
+      expect(postedText.includes(seedMessage.text)).toBeTruthy();
     },
   );
 
