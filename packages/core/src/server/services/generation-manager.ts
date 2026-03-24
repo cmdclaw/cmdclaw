@@ -33,7 +33,6 @@ import type {
 import type { SandboxBackend } from "../sandbox/types";
 import { env } from "../../env";
 import {
-  getCoworkerCliSystemPrompt,
   type CoworkerPatchApplyEnvelope,
   parseCoworkerPatchApplyEnvelope,
   parseCoworkerInvocationEnvelope,
@@ -68,10 +67,9 @@ import {
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
 import {
-  CMDCLAW_CHAT_AGENT_ID,
-  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
-  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
-} from "../prompts/opencode-agent-ids";
+  composeOpencodePromptSpec,
+  type OpencodePromptCompositionInput,
+} from "../prompts/opencode-runtime-prompt";
 import {
   buildQueueJobId,
   CHAT_GENERATION_JOB_NAME,
@@ -599,25 +597,6 @@ function buildExecutionPolicy(params: {
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
     queuedFileAttachments: params.queuedFileAttachments,
   };
-}
-
-function getSelectedPlatformSkillPrompt(selectedPlatformSkillSlugs: string[] | undefined): string {
-  if (!selectedPlatformSkillSlugs || selectedPlatformSkillSlugs.length === 0) {
-    return "";
-  }
-
-  const list = selectedPlatformSkillSlugs.map((slug) => `- ${slug}`).join("\n");
-  const paths = selectedPlatformSkillSlugs
-    .map((slug) => `- /app/.claude/skills/${slug}/SKILL.md`)
-    .join("\n");
-  return [
-    "# Selected Platform Skills",
-    "The user selected these platform skills for this generation:",
-    list,
-    "Prioritize these selected skills before using other platform skills.",
-    "Read and follow these SKILL.md files first:",
-    paths,
-  ].join("\n");
 }
 
 function computeExpiryIso(timeoutMs: number): string {
@@ -4342,36 +4321,38 @@ class GenerationManager {
       const integrationSkillsInstructions =
         getIntegrationSkillsSystemPrompt(writtenIntegrationSkills);
 
-      // Build system prompt
-      const baseSystemPrompt = "You are CmdClaw, an AI agent that helps do work.";
-      const fileShareInstructions = [
-        "## File Sharing",
-        "When you create files that the user needs (PDFs, images, documents, code files, etc.), ",
-        "save them to /app or /home/user. Files created during your response will automatically ",
-        "be made available for download in the chat interface.",
-      ].join("");
-      const coworkerCliPrompt = !ctx.coworkerRunId ? getCoworkerCliSystemPrompt() : null;
-      const coworkerPrompt = this.buildCoworkerPrompt(ctx);
-      const coworkerBuilderPrompt = this.buildCoworkerBuilderPrompt(ctx);
-      const integrationSkillDraftInstructions = this.getIntegrationSkillDraftInstructions();
-      const selectedPlatformSkillInstructions = getSelectedPlatformSkillPrompt(
-        ctx.selectedPlatformSkillSlugs,
-      );
-      const agent = this.resolveOpencodeAgentId(ctx);
-      const systemPromptParts = [
-        baseSystemPrompt,
-        fileShareInstructions,
-        cliInstructions,
-        coworkerCliPrompt,
-        skillsInstructions,
-        selectedPlatformSkillInstructions,
-        integrationSkillsInstructions,
-        integrationSkillDraftInstructions,
-        memoryInstructions,
-        coworkerPrompt,
-        coworkerBuilderPrompt,
-      ].filter(Boolean);
-      const systemPrompt = systemPromptParts.join("\n\n");
+      const promptSpecInput: OpencodePromptCompositionInput = ctx.coworkerRunId
+        ? {
+            kind: "coworker_runner",
+            cliInstructions,
+            skillsInstructions,
+            integrationSkillsInstructions,
+            memoryInstructions,
+            selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+            coworkerPrompt: ctx.coworkerPrompt,
+            coworkerPromptDo: ctx.coworkerPromptDo,
+            coworkerPromptDont: ctx.coworkerPromptDont,
+            triggerPayload: ctx.triggerPayload,
+          }
+        : ctx.builderCoworkerContext
+          ? {
+              kind: "coworker_builder",
+              cliInstructions,
+              skillsInstructions,
+              integrationSkillsInstructions,
+              memoryInstructions,
+              selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+              builderCoworkerContext: ctx.builderCoworkerContext,
+            }
+          : {
+              kind: "chat",
+              cliInstructions,
+              skillsInstructions,
+              integrationSkillsInstructions,
+              memoryInstructions,
+              selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+            };
+      const promptSpec = composeOpencodePromptSpec(promptSpecInput);
 
       let currentTextPart: { type: "text"; text: string } | null = null;
       let currentTextPartId: string | null = null;
@@ -4504,8 +4485,8 @@ class GenerationManager {
       const promptPromise = client.prompt({
         sessionID: sessionId,
         parts: promptParts,
-        agent,
-        system: systemPrompt,
+        agent: promptSpec.agentId,
+        system: promptSpec.systemPrompt,
         model: modelConfig,
       });
 
@@ -5597,23 +5578,6 @@ class GenerationManager {
           return assertNever(part.state);
       }
     }
-  }
-
-  private getIntegrationSkillDraftInstructions(): string {
-    return [
-      "## Creating Integration Skills",
-      "To create a new integration skill via chat, write a JSON draft file in:",
-      "/app/.opencode/integration-skill-drafts/<slug>.json",
-      "The server imports drafts automatically when generation completes.",
-      "Draft schema:",
-      "{",
-      '  "slug": "integration-slug",',
-      '  "title": "Skill title",',
-      '  "description": "When and why to use this skill",',
-      '  "setAsPreferred": true,',
-      '  "files": [{"path":"SKILL.md","content":"..."}]',
-      "}",
-    ].join("\n");
   }
 
   private async importIntegrationSkillDraftsFromSandbox(
@@ -6781,75 +6745,6 @@ class GenerationManager {
     }
   }
 
-  private buildCoworkerPrompt(ctx: GenerationContext): string | null {
-    if (!ctx.coworkerPrompt && ctx.triggerPayload === undefined) {
-      return null;
-    }
-
-    const sections = [
-      ctx.coworkerPrompt ? `## Coworker Instructions\n${ctx.coworkerPrompt}` : null,
-      ctx.coworkerPromptDo ? `## Do\n${ctx.coworkerPromptDo}` : null,
-      ctx.coworkerPromptDont ? `## Don't\n${ctx.coworkerPromptDont}` : null,
-      ctx.triggerPayload !== undefined
-        ? `## Trigger Payload\n${JSON.stringify(ctx.triggerPayload, null, 2)}`
-        : null,
-    ].filter(Boolean);
-
-    if (sections.length === 0) {
-      return null;
-    }
-    return sections.join("\n\n");
-  }
-
-  private buildCoworkerBuilderPrompt(ctx: GenerationContext): string | null {
-    if (!ctx.builderCoworkerContext) {
-      return null;
-    }
-
-    const snapshot = JSON.stringify(
-      {
-        coworkerId: ctx.builderCoworkerContext.coworkerId,
-        updatedAt: ctx.builderCoworkerContext.updatedAt,
-        editable: {
-          prompt: ctx.builderCoworkerContext.prompt,
-          model: ctx.builderCoworkerContext.model,
-          toolAccessMode: ctx.builderCoworkerContext.toolAccessMode,
-          triggerType: ctx.builderCoworkerContext.triggerType,
-          schedule: ctx.builderCoworkerContext.schedule,
-          allowedIntegrations: ctx.builderCoworkerContext.allowedIntegrations,
-        },
-      },
-      null,
-      2,
-    );
-
-    return [
-      "## Coworker Builder Context (System)",
-      "You are in coworker builder mode.",
-      "The coworker snapshot below is the latest server state. Only edit these fields: prompt, model, toolAccessMode, allowedIntegrations, triggerType, schedule.",
-      "If the user asks to change editable coworker fields, apply them by running the coworker CLI instead of describing a patch in assistant text.",
-      "Use this command shape:",
-      `coworker patch ${ctx.builderCoworkerContext.coworkerId} --base-updated-at ${escapeShellArg(ctx.builderCoworkerContext.updatedAt)} --patch '<json>' --json`,
-      "Rules:",
-      "- Use baseUpdatedAt exactly from the snapshot below.",
-      "- The --patch value must be strict JSON with only the fields that should change.",
-      "- Do not include extra top-level envelope keys inside --patch.",
-      "- Supported schedule formats:",
-      '  - {"type":"interval","intervalMinutes":60..10080}',
-      '  - {"type":"daily","time":"HH:MM","timezone":"Area/City"}',
-      '  - {"type":"weekly","time":"HH:MM","daysOfWeek":[0..6],"timezone":"Area/City"}',
-      '  - {"type":"monthly","time":"HH:MM","dayOfMonth":1..31,"timezone":"Area/City"}',
-      "- If triggerType is schedule, include a valid schedule object.",
-      "- If triggerType is not schedule, omit schedule unless explicitly asked to clear it with null.",
-      '- For concrete coworker requests (for example: "send a message in #channel every hour"), run `coworker patch ... --json` in the same turn, even if you also ask a follow-up question.',
-      "- If information is missing, apply a best-effort default patch first, then ask a follow-up question.",
-      '- Best-effort defaults: set triggerType=schedule with schedule {"type":"interval","intervalMinutes":60} for "every hour", and set prompt to a concise executable instruction.',
-      "- If no editable coworker change is requested, do not run coworker patch.",
-      "Snapshot:",
-      snapshot,
-    ].join("\n");
-  }
-
   private appendSystemEvent(
     ctx: GenerationContext,
     event: { content: string; coworkerId?: string },
@@ -6926,20 +6821,6 @@ class GenerationManager {
         userId: ctx.userId,
       },
     );
-  }
-
-  private resolveOpencodeAgentId(
-    ctx: Pick<GenerationContext, "coworkerRunId" | "builderCoworkerContext">,
-  ): string {
-    if (ctx.coworkerRunId) {
-      return CMDCLAW_COWORKER_RUNNER_AGENT_ID;
-    }
-
-    if (ctx.builderCoworkerContext) {
-      return CMDCLAW_COWORKER_BUILDER_AGENT_ID;
-    }
-
-    return CMDCLAW_CHAT_AGENT_ID;
   }
 
   private async recordCoworkerRunEvent(

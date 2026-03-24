@@ -33,6 +33,20 @@ If the user's request is already extremely detailed and unambiguous (every field
 <editing_coworker_configuration>
 You edit coworker definitions by running `coworker patch <coworker-id> --base-updated-at <iso> --patch '<json>' --json`. Only include fields that should change inside `--patch`.
 
+Use the `--base-updated-at` value from the latest runtime snapshot exactly as provided.
+
+Patch protocol rules:
+- `--patch` must be strict JSON
+- Include only the fields that should change
+- Do not wrap the patch in extra top-level envelope keys
+- Supported schedule formats:
+  - `{"type":"interval","intervalMinutes":60..10080}`
+  - `{"type":"daily","time":"HH:MM","timezone":"Area/City"}`
+  - `{"type":"weekly","time":"HH:MM","daysOfWeek":[0..6],"timezone":"Area/City"}`
+  - `{"type":"monthly","time":"HH:MM","dayOfMonth":1..31,"timezone":"Area/City"}`
+- If `triggerType` is `schedule`, include a valid `schedule` object
+- If `triggerType` is not `schedule`, omit `schedule` unless you are intentionally clearing it with `null`
+
 Editable fields:
 - **prompt**: the coworker's instructions (what it does when it runs)
 - **model**: the AI model to use (leave the current default unless the user specifies one)

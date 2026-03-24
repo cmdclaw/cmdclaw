@@ -94,6 +94,10 @@ const { isStatelessServerlessRuntimeMock } = vi.hoisted(() => ({
   isStatelessServerlessRuntimeMock: vi.fn(() => false),
 }));
 
+const { composeOpencodePromptSpecMock } = vi.hoisted(() => ({
+  composeOpencodePromptSpecMock: vi.fn(),
+}));
+
 const { saveConversationSessionSnapshotMock, clearConversationSessionSnapshotMock } = vi.hoisted(
   () => ({
     saveConversationSessionSnapshotMock: vi.fn(),
@@ -293,6 +297,10 @@ vi.mock("../utils/encryption", () => ({
   decrypt: vi.fn((value: string) => value),
 }));
 
+vi.mock("../prompts/opencode-runtime-prompt", () => ({
+  composeOpencodePromptSpec: composeOpencodePromptSpecMock,
+}));
+
 vi.mock("../sandbox/core/orchestrator", () => ({
   getOrCreateConversationRuntime: vi.fn(),
 }));
@@ -435,6 +443,7 @@ import {
   CMDCLAW_COWORKER_BUILDER_AGENT_ID,
   CMDCLAW_COWORKER_RUNNER_AGENT_ID,
 } from "../prompts/opencode-agent-ids";
+import { composeOpencodePromptSpec } from "../prompts/opencode-runtime-prompt";
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
 import { syncMemoryFilesToSandbox, buildMemorySystemPrompt } from "../sandbox/prep/memory-prep";
@@ -489,8 +498,6 @@ type GenerationManagerTestHarness = {
   runGeneration: (ctx: GenerationCtx) => Promise<void>;
   handleSessionReset: (ctx: GenerationCtx) => Promise<void>;
   runOpenCodeGeneration: (ctx: GenerationCtx) => Promise<void>;
-  buildCoworkerPrompt: (ctx: GenerationCtx) => string | null;
-  buildCoworkerBuilderPrompt: (ctx: GenerationCtx) => string | null;
   processOpencodeEvent: (...args: unknown[]) => Promise<void>;
   handleOpenCodeActionableEvent: (...args: unknown[]) => Promise<unknown>;
   handleOpenCodePermissionAsked: (...args: unknown[]) => Promise<void>;
@@ -694,6 +701,20 @@ describe("generationManager transitions", () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.mocked(composeOpencodePromptSpec).mockReset();
+    vi.mocked(composeOpencodePromptSpec).mockImplementation((input) => {
+      const agentId =
+        input.kind === "coworker_runner"
+          ? CMDCLAW_COWORKER_RUNNER_AGENT_ID
+          : input.kind === "coworker_builder"
+            ? CMDCLAW_COWORKER_BUILDER_AGENT_ID
+            : CMDCLAW_CHAT_AGENT_ID;
+      return {
+        agentId,
+        systemPrompt: `mock system prompt for ${input.kind}`,
+        sections: [{ key: "mock", content: `mock system prompt for ${input.kind}` }],
+      };
+    });
     saveConversationSessionSnapshotMock.mockReset();
     saveConversationSessionSnapshotMock.mockResolvedValue(undefined);
     clearConversationSessionSnapshotMock.mockReset();
@@ -2810,52 +2831,6 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("builds coworker prompt sections only when coworker context is present", () => {
-    const mgr = asTestManager();
-
-    expect(
-      mgr.buildCoworkerPrompt(createCtx({ coworkerPrompt: undefined, triggerPayload: undefined })),
-    ).toBeNull();
-
-    const prompt = mgr.buildCoworkerPrompt(
-      createCtx({
-        coworkerPrompt: "Primary coworker instructions",
-        coworkerPromptDo: "Do this",
-        coworkerPromptDont: "Do not do that",
-        triggerPayload: { event: "cron" },
-      }),
-    );
-
-    expect(prompt).toContain("## Coworker Instructions");
-    expect(prompt).toContain("Primary coworker instructions");
-    expect(prompt).toContain("## Do");
-    expect(prompt).toContain("## Don't");
-    expect(prompt).toContain("## Trigger Payload");
-  });
-
-  it("builds coworker builder context prompt when builder context is present", () => {
-    const mgr = asTestManager();
-    const prompt = mgr.buildCoworkerBuilderPrompt(
-      createCtx({
-        builderCoworkerContext: {
-          coworkerId: "wf-1",
-          updatedAt: "2026-03-03T12:00:00.000Z",
-          prompt: "Current coworker prompt",
-          model: "anthropic/claude-sonnet-4-6",
-          toolAccessMode: "selected",
-          triggerType: "manual",
-          schedule: null,
-          allowedIntegrations: ["github"],
-        },
-      }),
-    );
-
-    expect(prompt).toContain("Coworker Builder Context");
-    expect(prompt).toContain("coworker patch");
-    expect(prompt).toContain('"coworkerId": "wf-1"');
-    expect(prompt).toContain('"model": "anthropic/claude-sonnet-4-6"');
-  });
-
   it("runs OpenCode generation happy path and completes", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
@@ -2942,10 +2917,19 @@ describe("generationManager transitions", () => {
         allowSnapshotRestore: true,
       }),
     );
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "chat",
+        cliInstructions: "cli instructions",
+        skillsInstructions: "skills prompt",
+        integrationSkillsInstructions: "integration skills prompt",
+        memoryInstructions: "memory prompt",
+      }),
+    );
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
     expect(promptArg.agent).toBe(CMDCLAW_CHAT_AGENT_ID);
-    expect(promptArg.system).toContain("## File Sharing");
+    expect(promptArg.system).toBe("mock system prompt for chat");
     expect(vi.mocked(collectNewSandboxFiles)).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(Number),
@@ -3018,11 +3002,16 @@ describe("generationManager transitions", () => {
 
     await mgr.runOpenCodeGeneration(ctx);
 
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "coworker_builder",
+        builderCoworkerContext: ctx.builderCoworkerContext,
+      }),
+    );
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
     expect(promptArg.agent).toBe(CMDCLAW_COWORKER_BUILDER_AGENT_ID);
-    expect(promptArg.system).toContain("## Coworker Builder Context (System)");
-    expect(promptArg.system).toContain('"coworkerId": "wf-1"');
+    expect(promptArg.system).toBe("mock system prompt for coworker_builder");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
@@ -3079,10 +3068,17 @@ describe("generationManager transitions", () => {
 
     await mgr.runOpenCodeGeneration(ctx);
 
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "coworker_runner",
+        coworkerPrompt: undefined,
+        triggerPayload: undefined,
+      }),
+    );
     expect(promptMock).toHaveBeenCalledTimes(1);
     const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
     expect(promptArg.agent).toBe(CMDCLAW_COWORKER_RUNNER_AGENT_ID);
-    expect(promptArg.system).not.toContain("Do not ask clarifying questions.");
+    expect(promptArg.system).toBe("mock system prompt for coworker_runner");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
