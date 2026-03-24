@@ -13,12 +13,52 @@ const {
   mockSetSelectedSkillSlugs,
   mockTriggerCoworkerMutateAsync,
   mockRouterPush,
+  mockRouterReplace,
+  mockPathnameData,
+  mockParamsData,
+  mockSearchParamsData,
+  mockCoworkerData,
+  mockCoworkerRunsData,
 } = vi.hoisted(() => ({
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockGetOrCreateBuilderConversationMutate: vi.fn(),
   mockSetSelectedSkillSlugs: vi.fn(),
   mockTriggerCoworkerMutateAsync: vi.fn(),
   mockRouterPush: vi.fn(),
+  mockRouterReplace: vi.fn(),
+  mockPathnameData: { current: "/coworkers/cw-1" },
+  mockParamsData: { current: { id: "cw-1" } as { id: string; runId?: string } },
+  mockSearchParamsData: { current: "" },
+  mockCoworkerData: {
+    current: {
+      id: "cw-1",
+      name: "Existing Coworker",
+      description: "Existing description",
+      username: "existing-user",
+      status: "on" as const,
+      autoApprove: true,
+      triggerType: "manual",
+      prompt: "Existing prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+      createdAt: new Date("2026-03-12T10:00:00.000Z"),
+      updatedAt: new Date("2026-03-12T10:00:00.000Z"),
+      runs: [],
+    },
+  },
+  mockCoworkerRunsData: {
+    current: [] as Array<{
+      id: string;
+      status: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      errorMessage: string | null;
+    }>,
+  },
 }));
 
 function MockContainer({ children }: { children: React.ReactNode }) {
@@ -47,8 +87,10 @@ function MockSwitch({
 }
 
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ id: "cw-1" }),
-  useRouter: () => ({ push: mockRouterPush }),
+  useParams: () => mockParamsData.current,
+  usePathname: () => mockPathnameData.current,
+  useSearchParams: () => new URLSearchParams(mockSearchParamsData.current),
+  useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
 }));
 
 vi.mock("next/image", () => ({
@@ -212,31 +254,14 @@ vi.mock("@/orpc/hooks", () => ({
   useDisableCoworkerForwardingAlias: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useRotateCoworkerForwardingAlias: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useCoworker: () => ({
-    data: {
-      id: "cw-1",
-      name: "Existing Coworker",
-      description: "Existing description",
-      username: "existing-user",
-      status: "on",
-      autoApprove: true,
-      triggerType: "manual",
-      prompt: "Existing prompt",
-      model: "anthropic/claude-sonnet-4-6",
-      promptDo: null,
-      promptDont: null,
-      allowedIntegrations: ["slack"],
-      allowedCustomIntegrations: [],
-      schedule: null,
-      createdAt: new Date("2026-03-12T10:00:00.000Z"),
-      updatedAt: new Date("2026-03-12T10:00:00.000Z"),
-      runs: [],
-    },
+    data: mockCoworkerData.current,
     isLoading: false,
   }),
   useCoworkerForwardingAlias: () => ({ data: null }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
   useDeleteCoworker: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useCoworkerRuns: () => ({ data: [], refetch: vi.fn() }),
+  useCoworkerRun: () => ({ data: null, isLoading: false }),
+  useCoworkerRuns: () => ({ data: mockCoworkerRunsData.current, refetch: vi.fn() }),
   useTriggerCoworker: () => ({ mutateAsync: mockTriggerCoworkerMutateAsync, isPending: false }),
   useGetOrCreateBuilderConversation: () => ({
     mutate: mockGetOrCreateBuilderConversationMutate,
@@ -268,6 +293,30 @@ describe("CoworkerEditorPage", () => {
     mockSetSelectedSkillSlugs.mockReset();
     mockTriggerCoworkerMutateAsync.mockReset();
     mockRouterPush.mockReset();
+    mockRouterReplace.mockReset();
+    mockPathnameData.current = "/coworkers/cw-1";
+    mockParamsData.current = { id: "cw-1" };
+    mockSearchParamsData.current = "";
+    mockCoworkerData.current = {
+      id: "cw-1",
+      name: "Existing Coworker",
+      description: "Existing description",
+      username: "existing-user",
+      status: "on",
+      autoApprove: true,
+      triggerType: "manual",
+      prompt: "Existing prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+      createdAt: new Date("2026-03-12T10:00:00.000Z"),
+      updatedAt: new Date("2026-03-12T10:00:00.000Z"),
+      runs: [],
+    };
+    mockCoworkerRunsData.current = [];
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
     mockTriggerCoworkerMutateAsync.mockResolvedValue({ success: true });
   });
@@ -337,6 +386,40 @@ describe("CoworkerEditorPage", () => {
 
     expect(screen.getByText("No runs yet.")).toBeInTheDocument();
     expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).toHaveBeenCalledWith("/coworkers/cw-1/runs");
+  });
+
+  it("pushes a direct coworker run route when selecting a run", () => {
+    mockCoworkerRunsData.current = [
+      {
+        id: "run-1",
+        status: "completed",
+        startedAt: new Date("2026-03-12T10:00:00.000Z"),
+        finishedAt: new Date("2026-03-12T10:05:00.000Z"),
+        errorMessage: null,
+      },
+    ];
+
+    render(<CoworkerEditorPage />);
+
+    fireEvent.click(screen.getByText("Runs"));
+    fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/cw-1/runs/run-1");
+    expect(screen.getByText("Run not found.")).toBeInTheDocument();
+  });
+
+  it("opens the inline run viewer when loaded on a coworker run route", async () => {
+    mockPathnameData.current = "/coworkers/cw-1/runs/run-1";
+    mockParamsData.current = { id: "cw-1", runId: "run-1" };
+
+    render(<CoworkerEditorPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Run not found.")).toBeInTheDocument();
   });
 
   it("saves model changes before starting a run", async () => {
@@ -362,5 +445,24 @@ describe("CoworkerEditorPage", () => {
     expect(mockUpdateCoworkerMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
       mockTriggerCoworkerMutateAsync.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
+  });
+
+  it("refreshes the instruction panel when the coworker is patched externally", async () => {
+    const { rerender } = render(<CoworkerEditorPage />);
+
+    expect(screen.getByDisplayValue("Existing prompt")).toBeInTheDocument();
+
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      prompt: "Builder patched prompt",
+      updatedAt: new Date("2026-03-12T10:05:00.000Z"),
+    };
+
+    await act(async () => {
+      rerender(<CoworkerEditorPage />);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
   });
 });

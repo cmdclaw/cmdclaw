@@ -27,7 +27,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -125,6 +125,8 @@ const runListMotionExit = { opacity: 0, x: -24 } as const;
 const runMotionTransition = { duration: 0.2, ease: "easeOut" } as const;
 const statusTextMotionTransition = { duration: 0.15 } as const;
 const DEFAULT_COWORKER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
+type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox";
+
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
     return "just now";
@@ -185,8 +187,11 @@ function CoworkerChatPanel({
 }
 
 export default function CoworkerEditorPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id: string; runId?: string }>();
   const coworkerId = params?.id;
+  const routeRunId = params?.runId ?? null;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { isAdmin } = useIsAdmin();
   const { data: coworker, isLoading } = useCoworker(coworkerId);
@@ -224,16 +229,40 @@ export default function CoworkerEditorPage() {
   >(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<"chat" | "instruction" | "runs" | "docs" | "toolbox">(
-    "instruction",
-  );
+  const [activeTab, setActiveTab] = useState<CoworkerTab>("instruction");
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(routeRunId);
+  const isRunsRoute = pathname?.startsWith(`/coworkers/${coworkerId}/runs`) ?? false;
+  const baseTabParam = searchParams.get("tab");
+  const routeBaseTab: CoworkerTab | null =
+    baseTabParam === "chat" ||
+    baseTabParam === "instruction" ||
+    baseTabParam === "docs" ||
+    baseTabParam === "toolbox"
+      ? baseTabParam
+      : null;
   const hasSetMobileDefaultRef = useRef(false);
   useEffect(() => {
-    if (isMobile && !hasSetMobileDefaultRef.current) {
-      hasSetMobileDefaultRef.current = true;
+    if (!isMobile || hasSetMobileDefaultRef.current) {
+      return;
+    }
+    hasSetMobileDefaultRef.current = true;
+    if (!isRunsRoute) {
       setActiveTab("chat");
     }
-  }, [isMobile]);
+  }, [isMobile, isRunsRoute]);
+
+  useEffect(() => {
+    if (!isRunsRoute) {
+      setSelectedRunId(null);
+      if (routeBaseTab) {
+        setActiveTab(routeBaseTab);
+      }
+      return;
+    }
+
+    setActiveTab("runs");
+    setSelectedRunId(routeRunId);
+  }, [isRunsRoute, routeBaseTab, routeRunId]);
   const collapseToggleRef = useRef<(() => void) | null>(null);
   const handleClose = useCallback(() => {
     collapseToggleRef.current?.();
@@ -460,6 +489,10 @@ export default function CoworkerEditorPage() {
       return;
     }
 
+    const normalizedModelSelection = normalizeChatModelSelection({
+      model: coworker.model ?? DEFAULT_COWORKER_MODEL,
+      authSource: coworker.authSource ?? null,
+    });
     const availableIntegrationTypes = COWORKER_AVAILABLE_INTEGRATION_TYPES;
     const coworkerAllowedIntegrations = (
       (coworker.allowedIntegrations ?? []) as IntegrationType[]
@@ -473,7 +506,7 @@ export default function CoworkerEditorPage() {
       triggerType: coworker.triggerType,
       prompt: coworker.prompt,
       model: coworker.model ?? DEFAULT_COWORKER_MODEL,
-      authSource: coworker.authSource ?? null,
+      authSource: normalizedModelSelection.authSource,
       autoApprove: coworker.autoApprove ?? true,
       toolAccessMode: coworker.toolAccessMode,
       allowedIntegrations: coworkerAllowedIntegrations,
@@ -505,10 +538,6 @@ export default function CoworkerEditorPage() {
     setUsername(coworker.username ?? "");
     setTriggerType(coworker.triggerType);
     setPrompt(coworker.prompt);
-    const normalizedModelSelection = normalizeChatModelSelection({
-      model: coworker.model ?? DEFAULT_COWORKER_MODEL,
-      authSource: coworker.authSource ?? null,
-    });
     setModel(normalizedModelSelection.model || DEFAULT_COWORKER_MODEL);
     setModelAuthSource(normalizedModelSelection.authSource);
     setToolAccessMode(coworker.toolAccessMode);
@@ -791,26 +820,92 @@ export default function CoworkerEditorPage() {
   const hasAgentInstructions = prompt.trim().length > 0;
   const coworkerDisplayName = coworker?.name?.trim().length ? coworker.name : "New Coworker";
 
+  const buildCoworkerEditorHref = useCallback(
+    (tab?: Exclude<CoworkerTab, "runs"> | null) => {
+      if (!coworkerId) {
+        return "/coworkers";
+      }
+
+      if (!tab || tab === "instruction") {
+        return `/coworkers/${coworkerId}`;
+      }
+
+      return `/coworkers/${coworkerId}?tab=${tab}`;
+    },
+    [coworkerId],
+  );
+
+  const buildCoworkerPanelHref = useCallback(
+    (options?: { runId?: string | null }) => {
+      if (!coworkerId) {
+        return "/coworkers";
+      }
+
+      if (options?.runId) {
+        return `/coworkers/${coworkerId}/runs/${options.runId}`;
+      }
+
+      return `/coworkers/${coworkerId}/runs`;
+    },
+    [coworkerId],
+  );
+
   const handleRunClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       setActiveTab("runs");
+      setSelectedRunId(null);
+      router.replace(buildCoworkerPanelHref());
       void handleRun();
     },
-    [handleRun],
+    [buildCoworkerPanelHref, handleRun, router],
   );
 
   const isRunDisabled =
     !hasAgentInstructions || status !== "on" || triggerCoworker.isPending || isStartingRun;
   const isRunning = triggerCoworker.isPending || isStartingRun;
 
-  type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox";
   const handleMobileTabChange = useCallback(
     (key: string) => {
-      setActiveTab(key as CoworkerTab);
+      const nextTab = key as CoworkerTab;
+      setActiveTab(nextTab);
+      setSelectedRunId(null);
+
+      if (!coworkerId) {
+        return;
+      }
+
+      if (nextTab === "runs") {
+        router.replace(buildCoworkerPanelHref());
+        return;
+      }
+
+      if (isRunsRoute || routeBaseTab !== nextTab) {
+        router.replace(buildCoworkerEditorHref(nextTab));
+      }
     },
-    [setActiveTab],
+    [
+      buildCoworkerEditorHref,
+      buildCoworkerPanelHref,
+      coworkerId,
+      isRunsRoute,
+      routeBaseTab,
+      router,
+    ],
   );
+  const handleSelectRun = useCallback(
+    (runId: string) => {
+      setActiveTab("runs");
+      setSelectedRunId(runId);
+      router.push(buildCoworkerPanelHref({ runId }));
+    },
+    [buildCoworkerPanelHref, router],
+  );
+  const handleBackToRuns = useCallback(() => {
+    setActiveTab("runs");
+    setSelectedRunId(null);
+    router.replace(buildCoworkerPanelHref());
+  }, [buildCoworkerPanelHref, router]);
   const handleOpenDeleteDialog = useCallback(() => {
     setShowDeleteDialog(true);
   }, []);
@@ -864,13 +959,16 @@ export default function CoworkerEditorPage() {
         copiedForwardingField={copiedForwardingField}
         runs={runs}
         activeTab={activeTab}
+        selectedRunId={selectedRunId}
         isRunDisabled={isRunDisabled}
         isRunning={isRunning}
         createForwardingAlias={createForwardingAlias}
         disableForwardingAlias={disableForwardingAlias}
         rotateForwardingAlias={rotateForwardingAlias}
-        onTabChange={setActiveTab}
+        onTabChange={handleMobileTabChange}
         onRun={handleRunClick}
+        onSelectRun={handleSelectRun}
+        onBackToRuns={handleBackToRuns}
         onNameChange={handleNameChange}
         onDescriptionChange={handleDescriptionChange}
         onUsernameChange={handleUsernameChange}
@@ -934,13 +1032,16 @@ export default function CoworkerEditorPage() {
       copiedForwardingField,
       runs,
       activeTab,
+      selectedRunId,
       isRunDisabled,
       isRunning,
       createForwardingAlias,
       disableForwardingAlias,
       rotateForwardingAlias,
-      setActiveTab,
+      handleMobileTabChange,
       handleRunClick,
+      handleSelectRun,
+      handleBackToRuns,
       handleNameChange,
       handleDescriptionChange,
       handleUsernameChange,
@@ -1072,13 +1173,16 @@ export default function CoworkerEditorPage() {
               copiedForwardingField={copiedForwardingField}
               runs={runs}
               activeTab={activeTab}
+              selectedRunId={selectedRunId}
               isRunDisabled={isRunDisabled}
               isRunning={isRunning}
               createForwardingAlias={createForwardingAlias}
               disableForwardingAlias={disableForwardingAlias}
               rotateForwardingAlias={rotateForwardingAlias}
-              onTabChange={setActiveTab}
+              onTabChange={handleMobileTabChange}
               onRun={handleRunClick}
+              onSelectRun={handleSelectRun}
+              onBackToRuns={handleBackToRuns}
               onNameChange={handleNameChange}
               onDescriptionChange={handleDescriptionChange}
               onUsernameChange={handleUsernameChange}
@@ -1334,14 +1438,17 @@ type CoworkerSettingsPanelProps = {
         errorMessage: string | null;
       }>
     | undefined;
-  activeTab: "chat" | "instruction" | "runs" | "docs" | "toolbox";
+  activeTab: CoworkerTab;
+  selectedRunId: string | null;
   isRunDisabled: boolean;
   isRunning: boolean;
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
-  onTabChange: (tab: "chat" | "instruction" | "runs" | "docs" | "toolbox") => void;
+  onTabChange: (tab: CoworkerTab) => void;
   onRun: (e: React.MouseEvent) => void;
+  onSelectRun: (runId: string) => void;
+  onBackToRuns: () => void;
   onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onUsernameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -1406,6 +1513,7 @@ function CoworkerSettingsPanel({
   copiedForwardingField,
   runs,
   activeTab,
+  selectedRunId,
   isRunDisabled,
   isRunning,
   createForwardingAlias,
@@ -1413,6 +1521,8 @@ function CoworkerSettingsPanel({
   rotateForwardingAlias,
   onTabChange,
   onRun,
+  onSelectRun,
+  onBackToRuns,
   onNameChange,
   onDescriptionChange,
   onUsernameChange,
@@ -1445,7 +1555,6 @@ function CoworkerSettingsPanel({
 }: CoworkerSettingsPanelProps) {
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
   const [triggerExpanded, setTriggerExpanded] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const handleOpenInstructionModal = useCallback(() => {
     setInstructionModalOpen(true);
@@ -1489,22 +1598,20 @@ function CoworkerSettingsPanel({
 
   const handleTabChange = useCallback(
     (key: string) => {
-      setSelectedRunId(null);
-      onTabChange(key as "chat" | "instruction" | "runs" | "docs" | "toolbox");
+      onTabChange(key as CoworkerTab);
     },
     [onTabChange],
   );
 
-  const handleSelectRun = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const runId = e.currentTarget.dataset.runId;
-    if (runId) {
-      setSelectedRunId(runId);
-    }
-  }, []);
-
-  const handleBackToRuns = useCallback(() => {
-    setSelectedRunId(null);
-  }, []);
+  const handleSelectRun = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const runId = e.currentTarget.dataset.runId;
+      if (runId) {
+        onSelectRun(runId);
+      }
+    },
+    [onSelectRun],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -2025,7 +2132,7 @@ function CoworkerSettingsPanel({
                 transition={runMotionTransition}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <InlineRunViewer runId={selectedRunId} onBack={handleBackToRuns} />
+                <InlineRunViewer runId={selectedRunId} onBack={onBackToRuns} />
               </motion.div>
             ) : (
               <motion.div
