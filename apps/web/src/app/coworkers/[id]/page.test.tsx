@@ -318,7 +318,7 @@ describe("CoworkerEditorPage", () => {
     };
     mockCoworkerRunsData.current = [];
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
-    mockTriggerCoworkerMutateAsync.mockResolvedValue({ success: true });
+    mockTriggerCoworkerMutateAsync.mockResolvedValue({ runId: "run-1" });
   });
 
   afterEach(() => {
@@ -379,14 +379,18 @@ describe("CoworkerEditorPage", () => {
     );
   });
 
-  it("switches to the runs tab when starting a run", () => {
+  it("opens the triggered run when starting a run", async () => {
     render(<CoworkerEditorPage />);
 
     fireEvent.click(screen.getAllByText("Run now")[0]!);
 
-    expect(screen.getByText("No runs yet.")).toBeInTheDocument();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Run not found.")).toBeInTheDocument();
     expect(mockRouterPush).not.toHaveBeenCalled();
-    expect(mockRouterReplace).toHaveBeenCalledWith("/coworkers/cw-1/runs");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/coworkers/cw-1/runs/run-1");
   });
 
   it("pushes a direct coworker run route when selecting a run", () => {

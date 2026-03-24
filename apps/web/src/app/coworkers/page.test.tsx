@@ -342,6 +342,6 @@ describe("CoworkersPage", () => {
     await waitFor(() => {
       expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });
     });
-    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs");
+    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs/run-1");
   });
 });

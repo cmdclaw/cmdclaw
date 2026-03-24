@@ -272,17 +272,11 @@ export function AppSidebar() {
       return pathname === "/";
     }
     if (href === "/chat") {
-      return (
-        pathname === "/chat" ||
-        pathname.startsWith("/chat/") ||
-        pathname.startsWith("/coworkers/runs/")
-      );
+      return pathname === "/chat" || pathname.startsWith("/chat/");
     }
     return pathname === href || pathname.startsWith(href + "/");
   };
-  const isCoworkerRunDetailPage = pathname.startsWith("/coworkers/runs/");
-  const isCoworkerPage =
-    (pathname === "/coworkers" || pathname.startsWith("/coworkers/")) && !isCoworkerRunDetailPage;
+  const isCoworkerPage = pathname === "/coworkers" || pathname.startsWith("/coworkers/");
 
   // Only animate the recent section when navigating to/from coworkers, not on first load/reload.
   const recentDirection = isCoworkerPage ? 1 : -1;

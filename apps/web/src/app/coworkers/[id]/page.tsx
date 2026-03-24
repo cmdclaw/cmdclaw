@@ -792,7 +792,7 @@ export default function CoworkerEditorPage() {
 
   const handleRun = useCallback(async () => {
     if (!coworkerId || isStartingRun) {
-      return;
+      return null;
     }
 
     setIsStartingRun(true);
@@ -803,15 +803,17 @@ export default function CoworkerEditorPage() {
       const saveSucceeded = await persistCoworker({ force: true });
       if (!saveSucceeded) {
         toast.error("Failed to save coworker before test run.");
-        return;
+        return null;
       }
 
-      await triggerCoworker.mutateAsync({ id: coworkerId, payload: {} });
+      const result = await triggerCoworker.mutateAsync({ id: coworkerId, payload: {} });
       toast.success("Run started.");
       void refetchRuns();
+      return result;
     } catch (error) {
       console.error("Failed to run coworker:", error);
       toast.error("Failed to start run.");
+      return null;
     } finally {
       setIsStartingRun(false);
     }
@@ -851,12 +853,17 @@ export default function CoworkerEditorPage() {
   );
 
   const handleRunClick = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation();
+
+      const result = await handleRun();
+      if (!result?.runId) {
+        return;
+      }
+
       setActiveTab("runs");
-      setSelectedRunId(null);
-      router.replace(buildCoworkerPanelHref());
-      void handleRun();
+      setSelectedRunId(result.runId);
+      router.replace(buildCoworkerPanelHref({ runId: result.runId }));
     },
     [buildCoworkerPanelHref, handleRun, router],
   );
