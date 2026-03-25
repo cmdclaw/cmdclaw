@@ -18,7 +18,10 @@ export type AttachmentData = {
 };
 
 type PromptBarProps = {
-  onSubmit: (text: string, attachments?: AttachmentData[]) => void;
+  onSubmit: (
+    text: string,
+    attachments?: AttachmentData[],
+  ) => void | boolean | Promise<void | boolean>;
   onStop?: () => void;
   isSubmitting?: boolean;
   isStreaming?: boolean;
@@ -391,12 +394,20 @@ export function PromptBar({
   );
 
   // ── Submit ──
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const trimmed = text.trim();
     if ((!trimmed && attachments.length === 0) || disabled || isSubmitting) {
       return;
     }
-    onSubmit(trimmed, attachments.length > 0 ? attachments : undefined);
+    try {
+      const result = await onSubmit(trimmed, attachments.length > 0 ? attachments : undefined);
+      if (result === false) {
+        return;
+      }
+    } catch (error) {
+      console.error("Prompt submit failed:", error);
+      return;
+    }
     setAttachments([]);
     setText("");
     if (textareaRef.current) {
@@ -408,7 +419,7 @@ export function PromptBar({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        handleSubmit();
+        void handleSubmit();
       }
     },
     [handleSubmit],
@@ -417,6 +428,10 @@ export function PromptBar({
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
   }, []);
+
+  const handleSendClick = useCallback(() => {
+    void handleSubmit();
+  }, [handleSubmit]);
 
   // ── Voice ──
   const handleRecordMouseDown = useCallback(
@@ -678,7 +693,7 @@ export function PromptBar({
             {/* Send */}
             <button
               type="button"
-              onClick={handleSubmit}
+              onClick={handleSendClick}
               disabled={!canSend}
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-lg transition-all",

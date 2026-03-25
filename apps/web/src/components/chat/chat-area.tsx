@@ -2184,8 +2184,8 @@ export function ChatArea({
   );
 
   const handleSend = useCallback(
-    (content: string, attachments?: AttachmentData[]) => {
-      const send = async () => {
+    async (content: string, attachments?: AttachmentData[]) => {
+      try {
         const selectedSkillKeysSnapshot = [...selectedSkillKeys];
         const selectedPlatformSkillSlugs = selectedSkillKeysSnapshot.filter(
           (key) => !key.startsWith(CUSTOM_SKILL_PREFIX),
@@ -2213,14 +2213,21 @@ export function ChatArea({
             replaceExisting: true,
           });
           clearSelectedSkillSlugs(skillSelectionScopeKey);
-          return;
+          return true;
         }
 
         clearSelectedSkillSlugs(skillSelectionScopeKey);
         await runGeneration(outgoingContent, attachments, selectedSkillKeysSnapshot);
-      };
-
-      void send();
+        return true;
+      } catch (error) {
+        console.error("Failed to send chat message:", error);
+        setStreamError(
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "Failed to send message. Please try again.",
+        );
+        return false;
+      }
     },
     [
       buildOutgoingContent,

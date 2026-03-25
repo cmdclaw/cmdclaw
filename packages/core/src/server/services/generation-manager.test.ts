@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   updateReturningMock,
   updateSetMock,
+  deleteReturningMock,
   insertReturningMock,
   insertValuesMock,
   conversationRuntimeFindFirstMock,
@@ -10,6 +11,7 @@ const {
   generationFindManyMock,
   messageFindFirstMock,
   conversationFindFirstMock,
+  conversationQueuedMessageFindFirstMock,
   conversationQueuedMessageFindManyMock,
   coworkerRunFindFirstMock,
   coworkerFindFirstMock,
@@ -23,6 +25,10 @@ const {
   const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
   const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
+  const deleteReturningMock = vi.fn();
+  const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
+  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+
   const insertReturningMock = vi.fn();
   const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
   const insertMock = vi.fn(() => ({ values: insertValuesMock }));
@@ -31,6 +37,7 @@ const {
   const generationFindManyMock = vi.fn();
   const messageFindFirstMock = vi.fn();
   const conversationFindFirstMock = vi.fn();
+  const conversationQueuedMessageFindFirstMock = vi.fn();
   const conversationQueuedMessageFindManyMock = vi.fn();
   const coworkerRunFindFirstMock = vi.fn();
   const coworkerFindFirstMock = vi.fn();
@@ -44,7 +51,10 @@ const {
       generation: { findFirst: generationFindFirstMock, findMany: generationFindManyMock },
       message: { findFirst: messageFindFirstMock },
       conversation: { findFirst: conversationFindFirstMock },
-      conversationQueuedMessage: { findMany: conversationQueuedMessageFindManyMock },
+      conversationQueuedMessage: {
+        findFirst: conversationQueuedMessageFindFirstMock,
+        findMany: conversationQueuedMessageFindManyMock,
+      },
       coworkerRun: { findFirst: coworkerRunFindFirstMock },
       coworker: { findFirst: coworkerFindFirstMock },
       providerAuth: { findFirst: providerAuthFindFirstMock, findMany: vi.fn(() => []) },
@@ -52,6 +62,7 @@ const {
       skill: { findMany: vi.fn(() => []) },
       customIntegrationCredential: { findMany: vi.fn(() => []) },
     },
+    delete: deleteMock,
     update: updateMock,
     insert: insertMock,
   };
@@ -59,6 +70,7 @@ const {
   return {
     updateReturningMock,
     updateSetMock,
+    deleteReturningMock,
     insertReturningMock,
     insertValuesMock,
     conversationRuntimeFindFirstMock,
@@ -66,6 +78,7 @@ const {
     generationFindManyMock,
     messageFindFirstMock,
     conversationFindFirstMock,
+    conversationQueuedMessageFindFirstMock,
     conversationQueuedMessageFindManyMock,
     coworkerRunFindFirstMock,
     coworkerFindFirstMock,
@@ -1768,6 +1781,96 @@ describe("generationManager transitions", () => {
 
     expect(result).toEqual([]);
     expect(conversationQueuedMessageFindManyMock).not.toHaveBeenCalled();
+  });
+
+  it("enqueues queued messages for coworker conversations", async () => {
+    conversationFindFirstMock.mockResolvedValueOnce({
+      id: "conv-coworker-builder",
+      userId: "user-1",
+      type: "coworker",
+    });
+    insertReturningMock.mockResolvedValueOnce([{ id: "queue-coworker-1" }]);
+
+    const result = await generationManager.enqueueConversationMessage({
+      conversationId: "conv-coworker-builder",
+      userId: "user-1",
+      content: "Steer the builder toward CRM follow-up.",
+    });
+
+    expect(result).toEqual({ queuedMessageId: "queue-coworker-1" });
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "conversation:queued-message-process",
+      { conversationId: "conv-coworker-builder" },
+      expect.any(Object),
+    );
+  });
+
+  it("lists queued messages for coworker conversations", async () => {
+    const createdAt = new Date("2026-03-12T10:00:00.000Z");
+    conversationFindFirstMock.mockResolvedValueOnce({
+      id: "conv-coworker-run",
+      userId: "user-1",
+      type: "coworker",
+    });
+    conversationQueuedMessageFindManyMock.mockResolvedValueOnce([
+      {
+        id: "queue-coworker-1",
+        content: "Steer the runner toward the latest customer reply.",
+        fileAttachments: undefined,
+        selectedPlatformSkillSlugs: ["gmail"],
+        status: "queued",
+        createdAt,
+      },
+    ]);
+
+    const result = await generationManager.listConversationQueuedMessages(
+      "conv-coworker-run",
+      "user-1",
+    );
+
+    expect(result).toEqual([
+      {
+        id: "queue-coworker-1",
+        content: "Steer the runner toward the latest customer reply.",
+        fileAttachments: undefined,
+        selectedPlatformSkillSlugs: ["gmail"],
+        status: "queued",
+        createdAt,
+      },
+    ]);
+  });
+
+  it("processes queued messages for coworker conversations once idle", async () => {
+    const startGenerationSpy = vi.spyOn(generationManager, "startGeneration").mockResolvedValue({
+      generationId: "gen-next",
+      conversationId: "conv-coworker-run",
+    });
+
+    conversationFindFirstMock.mockResolvedValueOnce({
+      id: "conv-coworker-run",
+      type: "coworker",
+    });
+    generationFindFirstMock.mockResolvedValueOnce(null);
+    conversationQueuedMessageFindFirstMock.mockResolvedValueOnce({ id: "queue-coworker-1" });
+    updateReturningMock.mockResolvedValueOnce([
+      {
+        id: "queue-coworker-1",
+        userId: "user-1",
+        content: "Steer the runner toward the urgent issue first.",
+        fileAttachments: null,
+        selectedPlatformSkillSlugs: ["linear"],
+      },
+    ]);
+
+    await generationManager.processConversationQueuedMessages("conv-coworker-run");
+
+    expect(startGenerationSpy).toHaveBeenCalledWith({
+      conversationId: "conv-coworker-run",
+      userId: "user-1",
+      content: "Steer the runner toward the urgent issue first.",
+      fileAttachments: undefined,
+      selectedPlatformSkillSlugs: ["linear"],
+    });
   });
 
   it("forces opencode backend for OpenAI subscription models even when Daytona is preferred", async () => {

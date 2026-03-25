@@ -46,7 +46,10 @@ type BottomActionBarProps = {
   authConnectedIntegrations?: string[];
 
   // PromptBar props passthrough
-  onSubmit: (text: string, attachments?: AttachmentData[]) => void;
+  onSubmit: (
+    text: string,
+    attachments?: AttachmentData[],
+  ) => void | boolean | Promise<void | boolean>;
   onStop?: () => void;
   isSubmitting?: boolean;
   isStreaming?: boolean;

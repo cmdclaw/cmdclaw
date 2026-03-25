@@ -747,6 +747,8 @@ function limitToolResultContent(value: unknown): unknown {
   }
 }
 
+const QUEUEABLE_CONVERSATION_TYPES = ["chat", "coworker"] as const;
+
 class GenerationManager {
   private activeGenerations = new Map<string, GenerationContext>();
   private activeSubscriptionCounts = new Map<string, number>();
@@ -825,7 +827,7 @@ class GenerationManager {
       where: and(
         eq(conversation.id, params.conversationId),
         eq(conversation.userId, params.userId),
-        eq(conversation.type, "chat"),
+        inArray(conversation.type, QUEUEABLE_CONVERSATION_TYPES),
       ),
       columns: {
         id: true,
@@ -872,7 +874,7 @@ class GenerationManager {
       where: and(
         eq(conversation.id, conversationId),
         eq(conversation.userId, userId),
-        eq(conversation.type, "chat"),
+        inArray(conversation.type, QUEUEABLE_CONVERSATION_TYPES),
       ),
       columns: {
         id: true,
@@ -939,7 +941,10 @@ class GenerationManager {
 
   async processConversationQueuedMessages(conversationId: string): Promise<void> {
     const conv = await db.query.conversation.findFirst({
-      where: and(eq(conversation.id, conversationId), eq(conversation.type, "chat")),
+      where: and(
+        eq(conversation.id, conversationId),
+        inArray(conversation.type, QUEUEABLE_CONVERSATION_TYPES),
+      ),
       columns: {
         id: true,
       },
