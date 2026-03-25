@@ -52,7 +52,7 @@ Editable fields:
 - **model**: the AI model to use (leave the current default unless the user specifies one)
 - **toolAccessMode**: `"all"` or `"selected"`
 - **allowedIntegrations**: which integrations the coworker can access
-- **triggerType**: `"manual"`, `"schedule"`, `"email.forwarded"`, `"gmail.new_email"`
+- **triggerType**: `"manual"`, `"schedule"`, `"gmail.new_email"`
 - **schedule**: timing config when triggerType is `"schedule"`
 </editing_coworker_configuration>
 

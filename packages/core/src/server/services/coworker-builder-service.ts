@@ -16,10 +16,11 @@ import { syncCoworkerScheduleJob } from "./coworker-scheduler";
 const BUILDER_ALLOWED_TRIGGER_TYPES = [
   "manual",
   "schedule",
-  EMAIL_FORWARDED_TRIGGER_TYPE,
   "gmail.new_email",
   "twitter.new_dm",
 ] as const;
+
+const LEGACY_READ_ONLY_TRIGGER_TYPES = [EMAIL_FORWARDED_TRIGGER_TYPE] as const;
 
 const modelReferenceSchema = z
   .string()
@@ -365,8 +366,15 @@ export async function applyCoworkerPatch(params: {
   const nextSchedule =
     params.patch.schedule !== undefined ? params.patch.schedule : (existing.schedule ?? null);
   const details: string[] = [];
+  const isLegacyReadOnlyTrigger =
+    params.patch.triggerType === undefined &&
+    nextTriggerType === existing.triggerType &&
+    LEGACY_READ_ONLY_TRIGGER_TYPES.includes(
+      existing.triggerType as (typeof LEGACY_READ_ONLY_TRIGGER_TYPES)[number],
+    );
 
   if (
+    !isLegacyReadOnlyTrigger &&
     !BUILDER_ALLOWED_TRIGGER_TYPES.includes(
       nextTriggerType as (typeof BUILDER_ALLOWED_TRIGGER_TYPES)[number],
     )

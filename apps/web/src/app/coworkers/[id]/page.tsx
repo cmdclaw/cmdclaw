@@ -96,8 +96,12 @@ import {
 const BASE_TRIGGERS = [
   { value: "manual", label: "Manual only" },
   { value: "schedule", label: "Run on a schedule" },
-  { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: "Email forwarded to CmdClaw" },
   { value: "gmail.new_email", label: "New Gmail email" },
+];
+
+const LEGACY_HIDDEN_TRIGGERS = [
+  // Temporarily hidden while the forwarding domain is being updated.
+  { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: "Email forwarded to CmdClaw" },
 ];
 
 const scheduleMotionInitial = { opacity: 0, y: -8, height: 0 } as const;
@@ -327,11 +331,12 @@ export default function CoworkerEditorPage() {
   const triggers = useMemo(
     () => [
       ...BASE_TRIGGERS,
+      ...(isEmailTriggerPersisted ? LEGACY_HIDDEN_TRIGGERS : []),
       ...(isAdmin || !isComingSoonIntegration("twitter")
         ? ([{ value: "twitter.new_dm", label: "New X (Twitter) DM" }] as const)
         : []),
     ],
-    [isAdmin],
+    [isAdmin, isEmailTriggerPersisted],
   );
   const skillSelectionScopeKey = useMemo(
     () => (coworkerId ? `coworker-builder:${coworkerId}` : "coworker-builder"),

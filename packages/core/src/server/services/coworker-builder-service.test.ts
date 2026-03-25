@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
 
 const { syncCoworkerScheduleJobMock, generateCoworkerMetadataOnFirstPromptFillMock } = vi.hoisted(
   () => ({
@@ -17,6 +18,7 @@ vi.mock("./coworker-metadata", () => ({
 
 import {
   applyCoworkerPatch,
+  coworkerBuilderPatchSchema,
 } from "./coworker-builder-service";
 
 function createDbStub() {
@@ -137,6 +139,14 @@ describe("coworker-builder-service", () => {
     expect(result.status).toBe("validation_error");
   });
 
+  it("rejects new email forwarding trigger patches", () => {
+    const result = coworkerBuilderPatchSchema.safeParse({
+      triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("applies prompt changes and reports changed fields", async () => {
     const { db, mocks } = createDbStub();
     const updatedAt = new Date("2026-03-03T12:00:00.000Z");
@@ -187,6 +197,57 @@ describe("coworker-builder-service", () => {
     }
     expect(result.appliedChanges).toEqual(["prompt"]);
     expect(syncCoworkerScheduleJobMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps legacy email forwarding coworkers editable", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "new prompt",
+        model: "anthropic/claude-sonnet-4-6",
+        triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,
+        schedule: null,
+        allowedIntegrations: ["github"],
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+
+    const result = await applyCoworkerPatch({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      patch: { prompt: "new prompt" },
+    });
+
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") {
+      return;
+    }
+    expect(result.appliedChanges).toEqual(["prompt"]);
   });
 
   it("fills missing metadata when builder sets the first prompt", async () => {

@@ -729,12 +729,7 @@ export function usePatchCoworker() {
         model?: string;
         toolAccessMode?: CoworkerToolAccessMode;
         allowedIntegrations?: string[];
-        triggerType?:
-          | "manual"
-          | "schedule"
-          | "email.forwarded"
-          | "gmail.new_email"
-          | "twitter.new_dm";
+        triggerType?: "manual" | "schedule" | "gmail.new_email" | "twitter.new_dm";
         schedule?:
           | {
               type: "interval";
