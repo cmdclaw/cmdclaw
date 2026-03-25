@@ -727,7 +727,6 @@ export const generationInterrupt = pgTable(
       .notNull()
       .references(() => generation.id, { onDelete: "cascade" }),
     runtimeId: text("runtime_id")
-      .notNull()
       .references((): AnyPgColumn => conversationRuntime.id, { onDelete: "cascade" }),
     conversationId: text("conversation_id")
       .notNull()
@@ -738,7 +737,7 @@ export const generationInterrupt = pgTable(
     provider: text("provider").notNull(),
     providerRequestId: text("provider_request_id"),
     providerToolUseId: text("provider_tool_use_id").notNull(),
-    turnSeq: integer("turn_seq").notNull(),
+    turnSeq: integer("turn_seq"),
     responsePayload: jsonb("response_payload").$type<GenerationInterruptResponsePayload>(),
     requestedAt: timestamp("requested_at").defaultNow().notNull(),
     expiresAt: timestamp("expires_at"),
