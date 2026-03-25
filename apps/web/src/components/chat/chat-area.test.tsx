@@ -153,12 +153,19 @@ vi.mock("./auth-request-card", () => ({
 }));
 
 vi.mock("./bottom-action-bar", () => ({
-  BottomActionBar: ({ onSubmit }: { onSubmit: (content: string) => void }) => {
-    const handleClick = React.useCallback(() => onSubmit("hello"), [onSubmit]);
+  BottomActionBar: ({ onSubmit }: { onSubmit: (content: string) => void | Promise<unknown> }) => {
+    const [status, setStatus] = React.useState("idle");
+    const handleClick = React.useCallback(() => {
+      setStatus("pending");
+      void Promise.resolve(onSubmit("hello")).then(() => setStatus("resolved"));
+    }, [onSubmit]);
     return (
-      <button type="button" onClick={handleClick}>
-        Send
-      </button>
+      <div>
+        <button type="button" onClick={handleClick}>
+          Send
+        </button>
+        <div data-testid="submit-status">{status}</div>
+      </div>
     );
   },
 }));
@@ -316,5 +323,21 @@ describe("ChatArea generation errors", () => {
     });
 
     expect(screen.queryByText("Preparing agent...")).not.toBeInTheDocument();
+  });
+
+  it("resolves submit immediately without waiting for the full stream to finish", async () => {
+    mockStartGeneration.mockImplementation(() => new Promise(() => {}));
+
+    render(<ChatArea conversationId="conv-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("submit-status")).toHaveTextContent("resolved");
+    });
+    expect(mockStartGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "hello", conversationId: "conv-1" }),
+      expect.any(Object),
+    );
   });
 });

@@ -103,6 +103,7 @@ type Props = {
   conversationId?: string;
   forceCoworkerQuerySync?: boolean;
   coworkerIdForSync?: string;
+  onCoworkerSync?: (coworkerId: string) => void;
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
 };
@@ -121,6 +122,12 @@ type InputPrefillRequest = {
   mode?: "replace" | "append";
 };
 
+type ChatExternalSendDetail = {
+  conversationId: string;
+  content: string;
+  attachments?: AttachmentData[];
+};
+
 type ChatStarter = {
   label: string;
   prompt: string;
@@ -131,6 +138,8 @@ type ChatStarterSection = {
   description: string;
   items: ChatStarter[];
 };
+
+export const CHAT_EXTERNAL_SEND_EVENT = "chat:external-send";
 
 const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
 const EMPTY_SELECTED_SKILLS: string[] = [];
@@ -537,6 +546,7 @@ export function ChatArea({
   conversationId,
   forceCoworkerQuerySync = false,
   coworkerIdForSync,
+  onCoworkerSync,
   skillSelectionScopeKey: skillSelectionScopeKeyOverride,
   initialPrefillText,
 }: Props) {
@@ -1405,6 +1415,7 @@ export function ChatArea({
           if (forceCoworkerQuerySync && data.coworkerId) {
             queryClient.invalidateQueries({ queryKey: ["coworker"] });
             queryClient.invalidateQueries({ queryKey: ["coworker", "get", data.coworkerId] });
+            onCoworkerSync?.(data.coworkerId);
           }
         },
         onThinking: (data) => {
@@ -1667,6 +1678,7 @@ export function ChatArea({
     markInitSignal,
     handleGenerationCancelledUi,
     handleGenerationDoneUi,
+    onCoworkerSync,
     persistInterruptedRuntimeMessage,
     queryClient,
     resetInitTracking,
@@ -1832,7 +1844,7 @@ export function ChatArea({
         (key) => !key.startsWith(CUSTOM_SKILL_PREFIX),
       );
       const effectiveConversationId = currentConversationIdRef.current ?? conversationId;
-      await startGeneration(
+      void startGeneration(
         {
           conversationId: effectiveConversationId,
           content,
@@ -1883,6 +1895,7 @@ export function ChatArea({
             if (forceCoworkerQuerySync && data.coworkerId) {
               queryClient.invalidateQueries({ queryKey: ["coworker"] });
               queryClient.invalidateQueries({ queryKey: ["coworker", "get", data.coworkerId] });
+              onCoworkerSync?.(data.coworkerId);
             }
           },
           onThinking: (data) => {
@@ -2148,6 +2161,7 @@ export function ChatArea({
       handleGenerationCancelledUi,
       handleGenerationDoneUi,
       persistInterruptedRuntimeMessage,
+      onCoworkerSync,
       queryClient,
       selectedSkillKeys,
       normalizedSelectedModel,
@@ -2241,6 +2255,32 @@ export function ChatArea({
       skillSelectionScopeKey,
     ],
   );
+
+  useEffect(() => {
+    if (!conversationId) {
+      return;
+    }
+
+    const handleExternalSend = (event: Event) => {
+      const customEvent = event as CustomEvent<ChatExternalSendDetail>;
+      const detail = customEvent.detail;
+      if (!detail) {
+        return;
+      }
+
+      const activeConversationId = currentConversationIdRef.current ?? conversationId;
+      if (!activeConversationId || detail.conversationId !== activeConversationId) {
+        return;
+      }
+
+      void handleSend(detail.content, detail.attachments);
+    };
+
+    window.addEventListener(CHAT_EXTERNAL_SEND_EVENT, handleExternalSend);
+    return () => {
+      window.removeEventListener(CHAT_EXTERNAL_SEND_EVENT, handleExternalSend);
+    };
+  }, [conversationId, handleSend]);
 
   const handleSendQueuedNow = useCallback(() => {
     const send = async () => {

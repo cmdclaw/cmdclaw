@@ -263,6 +263,7 @@ vi.mock("@/orpc/hooks", () => ({
   useCoworker: () => ({
     data: mockCoworkerData.current,
     isLoading: false,
+    refetch: vi.fn(),
   }),
   useCoworkerForwardingAlias: () => ({ data: null }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
@@ -496,6 +497,28 @@ describe("CoworkerEditorPage", () => {
       await Promise.resolve();
     });
 
+    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+  });
+
+  it("merges an external prompt patch even when another local edit is still unsaved", async () => {
+    const { rerender } = render(<CoworkerEditorPage />);
+
+    fireEvent.change(screen.getByDisplayValue("Existing description"), {
+      target: { value: "Locally edited description" },
+    });
+
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      prompt: "Builder patched prompt",
+      updatedAt: new Date("2026-03-12T10:05:00.000Z"),
+    };
+
+    await act(async () => {
+      rerender(<CoworkerEditorPage />);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByDisplayValue("Locally edited description")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
   });
 

@@ -149,7 +149,50 @@ type UploadAttachment = {
   dataUrl: string;
 };
 
+type CoworkerEditorPayload = {
+  id: string;
+  name: string;
+  description: string;
+  username: string;
+  status: "on" | "off";
+  triggerType: string;
+  prompt: string;
+  model: string;
+  authSource: ProviderAuthSource | null;
+  autoApprove: boolean;
+  toolAccessMode: CoworkerToolAccessMode;
+  allowedIntegrations: IntegrationType[];
+  allowedSkillSlugs: string[];
+  schedule: CoworkerSchedule | null;
+};
+
 const EMPTY_COWORKER_DOCUMENTS: CoworkerDocumentRecord[] = [];
+
+function normalizeScheduleForComparison(schedule: CoworkerSchedule | null) {
+  if (!schedule) {
+    return null;
+  }
+
+  if (schedule.type !== "weekly") {
+    return schedule;
+  }
+
+  return {
+    ...schedule,
+    daysOfWeek: [...schedule.daysOfWeek].toSorted(),
+  };
+}
+
+function stringArraysEqual(left: string[], right: string[]) {
+  return JSON.stringify([...left].toSorted()) === JSON.stringify([...right].toSorted());
+}
+
+function schedulesEqual(left: CoworkerSchedule | null, right: CoworkerSchedule | null) {
+  return (
+    JSON.stringify(normalizeScheduleForComparison(left)) ===
+    JSON.stringify(normalizeScheduleForComparison(right))
+  );
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -283,6 +326,7 @@ function formatRelativeTime(value?: Date | string | null) {
 function CoworkerChatPanel({
   conversationId,
   coworkerId,
+  onCoworkerSync,
   skillSelectionScopeKey,
   isLoading,
   errorMessage,
@@ -290,6 +334,7 @@ function CoworkerChatPanel({
 }: {
   conversationId: string | null;
   coworkerId: string;
+  onCoworkerSync: (coworkerId: string) => void;
   skillSelectionScopeKey: string;
   isLoading: boolean;
   errorMessage: string | null;
@@ -321,6 +366,7 @@ function CoworkerChatPanel({
       conversationId={conversationId}
       forceCoworkerQuerySync
       coworkerIdForSync={coworkerId}
+      onCoworkerSync={onCoworkerSync}
       skillSelectionScopeKey={skillSelectionScopeKey}
     />
   );
@@ -333,7 +379,7 @@ export default function CoworkerEditorPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isAdmin } = useIsAdmin();
-  const { data: coworker, isLoading } = useCoworker(coworkerId);
+  const { data: coworker, isLoading, refetch: refetchCoworker } = useCoworker(coworkerId);
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
   const { data: personalSkills, isLoading: isPersonalSkillsLoading } = useSkillList();
   const { data: providerAuthStatus } = useProviderAuthStatus();
@@ -445,6 +491,7 @@ export default function CoworkerEditorPage() {
   const initializedCoworkerIdRef = useRef<string | null>(null);
   const lastSyncedCoworkerUpdatedAtRef = useRef<string | null>(null);
   const lastSavedPayloadRef = useRef<string | null>(null);
+  const lastSavedPayloadSnapshotRef = useRef<CoworkerEditorPayload | null>(null);
   const builderConversationInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -569,7 +616,48 @@ export default function CoworkerEditorPage() {
     triggerType,
   ]);
 
-  const getCoworkerUpdateInput = useCallback(() => {
+  const applyScheduleState = useCallback((schedule: CoworkerSchedule | null) => {
+    if (!schedule) {
+      return;
+    }
+
+    setScheduleType(schedule.type);
+    if (schedule.type === "interval") {
+      setIntervalMinutes(Math.max(60, schedule.intervalMinutes));
+      return;
+    }
+
+    setScheduleTime(schedule.time.slice(0, 5));
+    if (schedule.type === "weekly") {
+      setScheduleDaysOfWeek(schedule.daysOfWeek);
+      return;
+    }
+
+    if (schedule.type === "monthly") {
+      setScheduleDayOfMonth(schedule.dayOfMonth);
+    }
+  }, []);
+
+  const applyEditorPayload = useCallback(
+    (payload: CoworkerEditorPayload) => {
+      setName(payload.name);
+      setDescription(payload.description);
+      setUsername(payload.username);
+      setStatus(payload.status);
+      setTriggerType(payload.triggerType);
+      setPrompt(payload.prompt);
+      setModel(payload.model);
+      setModelAuthSource(payload.authSource);
+      setAutoApprove(payload.autoApprove);
+      setToolAccessMode(payload.toolAccessMode);
+      setAllowedIntegrations(payload.allowedIntegrations);
+      setAllowedSkillSlugs(payload.allowedSkillSlugs);
+      applyScheduleState(payload.schedule);
+    },
+    [applyScheduleState],
+  );
+
+  const getCoworkerUpdateInput = useCallback((): CoworkerEditorPayload | null => {
     if (!coworkerId) {
       return null;
     }
@@ -607,18 +695,12 @@ export default function CoworkerEditorPage() {
   ]);
 
   const getCoworkerPayloadSignature = useCallback(
-    (input: NonNullable<ReturnType<typeof getCoworkerUpdateInput>>) =>
+    (input: CoworkerEditorPayload) =>
       JSON.stringify({
         ...input,
         allowedIntegrations: [...input.allowedIntegrations].toSorted(),
         allowedSkillSlugs: [...input.allowedSkillSlugs].toSorted(),
-        schedule:
-          input.schedule?.type === "weekly"
-            ? {
-                ...input.schedule,
-                daysOfWeek: [...input.schedule.daysOfWeek].toSorted(),
-              }
-            : input.schedule,
+        schedule: normalizeScheduleForComparison(input.schedule),
       }),
     [],
   );
@@ -639,6 +721,7 @@ export default function CoworkerEditorPage() {
       try {
         await updateCoworker.mutateAsync(input);
         lastSavedPayloadRef.current = signature;
+        lastSavedPayloadSnapshotRef.current = input;
         return true;
       } catch (error) {
         console.error("Failed to update coworker:", error);
@@ -664,7 +747,7 @@ export default function CoworkerEditorPage() {
     const coworkerAllowedIntegrations = (
       (coworker.allowedIntegrations ?? []) as IntegrationType[]
     ).filter((type): type is IntegrationType => availableIntegrationTypes.includes(type));
-    const payloadFromCoworker = {
+    const payloadFromCoworker: CoworkerEditorPayload = {
       id: coworker.id,
       name: coworker.name,
       description: coworker.description ?? "",
@@ -679,7 +762,7 @@ export default function CoworkerEditorPage() {
       allowedIntegrations: coworkerAllowedIntegrations,
       allowedSkillSlugs: coworker.allowedSkillSlugs ?? [],
       schedule: (coworker.schedule as CoworkerSchedule | null) ?? null,
-    } as const;
+    };
     const serverPayloadSignature = getCoworkerPayloadSignature(payloadFromCoworker);
     const currentLocalPayload = hasInitializedEditorRef.current ? getCoworkerUpdateInput() : null;
     const currentLocalSignature = currentLocalPayload
@@ -696,44 +779,78 @@ export default function CoworkerEditorPage() {
     const isFirstHydration = initializedCoworkerIdRef.current !== coworker.id;
     const hasFreshServerUpdate = lastSyncedCoworkerUpdatedAtRef.current !== coworkerUpdatedAt;
 
-    if (!isFirstHydration && (!hasFreshServerUpdate || hasUnsavedLocalChanges)) {
+    if (!isFirstHydration && !hasFreshServerUpdate) {
       return;
     }
 
-    setName(coworker.name);
-    setDescription(coworker.description ?? "");
-    setUsername(coworker.username ?? "");
-    setTriggerType(coworker.triggerType);
-    setPrompt(coworker.prompt);
-    setModel(normalizedModelSelection.model || DEFAULT_COWORKER_MODEL);
-    setModelAuthSource(normalizedModelSelection.authSource);
-    setToolAccessMode(coworker.toolAccessMode);
-    setAllowedIntegrations(coworkerAllowedIntegrations);
-    setAllowedSkillSlugs(coworker.allowedSkillSlugs ?? []);
-    setStatus(coworker.status);
-    setAutoApprove(coworker.autoApprove ?? true);
-
-    // Initialize schedule state (when trigger is "schedule")
-    const schedule = coworker.schedule as CoworkerSchedule | null;
-    if (schedule) {
-      setScheduleType(schedule.type);
-      if (schedule.type === "interval") {
-        setIntervalMinutes(Math.max(60, schedule.intervalMinutes));
-      } else if (schedule.type === "daily") {
-        setScheduleTime(schedule.time.slice(0, 5));
-      } else if (schedule.type === "weekly") {
-        setScheduleTime(schedule.time.slice(0, 5));
-        setScheduleDaysOfWeek(schedule.daysOfWeek);
-      } else if (schedule.type === "monthly") {
-        setScheduleTime(schedule.time.slice(0, 5));
-        setScheduleDayOfMonth(schedule.dayOfMonth);
+    if (!isFirstHydration && hasUnsavedLocalChanges && currentLocalPayload) {
+      const lastSavedPayload = lastSavedPayloadSnapshotRef.current;
+      if (!lastSavedPayload) {
+        return;
       }
+
+      if (currentLocalPayload.name === lastSavedPayload.name) {
+        setName(payloadFromCoworker.name);
+      }
+      if (currentLocalPayload.description === lastSavedPayload.description) {
+        setDescription(payloadFromCoworker.description);
+      }
+      if (currentLocalPayload.username === lastSavedPayload.username) {
+        setUsername(payloadFromCoworker.username);
+      }
+      if (currentLocalPayload.status === lastSavedPayload.status) {
+        setStatus(payloadFromCoworker.status);
+      }
+      if (currentLocalPayload.triggerType === lastSavedPayload.triggerType) {
+        setTriggerType(payloadFromCoworker.triggerType);
+      }
+      if (currentLocalPayload.prompt === lastSavedPayload.prompt) {
+        setPrompt(payloadFromCoworker.prompt);
+      }
+      if (currentLocalPayload.model === lastSavedPayload.model) {
+        setModel(payloadFromCoworker.model);
+      }
+      if (currentLocalPayload.authSource === lastSavedPayload.authSource) {
+        setModelAuthSource(payloadFromCoworker.authSource);
+      }
+      if (currentLocalPayload.autoApprove === lastSavedPayload.autoApprove) {
+        setAutoApprove(payloadFromCoworker.autoApprove);
+      }
+      if (currentLocalPayload.toolAccessMode === lastSavedPayload.toolAccessMode) {
+        setToolAccessMode(payloadFromCoworker.toolAccessMode);
+      }
+      if (
+        stringArraysEqual(
+          currentLocalPayload.allowedIntegrations,
+          lastSavedPayload.allowedIntegrations,
+        )
+      ) {
+        setAllowedIntegrations(payloadFromCoworker.allowedIntegrations);
+      }
+      if (
+        stringArraysEqual(currentLocalPayload.allowedSkillSlugs, lastSavedPayload.allowedSkillSlugs)
+      ) {
+        setAllowedSkillSlugs(payloadFromCoworker.allowedSkillSlugs);
+      }
+      if (schedulesEqual(currentLocalPayload.schedule, lastSavedPayload.schedule)) {
+        applyScheduleState(payloadFromCoworker.schedule);
+      }
+    } else {
+      applyEditorPayload(payloadFromCoworker);
     }
+
     initializedCoworkerIdRef.current = coworker.id;
     lastSyncedCoworkerUpdatedAtRef.current = coworkerUpdatedAt;
     hasInitializedEditorRef.current = true;
     lastSavedPayloadRef.current = serverPayloadSignature;
-  }, [coworker, getCoworkerPayloadSignature, getCoworkerUpdateInput]);
+    lastSavedPayloadSnapshotRef.current = payloadFromCoworker;
+  }, [
+    applyEditorPayload,
+    applyScheduleState,
+    coworker,
+    getCoworkerPayloadSignature,
+    getCoworkerUpdateInput,
+  ]);
 
   useEffect(() => {
     setSelectedSkillSlugs(skillSelectionScopeKey, allowedSkillSlugs);
@@ -790,6 +907,17 @@ export default function CoworkerEditorPage() {
     builderConversationInitializedRef.current = true;
     void loadBuilderConversation(coworkerId);
   }, [coworkerId, loadBuilderConversation]);
+
+  const handleCoworkerSyncFromChat = useCallback(
+    (updatedCoworkerId: string) => {
+      if (!coworkerId || updatedCoworkerId !== coworkerId) {
+        return;
+      }
+
+      void refetchCoworker();
+    },
+    [coworkerId, refetchCoworker],
+  );
 
   const handleUploadDocuments = useCallback(
     async (files: FileList | File[]) => {
@@ -1313,6 +1441,7 @@ export default function CoworkerEditorPage() {
       <CoworkerChatPanel
         conversationId={builderConversationId}
         coworkerId={coworkerId ?? ""}
+        onCoworkerSync={handleCoworkerSyncFromChat}
         skillSelectionScopeKey={skillSelectionScopeKey}
         isLoading={isBuilderConversationLoading}
         errorMessage={builderConversationError}
@@ -1323,6 +1452,7 @@ export default function CoworkerEditorPage() {
       builderConversationError,
       builderConversationId,
       coworkerId,
+      handleCoworkerSyncFromChat,
       handleRetryBuilderConversation,
       isBuilderConversationLoading,
       skillSelectionScopeKey,
