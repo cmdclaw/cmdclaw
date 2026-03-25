@@ -36,6 +36,7 @@ import {
   generation,
   user,
   coworker,
+  coworkerDocument,
   coworkerEmailAlias,
   coworkerRun,
   coworkerRunEvent,
@@ -43,6 +44,10 @@ import {
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import {
+  deleteCoworkerDocument,
+  uploadCoworkerDocument,
+} from "@/server/services/coworker-document";
 import { protectedProcedure } from "../middleware";
 
 const integrationTypeSchema = z.enum([
@@ -348,6 +353,10 @@ const get = protectedProcedure
       orderBy: (run, { desc }) => [desc(run.startedAt)],
       limit: 20,
     });
+    const documents = await context.db.query.coworkerDocument.findMany({
+      where: eq(coworkerDocument.coworkerId, wf.id),
+      orderBy: (document, { desc }) => [desc(document.createdAt)],
+    });
     const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
 
     return {
@@ -370,6 +379,14 @@ const get = protectedProcedure
       schedule: wf.schedule,
       createdAt: wf.createdAt,
       updatedAt: wf.updatedAt,
+      documents: documents.map((document) => ({
+        id: document.id,
+        filename: document.filename,
+        mimeType: document.mimeType,
+        sizeBytes: document.sizeBytes,
+        description: document.description,
+        createdAt: document.createdAt,
+      })),
       runs: runs.map((run) => ({
         id: run.id,
         status: run.status,
@@ -690,6 +707,42 @@ const patch = protectedProcedure
 
     return result;
   });
+
+const uploadDocument = protectedProcedure
+  .input(
+    z.object({
+      coworkerId: z.string(),
+      filename: z.string().min(1).max(256),
+      mimeType: z.string().min(1),
+      content: z.string().min(1),
+      description: z.string().max(1024).optional(),
+    }),
+  )
+  .handler(async ({ input, context }) =>
+    uploadCoworkerDocument({
+      database: context.db as typeof import("@cmdclaw/db/client").db,
+      userId: context.user.id,
+      coworkerId: input.coworkerId,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      contentBase64: input.content,
+      description: input.description,
+    }),
+  );
+
+const deleteDocument = protectedProcedure
+  .input(
+    z.object({
+      id: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) =>
+    deleteCoworkerDocument({
+      database: context.db as typeof import("@cmdclaw/db/client").db,
+      userId: context.user.id,
+      documentId: input.id,
+    }),
+  );
 
 const trigger = protectedProcedure
   .input(
@@ -1157,6 +1210,8 @@ export const coworkerRouter = {
   create,
   update,
   patch,
+  uploadDocument,
+  deleteDocument,
   delete: del,
   trigger,
   getRun,

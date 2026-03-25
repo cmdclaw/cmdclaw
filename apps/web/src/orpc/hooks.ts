@@ -774,6 +774,47 @@ export function useDeleteCoworker() {
   });
 }
 
+export function useUploadCoworkerDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      coworkerId,
+      filename,
+      mimeType,
+      content,
+      description,
+    }: {
+      coworkerId: string;
+      filename: string;
+      mimeType: string;
+      content: string;
+      description?: string;
+    }) =>
+      client.coworker.uploadDocument({
+        coworkerId,
+        filename,
+        mimeType,
+        content,
+        description,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
+
+export function useDeleteCoworkerDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => client.coworker.deleteDocument({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
+
 export function useTriggerCoworker() {
   const queryClient = useQueryClient();
 

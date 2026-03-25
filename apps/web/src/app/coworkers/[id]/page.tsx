@@ -33,7 +33,7 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { ChatArea } from "@/components/chat/chat-area";
+import { CHAT_EXTERNAL_SEND_EVENT, ChatArea } from "@/components/chat/chat-area";
 import { useChatSkillStore } from "@/components/chat/chat-skill-store";
 import { ModelSelector } from "@/components/chat/model-selector";
 import {
@@ -77,6 +77,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   useCreateCoworkerForwardingAlias,
+  useDeleteCoworkerDocument,
   useDisableCoworkerForwardingAlias,
   useRotateCoworkerForwardingAlias,
   useCoworker,
@@ -85,11 +86,13 @@ import {
   useDeleteCoworker,
   useCoworkerRun,
   useCoworkerRuns,
+  useEnqueueConversationMessage,
   useTriggerCoworker,
   useGetOrCreateBuilderConversation,
   usePlatformSkillList,
   useProviderAuthStatus,
   useSkillList,
+  useUploadCoworkerDocument,
   type CoworkerSchedule,
 } from "@/orpc/hooks";
 
@@ -130,6 +133,119 @@ const runMotionTransition = { duration: 0.2, ease: "easeOut" } as const;
 const statusTextMotionTransition = { duration: 0.15 } as const;
 const DEFAULT_COWORKER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox";
+
+type CoworkerDocumentRecord = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  description: string | null;
+  createdAt: Date | string;
+};
+
+type UploadAttachment = {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
+const EMPTY_COWORKER_DOCUMENTS: CoworkerDocumentRecord[] = [];
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    const handleLoad = () => {
+      reader.removeEventListener("load", handleLoad);
+      reader.removeEventListener("error", handleError);
+      resolve(String(reader.result ?? ""));
+    };
+
+    const handleError = () => {
+      reader.removeEventListener("load", handleLoad);
+      reader.removeEventListener("error", handleError);
+      reject(reader.error ?? new Error(`Failed to read ${file.name}`));
+    };
+
+    reader.addEventListener("load", handleLoad);
+    reader.addEventListener("error", handleError);
+    reader.readAsDataURL(file);
+  });
+}
+
+function inferUploadMimeType(file: File): string {
+  if (file.type.trim()) {
+    return file.type;
+  }
+
+  const normalizedName = file.name.toLowerCase();
+  if (normalizedName.endsWith(".pdf")) {
+    return "application/pdf";
+  }
+  if (normalizedName.endsWith(".doc")) {
+    return "application/msword";
+  }
+  if (normalizedName.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  if (normalizedName.endsWith(".xls")) {
+    return "application/vnd.ms-excel";
+  }
+  if (normalizedName.endsWith(".xlsx")) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  if (normalizedName.endsWith(".csv")) {
+    return "text/csv";
+  }
+  if (normalizedName.endsWith(".txt") || normalizedName.endsWith(".md")) {
+    return "text/plain";
+  }
+  if (normalizedName.endsWith(".png")) {
+    return "image/png";
+  }
+  if (normalizedName.endsWith(".jpg") || normalizedName.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  if (normalizedName.endsWith(".gif")) {
+    return "image/gif";
+  }
+  if (normalizedName.endsWith(".webp")) {
+    return "image/webp";
+  }
+  if (normalizedName.endsWith(".svg")) {
+    return "image/svg+xml";
+  }
+
+  return "application/octet-stream";
+}
+
+function formatFileSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function buildCoworkerDocumentBuilderMessage(filenames: string[]): string {
+  return [
+    "I uploaded new coworker documents:",
+    ...filenames.map((filename) => `- ${filename}`),
+    "",
+    "Please add them to my agent instruction and use them when relevant.",
+  ].join("\n");
+}
+
+function buildCoworkerDocumentRemovalBuilderMessage(filenames: string[]): string {
+  return [
+    "I removed coworker documents:",
+    ...filenames.map((filename) => `- ${filename}`),
+    "",
+    "Please remove them from my agent instruction and stop using them.",
+  ].join("\n");
+}
 
 function formatRelativeTime(value?: Date | string | null) {
   if (!value) {
@@ -208,9 +324,12 @@ export default function CoworkerEditorPage() {
   const createForwardingAlias = useCreateCoworkerForwardingAlias();
   const disableForwardingAlias = useDisableCoworkerForwardingAlias();
   const rotateForwardingAlias = useRotateCoworkerForwardingAlias();
+  const uploadCoworkerDocument = useUploadCoworkerDocument();
+  const deleteCoworkerDocument = useDeleteCoworkerDocument();
   const triggerCoworker = useTriggerCoworker();
   const deleteCoworker = useDeleteCoworker();
   const getOrCreateBuilderConversation = useGetOrCreateBuilderConversation();
+  const enqueueConversationMessage = useEnqueueConversationMessage();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -232,6 +351,8 @@ export default function CoworkerEditorPage() {
     "coworkerAlias" | "invokeHandle" | null
   >(null);
   const [builderConversationId, setBuilderConversationId] = useState<string | null>(null);
+  const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
+  const [deletingDocumentIds, setDeletingDocumentIds] = useState<string[]>([]);
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<CoworkerTab>("instruction");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(routeRunId);
@@ -589,6 +710,169 @@ export default function CoworkerEditorPage() {
       },
     });
   }, [coworker, getOrCreateBuilderConversation]);
+
+  const ensureBuilderConversationId = useCallback(async () => {
+    if (builderConversationId) {
+      return builderConversationId;
+    }
+    if (!coworkerId) {
+      return null;
+    }
+
+    const result = await getOrCreateBuilderConversation.mutateAsync(coworkerId);
+    setBuilderConversationId(result.conversationId);
+    return result.conversationId;
+  }, [builderConversationId, coworkerId, getOrCreateBuilderConversation]);
+
+  const handleUploadDocuments = useCallback(
+    async (files: FileList | File[]) => {
+      if (!coworkerId) {
+        return;
+      }
+
+      const nextFiles = Array.from(files).filter((file) => file.size > 0);
+      if (nextFiles.length === 0) {
+        return;
+      }
+
+      setIsUploadingDocuments(true);
+      try {
+        const attachments: UploadAttachment[] = await Promise.all(
+          nextFiles.map(async (file) => ({
+            name: file.name,
+            mimeType: inferUploadMimeType(file),
+            dataUrl: await readFileAsDataUrl(file),
+          })),
+        );
+
+        const uploadedDocuments = await Promise.all(
+          attachments.map((attachment) =>
+            uploadCoworkerDocument.mutateAsync({
+              coworkerId,
+              filename: attachment.name,
+              mimeType: attachment.mimeType,
+              content: attachment.dataUrl.split(",")[1] ?? "",
+            }),
+          ),
+        );
+
+        const conversationId = await ensureBuilderConversationId();
+        if (!conversationId) {
+          toast.success(
+            uploadedDocuments.length === 1
+              ? `Uploaded ${uploadedDocuments[0]?.filename ?? "document"}.`
+              : `Uploaded ${uploadedDocuments.length} documents.`,
+          );
+          return;
+        }
+
+        const builderPrompt = buildCoworkerDocumentBuilderMessage(
+          uploadedDocuments.map((document) => document.filename),
+        );
+
+        if (!isMobile && builderConversationId === conversationId) {
+          window.dispatchEvent(
+            new CustomEvent(CHAT_EXTERNAL_SEND_EVENT, {
+              detail: {
+                conversationId,
+                content: builderPrompt,
+                attachments,
+              },
+            }),
+          );
+          toast.success(
+            `Uploaded ${uploadedDocuments.length} document${uploadedDocuments.length === 1 ? "" : "s"} and sent them to the builder chat.`,
+          );
+          return;
+        }
+
+        await enqueueConversationMessage.mutateAsync({
+          conversationId,
+          content: builderPrompt,
+          fileAttachments: attachments,
+          replaceExisting: false,
+        });
+
+        toast.success(
+          `Uploaded ${uploadedDocuments.length} document${uploadedDocuments.length === 1 ? "" : "s"} and queued a builder update.`,
+        );
+      } catch (error) {
+        console.error("Failed to upload coworker documents:", error);
+        toast.error(
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "Failed to upload documents.",
+        );
+      } finally {
+        setIsUploadingDocuments(false);
+      }
+    },
+    [
+      coworkerId,
+      enqueueConversationMessage,
+      ensureBuilderConversationId,
+      builderConversationId,
+      isMobile,
+      uploadCoworkerDocument,
+    ],
+  );
+
+  const handleDeleteDocument = useCallback(
+    async (document: CoworkerDocumentRecord) => {
+      setDeletingDocumentIds((current) =>
+        current.includes(document.id) ? current : [...current, document.id],
+      );
+
+      try {
+        await deleteCoworkerDocument.mutateAsync({ id: document.id });
+
+        const conversationId = await ensureBuilderConversationId();
+        if (!conversationId) {
+          toast.success(`Removed ${document.filename}.`);
+          return;
+        }
+
+        const builderPrompt = buildCoworkerDocumentRemovalBuilderMessage([document.filename]);
+
+        if (!isMobile && builderConversationId === conversationId) {
+          window.dispatchEvent(
+            new CustomEvent(CHAT_EXTERNAL_SEND_EVENT, {
+              detail: {
+                conversationId,
+                content: builderPrompt,
+              },
+            }),
+          );
+          toast.success(`Removed ${document.filename} and updated the builder chat.`);
+          return;
+        }
+
+        await enqueueConversationMessage.mutateAsync({
+          conversationId,
+          content: builderPrompt,
+          replaceExisting: false,
+        });
+
+        toast.success(`Removed ${document.filename} and queued a builder update.`);
+      } catch (error) {
+        console.error("Failed to delete coworker document:", error);
+        toast.error(
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "Failed to delete document.",
+        );
+      } finally {
+        setDeletingDocumentIds((current) => current.filter((id) => id !== document.id));
+      }
+    },
+    [
+      builderConversationId,
+      deleteCoworkerDocument,
+      enqueueConversationMessage,
+      ensureBuilderConversationId,
+      isMobile,
+    ],
+  );
 
   const handleStatusChange = useCallback((checked: boolean) => {
     setStatus(checked ? "on" : "off");
@@ -969,14 +1253,19 @@ export default function CoworkerEditorPage() {
         coworkerForwardingAlias={coworkerForwardingAlias}
         isEmailTriggerPersisted={isEmailTriggerPersisted}
         copiedForwardingField={copiedForwardingField}
+        documents={coworker?.documents ?? EMPTY_COWORKER_DOCUMENTS}
         runs={runs}
         activeTab={activeTab}
         selectedRunId={selectedRunId}
         isRunDisabled={isRunDisabled}
         isRunning={isRunning}
+        isUploadingDocuments={isUploadingDocuments}
+        deletingDocumentIds={deletingDocumentIds}
         createForwardingAlias={createForwardingAlias}
         disableForwardingAlias={disableForwardingAlias}
         rotateForwardingAlias={rotateForwardingAlias}
+        onUploadDocuments={handleUploadDocuments}
+        onDeleteDocument={handleDeleteDocument}
         onTabChange={handleMobileTabChange}
         onRun={handleRunClick}
         onSelectRun={handleSelectRun}
@@ -1042,14 +1331,19 @@ export default function CoworkerEditorPage() {
       coworkerForwardingAlias,
       isEmailTriggerPersisted,
       copiedForwardingField,
+      coworker?.documents,
       runs,
       activeTab,
       selectedRunId,
       isRunDisabled,
       isRunning,
+      isUploadingDocuments,
+      deletingDocumentIds,
       createForwardingAlias,
       disableForwardingAlias,
       rotateForwardingAlias,
+      handleUploadDocuments,
+      handleDeleteDocument,
       handleMobileTabChange,
       handleRunClick,
       handleSelectRun,
@@ -1183,14 +1477,19 @@ export default function CoworkerEditorPage() {
               coworkerForwardingAlias={coworkerForwardingAlias}
               isEmailTriggerPersisted={isEmailTriggerPersisted}
               copiedForwardingField={copiedForwardingField}
+              documents={coworker.documents ?? EMPTY_COWORKER_DOCUMENTS}
               runs={runs}
               activeTab={activeTab}
               selectedRunId={selectedRunId}
               isRunDisabled={isRunDisabled}
               isRunning={isRunning}
+              isUploadingDocuments={isUploadingDocuments}
+              deletingDocumentIds={deletingDocumentIds}
               createForwardingAlias={createForwardingAlias}
               disableForwardingAlias={disableForwardingAlias}
               rotateForwardingAlias={rotateForwardingAlias}
+              onUploadDocuments={handleUploadDocuments}
+              onDeleteDocument={handleDeleteDocument}
               onTabChange={handleMobileTabChange}
               onRun={handleRunClick}
               onSelectRun={handleSelectRun}
@@ -1441,6 +1740,7 @@ type CoworkerSettingsPanelProps = {
     | undefined;
   isEmailTriggerPersisted: boolean;
   copiedForwardingField: "coworkerAlias" | "invokeHandle" | null;
+  documents: CoworkerDocumentRecord[];
   runs:
     | Array<{
         id: string;
@@ -1454,9 +1754,13 @@ type CoworkerSettingsPanelProps = {
   selectedRunId: string | null;
   isRunDisabled: boolean;
   isRunning: boolean;
+  isUploadingDocuments: boolean;
+  deletingDocumentIds: string[];
   createForwardingAlias: { isPending: boolean };
   disableForwardingAlias: { isPending: boolean };
   rotateForwardingAlias: { isPending: boolean };
+  onUploadDocuments: (files: FileList | File[]) => void | Promise<void>;
+  onDeleteDocument: (document: CoworkerDocumentRecord) => void | Promise<void>;
   onTabChange: (tab: CoworkerTab) => void;
   onRun: (e: React.MouseEvent) => void;
   onSelectRun: (runId: string) => void;
@@ -1523,14 +1827,19 @@ function CoworkerSettingsPanel({
   coworkerForwardingAlias,
   isEmailTriggerPersisted,
   copiedForwardingField,
+  documents,
   runs,
   activeTab,
   selectedRunId,
   isRunDisabled,
   isRunning,
+  isUploadingDocuments,
+  deletingDocumentIds,
   createForwardingAlias,
   disableForwardingAlias,
   rotateForwardingAlias,
+  onUploadDocuments,
+  onDeleteDocument,
   onTabChange,
   onRun,
   onSelectRun,
@@ -1567,6 +1876,8 @@ function CoworkerSettingsPanel({
 }: CoworkerSettingsPanelProps) {
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
   const [triggerExpanded, setTriggerExpanded] = useState(false);
+  const [isDocumentDragActive, setIsDocumentDragActive] = useState(false);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleOpenInstructionModal = useCallback(() => {
     setInstructionModalOpen(true);
@@ -1623,6 +1934,69 @@ function CoworkerSettingsPanel({
       }
     },
     [onSelectRun],
+  );
+
+  const handleBrowseDocuments = useCallback(() => {
+    if (isUploadingDocuments) {
+      return;
+    }
+    documentInputRef.current?.click();
+  }, [isUploadingDocuments]);
+
+  const handleDocumentInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        void onUploadDocuments(files);
+      }
+      event.target.value = "";
+    },
+    [onUploadDocuments],
+  );
+
+  const handleDocumentDragOver = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDocumentDragActive(true);
+  }, []);
+
+  const handleDocumentDragLeave = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+    setIsDocumentDragActive(false);
+  }, []);
+
+  const handleDocumentDrop = useCallback(
+    (event: React.DragEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      setIsDocumentDragActive(false);
+      if (isUploadingDocuments) {
+        return;
+      }
+      if (event.dataTransfer.files.length > 0) {
+        void onUploadDocuments(event.dataTransfer.files);
+      }
+    },
+    [isUploadingDocuments, onUploadDocuments],
+  );
+
+  const handleDeleteDocumentClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const documentId = event.currentTarget.dataset.documentId;
+      if (!documentId) {
+        return;
+      }
+
+      const document = documents.find((entry) => entry.id === documentId);
+      if (!document) {
+        return;
+      }
+
+      void onDeleteDocument(document);
+    },
+    [documents, onDeleteDocument],
   );
 
   return (
@@ -2201,17 +2575,118 @@ function CoworkerSettingsPanel({
         {activeTab === "docs" && (
           <div className="px-4 py-3">
             <div className="space-y-3">
-              <div className="border-muted-foreground/25 hover:border-muted-foreground/40 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 transition-colors">
-                <Upload className="text-muted-foreground h-8 w-8" />
-                <p className="text-muted-foreground text-sm">Drop files here or click to upload</p>
-                <Button variant="outline" size="sm" className="mt-1 h-7 text-xs">
-                  Browse files
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 py-4">
-                <FileText className="text-muted-foreground h-4 w-4" />
-                <p className="text-muted-foreground text-xs">No documents added yet.</p>
-              </div>
+              <input
+                ref={documentInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleDocumentInputChange}
+              />
+              <button
+                type="button"
+                onClick={handleBrowseDocuments}
+                onDragOver={handleDocumentDragOver}
+                onDragLeave={handleDocumentDragLeave}
+                onDrop={handleDocumentDrop}
+                disabled={isUploadingDocuments}
+                className={cn(
+                  "relative block w-full overflow-hidden rounded-[24px] border-2 border-dashed px-5 py-8 text-left transition-all",
+                  isDocumentDragActive
+                    ? "border-emerald-400 bg-emerald-50/70 shadow-[0_0_0_6px_rgba(16,185,129,0.08)]"
+                    : "border-muted-foreground/25 hover:border-muted-foreground/40 bg-gradient-to-br from-white to-slate-50/80",
+                  isUploadingDocuments && "cursor-wait opacity-80",
+                )}
+              >
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.04),transparent_55%)]" />
+                <div className="relative flex flex-col items-center justify-center gap-3 text-center">
+                  <div
+                    className={cn(
+                      "flex h-14 w-14 items-center justify-center rounded-2xl border",
+                      isDocumentDragActive
+                        ? "border-emerald-300 bg-emerald-100 text-emerald-700"
+                        : "border-slate-200 bg-white text-slate-500",
+                    )}
+                  >
+                    {isUploadingDocuments ? (
+                      <Loader2 className="h-7 w-7 animate-spin" />
+                    ) : (
+                      <Upload className="h-7 w-7" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-slate-800">
+                      {isUploadingDocuments
+                        ? "Uploading documents and updating the builder…"
+                        : "Drop files here or browse from your machine"}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      PDF, Office docs, text, CSV, and images. Uploaded files are stored for future
+                      coworker runs and sent to the builder chat.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 h-8 rounded-full px-4 text-xs"
+                    disabled={isUploadingDocuments}
+                  >
+                    Browse files
+                  </Button>
+                </div>
+              </button>
+              {documents.length > 0 ? (
+                <div className="space-y-2">
+                  {documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="border-border/40 bg-background/70 flex items-start gap-3 rounded-2xl border px-3 py-3"
+                    >
+                      <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+                        <FileText className="text-muted-foreground h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-medium text-slate-900">
+                            {document.filename}
+                          </p>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium tracking-[0.14em] text-slate-500 uppercase">
+                            {document.mimeType.split("/")[0]}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                          <span>{formatFileSize(document.sizeBytes)}</span>
+                          <span>Added {formatRelativeTime(document.createdAt)}</span>
+                        </div>
+                        {document.description ? (
+                          <p className="text-muted-foreground text-xs">{document.description}</p>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0 rounded-full"
+                        data-document-id={document.id}
+                        onClick={handleDeleteDocumentClick}
+                        disabled={deletingDocumentIds.includes(document.id)}
+                        aria-label={`Delete ${document.filename}`}
+                      >
+                        {deletingDocumentIds.includes(document.id) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 py-4">
+                  <FileText className="text-muted-foreground h-4 w-4" />
+                  <p className="text-muted-foreground text-xs">No documents added yet.</p>
+                </div>
+              )}
             </div>
           </div>
         )}

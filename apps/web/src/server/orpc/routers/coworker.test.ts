@@ -18,6 +18,8 @@ const {
   generateCoworkerMetadataOnFirstPromptFillMock,
   normalizeAndEnsureUniqueCoworkerUsernameMock,
   applyCoworkerPatchMock,
+  uploadCoworkerDocumentMock,
+  deleteCoworkerDocumentMock,
 } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn(),
   syncCoworkerScheduleJobMock: vi.fn(),
@@ -25,6 +27,8 @@ const {
   generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
   normalizeAndEnsureUniqueCoworkerUsernameMock: vi.fn(),
   applyCoworkerPatchMock: vi.fn(),
+  uploadCoworkerDocumentMock: vi.fn(),
+  deleteCoworkerDocumentMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -55,6 +59,11 @@ vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
   };
 });
 
+vi.mock("@/server/services/coworker-document", () => ({
+  deleteCoworkerDocument: deleteCoworkerDocumentMock,
+  uploadCoworkerDocument: uploadCoworkerDocumentMock,
+}));
+
 import { coworkerRouter } from "./coworker";
 const coworkerRouterAny = coworkerRouter as unknown as Record<
   string,
@@ -81,6 +90,10 @@ function createContext() {
     db: {
       query: {
         coworker: {
+          findFirst: vi.fn(),
+          findMany: vi.fn(),
+        },
+        coworkerDocument: {
           findFirst: vi.fn(),
           findMany: vi.fn(),
         },
@@ -115,6 +128,7 @@ function createContext() {
   };
 
   context.db.query.user.findFirst.mockResolvedValue({ role: "member" });
+  context.db.query.coworkerDocument.findMany.mockResolvedValue([]);
 
   return context;
 }
@@ -148,6 +162,16 @@ describe("coworkerRouter", () => {
         allowedIntegrations: ["github"],
       },
       appliedChanges: ["prompt"],
+    });
+    uploadCoworkerDocumentMock.mockResolvedValue({
+      id: "doc-1",
+      filename: "brief.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4,
+    });
+    deleteCoworkerDocumentMock.mockResolvedValue({
+      success: true,
+      filename: "brief.pdf",
     });
   });
 
@@ -357,6 +381,7 @@ describe("coworkerRouter", () => {
       schedule: null,
       createdAt: now,
       updatedAt: now,
+      documents: [],
       runs: [
         {
           id: "run-1",
@@ -452,6 +477,56 @@ describe("coworkerRouter", () => {
         context,
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("uploads a document for a coworker", async () => {
+    const context = createContext();
+
+    const result = await coworkerRouterAny.uploadDocument({
+      input: {
+        coworkerId: "wf-1",
+        filename: "brief.pdf",
+        mimeType: "application/pdf",
+        content: Buffer.from("test").toString("base64"),
+        description: "Reference brief",
+      },
+      context,
+    });
+
+    expect(uploadCoworkerDocumentMock).toHaveBeenCalledWith({
+      database: context.db,
+      userId: "user-1",
+      coworkerId: "wf-1",
+      filename: "brief.pdf",
+      mimeType: "application/pdf",
+      contentBase64: Buffer.from("test").toString("base64"),
+      description: "Reference brief",
+    });
+    expect(result).toEqual({
+      id: "doc-1",
+      filename: "brief.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4,
+    });
+  });
+
+  it("deletes a document for a coworker", async () => {
+    const context = createContext();
+
+    const result = await coworkerRouterAny.deleteDocument({
+      input: { id: "doc-1" },
+      context,
+    });
+
+    expect(deleteCoworkerDocumentMock).toHaveBeenCalledWith({
+      database: context.db,
+      userId: "user-1",
+      documentId: "doc-1",
+    });
+    expect(result).toEqual({
+      success: true,
+      filename: "brief.pdf",
+    });
   });
 
   it("uses provided coworker name without generation", async () => {
