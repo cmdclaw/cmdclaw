@@ -10,6 +10,7 @@ void jestDomVitest;
 const {
   mockUpdateCoworkerMutateAsync,
   mockGetOrCreateBuilderConversationMutate,
+  mockGetOrCreateBuilderConversationMutateAsync,
   mockSetSelectedSkillSlugs,
   mockTriggerCoworkerMutateAsync,
   mockRouterPush,
@@ -22,6 +23,7 @@ const {
 } = vi.hoisted(() => ({
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockGetOrCreateBuilderConversationMutate: vi.fn(),
+  mockGetOrCreateBuilderConversationMutateAsync: vi.fn(),
   mockSetSelectedSkillSlugs: vi.fn(),
   mockTriggerCoworkerMutateAsync: vi.fn(),
   mockRouterPush: vi.fn(),
@@ -249,8 +251,13 @@ vi.mock("@/hooks/use-is-admin", () => ({
   useIsAdmin: () => ({ isAdmin: false }),
 }));
 
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => false,
+}));
+
 vi.mock("@/orpc/hooks", () => ({
   useCreateCoworkerForwardingAlias: () => ({ isPending: false, mutateAsync: vi.fn() }),
+  useDeleteCoworkerDocument: () => ({ mutateAsync: vi.fn() }),
   useDisableCoworkerForwardingAlias: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useRotateCoworkerForwardingAlias: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useCoworker: () => ({
@@ -262,9 +269,11 @@ vi.mock("@/orpc/hooks", () => ({
   useDeleteCoworker: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCoworkerRun: () => ({ data: null, isLoading: false }),
   useCoworkerRuns: () => ({ data: mockCoworkerRunsData.current, refetch: vi.fn() }),
+  useEnqueueConversationMessage: () => ({ mutateAsync: vi.fn() }),
   useTriggerCoworker: () => ({ mutateAsync: mockTriggerCoworkerMutateAsync, isPending: false }),
   useGetOrCreateBuilderConversation: () => ({
     mutate: mockGetOrCreateBuilderConversationMutate,
+    mutateAsync: mockGetOrCreateBuilderConversationMutateAsync,
   }),
   usePlatformSkillList: () => ({ data: [], isLoading: false }),
   useProviderAuthStatus: () => ({
@@ -274,6 +283,7 @@ vi.mock("@/orpc/hooks", () => ({
     },
   }),
   useSkillList: () => ({ data: [], isLoading: false }),
+  useUploadCoworkerDocument: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("sonner", () => ({
@@ -286,10 +296,17 @@ vi.mock("sonner", () => ({
 import CoworkerEditorPage from "./page";
 
 describe("CoworkerEditorPage", () => {
+  let pushStateSpy: ReturnType<typeof vi.spyOn>;
+  let replaceStateSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    pushStateSpy = vi.spyOn(window.history, "pushState");
+    replaceStateSpy = vi.spyOn(window.history, "replaceState");
     mockUpdateCoworkerMutateAsync.mockReset();
     mockGetOrCreateBuilderConversationMutate.mockReset();
+    mockGetOrCreateBuilderConversationMutateAsync.mockReset();
+    mockGetOrCreateBuilderConversationMutateAsync.mockResolvedValue({ conversationId: "conv-1" });
     mockSetSelectedSkillSlugs.mockReset();
     mockTriggerCoworkerMutateAsync.mockReset();
     mockRouterPush.mockReset();
@@ -323,6 +340,8 @@ describe("CoworkerEditorPage", () => {
 
   afterEach(() => {
     cleanup();
+    pushStateSpy.mockRestore();
+    replaceStateSpy.mockRestore();
     vi.clearAllTimers();
   });
 
@@ -390,7 +409,12 @@ describe("CoworkerEditorPage", () => {
 
     expect(screen.getByText("Run not found.")).toBeInTheDocument();
     expect(mockRouterPush).not.toHaveBeenCalled();
-    expect(mockRouterReplace).toHaveBeenCalledWith("/coworkers/cw-1/runs/run-1");
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(replaceStateSpy).toHaveBeenCalledWith(
+      window.history.state,
+      "",
+      "/coworkers/cw-1/runs/run-1",
+    );
   });
 
   it("pushes a direct coworker run route when selecting a run", () => {
@@ -409,7 +433,12 @@ describe("CoworkerEditorPage", () => {
     fireEvent.click(screen.getByText("Runs"));
     fireEvent.click(screen.getByRole("button", { name: /completed/i }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/cw-1/runs/run-1");
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(pushStateSpy).toHaveBeenCalledWith(
+      window.history.state,
+      "",
+      "/coworkers/cw-1/runs/run-1",
+    );
     expect(screen.getByText("Run not found.")).toBeInTheDocument();
   });
 
@@ -468,5 +497,53 @@ describe("CoworkerEditorPage", () => {
     });
 
     expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+  });
+
+  it("switches right-panel tabs without routing through next navigation", async () => {
+    render(<CoworkerEditorPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByText("Docs"));
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(replaceStateSpy).toHaveBeenCalledWith(
+      window.history.state,
+      "",
+      "/coworkers/cw-1?tab=docs",
+    );
+    expect(screen.getByText("Chat")).toBeInTheDocument();
+  });
+
+  it("shows a retry when builder conversation loading fails", async () => {
+    let shouldFail = true;
+    mockGetOrCreateBuilderConversationMutateAsync.mockImplementation(async () => {
+      if (shouldFail) {
+        throw new Error("Conversation fetch failed");
+      }
+
+      return { conversationId: "conv-1" };
+    });
+
+    render(<CoworkerEditorPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Failed to load builder chat")).toBeInTheDocument();
+    expect(screen.getByText("Conversation fetch failed")).toBeInTheDocument();
+
+    shouldFail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Chat")).toBeInTheDocument();
   });
 });
