@@ -100,7 +100,9 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
         gen.status as (typeof TERMINAL_GENERATION_STATUSES)[number],
       )
     ) {
-      const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(gen.id);
+      const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+        gen.id,
+      );
       const isPreparingTimeout =
         run.status === "running" &&
         gen.status === "running" &&
@@ -259,6 +261,7 @@ export async function triggerCoworkerRun(params: {
   let conversationId: string;
   try {
     const startResult = await generationManager.startCoworkerGeneration({
+      coworkerId: wf.id,
       coworkerRunId: run.id,
       content: userContent,
       model: wf.model,

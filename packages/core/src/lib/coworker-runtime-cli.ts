@@ -74,7 +74,10 @@ function extractJsonCandidate(value: string): string | null {
     return trimmed;
   }
 
-  const lines = trimmed.split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index];
     if (line.startsWith("{") && line.endsWith("}")) {
@@ -91,7 +94,9 @@ function looksLikeCoworkerInvokeCommand(command: string): boolean {
     return false;
   }
 
-  return /^coworker\s+invoke(?:\s|$)/.test(normalized) || /\/coworker\s+invoke(?:\s|$)/.test(normalized);
+  return (
+    /^coworker\s+invoke(?:\s|$)/.test(normalized) || /\/coworker\s+invoke(?:\s|$)/.test(normalized)
+  );
 }
 
 function looksLikeCoworkerPatchCommand(command: string): boolean {
@@ -100,7 +105,9 @@ function looksLikeCoworkerPatchCommand(command: string): boolean {
     return false;
   }
 
-  return /^coworker\s+patch(?:\s|$)/.test(normalized) || /\/coworker\s+patch(?:\s|$)/.test(normalized);
+  return (
+    /^coworker\s+patch(?:\s|$)/.test(normalized) || /\/coworker\s+patch(?:\s|$)/.test(normalized)
+  );
 }
 
 function parseEnvelopeObject(value: unknown): CoworkerInvocationEnvelope | null {
@@ -418,6 +425,7 @@ export function getCoworkerCliSystemPrompt(): string {
     "Before invoking any coworker, run `coworker list --json` to inspect the currently available coworkers and verify the exact usernames.",
     "To launch a coworker, use `coworker invoke --username <username> --message <explicit task> --json`.",
     "If the user uploaded relevant files, forward them with repeated `--attachment <sandbox-path>` arguments.",
+    "To persist a file for future runs of a coworker, use `coworker upload-document <coworker-id> --file <sandbox-path> --json`.",
     "Do not guess coworker usernames. If a mention cannot be resolved exactly, explain the mismatch and stop.",
     "When multiple coworker mentions are present, invoke each coworker separately.",
     "Always use `--json` for `coworker invoke` so CmdClaw can render a coworker invocation card in chat.",

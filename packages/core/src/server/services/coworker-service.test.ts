@@ -6,8 +6,7 @@ process.env.REDIS_URL = "redis://localhost:6379";
 process.env.OPENAI_API_KEY = "test-openai-key";
 process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
 process.env.SANDBOX_DEFAULT = "docker";
-process.env.ENCRYPTION_KEY =
-  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 process.env.CMDCLAW_SERVER_SECRET = "1".repeat(64);
 process.env.AWS_ENDPOINT_URL = "https://s3.example.com";
 process.env.AWS_ACCESS_KEY_ID = "test-access-key";
@@ -165,6 +164,7 @@ describe("triggerCoworkerRun", () => {
 
     expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        coworkerId: "wf-1",
         coworkerRunId: "run-1",
         model: "anthropic/claude-sonnet-4-6",
         userId: "user-1",

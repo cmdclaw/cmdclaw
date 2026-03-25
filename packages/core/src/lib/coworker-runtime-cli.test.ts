@@ -10,8 +10,7 @@ describe("coworker-runtime-cli", () => {
     const envelope = parseCoworkerInvocationEnvelope({
       toolName: "Bash",
       toolInput: {
-        command:
-          'coworker invoke --username linkedin-digest --message "Review this inbox" --json',
+        command: 'coworker invoke --username linkedin-digest --message "Review this inbox" --json',
       },
       toolResult: {
         stdout: JSON.stringify({
@@ -106,5 +105,6 @@ describe("coworker-runtime-cli", () => {
   it("documents the list and invoke workflow", () => {
     expect(getCoworkerCliSystemPrompt()).toContain("coworker list --json");
     expect(getCoworkerCliSystemPrompt()).toContain("coworker invoke");
+    expect(getCoworkerCliSystemPrompt()).toContain("coworker upload-document");
   });
 });

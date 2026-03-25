@@ -8,6 +8,12 @@ type AttachmentPayload = {
   dataUrl: string;
 };
 
+type DocumentUploadPayload = {
+  filename: string;
+  mimeType: string;
+  content: string;
+};
+
 function usage(): never {
   console.error("Usage:");
   console.error("  coworker list [--json]");
@@ -15,6 +21,9 @@ function usage(): never {
     "  coworker invoke --username <username> --message <text> [--attachment <path>]... [--json]",
   );
   console.error("  coworker patch <coworker-id> --base-updated-at <iso> --patch <json> [--json]");
+  console.error(
+    "  coworker upload-document <coworker-id> --file <path> [--description <text>] [--json]",
+  );
   process.exit(1);
 }
 
@@ -64,6 +73,16 @@ async function readAttachment(filePath: string): Promise<AttachmentPayload> {
     name: basename(filePath),
     mimeType,
     dataUrl: `data:${mimeType};base64,${content.toString("base64")}`,
+  };
+}
+
+async function readUploadedDocument(filePath: string): Promise<DocumentUploadPayload> {
+  const content = await readFile(filePath);
+  const mimeType = inferMimeType(filePath);
+  return {
+    filename: basename(filePath),
+    mimeType,
+    content: content.toString("base64"),
   };
 }
 
@@ -279,6 +298,62 @@ async function main(): Promise<void> {
         console.log(`- ${String(detail)}`);
       }
     }
+    return;
+  }
+
+  if (command === "upload-document") {
+    const coworkerId = args[1] ?? "";
+    let filePath = "";
+    let description: string | undefined;
+
+    for (let index = 2; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === "--json") {
+        continue;
+      }
+      if (arg === "--file") {
+        filePath = args[index + 1] ?? "";
+        index += 1;
+        continue;
+      }
+      if (arg === "--description") {
+        description = args[index + 1] ?? "";
+        index += 1;
+        continue;
+      }
+
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+
+    if (!coworkerId || !filePath.trim()) {
+      usage();
+    }
+
+    const document = await readUploadedDocument(filePath.trim());
+    const response = (await postJson("/api/internal/coworkers/runtime/documents/upload", {
+      coworkerId,
+      filename: document.filename,
+      mimeType: document.mimeType,
+      content: document.content,
+      description,
+    })) as { document?: unknown };
+
+    const uploadResult = response?.document ?? response;
+    if (wantsJson) {
+      printJson(uploadResult);
+      return;
+    }
+
+    if (!uploadResult || typeof uploadResult !== "object") {
+      console.log(`Uploaded ${document.filename}.`);
+      return;
+    }
+
+    const record = uploadResult as Record<string, unknown>;
+    console.log(
+      `Uploaded ${String(record.filename ?? document.filename)} (${String(record.mimeType ?? document.mimeType)}).`,
+    );
+    console.log(`documentId: ${String(record.id ?? "")}`);
     return;
   }
 
