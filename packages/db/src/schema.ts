@@ -100,6 +100,11 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const magicLinkRequestStatusEnum = pgEnum("magic_link_request_status", [
+  "pending",
+  "consumed",
+]);
+
 export const magicLinkRequestState = pgTable(
   "magic_link_request_state",
   {
@@ -108,6 +113,8 @@ export const magicLinkRequestState = pgTable(
     callbackUrl: text("callback_url"),
     newUserCallbackUrl: text("new_user_callback_url"),
     errorCallbackUrl: text("error_callback_url"),
+    status: magicLinkRequestStatusEnum("status").default("pending").notNull(),
+    consumedAt: timestamp("consumed_at"),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

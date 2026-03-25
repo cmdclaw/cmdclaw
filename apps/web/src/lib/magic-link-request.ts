@@ -1,5 +1,9 @@
 import crypto from "crypto";
 
+export const MAGIC_LINK_TTL_SECONDS = 60 * 60;
+export const MAGIC_LINK_TTL_MS = MAGIC_LINK_TTL_SECONDS * 1000;
+export const MAGIC_LINK_STATE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type MagicLinkRedirectState = {
   callbackURL?: string;
   newUserCallbackURL?: string;
@@ -31,7 +35,11 @@ export function buildSignInMagicLinkUrl({
   token: string;
   baseUrl: string;
 }): string {
-  return new URL(`/sign-in/${encodeURIComponent(token)}`, baseUrl).toString();
+  return new URL(buildSignInMagicLinkPath(token), baseUrl).toString();
+}
+
+export function buildSignInMagicLinkPath(token: string): string {
+  return `/sign-in/${encodeURIComponent(token)}`;
 }
 
 export function hashMagicLinkToken(token: string): string {

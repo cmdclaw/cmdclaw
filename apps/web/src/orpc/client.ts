@@ -15,10 +15,11 @@ let loginRedirectInFlight = false;
 
 type SessionCheckResult = "session_present" | "session_missing" | "check_failed";
 
-function shouldSkipLoginRedirect(pathname: string): boolean {
+export function shouldSkipLoginRedirect(pathname: string): boolean {
   return (
     pathname === "/" ||
     pathname === "/login" ||
+    pathname.startsWith("/sign-in/") ||
     pathname === "/templates" ||
     pathname === "/template" ||
     pathname.startsWith("/template/") ||

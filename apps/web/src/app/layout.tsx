@@ -71,7 +71,7 @@ export default async function RootLayout({
         <PostHogClientProvider>
           <ORPCProvider>
             <BillingProviderWrapper>
-              <DesktopNotificationPermissionGate />
+              <DesktopNotificationPermissionGate enabled={hasSession} />
               <AppShellRouteWrapper initialHasSession={hasSession}>{children}</AppShellRouteWrapper>
               <Toaster />
             </BillingProviderWrapper>

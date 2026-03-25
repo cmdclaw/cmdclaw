@@ -963,10 +963,11 @@ export function useDeleteSkillDocument() {
 // ========== USER HOOKS ==========
 
 // Hook for getting current user
-export function useCurrentUser() {
+export function useCurrentUser(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["user", "me"],
     queryFn: () => client.user.me(),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -11,6 +11,7 @@ import { Resend } from "resend";
 import { env } from "@/env";
 import { shouldGrantAdminRole } from "@/lib/admin-emails";
 import { buildMagicLinkEmailPayload } from "@/lib/magic-link-email";
+import { MAGIC_LINK_TTL_SECONDS } from "@/lib/magic-link-request";
 import { buildSignInMagicLinkUrl } from "@/lib/magic-link-request";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
 import { createMagicLinkRequestState } from "@/server/lib/magic-link-request-state";
@@ -77,7 +78,7 @@ export const auth = betterAuth({
         ]
       : []),
     magicLink({
-      expiresIn: 3600, // 1 hour
+      expiresIn: MAGIC_LINK_TTL_SECONDS,
       async sendMagicLink({ email, token, url }) {
         console.log(`[auth] Sending magic link to ${email}`);
         await createMagicLinkRequestState({
