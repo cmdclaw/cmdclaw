@@ -325,6 +325,10 @@ vi.mock("../sandbox/prep/skills-prep", () => ({
   getIntegrationSkillsSystemPrompt: vi.fn(() => ""),
 }));
 
+vi.mock("../sandbox/prep/coworker-documents-prep", () => ({
+  writeCoworkerDocumentsToSandbox: vi.fn(() => []),
+}));
+
 vi.mock("../integrations/cli-env", () => ({
   getCliEnvForUser: vi.fn(),
   getCliInstructions: vi.fn(() => ""),
@@ -459,6 +463,7 @@ import {
 import { composeOpencodePromptSpec } from "../prompts/opencode-runtime-prompt";
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
+import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-documents-prep";
 import { syncMemoryFilesToSandbox, buildMemorySystemPrompt } from "../sandbox/prep/memory-prep";
 import {
   writeSkillsToSandbox,
@@ -530,6 +535,10 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
     conversationId: "conv-1",
     userId: "user-1",
     status: "running",
+    deadlineAt: new Date(Date.now() + 15 * 60 * 1000),
+    lastRuntimeEventAt: new Date(),
+    recoveryAttempts: 0,
+    completionReason: null,
     contentParts: [],
     assistantContent: "",
     abortController: new AbortController(),
@@ -1459,7 +1468,7 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("times out approval into paused status and emits status_change", async () => {
+  it("times out approval into terminal error", async () => {
     const ctx = createCtx();
     coworkerRunFindFirstMock.mockResolvedValue({ id: "wf-run-1" });
     const stalePendingApproval = {
@@ -1474,6 +1483,7 @@ describe("generationManager transitions", () => {
     };
 
     const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
     mgr.activeGenerations.set(ctx.id, ctx);
     generationFindFirstMock.mockImplementation(async (input?: unknown) => {
       const request = input as { with?: { conversation?: boolean } } | undefined;
@@ -1514,23 +1524,9 @@ describe("generationManager transitions", () => {
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
 
     await expect(approvalPromise).resolves.toBe("deny");
-
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "paused",
-        isPaused: true,
-      }),
-    );
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        generationStatus: "paused",
-      }),
-    );
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "paused",
-      }),
-    );
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+    expect(ctx.completionReason).toBe("approval_timeout");
+    expect(ctx.errorMessage).toBe("Approval request expired before the run could continue.");
   });
 
   it("accepts an auth interrupt and resumes persisted generation state", async () => {
@@ -1580,7 +1576,7 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("pauses on auth timeout", async () => {
+  it("fails on auth timeout", async () => {
     const ctx = createCtx();
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
@@ -1613,18 +1609,9 @@ describe("generationManager transitions", () => {
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1);
 
     await expect(authPromise).resolves.toEqual({ success: false });
-    expect(finishSpy).not.toHaveBeenCalled();
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "paused",
-        isPaused: true,
-      }),
-    );
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        generationStatus: "paused",
-      }),
-    );
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+    expect(ctx.completionReason).toBe("auth_timeout");
+    expect(ctx.errorMessage).toBe("Authentication request expired before the run could continue.");
   });
 
   it("starts a new generation and enqueues background run", async () => {
@@ -1943,7 +1930,7 @@ describe("generationManager transitions", () => {
       "generation:preparing-stuck-check",
       { generationId: "gen-new" },
       expect.objectContaining({
-        delay: 5 * 60 * 1000,
+        delay: 45_000,
       }),
     );
     expect(queueAddMock).toHaveBeenNthCalledWith(
@@ -1954,6 +1941,10 @@ describe("generationManager transitions", () => {
     );
     expect(insertValuesMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        deadlineAt: expect.any(Date),
+        lastRuntimeEventAt: expect.any(Date),
+        recoveryAttempts: 0,
+        completionReason: null,
         executionPolicy: expect.objectContaining({
           queuedFileAttachments: [pdfAttachment],
         }),
@@ -2208,6 +2199,7 @@ describe("generationManager transitions", () => {
       .mockResolvedValueOnce([{ id: "gen-coworker" }]);
 
     const result = await generationManager.startCoworkerGeneration({
+      coworkerId: "wf-1",
       coworkerRunId: "wf-run-1",
       content: "Create a weekly report",
       userId: "user-1",
@@ -2223,6 +2215,7 @@ describe("generationManager transitions", () => {
     });
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(mgr.activeGenerations.get("gen-coworker")).toMatchObject({
+      coworkerId: "wf-1",
       coworkerRunId: "wf-run-1",
       allowedIntegrations: ["github"],
       allowedCustomIntegrations: ["custom-slug"],
@@ -2236,6 +2229,7 @@ describe("generationManager transitions", () => {
   it("rejects inaccessible saved coworker models before generation starts", async () => {
     await expect(
       generationManager.startCoworkerGeneration({
+        coworkerId: "wf-1",
         coworkerRunId: "wf-run-1",
         content: "Create a weekly report",
         userId: "user-1",
@@ -2944,6 +2938,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getEnabledIntegrationTypes).mockResolvedValue(["github", "slack"]);
     vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("cli instructions");
     vi.mocked(writeSkillsToSandbox).mockResolvedValue(["base-skill"]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("skills prompt");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue(["github"]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("integration skills prompt");
@@ -3050,6 +3045,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
     vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
     vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
@@ -3125,6 +3121,9 @@ describe("generationManager transitions", () => {
     vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
     vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
     vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([
+      "/home/user/coworker-documents/wf-1/brief.pdf",
+    ]);
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
@@ -3165,6 +3164,7 @@ describe("generationManager transitions", () => {
       conversationId: "conv-coworker",
       backendType: "opencode",
       model: "anthropic/claude-sonnet-4-6",
+      coworkerId: "wf-1",
       coworkerRunId: "wf-run-1",
       userMessageContent: "Execute scheduled coworker task",
     });
@@ -3179,9 +3179,25 @@ describe("generationManager transitions", () => {
       }),
     );
     expect(promptMock).toHaveBeenCalledTimes(1);
-    const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
+    const promptArg = promptMock.mock.calls[0]?.[0] as {
+      agent?: string;
+      system?: string;
+      parts?: Array<{ type: string; text?: string }>;
+    };
     expect(promptArg.agent).toBe(CMDCLAW_COWORKER_RUNNER_AGENT_ID);
     expect(promptArg.system).toBe("mock system prompt for coworker_runner");
+    expect(vi.mocked(writeCoworkerDocumentsToSandbox)).toHaveBeenCalledWith(
+      expect.anything(),
+      "wf-1",
+    );
+    expect(promptArg.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining("/home/user/coworker-documents/wf-1/brief.pdf"),
+        }),
+      ]),
+    );
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
@@ -3192,6 +3208,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
     vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
     vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
     vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
     vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");

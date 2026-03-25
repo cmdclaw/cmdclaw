@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   pgTable,
@@ -492,7 +492,13 @@ export type ContentPart =
       run_id: string;
       conversation_id: string;
       generation_id: string;
-      status: "running" | "awaiting_approval" | "awaiting_auth" | "completed" | "error" | "cancelled";
+      status:
+        | "running"
+        | "awaiting_approval"
+        | "awaiting_auth"
+        | "completed"
+        | "error"
+        | "cancelled";
       attachment_names?: string[];
       message: string;
     }
@@ -677,6 +683,12 @@ export const generation = pgTable(
     runtimeHarness: text("runtime_harness"),
     runtimeProtocolVersion: text("runtime_protocol_version"),
     isPaused: boolean("is_paused").default(false).notNull(),
+    deadlineAt: timestamp("deadline_at")
+      .default(sql`now() + interval '15 minutes'`)
+      .notNull(),
+    lastRuntimeEventAt: timestamp("last_runtime_event_at").defaultNow().notNull(),
+    recoveryAttempts: integer("recovery_attempts").default(0).notNull(),
+    completionReason: text("completion_reason"),
     // Metadata
     errorMessage: text("error_message"),
     inputTokens: integer("input_tokens").default(0).notNull(),
@@ -950,6 +962,29 @@ export const coworkerRun = pgTable(
     index("coworker_run_status_idx").on(table.status),
     index("coworker_run_started_at_idx").on(table.startedAt),
   ],
+);
+
+export const coworkerDocument = pgTable(
+  "coworker_document",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    coworkerId: text("coworker_id")
+      .notNull()
+      .references(() => coworker.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("coworker_document_coworker_id_idx").on(table.coworkerId)],
 );
 
 export const coworkerEmailAlias = pgTable(
@@ -1248,6 +1283,7 @@ export const conversationQueuedMessageRelations = relations(
 export const coworkerRelations = relations(coworker, ({ one, many }) => ({
   owner: one(user, { fields: [coworker.ownerId], references: [user.id] }),
   runs: many(coworkerRun),
+  documents: many(coworkerDocument),
   emailAliases: many(coworkerEmailAlias),
 }));
 
@@ -1261,6 +1297,13 @@ export const coworkerRunRelations = relations(coworkerRun, ({ one, many }) => ({
     references: [generation.id],
   }),
   events: many(coworkerRunEvent),
+}));
+
+export const coworkerDocumentRelations = relations(coworkerDocument, ({ one }) => ({
+  coworker: one(coworker, {
+    fields: [coworkerDocument.coworkerId],
+    references: [coworker.id],
+  }),
 }));
 
 export const coworkerRunEventRelations = relations(coworkerRunEvent, ({ one }) => ({

@@ -3,8 +3,10 @@ import { conversation, coworkerRun, generation, message } from "@cmdclaw/db/sche
 import { desc, eq, inArray } from "drizzle-orm";
 import { CONVERSATION_LOADING_CLEANUP_JOB_NAME, getQueue } from "../queues";
 import { generationInterruptService } from "./generation-interrupt-service";
+import { generationLifecyclePolicy } from "./lifecycle-policy";
 
-const CONVERSATION_LOADING_MAX_IDLE_MS = 4 * 60 * 60 * 1000;
+const CONVERSATION_LOADING_MAX_IDLE_MS =
+  generationLifecyclePolicy.explicitPauseRetentionMs / 6;
 const STALE_CONVERSATION_LOADING_ERROR_MESSAGE =
   "Generation was marked as stale after no new messages were recorded for over 4 hours.";
 const STALE_LOADING_CONVERSATION_STATUSES = [

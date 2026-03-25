@@ -90,6 +90,7 @@ import {
   type GenerationStreamEnvelope,
 } from "../redis/generation-event-bus";
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
+import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-documents-prep";
 import { buildMemorySystemPrompt, syncMemoryFilesToSandbox } from "../sandbox/prep/memory-prep";
 import {
   getIntegrationSkillsSystemPrompt,
@@ -114,6 +115,7 @@ import { GenerationStartError } from "./generation-start-error";
 import { createCommunityIntegrationSkill } from "./integration-skill-service";
 import { writeSessionTranscriptFromConversation } from "./memory-service";
 import {
+  buildOpencodeExportCommand,
   clearConversationSessionSnapshot,
   saveConversationSessionSnapshot,
 } from "./opencode-session-snapshot-service";
@@ -122,6 +124,19 @@ import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-servic
 import { getSandboxSlotManager } from "./sandbox-slot-manager";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
 import { conversationRuntimeService } from "./conversation-runtime-service";
+import {
+  canAttemptRecovery,
+  classifyRuntimeFailure,
+  createGenerationLifecycle,
+  generationLifecyclePolicy,
+  isApprovalExpired,
+  isAuthExpired,
+  isRunExpired,
+  resolveGenerationDeadlineAt,
+  type GenerationCompletionReason,
+  type RuntimeExportState,
+  type RuntimeFailureClassification,
+} from "./lifecycle-policy";
 import { sendTaskDonePush } from "./web-push-service";
 
 function escapeShellArg(value: string): string {
@@ -301,6 +316,10 @@ interface GenerationContext {
   userId: string;
   sandboxId?: string;
   status: GenerationStatus;
+  deadlineAt: Date;
+  lastRuntimeEventAt: Date;
+  recoveryAttempts: number;
+  completionReason?: GenerationCompletionReason | null;
   contentParts: ContentPart[];
   assistantContent: string;
   abortController: AbortController;
@@ -339,6 +358,7 @@ interface GenerationContext {
   backendType: BackendType;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";
   // Coworker fields
+  coworkerId?: string;
   coworkerRunId?: string;
   allowedIntegrations?: IntegrationType[];
   autoApprove: boolean;
@@ -453,26 +473,12 @@ async function getDoneArtifacts(messageId: string): Promise<
   };
 }
 
-// Approval timeout: 5 minutes before pausing sandbox
-const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
-// Auth timeout: 10 minutes for OAuth flow
-const AUTH_TIMEOUT_MS = 10 * 60 * 1000;
+const APPROVAL_TIMEOUT_MS = generationLifecyclePolicy.approvalTimeoutMs;
+const AUTH_TIMEOUT_MS = generationLifecyclePolicy.authTimeoutMs;
 const CANCELLATION_POLL_INTERVAL_MS = 1000;
-const AGENT_PREPARING_TIMEOUT_MS = (() => {
-  const seconds = Number(process.env.AGENT_PREPARING_TIMEOUT_SECONDS ?? "300");
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return 5 * 60 * 1000;
-  }
-  return Math.floor(seconds * 1000);
-})();
-const OPENCODE_PROMPT_TIMEOUT_MS = (() => {
-  const seconds = Number(process.env.OPENCODE_PROMPT_TIMEOUT_SECONDS ?? "1500");
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return 30 * 1000;
-  }
-  return Math.floor(seconds * 1000);
-})();
-const OPENCODE_PROMPT_TIMEOUT_LABEL = `${Math.ceil(OPENCODE_PROMPT_TIMEOUT_MS / 1000)}s`;
+const AGENT_PREPARING_TIMEOUT_MS = generationLifecyclePolicy.bootstrapTimeoutMs;
+const OPENCODE_PROMPT_TIMEOUT_MS = generationLifecyclePolicy.runDeadlineMs;
+const OPENCODE_PROMPT_TIMEOUT_LABEL = `${Math.ceil(OPENCODE_PROMPT_TIMEOUT_MS / 60_000)}m`;
 // Save debounce interval for text chunks
 const SAVE_DEBOUNCE_MS = 2000;
 const SESSION_RESET_COMMANDS = new Set(["/new"]);
@@ -722,6 +728,61 @@ function formatErrorMessage(error: unknown): string {
     return `${error.name}: ${error.message}`;
   }
   return String(error);
+}
+
+function isMissingSandboxError(error: unknown): boolean {
+  const message = formatErrorMessage(error).toLowerCase();
+  return (
+    message.includes("sandbox") &&
+    (message.includes("not found") ||
+      message.includes("not_running") ||
+      message.includes("not running") ||
+      message.includes("dead") ||
+      message.includes("paused"))
+  );
+}
+
+function extractRuntimeExportState(payload: unknown): RuntimeExportState {
+  if (!payload || typeof payload !== "object") {
+    return "broken";
+  }
+
+  const record = payload as {
+    messages?: Array<{
+      info?: { role?: string };
+      parts?: Array<{
+        type?: string;
+        reason?: string;
+        state?: { status?: string };
+      }>;
+    }>;
+  };
+  const assistantMessages = (record.messages ?? []).filter(
+    (messageRecord) => messageRecord?.info?.role === "assistant",
+  );
+  const lastAssistantMessage = assistantMessages.at(-1);
+  const parts = lastAssistantMessage?.parts ?? [];
+
+  if (parts.some((part) => part?.type === "step-finish" && part.reason === "complete")) {
+    return "terminal_completed";
+  }
+  if (parts.some((part) => part?.type === "step-finish" && part.reason === "error")) {
+    return "terminal_failed";
+  }
+  if (
+    parts.some(
+      (part) =>
+        part?.type === "tool" &&
+        typeof part.state?.status === "string" &&
+        part.state.status === "pending",
+    )
+  ) {
+    return "broken";
+  }
+  if (parts.length === 0) {
+    return "broken";
+  }
+  return "non_terminal";
 }
 
 function truncateString(value: string, maxChars: number): string {
@@ -1192,6 +1253,212 @@ class GenerationManager {
       .update(conversation)
       .set({ sandboxLastUserVisibleActionAt: new Date() })
       .where(eq(conversation.id, conversationId));
+  }
+
+  private markRuntimeActivity(ctx: GenerationContext, at = new Date()): void {
+    ctx.lastRuntimeEventAt = at;
+  }
+
+  private setCompletionReason(
+    ctx: GenerationContext,
+    reason: GenerationCompletionReason | null | undefined,
+  ): void {
+    ctx.completionReason = reason ?? null;
+  }
+
+  private getRemainingRunTimeMs(ctx: Pick<GenerationContext, "deadlineAt">): number {
+    return Math.max(0, ctx.deadlineAt.getTime() - Date.now());
+  }
+
+  private async recordRecoveryAttempt(ctx: GenerationContext): Promise<void> {
+    ctx.recoveryAttempts += 1;
+    await db
+      .update(generation)
+      .set({
+        recoveryAttempts: ctx.recoveryAttempts,
+      })
+      .where(eq(generation.id, ctx.id));
+  }
+
+  private async finalizeDetachedGenerationError(params: {
+    generationId: string;
+    conversationId: string;
+    coworkerRunId?: string;
+    message: string;
+    completionReason: GenerationCompletionReason;
+  }): Promise<void> {
+    await generationInterruptService.cancelInterruptsForGeneration(params.generationId);
+    await db
+      .update(generation)
+      .set({
+        status: "error",
+        pendingApproval: null,
+        pendingAuth: null,
+        isPaused: false,
+        cancelRequestedAt: null,
+        errorMessage: params.message,
+        completionReason: params.completionReason,
+        completedAt: new Date(),
+      })
+      .where(eq(generation.id, params.generationId));
+    await db
+      .update(conversation)
+      .set({
+        generationStatus: "error",
+      })
+      .where(eq(conversation.id, params.conversationId));
+    if (params.coworkerRunId) {
+      await db
+        .update(coworkerRun)
+        .set({
+          status: "error",
+          finishedAt: new Date(),
+          errorMessage: params.message,
+        })
+        .where(eq(coworkerRun.id, params.coworkerRunId));
+    }
+    await this.publishDetachedGenerationStreamEvent({
+      generationId: params.generationId,
+      conversationId: params.conversationId,
+      event: {
+        type: "error",
+        message: params.message,
+      },
+    });
+  }
+
+  private async inspectRuntimeFailureState(
+    ctx: GenerationContext,
+    client?: RuntimeHarnessClient,
+  ): Promise<{
+    classification: RuntimeFailureClassification;
+    exportState: RuntimeExportState;
+    exportedPayload?: unknown;
+  }> {
+    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+      ctx.id,
+    );
+    if (pendingInterrupt?.kind === "auth") {
+      return {
+        classification: "waiting_auth",
+        exportState: "waiting_auth",
+      };
+    }
+    if (pendingInterrupt) {
+      return {
+        classification: "waiting_approval",
+        exportState: "waiting_approval",
+      };
+    }
+
+    let sandboxState: "live" | "missing" | "paused" | "dead" | "unknown" = ctx.sandbox
+      ? "live"
+      : "unknown";
+    let exportState: RuntimeExportState = "non_terminal";
+    let exportedPayload: unknown;
+
+    if (ctx.sessionId && client) {
+      try {
+        const sessionResult = await client.getSession({ sessionID: ctx.sessionId });
+        if (sessionResult.error) {
+          if (isMissingSandboxError(sessionResult.error)) {
+            sandboxState = "missing";
+          }
+        } else if (sessionResult.data && sandboxState === "unknown") {
+          sandboxState = "live";
+        }
+      } catch (error) {
+        if (isMissingSandboxError(error)) {
+          sandboxState = "missing";
+        }
+      }
+    }
+
+    if (ctx.sandbox && ctx.sessionId) {
+      try {
+        const exportResult = await ctx.sandbox.execute(buildOpencodeExportCommand(ctx.sessionId), {
+          timeout: 15_000,
+        });
+        if (exportResult.exitCode === 0) {
+          exportedPayload = JSON.parse(exportResult.stdout);
+          exportState = extractRuntimeExportState(exportedPayload);
+          sandboxState = "live";
+        } else if (isMissingSandboxError(exportResult.stderr || exportResult.stdout)) {
+          sandboxState = "missing";
+        } else {
+          exportState = "broken";
+        }
+      } catch (error) {
+        if (isMissingSandboxError(error)) {
+          sandboxState = "missing";
+        } else {
+          exportState = "broken";
+        }
+      }
+    } else if (sandboxState === "unknown") {
+      sandboxState = "missing";
+    }
+
+    return {
+      classification: classifyRuntimeFailure({
+        exportState,
+        sandboxState,
+        canRecover: canAttemptRecovery(ctx),
+      }),
+      exportState,
+      exportedPayload,
+    };
+  }
+
+  private async observeRecoveredRuntime(
+    ctx: GenerationContext,
+    client?: RuntimeHarnessClient,
+  ): Promise<RuntimeFailureClassification> {
+    if (!client) {
+      const inspected = await this.inspectRuntimeFailureState(ctx);
+      return inspected.classification;
+    }
+
+    const recoveryController = new AbortController();
+    const recoveryTimeoutId = setTimeout(() => {
+      recoveryController.abort();
+    }, generationLifecyclePolicy.recoveryObserveWindowMs);
+
+    try {
+      const eventResult = await client.subscribe({}, { signal: recoveryController.signal });
+      for await (const rawEvent of eventResult.stream) {
+        const event = rawEvent as RuntimeEvent;
+        this.markRuntimeActivity(ctx);
+        if (event.type === "session.idle") {
+          return "terminal_completed";
+        }
+        if (event.type === "session.error") {
+          return "terminal_failed";
+        }
+      }
+    } catch (error) {
+      if (!recoveryController.signal.aborted) {
+        console.warn("[GenerationManager] Runtime recovery subscribe failed:", error);
+      }
+    } finally {
+      clearTimeout(recoveryTimeoutId);
+    }
+
+    const inspected = await this.inspectRuntimeFailureState(ctx, client);
+    return inspected.classification;
+  }
+
+  private async resolveRuntimeFailure(
+    ctx: GenerationContext,
+    client?: RuntimeHarnessClient,
+  ): Promise<RuntimeFailureClassification> {
+    const inspected = await this.inspectRuntimeFailureState(ctx, client);
+    if (inspected.classification !== "recoverable_live_runtime") {
+      return inspected.classification;
+    }
+
+    await this.recordRecoveryAttempt(ctx);
+    return this.observeRecoveredRuntime(ctx, client);
   }
 
   private async releaseSandboxSlotLease(ctx: GenerationContext): Promise<void> {
@@ -1924,6 +2191,7 @@ class GenerationManager {
     }
 
     // Create generation record
+    const lifecycle = createGenerationLifecycle();
     const [genRecord] = await db
       .insert(generation)
       .values({
@@ -1939,6 +2207,10 @@ class GenerationManager {
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
+        deadlineAt: lifecycle.deadlineAt,
+        lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
+        recoveryAttempts: lifecycle.recoveryAttempts,
+        completionReason: lifecycle.completionReason,
       })
       .returning();
     const runtimeBinding = await conversationRuntimeService.bindGenerationToRuntime({
@@ -2011,6 +2283,10 @@ class GenerationManager {
       conversationId: conv.id,
       userId,
       status: "running",
+      deadlineAt: lifecycle.deadlineAt,
+      lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
+      recoveryAttempts: lifecycle.recoveryAttempts,
+      completionReason: lifecycle.completionReason,
       contentParts: [],
       assistantContent: "",
       abortController: new AbortController(),
@@ -2097,6 +2373,7 @@ class GenerationManager {
    * Start a new coworker generation.
    */
   async startCoworkerGeneration(params: {
+    coworkerId: string;
     coworkerRunId: string;
     content: string;
     model?: string;
@@ -2163,6 +2440,7 @@ class GenerationManager {
       });
     }
 
+    const lifecycle = createGenerationLifecycle();
     const [genRecord] = await db
       .insert(generation)
       .values({
@@ -2180,6 +2458,10 @@ class GenerationManager {
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
+        deadlineAt: lifecycle.deadlineAt,
+        lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
+        recoveryAttempts: lifecycle.recoveryAttempts,
+        completionReason: lifecycle.completionReason,
       })
       .returning();
     const runtimeBinding = await conversationRuntimeService.bindGenerationToRuntime({
@@ -2222,6 +2504,10 @@ class GenerationManager {
       conversationId: newConv.id,
       userId,
       status: "running",
+      deadlineAt: lifecycle.deadlineAt,
+      lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
+      recoveryAttempts: lifecycle.recoveryAttempts,
+      completionReason: lifecycle.completionReason,
       contentParts: [],
       assistantContent: "",
       abortController: new AbortController(),
@@ -2240,6 +2526,7 @@ class GenerationManager {
       pendingMessageParts: new Map(),
       backendType: "opencode",
       sandboxProviderOverride: params.sandboxProvider,
+      coworkerId: params.coworkerId,
       coworkerRunId: params.coworkerRunId,
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: params.autoApprove,
@@ -2389,6 +2676,13 @@ class GenerationManager {
       conversationId: genRecord.conversationId,
       userId: genRecord.conversation.userId,
       status: genRecord.status,
+      deadlineAt: resolveGenerationDeadlineAt({
+        startedAt: genRecord.startedAt,
+        deadlineAt: genRecord.deadlineAt,
+      }),
+      lastRuntimeEventAt: genRecord.lastRuntimeEventAt ?? genRecord.startedAt,
+      recoveryAttempts: genRecord.recoveryAttempts ?? 0,
+      completionReason: (genRecord.completionReason as GenerationCompletionReason | null) ?? null,
       contentParts: (genRecord.contentParts as ContentPart[] | null) ?? [],
       assistantContent: "",
       abortController: new AbortController(),
@@ -2472,6 +2766,20 @@ class GenerationManager {
 
     this.activeGenerations.set(genRecord.id, ctx);
     this.markPhase(ctx, "generation_started");
+    if (
+      isRunExpired(
+        {
+          startedAt: ctx.startedAt,
+          deadlineAt: ctx.deadlineAt,
+        },
+        new Date(),
+      )
+    ) {
+      this.setCompletionReason(ctx, "run_deadline");
+      ctx.errorMessage = "We stopped this run because it exceeded the 15 minute wall-clock limit.";
+      await this.finishGeneration(ctx, "error");
+      return;
+    }
     if (ctx.status === "awaiting_approval" && pendingInterrupt?.expiresAt) {
       await this.enqueueGenerationTimeout(
         ctx.id,
@@ -2485,12 +2793,13 @@ class GenerationManager {
     if (
       ctx.status === "awaiting_approval" &&
       pendingInterrupt &&
-      Date.now() >=
-        resolveExpiryMs(
-          pendingInterrupt.expiresAt?.toISOString(),
-          pendingInterrupt.requestedAt.toISOString(),
-          APPROVAL_TIMEOUT_MS,
-        )
+      isApprovalExpired(
+        {
+          requestedAt: pendingInterrupt.requestedAt,
+          expiresAt: pendingInterrupt.expiresAt,
+        },
+        new Date(),
+      )
     ) {
       await this.processGenerationTimeout(ctx.id, "approval");
       return;
@@ -2498,12 +2807,13 @@ class GenerationManager {
     if (
       ctx.status === "awaiting_auth" &&
       pendingInterrupt &&
-      Date.now() >=
-        resolveExpiryMs(
-          pendingInterrupt.expiresAt?.toISOString(),
-          pendingInterrupt.requestedAt.toISOString(),
-          AUTH_TIMEOUT_MS,
-        )
+      isAuthExpired(
+        {
+          requestedAt: pendingInterrupt.requestedAt,
+          expiresAt: pendingInterrupt.expiresAt,
+        },
+        new Date(),
+      )
     ) {
       await this.processGenerationTimeout(ctx.id, "auth");
       return;
@@ -3011,46 +3321,38 @@ class GenerationManager {
       ) {
         return;
       }
-      const expiresAtMs = resolveExpiryMs(
-        pendingInterrupt.expiresAt?.toISOString(),
-        pendingInterrupt.requestedAt.toISOString(),
-        APPROVAL_TIMEOUT_MS,
-      );
-      if (Number.isFinite(expiresAtMs) && now < expiresAtMs) {
+      if (
+        !isApprovalExpired(
+          {
+            requestedAt: pendingInterrupt.requestedAt,
+            expiresAt: pendingInterrupt.expiresAt,
+          },
+          new Date(now),
+        )
+      ) {
         return;
       }
-
-      await db
-        .update(generation)
-        .set({
-          status: "paused",
-          isPaused: true,
-        })
-        .where(eq(generation.id, generationId));
-      await db
-        .update(conversation)
-        .set({ generationStatus: "paused" })
-        .where(eq(conversation.id, genRecord.conversationId));
-
       const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
         where: eq(coworkerRun.generationId, generationId),
         columns: { id: true },
       });
-      if (linkedCoworkerRun?.id) {
-        await db
-          .update(coworkerRun)
-          .set({
-            status: "paused",
-          })
-          .where(eq(coworkerRun.id, linkedCoworkerRun.id));
-      }
-
       const ctx = this.activeGenerations.get(generationId);
-      if (ctx && ctx.status === "awaiting_approval") {
-        ctx.status = "paused";
-        await this.releaseSandboxSlotLease(ctx);
-        this.broadcast(ctx, { type: "status_change", status: "paused" });
-        this.evictActiveGenerationContext(generationId);
+      if (ctx) {
+        this.setCompletionReason(ctx, "approval_timeout");
+        ctx.errorMessage = "Approval request expired before the run could continue.";
+        await this.handleApprovalTimeout(ctx);
+      } else {
+        await generationInterruptService.resolveInterrupt({
+          interruptId: pendingInterrupt.id,
+          status: "expired",
+        });
+        await this.finalizeDetachedGenerationError({
+          generationId,
+          conversationId: genRecord.conversationId,
+          coworkerRunId: linkedCoworkerRun?.id,
+          message: "Approval request expired before the run could continue.",
+          completionReason: "approval_timeout",
+        });
       }
       return;
     }
@@ -3064,45 +3366,38 @@ class GenerationManager {
     ) {
       return;
     }
-    const expiresAtMs = resolveExpiryMs(
-      pendingInterrupt.expiresAt?.toISOString(),
-      pendingInterrupt.requestedAt.toISOString(),
-      AUTH_TIMEOUT_MS,
-    );
-    if (Number.isFinite(expiresAtMs) && now < expiresAtMs) {
+    if (
+      !isAuthExpired(
+        {
+          requestedAt: pendingInterrupt.requestedAt,
+          expiresAt: pendingInterrupt.expiresAt,
+        },
+        new Date(now),
+      )
+    ) {
       return;
     }
-
-    await db
-      .update(generation)
-      .set({
-        status: "paused",
-        isPaused: true,
-      })
-      .where(eq(generation.id, generationId));
-
-    await db
-      .update(conversation)
-      .set({ generationStatus: "paused" })
-      .where(eq(conversation.id, genRecord.conversationId));
-
     const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
       where: eq(coworkerRun.generationId, generationId),
       columns: { id: true },
     });
-    if (linkedCoworkerRun?.id) {
-      await db
-        .update(coworkerRun)
-        .set({ status: "paused" })
-        .where(eq(coworkerRun.id, linkedCoworkerRun.id));
-    }
-
     const ctx = this.activeGenerations.get(generationId);
-    if (ctx && ctx.status === "awaiting_auth") {
-      ctx.status = "paused";
-      await this.releaseSandboxSlotLease(ctx);
-      this.broadcast(ctx, { type: "status_change", status: "paused" });
-      this.evictActiveGenerationContext(generationId);
+    if (ctx) {
+      this.setCompletionReason(ctx, "auth_timeout");
+      ctx.errorMessage = "Authentication request expired before the run could continue.";
+      await this.handleAuthTimeout(ctx);
+    } else {
+      await generationInterruptService.resolveInterrupt({
+        interruptId: pendingInterrupt.id,
+        status: "expired",
+      });
+      await this.finalizeDetachedGenerationError({
+        generationId,
+        conversationId: genRecord.conversationId,
+        coworkerRunId: linkedCoworkerRun?.id,
+        message: "Authentication request expired before the run could continue.",
+        completionReason: "auth_timeout",
+      });
     }
   }
 
@@ -3712,6 +4007,21 @@ class GenerationManager {
 
     try {
       await this.hydrateStreamSequence(ctx);
+      if (
+        isRunExpired(
+          {
+            startedAt: ctx.startedAt,
+            deadlineAt: ctx.deadlineAt,
+          },
+          new Date(),
+        )
+      ) {
+        this.setCompletionReason(ctx, "run_deadline");
+        ctx.errorMessage =
+          "We stopped this run because it exceeded the 15 minute wall-clock limit.";
+        await this.finishGeneration(ctx, "error");
+        return;
+      }
       const trimmed = ctx.userMessageContent.trim();
       if (SESSION_RESET_COMMANDS.has(trimmed)) {
         await this.handleSessionReset(ctx);
@@ -3815,6 +4125,7 @@ class GenerationManager {
   private async runOpenCodeGeneration(ctx: GenerationContext): Promise<void> {
     let promptTimeoutTriggered = false;
     let clearPromptTimeout: (() => void) | undefined;
+    let client: RuntimeHarnessClient | undefined;
     try {
       if (await this.refreshCancellationSignal(ctx, { force: true })) {
         await this.finishGeneration(ctx, "cancelled");
@@ -4358,6 +4669,10 @@ class GenerationManager {
               selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
             };
       const promptSpec = composeOpencodePromptSpec(promptSpecInput);
+      const runtimeClient = client;
+      if (!runtimeClient) {
+        throw new Error("Runtime harness client is unavailable.");
+      }
 
       let currentTextPart: { type: "text"; text: string } | null = null;
       let currentTextPartId: string | null = null;
@@ -4366,12 +4681,18 @@ class GenerationManager {
       let opencodeToolCallCount = 0;
       let opencodePermissionCount = 0;
       let opencodeQuestionCount = 0;
+      let stagedCoworkerDocumentCount = 0;
       let stagedUploadCount = 0;
       let stagedUploadFailureCount = 0;
 
       // Subscribe to SSE events BEFORE sending the prompt
       const promptTimeoutController = new AbortController();
-      const eventResult = await client.subscribe({}, { signal: promptTimeoutController.signal });
+      const eventResult = await runtimeClient.subscribe(
+        {},
+        {
+          signal: promptTimeoutController.signal,
+        },
+      );
       const eventStream = eventResult.stream;
 
       const parsedModel = parseModelReference(ctx.model);
@@ -4386,6 +4707,23 @@ class GenerationManager {
       // For non-image files, write them to the sandbox so the LLM can process them
       // via sandbox tools, rather than passing unsupported media types directly.
       const promptParts: RuntimePromptPart[] = [{ type: "text", text: ctx.userMessageContent }];
+      if (ctx.coworkerId) {
+        const coworkerDocumentPaths = await writeCoworkerDocumentsToSandbox(
+          runtimeSandbox,
+          ctx.coworkerId,
+        );
+        if (coworkerDocumentPaths.length > 0) {
+          stagedCoworkerDocumentCount = coworkerDocumentPaths.length;
+          promptParts.push({
+            type: "text",
+            text: [
+              "Persistent coworker documents are available in the sandbox for this run:",
+              ...coworkerDocumentPaths.map((filePath) => `- ${filePath}`),
+              "Read them from disk when they are relevant to the task.",
+            ].join("\n"),
+          });
+        }
+      }
       if (ctx.attachments && ctx.attachments.length > 0) {
         await Promise.all(
           ctx.attachments.map(async (a) => {
@@ -4431,11 +4769,19 @@ class GenerationManager {
           }),
         );
       }
-      if (stagedUploadCount > 0 || stagedUploadFailureCount > 0) {
+      if (
+        stagedCoworkerDocumentCount > 0 ||
+        stagedUploadCount > 0 ||
+        stagedUploadFailureCount > 0
+      ) {
         logServerEvent(
           "info",
           "ATTACHMENTS_STAGED",
-          { stagedUploadCount, stagedUploadFailureCount },
+          {
+            stagedCoworkerDocumentCount,
+            stagedUploadCount,
+            stagedUploadFailureCount,
+          },
           {
             source: "generation-manager",
             traceId: ctx.traceId,
@@ -4463,13 +4809,18 @@ class GenerationManager {
       );
       this.markPhase(ctx, "prompt_sent");
       const promptSentAtMs = Date.now();
+      const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
+      if (remainingRunTimeMs <= 0) {
+        this.setCompletionReason(ctx, "run_deadline");
+        throw new Error("We stopped this run because it exceeded the 15 minute wall-clock limit.");
+      }
       const promptTimeoutId = setTimeout(() => {
         promptTimeoutTriggered = true;
         promptTimeoutController.abort();
         logServerEvent(
           "error",
           "OPENCODE_PROMPT_TIMEOUT",
-          { timeoutMs: OPENCODE_PROMPT_TIMEOUT_MS },
+          { timeoutMs: remainingRunTimeMs },
           {
             source: "generation-manager",
             traceId: ctx.traceId,
@@ -4479,15 +4830,15 @@ class GenerationManager {
             sessionId,
           },
         );
-        void client.abort({ sessionID: sessionId }).catch((err) => {
+        void runtimeClient.abort({ sessionID: sessionId }).catch((err) => {
           console.error("[GenerationManager] Failed to abort timed out OpenCode session:", err);
         });
-      }, OPENCODE_PROMPT_TIMEOUT_MS);
+      }, remainingRunTimeMs);
       clearPromptTimeout = () => {
         clearTimeout(promptTimeoutId);
         clearPromptTimeout = undefined;
       };
-      const promptPromise = client.prompt({
+      const promptPromise = runtimeClient.prompt({
         sessionID: sessionId,
         parts: promptParts,
         agent: promptSpec.agentId,
@@ -4501,6 +4852,7 @@ class GenerationManager {
           this.markPhase(ctx, "first_event_received");
         }
         const event = rawEvent as RuntimeEvent;
+        this.markRuntimeActivity(ctx);
         if (await this.refreshCancellationSignal(ctx)) {
           break;
         }
@@ -4601,17 +4953,15 @@ class GenerationManager {
       await promptPromise;
       clearPromptTimeout?.();
       const promptElapsedMs = Date.now() - promptSentAtMs;
-      if (promptTimeoutTriggered || promptElapsedMs >= OPENCODE_PROMPT_TIMEOUT_MS) {
+      if (promptTimeoutTriggered || promptElapsedMs >= remainingRunTimeMs) {
         promptTimeoutTriggered = true;
-        throw new Error(
-          `We stopped this run because it exceeded the time limit (${OPENCODE_PROMPT_TIMEOUT_LABEL}).`,
-        );
+        throw new Error("We stopped this run because it exceeded the 15 minute wall-clock limit.");
       }
       this.markPhase(ctx, "prompt_completed");
 
       if (!ctx.assistantContent.trim()) {
         try {
-          const messagesResult = await client.messages({
+          const messagesResult = await runtimeClient.messages({
             sessionID: sessionId,
             limit: 20,
           });
@@ -4733,14 +5083,39 @@ class GenerationManager {
       clearPromptTimeout?.();
       let promptTimeoutError: Error | null = null;
       if (promptTimeoutTriggered) {
-        ctx.errorMessage = `We stopped this run because it exceeded the time limit (${OPENCODE_PROMPT_TIMEOUT_LABEL}).`;
+        this.setCompletionReason(ctx, "run_deadline");
+        ctx.errorMessage =
+          "We stopped this run because it exceeded the 15 minute wall-clock limit.";
         promptTimeoutError = new Error(
           `OpenCode prompt timed out after ${OPENCODE_PROMPT_TIMEOUT_MS}ms (${OPENCODE_PROMPT_TIMEOUT_LABEL}) for generation ${ctx.id}`,
         );
       }
       console.error("[GenerationManager] Error:", error);
-      if (!ctx.errorMessage) {
+      const runtimeFailure = await this.resolveRuntimeFailure(ctx, client);
+      if (runtimeFailure === "waiting_approval" || runtimeFailure === "waiting_auth") {
+        return;
+      }
+      if (runtimeFailure === "sandbox_missing") {
+        this.setCompletionReason(ctx, "sandbox_missing");
+        ctx.errorMessage =
+          "The sandbox stopped while this run was still active. Retry the task to continue.";
+      } else if (runtimeFailure === "broken_runtime_state") {
+        this.setCompletionReason(ctx, "broken_runtime_state");
+        ctx.errorMessage =
+          "The runtime ended in a non-terminal state and could not be recovered. Retry the task to continue.";
+      } else if (runtimeFailure === "terminal_failed") {
+        this.setCompletionReason(ctx, "runtime_error");
+      } else if (runtimeFailure === "terminal_completed") {
+        this.setCompletionReason(ctx, "completed");
+      } else if (!ctx.completionReason) {
+        this.setCompletionReason(ctx, "infra_disconnect");
+      }
+      if (!ctx.errorMessage && runtimeFailure !== "terminal_completed") {
         ctx.errorMessage = error instanceof Error ? error.message : "Unknown error";
+      }
+      if (runtimeFailure === "terminal_completed") {
+        await this.finishGeneration(ctx, "completed");
+        return;
       }
       console.info(
         `[GenerationManager][SUMMARY] status=error generationId=${ctx.id} conversationId=${ctx.conversationId} durationMs=${Date.now() - ctx.startedAt.getTime()} error=${JSON.stringify(ctx.errorMessage)}`,
@@ -5733,34 +6108,17 @@ class GenerationManager {
       return;
     }
 
-    console.log(`[GenerationManager] Approval timeout for generation ${ctx.id}, pausing sandbox`);
-
-    ctx.status = "paused";
-
-    // Update database
-    await db
-      .update(generation)
-      .set({
-        status: "paused",
-        isPaused: true,
-      })
-      .where(eq(generation.id, ctx.id));
-
-    await db
-      .update(conversation)
-      .set({ generationStatus: "paused" })
-      .where(eq(conversation.id, ctx.conversationId));
-
-    if (ctx.coworkerRunId) {
-      await db
-        .update(coworkerRun)
-        .set({ status: "paused" })
-        .where(eq(coworkerRun.id, ctx.coworkerRunId));
+    console.log(`[GenerationManager] Approval timeout for generation ${ctx.id}, failing run`);
+    this.setCompletionReason(ctx, "approval_timeout");
+    if (!ctx.errorMessage) {
+      ctx.errorMessage = "Approval request expired before the run could continue.";
     }
-
-    await this.releaseSandboxSlotLease(ctx);
-    this.broadcast(ctx, { type: "status_change", status: "paused" });
-    this.evictActiveGenerationContext(ctx.id);
+    await generationInterruptService.resolveInterrupt({
+      interruptId: ctx.currentInterruptId,
+      status: "expired",
+    });
+    ctx.currentInterruptId = undefined;
+    await this.finishGeneration(ctx, "error");
   }
 
   private async handleAuthTimeout(ctx: GenerationContext): Promise<void> {
@@ -5768,33 +6126,17 @@ class GenerationManager {
       return;
     }
 
-    console.log(`[GenerationManager] Auth timeout for generation ${ctx.id}, pausing sandbox`);
-
-    ctx.status = "paused";
-
-    await db
-      .update(generation)
-      .set({
-        status: "paused",
-        isPaused: true,
-      })
-      .where(eq(generation.id, ctx.id));
-
-    await db
-      .update(conversation)
-      .set({ generationStatus: "paused" })
-      .where(eq(conversation.id, ctx.conversationId));
-
-    if (ctx.coworkerRunId) {
-      await db
-        .update(coworkerRun)
-        .set({ status: "paused" })
-        .where(eq(coworkerRun.id, ctx.coworkerRunId));
+    console.log(`[GenerationManager] Auth timeout for generation ${ctx.id}, failing run`);
+    this.setCompletionReason(ctx, "auth_timeout");
+    if (!ctx.errorMessage) {
+      ctx.errorMessage = "Authentication request expired before the run could continue.";
     }
-
-    await this.releaseSandboxSlotLease(ctx);
-    this.broadcast(ctx, { type: "status_change", status: "paused" });
-    this.evictActiveGenerationContext(ctx.id);
+    await generationInterruptService.resolveInterrupt({
+      interruptId: ctx.currentInterruptId,
+      status: "expired",
+    });
+    ctx.currentInterruptId = undefined;
+    await this.finishGeneration(ctx, "error");
   }
 
   /**
@@ -6487,6 +6829,15 @@ class GenerationManager {
           pendingAuth: null,
           contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
           errorMessage: ctx.errorMessage,
+          lastRuntimeEventAt: ctx.lastRuntimeEventAt,
+          recoveryAttempts: ctx.recoveryAttempts,
+          completionReason:
+            ctx.completionReason ??
+            (status === "completed"
+              ? "completed"
+              : status === "cancelled"
+                ? "user_cancel"
+                : "runtime_error"),
           inputTokens: ctx.usage.inputTokens,
           outputTokens: ctx.usage.outputTokens,
           completedAt: new Date(),
@@ -6645,6 +6996,9 @@ class GenerationManager {
         contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
         inputTokens: ctx.usage.inputTokens,
         outputTokens: ctx.usage.outputTokens,
+        lastRuntimeEventAt: ctx.lastRuntimeEventAt,
+        recoveryAttempts: ctx.recoveryAttempts,
+        completionReason: ctx.completionReason ?? null,
       })
       .where(eq(generation.id, ctx.id));
   }

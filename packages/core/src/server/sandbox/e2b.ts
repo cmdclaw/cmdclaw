@@ -8,6 +8,7 @@ import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
+import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
 import {
   COMPACTION_SUMMARY_PREFIX,
@@ -26,7 +27,7 @@ import {
 
 // Use custom template with OpenCode pre-installed
 const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
-const SANDBOX_TIMEOUT_MS = 60 * 1000;
+const SANDBOX_TIMEOUT_MS = generationLifecyclePolicy.activeSandboxTimeoutMs;
 
 function resolveSandboxAppUrl(): string {
   const configuredUrl = env.E2B_CALLBACK_BASE_URL ?? env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
@@ -268,8 +269,8 @@ export async function getOrCreateSandbox(
       },
       timeoutMs: SANDBOX_TIMEOUT_MS,
       lifecycle: {
-        onTimeout: "pause",
-        autoResume: true,
+        onTimeout: "kill",
+        autoResume: false,
       },
     });
     await applySandboxTimeout(sandbox);

@@ -2,9 +2,10 @@ import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { db } from "@cmdclaw/db/client";
 import { conversation, conversationRuntime } from "@cmdclaw/db/schema";
 import { killSandbox } from "../sandbox/e2b";
+import { generationLifecyclePolicy } from "./lifecycle-policy";
 import { getSandboxSlotManager } from "./sandbox-slot-manager";
 
-const PAUSED_SANDBOX_MAX_INACTIVITY_MS = 24 * 60 * 60 * 1000;
+const PAUSED_SANDBOX_MAX_INACTIVITY_MS = generationLifecyclePolicy.explicitPauseRetentionMs;
 
 export async function cleanupPausedSandboxes(): Promise<{
   scanned: number;
