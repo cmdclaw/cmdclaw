@@ -73,6 +73,14 @@ export function useConversation(id: string | undefined) {
   });
 }
 
+export function useConversationUsage(id: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["conversation", "usage", id],
+    queryFn: () => client.conversation.getUsage({ id: id! }),
+    enabled: enabled && Boolean(id),
+  });
+}
+
 // Hook for deleting a conversation
 export function useDeleteConversation() {
   const queryClient = useQueryClient();

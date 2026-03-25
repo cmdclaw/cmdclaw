@@ -504,7 +504,12 @@ export async function getOrCreateSession(
     onLifecycle?: SessionInitLifecycleCallback;
     telemetry?: ObservabilityContext;
   },
-): Promise<{ client: OpencodeClient; sessionId: string; sandbox: Sandbox }> {
+): Promise<{
+  client: OpencodeClient;
+  sessionId: string;
+  sandbox: Sandbox;
+  sessionSource: "live_session" | "restored_snapshot" | "created_session";
+}> {
   const telemetryContext: ObservabilityContext = {
     ...options?.telemetry,
     source: "e2b",
@@ -554,6 +559,7 @@ export async function getOrCreateSession(
         client: state.client,
         sessionId: existingSessionId,
         sandbox: state.sandbox,
+        sessionSource: "live_session",
       };
     }
 
@@ -658,6 +664,7 @@ export async function getOrCreateSession(
           client: state.client,
           sessionId: restoredSnapshot.sessionId,
           sandbox: state.sandbox,
+          sessionSource: "restored_snapshot",
         };
       }
     } catch (error) {
@@ -759,7 +766,12 @@ export async function getOrCreateSession(
     sessionId,
     durationMs: Date.now() - sessionInitStartedAt,
   });
-  return { client: state.client, sessionId, sandbox: state.sandbox };
+  return {
+    client: state.client,
+    sessionId,
+    sandbox: state.sandbox,
+    sessionSource: "created_session",
+  };
 }
 
 /**

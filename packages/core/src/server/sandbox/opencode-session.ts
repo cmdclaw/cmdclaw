@@ -107,6 +107,7 @@ type OpenCodeSessionResult = {
   client: OpencodeClient;
   sessionId: string;
   sandbox: OpenCodeSandbox;
+  sessionSource: "live_session" | "restored_snapshot" | "created_session";
 };
 
 interface OpenCodeSessionProvider {
@@ -596,6 +597,7 @@ async function getOrCreateCloudSession(
         client: state.client,
         sessionId: existingSessionId,
         sandbox: state.sandbox,
+        sessionSource: "live_session",
       };
     }
 
@@ -652,6 +654,7 @@ async function getOrCreateCloudSession(
           client: state.client,
           sessionId: restoredSnapshot.sessionId,
           sandbox: state.sandbox,
+          sessionSource: "restored_snapshot",
         };
       }
     } catch (error) {
@@ -708,6 +711,7 @@ async function getOrCreateCloudSession(
     client: state.client,
     sessionId,
     sandbox: state.sandbox,
+    sessionSource: "created_session",
   };
 }
 
@@ -964,6 +968,7 @@ function wrapE2BSession(
   return {
     client: session.client,
     sessionId: session.sessionId,
+    sessionSource: session.sessionSource,
     sandbox: {
       provider: "e2b",
       sandboxId: session.sandbox.sandboxId,

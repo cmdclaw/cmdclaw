@@ -67,5 +67,6 @@ export async function runConversationSessionPipeline(input: {
       runtimeHarness: input.selection.runtimeHarness,
       runtimeProtocolVersion: input.selection.runtimeProtocolVersion,
     },
+    sessionSource: result.sessionSource,
   };
 }

@@ -1,3 +1,4 @@
+import { getConversationUsageFromOpenCodeSession } from "@cmdclaw/core/server/services/conversation-usage-service";
 import { writeSessionTranscriptFromConversation } from "@cmdclaw/core/server/services/memory-service";
 import { clearConversationSessionSnapshot } from "@cmdclaw/core/server/services/opencode-session-snapshot-service";
 import { conversation, message, messageAttachment, sandboxFile } from "@cmdclaw/db/schema";
@@ -6,6 +7,15 @@ import { eq, desc, and, isNull, asc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";
+
+function normalizeSandboxProvider(
+  value: string | null | undefined,
+): "e2b" | "daytona" | "docker" | undefined {
+  if (value === "e2b" || value === "daytona" || value === "docker") {
+    return value;
+  }
+  return undefined;
+}
 
 // List conversations for current user
 const list = protectedProcedure
@@ -107,6 +117,38 @@ const get = protectedProcedure
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
     };
+  });
+
+const getUsage = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const conv = await context.db.query.conversation.findFirst({
+      where: and(
+        eq(conversation.id, input.id),
+        eq(conversation.userId, context.user.id),
+        eq(conversation.type, "chat"),
+      ),
+      columns: {
+        id: true,
+        model: true,
+        authSource: true,
+        lastSandboxProvider: true,
+        lastRuntimeHarness: true,
+      },
+    });
+
+    if (!conv) {
+      throw new ORPCError("NOT_FOUND", { message: "Conversation not found" });
+    }
+
+    return await getConversationUsageFromOpenCodeSession({
+      conversationId: conv.id,
+      userId: context.user.id,
+      model: conv.model,
+      authSource: conv.authSource,
+      sandboxProviderOverride: normalizeSandboxProvider(conv.lastSandboxProvider),
+      runtimeHarness: conv.lastRuntimeHarness,
+    });
   });
 
 // Update conversation title
@@ -494,6 +536,7 @@ const getSandboxFiles = protectedProcedure
 export const conversationRouter = {
   list,
   get,
+  getUsage,
   updateTitle,
   updatePinned,
   markSeen,

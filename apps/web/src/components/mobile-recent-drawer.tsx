@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BarChart3,
   CheckCheck,
   LoaderCircle,
   MoreHorizontal,
@@ -25,6 +26,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -37,6 +45,7 @@ import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
+  useConversationUsage,
   useDeleteConversation,
   useMarkAllConversationsSeen,
   useUpdateConversationPinned,
@@ -50,6 +59,10 @@ const RUNNING_CONVERSATION_STATUSES = new Set([
   "awaiting_auth",
   "paused",
 ]);
+
+function formatTokenCount(value: number): string {
+  return value.toLocaleString();
+}
 
 function formatRelativeShort(date: Date) {
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -124,6 +137,14 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [usageConversation, setUsageConversation] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const usageQuery = useConversationUsage(
+    usageConversation?.id ?? null,
+    Boolean(usageConversation),
+  );
 
   const conversations = conversationData?.conversations ?? [];
   const recentCoworkerRuns = flattenCoworkerRecentRuns(coworkers).slice(0, 10);
@@ -223,6 +244,15 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
     setIsRenameModalOpen(true);
   }, []);
 
+  const handleUsageMenuClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const id = event.currentTarget.dataset.conversationId;
+    if (!id) {
+      return;
+    }
+    const title = event.currentTarget.dataset.conversationTitle ?? "Untitled";
+    setUsageConversation({ id, title });
+  }, []);
+
   const handleDeleteMenuClick = useCallback(
     async (event: React.MouseEvent<HTMLDivElement>) => {
       const id = event.currentTarget.dataset.conversationId;
@@ -233,6 +263,12 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
     },
     [handleDeleteConversation],
   );
+
+  const handleUsageDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setUsageConversation(null);
+    }
+  }, []);
 
   return (
     <>
@@ -339,6 +375,14 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             data-conversation-id={conversation.id}
+                            data-conversation-title={conversation.title ?? "Untitled"}
+                            onClick={handleUsageMenuClick}
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                            <span>Show usage</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            data-conversation-id={conversation.id}
                             data-conversation-title={conversation.title ?? ""}
                             onClick={handleRenameMenuClick}
                           >
@@ -433,6 +477,62 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
           </form>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={Boolean(usageConversation)} onOpenChange={handleUsageDialogOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Conversation usage</DialogTitle>
+            <DialogDescription>
+              {usageConversation
+                ? `Token usage for ${usageConversation.title || "Untitled"}.`
+                : "Token usage for this conversation."}
+            </DialogDescription>
+          </DialogHeader>
+          {usageQuery.isLoading ? (
+            <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <span>Computing usage from the OpenCode session...</span>
+            </div>
+          ) : usageQuery.isError ? (
+            <div className="space-y-1 py-2">
+              <p className="text-sm font-medium">Usage unavailable</p>
+              <p className="text-muted-foreground text-sm">
+                We couldn&apos;t restore the OpenCode session for this conversation.
+              </p>
+            </div>
+          ) : usageQuery.data ? (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-muted-foreground text-xs">Input</p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {formatTokenCount(usageQuery.data.inputTokens)}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-muted-foreground text-xs">Output</p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {formatTokenCount(usageQuery.data.outputTokens)}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-muted-foreground text-xs">Total</p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {formatTokenCount(usageQuery.data.totalTokens)}
+                  </p>
+                </div>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Aggregated from {usageQuery.data.assistantMessageCount} assistant messages via the{" "}
+                {usageQuery.data.source === "restored_snapshot"
+                  ? "restored OpenCode snapshot"
+                  : "live OpenCode session"}
+                .
+              </p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

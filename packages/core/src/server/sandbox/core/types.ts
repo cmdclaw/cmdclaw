@@ -195,9 +195,15 @@ export interface ConversationRuntimeSession {
   id: string;
 }
 
+export type ConversationRuntimeSessionSource =
+  | "live_session"
+  | "restored_snapshot"
+  | "created_session";
+
 export interface ConversationRuntimeResult {
   sandbox: SandboxHandle;
   harnessClient: RuntimeHarnessClient;
   session: ConversationRuntimeSession;
   metadata: RuntimeSelection;
+  sessionSource?: ConversationRuntimeSessionSource;
 }
