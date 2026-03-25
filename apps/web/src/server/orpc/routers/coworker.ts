@@ -778,6 +778,11 @@ const getRun = protectedProcedure
 
     const wf = await context.db.query.coworker.findFirst({
       where: and(eq(coworker.id, run.coworkerId), eq(coworker.ownerId, context.user.id)),
+      columns: {
+        id: true,
+        name: true,
+        username: true,
+      },
     });
 
     if (!wf) {
@@ -800,6 +805,8 @@ const getRun = protectedProcedure
     return {
       id: run.id,
       coworkerId: run.coworkerId,
+      coworkerName: wf.name,
+      coworkerUsername: wf.username,
       status: run.status,
       triggerPayload: run.triggerPayload,
       generationId: run.generationId,

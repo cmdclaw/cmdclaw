@@ -1342,6 +1342,8 @@ describe("coworkerRouter", () => {
     });
     context.db.query.coworker.findFirst.mockResolvedValue({
       id: "wf-1",
+      name: "Inbox Triage",
+      username: "inbox-triage",
       ownerId: "user-1",
     });
     context.db.query.coworkerRunEvent.findMany.mockResolvedValue([
@@ -1369,6 +1371,8 @@ describe("coworkerRouter", () => {
     expect(result).toEqual({
       id: "run-1",
       coworkerId: "wf-1",
+      coworkerName: "Inbox Triage",
+      coworkerUsername: "inbox-triage",
       status: "success",
       triggerPayload: { source: "schedule" },
       generationId: "gen-1",
@@ -1402,6 +1406,8 @@ describe("coworkerRouter", () => {
     });
     context.db.query.coworker.findFirst.mockResolvedValue({
       id: "wf-1",
+      name: "Inbox Triage",
+      username: null,
       ownerId: "user-1",
     });
     context.db.query.coworkerRunEvent.findMany.mockResolvedValue([]);
@@ -1412,6 +1418,10 @@ describe("coworkerRouter", () => {
     })) as { conversationId: string | null };
 
     expect(result.conversationId).toBeNull();
+    expect(result).toMatchObject({
+      coworkerName: "Inbox Triage",
+      coworkerUsername: null,
+    });
     expect(context.db.query.generation.findFirst).not.toHaveBeenCalled();
   });
 
