@@ -2,6 +2,7 @@ import { count, eq } from "drizzle-orm";
 import { db } from "@cmdclaw/db/client";
 import { session, user, userDailyActivity } from "@cmdclaw/db/schema";
 import { captureUserActiveToday, captureUserSignedUp } from "./posthog";
+import { postSignupSlackNotification } from "./telemetry-slack";
 
 type GenericContextValue = Record<string, unknown>;
 
@@ -99,12 +100,31 @@ export async function trackSignupFromSession(params: TrackSignupFromSessionParam
     return false;
   }
 
-  await captureUserSignedUp({
-    distinctId: params.session.userId,
-    email: existingUser.email,
-    name: existingUser.name,
-    signupMethod: inferSignupMethod(params.context),
-  });
+  const signupMethod = inferSignupMethod(params.context);
+  const occurredAt = params.session.createdAt ?? new Date();
+  const telemetryResults = await Promise.allSettled([
+    captureUserSignedUp({
+      distinctId: params.session.userId,
+      email: existingUser.email,
+      name: existingUser.name,
+      signupMethod,
+    }),
+    postSignupSlackNotification({
+      email: existingUser.email,
+      name: existingUser.name,
+      signupMethod,
+      userId: params.session.userId,
+      occurredAt,
+    }),
+  ]);
+
+  const errors = telemetryResults
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map((result) => result.reason);
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "Failed to emit signup telemetry");
+  }
 
   return true;
 }

@@ -15,6 +15,15 @@ vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
+vi.mock("./telemetry-slack", () => ({
+  postMessageToOpsTelemetryChannel: vi.fn(),
+}));
+
+vi.mock("../queues", () => ({
+  DAILY_TELEMETRY_DIGEST_JOB_NAME: "daily-telemetry-digest",
+  getQueue: vi.fn(),
+}));
+
 import {
   buildDailyTelemetryDigestMessage,
   getDailyTelemetryDigestSummary,

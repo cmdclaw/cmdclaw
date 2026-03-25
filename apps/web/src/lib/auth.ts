@@ -124,6 +124,9 @@ export const auth = betterAuth({
             await trackSignupFromSession({ session, context });
           } catch (error) {
             console.error("[auth] failed to emit signup telemetry", error);
+            if (error instanceof AggregateError) {
+              console.error("[auth] signup telemetry causes", error.errors);
+            }
           }
         },
       },

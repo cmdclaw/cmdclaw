@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dbMock, captureUserActiveTodayMock, captureUserSignedUpMock } = vi.hoisted(() => ({
+const {
+  dbMock,
+  captureUserActiveTodayMock,
+  captureUserSignedUpMock,
+  postSignupSlackNotificationMock,
+} = vi.hoisted(() => ({
   dbMock: {
     query: {
       user: {
@@ -12,6 +17,7 @@ const { dbMock, captureUserActiveTodayMock, captureUserSignedUpMock } = vi.hoist
   },
   captureUserActiveTodayMock: vi.fn(),
   captureUserSignedUpMock: vi.fn(),
+  postSignupSlackNotificationMock: vi.fn(),
 }));
 
 vi.mock("@cmdclaw/db/client", () => ({
@@ -21,6 +27,10 @@ vi.mock("@cmdclaw/db/client", () => ({
 vi.mock("./posthog", () => ({
   captureUserActiveToday: captureUserActiveTodayMock,
   captureUserSignedUp: captureUserSignedUpMock,
+}));
+
+vi.mock("./telemetry-slack", () => ({
+  postSignupSlackNotification: postSignupSlackNotificationMock,
 }));
 
 import {
@@ -79,6 +89,13 @@ describe("user telemetry services", () => {
       name: "New User",
       signupMethod: "google",
     });
+    expect(postSignupSlackNotificationMock).toHaveBeenCalledWith({
+      email: "new@example.com",
+      name: "New User",
+      signupMethod: "google",
+      userId: "user-1",
+      occurredAt: new Date("2026-03-13T10:00:00.000Z"),
+    });
   });
 
   it("skips signup capture for later sessions", async () => {
@@ -94,6 +111,7 @@ describe("user telemetry services", () => {
     expect(tracked).toBe(false);
     expect(dbMock.query.user.findFirst).not.toHaveBeenCalled();
     expect(captureUserSignedUpMock).not.toHaveBeenCalled();
+    expect(postSignupSlackNotificationMock).not.toHaveBeenCalled();
   });
 
   it("records first daily activity and emits the PostHog event", async () => {
