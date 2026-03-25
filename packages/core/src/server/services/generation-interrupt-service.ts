@@ -26,9 +26,9 @@ export type GenerationInterruptRecord = typeof generationInterrupt.$inferSelect;
 export type GenerationInterruptEventPayload = {
   interruptId: string;
   generationId: string;
-  runtimeId: string;
+  runtimeId: string | null;
   conversationId: string;
-  turnSeq: number;
+  turnSeq: number | null;
   kind: GenerationInterruptKind;
   status: GenerationInterruptStatus;
   providerToolUseId: string;
