@@ -572,13 +572,13 @@ export function AppSidebar() {
           {usageQuery.isLoading ? (
             <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
               <LoaderCircle className="h-4 w-4 animate-spin" />
-              <span>Computing usage from the OpenCode session...</span>
+              <span>Loading stored usage...</span>
             </div>
           ) : usageQuery.isError ? (
             <div className="space-y-1 py-2">
               <p className="text-sm font-medium">Usage unavailable</p>
               <p className="text-muted-foreground text-sm">
-                We couldn&apos;t restore the OpenCode session for this conversation.
+                We couldn&apos;t load usage for this conversation.
               </p>
             </div>
           ) : usageQuery.data ? (
@@ -604,11 +604,7 @@ export function AppSidebar() {
                 </div>
               </div>
               <p className="text-muted-foreground text-sm">
-                Aggregated from {usageQuery.data.assistantMessageCount} assistant messages via the{" "}
-                {usageQuery.data.source === "restored_snapshot"
-                  ? "restored OpenCode snapshot"
-                  : "live OpenCode session"}
-                .
+                Stored across {usageQuery.data.assistantMessageCount} assistant messages.
               </p>
             </div>
           ) : null}

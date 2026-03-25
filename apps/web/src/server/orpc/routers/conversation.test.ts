@@ -12,24 +12,22 @@ function createProcedureStub() {
   return stub;
 }
 
-const { conversationFindFirstMock, dbMock, getConversationUsageFromOpenCodeSessionMock } =
-  vi.hoisted(() => {
-    const conversationFindFirstMock = vi.fn();
+const { conversationFindFirstMock, dbMock } = vi.hoisted(() => {
+  const conversationFindFirstMock = vi.fn();
 
-    const dbMock = {
-      query: {
-        conversation: {
-          findFirst: conversationFindFirstMock,
-        },
+  const dbMock = {
+    query: {
+      conversation: {
+        findFirst: conversationFindFirstMock,
       },
-    };
+    },
+  };
 
-    return {
-      conversationFindFirstMock,
-      dbMock,
-      getConversationUsageFromOpenCodeSessionMock: vi.fn(),
-    };
-  });
+  return {
+    conversationFindFirstMock,
+    dbMock,
+  };
+});
 
 vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
@@ -41,10 +39,6 @@ vi.mock("@cmdclaw/core/server/services/memory-service", () => ({
 
 vi.mock("@cmdclaw/core/server/services/opencode-session-snapshot-service", () => ({
   clearConversationSessionSnapshot: vi.fn(),
-}));
-
-vi.mock("@cmdclaw/core/server/services/conversation-usage-service", () => ({
-  getConversationUsageFromOpenCodeSession: getConversationUsageFromOpenCodeSessionMock,
 }));
 
 import { conversationRouter } from "./conversation";
@@ -75,21 +69,17 @@ describe("conversationRouter.getUsage", () => {
     ).rejects.toMatchObject(new ORPCError("NOT_FOUND", { message: "Conversation not found" }));
   });
 
-  it("returns aggregated usage from the core usage service", async () => {
+  it("returns stored usage from the conversation row", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
-      model: "anthropic/claude-sonnet-4-6",
-      authSource: null,
-      lastSandboxProvider: "e2b",
-      lastRuntimeHarness: "opencode",
-    });
-    getConversationUsageFromOpenCodeSessionMock.mockResolvedValue({
       inputTokens: 11,
       outputTokens: 13,
       totalTokens: 24,
       assistantMessageCount: 2,
-      sessionId: "session-1",
-      source: "restored_snapshot",
+      usageInputTokens: 11,
+      usageOutputTokens: 13,
+      usageTotalTokens: 24,
+      usageAssistantMessageCount: 2,
     });
 
     const result = await conversationRouterAny.getUsage({
@@ -97,41 +87,33 @@ describe("conversationRouter.getUsage", () => {
       context,
     });
 
-    expect(getConversationUsageFromOpenCodeSessionMock).toHaveBeenCalledWith({
-      conversationId: "conv-1",
-      userId: "user-1",
-      model: "anthropic/claude-sonnet-4-6",
-      authSource: null,
-      sandboxProviderOverride: "e2b",
-      runtimeHarness: "opencode",
-    });
     expect(result).toEqual({
       inputTokens: 11,
       outputTokens: 13,
       totalTokens: 24,
       assistantMessageCount: 2,
-      sessionId: "session-1",
-      source: "restored_snapshot",
     });
   });
 
-  it("propagates usage computation failures", async () => {
+  it("returns zero usage when no assistant usage has been stored yet", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
-      model: "anthropic/claude-sonnet-4-6",
-      authSource: null,
-      lastSandboxProvider: "docker",
-      lastRuntimeHarness: "opencode",
+      usageInputTokens: 0,
+      usageOutputTokens: 0,
+      usageTotalTokens: 0,
+      usageAssistantMessageCount: 0,
     });
-    getConversationUsageFromOpenCodeSessionMock.mockRejectedValue(
-      new Error("session restore failed"),
-    );
 
     await expect(
       conversationRouterAny.getUsage({
         input: { id: "conv-1" },
         context,
       }),
-    ).rejects.toThrow("session restore failed");
+    ).resolves.toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      assistantMessageCount: 0,
+    });
   });
 });

@@ -14,7 +14,7 @@
     "check": "bunx tsc --noEmit -p tsconfig.json",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "bun src/ensure-extensions.ts && drizzle-kit migrate --config=drizzle.config.ts",
-    "db:push": "bun src/ensure-extensions.ts && drizzle-kit push --config=drizzle.config.ts",
+    "db:push": "bun src/ensure-extensions.ts && drizzle-kit push --config=drizzle.config.ts && bun src/backfill-conversation-usage.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
     "reset": "bun src/reset.ts",
     "seed": "bun src/seed.ts"

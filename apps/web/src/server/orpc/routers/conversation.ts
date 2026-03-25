@@ -1,4 +1,3 @@
-import { getConversationUsageFromOpenCodeSession } from "@cmdclaw/core/server/services/conversation-usage-service";
 import { writeSessionTranscriptFromConversation } from "@cmdclaw/core/server/services/memory-service";
 import { clearConversationSessionSnapshot } from "@cmdclaw/core/server/services/opencode-session-snapshot-service";
 import { conversation, message, messageAttachment, sandboxFile } from "@cmdclaw/db/schema";
@@ -7,15 +6,6 @@ import { eq, desc, and, isNull, asc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";
-
-function normalizeSandboxProvider(
-  value: string | null | undefined,
-): "e2b" | "daytona" | "docker" | undefined {
-  if (value === "e2b" || value === "daytona" || value === "docker") {
-    return value;
-  }
-  return undefined;
-}
 
 // List conversations for current user
 const list = protectedProcedure
@@ -130,10 +120,10 @@ const getUsage = protectedProcedure
       ),
       columns: {
         id: true,
-        model: true,
-        authSource: true,
-        lastSandboxProvider: true,
-        lastRuntimeHarness: true,
+        usageInputTokens: true,
+        usageOutputTokens: true,
+        usageTotalTokens: true,
+        usageAssistantMessageCount: true,
       },
     });
 
@@ -141,14 +131,12 @@ const getUsage = protectedProcedure
       throw new ORPCError("NOT_FOUND", { message: "Conversation not found" });
     }
 
-    return await getConversationUsageFromOpenCodeSession({
-      conversationId: conv.id,
-      userId: context.user.id,
-      model: conv.model,
-      authSource: conv.authSource,
-      sandboxProviderOverride: normalizeSandboxProvider(conv.lastSandboxProvider),
-      runtimeHarness: conv.lastRuntimeHarness,
-    });
+    return {
+      inputTokens: conv.usageInputTokens,
+      outputTokens: conv.usageOutputTokens,
+      totalTokens: conv.usageTotalTokens,
+      assistantMessageCount: conv.usageAssistantMessageCount,
+    };
   });
 
 // Update conversation title
