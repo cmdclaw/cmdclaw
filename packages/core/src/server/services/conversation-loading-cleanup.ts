@@ -9,23 +9,11 @@ const CONVERSATION_LOADING_MAX_IDLE_MS =
   generationLifecyclePolicy.explicitPauseRetentionMs / 6;
 const STALE_CONVERSATION_LOADING_ERROR_MESSAGE =
   "Generation was marked as stale after no new messages were recorded for over 4 hours.";
-const STALE_LOADING_CONVERSATION_STATUSES = [
-  "generating",
-  "awaiting_approval",
-  "awaiting_auth",
-  "paused",
-] as const;
+export const STALE_LOADING_CONVERSATION_STATUSES = ["generating"] as const;
 
 export const CONVERSATION_LOADING_CLEANUP_SCHEDULER_ID = "conversation:loading-cleanup";
 
-type ConversationGenerationStatus =
-  | "idle"
-  | "generating"
-  | "awaiting_approval"
-  | "awaiting_auth"
-  | "paused"
-  | "complete"
-  | "error";
+type ConversationGenerationStatus = "idle" | "generating" | "complete" | "error";
 
 function mapGenerationStatusToConversationStatus(
   status: typeof generation.$inferSelect.status,
@@ -37,9 +25,6 @@ function mapGenerationStatusToConversationStatus(
       return "complete";
     case "error":
       return "error";
-    case "awaiting_approval":
-    case "awaiting_auth":
-    case "paused":
     case "cancelled":
       return "idle";
     default:

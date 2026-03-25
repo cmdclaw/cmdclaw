@@ -25,6 +25,7 @@ describe("runConversationSessionPipeline", () => {
     getOrCreateSessionForCloudProviderMock.mockResolvedValue({
       client: opencodeClient,
       sessionId: "session-123",
+      sessionSource: "live_session",
       sandbox: {
         provider: "docker",
         sandboxId: "sandbox-123",
@@ -85,6 +86,7 @@ describe("runConversationSessionPipeline", () => {
       runtimeProtocolVersion: "sandbox-agent-v1",
     });
     expect(result.session).toEqual({ id: "session-123" });
+    expect(result.sessionSource).toBe("live_session");
     expect(result.harnessClient).toBe(harnessClient);
     expect(result.sandbox.provider).toBe("docker");
     expect(result.sandbox.sandboxId).toBe("sandbox-123");

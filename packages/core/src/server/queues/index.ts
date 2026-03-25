@@ -41,6 +41,10 @@ export function buildQueueJobId(parts: Array<string | number | null | undefined>
 type JobPayload = Record<string, unknown> & { coworkerId?: string };
 type JobHandler = Processor<JobPayload, unknown, string>;
 
+function resolveGenerationRunMode(value: unknown): "normal_run" | "recovery_reattach" {
+  return value === "recovery_reattach" ? "recovery_reattach" : "normal_run";
+}
+
 function isActiveCoworkerRunConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -155,7 +159,10 @@ const handlers: Record<string, JobHandler> = {
     }
 
     const { generationManager } = await import("../services/generation-manager");
-    await generationManager.runQueuedGeneration(generationId);
+    await generationManager.runQueuedGeneration(
+      generationId,
+      resolveGenerationRunMode(job.data?.runMode),
+    );
   },
   [COWORKER_GENERATION_JOB_NAME]: async (job) => {
     const generationId = job.data?.generationId;
@@ -164,7 +171,10 @@ const handlers: Record<string, JobHandler> = {
     }
 
     const { generationManager } = await import("../services/generation-manager");
-    await generationManager.runQueuedGeneration(generationId);
+    await generationManager.runQueuedGeneration(
+      generationId,
+      resolveGenerationRunMode(job.data?.runMode),
+    );
   },
   [GENERATION_APPROVAL_TIMEOUT_JOB_NAME]: async (job) => {
     const generationId = job.data?.generationId;
@@ -198,7 +208,7 @@ const handlers: Record<string, JobHandler> = {
     const summary = await generationManager.reapStaleGenerations();
     if (summary.stale > 0) {
       console.warn(
-        `[worker] stale generation reaper finalized ${summary.stale} generation(s) (${summary.finalizedRunningAsError} as error, ${summary.finalizedOtherAsCancelled} as cancelled)`,
+        `[worker] stale generation reaper finalized ${summary.stale} generation(s) (${summary.finalizedRunningAsError} running as error, ${summary.finalizedWaitingAsError} waiting as error)`,
       );
     }
   },

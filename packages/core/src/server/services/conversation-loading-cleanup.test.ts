@@ -72,6 +72,7 @@ vi.mock("../queues", () => ({
 import {
   cleanupStaleConversationLoadingStates,
   CONVERSATION_LOADING_CLEANUP_SCHEDULER_ID,
+  STALE_LOADING_CONVERSATION_STATUSES,
   syncConversationLoadingCleanupJob,
 } from "./conversation-loading-cleanup";
 
@@ -167,35 +168,11 @@ describe("conversation-loading-cleanup", () => {
     });
   });
 
-  it("clears stale paused conversations when the linked generation is already cancelled", async () => {
-    conversationFindManyMock.mockResolvedValue([
-      {
-        id: "conv-2b",
-        currentGenerationId: "gen-2b",
-        updatedAt: new Date("2026-03-23T06:00:00.000Z"),
-      },
-    ]);
-    messageFindFirstMock.mockResolvedValue({
-      createdAt: new Date("2026-03-23T07:00:00.000Z"),
-    });
-    generationFindFirstMock.mockResolvedValue({
-      id: "gen-2b",
-      status: "cancelled",
-    });
-
-    const summary = await cleanupStaleConversationLoadingStates(now);
-
-    expect(summary).toEqual({
-      scanned: 1,
-      stale: 1,
-      finalizedRunningAsError: 0,
-      correctedStatuses: 1,
-    });
-    expect(cancelInterruptsForGenerationMock).not.toHaveBeenCalled();
-    expect(recordedUpdates).toHaveLength(1);
-    expect(recordedUpdates[0]?.values).toEqual({
-      generationStatus: "idle",
-    });
+  it("limits stale loading cleanup to generating conversations", () => {
+    expect(STALE_LOADING_CONVERSATION_STATUSES).toEqual(["generating"]);
+    expect(STALE_LOADING_CONVERSATION_STATUSES).not.toContain("awaiting_approval");
+    expect(STALE_LOADING_CONVERSATION_STATUSES).not.toContain("awaiting_auth");
+    expect(STALE_LOADING_CONVERSATION_STATUSES).not.toContain("paused");
   });
 
   it("resets stale generating conversations to idle when the linked generation is missing", async () => {

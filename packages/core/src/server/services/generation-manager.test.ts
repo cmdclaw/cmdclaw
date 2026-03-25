@@ -472,9 +472,11 @@ import {
   getIntegrationSkillsSystemPrompt,
 } from "../sandbox/prep/skills-prep";
 import { logServerEvent } from "../utils/observability";
+import { classifyRuntimeFailure } from "./lifecycle-policy";
 import {
   buildDefaultQuestionAnswers,
   buildQuestionCommand,
+  extractRuntimeExportState,
   generationManager,
 } from "./generation-manager";
 import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-service";
@@ -514,6 +516,8 @@ type GenerationManagerTestHarness = {
   activeGenerations: Map<string, GenerationCtx>;
   finishGeneration: (ctx: GenerationCtx, status: string) => Promise<void>;
   runGeneration: (ctx: GenerationCtx) => Promise<void>;
+  runRecoveryReattach: (ctx: GenerationCtx) => Promise<void>;
+  resolveRuntimeFailure: (ctx: GenerationCtx, client?: unknown) => Promise<string>;
   handleSessionReset: (ctx: GenerationCtx) => Promise<void>;
   runOpenCodeGeneration: (ctx: GenerationCtx) => Promise<void>;
   processOpencodeEvent: (...args: unknown[]) => Promise<void>;
@@ -644,14 +648,16 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
 function createConversationRuntimeMock(params: {
   promptMock: ReturnType<typeof vi.fn>;
   subscribeMock: ReturnType<typeof vi.fn>;
+  messagesMock?: ReturnType<typeof vi.fn>;
   readFile?: ReturnType<typeof vi.fn>;
+  sessionSource?: "live_session" | "restored_snapshot" | "created_session";
 }) {
   return {
     harnessClient: {
       subscribe: params.subscribeMock,
       prompt: params.promptMock,
       abort: vi.fn().mockResolvedValue({ data: null, error: null }),
-      messages: vi.fn().mockResolvedValue({ data: [], error: null }),
+      messages: params.messagesMock ?? vi.fn().mockResolvedValue({ data: [], error: null }),
       getSession: vi.fn().mockResolvedValue({ data: null, error: null }),
       createSession: vi.fn().mockResolvedValue({ data: { id: "session-1" }, error: null }),
       replyPermission: vi.fn().mockResolvedValue(undefined),
@@ -659,6 +665,7 @@ function createConversationRuntimeMock(params: {
       rejectQuestion: vi.fn().mockResolvedValue(undefined),
     },
     session: { id: "session-1" },
+    sessionSource: params.sessionSource ?? "created_session",
     sandbox: {
       provider: "e2b" as const,
       sandboxId: "sandbox-1",
@@ -1053,6 +1060,73 @@ describe("generationManager transitions", () => {
       ["Project task (Recommended)"],
       ["Direct"],
     ]);
+  });
+
+  it("classifies exported runtime states for terminal, waiting, and recoverable flows", () => {
+    expect(
+      extractRuntimeExportState({
+        messages: [
+          {
+            info: { role: "assistant" },
+            parts: [{ type: "step-finish", reason: "complete" }],
+          },
+        ],
+      }),
+    ).toBe("terminal_completed");
+
+    expect(
+      extractRuntimeExportState({
+        messages: [
+          {
+            info: { role: "assistant" },
+            parts: [{ type: "step-finish", reason: "error" }],
+          },
+        ],
+      }),
+    ).toBe("terminal_failed");
+
+    expect(
+      extractRuntimeExportState({
+        messages: [
+          {
+            info: { role: "assistant" },
+            parts: [
+              { type: "tool", tool: "question", state: { status: "running" } },
+              { type: "step-finish", reason: "stop" },
+            ],
+          },
+        ],
+      }),
+    ).toBe("waiting_approval");
+
+    expect(
+      extractRuntimeExportState({
+        messages: [
+          {
+            info: { role: "assistant" },
+            parts: [
+              {
+                type: "tool",
+                tool: "auth",
+                state: { status: "running", input: { integrations: ["slack"] } },
+              },
+              { type: "step-finish", reason: "stop" },
+            ],
+          },
+        ],
+      }),
+    ).toBe("waiting_auth");
+
+    expect(
+      extractRuntimeExportState({
+        messages: [
+          {
+            info: { role: "assistant" },
+            parts: [{ type: "tool", tool: "bash", state: { status: "pending" } }],
+          },
+        ],
+      }),
+    ).toBe("non_terminal");
   });
 
   it("cancels generation by aborting active context and setting cancel_requested", async () => {
@@ -1937,7 +2011,7 @@ describe("generationManager transitions", () => {
     expect(queueAddMock).toHaveBeenNthCalledWith(
       2,
       "generation:chat-run",
-      { generationId: "gen-new" },
+      { generationId: "gen-new", runMode: "normal_run" },
       expect.any(Object),
     );
     expect(insertValuesMock).toHaveBeenCalledWith(
@@ -1995,6 +2069,7 @@ describe("generationManager transitions", () => {
       expect.objectContaining({
         attachments: [queuedAttachment],
       }),
+      "normal_run",
     );
   });
 
@@ -2048,6 +2123,7 @@ describe("generationManager transitions", () => {
         coworkerId: "wf-1",
         coworkerRunId: "wf-run-1",
       }),
+      "normal_run",
     );
   });
 
@@ -3059,6 +3135,13 @@ describe("generationManager transitions", () => {
     });
 
     const promptMock = vi.fn().mockResolvedValue(undefined);
+    const messagesMock = vi.fn().mockResolvedValue({
+      data: [
+        { info: { role: "assistant", tokens: { input: 123, output: 456 } } },
+        { info: { role: "user" } },
+      ],
+      error: null,
+    });
     const subscribeMock = vi.fn().mockResolvedValue({
       stream: asAsyncIterable([
         { type: "server.connected", properties: {} },
@@ -3068,6 +3151,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
       createConversationRuntimeMock({
         promptMock,
+        messagesMock,
         subscribeMock,
       }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
     );
@@ -3130,6 +3214,10 @@ describe("generationManager transitions", () => {
       expect.arrayContaining(["/home/user/uploads/notes.txt"]),
     );
     expect(vi.mocked(uploadSandboxFile)).toHaveBeenCalled();
+    expect(ctx.usage).toMatchObject({
+      inputTokens: 123,
+      outputTokens: 456,
+    });
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
   });
@@ -3271,6 +3359,146 @@ describe("generationManager transitions", () => {
     expect(resolveRuntimeFailureSpy).toHaveBeenCalled();
     expect(scheduleRecoverySpy).toHaveBeenCalled();
     expect(finishSpy).not.toHaveBeenCalledWith(expect.anything(), "error");
+  });
+
+  it("treats a live pending-tool export as recoverable on the first disconnect", () => {
+    const exportState = extractRuntimeExportState({
+      messages: [
+        {
+          info: { role: "assistant" },
+          parts: [{ type: "tool", tool: "bash", state: { status: "pending" } }],
+        },
+      ],
+    });
+
+    expect(exportState).toBe("non_terminal");
+    expect(
+      classifyRuntimeFailure({
+        exportState,
+        sandboxState: "live",
+        canRecover: true,
+      }),
+    ).toBe("recoverable_live_runtime");
+  });
+
+  it("does not allow a second recovery reattach after the one-shot attempt is used", async () => {
+    const mgr = asTestManager();
+    const result = await mgr.resolveRuntimeFailure(
+      createCtx({
+        sessionId: "session-1",
+        recoveryAttempts: 1,
+        sandbox: {
+          execute: vi.fn().mockResolvedValue({
+            exitCode: 0,
+            stdout: JSON.stringify({
+              messages: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "tool", tool: "bash", state: { status: "pending" } }],
+                },
+              ],
+            }),
+          }),
+        },
+      }),
+      {
+        getSession: vi.fn().mockResolvedValue({ data: { id: "session-1" }, error: null }),
+      },
+    );
+
+    expect(result).toBe("broken_runtime_state");
+  });
+
+  it("reattaches to a live session without resending the prompt", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-recovery-live",
+      title: "Conversation",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock: vi.fn().mockResolvedValue({
+          stream: asAsyncIterable([
+            { type: "server.connected", properties: {} },
+            { type: "session.idle", properties: {} },
+          ]),
+        }),
+        sessionSource: "live_session",
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+
+    const ctx = createCtx({
+      id: "gen-recovery-live",
+      conversationId: "conv-recovery-live",
+      sessionId: "session-1",
+      executionPolicy: { allowSnapshotRestoreOnRun: false },
+    });
+
+    await mgr.runRecoveryReattach(ctx);
+
+    expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        replayHistory: false,
+        allowSnapshotRestore: false,
+      }),
+    );
+    expect(promptMock).not.toHaveBeenCalled();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
+  it("fails recovery reattach when only a fresh or restored session is available", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-recovery-fail",
+      title: "Conversation",
+    });
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValueOnce(
+      createConversationRuntimeMock({
+        promptMock: vi.fn().mockResolvedValue(undefined),
+        subscribeMock: vi.fn().mockResolvedValue({ stream: asAsyncIterable([]) }),
+        sessionSource: "created_session",
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const createdCtx = createCtx({
+      id: "gen-recovery-created",
+      conversationId: "conv-recovery-fail",
+      sessionId: "session-1",
+    });
+    await mgr.runRecoveryReattach(createdCtx);
+    expect(createdCtx.completionReason).toBe("sandbox_missing");
+    expect(finishSpy).toHaveBeenCalledWith(createdCtx, "error");
+
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValueOnce(
+      createConversationRuntimeMock({
+        promptMock: vi.fn().mockResolvedValue(undefined),
+        subscribeMock: vi.fn().mockResolvedValue({ stream: asAsyncIterable([]) }),
+        sessionSource: "restored_snapshot",
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const restoredCtx = createCtx({
+      id: "gen-recovery-restored",
+      conversationId: "conv-recovery-fail",
+      sessionId: "session-1",
+    });
+    await mgr.runRecoveryReattach(restoredCtx);
+    expect(restoredCtx.completionReason).toBe("broken_runtime_state");
+    expect(finishSpy).toHaveBeenCalledWith(restoredCtx, "error");
   });
 
   it("routes coworker builder prompts to the builder agent and keeps builder context in system", async () => {
@@ -3575,8 +3803,24 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("reaps stale generations and evicts matching active contexts", async () => {
+  it("reaps stale generations and error-finalizes running and waiting contexts", async () => {
     const now = Date.now();
+    interruptStore.set("interrupt-stale-approval", {
+      id: "interrupt-stale-approval",
+      generationId: "gen-stale-approval",
+      kind: "runtime_question",
+      status: "pending",
+      requestedAt: new Date(now - 31 * 60 * 1000),
+      expiresAt: new Date(now - 1_000),
+    });
+    interruptStore.set("interrupt-stale-auth", {
+      id: "interrupt-stale-auth",
+      generationId: "gen-stale-auth",
+      kind: "auth",
+      status: "pending",
+      requestedAt: new Date(now - 61 * 60 * 1000),
+      expiresAt: new Date(now - 1_000),
+    });
     generationFindManyMock.mockResolvedValue([
       {
         id: "gen-stale-running",
@@ -3584,9 +3828,14 @@ describe("generationManager transitions", () => {
         startedAt: new Date(now - 7 * 60 * 60 * 1000),
       },
       {
-        id: "gen-stale-paused",
-        status: "paused",
-        startedAt: new Date(now - 2 * 60 * 60 * 1000),
+        id: "gen-stale-approval",
+        status: "awaiting_approval",
+        startedAt: new Date(now - 31 * 60 * 1000),
+      },
+      {
+        id: "gen-stale-auth",
+        status: "awaiting_auth",
+        startedAt: new Date(now - 61 * 60 * 1000),
       },
       {
         id: "gen-fresh-running",
@@ -3597,26 +3846,49 @@ describe("generationManager transitions", () => {
 
     const mgr = asTestManager();
     mgr.activeGenerations.set("gen-stale-running", createCtx({ id: "gen-stale-running" }));
-    mgr.activeGenerations.set("gen-stale-paused", createCtx({ id: "gen-stale-paused" }));
+    mgr.activeGenerations.set("gen-stale-approval", createCtx({ id: "gen-stale-approval" }));
+    mgr.activeGenerations.set("gen-stale-auth", createCtx({ id: "gen-stale-auth" }));
     mgr.activeGenerations.set("gen-fresh-running", createCtx({ id: "gen-fresh-running" }));
 
     const summary = await generationManager.reapStaleGenerations();
 
     expect(summary).toEqual({
-      scanned: 3,
-      stale: 1,
+      scanned: 4,
+      stale: 3,
       finalizedRunningAsError: 1,
-      finalizedOtherAsCancelled: 0,
+      finalizedWaitingAsError: 2,
     });
 
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "error",
-        completedAt: expect.any(Date),
-      }),
+    expect(updateSetMock.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            status: "error",
+            completedAt: expect.any(Date),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            status: "error",
+            completionReason: "approval_timeout",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            status: "error",
+            completionReason: "auth_timeout",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            generationStatus: "error",
+          }),
+        ],
+      ]),
     );
     expect(mgr.activeGenerations.has("gen-stale-running")).toBe(false);
-    expect(mgr.activeGenerations.has("gen-stale-paused")).toBe(true);
+    expect(mgr.activeGenerations.has("gen-stale-approval")).toBe(false);
+    expect(mgr.activeGenerations.has("gen-stale-auth")).toBe(false);
     expect(mgr.activeGenerations.has("gen-fresh-running")).toBe(true);
   });
 
