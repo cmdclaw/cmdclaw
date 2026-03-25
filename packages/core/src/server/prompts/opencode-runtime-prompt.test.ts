@@ -27,12 +27,14 @@ describe("composeOpencodePromptSpec", () => {
       integrationSkillsInstructions: "Integration skills instructions",
       memoryInstructions: "Memory instructions",
       selectedPlatformSkillSlugs: ["calendar", "gmail"],
+      userTimezone: "Europe/Dublin",
     });
 
     expect(result.agentId).toBe(CMDCLAW_CHAT_AGENT_ID);
     expect(result.sections.map((section) => section.key)).toEqual([
       "base_system",
       "file_sharing",
+      "user_timezone",
       "cli",
       "coworker_cli",
       "skills",
@@ -42,6 +44,8 @@ describe("composeOpencodePromptSpec", () => {
       "memory",
     ]);
     expect(result.systemPrompt).toContain("## File Sharing");
+    expect(result.systemPrompt).toContain("## User Timezone");
+    expect(result.systemPrompt).toContain("Europe/Dublin");
     expect(result.systemPrompt).toContain("CLI instructions");
     expect(result.systemPrompt).toContain("# Selected Platform Skills");
     expect(result.systemPrompt).toContain("/app/.opencode/integration-skill-drafts/<slug>.json");
@@ -52,9 +56,12 @@ describe("composeOpencodePromptSpec", () => {
       kind: "coworker_builder",
       builderCoworkerContext: builderContext,
       cliInstructions: "CLI instructions",
+      userTimezone: "America/New_York",
     });
 
     expect(result.agentId).toBe(CMDCLAW_COWORKER_BUILDER_AGENT_ID);
+    expect(result.sections.map((section) => section.key)).toContain("user_timezone");
+    expect(result.systemPrompt).toContain("America/New_York");
     expect(result.sections.map((section) => section.key)).toContain("coworker_builder_runtime");
     expect(result.systemPrompt).toContain("## Coworker Builder Runtime Context");
     expect(result.systemPrompt).toContain('"coworkerId": "cw-1"');
@@ -72,9 +79,12 @@ describe("composeOpencodePromptSpec", () => {
       coworkerPromptDont: "Do not send duplicates.",
       triggerPayload: { source: "schedule" },
       memoryInstructions: "Memory instructions",
+      userTimezone: "Asia/Tokyo",
     });
 
     expect(result.agentId).toBe(CMDCLAW_COWORKER_RUNNER_AGENT_ID);
+    expect(result.sections.map((section) => section.key)).toContain("user_timezone");
+    expect(result.systemPrompt).toContain("Asia/Tokyo");
     expect(result.sections.map((section) => section.key)).toContain("coworker_execution");
     expect(result.systemPrompt).toContain("## Coworker Instructions");
     expect(result.systemPrompt).toContain("## Do");
@@ -100,5 +110,6 @@ describe("composeOpencodePromptSpec", () => {
     ]);
     expect(result.systemPrompt).not.toContain("Selected Platform Skills");
     expect(result.systemPrompt).not.toContain("Skills instructions");
+    expect(result.systemPrompt).not.toContain("User Timezone");
   });
 });

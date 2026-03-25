@@ -23,6 +23,7 @@ type SharedPromptInput = {
   integrationSkillsInstructions?: string | null;
   memoryInstructions?: string | null;
   selectedPlatformSkillSlugs?: string[];
+  userTimezone?: string | null;
 };
 
 type ChatPromptInput = SharedPromptInput & {
@@ -122,6 +123,20 @@ function buildIntegrationSkillDraftSection(): string {
   ].join("\n");
 }
 
+function buildUserTimezoneSection(userTimezone: string | null | undefined): string | null {
+  const trimmed = userTimezone?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return [
+    "## User Timezone",
+    `The user's saved IANA timezone is \`${trimmed}\`.`,
+    "Use it as the default timezone for relative dates, times, and schedules unless the user explicitly overrides it.",
+    "Do not ask for the user's timezone if this saved timezone is sufficient.",
+  ].join("\n");
+}
+
 function buildCoworkerExecutionSection(input: CoworkerRunnerPromptInput): string | null {
   const sections = [
     input.coworkerPrompt ? `## Coworker Instructions\n${input.coworkerPrompt}` : null,
@@ -175,6 +190,7 @@ function composeChatPrompt(input: ChatPromptInput): ResolvedPromptSpec {
 
   appendSection(sections, "base_system", BASE_SYSTEM_PROMPT);
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
+  appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
@@ -195,6 +211,7 @@ function composeCoworkerBuilderPrompt(input: CoworkerBuilderPromptInput): Resolv
 
   appendSection(sections, "base_system", BASE_SYSTEM_PROMPT);
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
+  appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
@@ -219,6 +236,7 @@ function composeCoworkerRunnerPrompt(input: CoworkerRunnerPromptInput): Resolved
 
   appendSection(sections, "base_system", BASE_SYSTEM_PROMPT);
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
+  appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(

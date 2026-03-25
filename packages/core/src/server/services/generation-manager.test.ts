@@ -15,6 +15,7 @@ const {
   conversationQueuedMessageFindManyMock,
   coworkerRunFindFirstMock,
   coworkerFindFirstMock,
+  userFindFirstMock,
   providerAuthFindFirstMock,
   sharedProviderAuthFindFirstMock,
   queueAddMock,
@@ -41,6 +42,7 @@ const {
   const conversationQueuedMessageFindManyMock = vi.fn();
   const coworkerRunFindFirstMock = vi.fn();
   const coworkerFindFirstMock = vi.fn();
+  const userFindFirstMock = vi.fn();
   const providerAuthFindFirstMock = vi.fn();
   const sharedProviderAuthFindFirstMock = vi.fn();
   const queueAddMock = vi.fn();
@@ -57,6 +59,7 @@ const {
       },
       coworkerRun: { findFirst: coworkerRunFindFirstMock },
       coworker: { findFirst: coworkerFindFirstMock },
+      user: { findFirst: userFindFirstMock },
       providerAuth: { findFirst: providerAuthFindFirstMock, findMany: vi.fn(() => []) },
       sharedProviderAuth: { findFirst: sharedProviderAuthFindFirstMock },
       skill: { findMany: vi.fn(() => []) },
@@ -82,6 +85,7 @@ const {
     conversationQueuedMessageFindManyMock,
     coworkerRunFindFirstMock,
     coworkerFindFirstMock,
+    userFindFirstMock,
     providerAuthFindFirstMock,
     sharedProviderAuthFindFirstMock,
     queueAddMock,
@@ -731,6 +735,11 @@ describe("generationManager transitions", () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    userFindFirstMock.mockResolvedValue({
+      role: "admin",
+      activeWorkspaceId: null,
+      timezone: null,
+    });
     vi.mocked(composeOpencodePromptSpec).mockReset();
     vi.mocked(composeOpencodePromptSpec).mockImplementation((input) => {
       const agentId =
@@ -3133,6 +3142,9 @@ describe("generationManager transitions", () => {
       title: "Conversation",
       opencodeSessionId: "session-existing",
     });
+    userFindFirstMock.mockResolvedValue({
+      timezone: "Europe/Dublin",
+    });
 
     const promptMock = vi.fn().mockResolvedValue(undefined);
     const messagesMock = vi.fn().mockResolvedValue({
@@ -3190,7 +3202,12 @@ describe("generationManager transitions", () => {
     await mgr.runOpenCodeGeneration(ctx);
 
     expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({
+        integrationEnvs: expect.objectContaining({
+          ALLOWED_INTEGRATIONS: "github",
+          CMDCLAW_USER_TIMEZONE: "Europe/Dublin",
+        }),
+      }),
       expect.objectContaining({
         allowSnapshotRestore: true,
       }),
@@ -3202,6 +3219,7 @@ describe("generationManager transitions", () => {
         skillsInstructions: "skills prompt",
         integrationSkillsInstructions: "integration skills prompt",
         memoryInstructions: "memory prompt",
+        userTimezone: "Europe/Dublin",
       }),
     );
     expect(promptMock).toHaveBeenCalledTimes(1);

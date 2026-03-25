@@ -5102,6 +5102,7 @@ class GenerationManager {
             integrationSkillsInstructions,
             memoryInstructions,
             selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+            userTimezone: dbUser?.timezone ?? null,
             coworkerPrompt: ctx.coworkerPrompt,
             coworkerPromptDo: ctx.coworkerPromptDo,
             coworkerPromptDont: ctx.coworkerPromptDont,
@@ -5115,6 +5116,7 @@ class GenerationManager {
               integrationSkillsInstructions,
               memoryInstructions,
               selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+              userTimezone: dbUser?.timezone ?? null,
               builderCoworkerContext: ctx.builderCoworkerContext,
             }
           : {
@@ -5124,6 +5126,7 @@ class GenerationManager {
               integrationSkillsInstructions,
               memoryInstructions,
               selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+              userTimezone: dbUser?.timezone ?? null,
             };
       const promptSpec = composeOpencodePromptSpec(promptSpecInput);
       const runtimeClient = client;
