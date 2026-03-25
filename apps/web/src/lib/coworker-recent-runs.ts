@@ -2,6 +2,7 @@ export type CoworkerRecentRun = {
   id: string;
   status: string;
   startedAt?: Date | string | null;
+  conversationId?: string | null;
   source?: string;
 };
 
@@ -41,6 +42,7 @@ export function flattenCoworkerRecentRuns(
         id: run.id,
         status: run.status,
         startedAt: run.startedAt,
+        conversationId: run.conversationId ?? null,
         source: run.source,
         coworkerId: coworker.id,
         coworkerName: getCoworkerName(coworker.name),

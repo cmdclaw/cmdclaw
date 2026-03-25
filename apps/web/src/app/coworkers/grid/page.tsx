@@ -11,7 +11,13 @@ type CoworkerItem = {
   name?: string | null;
   status: "on" | "off";
   triggerType: string;
-  recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
+  recentRuns?: {
+    id: string;
+    status: string;
+    startedAt?: Date | string | null;
+    conversationId?: string | null;
+    source?: string;
+  }[];
 };
 
 function formatDate(value?: Date | string | null) {

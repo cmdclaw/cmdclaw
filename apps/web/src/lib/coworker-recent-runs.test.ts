@@ -13,7 +13,12 @@ describe("flattenCoworkerRecentRuns", () => {
         id: "cw-2",
         name: "Sales coworker",
         recentRuns: [
-          { id: "run-latest", status: "running", startedAt: "2026-03-12T10:00:00.000Z" },
+          {
+            id: "run-latest",
+            status: "running",
+            startedAt: "2026-03-12T10:00:00.000Z",
+            conversationId: "conv-latest",
+          },
           { id: "run-middle", status: "error", startedAt: "2026-03-12T08:00:00.000Z" },
         ],
       },
@@ -24,6 +29,7 @@ describe("flattenCoworkerRecentRuns", () => {
       coworkerId: "cw-2",
       coworkerName: "Sales coworker",
       status: "running",
+      conversationId: "conv-latest",
     });
   });
 

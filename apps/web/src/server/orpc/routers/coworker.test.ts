@@ -257,12 +257,14 @@ describe("coworkerRouter", () => {
           id: "run-1",
           status: "success",
           startedAt,
+          generation: { conversationId: "conv-1" },
           triggerPayload: { event: "schedule" },
         },
         {
           id: "run-2",
           status: "failed",
           startedAt: secondStartedAt,
+          generation: null,
           triggerPayload: {},
         },
       ])
@@ -289,11 +291,18 @@ describe("coworkerRouter", () => {
         lastRunStatus: "success",
         lastRunAt: startedAt,
         recentRuns: [
-          { id: "run-1", status: "success", startedAt, source: "trigger" },
+          {
+            id: "run-1",
+            status: "success",
+            startedAt,
+            conversationId: "conv-1",
+            source: "trigger",
+          },
           {
             id: "run-2",
             status: "failed",
             startedAt: secondStartedAt,
+            conversationId: null,
             source: "manual",
           },
         ],

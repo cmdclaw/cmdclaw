@@ -1,8 +1,17 @@
 "use client";
 
+import { BarChart3, MoreHorizontal } from "lucide-react";
 import { useParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
+import { ConversationUsageDialog } from "@/components/conversation-usage-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useCoworkerRun } from "@/orpc/hooks";
 
@@ -11,10 +20,17 @@ export default function CoworkerRunLayout({ children }: { children: React.ReactN
   const params = useParams<{ id: string }>();
   const runId = params?.id;
   const { data: run } = useCoworkerRun(runId);
+  const [isUsageOpen, setIsUsageOpen] = useState(false);
   const conversationId = run?.conversationId ?? undefined;
   const runLabel = run?.coworkerUsername
     ? `@${run.coworkerUsername}`
     : run?.coworkerName || (isAdmin && runId ? `ID: ${runId}` : null);
+  const handleUsageOpenChange = useCallback((open: boolean) => {
+    setIsUsageOpen(open);
+  }, []);
+  const handleUsageMenuSelect = useCallback(() => {
+    setIsUsageOpen(true);
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden pb-[calc(3.5rem+var(--safe-area-inset-bottom))] md:pb-0">
@@ -31,9 +47,35 @@ export default function CoworkerRunLayout({ children }: { children: React.ReactN
             {runLabel}
           </span>
         ) : null}
-        <ChatCopyButton conversationId={conversationId} className="ml-auto" />
-        <ChatShareControls conversationId={conversationId} />
+        <div className="ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+                aria-label="Run actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={handleUsageMenuSelect}>
+                <BarChart3 className="h-4 w-4" />
+                <span>Show usage</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ChatCopyButton conversationId={conversationId} />
+          <ChatShareControls conversationId={conversationId} />
+        </div>
       </header>
+      <ConversationUsageDialog
+        open={isUsageOpen}
+        onOpenChange={handleUsageOpenChange}
+        conversationId={run?.conversationId}
+        entityType="run"
+        entityTitle={runLabel}
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );

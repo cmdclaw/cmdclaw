@@ -16,6 +16,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
+import { ConversationUsageDialog } from "@/components/conversation-usage-dialog";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -25,13 +26,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,7 +39,6 @@ import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
-  useConversationUsage,
   useDeleteConversation,
   useMarkAllConversationsSeen,
   useUpdateConversationPinned,
@@ -59,10 +52,6 @@ const RUNNING_CONVERSATION_STATUSES = new Set([
   "awaiting_auth",
   "paused",
 ]);
-
-function formatTokenCount(value: number): string {
-  return value.toLocaleString();
-}
 
 function formatRelativeShort(date: Date) {
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -141,10 +130,6 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
     id: string;
     title: string;
   } | null>(null);
-  const usageQuery = useConversationUsage(
-    usageConversation?.id ?? null,
-    Boolean(usageConversation),
-  );
 
   const conversations = conversationData?.conversations ?? [];
   const recentCoworkerRuns = flattenCoworkerRecentRuns(coworkers).slice(0, 10);
@@ -478,57 +463,12 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={Boolean(usageConversation)} onOpenChange={handleUsageDialogOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Conversation usage</DialogTitle>
-            <DialogDescription>
-              {usageConversation
-                ? `Token usage for ${usageConversation.title || "Untitled"}.`
-                : "Token usage for this conversation."}
-            </DialogDescription>
-          </DialogHeader>
-          {usageQuery.isLoading ? (
-            <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              <span>Loading stored usage...</span>
-            </div>
-          ) : usageQuery.isError ? (
-            <div className="space-y-1 py-2">
-              <p className="text-sm font-medium">Usage unavailable</p>
-              <p className="text-muted-foreground text-sm">
-                We couldn&apos;t load usage for this conversation.
-              </p>
-            </div>
-          ) : usageQuery.data ? (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground text-xs">Input</p>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatTokenCount(usageQuery.data.inputTokens)}
-                  </p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground text-xs">Output</p>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatTokenCount(usageQuery.data.outputTokens)}
-                  </p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground text-xs">Total</p>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatTokenCount(usageQuery.data.totalTokens)}
-                  </p>
-                </div>
-              </div>
-              <p className="text-muted-foreground text-sm">
-                Stored across {usageQuery.data.assistantMessageCount} assistant messages.
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <ConversationUsageDialog
+        open={Boolean(usageConversation)}
+        onOpenChange={handleUsageDialogOpenChange}
+        conversationId={usageConversation?.id}
+        entityTitle={usageConversation?.title}
+      />
     </>
   );
 }

@@ -27,6 +27,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BugReportDialog } from "@/components/bug-report-dialog";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
+import { ConversationUsageDialog } from "@/components/conversation-usage-dialog";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -36,13 +37,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,7 +59,6 @@ import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
 import {
   useConversationList,
-  useConversationUsage,
   useDeleteConversation,
   useMarkAllConversationsSeen,
   useMarkConversationSeen,
@@ -100,10 +93,6 @@ const RUNNING_CONVERSATION_STATUSES = new Set([
   "paused",
 ]);
 const EMPTY_CONVERSATIONS: ConversationListData["conversations"] = [];
-
-function formatTokenCount(value: number): string {
-  return value.toLocaleString();
-}
 
 function formatRelativeShort(date: Date) {
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -212,10 +201,19 @@ export function AppSidebar() {
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
-  const [usageConversation, setUsageConversation] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
+  const [usageTarget, setUsageTarget] = useState<
+    | {
+        kind: "conversation";
+        conversationId: string;
+        title: string;
+      }
+    | {
+        kind: "run";
+        conversationId: string | null;
+        title: string;
+      }
+    | null
+  >(null);
   const latestSeenRef = useRef<Record<string, number>>({});
 
   const { data: coworkers } = useCoworkerList();
@@ -226,10 +224,6 @@ export function AppSidebar() {
   const markConversationSeenMutation = useMarkConversationSeen();
   const updateConversationPinned = useUpdateConversationPinned();
   const updateConversationTitle = useUpdateConversationTitle();
-  const usageQuery = useConversationUsage(
-    usageConversation?.id ?? null,
-    Boolean(usageConversation),
-  );
 
   useEffect(() => {
     let mounted = true;
@@ -439,7 +433,20 @@ export function AppSidebar() {
       return;
     }
     const title = event.currentTarget.dataset.conversationTitle ?? "Untitled";
-    setUsageConversation({ id, title });
+    setUsageTarget({
+      kind: "conversation",
+      conversationId: id,
+      title,
+    });
+  }, []);
+
+  const handleRunUsageMenuClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const title = event.currentTarget.dataset.runTitle ?? "Untitled";
+    setUsageTarget({
+      kind: "run",
+      conversationId: event.currentTarget.dataset.conversationId ?? null,
+      title,
+    });
   }, []);
 
   const handleRenameModalOpenChange = useCallback((open: boolean) => {
@@ -452,7 +459,7 @@ export function AppSidebar() {
 
   const handleUsageDialogOpenChange = useCallback((open: boolean) => {
     if (!open) {
-      setUsageConversation(null);
+      setUsageTarget(null);
     }
   }, []);
 
@@ -559,57 +566,13 @@ export function AppSidebar() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={Boolean(usageConversation)} onOpenChange={handleUsageDialogOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Conversation usage</DialogTitle>
-            <DialogDescription>
-              {usageConversation
-                ? `Token usage for ${usageConversation.title || "Untitled"}.`
-                : "Token usage for this conversation."}
-            </DialogDescription>
-          </DialogHeader>
-          {usageQuery.isLoading ? (
-            <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              <span>Loading stored usage...</span>
-            </div>
-          ) : usageQuery.isError ? (
-            <div className="space-y-1 py-2">
-              <p className="text-sm font-medium">Usage unavailable</p>
-              <p className="text-muted-foreground text-sm">
-                We couldn&apos;t load usage for this conversation.
-              </p>
-            </div>
-          ) : usageQuery.data ? (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground text-xs">Input</p>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatTokenCount(usageQuery.data.inputTokens)}
-                  </p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground text-xs">Output</p>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatTokenCount(usageQuery.data.outputTokens)}
-                  </p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground text-xs">Total</p>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatTokenCount(usageQuery.data.totalTokens)}
-                  </p>
-                </div>
-              </div>
-              <p className="text-muted-foreground text-sm">
-                Stored across {usageQuery.data.assistantMessageCount} assistant messages.
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <ConversationUsageDialog
+        open={Boolean(usageTarget)}
+        onOpenChange={handleUsageDialogOpenChange}
+        conversationId={usageTarget?.conversationId}
+        entityType={usageTarget?.kind ?? "conversation"}
+        entityTitle={usageTarget?.title}
+      />
 
       <aside className="bg-sidebar hidden h-screen w-[220px] shrink-0 flex-col border-r md:flex">
         {/* Logo */}
@@ -866,27 +829,65 @@ export function AppSidebar() {
                       const runPath = `/coworkers/runs/${run.id}`;
 
                       return (
-                        <Link
+                        <div
                           key={run.id}
-                          href={runPath}
-                          prefetch={false}
                           className={cn(
-                            "flex min-h-10 flex-col justify-center rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                            "group relative rounded-md text-[13px] transition-colors",
                             pathname === runPath
                               ? "bg-sidebar-accent text-sidebar-accent-foreground"
                               : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                           )}
                         >
-                          <span className="flex items-center gap-2">
-                            <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
-                            <span className="text-sidebar-foreground/45 shrink-0 text-[11px]">
-                              {formatRelativeShortNullable(run.startedAt)}
+                          <Link
+                            href={runPath}
+                            prefetch={false}
+                            className="flex min-h-10 flex-col justify-center px-2.5 py-1.5 pr-8"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
+                              <span
+                                className={cn(
+                                  "text-sidebar-foreground/45 shrink-0 text-[11px] transition-opacity",
+                                  "group-hover:opacity-0 group-focus-within:opacity-0",
+                                )}
+                              >
+                                {formatRelativeShortNullable(run.startedAt)}
+                              </span>
                             </span>
-                          </span>
-                          <span className="text-sidebar-foreground/45 truncate text-[11px]">
-                            {getCoworkerRunStatusLabel(run.status)}
-                          </span>
-                        </Link>
+                            <span className="text-sidebar-foreground/45 truncate text-[11px]">
+                              {getCoworkerRunStatusLabel(run.status)}
+                            </span>
+                          </Link>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
+                                  "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
+                                  "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                                  "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
+                                  pathname === runPath
+                                    ? "before:from-sidebar-accent"
+                                    : "before:from-sidebar",
+                                )}
+                                aria-label="Run actions"
+                              >
+                                <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" side="right">
+                              <DropdownMenuItem
+                                data-conversation-id={run.conversationId ?? ""}
+                                data-run-title={run.coworkerName}
+                                onClick={handleRunUsageMenuClick}
+                              >
+                                <BarChart3 className="h-4 w-4" />
+                                <span>Show usage</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       );
                     })
                   )}

@@ -291,6 +291,13 @@ const list = protectedProcedure.handler(async ({ context }) => {
         where: eq(coworkerRun.coworkerId, wf.id),
         orderBy: (run, { desc }) => [desc(run.startedAt)],
         limit: 20,
+        with: {
+          generation: {
+            columns: {
+              conversationId: true,
+            },
+          },
+        },
       });
       const lastRun = runs[0];
       const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
@@ -325,6 +332,7 @@ const list = protectedProcedure.handler(async ({ context }) => {
             id: run.id,
             status: run.status,
             startedAt: run.startedAt,
+            conversationId: run.generation?.conversationId ?? null,
             source,
           };
         }),

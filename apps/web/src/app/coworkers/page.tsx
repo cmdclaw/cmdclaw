@@ -64,7 +64,13 @@ type CoworkerItem = {
   toolAccessMode: CoworkerToolAccessMode;
   allowedIntegrations?: IntegrationType[];
   allowedSkillSlugs?: string[];
-  recentRuns?: { id: string; status: string; startedAt?: Date | string | null; source?: string }[];
+  recentRuns?: {
+    id: string;
+    status: string;
+    startedAt?: Date | string | null;
+    conversationId?: string | null;
+    source?: string;
+  }[];
 };
 
 const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;

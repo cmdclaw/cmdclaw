@@ -56,6 +56,10 @@ vi.mock("@/components/chat/chat-share-controls", () => ({
   ),
 }));
 
+vi.mock("@/components/conversation-usage-dialog", () => ({
+  ConversationUsageDialog: () => null,
+}));
+
 describe("CoworkerRunLayout", () => {
   afterEach(() => {
     cleanup();
@@ -76,6 +80,7 @@ describe("CoworkerRunLayout", () => {
     );
 
     expect(screen.getByText("@inbox-triage")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run actions" })).toBeInTheDocument();
     expect(screen.queryByText("ID: run-1")).not.toBeInTheDocument();
   });
 
