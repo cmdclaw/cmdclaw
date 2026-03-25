@@ -236,7 +236,8 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 - outlook-mail search -q <query> [-l limit] - Search mailbox
 - outlook-mail get <messageId> - Get full email content
 - outlook-mail unread - Count unread emails
-- outlook-mail send --to <email> --subject <subject> --body <body>
+- outlook-mail draft --to <email> --subject <subject> --body <body> [--attachment <path>]
+- outlook-mail send --to <email> --subject <subject> --body <body> [--attachment <path>]
 - Example: outlook-mail search -q "invoice" -l 5
 
 ## Outlook Calendar CLI [${statusTag("outlook_calendar")}]

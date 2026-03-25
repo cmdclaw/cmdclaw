@@ -16,6 +16,12 @@ describe("OAuth config", () => {
     expect(config.scopes).toContain("https://www.googleapis.com/auth/gmail.compose");
   });
 
+  it("includes read-write scope for Outlook draft creation", () => {
+    const config = getOAuthConfig("outlook");
+
+    expect(config.scopes).toContain("Mail.ReadWrite");
+  });
+
   it("uses Dynamics scopes without mixing in Microsoft Graph resource scopes", () => {
     const config = getOAuthConfig("dynamics");
 

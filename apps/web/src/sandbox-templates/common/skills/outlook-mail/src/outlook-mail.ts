@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
 import { parseArgs } from "util";
 import { prepareEmailHtmlBody } from "../../_shared/email-body-format";
 
@@ -25,6 +27,7 @@ const { positionals, values } = parseArgs({
     subject: { type: "string" },
     body: { type: "string" },
     cc: { type: "string" },
+    attachment: { type: "string", multiple: true },
   },
 });
 
@@ -46,6 +49,13 @@ function sanitizeFilterLiteral(value: string): string {
   return value.replace(/'/g, "''");
 }
 
+type OutlookFileAttachment = {
+  "@odata.type": "#microsoft.graph.fileAttachment";
+  contentBytes: string;
+  contentType: string;
+  name: string;
+};
+
 function mapMessage(message: {
   id?: string;
   subject?: string;
@@ -63,6 +73,81 @@ function mapMessage(message: {
     snippet: message.bodyPreview ?? "",
     isRead: message.isRead ?? false,
   };
+}
+
+function inferAttachmentMimeType(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case ".csv":
+      return "text/csv";
+    case ".doc":
+      return "application/msword";
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".gif":
+      return "image/gif";
+    case ".jpeg":
+    case ".jpg":
+      return "image/jpeg";
+    case ".json":
+      return "application/json";
+    case ".md":
+    case ".txt":
+      return "text/plain";
+    case ".ods":
+      return "application/vnd.oasis.opendocument.spreadsheet";
+    case ".odt":
+      return "application/vnd.oasis.opendocument.text";
+    case ".pdf":
+      return "application/pdf";
+    case ".png":
+      return "image/png";
+    case ".ppt":
+      return "application/vnd.ms-powerpoint";
+    case ".pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case ".rtf":
+      return "application/rtf";
+    case ".webp":
+      return "image/webp";
+    case ".xls":
+      return "application/vnd.ms-excel";
+    case ".xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function sanitizeAttachmentName(filename: string): string {
+  return filename.replaceAll(/["\r\n]/g, "_");
+}
+
+function getAttachmentPaths(): string[] {
+  const attachmentValue = values.attachment;
+  if (typeof attachmentValue === "string") {
+    return [attachmentValue];
+  }
+  if (Array.isArray(attachmentValue)) {
+    return attachmentValue.filter((entry): entry is string => typeof entry === "string");
+  }
+  return [];
+}
+
+async function readAttachment(filePath: string): Promise<OutlookFileAttachment> {
+  try {
+    const content = await readFile(filePath);
+    return {
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      contentBytes: content.toString("base64"),
+      contentType: inferAttachmentMimeType(filePath),
+      name: sanitizeAttachmentName(basename(filePath)),
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to read attachment "${filePath}": ${detail}`, {
+      cause: error,
+    });
+  }
 }
 
 async function graphRequest(path: string, init?: RequestInit): Promise<Response> {
@@ -237,13 +322,28 @@ async function countUnread() {
 }
 
 async function sendEmail() {
+  const message = await buildOutgoingMessage();
+  const res = await graphRequest("/me/sendMail", {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
+  console.log("Email sent.");
+}
+
+async function buildOutgoingMessage() {
   if (!values.to || !values.subject || !values.body) {
-    console.error("Required: --to, --subject, --body");
-    process.exit(1);
+    throw new Error("Required: --to, --subject, --body");
   }
 
   const { html } = prepareEmailHtmlBody(values.body);
-  const message = {
+  const attachments = await Promise.all(getAttachmentPaths().map((path) => readAttachment(path)));
+
+  return {
     subject: values.subject,
     body: {
       contentType: "HTML",
@@ -263,18 +363,23 @@ async function sendEmail() {
           ],
         }
       : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
+}
 
-  const res = await graphRequest("/me/sendMail", {
+async function draftEmail() {
+  const message = await buildOutgoingMessage();
+  const res = await graphRequest("/me/messages", {
     method: "POST",
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(message),
   });
 
   if (!res.ok) {
     throw new Error(await res.text());
   }
 
-  console.log("Email sent.");
+  const { id } = (await res.json()) as { id?: string };
+  console.log(id ? `Email draft created. Draft ID: ${id}` : "Email draft created.");
 }
 
 function showHelp() {
@@ -283,7 +388,8 @@ function showHelp() {
   search -q <query> [-l limit]       Search mailbox
   get <messageId>                    Get email content
   unread [-q query] [-l limit]       Count unread emails
-  send --to <email> --subject <subject> --body <body> [--cc <email>]
+  send --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
+  draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
 
 Options:
   -h, --help                         Show this help message`);
@@ -311,6 +417,9 @@ async function main() {
         break;
       case "send":
         await sendEmail();
+        break;
+      case "draft":
+        await draftEmail();
         break;
       default:
         showHelp();

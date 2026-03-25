@@ -1,15 +1,15 @@
 ---
 name: outlook
-description: Read, search, and send Outlook emails. Use for listing emails, searching the mailbox, reading content, counting unread, and sending messages.
+description: Read, search, draft, and send Outlook emails. Use for listing emails, searching the mailbox, reading content, counting unread, drafting messages, and sending messages.
 ---
 
 # Outlook Mail
 
-Read inbox emails, get email content, count unread emails, and send messages via Microsoft Graph.
+Read inbox emails, get email content, count unread emails, draft messages, and send messages via Microsoft Graph.
 
 ## Environment Variables
 
-- `OUTLOOK_ACCESS_TOKEN` - Microsoft OAuth2 access token with Mail scopes
+- `OUTLOOK_ACCESS_TOKEN` - Microsoft OAuth2 access token with Outlook Mail scopes, including draft creation support
 
 ## Commands
 
@@ -26,8 +26,11 @@ outlook-mail get <messageId>
 # Count unread emails
 outlook-mail unread [-q "subject keyword"] [-l limit]
 
+# Draft an email
+outlook-mail draft --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"] [--attachment /tmp/report.pdf]
+
 # Send an email
-outlook-mail send --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"]
+outlook-mail send --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"] [--attachment /tmp/report.pdf]
 ```
 
 ## Email Body Formatting

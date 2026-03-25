@@ -92,7 +92,16 @@ const configs: Record<IntegrationType, () => OAuthConfig> = {
     authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     redirectUri: `${getAppUrl()}/api/oauth/callback`,
-    scopes: ["offline_access", "openid", "profile", "email", "User.Read", "Mail.Read", "Mail.Send"],
+    scopes: [
+      "offline_access",
+      "openid",
+      "profile",
+      "email",
+      "User.Read",
+      "Mail.Read",
+      "Mail.ReadWrite",
+      "Mail.Send",
+    ],
     getUserInfo: async (accessToken) => {
       const res = await fetch("https://graph.microsoft.com/v1.0/me", {
         headers: { Authorization: `Bearer ${accessToken}` },

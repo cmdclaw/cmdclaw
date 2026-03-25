@@ -31,6 +31,9 @@ describe("outlook-mail CLI", () => {
     expect(result.stdout).toContain("list");
     expect(result.stdout).toContain("search -q <query>");
     expect(result.stdout).toContain("unread");
+    expect(result.stdout).toContain(
+      "draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...",
+    );
   });
 
   test("fails for invalid limit value", () => {
@@ -87,7 +90,67 @@ describe("outlook-mail CLI", () => {
     expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
   });
 
-  test("uses html content type in graph payload", () => {
+  test("fails draft when body contains unsupported html tags", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/outlook-mail/src/outlook-mail.ts",
+      ["draft", "--to", "user@example.com", "--subject", "Hello", "--body", "<script>x</script>"],
+      {
+        OUTLOOK_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Invalid email body HTML: script/style tags are not allowed");
+    expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
+  });
+
+  test("fails send when an attachment file cannot be read", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/outlook-mail/src/outlook-mail.ts",
+      [
+        "send",
+        "--to",
+        "user@example.com",
+        "--subject",
+        "Hello",
+        "--body",
+        "<p>Hello</p>",
+        "--attachment",
+        "/tmp/does-not-exist.pdf",
+      ],
+      {
+        OUTLOOK_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain('Failed to read attachment "/tmp/does-not-exist.pdf"');
+  });
+
+  test("fails draft when an attachment file cannot be read", () => {
+    const result = runSkillCli(
+      "src/sandbox-templates/common/skills/outlook-mail/src/outlook-mail.ts",
+      [
+        "draft",
+        "--to",
+        "user@example.com",
+        "--subject",
+        "Hello",
+        "--body",
+        "<p>Hello</p>",
+        "--attachment",
+        "/tmp/does-not-exist.pdf",
+      ],
+      {
+        OUTLOOK_ACCESS_TOKEN: "test-token",
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain('Failed to read attachment "/tmp/does-not-exist.pdf"');
+  });
+
+  test("uses html content type and graph file attachments in payloads", () => {
     const source = readFileSync(
       path.resolve(
         process.cwd(),
@@ -96,5 +159,7 @@ describe("outlook-mail CLI", () => {
       "utf8",
     );
     expect(source).toContain('contentType: "HTML"');
+    expect(source).toContain('"#microsoft.graph.fileAttachment"');
+    expect(source).toContain('case "draft"');
   });
 });
