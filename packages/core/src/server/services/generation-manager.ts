@@ -18,7 +18,7 @@ import {
   type QueuedMessageAttachment,
 } from "@cmdclaw/db/schema";
 import { customIntegrationCredential } from "@cmdclaw/db/schema";
-import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import IORedis from "ioredis";
 import path from "path";
 import type { IntegrationType } from "../oauth/config";
@@ -316,6 +316,7 @@ interface GenerationContext {
   userId: string;
   sandboxId?: string;
   status: GenerationStatus;
+  executionPolicy: GenerationExecutionPolicy;
   deadlineAt: Date;
   lastRuntimeEventAt: Date;
   recoveryAttempts: number;
@@ -601,6 +602,7 @@ function buildExecutionPolicy(params: {
     autoApprove: params.autoApprove,
     sandboxProvider: params.sandboxProvider,
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
+    allowSnapshotRestoreOnRun: true,
     queuedFileAttachments: params.queuedFileAttachments,
   };
 }
@@ -728,6 +730,10 @@ function formatErrorMessage(error: unknown): string {
     return `${error.name}: ${error.message}`;
   }
   return String(error);
+}
+
+function isBootstrapTimeoutError(error: unknown): boolean {
+  return formatErrorMessage(error).startsWith("Error: Agent preparation timed out after ");
 }
 
 function isMissingSandboxError(error: unknown): boolean {
@@ -1283,6 +1289,7 @@ class GenerationManager {
   private async finalizeDetachedGenerationError(params: {
     generationId: string;
     conversationId: string;
+    runtimeId?: string;
     coworkerRunId?: string;
     message: string;
     completionReason: GenerationCompletionReason;
@@ -1307,6 +1314,12 @@ class GenerationManager {
         generationStatus: "error",
       })
       .where(eq(conversation.id, params.conversationId));
+    if (params.runtimeId) {
+      await conversationRuntimeService.clearActiveGeneration({
+        runtimeId: params.runtimeId,
+        generationId: params.generationId,
+      });
+    }
     if (params.coworkerRunId) {
       await db
         .update(coworkerRun)
@@ -1410,44 +1423,6 @@ class GenerationManager {
     };
   }
 
-  private async observeRecoveredRuntime(
-    ctx: GenerationContext,
-    client?: RuntimeHarnessClient,
-  ): Promise<RuntimeFailureClassification> {
-    if (!client) {
-      const inspected = await this.inspectRuntimeFailureState(ctx);
-      return inspected.classification;
-    }
-
-    const recoveryController = new AbortController();
-    const recoveryTimeoutId = setTimeout(() => {
-      recoveryController.abort();
-    }, generationLifecyclePolicy.recoveryObserveWindowMs);
-
-    try {
-      const eventResult = await client.subscribe({}, { signal: recoveryController.signal });
-      for await (const rawEvent of eventResult.stream) {
-        const event = rawEvent as RuntimeEvent;
-        this.markRuntimeActivity(ctx);
-        if (event.type === "session.idle") {
-          return "terminal_completed";
-        }
-        if (event.type === "session.error") {
-          return "terminal_failed";
-        }
-      }
-    } catch (error) {
-      if (!recoveryController.signal.aborted) {
-        console.warn("[GenerationManager] Runtime recovery subscribe failed:", error);
-      }
-    } finally {
-      clearTimeout(recoveryTimeoutId);
-    }
-
-    const inspected = await this.inspectRuntimeFailureState(ctx, client);
-    return inspected.classification;
-  }
-
   private async resolveRuntimeFailure(
     ctx: GenerationContext,
     client?: RuntimeHarnessClient,
@@ -1458,7 +1433,53 @@ class GenerationManager {
     }
 
     await this.recordRecoveryAttempt(ctx);
-    return this.observeRecoveredRuntime(ctx, client);
+    return inspected.classification;
+  }
+
+  private async setSnapshotRestoreAllowance(
+    ctx: Pick<GenerationContext, "id" | "executionPolicy">,
+    allow: boolean,
+  ): Promise<void> {
+    const current = ctx.executionPolicy.allowSnapshotRestoreOnRun ?? true;
+    if (current === allow) {
+      return;
+    }
+
+    ctx.executionPolicy = {
+      ...ctx.executionPolicy,
+      allowSnapshotRestoreOnRun: allow,
+    };
+    await db
+      .update(generation)
+      .set({
+        executionPolicy: ctx.executionPolicy,
+      })
+      .where(eq(generation.id, ctx.id));
+  }
+
+  private scheduleRecoveryReattach(ctx: GenerationContext): void {
+    const delayMs = generationLifecyclePolicy.recoveryObserveWindowMs;
+    if (this.shouldDeferGenerationToWorker()) {
+      void this.enqueueGenerationRun(ctx.id, this.getGenerationRunType(ctx), {
+        delayMs,
+        dedupeKey: `recovery-${ctx.recoveryAttempts}`,
+      }).catch((error) => {
+        console.error(
+          `[GenerationManager] Failed to enqueue recovery attempt for generation ${ctx.id}:`,
+          error,
+        );
+      });
+      return;
+    }
+
+    setTimeout(() => {
+      void this.runQueuedGeneration(ctx.id).catch((error) => {
+        console.error(
+          `[GenerationManager] Failed to run recovery attempt for generation ${ctx.id}:`,
+          error,
+        );
+      });
+    }, delayMs);
   }
 
   private async releaseSandboxSlotLease(ctx: GenerationContext): Promise<void> {
@@ -1598,6 +1619,7 @@ class GenerationManager {
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
     selectedPlatformSkillSlugs?: string[];
+    allowSnapshotRestoreOnRun?: boolean;
     queuedFileAttachments?: UserFileAttachment[];
   } {
     const policy =
@@ -1623,6 +1645,7 @@ class GenerationManager {
             (entry): entry is string => typeof entry === "string",
           )
         : undefined,
+      allowSnapshotRestoreOnRun: policy?.allowSnapshotRestoreOnRun ?? true,
       queuedFileAttachments: Array.isArray(policy?.queuedFileAttachments)
         ? policy.queuedFileAttachments.filter(
             (entry): entry is UserFileAttachment =>
@@ -2191,19 +2214,20 @@ class GenerationManager {
     }
 
     // Create generation record
+    const executionPolicy = buildExecutionPolicy({
+      allowedIntegrations: params.allowedIntegrations,
+      autoApprove: autoApprove ?? conv.autoApprove,
+      sandboxProvider: params.sandboxProvider,
+      selectedPlatformSkillSlugs,
+      queuedFileAttachments: fileAttachments,
+    });
     const lifecycle = createGenerationLifecycle();
     const [genRecord] = await db
       .insert(generation)
       .values({
         conversationId: conv.id,
         status: "running",
-        executionPolicy: buildExecutionPolicy({
-          allowedIntegrations: params.allowedIntegrations,
-          autoApprove: autoApprove ?? conv.autoApprove,
-          sandboxProvider: params.sandboxProvider,
-          selectedPlatformSkillSlugs,
-          queuedFileAttachments: fileAttachments,
-        }),
+        executionPolicy,
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
@@ -2283,6 +2307,7 @@ class GenerationManager {
       conversationId: conv.id,
       userId,
       status: "running",
+      executionPolicy,
       deadlineAt: lifecycle.deadlineAt,
       lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
       recoveryAttempts: lifecycle.recoveryAttempts,
@@ -2440,21 +2465,22 @@ class GenerationManager {
       });
     }
 
+    const executionPolicy = buildExecutionPolicy({
+      allowedIntegrations: params.allowedIntegrations,
+      allowedCustomIntegrations: params.allowedCustomIntegrations,
+      allowedSkillSlugs: normalizedAllowedSkillSlugs,
+      autoApprove: params.autoApprove,
+      sandboxProvider: params.sandboxProvider,
+      selectedPlatformSkillSlugs,
+      queuedFileAttachments: params.fileAttachments,
+    });
     const lifecycle = createGenerationLifecycle();
     const [genRecord] = await db
       .insert(generation)
       .values({
         conversationId: newConv.id,
         status: "running",
-        executionPolicy: buildExecutionPolicy({
-          allowedIntegrations: params.allowedIntegrations,
-          allowedCustomIntegrations: params.allowedCustomIntegrations,
-          allowedSkillSlugs: normalizedAllowedSkillSlugs,
-          autoApprove: params.autoApprove,
-          sandboxProvider: params.sandboxProvider,
-          selectedPlatformSkillSlugs,
-          queuedFileAttachments: params.fileAttachments,
-        }),
+        executionPolicy,
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
@@ -2504,6 +2530,7 @@ class GenerationManager {
       conversationId: newConv.id,
       userId,
       status: "running",
+      executionPolicy,
       deadlineAt: lifecycle.deadlineAt,
       lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
       recoveryAttempts: lifecycle.recoveryAttempts,
@@ -2676,6 +2703,7 @@ class GenerationManager {
       conversationId: genRecord.conversationId,
       userId: genRecord.conversation.userId,
       status: genRecord.status,
+      executionPolicy,
       deadlineAt: resolveGenerationDeadlineAt({
         startedAt: genRecord.startedAt,
         deadlineAt: genRecord.deadlineAt,
@@ -2708,6 +2736,7 @@ class GenerationManager {
       pendingMessageParts: new Map(),
       backendType: "opencode",
       sandboxProviderOverride: executionPolicy.sandboxProvider,
+      coworkerId: linkedCoworkerRun?.coworkerId,
       coworkerRunId: linkedCoworkerRun?.id,
       allowedIntegrations:
         executionPolicy.allowedIntegrations ??
@@ -3233,12 +3262,23 @@ class GenerationManager {
         ? "awaiting_auth"
         : "awaiting_approval"
       : "running";
+    let nextExecutionPolicy = this.getExecutionPolicyFromRecord(
+      genRecord,
+      genRecord.conversation.autoApprove,
+    );
+    if (genRecord.status === "paused") {
+      nextExecutionPolicy = {
+        ...nextExecutionPolicy,
+        allowSnapshotRestoreOnRun: true,
+      };
+    }
 
     await db
       .update(generation)
       .set({
         status: nextStatus,
         isPaused: false,
+        executionPolicy: nextExecutionPolicy,
       })
       .where(eq(generation.id, generationId));
 
@@ -3349,6 +3389,7 @@ class GenerationManager {
         await this.finalizeDetachedGenerationError({
           generationId,
           conversationId: genRecord.conversationId,
+          runtimeId: genRecord.runtimeId ?? undefined,
           coworkerRunId: linkedCoworkerRun?.id,
           message: "Approval request expired before the run could continue.",
           completionReason: "approval_timeout",
@@ -3394,6 +3435,7 @@ class GenerationManager {
       await this.finalizeDetachedGenerationError({
         generationId,
         conversationId: genRecord.conversationId,
+        runtimeId: genRecord.runtimeId ?? undefined,
         coworkerRunId: linkedCoworkerRun?.id,
         message: "Authentication request expired before the run could continue.",
         completionReason: "auth_timeout",
@@ -3415,9 +3457,6 @@ class GenerationManager {
       },
     });
     if (!genRecord) {
-      return;
-    }
-    if (!genRecord.conversation || genRecord.conversation.type !== "chat") {
       return;
     }
     if (genRecord.status !== "running" || genRecord.sandboxId || genRecord.completedAt) {
@@ -3445,6 +3484,22 @@ class GenerationManager {
       conversationId: genRecord.conversation.id,
       userId,
     });
+
+    if (!this.activeGenerations.has(generationId)) {
+      const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+        where: eq(coworkerRun.generationId, generationId),
+        columns: { id: true },
+      });
+      await this.finalizeDetachedGenerationError({
+        generationId: genRecord.id,
+        conversationId: genRecord.conversation.id,
+        runtimeId: genRecord.runtimeId ?? undefined,
+        coworkerRunId: linkedCoworkerRun?.id,
+        message: "Agent preparation timed out before the runtime became ready.",
+        completionReason: "bootstrap_timeout",
+      });
+      return;
+    }
 
     const pushUrl = process.env.KUMA_PUSH_URL?.trim();
     if (!pushUrl) {
@@ -4261,7 +4316,7 @@ class GenerationManager {
               sandboxProviderOverride: ctx.sandboxProviderOverride,
               title: conv?.title || "Conversation",
               replayHistory: hasExistingMessages,
-              allowSnapshotRestore: true,
+              allowSnapshotRestore: ctx.executionPolicy.allowSnapshotRestoreOnRun !== false,
               telemetry: {
                 source: "generation-manager",
                 traceId: ctx.traceId,
@@ -4381,6 +4436,7 @@ class GenerationManager {
           status: "active",
         });
       }
+      await this.setSnapshotRestoreAllowance(ctx, false);
 
       // Record marker time for file collection and store sandbox reference
       ctx.generationMarkerTime = Date.now();
@@ -5082,6 +5138,12 @@ class GenerationManager {
     } catch (error) {
       clearPromptTimeout?.();
       let promptTimeoutError: Error | null = null;
+      if (isBootstrapTimeoutError(error)) {
+        this.setCompletionReason(ctx, "bootstrap_timeout");
+        ctx.errorMessage = error instanceof Error ? error.message : formatErrorMessage(error);
+        await this.finishGeneration(ctx, "error");
+        return;
+      }
       if (promptTimeoutTriggered) {
         this.setCompletionReason(ctx, "run_deadline");
         ctx.errorMessage =
@@ -5092,6 +5154,10 @@ class GenerationManager {
       }
       console.error("[GenerationManager] Error:", error);
       const runtimeFailure = await this.resolveRuntimeFailure(ctx, client);
+      if (runtimeFailure === "recoverable_live_runtime") {
+        this.scheduleRecoveryReattach(ctx);
+        return;
+      }
       if (runtimeFailure === "waiting_approval" || runtimeFailure === "waiting_auth") {
         return;
       }
@@ -6844,12 +6910,22 @@ class GenerationManager {
         })
         .where(eq(generation.id, ctx.id));
 
-      // Update conversation status
+      const assistantMessagePersisted = Boolean(messageId);
+
+      // Update conversation status and persisted usage counters
       await db
         .update(conversation)
         .set({
           generationStatus:
             status === "completed" ? "complete" : status === "error" ? "error" : "idle",
+          ...(assistantMessagePersisted
+            ? {
+                usageInputTokens: sql`${conversation.usageInputTokens} + ${ctx.usage.inputTokens}`,
+                usageOutputTokens: sql`${conversation.usageOutputTokens} + ${ctx.usage.outputTokens}`,
+                usageTotalTokens: sql`${conversation.usageTotalTokens} + ${ctx.usage.inputTokens + ctx.usage.outputTokens}`,
+                usageAssistantMessageCount: sql`${conversation.usageAssistantMessageCount} + 1`,
+              }
+            : {}),
         })
         .where(eq(conversation.id, ctx.conversationId));
 
@@ -6860,7 +6936,9 @@ class GenerationManager {
         });
       }
 
-      await this.saveSessionSnapshotIfPossible(ctx, `finish:${status}`);
+      if (status === "completed") {
+        await this.saveSessionSnapshotIfPossible(ctx, `finish:${status}`);
+      }
 
       if (status === "completed") {
         try {

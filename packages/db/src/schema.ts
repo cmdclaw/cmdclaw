@@ -383,6 +383,11 @@ export const conversation = pgTable(
     autoApprove: boolean("auto_approve").default(false).notNull(),
     // Number of messages this user has acknowledged in the sidebar
     seenMessageCount: integer("seen_message_count").default(0).notNull(),
+    // Conversation-level usage counters persisted for direct querying.
+    usageInputTokens: integer("usage_input_tokens").default(0).notNull(),
+    usageOutputTokens: integer("usage_output_tokens").default(0).notNull(),
+    usageTotalTokens: integer("usage_total_tokens").default(0).notNull(),
+    usageAssistantMessageCount: integer("usage_assistant_message_count").default(0).notNull(),
     isPinned: boolean("is_pinned").default(false).notNull(),
     isShared: boolean("is_shared").default(false).notNull(),
     shareToken: text("share_token"),
@@ -607,6 +612,7 @@ export type GenerationExecutionPolicy = {
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
+  allowSnapshotRestoreOnRun?: boolean;
   queuedFileAttachments?: Array<{
     name: string;
     mimeType: string;

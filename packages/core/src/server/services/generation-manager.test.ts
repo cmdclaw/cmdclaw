@@ -535,6 +535,7 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
     conversationId: "conv-1",
     userId: "user-1",
     status: "running",
+    executionPolicy: { allowSnapshotRestoreOnRun: true },
     deadlineAt: new Date(Date.now() + 15 * 60 * 1000),
     lastRuntimeEventAt: new Date(),
     recoveryAttempts: 0,
@@ -1997,6 +1998,59 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("rehydrates coworker ids for queued coworker generations", async () => {
+    const mgr = asTestManager();
+    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-coworker-queued",
+      status: "running",
+      conversationId: "conv-coworker-queued",
+      conversation: {
+        id: "conv-coworker-queued",
+        userId: "user-1",
+        autoApprove: false,
+        model: "anthropic/claude-sonnet-4-6",
+        type: "coworker",
+      },
+      contentParts: [],
+      pendingApproval: null,
+      pendingAuth: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      startedAt: new Date(),
+      executionPolicy: {
+        autoApprove: false,
+      },
+    });
+    messageFindFirstMock.mockResolvedValueOnce({
+      content: "run the coworker",
+    });
+    coworkerRunFindFirstMock.mockResolvedValueOnce({
+      id: "wf-run-1",
+      coworkerId: "wf-1",
+      triggerPayload: null,
+    });
+    coworkerFindFirstMock.mockResolvedValueOnce({
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      allowedSkillSlugs: [],
+      prompt: "prompt",
+      promptDo: null,
+      promptDont: null,
+      autoApprove: false,
+    });
+
+    await generationManager.runQueuedGeneration("gen-coworker-queued");
+
+    expect(runSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coworkerId: "wf-1",
+        coworkerRunId: "wf-run-1",
+      }),
+    );
+  });
+
   it("skips queued generation rehydration when the runtime has been rebound to another generation", async () => {
     const mgr = asTestManager();
     const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
@@ -2047,6 +2101,8 @@ describe("generationManager transitions", () => {
 
   it("reports stuck preparing generations and pushes to kuma", async () => {
     process.env.KUMA_PUSH_URL = "https://kuma.example/push/abc";
+    const mgr = asTestManager();
+    mgr.activeGenerations.set("gen-stuck", createCtx({ id: "gen-stuck" }));
     generationFindFirstMock.mockResolvedValueOnce({
       id: "gen-stuck",
       status: "running",
@@ -2080,6 +2136,37 @@ describe("generationManager transitions", () => {
     expect(calledUrl).toContain("status=down");
     expect(calledUrl).toContain("conversation%3Dconv-stuck");
     expect(calledUrl).toContain("user%3Duser-1");
+  });
+
+  it("finalizes detached preparing generations as bootstrap timeouts", async () => {
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-detached-stuck",
+      status: "running",
+      sandboxId: null,
+      runtimeId: "runtime-1",
+      completedAt: null,
+      startedAt: new Date(Date.now() - 6 * 60 * 1000),
+      conversationId: "conv-detached-stuck",
+      conversation: {
+        id: "conv-detached-stuck",
+        userId: "user-1",
+        type: "coworker",
+      },
+    });
+    coworkerRunFindFirstMock.mockResolvedValueOnce({ id: "wf-run-1" });
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await generationManager.processPreparingStuckCheck("gen-detached-stuck");
+
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "error",
+        completionReason: "bootstrap_timeout",
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects startGeneration when an active generation already exists in DB", async () => {
@@ -2499,6 +2586,15 @@ describe("generationManager transitions", () => {
     await mgr.finishGeneration(ctx, "completed");
 
     expect(ctx.status).toBe("completed");
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationStatus: "complete",
+        usageInputTokens: expect.anything(),
+        usageOutputTokens: expect.anything(),
+        usageTotalTokens: expect.anything(),
+        usageAssistantMessageCount: expect.anything(),
+      }),
+    );
     expect(publishGenerationStreamEventMock).toHaveBeenCalled();
     expect(mgr.activeGenerations.has(ctx.id)).toBe(false);
   });
@@ -3036,6 +3132,145 @@ describe("generationManager transitions", () => {
     expect(vi.mocked(uploadSandboxFile)).toHaveBeenCalled();
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
+  });
+
+  it("disables snapshot restore for active reattach attempts once a run has already started", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-opencode-active",
+      title: "Conversation",
+      opencodeSessionId: "session-existing",
+    });
+
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock: vi.fn().mockResolvedValue(undefined),
+        subscribeMock: vi.fn().mockResolvedValue({
+          stream: asAsyncIterable([
+            { type: "server.connected", properties: {} },
+            { type: "session.idle", properties: {} },
+          ]),
+        }),
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({
+      type: "none",
+    });
+
+    await mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-opencode-active",
+        conversationId: "conv-opencode-active",
+        executionPolicy: { allowSnapshotRestoreOnRun: false },
+      }),
+    );
+
+    expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        allowSnapshotRestore: false,
+      }),
+    );
+  });
+
+  it("finalizes bootstrap timeouts without falling into generic runtime recovery", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(getOrCreateConversationRuntime).mockRejectedValueOnce(
+      new Error("Agent preparation timed out after 45 seconds."),
+    );
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-bootstrap",
+      title: "Conversation",
+    });
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    const resolveRuntimeFailureSpy = vi.spyOn(mgr as never, "resolveRuntimeFailure");
+
+    const ctx = createCtx({
+      id: "gen-bootstrap",
+      conversationId: "conv-bootstrap",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(ctx.completionReason).toBe("bootstrap_timeout");
+    expect(ctx.errorMessage).toBe("Agent preparation timed out after 45 seconds.");
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+    expect(resolveRuntimeFailureSpy).not.toHaveBeenCalled();
+  });
+
+  it("schedules a one-shot recovery reattach instead of finalizing healthy live runtimes", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-recoverable",
+      title: "Conversation",
+    });
+
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock: vi.fn().mockRejectedValue(new Error("stream disconnected")),
+        subscribeMock: vi.fn().mockResolvedValue({
+          stream: asAsyncIterable([{ type: "server.connected", properties: {} }]),
+        }),
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    const resolveRuntimeFailureSpy = vi
+      .spyOn(mgr as never, "resolveRuntimeFailure")
+      .mockResolvedValue("recoverable_live_runtime");
+    const scheduleRecoverySpy = vi
+      .spyOn(mgr as never, "scheduleRecoveryReattach")
+      .mockImplementation(() => undefined);
+
+    await mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-recoverable",
+        conversationId: "conv-recoverable",
+      }),
+    );
+
+    expect(resolveRuntimeFailureSpy).toHaveBeenCalled();
+    expect(scheduleRecoverySpy).toHaveBeenCalled();
+    expect(finishSpy).not.toHaveBeenCalledWith(expect.anything(), "error");
   });
 
   it("routes coworker builder prompts to the builder agent and keeps builder context in system", async () => {
