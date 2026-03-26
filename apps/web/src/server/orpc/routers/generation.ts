@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { detectMessageLanguage } from "@/server/utils/detect-message-language";
 import { protectedProcedure } from "../middleware";
+import { requireActiveWorkspaceAccess } from "../workspace-access";
 
 // Schema for generation events (same structure as GenerationEvent type)
 const generationEventPayloadSchema = z.discriminatedUnion("type", [
@@ -246,6 +247,41 @@ const generationEventSchema = z.intersection(
   generationEventPayloadSchema,
 );
 
+async function requireConversationAccessInActiveWorkspace(userId: string, conversationId: string) {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(userId);
+  const conv = await db.query.conversation.findFirst({
+    where: eq(conversation.id, conversationId),
+  });
+
+  if (!conv || conv.userId !== userId || conv.workspaceId !== workspaceId) {
+    throw new ORPCError("NOT_FOUND", { message: "Conversation not found" });
+  }
+
+  return { conversation: conv, workspaceId };
+}
+
+async function requireGenerationAccessInActiveWorkspace(userId: string, generationId: string) {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(userId);
+  const genRecord = await db.query.generation.findFirst({
+    where: eq(generation.id, generationId),
+    with: { conversation: true },
+  });
+
+  if (
+    !genRecord ||
+    genRecord.conversation.userId !== userId ||
+    genRecord.conversation.workspaceId !== workspaceId
+  ) {
+    throw new ORPCError("NOT_FOUND", { message: "Generation not found" });
+  }
+
+  return { generation: genRecord, workspaceId };
+}
+
 // Start a new generation (returns immediately with generationId)
 const modelReferenceSchema = z
   .string()
@@ -297,6 +333,11 @@ const startGeneration = protectedProcedure
     };
 
     try {
+      if (input.conversationId) {
+        await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+      } else {
+        await requireActiveWorkspaceAccess(context.user.id);
+      }
       const result = await generationManager.startGeneration({
         conversationId: input.conversationId,
         content: input.content,
@@ -373,6 +414,7 @@ const enqueueConversationMessage = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
     return generationManager.enqueueConversationMessage({
       conversationId: input.conversationId,
       userId: context.user.id,
@@ -410,6 +452,7 @@ const listConversationQueuedMessages = protectedProcedure
     ),
   )
   .handler(async ({ input, context }) => {
+    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
     let queued;
     try {
       queued = await generationManager.listConversationQueuedMessages(
@@ -441,6 +484,7 @@ const removeConversationQueuedMessage = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
     const success = await generationManager.removeConversationQueuedMessage(
       input.queuedMessageId,
       input.conversationId,
@@ -489,6 +533,7 @@ const subscribeGeneration = protectedProcedure
   )
   .output(eventIterator(generationEventSchema))
   .handler(async function* ({ input, context }) {
+    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const streamId = createTraceId();
     const openedAt = Date.now();
     const logContext = {
@@ -536,6 +581,7 @@ const cancelGeneration = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const success = await generationManager.cancelGeneration(input.generationId, context.user.id);
     return { success };
   });
@@ -549,6 +595,7 @@ const resumeGeneration = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const success = await generationManager.resumeGeneration(input.generationId, context.user.id);
     return { success };
   });
@@ -565,6 +612,7 @@ const submitApproval = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const success = await generationManager.submitApproval(
       input.generationId,
       input.toolUseId,
@@ -586,6 +634,7 @@ const submitAuthResult = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const success = await generationManager.submitAuthResult(
       input.generationId,
       input.integration,
@@ -631,18 +680,13 @@ const getGenerationStatus = protectedProcedure
       .nullable(),
   )
   .handler(async ({ input, context }) => {
-    // First check if user has access
-    const genRecord = await db.query.generation.findFirst({
-      where: eq(generation.id, input.generationId),
-      with: { conversation: true },
-    });
-
-    if (!genRecord) {
-      return null;
-    }
-
-    if (genRecord.conversation.userId !== context.user.id) {
-      throw new Error("Access denied");
+    try {
+      await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+    } catch (error) {
+      if (error instanceof ORPCError && error.code === "NOT_FOUND") {
+        return null;
+      }
+      throw error;
     }
 
     const status = await generationManager.getGenerationStatus(input.generationId);
@@ -675,22 +719,21 @@ const getActiveGeneration = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    // Check conversation access
-    const conv = await db.query.conversation.findFirst({
-      where: eq(conversation.id, input.conversationId),
-    });
-
-    if (!conv) {
-      return {
-        generationId: null,
-        startedAt: null,
-        errorMessage: null,
-        status: null,
-      };
-    }
-
-    if (conv.userId !== context.user.id) {
-      throw new Error("Access denied");
+    let conv;
+    try {
+      conv = (
+        await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId)
+      ).conversation;
+    } catch (error) {
+      if (error instanceof ORPCError && error.code === "NOT_FOUND") {
+        return {
+          generationId: null,
+          startedAt: null,
+          errorMessage: null,
+          status: null,
+        };
+      }
+      throw error;
     }
 
     let startedAt: string | null = null;

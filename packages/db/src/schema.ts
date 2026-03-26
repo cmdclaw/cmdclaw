@@ -918,6 +918,7 @@ export const coworker = pgTable(
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "set null" }),
     status: coworkerStatusEnum("status").default("on").notNull(),
     triggerType: text("trigger_type").notNull(),
     prompt: text("prompt").notNull(),
@@ -938,6 +939,7 @@ export const coworker = pgTable(
     builderConversationId: text("builder_conversation_id").references(() => conversation.id, {
       onDelete: "set null",
     }),
+    sharedAt: timestamp("shared_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -946,7 +948,9 @@ export const coworker = pgTable(
   },
   (table) => [
     index("coworker_owner_id_idx").on(table.ownerId),
+    index("coworker_workspace_id_idx").on(table.workspaceId),
     index("coworker_status_idx").on(table.status),
+    index("coworker_shared_at_idx").on(table.sharedAt),
     uniqueIndex("coworker_username_idx").on(table.username),
   ],
 );
@@ -960,6 +964,8 @@ export const coworkerRun = pgTable(
     coworkerId: text("coworker_id")
       .notNull()
       .references(() => coworker.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id").references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
     status: coworkerRunStatusEnum("status").default("running").notNull(),
     triggerPayload: jsonb("trigger_payload").notNull(),
     generationId: text("generation_id").references(() => generation.id, {
@@ -971,6 +977,8 @@ export const coworkerRun = pgTable(
   },
   (table) => [
     index("coworker_run_coworker_id_idx").on(table.coworkerId),
+    index("coworker_run_owner_id_idx").on(table.ownerId),
+    index("coworker_run_workspace_id_idx").on(table.workspaceId),
     index("coworker_run_status_idx").on(table.status),
     index("coworker_run_started_at_idx").on(table.startedAt),
   ],
@@ -1294,6 +1302,10 @@ export const conversationQueuedMessageRelations = relations(
 
 export const coworkerRelations = relations(coworker, ({ one, many }) => ({
   owner: one(user, { fields: [coworker.ownerId], references: [user.id] }),
+  workspace: one(workspace, {
+    fields: [coworker.workspaceId],
+    references: [workspace.id],
+  }),
   runs: many(coworkerRun),
   documents: many(coworkerDocument),
   emailAliases: many(coworkerEmailAlias),
@@ -1303,6 +1315,14 @@ export const coworkerRunRelations = relations(coworkerRun, ({ one, many }) => ({
   coworker: one(coworker, {
     fields: [coworkerRun.coworkerId],
     references: [coworker.id],
+  }),
+  owner: one(user, {
+    fields: [coworkerRun.ownerId],
+    references: [user.id],
+  }),
+  workspace: one(workspace, {
+    fields: [coworkerRun.workspaceId],
+    references: [workspace.id],
   }),
   generation: one(generation, {
     fields: [coworkerRun.generationId],

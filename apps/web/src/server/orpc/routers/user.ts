@@ -62,8 +62,10 @@ const forwarding = protectedProcedure.handler(async ({ context }) => {
     columns: {
       id: true,
       defaultForwardedCoworkerId: true,
+      activeWorkspaceId: true,
     },
   });
+  const workspace = await ensureWorkspaceForUser(context.user.id, dbUser?.activeWorkspaceId);
 
   const receivingDomain = process.env.RESEND_RECEIVING_DOMAIN?.trim().toLowerCase() ?? null;
   const userForwardingAddress = receivingDomain
@@ -73,6 +75,7 @@ const forwarding = protectedProcedure.handler(async ({ context }) => {
   const coworkers = await context.db.query.coworker.findMany({
     where: and(
       eq(coworker.ownerId, context.user.id),
+      eq(coworker.workspaceId, workspace.id),
       eq(coworker.triggerType, EMAIL_FORWARDED_TRIGGER_TYPE),
     ),
     columns: {
@@ -99,11 +102,17 @@ const setDefaultForwardedCoworker = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const dbUser = await context.db.query.user.findFirst({
+      where: eq(user.id, context.user.id),
+      columns: { activeWorkspaceId: true },
+    });
+    const workspace = await ensureWorkspaceForUser(context.user.id, dbUser?.activeWorkspaceId);
     if (input.coworkerId) {
       const owned = await context.db.query.coworker.findFirst({
         where: and(
           eq(coworker.id, input.coworkerId),
           eq(coworker.ownerId, context.user.id),
+          eq(coworker.workspaceId, workspace.id),
           eq(coworker.triggerType, EMAIL_FORWARDED_TRIGGER_TYPE),
         ),
         columns: { id: true },

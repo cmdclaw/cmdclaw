@@ -69,6 +69,13 @@ vi.mock("@cmdclaw/core/server/utils/observability", () => ({
   logServerEvent: vi.fn(),
 }));
 
+vi.mock("../workspace-access", () => ({
+  requireActiveWorkspaceAccess: vi.fn(async () => ({
+    workspace: { id: "ws-1" },
+    membership: { role: "member" },
+  })),
+}));
+
 import { generationRouter } from "./generation";
 
 const context = { user: { id: "user-1" } };
@@ -80,6 +87,20 @@ const generationRouterAny = generationRouter as unknown as Record<
 describe("generationRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      workspaceId: "ws-1",
+      generationStatus: "idle",
+      currentGenerationId: null,
+    });
+    generationFindFirstMock.mockResolvedValue({
+      id: "gen-1",
+      conversation: {
+        userId: "user-1",
+        workspaceId: "ws-1",
+      },
+    });
     generationManagerMock.cancelGeneration.mockResolvedValue(true);
     generationManagerMock.submitApproval.mockResolvedValue(true);
     generationManagerMock.submitAuthResult.mockResolvedValue(true);
@@ -108,7 +129,7 @@ describe("generationRouter", () => {
   it("enforces generation ownership in getGenerationStatus", async () => {
     generationFindFirstMock.mockResolvedValue({
       id: "gen-1",
-      conversation: { userId: "another-user" },
+      conversation: { userId: "another-user", workspaceId: "ws-1" },
     });
 
     await expect(
@@ -116,13 +137,14 @@ describe("generationRouter", () => {
         input: { generationId: "gen-1" },
         context,
       }),
-    ).rejects.toThrow("Access denied");
+    ).resolves.toBeNull();
   });
 
   it("enforces conversation ownership in getActiveGeneration", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
       userId: "another-user",
+      workspaceId: "ws-1",
       generationStatus: "idle",
       currentGenerationId: null,
     });
@@ -132,7 +154,12 @@ describe("generationRouter", () => {
         input: { conversationId: "conv-1" },
         context,
       }),
-    ).rejects.toThrow("Access denied");
+    ).resolves.toEqual({
+      generationId: null,
+      startedAt: null,
+      errorMessage: null,
+      status: null,
+    });
   });
 
   it("returns empty active-generation payload when conversation is missing", async () => {
@@ -155,6 +182,7 @@ describe("generationRouter", () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
       userId: "user-1",
+      workspaceId: "ws-1",
       generationStatus: "generating",
       currentGenerationId: "gen-db",
     });
@@ -180,6 +208,7 @@ describe("generationRouter", () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
       userId: "user-1",
+      workspaceId: "ws-1",
       generationStatus: "error",
       currentGenerationId: "gen-db",
     });
