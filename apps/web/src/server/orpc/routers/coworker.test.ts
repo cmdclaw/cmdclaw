@@ -20,6 +20,7 @@ const {
   applyCoworkerEditMock,
   uploadCoworkerDocumentMock,
   deleteCoworkerDocumentMock,
+  downloadFromS3Mock,
 } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn(),
   syncCoworkerScheduleJobMock: vi.fn(),
@@ -29,6 +30,7 @@ const {
   applyCoworkerEditMock: vi.fn(),
   uploadCoworkerDocumentMock: vi.fn(),
   deleteCoworkerDocumentMock: vi.fn(),
+  downloadFromS3Mock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -62,6 +64,10 @@ vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
 vi.mock("@/server/services/coworker-document", () => ({
   deleteCoworkerDocument: deleteCoworkerDocumentMock,
   uploadCoworkerDocument: uploadCoworkerDocumentMock,
+}));
+
+vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+  downloadFromS3: downloadFromS3Mock,
 }));
 
 vi.mock("../workspace-access", () => ({
@@ -214,6 +220,7 @@ describe("coworkerRouter", () => {
       success: true,
       filename: "brief.pdf",
     });
+    downloadFromS3Mock.mockResolvedValue(Buffer.from("hello world"));
   });
 
   it("creates a coworker and syncs schedule on happy path", async () => {
@@ -1256,6 +1263,153 @@ describe("coworkerRouter", () => {
     expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({ autoApprove: false }),
     );
+  });
+
+  it("exports a coworker definition with embedded documents", async () => {
+    const context = createContext();
+    const createdAt = new Date("2026-03-04T12:00:00.000Z");
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      name: "Inbox triage",
+      description: "Sort and summarize inbound work.",
+      username: "inbox-triage",
+      status: "on",
+      triggerType: "manual",
+      prompt: "Do the work",
+      model: DEFAULT_MODEL,
+      authSource: "shared",
+      promptDo: "Do the work carefully",
+      promptDont: "Do not spam",
+      autoApprove: true,
+      toolAccessMode: "selected",
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: ["custom-1"],
+      allowedSkillSlugs: ["skill-a"],
+      schedule: null,
+      builderConversationId: null,
+      sharedAt: null,
+    });
+    context.db.query.coworkerDocument.findMany.mockResolvedValue([
+      {
+        id: "doc-1",
+        coworkerId: "wf-1",
+        filename: "brief.txt",
+        mimeType: "text/plain",
+        description: "Brief",
+        storageKey: "s3/doc-1",
+        createdAt,
+      },
+    ]);
+
+    const result = await coworkerRouterAny.exportDefinition({
+      input: { id: "wf-1" },
+      context,
+    });
+
+    expect(downloadFromS3Mock).toHaveBeenCalledWith("s3/doc-1");
+    expect(result).toMatchObject({
+      version: 1,
+      coworker: {
+        name: "Inbox triage",
+        username: "inbox-triage",
+        toolAccessMode: "selected",
+        allowedIntegrations: ["slack"],
+        allowedCustomIntegrations: ["custom-1"],
+        allowedSkillSlugs: ["skill-a"],
+      },
+      documents: [
+        {
+          filename: "brief.txt",
+          mimeType: "text/plain",
+          description: "Brief",
+          contentBase64: Buffer.from("hello world").toString("base64"),
+        },
+      ],
+    });
+  });
+
+  it("imports a coworker definition in the off state and uploads documents", async () => {
+    const context = createContext();
+    context.mocks.insertReturningMock.mockResolvedValue([
+      {
+        id: "wf-imported",
+        name: "Imported coworker",
+        description: "Imported description",
+        username: "imported-coworker",
+        status: "off",
+      },
+    ]);
+
+    const result = await coworkerRouterAny.importDefinition({
+      input: {
+        definitionJson: JSON.stringify({
+          version: 1,
+          exportedAt: "2026-03-26T10:00:00.000Z",
+          coworker: {
+            name: "Imported coworker",
+            description: "Imported description",
+            username: "imported-coworker",
+            status: "on",
+            triggerType: "schedule",
+            prompt: "Run every day",
+            model: DEFAULT_MODEL,
+            authSource: "shared",
+            promptDo: "Do it",
+            promptDont: "Do not skip",
+            autoApprove: true,
+            toolAccessMode: "selected",
+            allowedIntegrations: ["slack"],
+            allowedCustomIntegrations: ["custom-1"],
+            allowedSkillSlugs: ["skill-a"],
+            schedule: {
+              type: "daily",
+              time: "09:00",
+              timezone: "UTC",
+            },
+          },
+          documents: [
+            {
+              filename: "brief.txt",
+              mimeType: "text/plain",
+              description: "Brief",
+              contentBase64: "aGVsbG8=",
+            },
+          ],
+        }),
+      },
+      context,
+    });
+
+    expect(result).toEqual({
+      id: "wf-imported",
+      name: "Imported coworker",
+      description: "Imported description",
+      username: "imported-coworker",
+      status: "off",
+    });
+    expect(context.mocks.insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Imported coworker",
+        status: "off",
+        triggerType: "schedule",
+        toolAccessMode: "selected",
+        allowedIntegrations: ["slack"],
+        allowedCustomIntegrations: ["custom-1"],
+        allowedSkillSlugs: ["skill-a"],
+      }),
+    );
+    expect(uploadCoworkerDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coworkerId: expect.any(String),
+        filename: "brief.txt",
+        mimeType: "text/plain",
+        contentBase64: "aGVsbG8=",
+        description: "Brief",
+      }),
+    );
+    expect(syncCoworkerScheduleJobMock).not.toHaveBeenCalled();
   });
 
   it("returns INTERNAL_SERVER_ERROR when scheduler cleanup fails during delete", async () => {

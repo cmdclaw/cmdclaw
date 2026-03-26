@@ -3,11 +3,11 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
-import { Download, Eye, Loader2, PenLine, Play, Power, Share2, Trash2 } from "lucide-react";
+import { Download, Eye, Loader2, PenLine, Play, Power, Share2, Trash2, Upload } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { ModelSelector } from "@/components/chat/model-selector";
@@ -55,6 +55,8 @@ import {
   useCreateCoworker,
   useCoworkerList,
   useDeleteCoworker,
+  useExportCoworkerDefinition,
+  useImportCoworkerDefinition,
   useImportSharedCoworker,
   useIntegrationList,
   useProviderAuthStatus,
@@ -148,6 +150,29 @@ function getCoworkerDisplayName(name?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : "New Coworker";
 }
 
+function getCoworkerExportFilename(coworker: Pick<CoworkerItem, "name" | "username">) {
+  const baseLabel = coworker.username?.trim() || coworker.name?.trim() || "coworker";
+  const slug = baseLabel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `${slug || "coworker"}.json`;
+}
+
+function downloadCoworkerDefinition(filename: string, json: string) {
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function buildToolSummary(
   coworker: Pick<CoworkerItem, "toolAccessMode" | "allowedIntegrations" | "allowedSkillSlugs">,
   connectedIntegrationTypes: IntegrationType[],
@@ -180,11 +205,13 @@ function CoworkerCard({
   isRunning,
   isUpdatingStatus,
   isUpdatingShare,
+  isExporting,
   isDeleting,
   onRun,
   onOpen,
   onToggleStatus,
   onToggleShare,
+  onExport,
   onDelete,
 }: {
   coworker: CoworkerItem;
@@ -192,11 +219,13 @@ function CoworkerCard({
   isRunning: boolean;
   isUpdatingStatus: boolean;
   isUpdatingShare: boolean;
+  isExporting: boolean;
   isDeleting: boolean;
   onRun: (coworker: CoworkerItem) => void;
   onOpen: (id: string) => void;
   onToggleStatus: (coworker: CoworkerItem) => void;
   onToggleShare: (coworker: CoworkerItem) => void;
+  onExport: (coworker: CoworkerItem) => void;
   onDelete: (coworker: CoworkerItem) => void;
 }) {
   const isOn = coworker.status === "on";
@@ -226,6 +255,9 @@ function CoworkerCard({
   const handleToggleShare = useCallback(() => {
     onToggleShare(coworker);
   }, [coworker, onToggleShare]);
+  const handleExport = useCallback(() => {
+    onExport(coworker);
+  }, [coworker, onExport]);
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key !== "Enter" && e.key !== " ") {
@@ -365,6 +397,13 @@ function CoworkerCard({
         >
           <Share2 className="size-4" />
           {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={handleExport}
+          disabled={isExporting || isDeleting || isUpdatingStatus}
+        >
+          <Download className="size-4" />
+          Export as JSON
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
@@ -509,6 +548,8 @@ export default function CoworkersPage() {
   const deleteCoworker = useDeleteCoworker();
   const shareCoworker = useShareCoworker();
   const unshareCoworker = useUnshareCoworker();
+  const exportCoworkerDefinition = useExportCoworkerDefinition();
+  const importCoworkerDefinition = useImportCoworkerDefinition();
   const importSharedCoworker = useImportSharedCoworker();
   const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
@@ -522,6 +563,7 @@ export default function CoworkersPage() {
   const [runningCoworkerId, setRunningCoworkerId] = useState<string | null>(null);
   const [statusCoworkerId, setStatusCoworkerId] = useState<string | null>(null);
   const [shareCoworkerId, setShareCoworkerId] = useState<string | null>(null);
+  const [exportingCoworkerId, setExportingCoworkerId] = useState<string | null>(null);
   const [importingSharedCoworkerId, setImportingSharedCoworkerId] = useState<string | null>(null);
   const [deletingCoworkerId, setDeletingCoworkerId] = useState<string | null>(null);
   const [coworkerPendingDelete, setCoworkerPendingDelete] = useState<CoworkerItem | null>(null);
@@ -529,6 +571,7 @@ export default function CoworkersPage() {
   const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const [filterShared, setFilterShared] = useState(false);
   const handleToggleFilterShared = useCallback(() => setFilterShared((v) => !v), []);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const isRecordingRef = useRef(false);
   const coworkerList = useMemo(() => {
     const real = Array.isArray(coworkers) ? coworkers : [];
@@ -651,6 +694,55 @@ export default function CoworkersPage() {
       }
     },
     [importSharedCoworker, router],
+  );
+  const handleExportCoworker = useCallback(
+    async (coworker: CoworkerItem) => {
+      setExportingCoworkerId(coworker.id);
+      try {
+        const definition = await exportCoworkerDefinition.mutateAsync(coworker.id);
+        const json = JSON.stringify(definition, null, 2);
+        const filename = getCoworkerExportFilename(coworker);
+        downloadCoworkerDefinition(filename, json);
+        toast.success(`Exported ${filename}.`);
+      } catch (error) {
+        console.error("Failed to export coworker:", error);
+        toast.error("Failed to export coworker.");
+      } finally {
+        setExportingCoworkerId(null);
+      }
+    },
+    [exportCoworkerDefinition],
+  );
+  const handleImportCoworkerClick = useCallback(() => {
+    if (importCoworkerDefinition.isPending) {
+      return;
+    }
+    importFileInputRef.current?.click();
+  }, [importCoworkerDefinition.isPending]);
+  const handleImportCoworkerFileChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+
+      if (!file) {
+        return;
+      }
+      if (!file.name.toLowerCase().endsWith(".json")) {
+        toast.error("Select a .json coworker export.");
+        return;
+      }
+
+      try {
+        const definitionJson = await file.text();
+        const created = await importCoworkerDefinition.mutateAsync(definitionJson);
+        toast.success("Coworker imported in the off state.");
+        router.push(`/coworkers/${created.id}`);
+      } catch (error) {
+        console.error("Failed to import coworker definition:", error);
+        toast.error("Failed to import coworker.");
+      }
+    },
+    [importCoworkerDefinition, router],
   );
   const handleDeleteDialogChange = useCallback(
     (open: boolean) => {
@@ -852,6 +944,30 @@ export default function CoworkersPage() {
               />
             </div>
           )}
+          <div className="mt-4 flex justify-center">
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              aria-label="Import coworker JSON file"
+              onChange={handleImportCoworkerFileChange}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleImportCoworkerClick}
+              disabled={importCoworkerDefinition.isPending}
+            >
+              {importCoworkerDefinition.isPending ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Upload className="size-3" />
+              )}
+              Import coworker
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -899,11 +1015,13 @@ export default function CoworkersPage() {
                 isRunning={runningCoworkerId === wf.id}
                 isUpdatingStatus={statusCoworkerId === wf.id}
                 isUpdatingShare={shareCoworkerId === wf.id}
+                isExporting={exportingCoworkerId === wf.id}
                 isDeleting={deletingCoworkerId === wf.id}
                 onRun={handleRunCoworker}
                 onOpen={handleOpenCoworker}
                 onToggleStatus={handleToggleCoworkerStatus}
                 onToggleShare={handleToggleShare}
+                onExport={handleExportCoworker}
                 onDelete={handleDeleteRequest}
               />
             ))}

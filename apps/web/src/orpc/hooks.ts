@@ -866,6 +866,23 @@ export function useImportSharedCoworker() {
   });
 }
 
+export function useExportCoworkerDefinition() {
+  return useMutation({
+    mutationFn: (id: string) => client.coworker.exportDefinition({ id }),
+  });
+}
+
+export function useImportCoworkerDefinition() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (definitionJson: string) => client.coworker.importDefinition({ definitionJson }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
+
 export function useCoworkerRun(
   id: string | undefined,
   options?: {
