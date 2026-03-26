@@ -12,21 +12,29 @@ const {
   mockUpdateCoworkerMutateAsync,
   mockDeleteCoworkerMutateAsync,
   mockTriggerCoworkerMutateAsync,
+  mockExportCoworkerDefinitionMutateAsync,
+  mockImportCoworkerDefinitionMutateAsync,
   mockGetOrCreateBuilderConversation,
   mockStartGeneration,
   mockToastSuccess,
   mockToastError,
   mockRouterPush,
+  mockCreateObjectURL,
+  mockRevokeObjectURL,
 } = vi.hoisted(() => ({
   mockCreateCoworkerMutateAsync: vi.fn(),
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockDeleteCoworkerMutateAsync: vi.fn(),
   mockTriggerCoworkerMutateAsync: vi.fn(),
+  mockExportCoworkerDefinitionMutateAsync: vi.fn(),
+  mockImportCoworkerDefinitionMutateAsync: vi.fn(),
   mockGetOrCreateBuilderConversation: vi.fn(),
   mockStartGeneration: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
   mockRouterPush: vi.fn(),
+  mockCreateObjectURL: vi.fn(),
+  mockRevokeObjectURL: vi.fn(),
 }));
 
 const mockLocationAssign = vi.fn();
@@ -236,6 +244,11 @@ vi.mock("@/orpc/hooks", () => ({
   useTriggerCoworker: () => ({ mutateAsync: mockTriggerCoworkerMutateAsync }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
   useDeleteCoworker: () => ({ mutateAsync: mockDeleteCoworkerMutateAsync }),
+  useExportCoworkerDefinition: () => ({ mutateAsync: mockExportCoworkerDefinitionMutateAsync }),
+  useImportCoworkerDefinition: () => ({
+    mutateAsync: mockImportCoworkerDefinitionMutateAsync,
+    isPending: false,
+  }),
   useShareCoworker: () => ({ mutateAsync: vi.fn() }),
   useUnshareCoworker: () => ({ mutateAsync: vi.fn() }),
   useSharedCoworkerList: () => ({ data: [] }),
@@ -267,22 +280,57 @@ describe("CoworkersPage", () => {
     mockUpdateCoworkerMutateAsync.mockReset();
     mockDeleteCoworkerMutateAsync.mockReset();
     mockTriggerCoworkerMutateAsync.mockReset();
+    mockExportCoworkerDefinitionMutateAsync.mockReset();
+    mockImportCoworkerDefinitionMutateAsync.mockReset();
     mockGetOrCreateBuilderConversation.mockReset();
     mockStartGeneration.mockReset();
     mockToastSuccess.mockReset();
     mockToastError.mockReset();
     mockRouterPush.mockReset();
+    mockCreateObjectURL.mockReset();
+    mockRevokeObjectURL.mockReset();
     mockCreateCoworkerMutateAsync.mockResolvedValue({ id: "cw-new" });
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
     mockDeleteCoworkerMutateAsync.mockResolvedValue({ success: true });
     mockTriggerCoworkerMutateAsync.mockResolvedValue({ runId: "run-1" });
+    mockExportCoworkerDefinitionMutateAsync.mockResolvedValue({
+      version: 1,
+      exportedAt: "2026-03-26T10:00:00.000Z",
+      coworker: {
+        name: "Inbox triage",
+        description: "Sort and summarize inbound work.",
+        username: "inbox-triage",
+        status: "on",
+        triggerType: "manual",
+        prompt: "Do the work",
+        model: "openai/gpt-5.4",
+        authSource: "shared",
+        promptDo: null,
+        promptDont: null,
+        autoApprove: true,
+        toolAccessMode: "all",
+        allowedIntegrations: [],
+        allowedCustomIntegrations: [],
+        allowedSkillSlugs: [],
+        schedule: null,
+      },
+      documents: [],
+    });
+    mockImportCoworkerDefinitionMutateAsync.mockResolvedValue({ id: "cw-imported" });
     mockGetOrCreateBuilderConversation.mockResolvedValue({ conversationId: "conv-1" });
     mockStartGeneration.mockResolvedValue({ generationId: "gen-1" });
+    mockCreateObjectURL.mockReturnValue("blob:export-url");
     mockLocationAssign.mockReset();
     vi.stubGlobal("location", {
       ...window.location,
       assign: mockLocationAssign,
     });
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: mockCreateObjectURL,
+      revokeObjectURL: mockRevokeObjectURL,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   });
 
   it("turns off a coworker from the card context menu", async () => {
@@ -347,5 +395,41 @@ describe("CoworkersPage", () => {
       expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });
     });
     expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/runs/run-1");
+  });
+
+  it("exports a coworker definition from the card context menu", async () => {
+    render(<CoworkersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /export as json/i }));
+
+    await waitFor(() => {
+      expect(mockExportCoworkerDefinitionMutateAsync).toHaveBeenCalledWith("cw-1");
+    });
+    expect(mockCreateObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(mockRevokeObjectURL).toHaveBeenCalledWith("blob:export-url");
+    expect(mockToastSuccess).toHaveBeenCalledWith("Exported inbox-triage.json.");
+    const exportedBlob = mockCreateObjectURL.mock.calls[0]?.[0];
+    expect(exportedBlob).toBeInstanceOf(Blob);
+    expect((exportedBlob as Blob).type).toBe("application/json");
+  });
+
+  it("imports a coworker from a json file on the coworkers page", async () => {
+    render(<CoworkersPage />);
+
+    const file = new File(['{"version":1,"coworker":{"name":"Imported"}}'], "coworker.json", {
+      type: "application/json",
+    });
+
+    fireEvent.change(screen.getByLabelText(/import coworker json file/i), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(mockImportCoworkerDefinitionMutateAsync).toHaveBeenCalledWith(
+        '{"version":1,"coworker":{"name":"Imported"}}',
+      );
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith("Coworker imported in the off state.");
+    expect(mockRouterPush).toHaveBeenCalledWith("/coworkers/cw-imported");
   });
 });

@@ -128,6 +128,15 @@ function normalizeDescriptionInput(value: string | null | undefined): string | n
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeCoworkerInstructionInput(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 async function resolveCoworkerUsername(params: {
   database: unknown;
   coworkerId: string;
@@ -241,6 +250,37 @@ const scheduleSchema = z.discriminatedUnion("type", [
     timezone: z.string().default("UTC"),
   }),
 ]);
+
+const coworkerDefinitionDocumentSchema = z.object({
+  filename: z.string().min(1).max(512),
+  mimeType: z.string().min(1).max(255),
+  description: z.string().max(2000).nullish(),
+  contentBase64: z.string().min(1),
+});
+
+const coworkerDefinitionSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string().datetime(),
+  coworker: z.object({
+    name: z.string().max(128),
+    description: z.string().max(280).nullable(),
+    username: z.string().max(128).nullable(),
+    status: z.enum(["on", "off"]),
+    triggerType: triggerTypeSchema,
+    prompt: z.string().max(20000),
+    model: modelReferenceSchema,
+    authSource: providerAuthSourceSchema.nullable(),
+    promptDo: z.string().max(2000).nullable(),
+    promptDont: z.string().max(2000).nullable(),
+    autoApprove: z.boolean(),
+    toolAccessMode: toolAccessModeSchema,
+    allowedIntegrations: z.array(integrationTypeSchema),
+    allowedCustomIntegrations: z.array(z.string()),
+    allowedSkillSlugs: z.array(z.string()),
+    schedule: scheduleSchema.nullable(),
+  }),
+  documents: z.array(coworkerDefinitionDocumentSchema).default([]),
+});
 
 function getResolvedCoworkerToolPolicy(wf: {
   toolAccessMode: CoworkerToolAccessMode | null;
@@ -1336,6 +1376,52 @@ const listShared = protectedProcedure.handler(async ({ context }) => {
     });
 });
 
+const exportDefinition = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const { coworker: coworkerRow } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
+    const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
+    const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
+    const documents = await context.db.query.coworkerDocument.findMany({
+      where: eq(coworkerDocument.coworkerId, wf.id),
+      orderBy: (document, { asc }) => [asc(document.createdAt)],
+    });
+
+    return {
+      version: 1 as const,
+      exportedAt: new Date().toISOString(),
+      coworker: {
+        name: wf.name ?? "",
+        description: wf.description,
+        username: wf.username,
+        status: wf.status,
+        triggerType: wf.triggerType,
+        prompt: wf.prompt,
+        model: wf.model,
+        authSource: wf.authSource,
+        promptDo: wf.promptDo,
+        promptDont: wf.promptDont,
+        autoApprove: wf.autoApprove,
+        toolAccessMode,
+        allowedIntegrations: wf.allowedIntegrations,
+        allowedCustomIntegrations: wf.allowedCustomIntegrations,
+        allowedSkillSlugs,
+        schedule: wf.schedule ?? null,
+      },
+      documents: await Promise.all(
+        documents.map(async (document) => ({
+          filename: document.filename,
+          mimeType: document.mimeType,
+          description: document.description,
+          contentBase64: (await downloadFromS3(document.storageKey)).toString("base64"),
+        })),
+      ),
+    };
+  });
+
 const importShared = protectedProcedure
   .input(
     z.object({
@@ -1409,6 +1495,99 @@ const importShared = protectedProcedure
       targetCoworkerId: coworkerId,
       targetUserId: context.user.id,
     });
+
+    return created;
+  });
+
+const importDefinition = protectedProcedure
+  .input(
+    z.object({
+      definitionJson: z.string().min(2).max(50_000_000),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    let parsedDefinition: unknown;
+
+    try {
+      parsedDefinition = JSON.parse(input.definitionJson);
+    } catch {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Coworker JSON is not valid JSON.",
+      });
+    }
+
+    const definition = coworkerDefinitionSchema.parse(parsedDefinition);
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+    const dbUser = await context.db.query.user.findFirst({
+      where: eq(user.id, context.user.id),
+      columns: { role: true },
+    });
+
+    assertModelAllowedForRole(definition.coworker.model, dbUser?.role);
+
+    const coworkerId = crypto.randomUUID();
+    const coworkerQueryDatabase = context.db as unknown as {
+      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    };
+    const username = await resolveCoworkerUsername({
+      database: coworkerQueryDatabase,
+      coworkerId,
+      username: definition.coworker.username,
+    });
+    const resolvedAuthSource = resolveCoworkerAuthSource(
+      definition.coworker.model,
+      definition.coworker.authSource,
+    );
+
+    const [created] = await context.db
+      .insert(coworker)
+      .values({
+        id: coworkerId,
+        name: definition.coworker.name.trim(),
+        description: normalizeDescriptionInput(definition.coworker.description),
+        username,
+        ownerId: context.user.id,
+        workspaceId,
+        status: "off",
+        triggerType: definition.coworker.triggerType,
+        prompt: definition.coworker.prompt,
+        model: definition.coworker.model,
+        authSource: resolvedAuthSource,
+        promptDo: normalizeCoworkerInstructionInput(definition.coworker.promptDo),
+        promptDont: normalizeCoworkerInstructionInput(definition.coworker.promptDont),
+        autoApprove: definition.coworker.autoApprove,
+        toolAccessMode: definition.coworker.toolAccessMode,
+        allowedIntegrations: definition.coworker.allowedIntegrations,
+        allowedCustomIntegrations: definition.coworker.allowedCustomIntegrations,
+        allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(
+          definition.coworker.allowedSkillSlugs,
+        ),
+        schedule: definition.coworker.schedule,
+        sharedAt: null,
+      })
+      .returning({
+        id: coworker.id,
+        name: coworker.name,
+        description: coworker.description,
+        username: coworker.username,
+        status: coworker.status,
+      });
+
+    await Promise.all(
+      definition.documents.map((document) =>
+        uploadCoworkerDocument({
+          database: context.db as typeof import("@cmdclaw/db/client").db,
+          userId: context.user.id,
+          coworkerId,
+          filename: document.filename,
+          mimeType: document.mimeType,
+          contentBase64: document.contentBase64,
+          description: document.description ?? undefined,
+        }),
+      ),
+    );
 
     return created;
   });
@@ -1606,7 +1785,9 @@ export const coworkerRouter = {
   share,
   unshare,
   listShared,
+  exportDefinition,
   importShared,
+  importDefinition,
   adminListWorkspaceCoworkers,
   adminGetWorkspaceRun,
   getOrCreateBuilderConversation,
