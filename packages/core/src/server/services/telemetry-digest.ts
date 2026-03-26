@@ -16,12 +16,17 @@ type SignupPreview = {
   name: string;
 };
 
+type AppUrlSource = "APP_URL" | "NEXT_PUBLIC_APP_URL";
+
 export type DailyTelemetryDigestSummary = {
   activityDate: string;
   newSignups: number;
   activeUsers: number;
   returningActiveUsers: number;
   signupsPreview: SignupPreview[];
+  appUrl: string | null;
+  appUrlDomain: string | null;
+  appUrlSource: AppUrlSource | null;
 };
 
 function parseDigestTime(time: string): { hour: number; minute: number } {
@@ -55,8 +60,43 @@ function getPreviousDayWindow(now: Date): { start: Date; end: Date; activityDate
   };
 }
 
+function resolveDigestAppUrl(): {
+  appUrl: string | null;
+  appUrlDomain: string | null;
+  appUrlSource: AppUrlSource | null;
+} {
+  const candidates: Array<{ value: string | undefined; source: AppUrlSource }> = [
+    { value: process.env.APP_URL?.trim(), source: "APP_URL" },
+    { value: process.env.NEXT_PUBLIC_APP_URL?.trim(), source: "NEXT_PUBLIC_APP_URL" },
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate.value) {
+      continue;
+    }
+
+    try {
+      const url = new URL(candidate.value);
+      return {
+        appUrl: candidate.value,
+        appUrlDomain: url.host,
+        appUrlSource: candidate.source,
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    appUrl: null,
+    appUrlDomain: null,
+    appUrlSource: null,
+  };
+}
+
 export async function getDailyTelemetryDigestSummary(now = new Date()): Promise<DailyTelemetryDigestSummary> {
   const { start, end, activityDate } = getPreviousDayWindow(now);
+  const appUrlInfo = resolveDigestAppUrl();
 
   const [[{ value: newSignups }], [{ value: activeUsers }], [{ value: returningActiveUsers }], signupsPreview] =
     await Promise.all([
@@ -95,6 +135,9 @@ export async function getDailyTelemetryDigestSummary(now = new Date()): Promise<
       email: signup.email,
       name: signup.name,
     })),
+    appUrl: appUrlInfo.appUrl,
+    appUrlDomain: appUrlInfo.appUrlDomain,
+    appUrlSource: appUrlInfo.appUrlSource,
   };
 }
 
@@ -102,6 +145,9 @@ export function buildDailyTelemetryDigestMessage(summary: DailyTelemetryDigestSu
   const lines = [
     `CmdClaw daily ops digest for ${summary.activityDate}`,
     "",
+    `App URL domain: ${summary.appUrlDomain ?? "not configured"}${
+      summary.appUrlSource ? ` (${summary.appUrlSource})` : ""
+    }`,
     `New signups: ${summary.newSignups}`,
     `Active users: ${summary.activeUsers}`,
     `Returning active users: ${summary.returningActiveUsers}`,
