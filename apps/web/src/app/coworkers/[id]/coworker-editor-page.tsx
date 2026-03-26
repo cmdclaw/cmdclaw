@@ -99,13 +99,10 @@ import {
 const BASE_TRIGGERS = [
   { value: "manual", label: "Manual only" },
   { value: "schedule", label: "Run on a schedule" },
-  { value: "gmail.new_email", label: "New Gmail email" },
-];
-
-const LEGACY_HIDDEN_TRIGGERS = [
-  // Temporarily hidden while the forwarding domain is being updated.
   { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: "Email forwarded to CmdClaw" },
 ];
+
+const LEGACY_HIDDEN_TRIGGERS = [{ value: "gmail.new_email", label: "New Gmail email" }];
 
 const scheduleMotionInitial = { opacity: 0, y: -8, height: 0 } as const;
 const scheduleMotionAnimate = { opacity: 1, y: 0, height: "auto" } as const;
@@ -524,6 +521,10 @@ export default function CoworkerEditorPage() {
   const coworkerForwardingAddress = coworkerForwardingAlias?.forwardingAddress ?? null;
   const hasActiveForwardingAlias = Boolean(coworkerForwardingAlias?.activeAlias);
   const isEmailTriggerPersisted = coworker?.triggerType === EMAIL_FORWARDED_TRIGGER_TYPE;
+  const persistedLegacyTriggers = useMemo(
+    () => LEGACY_HIDDEN_TRIGGERS.filter(({ value }) => value === coworker?.triggerType),
+    [coworker?.triggerType],
+  );
   const integrationEntries = useMemo(
     () =>
       COWORKER_AVAILABLE_INTEGRATION_TYPES.map((key) => ({
@@ -540,12 +541,12 @@ export default function CoworkerEditorPage() {
   const triggers = useMemo(
     () => [
       ...BASE_TRIGGERS,
-      ...(isEmailTriggerPersisted ? LEGACY_HIDDEN_TRIGGERS : []),
+      ...persistedLegacyTriggers,
       ...(isAdmin || !isComingSoonIntegration("twitter")
         ? ([{ value: "twitter.new_dm", label: "New X (Twitter) DM" }] as const)
         : []),
     ],
-    [isAdmin, isEmailTriggerPersisted],
+    [isAdmin, persistedLegacyTriggers],
   );
   const skillSelectionScopeKey = useMemo(
     () => (coworkerId ? `coworker-builder:${coworkerId}` : "coworker-builder"),

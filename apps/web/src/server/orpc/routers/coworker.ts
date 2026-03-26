@@ -19,8 +19,8 @@ import {
   type ProviderAuthSource,
 } from "@cmdclaw/core/lib/provider-auth-source";
 import {
-  applyCoworkerPatch,
-  coworkerBuilderPatchSchema,
+  applyCoworkerEdit,
+  coworkerBuilderEditSchema,
 } from "@cmdclaw/core/server/services/coworker-builder-service";
 import {
   generateCoworkerMetadataOnFirstPromptFill,
@@ -690,12 +690,12 @@ const del = protectedProcedure
     return { success: true };
   });
 
-const patch = protectedProcedure
+const edit = protectedProcedure
   .input(
     z.object({
       coworkerId: z.string(),
       baseUpdatedAt: z.string().datetime({ offset: true }),
-      patch: coworkerBuilderPatchSchema,
+      changes: coworkerBuilderEditSchema,
     }),
   )
   .handler(async ({ input, context }) => {
@@ -704,13 +704,13 @@ const patch = protectedProcedure
       columns: { role: true },
     });
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: context.db as unknown,
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
       coworkerId: input.coworkerId,
       baseUpdatedAt: input.baseUpdatedAt,
-      patch: input.patch,
+      changes: input.changes,
     });
 
     return result;
@@ -1224,7 +1224,7 @@ export const coworkerRouter = {
   get,
   create,
   update,
-  patch,
+  edit,
   uploadDocument,
   deleteDocument,
   delete: del,

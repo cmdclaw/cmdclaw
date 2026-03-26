@@ -58,7 +58,7 @@ export const coworkerBuilderScheduleSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const coworkerBuilderPatchSchema = z
+export const coworkerBuilderEditSchema = z
   .object({
     prompt: z.string().max(20000).optional(),
     model: modelReferenceSchema.optional(),
@@ -77,11 +77,11 @@ export const coworkerBuilderPatchSchema = z
       value.triggerType !== undefined ||
       value.schedule !== undefined,
     {
-      message: "Patch must include at least one editable field",
+      message: "Edit must include at least one editable field",
     },
   );
 
-export type CoworkerBuilderPatch = z.infer<typeof coworkerBuilderPatchSchema>;
+export type CoworkerBuilderEdit = z.infer<typeof coworkerBuilderEditSchema>;
 
 export type CoworkerBuilderContext = {
   coworkerId: string;
@@ -96,7 +96,7 @@ export type CoworkerBuilderContext = {
 
 type DatabaseLike = unknown;
 
-export type CoworkerPatchApplyResult =
+export type CoworkerEditApplyResult =
   | {
       status: "applied";
       coworker: CoworkerBuilderContext;
@@ -296,14 +296,14 @@ function buildChangedFields(params: {
   return changed;
 }
 
-export async function applyCoworkerPatch(params: {
+export async function applyCoworkerEdit(params: {
   database: DatabaseLike;
   userId: string;
   userRole: string | null;
   coworkerId: string;
   baseUpdatedAt: string;
-  patch: CoworkerBuilderPatch;
-}): Promise<CoworkerPatchApplyResult> {
+  changes: CoworkerBuilderEdit;
+}): Promise<CoworkerEditApplyResult> {
   const database = params.database as {
     query: {
       coworker: {
@@ -348,8 +348,8 @@ export async function applyCoworkerPatch(params: {
   const existing = coworkerBuilderRowSchema.parse(existingUnknown);
 
   const normalizedIntegrations =
-    params.patch.allowedIntegrations !== undefined
-      ? normalizeIntegrations(params.patch.allowedIntegrations)
+    params.changes.allowedIntegrations !== undefined
+      ? normalizeIntegrations(params.changes.allowedIntegrations)
       : undefined;
   if (normalizedIntegrations !== undefined && normalizedIntegrations.length === 0) {
     return {
@@ -359,15 +359,15 @@ export async function applyCoworkerPatch(params: {
     };
   }
 
-  const nextTriggerType = params.patch.triggerType ?? existing.triggerType;
+  const nextTriggerType = params.changes.triggerType ?? existing.triggerType;
   const nextToolAccessMode =
-    params.patch.toolAccessMode ??
+    params.changes.toolAccessMode ??
     normalizeCoworkerToolAccessMode(existing.toolAccessMode, existing.allowedIntegrations);
   const nextSchedule =
-    params.patch.schedule !== undefined ? params.patch.schedule : (existing.schedule ?? null);
+    params.changes.schedule !== undefined ? params.changes.schedule : (existing.schedule ?? null);
   const details: string[] = [];
   const isLegacyReadOnlyTrigger =
-    params.patch.triggerType === undefined &&
+    params.changes.triggerType === undefined &&
     nextTriggerType === existing.triggerType &&
     LEGACY_READ_ONLY_TRIGGER_TYPES.includes(
       existing.triggerType as (typeof LEGACY_READ_ONLY_TRIGGER_TYPES)[number],
@@ -388,8 +388,8 @@ export async function applyCoworkerPatch(params: {
     details.push("twitter.new_dm trigger requires admin role");
   }
   if (
-    params.patch.model !== undefined &&
-    isAdminOnlyChatModel(params.patch.model) &&
+    params.changes.model !== undefined &&
+    isAdminOnlyChatModel(params.changes.model) &&
     params.userRole !== "admin"
   ) {
     details.push("Claude Sonnet 4.6 model requires admin role");
@@ -406,15 +406,15 @@ export async function applyCoworkerPatch(params: {
     name: existing.name,
     description: existing.description ?? null,
     username: existing.username ?? null,
-    prompt: params.patch.prompt ?? existing.prompt,
-    model: params.patch.model ?? existing.model,
+    prompt: params.changes.prompt ?? existing.prompt,
+    model: params.changes.model ?? existing.model,
     toolAccessMode: nextToolAccessMode,
     triggerType: nextTriggerType,
     schedule:
       nextTriggerType === "schedule"
         ? nextSchedule
-        : params.patch.schedule !== undefined
-          ? params.patch.schedule
+        : params.changes.schedule !== undefined
+          ? params.changes.schedule
           : (existing.schedule ?? null),
     allowedIntegrations: normalizedIntegrations ?? (existing.allowedIntegrations as string[]),
   };
@@ -553,7 +553,7 @@ export async function applyCoworkerPatch(params: {
         allowedIntegrations: latest.allowedIntegrations as string[],
         updatedAt: latest.updatedAt,
       }),
-      message: "Coworker changed since this patch was prepared",
+      message: "Coworker changed since this edit was prepared",
     };
   }
 
@@ -567,7 +567,7 @@ export async function applyCoworkerPatch(params: {
       });
     } catch (error) {
       console.error(
-        `[coworker-builder] failed to sync scheduler after patch apply (${updated.id})`,
+        `[coworker-builder] failed to sync scheduler after coworker edit (${updated.id})`,
         error,
       );
       throw new ORPCError("INTERNAL_SERVER_ERROR", {

@@ -10,6 +10,7 @@ import { clientEditionCapabilities } from "@/lib/edition";
 const adminTabs = [
   { key: "settings", label: "Settings", href: "/admin" },
   { key: "subscriptions", label: "AI Subscriptions", href: "/admin/subscriptions" },
+  { key: "workspaces", label: "Workspaces", href: "/admin/workspaces" },
   { key: "credits", label: "Credits", href: "/admin/credits" },
   { key: "usage", label: "Usage", href: "/admin/usage" },
   { key: "impersonation", label: "Impersonation", href: "/admin/impersonation" },
@@ -19,6 +20,9 @@ const adminTabs = [
 function getActiveKey(pathname: string) {
   if (pathname.startsWith("/admin/subscriptions")) {
     return "subscriptions";
+  }
+  if (pathname.startsWith("/admin/workspaces")) {
+    return "workspaces";
   }
   if (pathname.startsWith("/admin/credits")) {
     return "credits";

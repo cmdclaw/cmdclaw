@@ -20,7 +20,7 @@ function usage(): never {
   console.error(
     "  coworker invoke --username <username> --message <text> [--attachment <path>]... [--json]",
   );
-  console.error("  coworker patch <coworker-id> --base-updated-at <iso> --patch-file <path>");
+  console.error("  coworker edit <coworker-id> --base-updated-at <iso> --changes <json> [--json]");
   console.error(
     "  coworker upload-document <coworker-id> --file <path> [--description <text>] [--json]",
   );
@@ -84,16 +84,6 @@ async function readUploadedDocument(filePath: string): Promise<DocumentUploadPay
     mimeType,
     content: content.toString("base64"),
   };
-}
-
-async function readPatchPayload(patchFilePath?: string): Promise<string> {
-  const normalizedFilePath = patchFilePath?.trim();
-
-  if (!normalizedFilePath) {
-    throw new Error("patch requires --patch-file");
-  }
-
-  return await readFile(normalizedFilePath, "utf8");
 }
 
 async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
@@ -249,20 +239,23 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "patch") {
+  if (command === "edit") {
     const coworkerId = args[1] ?? "";
     let baseUpdatedAt = "";
-    let patchFilePath = "";
+    let changes = "";
 
     for (let index = 2; index < args.length; index += 1) {
       const arg = args[index];
+      if (arg === "--json") {
+        continue;
+      }
       if (arg === "--base-updated-at") {
         baseUpdatedAt = args[index + 1] ?? "";
         index += 1;
         continue;
       }
-      if (arg === "--patch-file") {
-        patchFilePath = args[index + 1] ?? "";
+      if (arg === "--changes") {
+        changes = args[index + 1] ?? "";
         index += 1;
         continue;
       }
@@ -270,26 +263,41 @@ async function main(): Promise<void> {
       throw new Error(`Unknown argument: ${arg}`);
     }
 
-    if (!coworkerId || !baseUpdatedAt.trim() || !patchFilePath.trim()) {
+    if (!coworkerId || !baseUpdatedAt.trim() || !changes.trim()) {
       usage();
     }
 
-    const patchPayload = await readPatchPayload(patchFilePath);
-    let parsedPatch: unknown;
+    let parsedChanges: unknown;
     try {
-      parsedPatch = JSON.parse(patchPayload);
+      parsedChanges = JSON.parse(changes);
     } catch {
-      throw new Error("Invalid JSON for patch payload");
+      throw new Error("Invalid JSON for --changes");
     }
 
-    const response = (await postJson("/api/internal/coworkers/runtime/patch", {
+    const response = (await postJson("/api/internal/coworkers/runtime/edit", {
       coworkerId,
       baseUpdatedAt: baseUpdatedAt.trim(),
-      patch: parsedPatch,
-    })) as { patch?: unknown };
+      changes: parsedChanges,
+    })) as { edit?: unknown };
 
-    const patchResult = response?.patch ?? response;
-    printJson(patchResult);
+    const editResult = response?.edit ?? response;
+    if (wantsJson) {
+      printJson(editResult);
+      return;
+    }
+
+    if (!editResult || typeof editResult !== "object") {
+      console.log("Coworker edit saved.");
+      return;
+    }
+
+    const record = editResult as Record<string, unknown>;
+    console.log(String(record.message ?? "Coworker edit saved."));
+    if (Array.isArray(record.details) && record.details.length > 0) {
+      for (const detail of record.details) {
+        console.log(`- ${String(detail)}`);
+      }
+    }
     return;
   }
 

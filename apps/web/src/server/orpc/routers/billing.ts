@@ -1,6 +1,9 @@
 import { BILLING_PLANS, type BillingPlanId } from "@cmdclaw/core/lib/billing-plans";
 import {
   addWorkspaceMembers,
+  adminJoinWorkspace,
+  adminListAllWorkspaces,
+  adminRemoveWorkspaceMember,
   attachPlanToOwner,
   cancelPlanForOwner,
   createManualTopUp,
@@ -356,9 +359,70 @@ const rename = protectedProcedure
     return renameWorkspace(input.workspaceId, input.name);
   });
 
+const adminWorkspaces = protectedProcedure.handler(async ({ context }) => {
+  assertBillingEnabled();
+  const role = await getDbRole(context.user.id, context.db);
+  if (role !== "admin") {
+    throw new ORPCError("FORBIDDEN", { message: "Admin role required" });
+  }
+  return adminListAllWorkspaces();
+});
+
+const adminJoinWorkspaceEndpoint = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required" });
+    }
+    return adminJoinWorkspace(context.user.id, input.workspaceId);
+  });
+
+const adminAddWorkspaceMembers = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string(),
+      emails: z.array(z.string().email()).min(1).max(20),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required" });
+    }
+    const added = await addWorkspaceMembers(input.workspaceId, input.emails, "member");
+    return { added };
+  });
+
+const adminRemoveWorkspaceMemberEndpoint = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string(),
+      email: z.string().email(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required" });
+    }
+    return adminRemoveWorkspaceMember(input.workspaceId, input.email);
+  });
+
 export const billingRouter = {
   overview,
   adminUserOverview,
+  adminWorkspaces,
+  adminJoinWorkspace: adminJoinWorkspaceEndpoint,
+  adminAddWorkspaceMembers,
+  adminRemoveWorkspaceMember: adminRemoveWorkspaceMemberEndpoint,
   createWorkspace,
   switchWorkspace,
   attachPlan,

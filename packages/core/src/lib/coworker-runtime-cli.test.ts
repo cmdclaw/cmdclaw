@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getCoworkerCliSystemPrompt,
-  parseCoworkerPatchApplyEnvelope,
+  parseCoworkerEditApplyEnvelope,
   parseCoworkerInvocationEnvelope,
 } from "./coworker-runtime-cli";
 
@@ -54,16 +54,16 @@ describe("coworker-runtime-cli", () => {
     expect(envelope).toBeNull();
   });
 
-  it("parses coworker patch envelopes from bash stdout", () => {
-    const envelope = parseCoworkerPatchApplyEnvelope({
+  it("parses coworker edit envelopes from bash stdout", () => {
+    const envelope = parseCoworkerEditApplyEnvelope({
       toolName: "Bash",
       toolInput: {
         command:
-          "coworker patch cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --patch-file /tmp/coworker-patch.json",
+          'coworker edit cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --changes \'{"prompt":"new"}\' --json',
       },
       toolResult: {
         stdout: JSON.stringify({
-          kind: "coworker_patch_apply",
+          kind: "coworker_edit_apply",
           status: "applied",
           coworkerId: "cw-1",
           appliedChanges: ["prompt"],
@@ -77,13 +77,13 @@ describe("coworker-runtime-cli", () => {
             schedule: null,
             allowedIntegrations: ["github"],
           },
-          message: "Applied coworker changes: prompt.",
+          message: "Saved coworker edits: prompt.",
         }),
       },
     });
 
     expect(envelope).toEqual({
-      kind: "coworker_patch_apply",
+      kind: "coworker_edit_apply",
       status: "applied",
       coworkerId: "cw-1",
       appliedChanges: ["prompt"],
@@ -97,7 +97,7 @@ describe("coworker-runtime-cli", () => {
         schedule: null,
         allowedIntegrations: ["github"],
       },
-      message: "Applied coworker changes: prompt.",
+      message: "Saved coworker edits: prompt.",
       details: undefined,
     });
   });

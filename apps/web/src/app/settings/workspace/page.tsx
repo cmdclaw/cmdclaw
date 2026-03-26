@@ -2,6 +2,7 @@
 
 import type { ChangeEvent, FormEvent } from "react";
 import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,15 +12,54 @@ import {
   useBillingOverview,
   useInviteWorkspaceMembers,
   useRenameWorkspace,
+  useSwitchWorkspace,
   useWorkspaceMembers,
 } from "@/orpc/hooks";
 
-const EMPTY_WORKSPACE_OPTIONS: Array<{ id: string; name: string }> = [];
+const EMPTY_WORKSPACE_OPTIONS: Array<{ id: string; name: string; role?: string }> = [];
+
+function WorkspaceRow({
+  name,
+  role,
+  isActive,
+  isPending,
+  onSwitch,
+  workspaceId,
+}: {
+  name: string;
+  role: string;
+  isActive: boolean;
+  isPending: boolean;
+  onSwitch: (id: string) => void;
+  workspaceId: string;
+}) {
+  const handleClick = useCallback(() => {
+    onSwitch(workspaceId);
+  }, [onSwitch, workspaceId]);
+
+  return (
+    <div className="flex items-center justify-between rounded-lg border px-3 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{name}</p>
+        <p className="text-muted-foreground truncate text-xs capitalize">{role}</p>
+      </div>
+      {isActive ? (
+        <span className="text-muted-foreground text-xs font-medium">Active</span>
+      ) : (
+        <Button variant="outline" size="sm" disabled={isPending} onClick={handleClick}>
+          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Switch"}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 export default function WorkspaceSettingsPage() {
+  const router = useRouter();
   const { data, isLoading } = useBillingOverview();
   const inviteMembers = useInviteWorkspaceMembers();
   const renameWorkspace = useRenameWorkspace();
+  const switchWorkspace = useSwitchWorkspace();
   const [inviteEmailsInput, setInviteEmailsInput] = useState("");
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
 
@@ -45,6 +85,18 @@ export default function WorkspaceSettingsPage() {
   useEffect(() => {
     setWorkspaceNameInput(activeWorkspaceName);
   }, [activeWorkspaceName]);
+
+  const handleSwitchWorkspace = useCallback(
+    async (workspaceId: string) => {
+      try {
+        await switchWorkspace.mutateAsync(workspaceId);
+        router.push("/");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to switch workspace.");
+      }
+    },
+    [switchWorkspace, router],
+  );
 
   const handleInviteEmailsChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setInviteEmailsInput(event.target.value);
@@ -129,6 +181,31 @@ export default function WorkspaceSettingsPage() {
           Manage settings for your active workspace.
         </p>
       </div>
+
+      {clientEditionCapabilities.edition === "cloud" && workspaceOptions.length > 1 && (
+        <section className="rounded-lg border p-5">
+          <div>
+            <h3 className="text-sm font-medium">Your workspaces</h3>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Switch between workspaces you belong to.
+            </p>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {workspaceOptions.map((ws) => (
+              <WorkspaceRow
+                key={ws.id}
+                name={ws.name}
+                role={ws.role ?? "member"}
+                isActive={ws.id === activeWorkspaceId}
+                isPending={switchWorkspace.isPending}
+                onSwitch={handleSwitchWorkspace}
+                workspaceId={ws.id}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border p-5">
         <div>

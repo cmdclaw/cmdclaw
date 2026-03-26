@@ -1,9 +1,9 @@
-import { buildCoworkerPatchApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
+import { buildCoworkerEditApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
 import {
-  applyCoworkerPatch,
-  coworkerBuilderPatchSchema,
+  applyCoworkerEdit,
+  coworkerBuilderEditSchema,
   resolveCoworkerBuilderContextByConversation,
-  type CoworkerPatchApplyResult,
+  type CoworkerEditApplyResult,
 } from "@cmdclaw/core/server/services/coworker-builder-service";
 import { db } from "@cmdclaw/db/client";
 import { user } from "@cmdclaw/db/schema";
@@ -18,7 +18,7 @@ const requestSchema = z.object({
   turnSeq: z.number().int().positive(),
   coworkerId: z.string().min(1),
   baseUpdatedAt: z.string().datetime({ offset: true }),
-  patch: coworkerBuilderPatchSchema,
+  changes: coworkerBuilderEditSchema,
 });
 
 export async function POST(request: Request) {
@@ -54,23 +54,23 @@ export async function POST(request: Request) {
       columns: { role: true },
     });
 
-    const result: CoworkerPatchApplyResult = await applyCoworkerPatch({
+    const result: CoworkerEditApplyResult = await applyCoworkerEdit({
       database: db,
       userId: authorized.userId,
       userRole: dbUser?.role ?? null,
       coworkerId: parsed.data.coworkerId,
       baseUpdatedAt: parsed.data.baseUpdatedAt,
-      patch: parsed.data.patch,
+      changes: parsed.data.changes,
     });
 
     return Response.json({
-      patch: buildCoworkerPatchApplyEnvelope({
+      edit: buildCoworkerEditApplyEnvelope({
         coworkerId: parsed.data.coworkerId,
         result,
       }),
     });
   } catch (error) {
-    console.error("[Internal] coworker runtime patch error:", error);
+    console.error("[Internal] coworker runtime edit error:", error);
     return Response.json({ error: "internal_error" }, { status: 500 });
   }
 }

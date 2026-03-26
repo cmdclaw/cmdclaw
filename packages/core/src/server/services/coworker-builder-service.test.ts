@@ -17,8 +17,8 @@ vi.mock("./coworker-metadata", () => ({
 }));
 
 import {
-  applyCoworkerPatch,
-  coworkerBuilderPatchSchema,
+  applyCoworkerEdit,
+  coworkerBuilderEditSchema,
 } from "./coworker-builder-service";
 
 function createDbStub() {
@@ -89,13 +89,13 @@ describe("coworker-builder-service", () => {
       });
     mocks.returning.mockResolvedValueOnce([]);
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
       baseUpdatedAt: oldDate.toISOString(),
-      patch: { prompt: "new prompt" },
+      changes: { prompt: "new prompt" },
     });
 
     expect(result.status).toBe("conflict");
@@ -127,20 +127,20 @@ describe("coworker-builder-service", () => {
       updatedAt,
     });
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
       baseUpdatedAt: updatedAt.toISOString(),
-      patch: { triggerType: "schedule" },
+      changes: { triggerType: "schedule" },
     });
 
     expect(result.status).toBe("validation_error");
   });
 
-  it("rejects new email forwarding trigger patches", () => {
-    const result = coworkerBuilderPatchSchema.safeParse({
+  it("rejects new email forwarding trigger edits", () => {
+    const result = coworkerBuilderEditSchema.safeParse({
       triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,
     });
 
@@ -182,13 +182,13 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
       baseUpdatedAt: updatedAt.toISOString(),
-      patch: { prompt: "new prompt" },
+      changes: { prompt: "new prompt" },
     });
 
     expect(result.status).toBe("applied");
@@ -234,13 +234,13 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
       baseUpdatedAt: updatedAt.toISOString(),
-      patch: { prompt: "new prompt" },
+      changes: { prompt: "new prompt" },
     });
 
     expect(result.status).toBe("applied");
@@ -290,13 +290,13 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
       baseUpdatedAt: updatedAt.toISOString(),
-      patch: { prompt: "new prompt" },
+      changes: { prompt: "new prompt" },
     });
 
     expect(mocks.set).toHaveBeenCalledWith(
@@ -349,13 +349,13 @@ describe("coworker-builder-service", () => {
       },
     ]);
 
-    const result = await applyCoworkerPatch({
+    const result = await applyCoworkerEdit({
       database: db as never,
       userId: "user-1",
       userRole: "admin",
       coworkerId: "wf-1",
       baseUpdatedAt: updatedAt.toISOString(),
-      patch: { model: "openai/gpt-5.2-codex" },
+      changes: { model: "openai/gpt-5.2-codex" },
     });
 
     expect(result.status).toBe("applied");

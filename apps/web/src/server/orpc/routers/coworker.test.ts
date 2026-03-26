@@ -17,7 +17,7 @@ const {
   removeCoworkerScheduleJobMock,
   generateCoworkerMetadataOnFirstPromptFillMock,
   normalizeAndEnsureUniqueCoworkerUsernameMock,
-  applyCoworkerPatchMock,
+  applyCoworkerEditMock,
   uploadCoworkerDocumentMock,
   deleteCoworkerDocumentMock,
 } = vi.hoisted(() => ({
@@ -26,7 +26,7 @@ const {
   removeCoworkerScheduleJobMock: vi.fn(),
   generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
   normalizeAndEnsureUniqueCoworkerUsernameMock: vi.fn(),
-  applyCoworkerPatchMock: vi.fn(),
+  applyCoworkerEditMock: vi.fn(),
   uploadCoworkerDocumentMock: vi.fn(),
   deleteCoworkerDocumentMock: vi.fn(),
 }));
@@ -55,7 +55,7 @@ vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
   >("@cmdclaw/core/server/services/coworker-builder-service");
   return {
     ...actual,
-    applyCoworkerPatch: applyCoworkerPatchMock,
+    applyCoworkerEdit: applyCoworkerEditMock,
   };
 });
 
@@ -151,7 +151,7 @@ describe("coworkerRouter", () => {
       generationId: "gen-1",
       conversationId: "conv-1",
     });
-    applyCoworkerPatchMock.mockResolvedValue({
+    applyCoworkerEditMock.mockResolvedValue({
       status: "applied",
       coworker: {
         coworkerId: "wf-1",
@@ -1269,15 +1269,15 @@ describe("coworkerRouter", () => {
     });
   });
 
-  it("applies coworker builder patch with user role context", async () => {
+  it("applies coworker builder edits with user role context", async () => {
     const context = createContext();
     context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
 
-    const result = await coworkerRouterAny.patch({
+    const result = await coworkerRouterAny.edit({
       input: {
         coworkerId: "wf-1",
         baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-        patch: { prompt: "new prompt" },
+        changes: { prompt: "new prompt" },
       },
       context,
     });
@@ -1294,7 +1294,7 @@ describe("coworkerRouter", () => {
       },
       appliedChanges: ["prompt"],
     });
-    expect(applyCoworkerPatchMock).toHaveBeenCalledWith(
+    expect(applyCoworkerEditMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userRole: "admin",
         coworkerId: "wf-1",
