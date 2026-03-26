@@ -178,8 +178,9 @@ function buildCoworkerBuilderRuntimeSection(
     "## Coworker Builder Runtime Context",
     "This is the latest server snapshot for the coworker you are editing.",
     "Use the exact coworkerId and updatedAt from this snapshot when you run coworker patch.",
+    "Write the patch JSON to a temporary file and pass it with --patch-file.",
     "Current patch command:",
-    `coworker patch ${builderCoworkerContext.coworkerId} --base-updated-at ${quoteShellArg(builderCoworkerContext.updatedAt)} --patch '<json>' --json`,
+    `coworker patch ${builderCoworkerContext.coworkerId} --base-updated-at ${quoteShellArg(builderCoworkerContext.updatedAt)} --patch-file /tmp/coworker-patch.json`,
     "Snapshot:",
     snapshot,
   ].join("\n");

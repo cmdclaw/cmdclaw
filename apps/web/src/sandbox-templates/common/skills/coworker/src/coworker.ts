@@ -20,7 +20,7 @@ function usage(): never {
   console.error(
     "  coworker invoke --username <username> --message <text> [--attachment <path>]... [--json]",
   );
-  console.error("  coworker patch <coworker-id> --base-updated-at <iso> --patch <json> [--json]");
+  console.error("  coworker patch <coworker-id> --base-updated-at <iso> --patch-file <path>");
   console.error(
     "  coworker upload-document <coworker-id> --file <path> [--description <text>] [--json]",
   );
@@ -84,6 +84,16 @@ async function readUploadedDocument(filePath: string): Promise<DocumentUploadPay
     mimeType,
     content: content.toString("base64"),
   };
+}
+
+async function readPatchPayload(patchFilePath?: string): Promise<string> {
+  const normalizedFilePath = patchFilePath?.trim();
+
+  if (!normalizedFilePath) {
+    throw new Error("patch requires --patch-file");
+  }
+
+  return await readFile(normalizedFilePath, "utf8");
 }
 
 async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
@@ -242,20 +252,17 @@ async function main(): Promise<void> {
   if (command === "patch") {
     const coworkerId = args[1] ?? "";
     let baseUpdatedAt = "";
-    let patch = "";
+    let patchFilePath = "";
 
     for (let index = 2; index < args.length; index += 1) {
       const arg = args[index];
-      if (arg === "--json") {
-        continue;
-      }
       if (arg === "--base-updated-at") {
         baseUpdatedAt = args[index + 1] ?? "";
         index += 1;
         continue;
       }
-      if (arg === "--patch") {
-        patch = args[index + 1] ?? "";
+      if (arg === "--patch-file") {
+        patchFilePath = args[index + 1] ?? "";
         index += 1;
         continue;
       }
@@ -263,15 +270,16 @@ async function main(): Promise<void> {
       throw new Error(`Unknown argument: ${arg}`);
     }
 
-    if (!coworkerId || !baseUpdatedAt.trim() || !patch.trim()) {
+    if (!coworkerId || !baseUpdatedAt.trim() || !patchFilePath.trim()) {
       usage();
     }
 
+    const patchPayload = await readPatchPayload(patchFilePath);
     let parsedPatch: unknown;
     try {
-      parsedPatch = JSON.parse(patch);
+      parsedPatch = JSON.parse(patchPayload);
     } catch {
-      throw new Error("Invalid JSON for --patch");
+      throw new Error("Invalid JSON for patch payload");
     }
 
     const response = (await postJson("/api/internal/coworkers/runtime/patch", {
@@ -281,23 +289,7 @@ async function main(): Promise<void> {
     })) as { patch?: unknown };
 
     const patchResult = response?.patch ?? response;
-    if (wantsJson) {
-      printJson(patchResult);
-      return;
-    }
-
-    if (!patchResult || typeof patchResult !== "object") {
-      console.log("Coworker patch submitted.");
-      return;
-    }
-
-    const record = patchResult as Record<string, unknown>;
-    console.log(String(record.message ?? "Coworker patch submitted."));
-    if (Array.isArray(record.details) && record.details.length > 0) {
-      for (const detail of record.details) {
-        console.log(`- ${String(detail)}`);
-      }
-    }
+    printJson(patchResult);
     return;
   }
 
