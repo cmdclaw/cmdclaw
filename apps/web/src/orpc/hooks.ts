@@ -1185,6 +1185,30 @@ export function useAdminRemoveWorkspaceMember() {
   });
 }
 
+export function useAdminCreateWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { name: string; ownerEmail: string }) =>
+      client.billing.adminCreateWorkspace(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+    },
+  });
+}
+
+export function useAdminRenameWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; name: string }) =>
+      client.billing.adminRenameWorkspace(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+    },
+  });
+}
+
 export function useAdminManualBillingTopUp() {
   const queryClient = useQueryClient();
 
