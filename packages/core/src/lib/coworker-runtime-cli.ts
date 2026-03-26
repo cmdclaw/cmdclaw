@@ -1,5 +1,5 @@
 export const COWORKER_INVOCATION_ENVELOPE_KIND = "coworker_invocation" as const;
-export const COWORKER_PATCH_APPLY_ENVELOPE_KIND = "coworker_patch_apply" as const;
+export const COWORKER_EDIT_APPLY_ENVELOPE_KIND = "coworker_edit_apply" as const;
 
 export type CoworkerRuntimeRunStatus =
   | "running"
@@ -22,7 +22,7 @@ export type CoworkerInvocationEnvelope = {
   message: string;
 };
 
-export type CoworkerPatchApplyEnvelopeCoworker = {
+export type CoworkerEditApplyEnvelopeCoworker = {
   coworkerId: string;
   updatedAt: string;
   prompt: string;
@@ -33,31 +33,31 @@ export type CoworkerPatchApplyEnvelopeCoworker = {
   allowedIntegrations: string[];
 };
 
-export type CoworkerPatchApplyEnvelope =
+export type CoworkerEditApplyEnvelope =
   | {
-      kind: typeof COWORKER_PATCH_APPLY_ENVELOPE_KIND;
+      kind: typeof COWORKER_EDIT_APPLY_ENVELOPE_KIND;
       status: "applied";
       coworkerId: string;
       appliedChanges: string[];
-      coworker: CoworkerPatchApplyEnvelopeCoworker;
+      coworker: CoworkerEditApplyEnvelopeCoworker;
       message: string;
       details?: string[] | undefined;
     }
   | {
-      kind: typeof COWORKER_PATCH_APPLY_ENVELOPE_KIND;
+      kind: typeof COWORKER_EDIT_APPLY_ENVELOPE_KIND;
       status: "conflict";
       coworkerId: string;
       appliedChanges?: string[] | undefined;
-      coworker: CoworkerPatchApplyEnvelopeCoworker;
+      coworker: CoworkerEditApplyEnvelopeCoworker;
       message: string;
       details?: string[] | undefined;
     }
   | {
-      kind: typeof COWORKER_PATCH_APPLY_ENVELOPE_KIND;
+      kind: typeof COWORKER_EDIT_APPLY_ENVELOPE_KIND;
       status: "validation_error";
       coworkerId: string;
       appliedChanges?: string[] | undefined;
-      coworker?: CoworkerPatchApplyEnvelopeCoworker | undefined;
+      coworker?: CoworkerEditApplyEnvelopeCoworker | undefined;
       message: string;
       details: string[];
     };
@@ -99,14 +99,14 @@ function looksLikeCoworkerInvokeCommand(command: string): boolean {
   );
 }
 
-function looksLikeCoworkerPatchCommand(command: string): boolean {
+function looksLikeCoworkerEditCommand(command: string): boolean {
   const normalized = command.trim();
   if (!normalized) {
     return false;
   }
 
   return (
-    /^coworker\s+patch(?:\s|$)/.test(normalized) || /\/coworker\s+patch(?:\s|$)/.test(normalized)
+    /^coworker\s+edit(?:\s|$)/.test(normalized) || /\/coworker\s+edit(?:\s|$)/.test(normalized)
   );
 }
 
@@ -151,7 +151,7 @@ function parseEnvelopeObject(value: unknown): CoworkerInvocationEnvelope | null 
   };
 }
 
-function parsePatchCoworker(value: unknown): CoworkerPatchApplyEnvelopeCoworker | null {
+function parseEditCoworker(value: unknown): CoworkerEditApplyEnvelopeCoworker | null {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -185,13 +185,13 @@ function parsePatchCoworker(value: unknown): CoworkerPatchApplyEnvelopeCoworker 
   };
 }
 
-function parsePatchEnvelopeObject(value: unknown): CoworkerPatchApplyEnvelope | null {
+function parseEditEnvelopeObject(value: unknown): CoworkerEditApplyEnvelope | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
-  if (candidate.kind !== COWORKER_PATCH_APPLY_ENVELOPE_KIND) {
+  if (candidate.kind !== COWORKER_EDIT_APPLY_ENVELOPE_KIND) {
     return null;
   }
 
@@ -213,14 +213,14 @@ function parsePatchEnvelopeObject(value: unknown): CoworkerPatchApplyEnvelope | 
   const details = Array.isArray(candidate.details)
     ? candidate.details.filter((entry): entry is string => typeof entry === "string")
     : undefined;
-  const coworker = parsePatchCoworker(candidate.coworker);
+  const coworker = parseEditCoworker(candidate.coworker);
 
   if (candidate.status === "applied") {
     if (!coworker) {
       return null;
     }
     return {
-      kind: COWORKER_PATCH_APPLY_ENVELOPE_KIND,
+      kind: COWORKER_EDIT_APPLY_ENVELOPE_KIND,
       status: "applied",
       coworkerId: candidate.coworkerId,
       appliedChanges: appliedChanges ?? [],
@@ -235,7 +235,7 @@ function parsePatchEnvelopeObject(value: unknown): CoworkerPatchApplyEnvelope | 
       return null;
     }
     return {
-      kind: COWORKER_PATCH_APPLY_ENVELOPE_KIND,
+      kind: COWORKER_EDIT_APPLY_ENVELOPE_KIND,
       status: "conflict",
       coworkerId: candidate.coworkerId,
       appliedChanges,
@@ -250,7 +250,7 @@ function parsePatchEnvelopeObject(value: unknown): CoworkerPatchApplyEnvelope | 
   }
 
   return {
-    kind: COWORKER_PATCH_APPLY_ENVELOPE_KIND,
+    kind: COWORKER_EDIT_APPLY_ENVELOPE_KIND,
     status: "validation_error",
     coworkerId: candidate.coworkerId,
     appliedChanges,
@@ -313,11 +313,11 @@ export function parseCoworkerInvocationEnvelope(params: {
   return null;
 }
 
-export function parseCoworkerPatchApplyEnvelope(params: {
+export function parseCoworkerEditApplyEnvelope(params: {
   toolName: string;
   toolInput: unknown;
   toolResult: unknown;
-}): CoworkerPatchApplyEnvelope | null {
+}): CoworkerEditApplyEnvelope | null {
   if (params.toolName !== "Bash") {
     return null;
   }
@@ -327,7 +327,7 @@ export function parseCoworkerPatchApplyEnvelope(params: {
   }
 
   const command = (params.toolInput as { command?: unknown }).command;
-  if (typeof command !== "string" || !looksLikeCoworkerPatchCommand(command)) {
+  if (typeof command !== "string" || !looksLikeCoworkerEditCommand(command)) {
     return null;
   }
 
@@ -338,7 +338,7 @@ export function parseCoworkerPatchApplyEnvelope(params: {
     }
 
     try {
-      return parsePatchEnvelopeObject(JSON.parse(candidate));
+      return parseEditEnvelopeObject(JSON.parse(candidate));
     } catch {
       return null;
     }
@@ -350,28 +350,28 @@ export function parseCoworkerPatchApplyEnvelope(params: {
       const candidate = extractJsonCandidate(record.stdout);
       if (candidate) {
         try {
-          return parsePatchEnvelopeObject(JSON.parse(candidate));
+          return parseEditEnvelopeObject(JSON.parse(candidate));
         } catch {
           return null;
         }
       }
     }
-    return parsePatchEnvelopeObject(record);
+    return parseEditEnvelopeObject(record);
   }
 
   return null;
 }
 
-export function buildCoworkerPatchApplyEnvelope(params: {
+export function buildCoworkerEditApplyEnvelope(params: {
   result:
     | {
         status: "applied";
-        coworker: CoworkerPatchApplyEnvelopeCoworker;
+        coworker: CoworkerEditApplyEnvelopeCoworker;
         appliedChanges: string[];
       }
     | {
         status: "conflict";
-        coworker: CoworkerPatchApplyEnvelopeCoworker;
+        coworker: CoworkerEditApplyEnvelopeCoworker;
         message: string;
       }
     | {
@@ -380,24 +380,24 @@ export function buildCoworkerPatchApplyEnvelope(params: {
         details: string[];
       };
   coworkerId: string;
-}): CoworkerPatchApplyEnvelope {
+}): CoworkerEditApplyEnvelope {
   if (params.result.status === "applied") {
     return {
-      kind: COWORKER_PATCH_APPLY_ENVELOPE_KIND,
+      kind: COWORKER_EDIT_APPLY_ENVELOPE_KIND,
       status: "applied",
       coworkerId: params.coworkerId,
       appliedChanges: params.result.appliedChanges,
       coworker: params.result.coworker,
       message:
         params.result.appliedChanges.length > 0
-          ? `Applied coworker changes: ${params.result.appliedChanges.join(", ")}.`
-          : "No coworker changes were needed.",
+          ? `Saved coworker edits: ${params.result.appliedChanges.join(", ")}.`
+          : "No coworker edits were needed.",
     };
   }
 
   if (params.result.status === "conflict") {
     return {
-      kind: COWORKER_PATCH_APPLY_ENVELOPE_KIND,
+      kind: COWORKER_EDIT_APPLY_ENVELOPE_KIND,
       status: "conflict",
       coworkerId: params.coworkerId,
       coworker: params.result.coworker,
@@ -406,7 +406,7 @@ export function buildCoworkerPatchApplyEnvelope(params: {
   }
 
   return {
-    kind: COWORKER_PATCH_APPLY_ENVELOPE_KIND,
+    kind: COWORKER_EDIT_APPLY_ENVELOPE_KIND,
     status: "validation_error",
     coworkerId: params.coworkerId,
     message: params.result.message,

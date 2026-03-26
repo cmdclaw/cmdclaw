@@ -66,9 +66,10 @@ describe("composeOpencodePromptSpec", () => {
     expect(result.systemPrompt).toContain("## Coworker Builder Runtime Context");
     expect(result.systemPrompt).toContain('"coworkerId": "cw-1"');
     expect(result.systemPrompt).toContain("--base-updated-at '2026-03-03T12:00:00.000Z'");
-    expect(result.systemPrompt).not.toContain("Never run `coworker patch` on your first response");
+    expect(result.systemPrompt).toContain("coworker edit cw-1");
+    expect(result.systemPrompt).not.toContain("Never run `coworker edit` on your first response");
     expect(result.systemPrompt).not.toContain("Question round first");
-    expect(result.systemPrompt).not.toContain("If information is missing, apply a best-effort default patch first");
+    expect(result.systemPrompt).not.toContain("If information is missing, apply a best-effort default edit first");
   });
 
   it("returns the runner agent id and coworker execution sections", () => {

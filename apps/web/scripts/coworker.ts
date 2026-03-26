@@ -1,6 +1,6 @@
 import type { RouterClient } from "@orpc/server";
-import { buildCoworkerPatchApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
-import { coworkerBuilderPatchSchema } from "@cmdclaw/core/server/services/coworker-builder-service";
+import { buildCoworkerEditApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
+import { coworkerBuilderEditSchema } from "@cmdclaw/core/server/services/coworker-builder-service";
 import { db, closePool } from "@cmdclaw/db/client";
 import { conversation, coworkerRun } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
@@ -40,7 +40,7 @@ type ParsedArgs = {
   scheduleDayOfMonth?: number;
   model?: string;
   baseUpdatedAt?: string;
-  patchFilePath?: string;
+  changes?: string;
   filePath?: string;
   description?: string;
 };
@@ -230,8 +230,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.baseUpdatedAt = argv[i + 1];
         i += 1;
         break;
-      case "--patch-file":
-        args.patchFilePath = argv[i + 1];
+      case "--changes":
+        args.changes = argv[i + 1];
         i += 1;
         break;
       case "--file":
@@ -406,7 +406,7 @@ function printHelp(): void {
   console.log("\nCommands:");
   console.log("  list                              List coworkers");
   console.log("  create                            Create coworker (flags below)");
-  console.log("  patch <coworker-id|@username>     Apply a coworker patch");
+  console.log("  edit <coworker-id|@username>      Save coworker edits");
   console.log(
     "  upload-document <coworker-id|@username> Upload a persistent document for future runs",
   );
@@ -457,9 +457,9 @@ function printHelp(): void {
   console.log("Builder flags:");
   console.log("  --message <text>                  Natural-language coworker objective");
   console.log("  -M, --model <provider/model>      Optional generation model override");
-  console.log("\nPatch flags:");
+  console.log("\nEdit flags:");
   console.log("  --base-updated-at <iso>           Required optimistic concurrency timestamp");
-  console.log("  --patch-file <path>               Read JSON patch payload from file");
+  console.log("  --changes <json>                  JSON edit payload");
   console.log("\nUpload Document flags:");
   console.log("  --file <path>                     Local file path to upload");
   console.log("  --description <text>              Optional document notes");
@@ -679,53 +679,61 @@ async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): 
   printCoworkerDetails(coworker, args.format);
 }
 
-async function readPatchPayload(args: ParsedArgs): Promise<string> {
-  const patchFilePath = args.patchFilePath?.trim();
-
-  if (!patchFilePath) {
-    throw new Error("patch requires --patch-file");
+function parseEditInput(rawChanges: string | undefined) {
+  if (!rawChanges?.trim()) {
+    throw new Error("edit requires --changes");
   }
-
-  return await readFile(patchFilePath, "utf8");
-}
-
-async function parsePatchInput(args: ParsedArgs) {
-  const rawPatch = await readPatchPayload(args);
 
   let parsedUnknown: unknown;
   try {
-    parsedUnknown = JSON.parse(rawPatch);
+    parsedUnknown = JSON.parse(rawChanges);
   } catch {
-    throw new Error("Invalid JSON for patch payload");
+    throw new Error("Invalid JSON for --changes");
   }
 
-  return coworkerBuilderPatchSchema.parse(parsedUnknown);
+  return coworkerBuilderEditSchema.parse(parsedUnknown);
 }
 
-async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
+async function editCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
   const coworkerRef = args.positionals[0];
   if (!coworkerRef) {
     throw new Error(
-      "Usage: bun run coworker patch <coworker-id|@username> --base-updated-at <iso> --patch-file <path>",
+      "Usage: bun run coworker edit <coworker-id|@username> --base-updated-at <iso> --changes <json> [--json]",
     );
   }
   if (!args.baseUpdatedAt?.trim()) {
-    throw new Error("patch requires --base-updated-at");
+    throw new Error("edit requires --base-updated-at");
   }
 
   const coworkerId = await resolveCoworkerReference(client, coworkerRef);
-  const result = await client.coworker.patch({
+  const result = await client.coworker.edit({
     coworkerId,
     baseUpdatedAt: args.baseUpdatedAt.trim(),
-    patch: await parsePatchInput(args),
+    changes: parseEditInput(args.changes),
   });
 
-  const envelope = buildCoworkerPatchApplyEnvelope({
+  const envelope = buildCoworkerEditApplyEnvelope({
     coworkerId,
     result,
   });
 
-  console.log(JSON.stringify(envelope, null, 2));
+  if (args.json) {
+    console.log(JSON.stringify(envelope, null, 2));
+    return;
+  }
+
+  console.log(envelope.message);
+  if (envelope.status === "applied" || envelope.status === "conflict") {
+    console.log("");
+    printCoworkerDetails({
+      ...(await client.coworker.get({ id: coworkerId })),
+    });
+    return;
+  }
+
+  if (envelope.details.length > 0) {
+    console.log(envelope.details.join("\n"));
+  }
 }
 
 async function uploadCoworkerDocumentCommand(
@@ -1460,8 +1468,8 @@ async function main(): Promise<void> {
       case "ls":
         await listCoworkers(client, parsed);
         break;
-      case "patch":
-        await patchCoworker(client, parsed);
+      case "edit":
+        await editCoworker(client, parsed);
         break;
       case "upload-document":
         await uploadCoworkerDocumentCommand(client, parsed);

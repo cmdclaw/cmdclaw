@@ -717,14 +717,14 @@ export function useUpdateCoworker() {
   });
 }
 
-export function usePatchCoworker() {
+export function useEditCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: {
       coworkerId: string;
       baseUpdatedAt: string;
-      patch: {
+      changes: {
         prompt?: string;
         model?: string;
         toolAccessMode?: CoworkerToolAccessMode;
@@ -754,7 +754,7 @@ export function usePatchCoworker() {
             }
           | null;
       };
-    }) => client.coworker.patch(input),
+    }) => client.coworker.edit(input),
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
       queryClient.invalidateQueries({ queryKey: ["coworker", "get", input.coworkerId] });
@@ -1139,6 +1139,48 @@ export function useManualBillingTopUp() {
     }) => client.billing.manualTopUp(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["billing"] });
+    },
+  });
+}
+
+export function useAdminWorkspaces() {
+  return useQuery({
+    queryKey: ["billing", "admin-workspaces"],
+    queryFn: () => client.billing.adminWorkspaces(),
+  });
+}
+
+export function useAdminJoinWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string }) => client.billing.adminJoinWorkspace(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+    },
+  });
+}
+
+export function useAdminAddWorkspaceMembers() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; emails: string[] }) =>
+      client.billing.adminAddWorkspaceMembers(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+    },
+  });
+}
+
+export function useAdminRemoveWorkspaceMember() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; email: string }) =>
+      client.billing.adminRemoveWorkspaceMember(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
     },
   });
 }

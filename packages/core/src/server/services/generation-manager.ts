@@ -33,8 +33,8 @@ import type {
 import type { SandboxBackend } from "../sandbox/types";
 import { env } from "../../env";
 import {
-  type CoworkerPatchApplyEnvelope,
-  parseCoworkerPatchApplyEnvelope,
+  type CoworkerEditApplyEnvelope,
+  parseCoworkerEditApplyEnvelope,
   parseCoworkerInvocationEnvelope,
 } from "../../lib/coworker-runtime-cli";
 import { aggregateConversationUsageFromSessionMessages } from "./conversation-usage-service";
@@ -6420,13 +6420,13 @@ class GenerationManager {
               message: coworkerInvocation.message,
             });
           }
-          const coworkerPatchApply = parseCoworkerPatchApplyEnvelope({
+          const coworkerEditApply = parseCoworkerEditApplyEnvelope({
             toolName: existingToolUse.name,
             toolInput: existingToolUse.input,
             toolResult: result,
           });
-          if (coworkerPatchApply) {
-            this.applyCoworkerPatchEnvelope(ctx, coworkerPatchApply);
+          if (coworkerEditApply) {
+            this.applyCoworkerEditEnvelope(ctx, coworkerEditApply);
           }
           await this.saveProgress(ctx);
           return;
@@ -7627,9 +7627,9 @@ class GenerationManager {
     });
   }
 
-  private applyCoworkerPatchEnvelope(
+  private applyCoworkerEditEnvelope(
     ctx: GenerationContext,
-    envelope: CoworkerPatchApplyEnvelope,
+    envelope: CoworkerEditApplyEnvelope,
   ): void {
     const coworkerId = envelope.coworkerId;
 
@@ -7638,7 +7638,7 @@ class GenerationManager {
       this.appendSystemEvent(ctx, { content: envelope.message, coworkerId });
       logServerEvent(
         "info",
-        "COWORKER_PATCH_APPLIED",
+        "COWORKER_EDIT_APPLIED",
         {
           coworkerId,
           changedFields: envelope.appliedChanges,
@@ -7659,7 +7659,7 @@ class GenerationManager {
       this.appendSystemEvent(ctx, { content: envelope.message, coworkerId });
       logServerEvent(
         "warn",
-        "COWORKER_PATCH_CONFLICT",
+        "COWORKER_EDIT_CONFLICT",
         { coworkerId },
         {
           source: "generation-manager",
@@ -7678,7 +7678,7 @@ class GenerationManager {
     });
     logServerEvent(
       "warn",
-      "COWORKER_PATCH_VALIDATION_FAILED",
+      "COWORKER_EDIT_VALIDATION_FAILED",
       { coworkerId, details: envelope.details },
       {
         source: "generation-manager",

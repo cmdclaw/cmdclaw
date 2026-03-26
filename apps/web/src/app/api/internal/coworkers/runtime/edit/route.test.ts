@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const authorizeRuntimeTurnMock = vi.fn();
 const resolveCoworkerBuilderContextByConversationMock = vi.fn();
-const applyCoworkerPatchMock = vi.fn();
+const applyCoworkerEditMock = vi.fn();
 const userFindFirstMock = vi.fn();
 
 vi.mock("../../../runtime/_auth", () => ({
@@ -26,13 +26,13 @@ vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
   return {
     ...actual,
     resolveCoworkerBuilderContextByConversation: resolveCoworkerBuilderContextByConversationMock,
-    applyCoworkerPatch: applyCoworkerPatchMock,
+    applyCoworkerEdit: applyCoworkerEditMock,
   };
 });
 
 let POST: typeof import("./route").POST;
 
-describe("POST /api/internal/coworkers/runtime/patch", () => {
+describe("POST /api/internal/coworkers/runtime/edit", () => {
   beforeAll(async () => {
     ({ POST } = await import("./route"));
   });
@@ -58,7 +58,7 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
       schedule: null,
       allowedIntegrations: ["github"],
     });
-    applyCoworkerPatchMock.mockResolvedValue({
+    applyCoworkerEditMock.mockResolvedValue({
       status: "applied",
       appliedChanges: ["prompt"],
       coworker: {
@@ -74,8 +74,8 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
     });
   });
 
-  it("applies a coworker patch for the active builder conversation", async () => {
-    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/patch", {
+  it("applies coworker edits for the active builder conversation", async () => {
+    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/edit", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -86,7 +86,7 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
         turnSeq: 2,
         coworkerId: "cw-1",
         baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-        patch: { prompt: "Updated prompt" },
+        changes: { prompt: "Updated prompt" },
       }),
     });
 
@@ -94,17 +94,17 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(applyCoworkerPatchMock).toHaveBeenCalledWith({
+    expect(applyCoworkerEditMock).toHaveBeenCalledWith({
       database: expect.anything(),
       userId: "user-1",
       userRole: "admin",
       coworkerId: "cw-1",
       baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-      patch: { prompt: "Updated prompt" },
+      changes: { prompt: "Updated prompt" },
     });
     expect(body).toEqual({
-      patch: {
-        kind: "coworker_patch_apply",
+      edit: {
+        kind: "coworker_edit_apply",
         status: "applied",
         coworkerId: "cw-1",
         appliedChanges: ["prompt"],
@@ -118,7 +118,7 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
           schedule: null,
           allowedIntegrations: ["github"],
         },
-        message: "Applied coworker changes: prompt.",
+        message: "Saved coworker edits: prompt.",
       },
     });
   });
@@ -129,7 +129,7 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
       reason: "stale_turn",
     });
 
-    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/patch", {
+    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/edit", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -140,7 +140,7 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
         turnSeq: 1,
         coworkerId: "cw-1",
         baseUpdatedAt: "2026-03-03T12:00:00.000Z",
-        patch: { prompt: "Updated prompt" },
+        changes: { prompt: "Updated prompt" },
       }),
     });
 
@@ -148,6 +148,6 @@ describe("POST /api/internal/coworkers/runtime/patch", () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: "stale_turn" });
-    expect(applyCoworkerPatchMock).not.toHaveBeenCalled();
+    expect(applyCoworkerEditMock).not.toHaveBeenCalled();
   });
 });

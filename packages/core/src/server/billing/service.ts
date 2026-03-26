@@ -764,6 +764,91 @@ export async function addWorkspaceMembers(
   return users.map((item) => item.email);
 }
 
+export async function adminListAllWorkspaces() {
+  const workspaces = await db.query.workspace.findMany({
+    orderBy: [desc(workspace.createdAt)],
+    columns: {
+      id: true,
+      name: true,
+      slug: true,
+      billingPlanId: true,
+      createdAt: true,
+    },
+    with: {
+      members: {
+        columns: { role: true },
+        with: {
+          user: {
+            columns: { email: true, name: true },
+          },
+        },
+      },
+    },
+  });
+
+  return workspaces.map((ws) => ({
+    id: ws.id,
+    name: ws.name,
+    slug: ws.slug,
+    billingPlanId: ws.billingPlanId,
+    createdAt: ws.createdAt,
+    members: ws.members.map((m) => ({
+      email: m.user.email,
+      name: m.user.name,
+      role: m.role,
+    })),
+  }));
+}
+
+export async function adminJoinWorkspace(userId: string, workspaceId: string) {
+  const ws = await db.query.workspace.findFirst({
+    where: eq(workspace.id, workspaceId),
+    columns: { id: true, name: true },
+  });
+
+  if (!ws) {
+    throw new Error("Workspace not found");
+  }
+
+  await db
+    .insert(workspaceMember)
+    .values({
+      workspaceId,
+      userId,
+      role: "admin",
+    })
+    .onConflictDoNothing();
+
+  await setActiveWorkspace(userId, workspaceId);
+
+  return ws;
+}
+
+export async function adminRemoveWorkspaceMember(
+  workspaceId: string,
+  targetEmail: string,
+) {
+  const targetUser = await db.query.user.findFirst({
+    where: eq(user.email, targetEmail),
+    columns: { id: true, email: true },
+  });
+
+  if (!targetUser) {
+    throw new Error("User not found");
+  }
+
+  await db
+    .delete(workspaceMember)
+    .where(
+      and(
+        eq(workspaceMember.workspaceId, workspaceId),
+        eq(workspaceMember.userId, targetUser.id),
+      ),
+    );
+
+  return { email: targetUser.email };
+}
+
 export async function renameWorkspace(workspaceId: string, name: string) {
   const trimmedName = name.trim();
 
