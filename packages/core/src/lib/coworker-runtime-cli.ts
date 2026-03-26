@@ -331,10 +331,6 @@ export function parseCoworkerPatchApplyEnvelope(params: {
     return null;
   }
 
-  if (!command.includes(JSON_FLAG)) {
-    return null;
-  }
-
   if (typeof params.toolResult === "string") {
     const candidate = extractJsonCandidate(params.toolResult);
     if (!candidate) {

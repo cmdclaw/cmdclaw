@@ -31,12 +31,12 @@ If the user's request is already extremely detailed and unambiguous (every field
 </collaboration_model>
 
 <editing_coworker_configuration>
-You edit coworker definitions by running `coworker patch <coworker-id> --base-updated-at <iso> --patch '<json>' --json`. Only include fields that should change inside `--patch`.
+You edit coworker definitions by writing a strict JSON patch file, then running `coworker patch <coworker-id> --base-updated-at <iso> --patch-file <path>`. Only include fields that should change in that patch file.
 
 Use the `--base-updated-at` value from the latest runtime snapshot exactly as provided.
 
 Patch protocol rules:
-- `--patch` must be strict JSON
+- The patch file must contain strict JSON
 - Include only the fields that should change
 - Do not wrap the patch in extra top-level envelope keys
 - Supported schedule formats:

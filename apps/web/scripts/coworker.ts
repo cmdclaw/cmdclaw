@@ -40,7 +40,7 @@ type ParsedArgs = {
   scheduleDayOfMonth?: number;
   model?: string;
   baseUpdatedAt?: string;
-  patch?: string;
+  patchFilePath?: string;
   filePath?: string;
   description?: string;
 };
@@ -230,8 +230,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.baseUpdatedAt = argv[i + 1];
         i += 1;
         break;
-      case "--patch":
-        args.patch = argv[i + 1];
+      case "--patch-file":
+        args.patchFilePath = argv[i + 1];
         i += 1;
         break;
       case "--file":
@@ -459,7 +459,7 @@ function printHelp(): void {
   console.log("  -M, --model <provider/model>      Optional generation model override");
   console.log("\nPatch flags:");
   console.log("  --base-updated-at <iso>           Required optimistic concurrency timestamp");
-  console.log("  --patch <json>                    JSON patch payload");
+  console.log("  --patch-file <path>               Read JSON patch payload from file");
   console.log("\nUpload Document flags:");
   console.log("  --file <path>                     Local file path to upload");
   console.log("  --description <text>              Optional document notes");
@@ -679,16 +679,24 @@ async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): 
   printCoworkerDetails(coworker, args.format);
 }
 
-function parsePatchInput(rawPatch: string | undefined) {
-  if (!rawPatch?.trim()) {
-    throw new Error("patch requires --patch");
+async function readPatchPayload(args: ParsedArgs): Promise<string> {
+  const patchFilePath = args.patchFilePath?.trim();
+
+  if (!patchFilePath) {
+    throw new Error("patch requires --patch-file");
   }
+
+  return await readFile(patchFilePath, "utf8");
+}
+
+async function parsePatchInput(args: ParsedArgs) {
+  const rawPatch = await readPatchPayload(args);
 
   let parsedUnknown: unknown;
   try {
     parsedUnknown = JSON.parse(rawPatch);
   } catch {
-    throw new Error("Invalid JSON for --patch");
+    throw new Error("Invalid JSON for patch payload");
   }
 
   return coworkerBuilderPatchSchema.parse(parsedUnknown);
@@ -698,7 +706,7 @@ async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs):
   const coworkerRef = args.positionals[0];
   if (!coworkerRef) {
     throw new Error(
-      "Usage: bun run coworker patch <coworker-id|@username> --base-updated-at <iso> --patch <json> [--json]",
+      "Usage: bun run coworker patch <coworker-id|@username> --base-updated-at <iso> --patch-file <path>",
     );
   }
   if (!args.baseUpdatedAt?.trim()) {
@@ -709,7 +717,7 @@ async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs):
   const result = await client.coworker.patch({
     coworkerId,
     baseUpdatedAt: args.baseUpdatedAt.trim(),
-    patch: parsePatchInput(args.patch),
+    patch: await parsePatchInput(args),
   });
 
   const envelope = buildCoworkerPatchApplyEnvelope({
@@ -717,23 +725,7 @@ async function patchCoworker(client: RouterClient<AppRouter>, args: ParsedArgs):
     result,
   });
 
-  if (args.json) {
-    console.log(JSON.stringify(envelope, null, 2));
-    return;
-  }
-
-  console.log(envelope.message);
-  if (envelope.status === "applied" || envelope.status === "conflict") {
-    console.log("");
-    printCoworkerDetails({
-      ...(await client.coworker.get({ id: coworkerId })),
-    });
-    return;
-  }
-
-  if (envelope.details.length > 0) {
-    console.log(envelope.details.join("\n"));
-  }
+  console.log(JSON.stringify(envelope, null, 2));
 }
 
 async function uploadCoworkerDocumentCommand(
