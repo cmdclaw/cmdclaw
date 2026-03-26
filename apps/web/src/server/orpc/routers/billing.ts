@@ -400,6 +400,46 @@ const adminAddWorkspaceMembers = protectedProcedure
     return { added };
   });
 
+const adminCreateWorkspace = protectedProcedure
+  .input(
+    z.object({
+      name: z.string().trim().min(2).max(80),
+      ownerEmail: z.string().email(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required" });
+    }
+    const owner = await context.db.query.user.findFirst({
+      where: eq(user.email, input.ownerEmail),
+      columns: { id: true },
+    });
+    if (!owner) {
+      throw new ORPCError("NOT_FOUND", { message: `No user found with email ${input.ownerEmail}` });
+    }
+    const created = await createWorkspaceForUser(owner.id, input.name);
+    return { id: created.id, name: created.name };
+  });
+
+const adminRenameWorkspace = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string(),
+      name: z.string().trim().min(2).max(80),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    assertBillingEnabled();
+    const role = await getDbRole(context.user.id, context.db);
+    if (role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin role required" });
+    }
+    return renameWorkspace(input.workspaceId, input.name);
+  });
+
 const adminRemoveWorkspaceMemberEndpoint = protectedProcedure
   .input(
     z.object({
@@ -423,6 +463,8 @@ export const billingRouter = {
   adminJoinWorkspace: adminJoinWorkspaceEndpoint,
   adminAddWorkspaceMembers,
   adminRemoveWorkspaceMember: adminRemoveWorkspaceMemberEndpoint,
+  adminCreateWorkspace,
+  adminRenameWorkspace,
   createWorkspace,
   switchWorkspace,
   attachPlan,

@@ -1,15 +1,17 @@
 "use client";
 
-import type { ChangeEvent, FormEvent } from "react";
-import { Building2, Loader2, Search, UserPlus, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import { Building2, Loader2, Pencil, Plus, Search, UserPlus, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   useAdminAddWorkspaceMembers,
+  useAdminCreateWorkspace,
   useAdminJoinWorkspace,
   useAdminRemoveWorkspaceMember,
+  useAdminRenameWorkspace,
   useAdminWorkspaces,
   useBillingOverview,
 } from "@/orpc/hooks";
@@ -117,6 +119,147 @@ function AddMembersForm({
   );
 }
 
+function CreateWorkspaceForm({
+  onCreate,
+  isCreating,
+}: {
+  onCreate: (name: string, ownerEmail: string) => void;
+  isCreating: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+
+  const handleNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setName(event.target.value);
+  }, []);
+
+  const handleEmailChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setEmail(event.target.value);
+  }, []);
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmedName = name.trim();
+      const trimmedEmail = email.trim();
+      if (trimmedName.length < 2 || !trimmedEmail) {
+        return;
+      }
+      onCreate(trimmedName, trimmedEmail);
+      setName("");
+      setEmail("");
+    },
+    [name, email, onCreate],
+  );
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-end gap-2">
+      <Input
+        value={name}
+        onChange={handleNameChange}
+        placeholder="Workspace name"
+        className="h-8 max-w-48 text-sm"
+        disabled={isCreating}
+      />
+      <Input
+        value={email}
+        onChange={handleEmailChange}
+        placeholder="Owner email"
+        type="email"
+        className="h-8 max-w-56 text-sm"
+        disabled={isCreating}
+      />
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        disabled={isCreating || name.trim().length < 2 || !email.trim()}
+      >
+        {isCreating ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Create
+          </>
+        )}
+      </Button>
+    </form>
+  );
+}
+
+function EditableName({
+  workspaceId,
+  name,
+  onRename,
+  isRenaming,
+}: {
+  workspaceId: string;
+  name: string;
+  onRename: (workspaceId: string, name: string) => void;
+  isRenaming: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const startEditing = useCallback(() => {
+    setValue(name);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  }, [name]);
+
+  const submit = useCallback(() => {
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== name && trimmed.length >= 2) {
+      onRename(workspaceId, trimmed);
+    }
+    setEditing(false);
+  }, [value, name, workspaceId, onRename]);
+
+  const handleChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setValue(e.target.value);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        submit();
+      } else if (event.key === "Escape") {
+        setEditing(false);
+      }
+    },
+    [submit],
+  );
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={handleChange}
+        onBlur={submit}
+        onKeyDown={handleKeyDown}
+        disabled={isRenaming}
+        className="focus:border-foreground/30 truncate border-b border-transparent bg-transparent text-sm font-medium outline-none"
+        autoFocus
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEditing}
+      className="group flex items-center gap-1 truncate text-sm font-medium hover:underline"
+      title="Click to rename"
+    >
+      {name}
+      <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-50" />
+    </button>
+  );
+}
+
 function WorkspaceCard({
   workspace,
   isMember,
@@ -126,6 +269,8 @@ function WorkspaceCard({
   isRemoving,
   onAddMembers,
   isAdding,
+  onRename,
+  isRenaming,
 }: {
   workspace: WorkspaceData;
   isMember: boolean;
@@ -135,6 +280,8 @@ function WorkspaceCard({
   isRemoving: boolean;
   onAddMembers: (workspaceId: string, emails: string[]) => void;
   isAdding: boolean;
+  onRename: (workspaceId: string, name: string) => void;
+  isRenaming: boolean;
 }) {
   const handleJoin = useCallback(() => {
     onJoin(workspace.id);
@@ -145,7 +292,12 @@ function WorkspaceCard({
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium">{workspace.name}</p>
+            <EditableName
+              workspaceId={workspace.id}
+              name={workspace.name}
+              onRename={onRename}
+              isRenaming={isRenaming}
+            />
             <span className="text-muted-foreground bg-muted/60 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
               {workspace.billingPlanId}
             </span>
@@ -201,6 +353,8 @@ export default function AdminWorkspacesPage() {
   const joinWorkspace = useAdminJoinWorkspace();
   const addMembers = useAdminAddWorkspaceMembers();
   const removeMember = useAdminRemoveWorkspaceMember();
+  const renameWorkspace = useAdminRenameWorkspace();
+  const createWorkspace = useAdminCreateWorkspace();
   const [search, setSearch] = useState("");
 
   const myWorkspaceIds = useMemo(() => {
@@ -259,6 +413,30 @@ export default function AdminWorkspacesPage() {
     [addMembers],
   );
 
+  const handleCreate = useCallback(
+    async (name: string, ownerEmail: string) => {
+      try {
+        const ws = await createWorkspace.mutateAsync({ name, ownerEmail });
+        toast.success(`Created workspace "${ws.name}".`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to create workspace.");
+      }
+    },
+    [createWorkspace],
+  );
+
+  const handleRename = useCallback(
+    async (workspaceId: string, name: string) => {
+      try {
+        await renameWorkspace.mutateAsync({ workspaceId, name });
+        toast.success(`Workspace renamed to "${name}".`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to rename workspace.");
+      }
+    },
+    [renameWorkspace],
+  );
+
   const handleRemoveMember = useCallback(
     async (workspaceId: string, email: string) => {
       try {
@@ -279,6 +457,8 @@ export default function AdminWorkspacesPage() {
           Browse all workspaces. Add or remove members to manage access.
         </p>
       </div>
+
+      <CreateWorkspaceForm onCreate={handleCreate} isCreating={createWorkspace.isPending} />
 
       <div className="relative max-w-sm">
         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
@@ -314,6 +494,8 @@ export default function AdminWorkspacesPage() {
               isRemoving={removeMember.isPending}
               onAddMembers={handleAddMembers}
               isAdding={addMembers.isPending}
+              onRename={handleRename}
+              isRenaming={renameWorkspace.isPending}
             />
           ))}
         </div>
