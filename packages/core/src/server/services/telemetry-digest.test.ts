@@ -40,9 +40,12 @@ function mockCountSelect(value: number) {
 describe("telemetry digest", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
   });
 
   it("builds the previous-day summary from the DB queries", async () => {
+    process.env.APP_URL = "https://app.cmdclaw.ai";
     mockCountSelect(4);
     mockCountSelect(11);
     mockCountSelect(7);
@@ -62,6 +65,9 @@ describe("telemetry digest", () => {
         { id: "user-1", email: "alice@example.com", name: "Alice" },
         { id: "user-2", email: "bob@example.com", name: "Bob" },
       ],
+      appUrl: "https://app.cmdclaw.ai",
+      appUrlDomain: "app.cmdclaw.ai",
+      appUrlSource: "APP_URL",
     });
   });
 
@@ -75,9 +81,13 @@ describe("telemetry digest", () => {
         { id: "user-1", email: "alice@example.com", name: "Alice" },
         { id: "user-2", email: "bob@example.com", name: "" },
       ],
+      appUrl: "https://app.cmdclaw.ai",
+      appUrlDomain: "app.cmdclaw.ai",
+      appUrlSource: "APP_URL",
     });
 
     expect(message).toContain("CmdClaw daily ops digest for 2026-03-12");
+    expect(message).toContain("App URL domain: app.cmdclaw.ai (APP_URL)");
     expect(message).toContain("New signups: 2");
     expect(message).toContain("Active users: 9");
     expect(message).toContain("Returning active users: 6");
