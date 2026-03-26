@@ -6,6 +6,7 @@ import { eq, desc, and, isNull, asc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";
+import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 
 // List conversations for current user
 const list = protectedProcedure
@@ -16,9 +17,13 @@ const list = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const conversations = await context.db.query.conversation.findMany({
       where: and(
         eq(conversation.userId, context.user.id),
+        eq(conversation.workspaceId, workspaceId),
         eq(conversation.type, "chat"),
         isNull(conversation.archivedAt),
       ),
@@ -54,8 +59,15 @@ const list = protectedProcedure
 const get = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const conv = await context.db.query.conversation.findFirst({
-      where: and(eq(conversation.id, input.id), eq(conversation.userId, context.user.id)),
+      where: and(
+        eq(conversation.id, input.id),
+        eq(conversation.userId, context.user.id),
+        eq(conversation.workspaceId, workspaceId),
+      ),
       with: {
         messages: {
           orderBy: asc(message.createdAt),
@@ -112,10 +124,14 @@ const get = protectedProcedure
 const getUsage = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const conv = await context.db.query.conversation.findFirst({
       where: and(
         eq(conversation.id, input.id),
         eq(conversation.userId, context.user.id),
+        eq(conversation.workspaceId, workspaceId),
         eq(conversation.type, "chat"),
       ),
       columns: {
@@ -148,6 +164,9 @@ const updateTitle = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const result = await context.db
       .update(conversation)
       .set({ title: input.title })
@@ -155,6 +174,7 @@ const updateTitle = protectedProcedure
         and(
           eq(conversation.id, input.id),
           eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
           eq(conversation.type, "chat"),
         ),
       )
@@ -176,6 +196,9 @@ const updatePinned = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const result = await context.db
       .update(conversation)
       .set({ isPinned: input.isPinned })
@@ -183,6 +206,7 @@ const updatePinned = protectedProcedure
         and(
           eq(conversation.id, input.id),
           eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
           eq(conversation.type, "chat"),
         ),
       )
@@ -207,10 +231,14 @@ const markSeen = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const existing = await context.db.query.conversation.findFirst({
       where: and(
         eq(conversation.id, input.id),
         eq(conversation.userId, context.user.id),
+        eq(conversation.workspaceId, workspaceId),
         eq(conversation.type, "chat"),
       ),
       columns: {
@@ -234,6 +262,7 @@ const markSeen = protectedProcedure
         and(
           eq(conversation.id, input.id),
           eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
           eq(conversation.type, "chat"),
         ),
       )
@@ -250,6 +279,9 @@ const markSeen = protectedProcedure
 
 // Mark all user chat conversations as seen up to their current message count
 const markAllSeen = protectedProcedure.input(z.object({})).handler(async ({ context }) => {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
   const result = await context.db.execute(sql`
     with message_counts as (
       select
@@ -264,6 +296,7 @@ const markAllSeen = protectedProcedure.input(z.object({})).handler(async ({ cont
       from message_counts
       where c.id = message_counts."conversationId"
         and c.user_id = ${context.user.id}
+        and c.workspace_id = ${workspaceId}
         and c.type = 'chat'
         and c.archived_at is null
         and c.seen_message_count < message_counts."messageCount"
@@ -288,6 +321,9 @@ const updateAutoApprove = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const result = await context.db
       .update(conversation)
       .set({ autoApprove: input.autoApprove })
@@ -295,6 +331,7 @@ const updateAutoApprove = protectedProcedure
         and(
           eq(conversation.id, input.id),
           eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
           eq(conversation.type, "chat"),
         ),
       )
@@ -314,6 +351,9 @@ const updateAutoApprove = protectedProcedure
 const share = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const result = await context.db
       .update(conversation)
       .set({
@@ -321,7 +361,13 @@ const share = protectedProcedure
         shareToken: randomUUID(),
         sharedAt: new Date(),
       })
-      .where(and(eq(conversation.id, input.id), eq(conversation.userId, context.user.id)))
+      .where(
+        and(
+          eq(conversation.id, input.id),
+          eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
+        ),
+      )
       .returning({ shareToken: conversation.shareToken });
 
     if (result.length === 0 || !result[0].shareToken) {
@@ -335,6 +381,9 @@ const share = protectedProcedure
 const unshare = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const result = await context.db
       .update(conversation)
       .set({
@@ -342,7 +391,13 @@ const unshare = protectedProcedure
         shareToken: null,
         sharedAt: null,
       })
-      .where(and(eq(conversation.id, input.id), eq(conversation.userId, context.user.id)))
+      .where(
+        and(
+          eq(conversation.id, input.id),
+          eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
+        ),
+      )
       .returning({ id: conversation.id });
 
     if (result.length === 0) {
@@ -356,6 +411,9 @@ const unshare = protectedProcedure
 const archive = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     try {
       await writeSessionTranscriptFromConversation({
         userId: context.user.id,
@@ -374,6 +432,7 @@ const archive = protectedProcedure
         and(
           eq(conversation.id, input.id),
           eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
           eq(conversation.type, "chat"),
         ),
       )
@@ -390,6 +449,9 @@ const archive = protectedProcedure
 const del = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     try {
       await writeSessionTranscriptFromConversation({
         userId: context.user.id,
@@ -413,6 +475,7 @@ const del = protectedProcedure
         and(
           eq(conversation.id, input.id),
           eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
           eq(conversation.type, "chat"),
         ),
       )
@@ -429,6 +492,9 @@ const del = protectedProcedure
 const downloadAttachment = protectedProcedure
   .input(z.object({ attachmentId: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     // Find the attachment and verify ownership
     const attachment = await context.db.query.messageAttachment.findFirst({
       where: eq(messageAttachment.id, input.attachmentId),
@@ -441,7 +507,11 @@ const downloadAttachment = protectedProcedure
       },
     });
 
-    if (!attachment || attachment.message.conversation.userId !== context.user.id) {
+    if (
+      !attachment ||
+      attachment.message.conversation.userId !== context.user.id ||
+      attachment.message.conversation.workspaceId !== workspaceId
+    ) {
       throw new ORPCError("NOT_FOUND", { message: "Attachment not found" });
     }
 
@@ -459,6 +529,9 @@ const downloadAttachment = protectedProcedure
 const downloadSandboxFile = protectedProcedure
   .input(z.object({ fileId: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     // Find the sandbox file and verify ownership
     const file = await context.db.query.sandboxFile.findFirst({
       where: eq(sandboxFile.id, input.fileId),
@@ -467,7 +540,11 @@ const downloadSandboxFile = protectedProcedure
       },
     });
 
-    if (!file || file.conversation.userId !== context.user.id) {
+    if (
+      !file ||
+      file.conversation.userId !== context.user.id ||
+      file.conversation.workspaceId !== workspaceId
+    ) {
       throw new ORPCError("NOT_FOUND", { message: "File not found" });
     }
 
@@ -491,11 +568,15 @@ const downloadSandboxFile = protectedProcedure
 const getSandboxFiles = protectedProcedure
   .input(z.object({ conversationId: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     // Verify ownership
     const conv = await context.db.query.conversation.findFirst({
       where: and(
         eq(conversation.id, input.conversationId),
         eq(conversation.userId, context.user.id),
+        eq(conversation.workspaceId, workspaceId),
       ),
     });
 
@@ -521,6 +602,66 @@ const getSandboxFiles = protectedProcedure
     };
   });
 
+const adminGetWorkspaceConversation = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAdmin(context.user.id);
+    const conv = await context.db.query.conversation.findFirst({
+      where: and(eq(conversation.id, input.id), eq(conversation.workspaceId, workspaceId)),
+      with: {
+        messages: {
+          orderBy: asc(message.createdAt),
+          with: {
+            attachments: true,
+            sandboxFiles: true,
+          },
+        },
+      },
+    });
+
+    if (!conv) {
+      throw new ORPCError("NOT_FOUND", { message: "Conversation not found" });
+    }
+
+    return {
+      id: conv.id,
+      type: conv.type,
+      title: conv.title,
+      userId: conv.userId,
+      workspaceId: conv.workspaceId,
+      model: conv.model,
+      authSource: conv.authSource,
+      autoApprove: conv.autoApprove,
+      messages: conv.messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          contentParts: m.contentParts,
+          timing: m.timing,
+          createdAt: m.createdAt,
+          attachments: m.attachments?.map((a) => ({
+            id: a.id,
+            filename: a.filename,
+            mimeType: a.mimeType,
+            sizeBytes: a.sizeBytes,
+          })),
+          sandboxFiles: m.sandboxFiles?.map((f) => ({
+            fileId: f.id,
+            path: f.path,
+            filename: f.filename,
+            mimeType: f.mimeType,
+            sizeBytes: f.sizeBytes,
+          })),
+        })),
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+    };
+  });
+
 export const conversationRouter = {
   list,
   get,
@@ -537,4 +678,5 @@ export const conversationRouter = {
   downloadAttachment,
   downloadSandboxFile,
   getSandboxFiles,
+  adminGetWorkspaceConversation,
 };

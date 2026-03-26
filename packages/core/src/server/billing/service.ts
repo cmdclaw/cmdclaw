@@ -13,6 +13,8 @@ import {
   billingLedger,
   billingTopUp,
   conversation,
+  coworker,
+  coworkerRun,
   user,
   workspace,
   workspaceMember,
@@ -20,6 +22,7 @@ import {
 import { getAutumnClient } from "./autumn";
 import { calculateCredits } from "./credit-calculator";
 import { isSelfHostedEdition } from "../edition";
+import { sql } from "drizzle-orm";
 
 export type BillingOwner = {
   ownerType: BillingOwnerType;
@@ -326,6 +329,39 @@ export async function ensureWorkspaceForUser(userId: string, activeWorkspaceId?:
 
   const workspaceName = `${dbUser.name}'s workspace`;
   return createWorkspaceForUser(userId, workspaceName);
+}
+
+export async function backfillLegacyWorkspaceDataForUser(userId: string, workspaceId: string) {
+  await db
+    .update(conversation)
+    .set({ workspaceId })
+    .where(and(eq(conversation.userId, userId), sql`${conversation.workspaceId} is null`));
+
+  await db
+    .update(coworker)
+    .set({ workspaceId })
+    .where(and(eq(coworker.ownerId, userId), sql`${coworker.workspaceId} is null`));
+
+  await db.execute(sql`
+    update ${coworkerRun} as run
+    set
+      owner_id = coalesce(run.owner_id, wf.owner_id),
+      workspace_id = coalesce(run.workspace_id, wf.workspace_id)
+    from ${coworker} as wf
+    where run.coworker_id = wf.id
+      and wf.owner_id = ${userId}
+      and (run.owner_id is null or run.workspace_id is null)
+  `);
+}
+
+export async function requireActiveWorkspaceForUser(userId: string) {
+  const dbUser = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: { activeWorkspaceId: true },
+  });
+  const activeWorkspace = await ensureWorkspaceForUser(userId, dbUser?.activeWorkspaceId);
+  await backfillLegacyWorkspaceDataForUser(userId, activeWorkspace.id);
+  return activeWorkspace;
 }
 
 export async function resolveBillingOwnerForConversation(

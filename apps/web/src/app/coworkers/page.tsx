@@ -3,7 +3,7 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
-import { Loader2, PenLine, Play, Power, Trash2 } from "lucide-react";
+import { Download, Eye, Loader2, PenLine, Play, Power, Share2, Trash2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,14 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
@@ -47,10 +55,14 @@ import {
   useCreateCoworker,
   useCoworkerList,
   useDeleteCoworker,
+  useImportSharedCoworker,
   useIntegrationList,
   useProviderAuthStatus,
+  useShareCoworker,
+  useSharedCoworkerList,
   useTranscribe,
   useTriggerCoworker,
+  useUnshareCoworker,
   useUpdateCoworker,
 } from "@/orpc/hooks";
 
@@ -71,6 +83,25 @@ type CoworkerItem = {
     conversationId?: string | null;
     source?: string;
   }[];
+  sharedAt?: Date | string | null;
+};
+
+type SharedCoworkerItem = {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  triggerType: string;
+  toolAccessMode: CoworkerToolAccessMode;
+  allowedIntegrations?: IntegrationType[];
+  allowedSkillSlugs?: string[];
+  prompt?: string | null;
+  owner: {
+    name?: string | null;
+    email?: string | null;
+  };
+  sharedAt?: Date | string | null;
+  documentCount: number;
+  isOwnedByCurrentUser: boolean;
 };
 
 const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
@@ -117,7 +148,10 @@ function getCoworkerDisplayName(name?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : "New Coworker";
 }
 
-function buildToolSummary(coworker: CoworkerItem, connectedIntegrationTypes: IntegrationType[]) {
+function buildToolSummary(
+  coworker: Pick<CoworkerItem, "toolAccessMode" | "allowedIntegrations" | "allowedSkillSlugs">,
+  connectedIntegrationTypes: IntegrationType[],
+) {
   const integrationTypes =
     coworker.toolAccessMode === "all"
       ? connectedIntegrationTypes
@@ -145,20 +179,24 @@ function CoworkerCard({
   connectedIntegrationTypes,
   isRunning,
   isUpdatingStatus,
+  isUpdatingShare,
   isDeleting,
   onRun,
   onOpen,
   onToggleStatus,
+  onToggleShare,
   onDelete,
 }: {
   coworker: CoworkerItem;
   connectedIntegrationTypes: IntegrationType[];
   isRunning: boolean;
   isUpdatingStatus: boolean;
+  isUpdatingShare: boolean;
   isDeleting: boolean;
   onRun: (coworker: CoworkerItem) => void;
   onOpen: (id: string) => void;
   onToggleStatus: (coworker: CoworkerItem) => void;
+  onToggleShare: (coworker: CoworkerItem) => void;
   onDelete: (coworker: CoworkerItem) => void;
 }) {
   const isOn = coworker.status === "on";
@@ -185,6 +223,9 @@ function CoworkerCard({
   const handleDelete = useCallback(() => {
     onDelete(coworker);
   }, [coworker, onDelete]);
+  const handleToggleShare = useCallback(() => {
+    onToggleShare(coworker);
+  }, [coworker, onToggleShare]);
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key !== "Enter" && e.key !== " ") {
@@ -236,6 +277,12 @@ function CoworkerCard({
             <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
               {getTriggerLabel(coworker.triggerType)}
             </span>
+            {coworker.sharedAt ? (
+              <span className="text-foreground/70 bg-foreground/[0.06] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+                <Share2 className="size-2.5 opacity-60" />
+                Shared
+              </span>
+            ) : null}
             {toolSummary.visibleIntegrations.length > 0 && (
               <div className="flex items-center gap-1">
                 {toolSummary.visibleIntegrations.map((key) => {
@@ -312,6 +359,13 @@ function CoworkerCard({
           <Power className="size-4" />
           {isOn ? "Turn off" : "Turn on"}
         </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={handleToggleShare}
+          disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
+        >
+          <Share2 className="size-4" />
+          {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
           onSelect={handleDelete}
@@ -326,15 +380,136 @@ function CoworkerCard({
   );
 }
 
+function SharedCoworkerCard({
+  coworker,
+  connectedIntegrationTypes,
+  isImporting,
+  onImport,
+}: {
+  coworker: SharedCoworkerItem;
+  connectedIntegrationTypes: IntegrationType[];
+  isImporting: boolean;
+  onImport: (id: string) => void;
+}) {
+  const handleImport = useCallback(() => {
+    onImport(coworker.id);
+  }, [coworker.id, onImport]);
+
+  const toolSummary = useMemo(
+    () => buildToolSummary(coworker, connectedIntegrationTypes),
+    [connectedIntegrationTypes, coworker],
+  );
+
+  return (
+    <div className="border-border/40 bg-card flex min-h-[160px] flex-col gap-3 rounded-xl border p-5 shadow-sm">
+      <div className="space-y-1">
+        <p className="text-sm leading-tight font-medium">{getCoworkerDisplayName(coworker.name)}</p>
+        <p className="text-muted-foreground text-xs">
+          Shared by {coworker.owner.name?.trim() || coworker.owner.email || "A teammate"}
+        </p>
+      </div>
+      {coworker.description ? (
+        <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
+          {coworker.description}
+        </p>
+      ) : null}
+
+      <div className="flex items-center gap-2">
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {getTriggerLabel(coworker.triggerType)}
+        </span>
+        {toolSummary.visibleIntegrations.length > 0 && (
+          <div className="flex items-center gap-1">
+            {toolSummary.visibleIntegrations.map((key) => {
+              const logo = INTEGRATION_LOGOS[key];
+              if (!logo) {
+                return null;
+              }
+              return (
+                <Image
+                  key={key}
+                  src={logo}
+                  alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                  width={14}
+                  height={14}
+                  className="size-3.5 shrink-0"
+                  title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                />
+              );
+            })}
+          </div>
+        )}
+        {toolSummary.showSkillBadge ? (
+          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+            {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {toolSummary.overflowCount > 0 ? (
+          <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
+            +{toolSummary.overflowCount}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="text-muted-foreground/70 text-xs">
+        {coworker.documentCount} document{coworker.documentCount === 1 ? "" : "s"} · shared{" "}
+        {formatDate(coworker.sharedAt) ?? "recently"}
+      </div>
+      <div className="mt-auto flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleImport}
+          disabled={isImporting}
+        >
+          {isImporting ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Download className="size-3" />
+          )}
+          Install
+        </Button>
+        {coworker.prompt ? (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                <Eye className="size-3" />
+                View instructions
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{getCoworkerDisplayName(coworker.name)}</DialogTitle>
+                <DialogDescription>
+                  Instructions shared by{" "}
+                  {coworker.owner.name?.trim() || coworker.owner.email || "a teammate"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="text-muted-foreground max-h-[400px] overflow-y-auto text-sm whitespace-pre-wrap">
+                {coworker.prompt}
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function CoworkersPage() {
   const router = useRouter();
   const { data: coworkers, isLoading } = useCoworkerList();
+  const { data: sharedCoworkers } = useSharedCoworkerList();
   const { data: integrations } = useIntegrationList();
   const { data: providerAuthStatus } = useProviderAuthStatus();
   const createCoworker = useCreateCoworker();
   const triggerCoworker = useTriggerCoworker();
   const updateCoworker = useUpdateCoworker();
   const deleteCoworker = useDeleteCoworker();
+  const shareCoworker = useShareCoworker();
+  const unshareCoworker = useUnshareCoworker();
+  const importSharedCoworker = useImportSharedCoworker();
   const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
   const [isCreating, setIsCreating] = useState(false);
@@ -346,10 +521,14 @@ export default function CoworkersPage() {
   } | null>(null);
   const [runningCoworkerId, setRunningCoworkerId] = useState<string | null>(null);
   const [statusCoworkerId, setStatusCoworkerId] = useState<string | null>(null);
+  const [shareCoworkerId, setShareCoworkerId] = useState<string | null>(null);
+  const [importingSharedCoworkerId, setImportingSharedCoworkerId] = useState<string | null>(null);
   const [deletingCoworkerId, setDeletingCoworkerId] = useState<string | null>(null);
   const [coworkerPendingDelete, setCoworkerPendingDelete] = useState<CoworkerItem | null>(null);
   const [model, setModel] = useState(DEFAULT_COWORKER_BUILDER_MODEL);
   const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
+  const [filterShared, setFilterShared] = useState(false);
+  const handleToggleFilterShared = useCallback(() => setFilterShared((v) => !v), []);
   const isRecordingRef = useRef(false);
   const coworkerList = useMemo(() => {
     const real = Array.isArray(coworkers) ? coworkers : [];
@@ -379,6 +558,21 @@ export default function CoworkersPage() {
         sharedConnectedProviders: providerAuthStatus?.shared,
       }),
     [providerAuthStatus],
+  );
+  const sharedCoworkerList = useMemo(
+    () =>
+      (sharedCoworkers ?? []).filter(
+        (entry) => !entry.isOwnedByCurrentUser,
+      ) as SharedCoworkerItem[],
+    [sharedCoworkers],
+  );
+  const sharedByMeCount = useMemo(
+    () => coworkerList.filter((c) => c.sharedAt != null).length,
+    [coworkerList],
+  );
+  const displayedCoworkerList = useMemo(
+    () => (filterShared ? coworkerList.filter((c) => c.sharedAt != null) : coworkerList),
+    [coworkerList, filterShared],
   );
 
   const handleRunCoworker = useCallback(
@@ -422,6 +616,42 @@ export default function CoworkersPage() {
   const handleDeleteRequest = useCallback((coworker: CoworkerItem) => {
     setCoworkerPendingDelete(coworker);
   }, []);
+  const handleToggleShare = useCallback(
+    async (coworker: CoworkerItem) => {
+      setShareCoworkerId(coworker.id);
+      try {
+        if (coworker.sharedAt) {
+          await unshareCoworker.mutateAsync(coworker.id);
+          toast.success("Coworker unshared.");
+        } else {
+          await shareCoworker.mutateAsync(coworker.id);
+          toast.success("Coworker shared with workspace.");
+        }
+      } catch (error) {
+        console.error("Failed to update coworker sharing:", error);
+        toast.error("Failed to update sharing.");
+      } finally {
+        setShareCoworkerId(null);
+      }
+    },
+    [shareCoworker, unshareCoworker],
+  );
+  const handleImportSharedCoworker = useCallback(
+    async (sourceCoworkerId: string) => {
+      setImportingSharedCoworkerId(sourceCoworkerId);
+      try {
+        const created = await importSharedCoworker.mutateAsync(sourceCoworkerId);
+        toast.success("Coworker imported.");
+        router.push(`/coworkers/${created.id}`);
+      } catch (error) {
+        console.error("Failed to import coworker:", error);
+        toast.error("Failed to import coworker.");
+      } finally {
+        setImportingSharedCoworkerId(null);
+      }
+    },
+    [importSharedCoworker, router],
+  );
   const handleDeleteDialogChange = useCallback(
     (open: boolean) => {
       if (!open && deletingCoworkerId === null) {
@@ -634,23 +864,73 @@ export default function CoworkersPage() {
           <p className="text-muted-foreground text-sm">No coworkers yet.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {coworkerList.map((wf) => (
-            <CoworkerCard
-              key={wf.id}
-              coworker={wf}
-              connectedIntegrationTypes={connectedIntegrationTypes}
-              isRunning={runningCoworkerId === wf.id}
-              isUpdatingStatus={statusCoworkerId === wf.id}
-              isDeleting={deletingCoworkerId === wf.id}
-              onRun={handleRunCoworker}
-              onOpen={handleOpenCoworker}
-              onToggleStatus={handleToggleCoworkerStatus}
-              onDelete={handleDeleteRequest}
-            />
-          ))}
+        <div className="space-y-4">
+          {sharedByMeCount > 0 ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleFilterShared}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  filterShared
+                    ? "border-foreground/20 bg-foreground text-background"
+                    : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+                )}
+              >
+                <Share2 className="size-3" />
+                Shared with workspace
+                <span
+                  className={cn(
+                    "tabular-nums rounded-full px-1.5 text-[10px]",
+                    filterShared ? "bg-background/20" : "bg-muted",
+                  )}
+                >
+                  {sharedByMeCount}
+                </span>
+              </button>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {displayedCoworkerList.map((wf) => (
+              <CoworkerCard
+                key={wf.id}
+                coworker={wf}
+                connectedIntegrationTypes={connectedIntegrationTypes}
+                isRunning={runningCoworkerId === wf.id}
+                isUpdatingStatus={statusCoworkerId === wf.id}
+                isUpdatingShare={shareCoworkerId === wf.id}
+                isDeleting={deletingCoworkerId === wf.id}
+                onRun={handleRunCoworker}
+                onOpen={handleOpenCoworker}
+                onToggleStatus={handleToggleCoworkerStatus}
+                onToggleShare={handleToggleShare}
+                onDelete={handleDeleteRequest}
+              />
+            ))}
+          </div>
         </div>
       )}
+      {sharedCoworkerList.length > 0 ? (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold">Shared by teammates</h2>
+            <p className="text-muted-foreground text-sm">
+              Install a coworker into your own workspace environment.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {sharedCoworkerList.map((coworker) => (
+              <SharedCoworkerCard
+                key={coworker.id}
+                coworker={coworker}
+                connectedIntegrationTypes={connectedIntegrationTypes}
+                isImporting={importingSharedCoworkerId === coworker.id}
+                onImport={handleImportSharedCoworker}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       <AlertDialog open={coworkerPendingDelete !== null} onOpenChange={handleDeleteDialogChange}>
         <AlertDialogContent>
           <AlertDialogHeader>

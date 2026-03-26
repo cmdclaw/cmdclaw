@@ -236,6 +236,10 @@ vi.mock("@/orpc/hooks", () => ({
   useTriggerCoworker: () => ({ mutateAsync: mockTriggerCoworkerMutateAsync }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
   useDeleteCoworker: () => ({ mutateAsync: mockDeleteCoworkerMutateAsync }),
+  useShareCoworker: () => ({ mutateAsync: vi.fn() }),
+  useUnshareCoworker: () => ({ mutateAsync: vi.fn() }),
+  useSharedCoworkerList: () => ({ data: [] }),
+  useImportSharedCoworker: () => ({ mutateAsync: vi.fn() }),
   useProviderAuthStatus: () => ({
     data: { connected: { openai: true }, shared: { openai: true } },
   }),

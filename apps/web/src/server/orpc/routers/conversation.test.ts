@@ -41,6 +41,17 @@ vi.mock("@cmdclaw/core/server/services/opencode-session-snapshot-service", () =>
   clearConversationSessionSnapshot: vi.fn(),
 }));
 
+vi.mock("../workspace-access", () => ({
+  requireActiveWorkspaceAccess: vi.fn(async () => ({
+    workspace: { id: "ws-1" },
+    membership: { role: "member" },
+  })),
+  requireActiveWorkspaceAdmin: vi.fn(async () => ({
+    workspace: { id: "ws-1" },
+    membership: { role: "admin" },
+  })),
+}));
+
 import { conversationRouter } from "./conversation";
 
 const context = {

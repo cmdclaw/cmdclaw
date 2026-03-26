@@ -31,6 +31,7 @@ import {
   syncCoworkerScheduleJob,
 } from "@cmdclaw/core/server/services/coworker-scheduler";
 import { triggerCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
+import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
 import {
   conversation,
   generation,
@@ -49,6 +50,7 @@ import {
   uploadCoworkerDocument,
 } from "@/server/services/coworker-document";
 import { protectedProcedure } from "../middleware";
+import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 
 const integrationTypeSchema = z.enum([
   "google_gmail",
@@ -155,6 +157,64 @@ async function resolveCoworkerUsername(params: {
   }
 
   return normalized;
+}
+
+async function requireOwnedCoworkerInActiveWorkspace(
+  context: {
+    user: { id: string };
+    db: typeof import("@cmdclaw/db/client").db;
+  },
+  coworkerId: string,
+) {
+  const access = await requireActiveWorkspaceAccess(context.user.id);
+  const workspaceId = access.workspace.id;
+  const coworkerRow = await context.db.query.coworker.findFirst({
+    where: and(
+      eq(coworker.id, coworkerId),
+      eq(coworker.ownerId, context.user.id),
+      eq(coworker.workspaceId, workspaceId),
+    ),
+  });
+
+  if (!coworkerRow) {
+    throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
+  }
+
+  return {
+    coworker: coworkerRow,
+    workspaceId,
+    membershipRole: access.membership.role,
+  };
+}
+
+async function copyCoworkerDocuments(params: {
+  context: {
+    user: { id: string };
+    db: typeof import("@cmdclaw/db/client").db;
+  };
+  sourceCoworkerId: string;
+  targetCoworkerId: string;
+  targetUserId: string;
+}) {
+  const documents = await params.context.db.query.coworkerDocument.findMany({
+    where: eq(coworkerDocument.coworkerId, params.sourceCoworkerId),
+    orderBy: (document, { asc }) => [asc(document.createdAt)],
+  });
+
+  await Promise.all(
+    documents.map(async (document) => {
+      const contentBase64 = (await downloadFromS3(document.storageKey)).toString("base64");
+      await uploadCoworkerDocument({
+        database: params.context.db as typeof import("@cmdclaw/db/client").db,
+        userId: params.targetUserId,
+        coworkerId: params.targetCoworkerId,
+        filename: document.filename,
+        mimeType: document.mimeType,
+        contentBase64,
+        description: document.description ?? undefined,
+      });
+    }),
+  );
 }
 
 // Schedule configuration schema
@@ -272,15 +332,26 @@ async function ensureBuilderCoworkerMetadata(params: {
   const [updated] = await database
     .update(coworker)
     .set(metadataUpdates)
-    .where(and(eq(coworker.id, wf.id), eq(coworker.ownerId, context.user.id)))
+    .where(
+      wf.workspaceId
+        ? and(
+            eq(coworker.id, wf.id),
+            eq(coworker.ownerId, context.user.id),
+            eq(coworker.workspaceId, wf.workspaceId),
+          )
+        : and(eq(coworker.id, wf.id), eq(coworker.ownerId, context.user.id)),
+    )
     .returning();
 
   return updated ?? { ...wf, ...metadataUpdates };
 }
 
 const list = protectedProcedure.handler(async ({ context }) => {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
   const coworkers = await context.db.query.coworker.findMany({
-    where: eq(coworker.ownerId, context.user.id),
+    where: and(eq(coworker.ownerId, context.user.id), eq(coworker.workspaceId, workspaceId)),
     orderBy: (wf, { desc }) => [desc(wf.updatedAt)],
   });
 
@@ -318,6 +389,7 @@ const list = protectedProcedure.handler(async ({ context }) => {
         allowedCustomIntegrations: wf.allowedCustomIntegrations,
         allowedSkillSlugs,
         schedule: wf.schedule,
+        sharedAt: wf.sharedAt,
         updatedAt: wf.updatedAt,
         lastRunStatus: lastRun?.status ?? null,
         lastRunAt: lastRun?.startedAt ?? null,
@@ -346,13 +418,10 @@ const list = protectedProcedure.handler(async ({ context }) => {
 const get = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const coworkerRow = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-    });
-
-    if (!coworkerRow) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: coworkerRow } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
 
     const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
 
@@ -385,6 +454,7 @@ const get = protectedProcedure
       allowedCustomIntegrations: wf.allowedCustomIntegrations,
       allowedSkillSlugs,
       schedule: wf.schedule,
+      sharedAt: wf.sharedAt,
       createdAt: wf.createdAt,
       updatedAt: wf.updatedAt,
       documents: documents.map((document) => ({
@@ -427,6 +497,9 @@ const create = protectedProcedure
   )
   .handler(async ({ input, context }) => {
     const coworkerId = crypto.randomUUID();
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
       columns: { role: true },
@@ -453,6 +526,7 @@ const create = protectedProcedure
         description: descriptionToSave,
         username: usernameToSave,
         ownerId: context.user.id,
+        workspaceId,
         status: "on",
         triggerType: input.triggerType,
         prompt: input.prompt,
@@ -512,13 +586,10 @@ const update = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    const existing = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-    });
-
-    if (!existing) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: existing, workspaceId } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
 
     if (input.model !== undefined) {
       const dbUser = await context.db.query.user.findFirst({
@@ -637,7 +708,13 @@ const update = protectedProcedure
     const result = await context.db
       .update(coworker)
       .set(updates)
-      .where(and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)))
+      .where(
+        and(
+          eq(coworker.id, input.id),
+          eq(coworker.ownerId, context.user.id),
+          eq(coworker.workspaceId, workspaceId),
+        ),
+      )
       .returning({
         id: coworker.id,
         status: coworker.status,
@@ -669,9 +746,16 @@ const update = protectedProcedure
 const del = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const { workspaceId } = await requireOwnedCoworkerInActiveWorkspace(context, input.id);
     const result = await context.db
       .delete(coworker)
-      .where(and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)))
+      .where(
+        and(
+          eq(coworker.id, input.id),
+          eq(coworker.ownerId, context.user.id),
+          eq(coworker.workspaceId, workspaceId),
+        ),
+      )
       .returning({ id: coworker.id });
 
     if (result.length === 0) {
@@ -699,6 +783,7 @@ const edit = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    await requireOwnedCoworkerInActiveWorkspace(context, input.coworkerId);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
       columns: { role: true },
@@ -726,8 +811,9 @@ const uploadDocument = protectedProcedure
       description: z.string().max(1024).optional(),
     }),
   )
-  .handler(async ({ input, context }) =>
-    uploadCoworkerDocument({
+  .handler(async ({ input, context }) => {
+    await requireOwnedCoworkerInActiveWorkspace(context, input.coworkerId);
+    return uploadCoworkerDocument({
       database: context.db as typeof import("@cmdclaw/db/client").db,
       userId: context.user.id,
       coworkerId: input.coworkerId,
@@ -735,8 +821,8 @@ const uploadDocument = protectedProcedure
       mimeType: input.mimeType,
       contentBase64: input.content,
       description: input.description,
-    }),
-  );
+    });
+  });
 
 const deleteDocument = protectedProcedure
   .input(
@@ -744,13 +830,23 @@ const deleteDocument = protectedProcedure
       id: z.string(),
     }),
   )
-  .handler(async ({ input, context }) =>
-    deleteCoworkerDocument({
+  .handler(async ({ input, context }) => {
+    const existingDocument = await context.db.query.coworkerDocument.findFirst({
+      where: eq(coworkerDocument.id, input.id),
+      columns: { coworkerId: true },
+    });
+
+    if (!existingDocument) {
+      throw new ORPCError("NOT_FOUND", { message: "Document not found" });
+    }
+
+    await requireOwnedCoworkerInActiveWorkspace(context, existingDocument.coworkerId);
+    return deleteCoworkerDocument({
       database: context.db as typeof import("@cmdclaw/db/client").db,
       userId: context.user.id,
       documentId: input.id,
-    }),
-  );
+    });
+  });
 
 const trigger = protectedProcedure
   .input(
@@ -760,6 +856,7 @@ const trigger = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    await requireOwnedCoworkerInActiveWorkspace(context, input.id);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
       columns: { role: true },
@@ -776,8 +873,15 @@ const trigger = protectedProcedure
 const getRun = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const run = await context.db.query.coworkerRun.findFirst({
-      where: eq(coworkerRun.id, input.id),
+      where: and(
+        eq(coworkerRun.id, input.id),
+        eq(coworkerRun.ownerId, context.user.id),
+        eq(coworkerRun.workspaceId, workspaceId),
+      ),
     });
 
     if (!run) {
@@ -785,7 +889,11 @@ const getRun = protectedProcedure
     }
 
     const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, run.coworkerId), eq(coworker.ownerId, context.user.id)),
+      where: and(
+        eq(coworker.id, run.coworkerId),
+        eq(coworker.ownerId, context.user.id),
+        eq(coworker.workspaceId, workspaceId),
+      ),
       columns: {
         id: true,
         name: true,
@@ -839,16 +947,17 @@ const listRuns = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.coworkerId), eq(coworker.ownerId, context.user.id)),
-    });
-
-    if (!wf) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: wf, workspaceId } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.coworkerId,
+    );
 
     const runs = await context.db.query.coworkerRun.findMany({
-      where: eq(coworkerRun.coworkerId, wf.id),
+      where: and(
+        eq(coworkerRun.coworkerId, wf.id),
+        eq(coworkerRun.ownerId, context.user.id),
+        eq(coworkerRun.workspaceId, workspaceId),
+      ),
       orderBy: (run, { desc }) => [desc(run.startedAt)],
       limit: input.limit,
     });
@@ -865,14 +974,7 @@ const listRuns = protectedProcedure
 const getForwardingAlias = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-      columns: { id: true, triggerType: true },
-    });
-
-    if (!wf) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: wf } = await requireOwnedCoworkerInActiveWorkspace(context, input.id);
 
     const receivingDomain = getReceivingDomain();
     if (!receivingDomain || wf.triggerType !== EMAIL_FORWARDED_TRIGGER_TYPE) {
@@ -918,14 +1020,7 @@ const createForwardingAlias = protectedProcedure
       });
     }
 
-    const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-      columns: { id: true, triggerType: true },
-    });
-
-    if (!wf) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: wf } = await requireOwnedCoworkerInActiveWorkspace(context, input.id);
 
     if (wf.triggerType !== EMAIL_FORWARDED_TRIGGER_TYPE) {
       throw new ORPCError("BAD_REQUEST", {
@@ -1016,14 +1111,7 @@ const createForwardingAlias = protectedProcedure
 const disableForwardingAlias = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-      columns: { id: true },
-    });
-
-    if (!wf) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: wf } = await requireOwnedCoworkerInActiveWorkspace(context, input.id);
 
     const activeAlias = await context.db.query.coworkerEmailAlias.findFirst({
       where: and(eq(coworkerEmailAlias.coworkerId, wf.id), eq(coworkerEmailAlias.status, "active")),
@@ -1057,14 +1145,7 @@ const rotateForwardingAlias = protectedProcedure
       });
     }
 
-    const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-      columns: { id: true, triggerType: true },
-    });
-
-    if (!wf) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: wf } = await requireOwnedCoworkerInActiveWorkspace(context, input.id);
 
     if (wf.triggerType !== EMAIL_FORWARDED_TRIGGER_TYPE) {
       throw new ORPCError("BAD_REQUEST", {
@@ -1159,23 +1240,296 @@ const rotateForwardingAlias = protectedProcedure
     };
   });
 
+const share = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const { coworker: wf, workspaceId } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
+    const [shared] = await context.db
+      .update(coworker)
+      .set({ sharedAt: new Date() })
+      .where(
+        and(
+          eq(coworker.id, wf.id),
+          eq(coworker.ownerId, context.user.id),
+          eq(coworker.workspaceId, workspaceId),
+        ),
+      )
+      .returning({ id: coworker.id, sharedAt: coworker.sharedAt });
+
+    return {
+      success: true,
+      id: shared?.id ?? wf.id,
+      sharedAt: shared?.sharedAt ?? new Date(),
+    };
+  });
+
+const unshare = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const { coworker: wf, workspaceId } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
+    await context.db
+      .update(coworker)
+      .set({ sharedAt: null })
+      .where(
+        and(
+          eq(coworker.id, wf.id),
+          eq(coworker.ownerId, context.user.id),
+          eq(coworker.workspaceId, workspaceId),
+        ),
+      );
+
+    return { success: true };
+  });
+
+const listShared = protectedProcedure.handler(async ({ context }) => {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
+  const coworkers = await context.db.query.coworker.findMany({
+    where: and(eq(coworker.workspaceId, workspaceId)),
+    with: {
+      owner: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      documents: {
+        columns: { id: true },
+      },
+    },
+    orderBy: (wf, { desc }) => [desc(wf.sharedAt), desc(wf.updatedAt)],
+  });
+
+  return coworkers
+    .filter((wf) => wf.sharedAt)
+    .map((wf) => {
+      const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
+      return {
+        id: wf.id,
+        name: wf.name,
+        description: wf.description,
+        username: wf.username,
+        triggerType: wf.triggerType,
+        toolAccessMode,
+        allowedIntegrations: wf.allowedIntegrations,
+        allowedSkillSlugs,
+        prompt: wf.prompt,
+        model: wf.model,
+        sharedAt: wf.sharedAt,
+        updatedAt: wf.updatedAt,
+        owner: {
+          id: wf.owner.id,
+          name: wf.owner.name,
+          email: wf.owner.email,
+        },
+        documentCount: wf.documents.length,
+        isOwnedByCurrentUser: wf.ownerId === context.user.id,
+      };
+    });
+});
+
+const importShared = protectedProcedure
+  .input(
+    z.object({
+      sourceCoworkerId: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+    const dbUser = await context.db.query.user.findFirst({
+      where: eq(user.id, context.user.id),
+      columns: { role: true },
+    });
+
+    const source = await context.db.query.coworker.findFirst({
+      where: and(eq(coworker.id, input.sourceCoworkerId), eq(coworker.workspaceId, workspaceId)),
+    });
+
+    if (!source || !source.sharedAt) {
+      throw new ORPCError("NOT_FOUND", { message: "Shared coworker not found" });
+    }
+
+    assertModelAllowedForRole(source.model, dbUser?.role);
+
+    const coworkerId = crypto.randomUUID();
+    const coworkerQueryDatabase = context.db as unknown as {
+      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    };
+    const username = await resolveCoworkerUsername({
+      database: coworkerQueryDatabase,
+      coworkerId,
+      username: source.username,
+    });
+
+    const [created] = await context.db
+      .insert(coworker)
+      .values({
+        id: coworkerId,
+        name: source.name,
+        description: source.description,
+        username,
+        ownerId: context.user.id,
+        workspaceId,
+        status: "off",
+        triggerType: source.triggerType,
+        prompt: source.prompt,
+        model: source.model,
+        authSource: source.authSource,
+        promptDo: source.promptDo,
+        promptDont: source.promptDont,
+        autoApprove: source.autoApprove,
+        toolAccessMode: source.toolAccessMode,
+        allowedIntegrations: source.allowedIntegrations,
+        allowedCustomIntegrations: source.allowedCustomIntegrations,
+        allowedSkillSlugs: source.allowedSkillSlugs,
+        schedule: source.schedule,
+        sharedAt: null,
+      })
+      .returning({
+        id: coworker.id,
+        name: coworker.name,
+        description: coworker.description,
+        username: coworker.username,
+        status: coworker.status,
+      });
+
+    await copyCoworkerDocuments({
+      context,
+      sourceCoworkerId: source.id,
+      targetCoworkerId: coworkerId,
+      targetUserId: context.user.id,
+    });
+
+    return created;
+  });
+
+const adminListWorkspaceCoworkers = protectedProcedure.handler(async ({ context }) => {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAdmin(context.user.id);
+  const coworkers = await context.db.query.coworker.findMany({
+    where: eq(coworker.workspaceId, workspaceId),
+    with: {
+      owner: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: (wf, { desc }) => [desc(wf.updatedAt)],
+  });
+
+  return coworkers.map((wf) => ({
+    id: wf.id,
+    name: wf.name,
+    description: wf.description,
+    status: wf.status,
+    triggerType: wf.triggerType,
+    sharedAt: wf.sharedAt,
+    updatedAt: wf.updatedAt,
+    owner: wf.owner,
+  }));
+});
+
+const adminGetWorkspaceRun = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAdmin(context.user.id);
+    const run = await context.db.query.coworkerRun.findFirst({
+      where: and(eq(coworkerRun.id, input.id), eq(coworkerRun.workspaceId, workspaceId)),
+      with: {
+        coworker: {
+          columns: {
+            id: true,
+            name: true,
+          },
+          with: {
+            owner: {
+              columns: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new ORPCError("NOT_FOUND", { message: "Run not found" });
+    }
+
+    const events = await context.db.query.coworkerRunEvent.findMany({
+      where: eq(coworkerRunEvent.coworkerRunId, run.id),
+      orderBy: (evt, { asc }) => [asc(evt.createdAt)],
+    });
+    const gen = run.generationId
+      ? await context.db.query.generation.findFirst({
+          where: eq(generation.id, run.generationId),
+          columns: {
+            conversationId: true,
+          },
+        })
+      : null;
+
+    return {
+      id: run.id,
+      status: run.status,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      errorMessage: run.errorMessage,
+      conversationId: gen?.conversationId ?? null,
+      coworker: run.coworker
+        ? {
+            id: run.coworker.id,
+            name: run.coworker.name,
+            owner: run.coworker.owner,
+          }
+        : null,
+      events: events.map((evt) => ({
+        id: evt.id,
+        type: evt.type,
+        payload: evt.payload,
+        createdAt: evt.createdAt,
+      })),
+    };
+  });
+
 const getOrCreateBuilderConversation = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const wf = await context.db.query.coworker.findFirst({
-      where: and(eq(coworker.id, input.id), eq(coworker.ownerId, context.user.id)),
-      columns: { id: true, name: true, builderConversationId: true, model: true, authSource: true },
-    });
-
-    if (!wf) {
-      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
+    const { coworker: ownedCoworker, workspaceId } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
+    const wf = {
+      id: ownedCoworker.id,
+      name: ownedCoworker.name,
+      builderConversationId: ownedCoworker.builderConversationId,
+      model: ownedCoworker.model,
+      authSource: ownedCoworker.authSource,
+    };
 
     // Return existing conversation if it still exists
     if (wf.builderConversationId) {
       const existing = await context.db.query.conversation.findFirst({
         where: eq(conversation.id, wf.builderConversationId),
-        columns: { id: true, autoApprove: true },
+        columns: { id: true, autoApprove: true, workspaceId: true, userId: true, type: true },
       });
       if (existing) {
         if (existing.autoApprove) {
@@ -1186,11 +1540,18 @@ const getOrCreateBuilderConversation = protectedProcedure
               and(
                 eq(conversation.id, existing.id),
                 eq(conversation.userId, context.user.id),
+                eq(conversation.workspaceId, workspaceId),
                 eq(conversation.type, "coworker"),
               ),
             );
         }
-        return { conversationId: existing.id };
+        if (
+          existing.userId === context.user.id &&
+          existing.workspaceId === workspaceId &&
+          existing.type === "coworker"
+        ) {
+          return { conversationId: existing.id };
+        }
       }
     }
 
@@ -1199,6 +1560,7 @@ const getOrCreateBuilderConversation = protectedProcedure
       .insert(conversation)
       .values({
         userId: context.user.id,
+        workspaceId,
         type: "coworker",
         title: `${wf.name || "Coworker"} – Chat`,
         model: wf.model,
@@ -1214,7 +1576,13 @@ const getOrCreateBuilderConversation = protectedProcedure
     await context.db
       .update(coworker)
       .set({ builderConversationId: created.id })
-      .where(eq(coworker.id, wf.id));
+      .where(
+        and(
+          eq(coworker.id, wf.id),
+          eq(coworker.ownerId, context.user.id),
+          eq(coworker.workspaceId, workspaceId),
+        ),
+      );
 
     return { conversationId: created.id };
   });
@@ -1235,5 +1603,11 @@ export const coworkerRouter = {
   createForwardingAlias,
   disableForwardingAlias,
   rotateForwardingAlias,
+  share,
+  unshare,
+  listShared,
+  importShared,
+  adminListWorkspaceCoworkers,
+  adminGetWorkspaceRun,
   getOrCreateBuilderConversation,
 };

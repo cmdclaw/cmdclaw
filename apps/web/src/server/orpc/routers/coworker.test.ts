@@ -64,6 +64,18 @@ vi.mock("@/server/services/coworker-document", () => ({
   uploadCoworkerDocument: uploadCoworkerDocumentMock,
 }));
 
+vi.mock("../workspace-access", () => ({
+  requireActiveWorkspaceAccess: vi.fn(async () => ({
+    workspace: { id: "ws-1" },
+    membership: { role: "member" },
+  })),
+  requireActiveWorkspaceAdmin: vi.fn(async () => ({
+    workspace: { id: "ws-1" },
+    membership: { role: "admin" },
+  })),
+  isWorkspaceAdminRole: (role: string | null | undefined) => role === "admin" || role === "owner",
+}));
+
 import { coworkerRouter } from "./coworker";
 const coworkerRouterAny = coworkerRouter as unknown as Record<
   string,
@@ -128,6 +140,35 @@ function createContext() {
   };
 
   context.db.query.user.findFirst.mockResolvedValue({ role: "member" });
+  context.db.query.coworker.findFirst.mockResolvedValue({
+    id: "wf-1",
+    ownerId: "user-1",
+    workspaceId: "ws-1",
+    name: "Coworker",
+    description: null,
+    username: null,
+    status: "on",
+    triggerType: "manual",
+    prompt: "",
+    model: DEFAULT_MODEL,
+    authSource: null,
+    promptDo: null,
+    promptDont: null,
+    autoApprove: true,
+    toolAccessMode: "all",
+    allowedIntegrations: [],
+    allowedCustomIntegrations: [],
+    allowedSkillSlugs: [],
+    schedule: null,
+    builderConversationId: null,
+    sharedAt: null,
+    createdAt: new Date("2026-03-03T12:00:00.000Z"),
+    updatedAt: new Date("2026-03-03T12:00:00.000Z"),
+  });
+  context.db.query.coworkerDocument.findFirst.mockResolvedValue({
+    id: "doc-1",
+    coworkerId: "wf-1",
+  });
   context.db.query.coworkerDocument.findMany.mockResolvedValue([]);
 
   return context;
@@ -1201,6 +1242,9 @@ describe("coworkerRouter", () => {
     context.db.query.conversation.findFirst.mockResolvedValue({
       id: "conv-builder-1",
       autoApprove: true,
+      userId: "user-1",
+      workspaceId: "ws-1",
+      type: "coworker",
     });
 
     const result = await coworkerRouterAny.getOrCreateBuilderConversation({

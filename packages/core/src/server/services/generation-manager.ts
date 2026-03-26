@@ -2455,6 +2455,7 @@ class GenerationManager {
     model?: string;
     authSource?: ProviderAuthSource | null;
     userId: string;
+    workspaceId?: string | null;
     autoApprove: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
     allowedIntegrations: IntegrationType[];
@@ -2487,6 +2488,7 @@ class GenerationManager {
       .insert(conversation)
       .values({
         userId,
+        workspaceId: params.workspaceId ?? null,
         title: title || "Coworker run",
         type: "coworker",
         model: resolvedModel,

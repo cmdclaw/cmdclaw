@@ -826,6 +826,46 @@ export function useTriggerCoworker() {
   });
 }
 
+export function useShareCoworker() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => client.coworker.share({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
+
+export function useUnshareCoworker() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => client.coworker.unshare({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
+
+export function useSharedCoworkerList() {
+  return useQuery({
+    queryKey: ["coworker", "shared"],
+    queryFn: () => client.coworker.listShared(),
+  });
+}
+
+export function useImportSharedCoworker() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (sourceCoworkerId: string) => client.coworker.importShared({ sourceCoworkerId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
+
 export function useCoworkerRun(
   id: string | undefined,
   options?: {
@@ -1081,6 +1121,7 @@ export function useSwitchWorkspace() {
       queryClient.invalidateQueries({ queryKey: ["billing"] });
       queryClient.invalidateQueries({ queryKey: ["user", "me"] });
       queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
     },
   });
 }

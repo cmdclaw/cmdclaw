@@ -207,6 +207,8 @@ export async function triggerCoworkerRun(params: {
     .insert(coworkerRun)
     .values({
       coworkerId: wf.id,
+      ownerId: wf.ownerId,
+      workspaceId: wf.workspaceId,
       status: "running",
       triggerPayload: params.triggerPayload,
     })
@@ -267,6 +269,7 @@ export async function triggerCoworkerRun(params: {
       model: wf.model,
       authSource: wf.authSource,
       userId: wf.ownerId,
+      workspaceId: wf.workspaceId ?? null,
       autoApprove: wf.autoApprove,
       allowedIntegrations,
       allowedCustomIntegrations,
