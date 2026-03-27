@@ -394,22 +394,6 @@ export default function SubscriptionsPage() {
           );
         })}
       </div>
-
-      <div className="border-muted bg-muted/30 mt-6 rounded-lg border p-4">
-        <div className="flex items-start gap-2">
-          <Image
-            src="/integrations/anthropic.svg"
-            alt="Anthropic logo"
-            width={16}
-            height={16}
-            className="mt-0.5 h-4 w-auto shrink-0 dark:invert"
-          />
-          <p className="text-muted-foreground text-xs">
-            CmdClaw Models already includes Claude Sonnet 4.6. Connecting your ChatGPT account adds
-            your personal OpenAI-backed models without using CmdClaw credits.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

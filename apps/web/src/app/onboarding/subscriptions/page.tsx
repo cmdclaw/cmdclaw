@@ -354,22 +354,6 @@ function OnboardingSubscriptionsContent() {
         )}
       </div>
 
-      <div className="border-muted bg-muted/30 mb-6 rounded-xl border p-3.5">
-        <div className="flex items-start gap-2.5">
-          <Image
-            src="/integrations/anthropic.svg"
-            alt="Anthropic logo"
-            width={14}
-            height={14}
-            className="mt-0.5 h-3.5 w-auto shrink-0 dark:invert"
-          />
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            CmdClaw Models already includes Claude Sonnet 4.6. Connect ChatGPT if you also want to
-            use your personal OpenAI-backed models.
-          </p>
-        </div>
-      </div>
-
       <div className="flex justify-center gap-3">
         <Button variant="ghost" onClick={handleSkip}>
           Skip for now
