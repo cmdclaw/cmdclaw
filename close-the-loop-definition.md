@@ -24,6 +24,7 @@ In this codebase, an example of"closing the loop" is:
 3. Read the workflow guide directly from the repo when needed: `bun run cat close-the-loop-definition.md`.
 4. Validate behavior via `bun run chat` (real prompt, real execution path).
    Example: `bun run chat --message "send a message on slack saying hi" --model openai/gpt-5.4-mini`
+   In a real terminal, `--message` seeds the first turn and then keeps the same chat open at `followup>` so you can continue iterating without restarting the CLI.
 5. Read tmux logs to confirm server + worker behavior and catch regressions.
 6. Iterate immediately until the prompt result matches expected behavior.
 
