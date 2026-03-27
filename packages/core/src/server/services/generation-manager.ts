@@ -5,7 +5,6 @@ import {
   generation,
   message,
   messageAttachment,
-  skill,
   user,
   coworker,
   coworkerRun,
@@ -93,6 +92,7 @@ import {
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-documents-prep";
 import { buildMemorySystemPrompt, syncMemoryFilesToSandbox } from "../sandbox/prep/memory-prep";
+import { prepareExecutorInSandbox } from "../sandbox/prep/executor-prep";
 import {
   getIntegrationSkillsSystemPrompt,
   getSkillsSystemPrompt,
@@ -125,6 +125,7 @@ import { uploadSandboxFile, collectNewSandboxFiles } from "./sandbox-file-servic
 import { getSandboxSlotManager } from "./sandbox-slot-manager";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
 import { conversationRuntimeService } from "./conversation-runtime-service";
+import { listAccessibleEnabledSkillMetadataForUser } from "./workspace-skill-service";
 import {
   canAttemptRecovery,
   classifyRuntimeFailure,
@@ -316,6 +317,7 @@ interface GenerationContext {
   traceId: string;
   conversationId: string;
   userId: string;
+  workspaceId?: string | null;
   sandboxId?: string;
   status: GenerationStatus;
   executionPolicy: GenerationExecutionPolicy;
@@ -366,6 +368,7 @@ interface GenerationContext {
   allowedIntegrations?: IntegrationType[];
   autoApprove: boolean;
   allowedCustomIntegrations?: string[];
+  allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
   coworkerPrompt?: string;
   coworkerPromptDo?: string;
@@ -591,6 +594,7 @@ function extractAssistantTextFromSessionMessagesPayload(payload: unknown): strin
 function buildExecutionPolicy(params: {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
+  allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
   autoApprove: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
@@ -600,6 +604,7 @@ function buildExecutionPolicy(params: {
   return {
     allowedIntegrations: params.allowedIntegrations,
     allowedCustomIntegrations: params.allowedCustomIntegrations,
+    allowedExecutorSourceIds: params.allowedExecutorSourceIds,
     allowedSkillSlugs: params.allowedSkillSlugs,
     autoApprove: params.autoApprove,
     sandboxProvider: params.sandboxProvider,
@@ -1666,6 +1671,7 @@ class GenerationManager {
   ): {
     allowedIntegrations?: IntegrationType[];
     allowedCustomIntegrations?: string[];
+    allowedExecutorSourceIds?: string[];
     allowedSkillSlugs?: string[];
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
@@ -1683,6 +1689,7 @@ class GenerationManager {
     return {
       allowedIntegrations,
       allowedCustomIntegrations: policy?.allowedCustomIntegrations,
+      allowedExecutorSourceIds: policy?.allowedExecutorSourceIds,
       allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(policy?.allowedSkillSlugs),
       autoApprove: policy?.autoApprove ?? fallbackAutoApprove,
       sandboxProvider:
@@ -2357,6 +2364,7 @@ class GenerationManager {
       traceId,
       conversationId: conv.id,
       userId,
+      workspaceId: conv.workspaceId ?? null,
       status: "running",
       executionPolicy,
       deadlineAt: lifecycle.deadlineAt,
@@ -2460,6 +2468,7 @@ class GenerationManager {
     sandboxProvider?: "e2b" | "daytona" | "docker";
     allowedIntegrations: IntegrationType[];
     allowedCustomIntegrations?: string[];
+    allowedExecutorSourceIds?: string[];
     allowedSkillSlugs?: string[];
     fileAttachments?: UserFileAttachment[];
   }): Promise<{ generationId: string; conversationId: string }> {
@@ -2521,6 +2530,7 @@ class GenerationManager {
     const executionPolicy = buildExecutionPolicy({
       allowedIntegrations: params.allowedIntegrations,
       allowedCustomIntegrations: params.allowedCustomIntegrations,
+      allowedExecutorSourceIds: params.allowedExecutorSourceIds,
       allowedSkillSlugs: normalizedAllowedSkillSlugs,
       autoApprove: params.autoApprove,
       sandboxProvider: params.sandboxProvider,
@@ -2582,6 +2592,7 @@ class GenerationManager {
       traceId: createTraceId(),
       conversationId: newConv.id,
       userId,
+      workspaceId: params.workspaceId ?? null,
       status: "running",
       executionPolicy,
       deadlineAt: lifecycle.deadlineAt,
@@ -2611,6 +2622,7 @@ class GenerationManager {
       allowedIntegrations: params.allowedIntegrations,
       autoApprove: params.autoApprove,
       allowedCustomIntegrations: params.allowedCustomIntegrations,
+      allowedExecutorSourceIds: params.allowedExecutorSourceIds,
       allowedSkillSlugs: normalizedAllowedSkillSlugs,
       coworkerPrompt: undefined,
       coworkerPromptDo: undefined,
@@ -2696,6 +2708,7 @@ class GenerationManager {
           columns: {
             allowedIntegrations: true,
             allowedCustomIntegrations: true,
+            allowedExecutorSourceIds: true,
             allowedSkillSlugs: true,
             prompt: true,
             promptDo: true,
@@ -2758,6 +2771,7 @@ class GenerationManager {
       traceId: createTraceId(),
       conversationId: genRecord.conversationId,
       userId: genRecord.conversation.userId,
+      workspaceId: genRecord.conversation.workspaceId ?? null,
       status: genRecord.status,
       executionPolicy,
       deadlineAt: resolveGenerationDeadlineAt({
@@ -2805,6 +2819,10 @@ class GenerationManager {
       allowedCustomIntegrations:
         executionPolicy.allowedCustomIntegrations ??
         linkedCoworker?.allowedCustomIntegrations ??
+        undefined,
+      allowedExecutorSourceIds:
+        executionPolicy.allowedExecutorSourceIds ??
+        linkedCoworker?.allowedExecutorSourceIds ??
         undefined,
       allowedSkillSlugs:
         executionPolicy.allowedSkillSlugs ?? linkedCoworkerAllowedSkillSlugs ?? undefined,
@@ -4885,6 +4903,7 @@ class GenerationManager {
 
       // Write memory files to sandbox
       let memoryInstructions = buildMemorySystemPrompt();
+      let executorInstructions: string | null = null;
       let enabledSkillRows: Array<{ name: string; updatedAt: Date }> = [];
       let writtenSkills: string[] = [];
       let writtenIntegrationSkills: string[] = [];
@@ -4914,15 +4933,24 @@ class GenerationManager {
         }
       }
 
+      try {
+        const executorPrepStartedAt = Date.now();
+        const executorBootstrap = await prepareExecutorInSandbox({
+          sandbox: runtimeSandbox,
+          workspaceId: ctx.workspaceId,
+          userId: ctx.userId,
+          allowedSourceIds: ctx.allowedExecutorSourceIds,
+          runtimeId: ctx.runtimeId,
+        });
+        executorInstructions = executorBootstrap?.instructions ?? null;
+        markPrePromptStep("prepareExecutorInSandboxMs", executorPrepStartedAt);
+      } catch (error) {
+        console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
+      }
+
       const metadataQueryStartedAt = Date.now();
       const [loadedSkillRows, customCreds] = await Promise.all([
-        db.query.skill.findMany({
-          where: and(eq(skill.userId, ctx.userId), eq(skill.enabled, true)),
-          columns: {
-            name: true,
-            updatedAt: true,
-          },
-        }),
+        listAccessibleEnabledSkillMetadataForUser(ctx.userId),
         db.query.customIntegrationCredential.findMany({
           where: and(
             eq(customIntegrationCredential.userId, ctx.userId),
@@ -5100,6 +5128,7 @@ class GenerationManager {
         ? {
             kind: "coworker_runner",
             cliInstructions,
+            executorInstructions,
             skillsInstructions,
             integrationSkillsInstructions,
             memoryInstructions,
@@ -5114,6 +5143,7 @@ class GenerationManager {
           ? {
               kind: "coworker_builder",
               cliInstructions,
+              executorInstructions,
               skillsInstructions,
               integrationSkillsInstructions,
               memoryInstructions,
@@ -5124,6 +5154,7 @@ class GenerationManager {
           : {
               kind: "chat",
               cliInstructions,
+              executorInstructions,
               skillsInstructions,
               integrationSkillsInstructions,
               memoryInstructions,

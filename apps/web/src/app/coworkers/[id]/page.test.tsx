@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 void jestDomVitest;
 
 const {
+  mockCoworkerRefetch,
   mockUpdateCoworkerMutateAsync,
   mockGetOrCreateBuilderConversationMutate,
   mockGetOrCreateBuilderConversationMutateAsync,
@@ -21,6 +22,7 @@ const {
   mockCoworkerData,
   mockCoworkerRunsData,
 } = vi.hoisted(() => ({
+  mockCoworkerRefetch: vi.fn(),
   mockUpdateCoworkerMutateAsync: vi.fn(),
   mockGetOrCreateBuilderConversationMutate: vi.fn(),
   mockGetOrCreateBuilderConversationMutateAsync: vi.fn(),
@@ -124,7 +126,28 @@ vi.mock("react-markdown", () => ({
 }));
 
 vi.mock("@/components/chat/chat-area", () => ({
-  ChatArea: () => <div>Chat</div>,
+  ChatArea: ({
+    onCoworkerSync,
+  }: {
+    onCoworkerSync?: (payload: { coworkerId: string; prompt?: string; updatedAt?: string }) => void;
+  }) => {
+    const handleSync = React.useCallback(() => {
+      onCoworkerSync?.({
+        coworkerId: "cw-1",
+        prompt: "Builder patched prompt",
+        updatedAt: "2026-03-12T10:05:00.000Z",
+      });
+    }, [onCoworkerSync]);
+
+    return (
+      <div>
+        <div>Chat</div>
+        <button type="button" onClick={handleSync}>
+          Sync coworker
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("@/components/chat/model-selector", () => ({
@@ -263,7 +286,7 @@ vi.mock("@/orpc/hooks", () => ({
   useCoworker: () => ({
     data: mockCoworkerData.current,
     isLoading: false,
-    refetch: vi.fn(),
+    refetch: mockCoworkerRefetch,
   }),
   useCoworkerForwardingAlias: () => ({ data: null }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
@@ -276,6 +299,7 @@ vi.mock("@/orpc/hooks", () => ({
     mutate: mockGetOrCreateBuilderConversationMutate,
     mutateAsync: mockGetOrCreateBuilderConversationMutateAsync,
   }),
+  useExecutorSourceList: () => ({ data: { sources: [] } }),
   usePlatformSkillList: () => ({ data: [], isLoading: false }),
   useProviderAuthStatus: () => ({
     data: {
@@ -304,6 +328,7 @@ describe("CoworkerEditorPage", () => {
     vi.useFakeTimers();
     pushStateSpy = vi.spyOn(window.history, "pushState");
     replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    mockCoworkerRefetch.mockReset();
     mockUpdateCoworkerMutateAsync.mockReset();
     mockGetOrCreateBuilderConversationMutate.mockReset();
     mockGetOrCreateBuilderConversationMutateAsync.mockReset();
@@ -519,6 +544,36 @@ describe("CoworkerEditorPage", () => {
     });
 
     expect(screen.getByDisplayValue("Locally edited description")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+  });
+
+  it("refetches coworker instructions when builder chat reports a coworker sync", async () => {
+    mockCoworkerRefetch.mockImplementation(async () => {
+      mockCoworkerData.current = {
+        ...mockCoworkerData.current,
+        prompt: "Builder patched prompt",
+        updatedAt: new Date("2026-03-12T10:05:00.000Z"),
+      };
+      return { data: mockCoworkerData.current };
+    });
+
+    const { rerender } = render(<CoworkerEditorPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Existing prompt")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /sync coworker/i }));
+      await Promise.resolve();
+      rerender(<CoworkerEditorPage />);
+      await Promise.resolve();
+    });
+
+    expect(mockCoworkerRefetch).toHaveBeenCalledTimes(1);
     expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
   });
 

@@ -3,11 +3,13 @@ import { zipSync, strToU8 } from "fflate";
 import { Buffer } from "node:buffer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { ensureBucketMock, generateStorageKeyMock, uploadToS3Mock } = vi.hoisted(() => ({
-  ensureBucketMock: vi.fn(),
-  generateStorageKeyMock: vi.fn(),
-  uploadToS3Mock: vi.fn(),
-}));
+const { ensureBucketMock, generateStorageKeyMock, uploadToS3Mock, resolveUniqueSkillNameMock } =
+  vi.hoisted(() => ({
+    ensureBucketMock: vi.fn(),
+    generateStorageKeyMock: vi.fn(),
+    uploadToS3Mock: vi.fn(),
+    resolveUniqueSkillNameMock: vi.fn(),
+  }));
 
 vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
   ensureBucket: ensureBucketMock,
@@ -15,9 +17,13 @@ vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
   uploadToS3: uploadToS3Mock,
 }));
 
+vi.mock("@cmdclaw/core/server/services/workspace-skill-service", () => ({
+  resolveUniqueSkillNameInWorkspace: resolveUniqueSkillNameMock,
+}));
+
 import { importSkill } from "./skill-import";
 
-function createDatabase(existingNames: string[] = []) {
+function createDatabase() {
   const insertedSkills: Array<Record<string, unknown>> = [];
   const insertedFiles: Array<Array<Record<string, unknown>>> = [];
   const insertedDocuments: Array<Array<Record<string, unknown>>> = [];
@@ -57,11 +63,6 @@ function createDatabase(existingNames: string[] = []) {
   };
 
   const db = {
-    query: {
-      skill: {
-        findMany: vi.fn(async () => existingNames.map((name) => ({ name }))),
-      },
-    },
     transaction: vi.fn(
       async (callback: (input: typeof tx) => Promise<unknown>) => await callback(tx),
     ),
@@ -91,11 +92,14 @@ describe("importSkill", () => {
     generateStorageKeyMock.mockImplementation(
       (_userId: string, skillId: string, filename: string) => `skills/${skillId}/${filename}`,
     );
+    resolveUniqueSkillNameMock.mockImplementation(
+      async (_database: unknown, _workspaceId: string, baseName: string) => baseName,
+    );
   });
 
   it("imports a root-level zip with text files and binary assets", async () => {
     const database = createDatabase();
-    const result = await importSkill(database.db as never, "user-1", {
+    const result = await importSkill(database.db as never, "user-1", "ws-1", {
       mode: "zip",
       filename: "weekly-report.zip",
       contentBase64: encodeZip({
@@ -119,8 +123,10 @@ description: Build a weekly report
       enabled: false,
     });
     expect(database.insertedSkills[0]).toMatchObject({
+      workspaceId: "ws-1",
       name: "weekly-report",
       displayName: "weekly-report",
+      visibility: "private",
       enabled: false,
     });
     expect(database.insertedFiles[0]).toEqual(
@@ -146,7 +152,7 @@ description: Build a weekly report
   it("strips a single top-level folder from zip imports", async () => {
     const database = createDatabase();
 
-    const result = await importSkill(database.db as never, "user-1", {
+    const result = await importSkill(database.db as never, "user-1", "ws-1", {
       mode: "zip",
       filename: "weekly-report.zip",
       contentBase64: encodeZip({
@@ -171,9 +177,10 @@ description: Build a weekly report
   });
 
   it("creates a suffixed copy when the skill slug already exists", async () => {
-    const database = createDatabase(["weekly-report"]);
+    const database = createDatabase();
+    resolveUniqueSkillNameMock.mockResolvedValue("weekly-report-2");
 
-    const result = await importSkill(database.db as never, "user-1", {
+    const result = await importSkill(database.db as never, "user-1", "ws-1", {
       mode: "folder",
       files: [
         {
@@ -197,7 +204,7 @@ description: Build a weekly report
   it("uses frontmatter name for displayName instead of placeholder headings", async () => {
     const database = createDatabase();
 
-    const result = await importSkill(database.db as never, "user-1", {
+    const result = await importSkill(database.db as never, "user-1", "ws-1", {
       mode: "folder",
       files: [
         {
@@ -227,7 +234,7 @@ Real content here.
   it("imports multiline descriptions from YAML block scalars", async () => {
     const database = createDatabase();
 
-    const result = await importSkill(database.db as never, "user-1", {
+    const result = await importSkill(database.db as never, "user-1", "ws-1", {
       mode: "folder",
       files: [
         {
@@ -263,7 +270,7 @@ allowed-tools:
     const database = createDatabase();
 
     await expect(
-      importSkill(database.db as never, "user-1", {
+      importSkill(database.db as never, "user-1", "ws-1", {
         mode: "folder",
         files: [
           {

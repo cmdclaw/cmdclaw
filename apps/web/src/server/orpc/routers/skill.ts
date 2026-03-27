@@ -1,19 +1,25 @@
 import {
-  uploadToS3,
+  buildAccessibleSkillWhere,
+  buildOwnedSkillWhere,
+  copySkillToWorkspaceOwner,
+  resolveUniqueSkillNameInWorkspace,
+} from "@cmdclaw/core/server/services/workspace-skill-service";
+import {
   deleteFromS3,
-  getPresignedDownloadUrl,
-  generateStorageKey,
   ensureBucket,
+  generateStorageKey,
+  getPresignedDownloadUrl,
+  uploadToS3,
 } from "@cmdclaw/core/server/storage/s3-client";
-import { skill, skillFile, skillDocument } from "@cmdclaw/db/schema";
+import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { eq, and, count } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { z } from "zod";
 import { importSkill } from "@/server/services/skill-import";
 import { validateFileUpload } from "@/server/storage/validation";
 import { protectedProcedure } from "../middleware";
+import { requireActiveWorkspaceAccess } from "../workspace-access";
 
-// Helper to generate a valid skill slug (lowercase, numbers, hyphens only)
 function toSkillSlug(name: string): string {
   return name
     .toLowerCase()
@@ -23,7 +29,6 @@ function toSkillSlug(name: string): string {
     .slice(0, 64);
 }
 
-// Generate default SKILL.md content
 function generateSkillMd(displayName: string, slug: string, description: string): string {
   return `---
 name: ${slug}
@@ -36,74 +41,169 @@ Add your skill instructions here...
 `;
 }
 
-// List user's skills
-const list = protectedProcedure.handler(async ({ context }) => {
-  const skills = await context.db.query.skill.findMany({
-    where: eq(skill.userId, context.user.id),
-    with: {
-      files: true,
+function formatSkillSummary(
+  row: {
+    id: string;
+    name: string;
+    displayName: string;
+    description: string;
+    icon: string | null;
+    enabled: boolean;
+    visibility: "private" | "public";
+    createdAt: Date;
+    updatedAt: Date;
+    files: Array<unknown>;
+    user: {
+      id: string;
+      name: string | null;
+      email: string | null;
+    };
+    userId: string;
+  },
+  currentUserId: string,
+) {
+  const isOwnedByCurrentUser = row.userId === currentUserId;
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.displayName,
+    description: row.description,
+    icon: row.icon,
+    enabled: row.enabled,
+    visibility: row.visibility,
+    owner: {
+      id: row.user.id,
+      name: row.user.name,
+      email: row.user.email,
     },
-    orderBy: (skill, { desc }) => [desc(skill.createdAt)],
+    isOwnedByCurrentUser,
+    canEdit: isOwnedByCurrentUser,
+    fileCount: row.files.length,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function requireOwnedSkillInActiveWorkspace(
+  context: {
+    user: { id: string };
+    db: typeof import("@cmdclaw/db/client").db;
+  },
+  skillId: string,
+) {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
+
+  const existingSkill = await context.db.query.skill.findFirst({
+    where: and(eq(skill.id, skillId), buildOwnedSkillWhere(workspaceId, context.user.id)),
   });
 
-  return skills.map((s) => ({
-    id: s.id,
-    name: s.name,
-    displayName: s.displayName,
-    description: s.description,
-    icon: s.icon,
-    enabled: s.enabled,
-    fileCount: s.files.length,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-  }));
+  if (!existingSkill) {
+    throw new ORPCError("NOT_FOUND", { message: "Skill not found" });
+  }
+
+  return { existingSkill, workspaceId };
+}
+
+async function requireReadableSkillInActiveWorkspace(
+  context: {
+    user: { id: string };
+    db: typeof import("@cmdclaw/db/client").db;
+  },
+  skillId: string,
+) {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
+
+  const existingSkill = await context.db.query.skill.findFirst({
+    where: and(eq(skill.id, skillId), buildAccessibleSkillWhere(workspaceId, context.user.id)),
+    with: {
+      user: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      files: true,
+      documents: true,
+    },
+  });
+
+  if (!existingSkill) {
+    throw new ORPCError("NOT_FOUND", { message: "Skill not found" });
+  }
+
+  return { existingSkill, workspaceId };
+}
+
+const list = protectedProcedure.handler(async ({ context }) => {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
+
+  const skills = await context.db.query.skill.findMany({
+    where: buildAccessibleSkillWhere(workspaceId, context.user.id),
+    with: {
+      files: true,
+      user: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: (table, { desc, asc }) => [desc(table.createdAt), asc(table.name)],
+  });
+
+  return skills.map((row) => formatSkillSummary(row, context.user.id));
 });
 
-// Get a single skill with all files and documents
 const get = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const result = await context.db.query.skill.findFirst({
-      where: and(eq(skill.id, input.id), eq(skill.userId, context.user.id)),
-      with: {
-        files: true,
-        documents: true,
-      },
-    });
-
-    if (!result) {
-      throw new ORPCError("NOT_FOUND", { message: "Skill not found" });
-    }
+    const { existingSkill } = await requireReadableSkillInActiveWorkspace(context, input.id);
+    const isOwnedByCurrentUser = existingSkill.userId === context.user.id;
 
     return {
-      id: result.id,
-      name: result.name,
-      displayName: result.displayName,
-      description: result.description,
-      icon: result.icon,
-      enabled: result.enabled,
-      files: result.files.map((f) => ({
-        id: f.id,
-        path: f.path,
-        content: f.content,
-        createdAt: f.createdAt,
-        updatedAt: f.updatedAt,
+      id: existingSkill.id,
+      name: existingSkill.name,
+      displayName: existingSkill.displayName,
+      description: existingSkill.description,
+      icon: existingSkill.icon,
+      enabled: existingSkill.enabled,
+      visibility: existingSkill.visibility,
+      owner: {
+        id: existingSkill.user.id,
+        name: existingSkill.user.name,
+        email: existingSkill.user.email,
+      },
+      isOwnedByCurrentUser,
+      canEdit: isOwnedByCurrentUser,
+      files: existingSkill.files.map((file) => ({
+        id: file.id,
+        path: file.path,
+        content: file.content,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
       })),
-      documents: result.documents.map((d) => ({
-        id: d.id,
-        filename: d.filename,
-        path: d.path,
-        mimeType: d.mimeType,
-        sizeBytes: d.sizeBytes,
-        description: d.description,
-        createdAt: d.createdAt,
+      documents: existingSkill.documents.map((document) => ({
+        id: document.id,
+        filename: document.filename,
+        path: document.path,
+        mimeType: document.mimeType,
+        sizeBytes: document.sizeBytes,
+        description: document.description,
+        createdAt: document.createdAt,
       })),
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
+      createdAt: existingSkill.createdAt,
+      updatedAt: existingSkill.updatedAt,
     };
   });
 
-// Create a new skill
 const create = protectedProcedure
   .input(
     z.object({
@@ -113,25 +213,44 @@ const create = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
     const slug = toSkillSlug(input.displayName);
 
     if (!slug) {
       throw new ORPCError("BAD_REQUEST", { message: "Invalid skill name" });
     }
 
-    // Create skill
+    const resolvedSlug = await resolveUniqueSkillNameInWorkspace(
+      context.db as never,
+      workspaceId,
+      slug,
+    ).catch((error) => {
+      throw new ORPCError("BAD_REQUEST", {
+        message: error instanceof Error ? error.message : "Invalid skill name",
+      });
+    });
+
+    if (resolvedSlug !== slug) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "A skill with that name already exists in this workspace",
+      });
+    }
+
     const [newSkill] = await context.db
       .insert(skill)
       .values({
         userId: context.user.id,
+        workspaceId,
         name: slug,
         displayName: input.displayName,
         description: input.description,
         icon: input.icon,
+        visibility: "private",
       })
       .returning();
 
-    // Create default SKILL.md file
     await context.db.insert(skillFile).values({
       skillId: newSkill.id,
       path: "SKILL.md",
@@ -144,6 +263,7 @@ const create = protectedProcedure
       displayName: newSkill.displayName,
       description: newSkill.description,
       icon: newSkill.icon,
+      visibility: newSkill.visibility,
     };
   });
 
@@ -171,15 +291,18 @@ const importInputSchema = z.discriminatedUnion("mode", [
 const importSkillDefinition = protectedProcedure
   .input(importInputSchema)
   .handler(async ({ input, context }) => {
-    return await importSkill(context.db as never, context.user.id, input);
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
+    return await importSkill(context.db as never, context.user.id, workspaceId, input);
   });
 
-// Update skill metadata
 const update = protectedProcedure
   .input(
     z.object({
       id: z.string(),
-      name: z.string().min(1).max(64).optional(), // slug
+      name: z.string().min(1).max(64).optional(),
       displayName: z.string().min(1).max(128).optional(),
       description: z.string().min(1).max(1024).optional(),
       icon: z.string().max(64).nullish(),
@@ -187,14 +310,35 @@ const update = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    const { workspaceId } = await requireOwnedSkillInActiveWorkspace(context, input.id);
     const updates: Partial<typeof skill.$inferInsert> = {};
 
     if (input.name !== undefined) {
-      updates.name = toSkillSlug(input.name);
-      if (!updates.name) {
+      const normalizedName = toSkillSlug(input.name);
+      if (!normalizedName) {
         throw new ORPCError("BAD_REQUEST", { message: "Invalid skill name" });
       }
+
+      const resolvedName = await resolveUniqueSkillNameInWorkspace(
+        context.db as never,
+        workspaceId,
+        normalizedName,
+        { excludeSkillId: input.id },
+      ).catch((error) => {
+        throw new ORPCError("BAD_REQUEST", {
+          message: error instanceof Error ? error.message : "Invalid skill name",
+        });
+      });
+
+      if (resolvedName !== normalizedName) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "A skill with that name already exists in this workspace",
+        });
+      }
+
+      updates.name = resolvedName;
     }
+
     if (input.displayName !== undefined) {
       updates.displayName = input.displayName;
     }
@@ -211,7 +355,7 @@ const update = protectedProcedure
     const result = await context.db
       .update(skill)
       .set(updates)
-      .where(and(eq(skill.id, input.id), eq(skill.userId, context.user.id)))
+      .where(eq(skill.id, input.id))
       .returning({ id: skill.id });
 
     if (result.length === 0) {
@@ -221,13 +365,14 @@ const update = protectedProcedure
     return { success: true };
   });
 
-// Delete a skill
 const deleteSkill = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
+    await requireOwnedSkillInActiveWorkspace(context, input.id);
+
     const result = await context.db
       .delete(skill)
-      .where(and(eq(skill.id, input.id), eq(skill.userId, context.user.id)))
+      .where(eq(skill.id, input.id))
       .returning({ id: skill.id });
 
     if (result.length === 0) {
@@ -237,7 +382,85 @@ const deleteSkill = protectedProcedure
     return { success: true };
   });
 
-// Add a file to a skill
+const share = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    await requireOwnedSkillInActiveWorkspace(context, input.id);
+
+    const [shared] = await context.db
+      .update(skill)
+      .set({ visibility: "public" })
+      .where(eq(skill.id, input.id))
+      .returning({ id: skill.id, visibility: skill.visibility });
+
+    return {
+      success: true,
+      id: shared?.id ?? input.id,
+      visibility: shared?.visibility ?? "public",
+    };
+  });
+
+const unshare = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    await requireOwnedSkillInActiveWorkspace(context, input.id);
+
+    const [unshared] = await context.db
+      .update(skill)
+      .set({ visibility: "private" })
+      .where(eq(skill.id, input.id))
+      .returning({ id: skill.id, visibility: skill.visibility });
+
+    return {
+      success: true,
+      id: unshared?.id ?? input.id,
+      visibility: unshared?.visibility ?? "private",
+    };
+  });
+
+const saveShared = protectedProcedure
+  .input(z.object({ sourceSkillId: z.string() }))
+  .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
+    const sourceSkill = await context.db.query.skill.findFirst({
+      where: and(
+        eq(skill.id, input.sourceSkillId),
+        eq(skill.workspaceId, workspaceId),
+        eq(skill.visibility, "public"),
+      ),
+    });
+
+    if (!sourceSkill) {
+      throw new ORPCError("NOT_FOUND", { message: "Shared skill not found" });
+    }
+
+    const copiedSkill = await copySkillToWorkspaceOwner({
+      database: context.db as never,
+      sourceSkillId: sourceSkill.id,
+      targetUserId: context.user.id,
+      targetWorkspaceId: workspaceId,
+      enabled: false,
+      visibility: "private",
+    });
+
+    if (!copiedSkill) {
+      throw new ORPCError("NOT_FOUND", { message: "Shared skill not found" });
+    }
+
+    return {
+      id: copiedSkill.id,
+      name: copiedSkill.name,
+      displayName: copiedSkill.displayName,
+      description: copiedSkill.description,
+      icon: copiedSkill.icon,
+      enabled: copiedSkill.enabled,
+      visibility: copiedSkill.visibility,
+    };
+  });
+
 const addFile = protectedProcedure
   .input(
     z.object({
@@ -247,14 +470,7 @@ const addFile = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    // Verify ownership
-    const existingSkill = await context.db.query.skill.findFirst({
-      where: and(eq(skill.id, input.skillId), eq(skill.userId, context.user.id)),
-    });
-
-    if (!existingSkill) {
-      throw new ORPCError("NOT_FOUND", { message: "Skill not found" });
-    }
+    await requireOwnedSkillInActiveWorkspace(context, input.skillId);
 
     const [newFile] = await context.db
       .insert(skillFile)
@@ -271,7 +487,6 @@ const addFile = protectedProcedure
     };
   });
 
-// Update a file
 const updateFile = protectedProcedure
   .input(
     z.object({
@@ -280,7 +495,10 @@ const updateFile = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    // Get the file and verify ownership through skill
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
     const existingFile = await context.db.query.skillFile.findFirst({
       where: eq(skillFile.id, input.id),
       with: {
@@ -288,7 +506,11 @@ const updateFile = protectedProcedure
       },
     });
 
-    if (!existingFile || existingFile.skill.userId !== context.user.id) {
+    if (
+      !existingFile ||
+      existingFile.skill.userId !== context.user.id ||
+      existingFile.skill.workspaceId !== workspaceId
+    ) {
       throw new ORPCError("NOT_FOUND", { message: "File not found" });
     }
 
@@ -300,11 +522,13 @@ const updateFile = protectedProcedure
     return { success: true };
   });
 
-// Delete a file
 const deleteFile = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    // Get the file and verify ownership through skill
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
     const existingFile = await context.db.query.skillFile.findFirst({
       where: eq(skillFile.id, input.id),
       with: {
@@ -312,11 +536,14 @@ const deleteFile = protectedProcedure
       },
     });
 
-    if (!existingFile || existingFile.skill.userId !== context.user.id) {
+    if (
+      !existingFile ||
+      existingFile.skill.userId !== context.user.id ||
+      existingFile.skill.workspaceId !== workspaceId
+    ) {
       throw new ORPCError("NOT_FOUND", { message: "File not found" });
     }
 
-    // Don't allow deleting SKILL.md
     if (existingFile.path === "SKILL.md") {
       throw new ORPCError("BAD_REQUEST", { message: "Cannot delete SKILL.md" });
     }
@@ -326,48 +553,33 @@ const deleteFile = protectedProcedure
     return { success: true };
   });
 
-// ========== DOCUMENT ROUTES ==========
-
-// Upload a document
 const uploadDocument = protectedProcedure
   .input(
     z.object({
       skillId: z.string(),
       filename: z.string().min(1).max(256),
       mimeType: z.string(),
-      content: z.string(), // Base64-encoded file content
+      content: z.string(),
       description: z.string().max(1024).optional(),
     }),
   )
   .handler(async ({ input, context }) => {
-    // Verify skill ownership
-    const existingSkill = await context.db.query.skill.findFirst({
-      where: and(eq(skill.id, input.skillId), eq(skill.userId, context.user.id)),
-    });
+    await requireOwnedSkillInActiveWorkspace(context, input.skillId);
 
-    if (!existingSkill) {
-      throw new ORPCError("NOT_FOUND", { message: "Skill not found" });
-    }
-
-    // Decode base64 content
     const fileBuffer = Buffer.from(input.content, "base64");
     const sizeBytes = fileBuffer.length;
 
-    // Get current document count
     const [{ value: docCount }] = await context.db
       .select({ value: count() })
       .from(skillDocument)
       .where(eq(skillDocument.skillId, input.skillId));
 
-    // Validate
     validateFileUpload(input.filename, input.mimeType, sizeBytes, docCount);
 
-    // Ensure bucket exists and upload to S3
     await ensureBucket();
     const storageKey = generateStorageKey(context.user.id, input.skillId, input.filename);
     await uploadToS3(storageKey, fileBuffer, input.mimeType);
 
-    // Save metadata to database
     const [newDocument] = await context.db
       .insert(skillDocument)
       .values({
@@ -389,17 +601,25 @@ const uploadDocument = protectedProcedure
     };
   });
 
-// Get download URL for a document
 const getDocumentUrl = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    // Get document and verify ownership through skill
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
     const document = await context.db.query.skillDocument.findFirst({
       where: eq(skillDocument.id, input.id),
-      with: { skill: true },
+      with: {
+        skill: true,
+      },
     });
 
-    if (!document || document.skill.userId !== context.user.id) {
+    if (
+      !document ||
+      document.skill.workspaceId !== workspaceId ||
+      (document.skill.userId !== context.user.id && document.skill.visibility !== "public")
+    ) {
       throw new ORPCError("NOT_FOUND", { message: "Document not found" });
     }
 
@@ -408,24 +628,27 @@ const getDocumentUrl = protectedProcedure
     return { url, filename: document.filename };
   });
 
-// Delete a document
 const deleteDocument = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    // Get document and verify ownership through skill
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
     const document = await context.db.query.skillDocument.findFirst({
       where: eq(skillDocument.id, input.id),
       with: { skill: true },
     });
 
-    if (!document || document.skill.userId !== context.user.id) {
+    if (
+      !document ||
+      document.skill.userId !== context.user.id ||
+      document.skill.workspaceId !== workspaceId
+    ) {
       throw new ORPCError("NOT_FOUND", { message: "Document not found" });
     }
 
-    // Delete from S3
     await deleteFromS3(document.storageKey);
-
-    // Delete from database
     await context.db.delete(skillDocument).where(eq(skillDocument.id, input.id));
 
     return { success: true };
@@ -438,6 +661,9 @@ export const skillRouter = {
   import: importSkillDefinition,
   update,
   delete: deleteSkill,
+  share,
+  unshare,
+  saveShared,
   addFile,
   updateFile,
   deleteFile,

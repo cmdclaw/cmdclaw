@@ -129,6 +129,12 @@ export const workspaceMembershipRoleEnum = pgEnum("workspace_membership_role", [
 
 export const billingOwnerTypeEnum = pgEnum("billing_owner_type", ["user", "workspace"]);
 export const providerAuthSourceEnum = pgEnum("provider_auth_source", ["user", "shared"]);
+export const executorSourceKindEnum = pgEnum("executor_source_kind", ["mcp", "openapi"]);
+export const executorSourceAuthTypeEnum = pgEnum("executor_source_auth_type", [
+  "none",
+  "api_key",
+  "bearer",
+]);
 
 export const workspace = pgTable(
   "workspace",
@@ -223,6 +229,13 @@ export const userRelations = relations(user, ({ many }) => ({
   devices: many(device),
   customIntegrations: many(customIntegration),
   customIntegrationCredentials: many(customIntegrationCredential),
+  executorSourcesCreated: many(workspaceExecutorSource, {
+    relationName: "workspaceExecutorSourceCreatedByUser",
+  }),
+  executorSourcesUpdated: many(workspaceExecutorSource, {
+    relationName: "workspaceExecutorSourceUpdatedByUser",
+  }),
+  executorSourceCredentials: many(workspaceExecutorSourceCredential),
   integrationSkillsCreated: many(integrationSkill),
   integrationSkillPreferences: many(integrationSkillPreference),
   whatsappLinks: many(whatsappUserLink),
@@ -253,6 +266,9 @@ export const workspaceRelations = relations(workspace, ({ one, many }) => ({
   conversations: many(conversation),
   billingLedgers: many(billingLedger),
   billingTopUps: many(billingTopUp),
+  skills: many(skill),
+  executorSources: many(workspaceExecutorSource),
+  executorPackages: many(workspaceExecutorPackage),
 }));
 
 export const workspaceMemberRelations = relations(workspaceMember, ({ one }) => ({
@@ -317,6 +333,19 @@ export const googleIntegrationAccessAllowlist = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [uniqueIndex("google_integration_access_allowlist_email_idx").on(table.email)],
+);
+
+export const approvedLoginEmailAllowlist = pgTable(
+  "approved_login_email_allowlist",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    email: text("email").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("approved_login_email_allowlist_email_idx").on(table.email)],
 );
 
 // ========== CHAT SCHEMA ==========
@@ -615,6 +644,7 @@ export type PendingAuth = {
 export type GenerationExecutionPolicy = {
   allowedIntegrations?: string[];
   allowedCustomIntegrations?: string[];
+  allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
@@ -933,6 +963,7 @@ export const coworker = pgTable(
     toolAccessMode: coworkerToolAccessModeEnum("tool_access_mode"),
     allowedIntegrations: integrationTypeEnum("allowed_integrations").array().notNull(),
     allowedCustomIntegrations: text("allowed_custom_integrations").array().notNull().default([]),
+    allowedExecutorSourceIds: text("allowed_executor_source_ids").array().notNull().default([]),
     allowedSkillSlugs: text("allowed_skill_slugs").array().notNull().default([]),
     // Schedule configuration for time-based triggers (JSON object)
     schedule: jsonb("schedule"),
@@ -1372,6 +1403,8 @@ export const integrationTokenRelations = relations(integrationToken, ({ one }) =
 
 // ========== SKILL SCHEMA ==========
 
+export const skillVisibilityEnum = pgEnum("skill_visibility", ["private", "public"]);
+
 export const skill = pgTable(
   "skill",
   {
@@ -1381,6 +1414,7 @@ export const skill = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
     // Skill slug (lowercase, numbers, hyphens only)
     name: text("name").notNull(),
     // Human-readable display name
@@ -1389,6 +1423,7 @@ export const skill = pgTable(
     description: text("description").notNull(),
     // Icon: emoji (e.g., "🚀") or Lucide icon name (e.g., "lucide:rocket")
     icon: text("icon"),
+    visibility: skillVisibilityEnum("visibility").default("private").notNull(),
     enabled: boolean("enabled").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -1396,7 +1431,12 @@ export const skill = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("skill_user_id_idx").on(table.userId)],
+  (table) => [
+    index("skill_user_id_idx").on(table.userId),
+    index("skill_workspace_id_idx").on(table.workspaceId),
+    index("skill_visibility_idx").on(table.visibility),
+    unique("skill_workspace_name_idx").on(table.workspaceId, table.name),
+  ],
 );
 
 export const skillFile = pgTable(
@@ -1452,6 +1492,7 @@ export const skillDocument = pgTable(
 
 export const skillRelations = relations(skill, ({ one, many }) => ({
   user: one(user, { fields: [skill.userId], references: [user.id] }),
+  workspace: one(workspace, { fields: [skill.workspaceId], references: [workspace.id] }),
   files: many(skillFile),
   documents: many(skillDocument),
 }));
@@ -1954,6 +1995,147 @@ export const customIntegrationCredentialRelations = relations(
     customIntegration: one(customIntegration, {
       fields: [customIntegrationCredential.customIntegrationId],
       references: [customIntegration.id],
+    }),
+  }),
+);
+
+export const workspaceExecutorSource = pgTable(
+  "workspace_executor_source",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    kind: executorSourceKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    namespace: text("namespace").notNull(),
+    endpoint: text("endpoint").notNull(),
+    specUrl: text("spec_url"),
+    transport: text("transport"),
+    headers: jsonb("headers").$type<Record<string, string>>(),
+    queryParams: jsonb("query_params").$type<Record<string, string>>(),
+    defaultHeaders: jsonb("default_headers").$type<Record<string, string>>(),
+    authType: executorSourceAuthTypeEnum("auth_type").default("none").notNull(),
+    authHeaderName: text("auth_header_name"),
+    authQueryParam: text("auth_query_param"),
+    authPrefix: text("auth_prefix"),
+    enabled: boolean("enabled").default(true).notNull(),
+    revisionHash: text("revision_hash").notNull(),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    updatedByUserId: text("updated_by_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("workspace_executor_source_workspace_idx").on(table.workspaceId),
+    index("workspace_executor_source_created_by_idx").on(table.createdByUserId),
+    uniqueIndex("workspace_executor_source_workspace_namespace_idx").on(
+      table.workspaceId,
+      table.namespace,
+    ),
+  ],
+);
+
+export const workspaceExecutorSourceCredential = pgTable(
+  "workspace_executor_source_credential",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceExecutorSourceId: text("workspace_executor_source_id")
+      .notNull()
+      .references(() => workspaceExecutorSource.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    secret: text("secret"),
+    enabled: boolean("enabled").default(true).notNull(),
+    displayName: text("display_name"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("workspace_executor_source_credential_user_idx").on(table.userId),
+    index("workspace_executor_source_credential_source_idx").on(table.workspaceExecutorSourceId),
+    unique("workspace_executor_source_credential_user_source_idx").on(
+      table.userId,
+      table.workspaceExecutorSourceId,
+    ),
+  ],
+);
+
+export const workspaceExecutorPackage = pgTable(
+  "workspace_executor_package",
+  {
+    workspaceId: text("workspace_id")
+      .primaryKey()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    revisionHash: text("revision_hash").notNull(),
+    configJson: text("config_json").notNull(),
+    workspaceStateJson: text("workspace_state_json").notNull(),
+    builtAt: timestamp("built_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("workspace_executor_package_revision_idx").on(table.revisionHash)],
+);
+
+export const workspaceExecutorSourceRelations = relations(
+  workspaceExecutorSource,
+  ({ one, many }) => ({
+    workspace: one(workspace, {
+      fields: [workspaceExecutorSource.workspaceId],
+      references: [workspace.id],
+    }),
+    createdByUser: one(user, {
+      relationName: "workspaceExecutorSourceCreatedByUser",
+      fields: [workspaceExecutorSource.createdByUserId],
+      references: [user.id],
+    }),
+    updatedByUser: one(user, {
+      relationName: "workspaceExecutorSourceUpdatedByUser",
+      fields: [workspaceExecutorSource.updatedByUserId],
+      references: [user.id],
+    }),
+    credentials: many(workspaceExecutorSourceCredential),
+  }),
+);
+
+export const workspaceExecutorSourceCredentialRelations = relations(
+  workspaceExecutorSourceCredential,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [workspaceExecutorSourceCredential.userId],
+      references: [user.id],
+    }),
+    workspaceExecutorSource: one(workspaceExecutorSource, {
+      fields: [workspaceExecutorSourceCredential.workspaceExecutorSourceId],
+      references: [workspaceExecutorSource.id],
+    }),
+  }),
+);
+
+export const workspaceExecutorPackageRelations = relations(
+  workspaceExecutorPackage,
+  ({ one }) => ({
+    workspace: one(workspace, {
+      fields: [workspaceExecutorPackage.workspaceId],
+      references: [workspace.id],
     }),
   }),
 );

@@ -45,6 +45,7 @@ import {
   useUploadSkillDocument,
   useDeleteSkillDocument,
   useGetDocumentUrl,
+  useSaveSharedSkill,
 } from "@/orpc/hooks";
 
 type SkillMarkdownViewMode = "preview" | "source";
@@ -105,6 +106,7 @@ function SkillEditorPageContent() {
   const uploadDocument = useUploadSkillDocument();
   const deleteDocument = useDeleteSkillDocument();
   const getDocumentUrl = useGetDocumentUrl();
+  const saveSharedSkill = useSaveSharedSkill();
 
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -118,6 +120,7 @@ function SkillEditorPageContent() {
     message: string;
   } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSavingShared, setIsSavingShared] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{
     id: string;
     filename: string;
@@ -206,6 +209,9 @@ function SkillEditorPageContent() {
 
   const handleSaveFile = useCallback(
     async (showNotificationIfNoChanges = false) => {
+      if (!skill?.canEdit) {
+        return;
+      }
       if (!selectedFileId) {
         return;
       }
@@ -269,6 +275,7 @@ function SkillEditorPageContent() {
     [
       selectedFileId,
       skill?.files,
+      skill?.canEdit,
       skill?.name,
       skill?.displayName,
       skill?.description,
@@ -338,6 +345,9 @@ function SkillEditorPageContent() {
   );
 
   const handleAddFile = useCallback(async () => {
+    if (!skill?.canEdit) {
+      return;
+    }
     if (!newFilePath.trim()) {
       return;
     }
@@ -355,13 +365,12 @@ function SkillEditorPageContent() {
     } catch {
       setNotification({ type: "error", message: "Failed to add file" });
     }
-  }, [addFile, newFilePath, refetch, skillId]);
+  }, [addFile, newFilePath, refetch, skill?.canEdit, skillId]);
 
   const handleDeleteFile = useCallback(async () => {
-    if (!fileToDelete) {
+    if (!skill?.canEdit || !fileToDelete) {
       return;
     }
-
     try {
       await deleteFile.mutateAsync(fileToDelete.id);
       if (selectedFileId === fileToDelete.id) {
@@ -377,9 +386,20 @@ function SkillEditorPageContent() {
     } catch {
       setNotification({ type: "error", message: "Failed to delete file" });
     }
-  }, [deleteFile, fileToDelete, refetch, selectedFileId, skill?.files, syncSkillMarkdownState]);
+  }, [
+    deleteFile,
+    fileToDelete,
+    refetch,
+    selectedFileId,
+    skill?.canEdit,
+    skill?.files,
+    syncSkillMarkdownState,
+  ]);
 
   const handleDeleteSkill = useCallback(async () => {
+    if (!skill?.canEdit) {
+      return;
+    }
     if (!confirm(`Delete skill "${skillDisplayName}"? This cannot be undone.`)) {
       return;
     }
@@ -390,11 +410,30 @@ function SkillEditorPageContent() {
     } catch {
       setNotification({ type: "error", message: "Failed to delete skill" });
     }
-  }, [deleteSkill, router, skillDisplayName, skillId]);
+  }, [deleteSkill, router, skill?.canEdit, skillDisplayName, skillId]);
+
+  const handleSaveSharedSkill = useCallback(async () => {
+    if (skill?.canEdit) {
+      return;
+    }
+
+    setIsSavingShared(true);
+    try {
+      const saved = await saveSharedSkill.mutateAsync(skillId);
+      router.push(`/skills/${saved.id}`);
+    } catch {
+      setNotification({ type: "error", message: "Failed to save a copy" });
+    } finally {
+      setIsSavingShared(false);
+    }
+  }, [router, saveSharedSkill, skill?.canEdit, skillId]);
 
   // Document handlers
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!skill?.canEdit) {
+        return;
+      }
       const file = e.target.files?.[0];
       if (!file) {
         return;
@@ -426,7 +465,7 @@ function SkillEditorPageContent() {
         }
       }
     },
-    [refetch, skillId, uploadDocument],
+    [refetch, skill?.canEdit, skillId, uploadDocument],
   );
 
   const handleDownloadDocument = useCallback(
@@ -448,7 +487,7 @@ function SkillEditorPageContent() {
   );
 
   const handleDeleteDocument = useCallback(async () => {
-    if (!documentToDelete) {
+    if (!skill?.canEdit || !documentToDelete) {
       return;
     }
 
@@ -475,6 +514,7 @@ function SkillEditorPageContent() {
     documentToDelete,
     refetch,
     selectedDocumentId,
+    skill?.canEdit,
     skill?.files,
     syncSkillMarkdownState,
   ]);
@@ -515,6 +555,10 @@ function SkillEditorPageContent() {
       return;
     }
 
+    if (!skill?.canEdit) {
+      return;
+    }
+
     // Clear existing timeout
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
@@ -539,6 +583,7 @@ function SkillEditorPageContent() {
     skillIcon,
     selectedFileId,
     handleSaveFile,
+    skill?.canEdit,
     skill?.files,
   ]);
 
@@ -760,6 +805,7 @@ function SkillEditorPageContent() {
 
   const selectedFile = skill.files.find((f) => f.id === selectedFileId);
   const isSkillMd = selectedFile?.path === "SKILL.md";
+  const canEdit = skill.canEdit;
 
   return (
     <div className="h-[calc(100dvh-5rem)]">
@@ -773,6 +819,11 @@ function SkillEditorPageContent() {
             </Link>
           </Button>
           <div className="flex items-center gap-2">
+            {!canEdit ? (
+              <span className="text-muted-foreground text-xs">
+                Shared by {skill.owner.name ?? skill.owner.email ?? "workspace"}
+              </span>
+            ) : null}
             <span
               className={cn(
                 "flex items-center gap-1.5 text-xs transition-opacity",
@@ -807,9 +858,20 @@ function SkillEditorPageContent() {
                 </>
               )}
             </span>
-            <Button variant="ghost" size="sm" onClick={handleDeleteSkill}>
-              <Trash2 className="h-3 w-3" />
-            </Button>
+            {canEdit ? (
+              <Button variant="ghost" size="sm" onClick={handleDeleteSkill}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleSaveSharedSkill}>
+                {isSavingShared ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Download className="h-3 w-3" />
+                )}
+                Save to my skills
+              </Button>
+            )}
           </div>
         </div>
 
@@ -817,24 +879,35 @@ function SkillEditorPageContent() {
         <div className="mb-6 shrink-0 space-y-2">
           {/* Icon and Display Name */}
           <div className="flex items-start gap-3">
-            <IconPicker value={skillIcon} onChange={setSkillIcon}>
-              <button
-                type="button"
-                className="bg-muted hover:bg-muted/80 flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border transition-colors"
-              >
+            {canEdit ? (
+              <IconPicker value={skillIcon} onChange={setSkillIcon}>
+                <button
+                  type="button"
+                  className="bg-muted hover:bg-muted/80 flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border transition-colors"
+                >
+                  {skillIcon ? (
+                    <span className="text-2xl">{skillIcon}</span>
+                  ) : (
+                    <FileText className="text-muted-foreground h-6 w-6" />
+                  )}
+                </button>
+              </IconPicker>
+            ) : (
+              <div className="bg-muted flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border">
                 {skillIcon ? (
                   <span className="text-2xl">{skillIcon}</span>
                 ) : (
                   <FileText className="text-muted-foreground h-6 w-6" />
                 )}
-              </button>
-            </IconPicker>
+              </div>
+            )}
             <input
               ref={displayNameRef}
               type="text"
               value={skillDisplayName}
               onChange={handleDisplayNameInputChange}
               placeholder="Untitled Skill"
+              readOnly={!canEdit}
               className="placeholder:text-muted-foreground/50 w-full bg-transparent pt-1 text-3xl font-bold outline-none focus:outline-none"
             />
           </div>
@@ -855,10 +928,11 @@ function SkillEditorPageContent() {
             ) : (
               <button
                 onClick={handleStartEditingSlug}
+                disabled={!canEdit}
                 className="group text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
               >
                 <span className="font-mono">{skillSlug || "skill-slug"}</span>
-                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100" />
+                {canEdit ? <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100" /> : null}
               </button>
             )}
           </div>
@@ -878,6 +952,7 @@ function SkillEditorPageContent() {
           ) : (
             <button
               onClick={handleStartEditingDescription}
+              disabled={!canEdit}
               className="text-muted-foreground hover:text-foreground text-left text-sm whitespace-pre-wrap"
             >
               {skillDescription || (
@@ -914,7 +989,7 @@ function SkillEditorPageContent() {
               >
                 <FileText className="h-3 w-3" />
                 {file.path}
-                {file.path !== "SKILL.md" && (
+                {canEdit && file.path !== "SKILL.md" && (
                   <button
                     data-file-id={file.id}
                     data-file-path={file.path}
@@ -951,38 +1026,42 @@ function SkillEditorPageContent() {
                 >
                   <Download className="h-2.5 w-2.5" />
                 </button>
-                <button
-                  data-doc-id={doc.id}
-                  data-doc-filename={doc.path ?? doc.filename}
-                  onClick={handlePromptDeleteDocument}
-                  className="hover:bg-muted ml-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100"
-                >
-                  <Trash2 className="h-2.5 w-2.5" />
-                </button>
+                {canEdit ? (
+                  <button
+                    data-doc-id={doc.id}
+                    data-doc-filename={doc.path ?? doc.filename}
+                    onClick={handlePromptDeleteDocument}
+                    className="hover:bg-muted ml-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-2.5 w-2.5" />
+                  </button>
+                ) : null}
               </div>
             );
           })}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1.5 text-xs">
-                <Plus className="h-3 w-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={handleShowAddFile}>
-                <FileText className="h-4 w-4" />
-                Text file
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleTriggerDocumentUpload} disabled={isUploading}>
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileUp className="h-4 w-4" />
-                )}
-                {isUploading ? "Uploading..." : "Document"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canEdit ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1.5 text-xs">
+                  <Plus className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={handleShowAddFile}>
+                  <FileText className="h-4 w-4" />
+                  Text file
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleTriggerDocumentUpload} disabled={isUploading}>
+                  {isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileUp className="h-4 w-4" />
+                  )}
+                  {isUploading ? "Uploading..." : "Document"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
           <input
             ref={fileInputRef}
             type="file"
@@ -1023,7 +1102,7 @@ function SkillEditorPageContent() {
         </div>
 
         {/* Add file input */}
-        {showAddFile && (
+        {canEdit && showAddFile && (
           <div className="mb-4 flex shrink-0 items-center gap-2">
             <Input
               placeholder="filename.md"
@@ -1056,6 +1135,7 @@ function SkillEditorPageContent() {
                 <textarea
                   value={skillMarkdownSource}
                   onChange={handleMarkdownSourceChange}
+                  readOnly={!canEdit}
                   className="bg-background focus:ring-ring h-full w-full resize-none rounded-lg border p-4 font-mono text-sm focus:ring-2 focus:outline-none"
                   placeholder="---
 name: skill-name
@@ -1070,6 +1150,7 @@ Add your skill instructions here..."
                 <textarea
                   value={editedContent}
                   onChange={handleNonSkillFileContentChange}
+                  readOnly={!canEdit}
                   className="bg-background focus:ring-ring h-full w-full resize-none rounded-lg border p-4 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               )}

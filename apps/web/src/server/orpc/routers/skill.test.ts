@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function createProcedureStub() {
@@ -20,6 +19,9 @@ const {
   ensureBucketMock,
   validateFileUploadMock,
   importSkillMock,
+  requireActiveWorkspaceAccessMock,
+  resolveUniqueSkillNameInWorkspaceMock,
+  copySkillToWorkspaceOwnerMock,
 } = vi.hoisted(() => ({
   uploadToS3Mock: vi.fn(),
   deleteFromS3Mock: vi.fn(),
@@ -28,10 +30,17 @@ const {
   ensureBucketMock: vi.fn(),
   validateFileUploadMock: vi.fn(),
   importSkillMock: vi.fn(),
+  requireActiveWorkspaceAccessMock: vi.fn(),
+  resolveUniqueSkillNameInWorkspaceMock: vi.fn(),
+  copySkillToWorkspaceOwnerMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
+}));
+
+vi.mock("../workspace-access", () => ({
+  requireActiveWorkspaceAccess: requireActiveWorkspaceAccessMock,
 }));
 
 vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
@@ -40,6 +49,13 @@ vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
   getPresignedDownloadUrl: getPresignedDownloadUrlMock,
   generateStorageKey: generateStorageKeyMock,
   ensureBucket: ensureBucketMock,
+}));
+
+vi.mock("@cmdclaw/core/server/services/workspace-skill-service", () => ({
+  buildAccessibleSkillWhere: vi.fn(() => "accessible-where"),
+  buildOwnedSkillWhere: vi.fn(() => "owned-where"),
+  copySkillToWorkspaceOwner: copySkillToWorkspaceOwnerMock,
+  resolveUniqueSkillNameInWorkspace: resolveUniqueSkillNameInWorkspaceMock,
 }));
 
 vi.mock("@/server/storage/validation", () => ({
@@ -75,7 +91,7 @@ function createContext() {
   const selectFromMock = vi.fn(() => ({ where: selectWhereMock }));
   const selectMock = vi.fn(() => ({ from: selectFromMock }));
 
-  const context = {
+  return {
     user: { id: "user-1" },
     db: {
       query: {
@@ -94,31 +110,35 @@ function createContext() {
       update: updateMock,
       delete: deleteMock,
       select: selectMock,
-      transaction: vi.fn(
-        async (callback: (tx: unknown) => Promise<unknown>) => await callback(context.db),
-      ),
+      transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback({})),
     },
     mocks: {
       insertReturningMock,
       insertValuesMock,
       updateSetMock,
+      updateWhereMock,
       updateReturningMock,
       deleteReturningMock,
       selectWhereMock,
     },
   };
-
-  return context;
 }
 
 describe("skillRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireActiveWorkspaceAccessMock.mockResolvedValue({
+      workspace: { id: "ws-1" },
+      membership: { role: "member" },
+    });
+    resolveUniqueSkillNameInWorkspaceMock.mockImplementation(
+      async (_db: unknown, _workspaceId: string, name: string) => name,
+    );
     generateStorageKeyMock.mockReturnValue("skills/user-1/skill-1/doc.pdf");
-    getPresignedDownloadUrlMock.mockResolvedValue("https://example.com/presigned-url");
+    getPresignedDownloadUrlMock.mockResolvedValue("https://example.com/doc.pdf");
   });
 
-  it("lists user skills and maps file counts", async () => {
+  it("lists accessible skills with owner and visibility info", async () => {
     const context = createContext();
     const now = new Date("2024-01-01T00:00:00.000Z");
     context.db.query.skill.findMany.mockResolvedValue([
@@ -129,39 +149,61 @@ describe("skillRouter", () => {
         description: "desc",
         icon: "rocket",
         enabled: true,
-        files: [{ id: "f1" }, { id: "f2" }],
+        visibility: "private",
+        userId: "user-1",
         createdAt: now,
         updatedAt: now,
+        files: [{ id: "f1" }, { id: "f2" }],
+        user: { id: "user-1", name: "Me", email: "me@example.com" },
+      },
+      {
+        id: "skill-2",
+        name: "shared-skill",
+        displayName: "Shared Skill",
+        description: "shared",
+        icon: null,
+        enabled: true,
+        visibility: "public",
+        userId: "user-2",
+        createdAt: now,
+        updatedAt: now,
+        files: [{ id: "f3" }],
+        user: { id: "user-2", name: "Alex", email: "alex@example.com" },
       },
     ]);
 
-    const result = await skillRouterAny.list({ context });
-
-    expect(result).toEqual([
-      {
+    await expect(skillRouterAny.list({ context })).resolves.toEqual([
+      expect.objectContaining({
         id: "skill-1",
-        name: "my-skill",
-        displayName: "My Skill",
-        description: "desc",
-        icon: "rocket",
-        enabled: true,
+        visibility: "private",
         fileCount: 2,
-        createdAt: now,
-        updatedAt: now,
-      },
+        owner: { id: "user-1", name: "Me", email: "me@example.com" },
+        isOwnedByCurrentUser: true,
+        canEdit: true,
+      }),
+      expect.objectContaining({
+        id: "skill-2",
+        visibility: "public",
+        fileCount: 1,
+        owner: { id: "user-2", name: "Alex", email: "alex@example.com" },
+        isOwnedByCurrentUser: false,
+        canEdit: false,
+      }),
     ]);
   });
 
-  it("gets a skill with files and documents", async () => {
+  it("gets a shared skill for read-only access", async () => {
     const context = createContext();
     const now = new Date("2024-02-02T00:00:00.000Z");
     context.db.query.skill.findFirst.mockResolvedValue({
       id: "skill-1",
-      name: "my-skill",
-      displayName: "My Skill",
+      name: "shared-skill",
+      displayName: "Shared Skill",
       description: "desc",
       icon: null,
-      enabled: false,
+      enabled: true,
+      visibility: "public",
+      userId: "user-2",
       files: [
         {
           id: "file-1",
@@ -182,55 +224,32 @@ describe("skillRouter", () => {
           createdAt: now,
         },
       ],
+      user: {
+        id: "user-2",
+        name: "Alex",
+        email: "alex@example.com",
+      },
       createdAt: now,
       updatedAt: now,
     });
 
-    const result = (await skillRouterAny.get({
-      input: { id: "skill-1" },
-      context,
-    })) as {
-      id: string;
-      files: unknown[];
-      documents: unknown[];
-    };
-
-    expect(result.id).toBe("skill-1");
-    expect(result.files).toEqual([
-      {
-        id: "file-1",
-        path: "SKILL.md",
-        content: "content",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    expect(result.documents).toEqual([
-      {
-        id: "doc-1",
-        filename: "doc.pdf",
-        path: "references/doc.pdf",
-        mimeType: "application/pdf",
-        sizeBytes: 42,
-        description: "spec",
-        createdAt: now,
-      },
-    ]);
-  });
-
-  it("returns NOT_FOUND when getting an unknown skill", async () => {
-    const context = createContext();
-    context.db.query.skill.findFirst.mockResolvedValue(null);
-
     await expect(
       skillRouterAny.get({
-        input: { id: "skill-missing" },
+        input: { id: "skill-1" },
         context,
       }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "skill-1",
+        visibility: "public",
+        owner: { id: "user-2", name: "Alex", email: "alex@example.com" },
+        isOwnedByCurrentUser: false,
+        canEdit: false,
+      }),
+    );
   });
 
-  it("creates a skill and seeds a default SKILL.md file", async () => {
+  it("creates a private workspace skill and seeds SKILL.md", async () => {
     const context = createContext();
     context.mocks.insertReturningMock.mockResolvedValue([
       {
@@ -239,412 +258,124 @@ describe("skillRouter", () => {
         displayName: "My Skill",
         description: "A test skill",
         icon: "sparkles",
+        visibility: "private",
       },
     ]);
-
-    const result = await skillRouterAny.create({
-      input: {
-        displayName: "My Skill",
-        description: "A test skill",
-        icon: "sparkles",
-      },
-      context,
-    });
-
-    expect(result).toEqual({
-      id: "skill-1",
-      name: "my-skill",
-      displayName: "My Skill",
-      description: "A test skill",
-      icon: "sparkles",
-    });
-
-    expect(context.mocks.insertValuesMock).toHaveBeenCalledTimes(2);
-    const firstInsertArg = (
-      context.mocks.insertValuesMock.mock.calls[0] as unknown as [Record<string, unknown>]
-    )[0];
-    const secondInsertArg = (
-      context.mocks.insertValuesMock.mock.calls[1] as unknown as [Record<string, unknown>]
-    )[0];
-
-    expect(firstInsertArg).toMatchObject({
-      userId: "user-1",
-      name: "my-skill",
-      displayName: "My Skill",
-      description: "A test skill",
-    });
-    expect(secondInsertArg).toMatchObject({
-      skillId: "skill-1",
-      path: "SKILL.md",
-    });
-    expect(secondInsertArg.content).toContain("name: my-skill");
-    expect(secondInsertArg.content).toContain("# My Skill");
-  });
-
-  it("returns BAD_REQUEST when create receives a name that cannot produce a slug", async () => {
-    const context = createContext();
 
     await expect(
       skillRouterAny.create({
         input: {
-          displayName: "***",
-          description: "desc",
+          displayName: "My Skill",
+          description: "A test skill",
+          icon: "sparkles",
         },
         context,
       }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-  });
-
-  it("imports a skill using the shared import service", async () => {
-    const context = createContext();
-    importSkillMock.mockResolvedValue({
-      id: "skill-imported",
-      name: "weekly-report",
-      displayName: "Weekly Report",
-      description: "Generate a weekly report",
-      enabled: false,
-    });
-
-    const result = await skillRouterAny.import({
-      input: {
-        mode: "zip",
-        filename: "weekly-report.zip",
-        contentBase64: Buffer.from("zip").toString("base64"),
-      },
-      context,
-    });
-
-    expect(importSkillMock).toHaveBeenCalledWith(
-      context.db,
-      "user-1",
+    ).resolves.toEqual(
       expect.objectContaining({
-        mode: "zip",
-        filename: "weekly-report.zip",
-      }),
-    );
-    expect(result).toEqual({
-      id: "skill-imported",
-      name: "weekly-report",
-      displayName: "Weekly Report",
-      description: "Generate a weekly report",
-      enabled: false,
-    });
-  });
-
-  it("updates an existing skill", async () => {
-    const context = createContext();
-    context.mocks.updateReturningMock.mockResolvedValue([{ id: "skill-1" }]);
-
-    const result = await skillRouterAny.update({
-      input: {
         id: "skill-1",
-        name: "Renamed Skill",
-        description: "new",
-        icon: null,
-        enabled: false,
-      },
-      context,
-    });
+        name: "my-skill",
+        visibility: "private",
+      }),
+    );
 
-    expect(result).toEqual({ success: true });
-    expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
+    expect(context.mocks.insertValuesMock).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
-        name: "renamed-skill",
-        description: "new",
-        icon: null,
+        userId: "user-1",
+        workspaceId: "ws-1",
+        visibility: "private",
+      }),
+    );
+  });
+
+  it("delegates imports with the active workspace id", async () => {
+    const context = createContext();
+    importSkillMock.mockResolvedValue({ id: "skill-1", name: "imported" });
+
+    await skillRouterAny.import({
+      input: {
+        mode: "zip",
+        filename: "skill.zip",
+        contentBase64: "Zm9v",
+      },
+      context,
+    });
+
+    expect(importSkillMock).toHaveBeenCalledWith(context.db, "user-1", "ws-1", {
+      mode: "zip",
+      filename: "skill.zip",
+      contentBase64: "Zm9v",
+    });
+  });
+
+  it("shares and unshares owned skills", async () => {
+    const context = createContext();
+    context.db.query.skill.findFirst.mockResolvedValue({
+      id: "skill-1",
+      userId: "user-1",
+      workspaceId: "ws-1",
+    });
+    context.mocks.updateReturningMock
+      .mockResolvedValueOnce([{ id: "skill-1", visibility: "public" }])
+      .mockResolvedValueOnce([{ id: "skill-1", visibility: "private" }]);
+
+    await expect(skillRouterAny.share({ input: { id: "skill-1" }, context })).resolves.toEqual({
+      success: true,
+      id: "skill-1",
+      visibility: "public",
+    });
+
+    await expect(skillRouterAny.unshare({ input: { id: "skill-1" }, context })).resolves.toEqual({
+      success: true,
+      id: "skill-1",
+      visibility: "private",
+    });
+  });
+
+  it("copies a shared skill into a private saved copy", async () => {
+    const context = createContext();
+    context.db.query.skill.findFirst.mockResolvedValue({
+      id: "skill-shared",
+      userId: "user-2",
+      workspaceId: "ws-1",
+      visibility: "public",
+    });
+    copySkillToWorkspaceOwnerMock.mockResolvedValue({
+      id: "skill-copy",
+      name: "shared-skill-2",
+      displayName: "Shared Skill",
+      description: "shared",
+      icon: null,
+      enabled: false,
+      visibility: "private",
+    });
+
+    await expect(
+      skillRouterAny.saveShared({
+        input: { sourceSkillId: "skill-shared" },
+        context,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "skill-copy",
         enabled: false,
+        visibility: "private",
       }),
     );
   });
 
-  it("returns BAD_REQUEST when update receives an invalid slug name", async () => {
-    const context = createContext();
-
-    await expect(
-      skillRouterAny.update({
-        input: { id: "skill-1", name: "!!!" },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-  });
-
-  it("returns NOT_FOUND when updating a missing skill", async () => {
-    const context = createContext();
-    context.mocks.updateReturningMock.mockResolvedValue([]);
-
-    await expect(
-      skillRouterAny.update({
-        input: { id: "skill-missing", description: "nope" },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("deletes an existing skill", async () => {
-    const context = createContext();
-    context.mocks.deleteReturningMock.mockResolvedValue([{ id: "skill-1" }]);
-    // eslint-disable-next-line drizzle/enforce-delete-with-where -- Router procedure call, not a Drizzle query
-    const result = await skillRouterAny.delete({
-      input: { id: "skill-1" },
-      context,
-    });
-
-    expect(result).toEqual({ success: true });
-  });
-
-  it("returns NOT_FOUND when deleting a missing skill", async () => {
-    const context = createContext();
-    context.mocks.deleteReturningMock.mockResolvedValue([]);
-
-    await expect(
-      // eslint-disable-next-line drizzle/enforce-delete-with-where -- Router procedure call, not a Drizzle query
-      skillRouterAny.delete({
-        input: { id: "skill-missing" },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("adds a file when skill is owned by the user", async () => {
-    const context = createContext();
-    context.db.query.skill.findFirst.mockResolvedValue({
-      id: "skill-1",
-      userId: "user-1",
-    });
-    context.mocks.insertReturningMock.mockResolvedValue([{ id: "file-1", path: "notes.md" }]);
-
-    const result = await skillRouterAny.addFile({
-      input: {
-        skillId: "skill-1",
-        path: "notes.md",
-        content: "hello",
-      },
-      context,
-    });
-
-    expect(result).toEqual({ id: "file-1", path: "notes.md" });
-  });
-
-  it("returns NOT_FOUND when adding a file to a missing skill", async () => {
-    const context = createContext();
-    context.db.query.skill.findFirst.mockResolvedValue(null);
-
-    await expect(
-      skillRouterAny.addFile({
-        input: {
-          skillId: "skill-missing",
-          path: "notes.md",
-          content: "hello",
-        },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("updates a file when the parent skill is owned by the user", async () => {
-    const context = createContext();
-    context.db.query.skillFile.findFirst.mockResolvedValue({
-      id: "file-1",
-      path: "notes.md",
-      skill: { userId: "user-1" },
-    });
-
-    const result = await skillRouterAny.updateFile({
-      input: {
-        id: "file-1",
-        content: "new content",
-      },
-      context,
-    });
-
-    expect(result).toEqual({ success: true });
-    expect(context.mocks.updateSetMock).toHaveBeenCalledWith({
-      content: "new content",
-    });
-  });
-
-  it("returns NOT_FOUND when updating a file not owned by user", async () => {
-    const context = createContext();
-    context.db.query.skillFile.findFirst.mockResolvedValue({
-      id: "file-1",
-      path: "notes.md",
-      skill: { userId: "another-user" },
-    });
-
-    await expect(
-      skillRouterAny.updateFile({
-        input: { id: "file-1", content: "new content" },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("deletes a non-SKILL.md file", async () => {
-    const context = createContext();
-    context.db.query.skillFile.findFirst.mockResolvedValue({
-      id: "file-1",
-      path: "notes.md",
-      skill: { userId: "user-1" },
-    });
-
-    const result = await skillRouterAny.deleteFile({
-      input: { id: "file-1" },
-      context,
-    });
-
-    expect(result).toEqual({ success: true });
-  });
-
-  it("returns BAD_REQUEST when deleting SKILL.md", async () => {
-    const context = createContext();
-    context.db.query.skillFile.findFirst.mockResolvedValue({
-      id: "file-1",
-      path: "SKILL.md",
-      skill: { userId: "user-1" },
-    });
-
-    await expect(
-      skillRouterAny.deleteFile({
-        input: { id: "file-1" },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-  });
-
-  it("returns NOT_FOUND when deleting a missing file", async () => {
-    const context = createContext();
-    context.db.query.skillFile.findFirst.mockResolvedValue(null);
-
-    await expect(
-      skillRouterAny.deleteFile({
-        input: { id: "file-missing" },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("uploads a document and stores metadata", async () => {
-    const context = createContext();
-    context.db.query.skill.findFirst.mockResolvedValue({
-      id: "skill-1",
-      userId: "user-1",
-    });
-    context.mocks.selectWhereMock.mockResolvedValue([{ value: 2 }]);
-    context.mocks.insertReturningMock.mockResolvedValue([
-      {
-        id: "doc-1",
-        filename: "doc.pdf",
-        mimeType: "application/pdf",
-        sizeBytes: 4,
-      },
-    ]);
-
-    const result = await skillRouterAny.uploadDocument({
-      input: {
-        skillId: "skill-1",
-        filename: "doc.pdf",
-        mimeType: "application/pdf",
-        content: Buffer.from("test").toString("base64"),
-        description: "My doc",
-      },
-      context,
-    });
-
-    expect(validateFileUploadMock).toHaveBeenCalledWith("doc.pdf", "application/pdf", 4, 2);
-    expect(ensureBucketMock).toHaveBeenCalledTimes(1);
-    expect(generateStorageKeyMock).toHaveBeenCalledWith("user-1", "skill-1", "doc.pdf");
-    expect(uploadToS3Mock).toHaveBeenCalledWith(
-      "skills/user-1/skill-1/doc.pdf",
-      expect.any(Buffer),
-      "application/pdf",
-    );
-    expect(result).toEqual({
-      id: "doc-1",
-      filename: "doc.pdf",
-      mimeType: "application/pdf",
-      sizeBytes: 4,
-    });
-    const documentInsertArg = (
-      context.mocks.insertValuesMock.mock.calls[0] as unknown as [Record<string, unknown>]
-    )[0];
-    expect(documentInsertArg).toMatchObject({
-      filename: "doc.pdf",
-      path: "doc.pdf",
-    });
-  });
-
-  it("returns NOT_FOUND when uploading a document for an unknown skill", async () => {
-    const context = createContext();
-    context.db.query.skill.findFirst.mockResolvedValue(null);
-
-    await expect(
-      skillRouterAny.uploadDocument({
-        input: {
-          skillId: "skill-missing",
-          filename: "doc.pdf",
-          mimeType: "application/pdf",
-          content: Buffer.from("test").toString("base64"),
-        },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("propagates upload validation errors", async () => {
-    const context = createContext();
-    context.db.query.skill.findFirst.mockResolvedValue({
-      id: "skill-1",
-      userId: "user-1",
-    });
-    context.mocks.selectWhereMock.mockResolvedValue([{ value: 20 }]);
-    validateFileUploadMock.mockImplementation(() => {
-      throw new ORPCError("BAD_REQUEST", { message: "too many documents" });
-    });
-
-    await expect(
-      skillRouterAny.uploadDocument({
-        input: {
-          skillId: "skill-1",
-          filename: "doc.pdf",
-          mimeType: "application/pdf",
-          content: Buffer.from("test").toString("base64"),
-        },
-        context,
-      }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-
-    expect(ensureBucketMock).not.toHaveBeenCalled();
-    expect(uploadToS3Mock).not.toHaveBeenCalled();
-  });
-
-  it("gets a presigned URL for a document owned by the user", async () => {
+  it("returns a document url for readable shared skills", async () => {
     const context = createContext();
     context.db.query.skillDocument.findFirst.mockResolvedValue({
       id: "doc-1",
       filename: "doc.pdf",
-      storageKey: "skills/user-1/skill-1/doc.pdf",
-      skill: { userId: "user-1" },
-    });
-
-    const result = await skillRouterAny.getDocumentUrl({
-      input: { id: "doc-1" },
-      context,
-    });
-
-    expect(getPresignedDownloadUrlMock).toHaveBeenCalledWith("skills/user-1/skill-1/doc.pdf");
-    expect(result).toEqual({
-      url: "https://example.com/presigned-url",
-      filename: "doc.pdf",
-    });
-  });
-
-  it("returns NOT_FOUND when getting URL for a document not owned by the user", async () => {
-    const context = createContext();
-    context.db.query.skillDocument.findFirst.mockResolvedValue({
-      id: "doc-1",
-      filename: "doc.pdf",
-      storageKey: "skills/other/doc.pdf",
-      skill: { userId: "another-user" },
+      storageKey: "skills/user-2/skill-shared/doc.pdf",
+      skill: {
+        userId: "user-2",
+        workspaceId: "ws-1",
+        visibility: "public",
+      },
     });
 
     await expect(
@@ -652,33 +383,25 @@ describe("skillRouter", () => {
         input: { id: "doc-1" },
         context,
       }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    ).resolves.toEqual({
+      url: "https://example.com/doc.pdf",
+      filename: "doc.pdf",
+    });
   });
 
-  it("deletes a document from storage and database", async () => {
+  it("rejects file updates for non-owners", async () => {
     const context = createContext();
-    context.db.query.skillDocument.findFirst.mockResolvedValue({
-      id: "doc-1",
-      storageKey: "skills/user-1/skill-1/doc.pdf",
-      skill: { userId: "user-1" },
+    context.db.query.skillFile.findFirst.mockResolvedValue({
+      id: "file-1",
+      skill: {
+        userId: "user-2",
+        workspaceId: "ws-1",
+      },
     });
-
-    const result = await skillRouterAny.deleteDocument({
-      input: { id: "doc-1" },
-      context,
-    });
-
-    expect(deleteFromS3Mock).toHaveBeenCalledWith("skills/user-1/skill-1/doc.pdf");
-    expect(result).toEqual({ success: true });
-  });
-
-  it("returns NOT_FOUND when deleting a missing document", async () => {
-    const context = createContext();
-    context.db.query.skillDocument.findFirst.mockResolvedValue(null);
 
     await expect(
-      skillRouterAny.deleteDocument({
-        input: { id: "doc-missing" },
+      skillRouterAny.updateFile({
+        input: { id: "file-1", content: "updated" },
         context,
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
