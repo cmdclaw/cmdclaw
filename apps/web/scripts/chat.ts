@@ -179,7 +179,9 @@ function printHelp(): void {
   console.log("Options:");
   console.log("  -s, --server <url>        Server URL (default http://localhost:3000)");
   console.log("  -c, --conversation <id>   Continue an existing conversation");
-  console.log("  -m, --message <text>      Send one message and exit");
+  console.log(
+    "  -m, --message <text>      Send an initial message (TTY stays interactive; non-TTY exits)",
+  );
   console.log(
     "  -M, --model <provider/model> Model reference (default prefers ChatGPT when connected)",
   );
@@ -941,6 +943,14 @@ function createSingleMessagePrompt(): readline.Interface | null {
   return createPrompt();
 }
 
+function attachSigintHandler(rl: readline.Interface): void {
+  rl.on("SIGINT", () => {
+    console.log("\nBye.");
+    rl.close();
+    process.exit(0);
+  });
+}
+
 async function printAuthenticatedUser(client: RouterClient<AppRouter>): Promise<void> {
   try {
     const me = await client.user.me();
@@ -1044,31 +1054,39 @@ async function main(): Promise<void> {
   }
 
   if (args.message) {
-    // Non-interactive: send a single message and exit
+    const interactivePrompt = createSingleMessagePrompt();
     const attachments = args.files.map((f) => fileToAttachment(f));
-    const singleMessagePrompt = createSingleMessagePrompt();
+    if (interactivePrompt) {
+      attachSigintHandler(interactivePrompt);
+    }
     const result = await runGeneration(
       client,
-      singleMessagePrompt,
+      interactivePrompt,
       args.message,
       args.conversationId,
       args,
       attachments.length ? attachments : undefined,
     );
-    singleMessagePrompt?.close();
     if (result) {
       console.log(`\n[conversation] ${result.conversationId}`);
+      if (interactivePrompt) {
+        const followupArgs: Args = {
+          ...args,
+          conversationId: result.conversationId,
+          message: undefined,
+          files: [],
+        };
+        await runChatLoop(client, interactivePrompt, followupArgs);
+        interactivePrompt.close();
+        return;
+      }
     }
+    interactivePrompt?.close();
     process.exit(result ? 0 : 1);
   }
 
   const rl = createPrompt();
-
-  rl.on("SIGINT", () => {
-    console.log("\nBye.");
-    rl.close();
-    process.exit(0);
-  });
+  attachSigintHandler(rl);
 
   await runChatLoop(client, rl, args);
   rl.close();
