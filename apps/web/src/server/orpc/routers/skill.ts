@@ -9,6 +9,7 @@ import { skill, skillFile, skillDocument } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, and, count } from "drizzle-orm";
 import { z } from "zod";
+import { importSkill } from "@/server/services/skill-import";
 import { validateFileUpload } from "@/server/storage/validation";
 import { protectedProcedure } from "../middleware";
 
@@ -91,6 +92,7 @@ const get = protectedProcedure
       documents: result.documents.map((d) => ({
         id: d.id,
         filename: d.filename,
+        path: d.path,
         mimeType: d.mimeType,
         sizeBytes: d.sizeBytes,
         description: d.description,
@@ -143,6 +145,33 @@ const create = protectedProcedure
       description: newSkill.description,
       icon: newSkill.icon,
     };
+  });
+
+const importInputSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("zip"),
+    filename: z.string().min(1).max(256),
+    contentBase64: z.string().min(1),
+  }),
+  z.object({
+    mode: z.literal("folder"),
+    files: z
+      .array(
+        z.object({
+          path: z.string().min(1).max(256),
+          mimeType: z.string().min(1).max(256).optional(),
+          contentBase64: z.string().min(1),
+        }),
+      )
+      .min(1)
+      .max(100),
+  }),
+]);
+
+const importSkillDefinition = protectedProcedure
+  .input(importInputSchema)
+  .handler(async ({ input, context }) => {
+    return await importSkill(context.db as never, context.user.id, input);
   });
 
 // Update skill metadata
@@ -344,6 +373,7 @@ const uploadDocument = protectedProcedure
       .values({
         skillId: input.skillId,
         filename: input.filename,
+        path: input.filename,
         mimeType: input.mimeType,
         sizeBytes,
         storageKey,
@@ -405,6 +435,7 @@ export const skillRouter = {
   list,
   get,
   create,
+  import: importSkillDefinition,
   update,
   delete: deleteSkill,
   addFile,
