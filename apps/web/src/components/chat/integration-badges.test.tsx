@@ -16,10 +16,10 @@ vi.mock("next/image", () => ({
 afterEach(cleanup);
 
 describe("IntegrationBadges", () => {
-  it("renders a bot icon badge for coworker", () => {
-    const { container } = render(<IntegrationBadges integrations={COWORKER_BADGES} />);
+  it("renders the coworker lobster logo badge", () => {
+    render(<IntegrationBadges integrations={COWORKER_BADGES} />);
 
     expect(screen.getByText("Coworker")).toBeInTheDocument();
-    expect(container.querySelector(".lucide-bot")).not.toBeNull();
+    expect(screen.getByLabelText("Coworker")).toBeInTheDocument();
   });
 });
