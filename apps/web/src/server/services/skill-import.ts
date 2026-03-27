@@ -12,6 +12,7 @@ import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import * as yauzl from "yauzl";
+import { parseSkillContent } from "@/lib/skill-markdown";
 
 const MAX_ZIP_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -93,6 +94,7 @@ type NormalizedBinaryEntry = {
 type NormalizedImportEntry = NormalizedTextEntry | NormalizedBinaryEntry;
 
 type ParsedSkillMetadata = {
+  rawName: string;
   slug: string;
   description: string;
   displayName: string;
@@ -121,24 +123,15 @@ function titleCaseSlug(slug: string): string {
     .join(" ");
 }
 
-function getDisplayNameFromSkillMarkdown(markdown: string, fallbackSlug: string): string {
-  const h1Match = markdown.match(/^#\s+(.+)$/m);
-  return h1Match?.[1]?.trim() || titleCaseSlug(fallbackSlug);
-}
-
 function parseSkillMetadata(markdown: string): ParsedSkillMetadata {
-  const match = markdown.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) {
+  const parsed = parseSkillContent(markdown);
+  if (!parsed.frontmatter) {
     throw badRequest("SKILL.md must start with YAML frontmatter.");
   }
 
-  const frontmatter = match[1];
-  const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
-  const descriptionMatch = frontmatter.match(/^description:\s*(.+)$/m);
-
-  const rawName = nameMatch?.[1]?.trim().replace(/^['"]|['"]$/g, "") ?? "";
-  const description = descriptionMatch?.[1]?.trim().replace(/^['"]|['"]$/g, "") ?? "";
+  const rawName = parsed.name.trim();
   const slug = toSkillSlug(rawName);
+  const description = parsed.description.trim();
 
   if (!slug) {
     throw badRequest("SKILL.md must include a valid 'name' frontmatter value.");
@@ -148,9 +141,10 @@ function parseSkillMetadata(markdown: string): ParsedSkillMetadata {
   }
 
   return {
+    rawName,
     slug,
     description,
-    displayName: getDisplayNameFromSkillMarkdown(markdown, slug),
+    displayName: rawName || titleCaseSlug(slug),
   };
 }
 
@@ -475,19 +469,10 @@ async function resolveUniqueSkillSlug(
 
 function resolveImportedDisplayName(
   baseDisplayName: string,
-  baseSlug: string,
-  resolvedSlug: string,
+  _baseSlug: string,
+  _resolvedSlug: string,
 ): string {
-  if (resolvedSlug === baseSlug) {
-    return baseDisplayName;
-  }
-
-  const suffix = resolvedSlug.slice(baseSlug.length + 1);
-  const numericSuffix = Number.parseInt(suffix, 10);
-  if (Number.isNaN(numericSuffix)) {
-    return `${baseDisplayName} (Imported)`;
-  }
-  return `${baseDisplayName} (Imported ${numericSuffix})`;
+  return baseDisplayName;
 }
 
 export async function importSkill(
