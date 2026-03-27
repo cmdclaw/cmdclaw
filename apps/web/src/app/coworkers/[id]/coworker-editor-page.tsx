@@ -172,14 +172,35 @@ function normalizeScheduleForComparison(schedule: CoworkerSchedule | null) {
     return null;
   }
 
-  if (schedule.type !== "weekly") {
-    return schedule;
+  switch (schedule.type) {
+    case "interval":
+      return {
+        type: "interval" as const,
+        intervalMinutes: schedule.intervalMinutes,
+      };
+    case "daily":
+      return {
+        type: "daily" as const,
+        time: schedule.time,
+        timezone: schedule.timezone,
+      };
+    case "weekly":
+      return {
+        type: "weekly" as const,
+        time: schedule.time,
+        daysOfWeek: [...schedule.daysOfWeek].toSorted(),
+        timezone: schedule.timezone,
+      };
+    case "monthly":
+      return {
+        type: "monthly" as const,
+        time: schedule.time,
+        dayOfMonth: schedule.dayOfMonth,
+        timezone: schedule.timezone,
+      };
+    default:
+      return schedule;
   }
-
-  return {
-    ...schedule,
-    daysOfWeek: [...schedule.daysOfWeek].toSorted(),
-  };
 }
 
 function stringArraysEqual(left: string[], right: string[]) {

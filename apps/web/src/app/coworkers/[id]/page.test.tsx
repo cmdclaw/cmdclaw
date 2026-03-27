@@ -4,6 +4,7 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CoworkerSchedule } from "@/orpc/hooks";
 
 void jestDomVitest;
 
@@ -48,7 +49,7 @@ const {
       promptDont: null,
       allowedIntegrations: ["slack"],
       allowedCustomIntegrations: [],
-      schedule: null,
+      schedule: null as CoworkerSchedule | null,
       createdAt: new Date("2026-03-12T10:00:00.000Z"),
       updatedAt: new Date("2026-03-12T10:00:00.000Z"),
       runs: [],
@@ -422,6 +423,26 @@ describe("CoworkerEditorPage", () => {
         model: "openai/gpt-5.4",
       }),
     );
+  });
+
+  it("does not autosave repeatedly when a hydrated schedule only differs by key order", async () => {
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      triggerType: "schedule",
+      schedule: {
+        time: "09:00",
+        type: "daily",
+        timezone: "Europe/Dublin",
+      },
+    };
+
+    render(<CoworkerEditorPage />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(mockUpdateCoworkerMutateAsync).not.toHaveBeenCalled();
   });
 
   it("opens the triggered run when starting a run", async () => {
