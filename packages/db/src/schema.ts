@@ -726,8 +726,9 @@ export const generationInterrupt = pgTable(
     generationId: text("generation_id")
       .notNull()
       .references(() => generation.id, { onDelete: "cascade" }),
-    runtimeId: text("runtime_id")
-      .references((): AnyPgColumn => conversationRuntime.id, { onDelete: "cascade" }),
+    runtimeId: text("runtime_id").references((): AnyPgColumn => conversationRuntime.id, {
+      onDelete: "cascade",
+    }),
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversation.id, { onDelete: "cascade" }),
@@ -1430,6 +1431,8 @@ export const skillDocument = pgTable(
       .references(() => skill.id, { onDelete: "cascade" }),
     // Original filename uploaded by user
     filename: text("filename").notNull(),
+    // Relative path within the skill directory
+    path: text("path").notNull(),
     // MIME type (e.g., "application/pdf", "image/png")
     mimeType: text("mime_type").notNull(),
     // File size in bytes

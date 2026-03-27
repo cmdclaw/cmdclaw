@@ -10,10 +10,7 @@ import { resolvePreferredCommunitySkillsForUser } from "../services/integration-
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
-import {
-  COMPACTION_SUMMARY_PREFIX,
-  SESSION_BOUNDARY_PREFIX,
-} from "../services/session-constants";
+import { COMPACTION_SUMMARY_PREFIX, SESSION_BOUNDARY_PREFIX } from "../services/session-constants";
 import { downloadFromS3 } from "../storage/s3-client";
 import { logServerEvent, type ObservabilityContext } from "../utils/observability";
 import type { SandboxBackend, ExecuteResult } from "./types";
@@ -1061,12 +1058,19 @@ export async function writeSkillsToSandbox(sandbox: Sandbox, userId: string): Pr
       s.documents.map(async (doc) => {
         try {
           const buffer = await downloadFromS3(doc.storageKey);
-          const docPath = `${skillDir}/${doc.filename}`;
+          const docPath = `${skillDir}/${doc.path ?? doc.filename}`;
+          const lastSlash = docPath.lastIndexOf("/");
+          const parentDir = docPath.substring(0, lastSlash);
+          if (parentDir !== skillDir) {
+            await sandbox.commands.run(`mkdir -p "${parentDir}"`);
+          }
           const arrayBuffer = new Uint8Array(buffer).buffer;
           await sandbox.files.write(docPath, arrayBuffer);
-          console.log(`[E2B] Written document: ${doc.filename} (${doc.sizeBytes} bytes)`);
+          console.log(
+            `[E2B] Written document: ${doc.path ?? doc.filename} (${doc.sizeBytes} bytes)`,
+          );
         } catch (error) {
-          console.error(`[E2B] Failed to write document ${doc.filename}:`, error);
+          console.error(`[E2B] Failed to write document ${doc.path ?? doc.filename}:`, error);
         }
       }),
     );

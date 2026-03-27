@@ -17,17 +17,11 @@ import {
   resolveMappedRuntimeUrl,
   writeFileInContainer,
 } from "./docker-runtime";
-import {
-  getOrCreateSession as getOrCreateE2BSession,
-  injectProviderAuth,
-} from "./e2b";
+import { getOrCreateSession as getOrCreateE2BSession, injectProviderAuth } from "./e2b";
 import { getPreferredCloudSandboxProvider } from "./factory";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
-import {
-  COMPACTION_SUMMARY_PREFIX,
-  SESSION_BOUNDARY_PREFIX,
-} from "../services/session-constants";
+import { COMPACTION_SUMMARY_PREFIX, SESSION_BOUNDARY_PREFIX } from "../services/session-constants";
 import { downloadFromS3 } from "../storage/s3-client";
 import {
   createSandboxRuntimeClient,
@@ -871,11 +865,19 @@ export async function writeSkillsToSandbox(
       s.documents.map(async (doc) => {
         try {
           const buffer = await downloadFromS3(doc.storageKey);
-          const docPath = `${skillDir}/${doc.filename}`;
+          const docPath = `${skillDir}/${doc.path ?? doc.filename}`;
+          const lastSlash = docPath.lastIndexOf("/");
+          const parentDir = docPath.substring(0, lastSlash);
+          if (parentDir !== skillDir) {
+            await sandbox.commands.run(`mkdir -p "${parentDir}"`);
+          }
           const arrayBuffer = new Uint8Array(buffer).buffer;
           await sandbox.files.write(docPath, arrayBuffer);
         } catch (error) {
-          console.error(`[OpenCodeSession] Failed to write document ${doc.filename}:`, error);
+          console.error(
+            `[OpenCodeSession] Failed to write document ${doc.path ?? doc.filename}:`,
+            error,
+          );
         }
       }),
     );

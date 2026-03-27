@@ -19,6 +19,7 @@ const {
   generateStorageKeyMock,
   ensureBucketMock,
   validateFileUploadMock,
+  importSkillMock,
 } = vi.hoisted(() => ({
   uploadToS3Mock: vi.fn(),
   deleteFromS3Mock: vi.fn(),
@@ -26,6 +27,7 @@ const {
   generateStorageKeyMock: vi.fn(),
   ensureBucketMock: vi.fn(),
   validateFileUploadMock: vi.fn(),
+  importSkillMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -42,6 +44,10 @@ vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
 
 vi.mock("@/server/storage/validation", () => ({
   validateFileUpload: validateFileUploadMock,
+}));
+
+vi.mock("@/server/services/skill-import", () => ({
+  importSkill: importSkillMock,
 }));
 
 import { skillRouter } from "./skill";
@@ -88,6 +94,9 @@ function createContext() {
       update: updateMock,
       delete: deleteMock,
       select: selectMock,
+      transaction: vi.fn(
+        async (callback: (tx: unknown) => Promise<unknown>) => await callback(context.db),
+      ),
     },
     mocks: {
       insertReturningMock,
@@ -166,6 +175,7 @@ describe("skillRouter", () => {
         {
           id: "doc-1",
           filename: "doc.pdf",
+          path: "references/doc.pdf",
           mimeType: "application/pdf",
           sizeBytes: 42,
           description: "spec",
@@ -199,6 +209,7 @@ describe("skillRouter", () => {
       {
         id: "doc-1",
         filename: "doc.pdf",
+        path: "references/doc.pdf",
         mimeType: "application/pdf",
         sizeBytes: 42,
         description: "spec",
@@ -282,6 +293,42 @@ describe("skillRouter", () => {
         context,
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("imports a skill using the shared import service", async () => {
+    const context = createContext();
+    importSkillMock.mockResolvedValue({
+      id: "skill-imported",
+      name: "weekly-report",
+      displayName: "Weekly Report",
+      description: "Generate a weekly report",
+      enabled: false,
+    });
+
+    const result = await skillRouterAny.import({
+      input: {
+        mode: "zip",
+        filename: "weekly-report.zip",
+        contentBase64: Buffer.from("zip").toString("base64"),
+      },
+      context,
+    });
+
+    expect(importSkillMock).toHaveBeenCalledWith(
+      context.db,
+      "user-1",
+      expect.objectContaining({
+        mode: "zip",
+        filename: "weekly-report.zip",
+      }),
+    );
+    expect(result).toEqual({
+      id: "skill-imported",
+      name: "weekly-report",
+      displayName: "Weekly Report",
+      description: "Generate a weekly report",
+      enabled: false,
+    });
   });
 
   it("updates an existing skill", async () => {
@@ -516,6 +563,13 @@ describe("skillRouter", () => {
       filename: "doc.pdf",
       mimeType: "application/pdf",
       sizeBytes: 4,
+    });
+    const documentInsertArg = (
+      context.mocks.insertValuesMock.mock.calls[0] as unknown as [Record<string, unknown>]
+    )[0];
+    expect(documentInsertArg).toMatchObject({
+      filename: "doc.pdf",
+      path: "doc.pdf",
     });
   });
 

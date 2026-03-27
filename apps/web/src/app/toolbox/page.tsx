@@ -17,14 +17,29 @@ import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ToolboxPreviewModal } from "@/components/toolbox-preview-modal";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { IconDisplay } from "@/components/ui/icon-picker";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { blobToBase64 } from "@/hooks/use-voice-recording";
 import {
   isUnipileMissingCredentialsError,
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
@@ -43,6 +58,7 @@ import {
   useLinkLinkedIn,
   useSkillList,
   useCreateSkill,
+  useImportSkill,
   useDeleteSkill,
   useRequestGoogleAccess,
 } from "@/orpc/hooks";
@@ -582,6 +598,7 @@ function ToolboxPageContent() {
   // Skill hooks
   const { data: skills, isLoading: skillsLoading, refetch: refetchSkills } = useSkillList();
   const createSkill = useCreateSkill();
+  const importSkill = useImportSkill();
   const deleteSkill = useDeleteSkill();
 
   // Local state
@@ -596,6 +613,9 @@ function ToolboxPageContent() {
     Object.fromEntries(COMMUNITY_SKILLS.map((s) => [s.id, s.enabled])),
   );
   const linkedInLinkingRef = useRef(false);
+  const zipImportInputRef = useRef<HTMLInputElement>(null);
+  const folderImportInputRef = useRef<HTMLInputElement>(null);
+  const [supportsFolderImport, setSupportsFolderImport] = useState(false);
 
   const isLoading = integrationsLoading || skillsLoading;
   const lacksGoogleAccess = googleAccessStatus?.allowed === false;
@@ -662,6 +682,20 @@ function ToolboxPageContent() {
       window.history.replaceState({}, "", "/toolbox");
     }
   }, [searchParams, refetchIntegrations]);
+
+  useEffect(() => {
+    const input = folderImportInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+
+    const supportsDirectorySelection =
+      "webkitdirectory" in (input as HTMLInputElement & { webkitdirectory?: boolean });
+    setSupportsFolderImport(supportsDirectorySelection);
+  }, []);
 
   // ─── Integration handlers ───────────────────────────────────────────────────
   const handleIntegrationConnect = useCallback(
@@ -746,6 +780,83 @@ function ToolboxPageContent() {
       setIsCreating(false);
     }
   }, [createSkill, router]);
+
+  const handleImportZipClick = useCallback(() => {
+    if (importSkill.isPending) {
+      return;
+    }
+    zipImportInputRef.current?.click();
+  }, [importSkill.isPending]);
+
+  const handleImportFolderClick = useCallback(() => {
+    if (importSkill.isPending || !supportsFolderImport) {
+      return;
+    }
+    folderImportInputRef.current?.click();
+  }, [importSkill.isPending, supportsFolderImport]);
+
+  const handleImportZipChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) {
+        return;
+      }
+      if (!file.name.toLowerCase().endsWith(".zip")) {
+        toast.error("Select a .zip skill archive.");
+        return;
+      }
+
+      try {
+        const created = await importSkill.mutateAsync({
+          mode: "zip",
+          filename: file.name,
+          contentBase64: await blobToBase64(file),
+        });
+        toast.success(`Imported ${created.displayName}. Review it before enabling.`);
+        router.push(`/skills/${created.id}`);
+      } catch (error) {
+        console.error("Failed to import skill zip:", error);
+        toast.error(toErrorMessage(error, "Failed to import skill."));
+      }
+    },
+    [importSkill, router],
+  );
+
+  const handleImportFolderChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      if (files.length === 0) {
+        return;
+      }
+
+      try {
+        const importedFiles = await Promise.all(
+          files.map(async (file) => {
+            const relativePath =
+              (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+            return {
+              path: relativePath,
+              mimeType: file.type || undefined,
+              contentBase64: await blobToBase64(file),
+            };
+          }),
+        );
+
+        const created = await importSkill.mutateAsync({
+          mode: "folder",
+          files: importedFiles,
+        });
+        toast.success(`Imported ${created.displayName}. Review it before enabling.`);
+        router.push(`/skills/${created.id}`);
+      } catch (error) {
+        console.error("Failed to import skill folder:", error);
+        toast.error(toErrorMessage(error, "Failed to import skill."));
+      }
+    },
+    [importSkill, router],
+  );
 
   const handleSkillDelete = useCallback(
     async (id: string, displayName: string) => {
@@ -1015,14 +1126,59 @@ function ToolboxPageContent() {
               Integrations, skills, and capabilities for your coworker
             </p>
           </div>
-          <Button onClick={handleCreateSkill} disabled={isCreating} className="self-start">
-            {isCreating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="mr-2 h-4 w-4" />
-            )}
-            Create Skill
-          </Button>
+          <div className="flex items-center gap-2 self-start">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={importSkill.isPending}>
+                  {importSkill.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileInput className="mr-2 h-4 w-4" />
+                  )}
+                  Import Skill
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleImportZipClick} disabled={importSkill.isPending}>
+                  <FileInput className="h-4 w-4" />
+                  Import .zip
+                </DropdownMenuItem>
+                {supportsFolderImport ? (
+                  <DropdownMenuItem
+                    onClick={handleImportFolderClick}
+                    disabled={importSkill.isPending}
+                  >
+                    <FileOutput className="h-4 w-4" />
+                    Import folder
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={handleCreateSkill} disabled={isCreating} className="self-start">
+              {isCreating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              Create Skill
+            </Button>
+            <input
+              ref={zipImportInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="hidden"
+              aria-label="Import skill zip"
+              onChange={handleImportZipChange}
+            />
+            <input
+              ref={folderImportInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              aria-label="Import skill folder"
+              onChange={handleImportFolderChange}
+            />
+          </div>
         </div>
       </div>
 

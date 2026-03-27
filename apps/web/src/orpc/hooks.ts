@@ -530,6 +530,32 @@ export function useCreateSkill() {
   });
 }
 
+export function useImportSkill() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (
+      input:
+        | {
+            mode: "zip";
+            filename: string;
+            contentBase64: string;
+          }
+        | {
+            mode: "folder";
+            files: Array<{
+              path: string;
+              mimeType?: string;
+              contentBase64: string;
+            }>;
+          },
+    ) => client.skill.import(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["skill"] });
+    },
+  });
+}
+
 // Hook for updating a skill
 export function useUpdateSkill() {
   const queryClient = useQueryClient();

@@ -897,7 +897,7 @@ function SkillEditorPageContent() {
                 )}
               >
                 <Icon className="h-3 w-3" />
-                {doc.filename}
+                {doc.path ?? doc.filename}
                 <button
                   data-doc-id={doc.id}
                   onClick={handlePromptDownloadDocument}
@@ -908,7 +908,7 @@ function SkillEditorPageContent() {
                 </button>
                 <button
                   data-doc-id={doc.id}
-                  data-doc-filename={doc.filename}
+                  data-doc-filename={doc.path ?? doc.filename}
                   onClick={handlePromptDeleteDocument}
                   className="hover:bg-muted ml-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100"
                 >
