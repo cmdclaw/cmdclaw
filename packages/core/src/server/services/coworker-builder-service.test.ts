@@ -139,6 +139,62 @@ describe("coworker-builder-service", () => {
     expect(result.status).toBe("validation_error");
   });
 
+  it("allows clearing integrations for selected tool access", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "old",
+        model: "anthropic/claude-sonnet-4-6",
+        toolAccessMode: "selected",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: [],
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+
+    const result = await applyCoworkerEdit({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      changes: {
+        toolAccessMode: "selected",
+        allowedIntegrations: [],
+      },
+    });
+
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") {
+      return;
+    }
+    expect(result.coworker.allowedIntegrations).toEqual([]);
+  });
+
   it("rejects new email forwarding trigger edits", () => {
     const result = coworkerBuilderEditSchema.safeParse({
       triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,

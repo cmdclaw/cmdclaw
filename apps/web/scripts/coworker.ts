@@ -1,14 +1,24 @@
 import type { RouterClient } from "@orpc/server";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { buildCoworkerEditApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
 import { coworkerBuilderEditSchema } from "@cmdclaw/core/server/services/coworker-builder-service";
 import { db, closePool } from "@cmdclaw/db/client";
 import { conversation, coworkerRun } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
+import { createReadStream, createWriteStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import readline from "node:readline";
+import { ZodError } from "zod";
 import type { AppRouter } from "@/server/orpc";
+import { runGenerationStream } from "@/lib/generation-stream";
 import { formatPersistedChatTranscript } from "../src/components/chat/chat-transcript";
-import { DEFAULT_SERVER_URL, createRpcClient, loadConfig } from "./lib/cli-shared";
+import { DEFAULT_SERVER_URL, ask, createRpcClient, loadConfig } from "./lib/cli-shared";
+import {
+  parseQuestionApprovalInput,
+  resolveQuestionSelection,
+  type QuestionApprovalItem,
+} from "./lib/question-approval";
 
 type ParsedArgs = {
   serverUrl?: string;
@@ -40,7 +50,7 @@ type ParsedArgs = {
   scheduleDayOfMonth?: number;
   model?: string;
   baseUpdatedAt?: string;
-  changes?: string;
+  changesFile?: string;
   filePath?: string;
   description?: string;
 };
@@ -89,7 +99,7 @@ type CoworkerSchedule =
   | { type: "monthly"; time: string; dayOfMonth: number; timezone?: string };
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "error", "success", "failed"]);
-const DEFAULT_COWORKER_BUILDER_MODEL = "anthropic/claude-sonnet-4-6";
+const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 
 function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
@@ -230,8 +240,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.baseUpdatedAt = argv[i + 1];
         i += 1;
         break;
-      case "--changes":
-        args.changes = argv[i + 1];
+      case "--changes-file":
+        args.changesFile = argv[i + 1];
         i += 1;
         break;
       case "--file":
@@ -459,7 +469,7 @@ function printHelp(): void {
   console.log("  -M, --model <provider/model>      Optional generation model override");
   console.log("\nEdit flags:");
   console.log("  --base-updated-at <iso>           Required optimistic concurrency timestamp");
-  console.log("  --changes <json>                  JSON edit payload");
+  console.log("  --changes-file <path>             Read JSON edit payload from a file");
   console.log("\nUpload Document flags:");
   console.log("  --file <path>                     Local file path to upload");
   console.log("  --description <text>              Optional document notes");
@@ -679,26 +689,50 @@ async function showCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): 
   printCoworkerDetails(coworker, args.format);
 }
 
-function parseEditInput(rawChanges: string | undefined) {
-  if (!rawChanges?.trim()) {
-    throw new Error("edit requires --changes");
+function formatZodError(error: ZodError): string {
+  return error.issues
+    .map((issue) => {
+      const path =
+        issue.path.length > 0
+          ? issue.path
+              .map((segment) => (typeof segment === "number" ? `[${segment}]` : segment))
+              .join(".")
+              .replace(/\.\[/g, "[")
+          : "changes";
+
+      return `${path}: ${issue.message}`;
+    })
+    .join("\n");
+}
+
+async function readJsonArgument(filePath: string | undefined): Promise<unknown> {
+  if (filePath?.trim()) {
+    const resolvedPath = filePath.trim();
+    try {
+      return JSON.parse(await readFile(resolvedPath, "utf8"));
+    } catch {
+      throw new Error(`Invalid JSON in --changes-file: ${resolvedPath}`);
+    }
   }
 
-  let parsedUnknown: unknown;
-  try {
-    parsedUnknown = JSON.parse(rawChanges);
-  } catch {
-    throw new Error("Invalid JSON for --changes");
+  throw new Error("edit requires --changes-file");
+}
+
+async function parseEditInput(changesFile: string | undefined) {
+  const parsedUnknown = await readJsonArgument(changesFile);
+  const parsed = coworkerBuilderEditSchema.safeParse(parsedUnknown);
+  if (!parsed.success) {
+    throw new Error(formatZodError(parsed.error));
   }
 
-  return coworkerBuilderEditSchema.parse(parsedUnknown);
+  return parsed.data;
 }
 
 async function editCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
   const coworkerRef = args.positionals[0];
   if (!coworkerRef) {
     throw new Error(
-      "Usage: bun run coworker edit <coworker-id|@username> --base-updated-at <iso> --changes <json> [--json]",
+      "Usage: bun run coworker edit <coworker-id|@username> --base-updated-at <iso> --changes-file <path> [--json]",
     );
   }
   if (!args.baseUpdatedAt?.trim()) {
@@ -709,7 +743,7 @@ async function editCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): 
   const result = await client.coworker.edit({
     coworkerId,
     baseUpdatedAt: args.baseUpdatedAt.trim(),
-    changes: parseEditInput(args.changes),
+    changes: await parseEditInput(args.changesFile),
   });
 
   const envelope = buildCoworkerEditApplyEnvelope({
@@ -1274,56 +1308,107 @@ async function approveCoworkerRun(
   console.log(`Submitted ${decision} for ${toolUseId} on run ${runId}.`);
 }
 
-async function streamGenerationUntilTerminal(
-  client: RouterClient<AppRouter>,
-  generationId: string,
-): Promise<"done" | "error" | "cancelled"> {
-  const iterator = await client.generation.subscribeGeneration({ generationId });
-  let printedText = false;
-
-  for await (const event of iterator) {
-    switch (event.type) {
-      case "text":
-        process.stdout.write(event.content);
-        printedText = true;
-        break;
-      case "system":
-        if (printedText) {
-          process.stdout.write("\n");
-          printedText = false;
-        }
-        console.log(`[system] ${event.content}`);
-        break;
-      case "error":
-        if (printedText) {
-          process.stdout.write("\n");
-        }
-        console.error(`Builder generation error: ${event.message}`);
-        return "error";
-      case "cancelled":
-        if (printedText) {
-          process.stdout.write("\n");
-        }
-        console.log("Builder generation cancelled.");
-        return "cancelled";
-      case "done":
-        if (printedText) {
-          process.stdout.write("\n");
-        }
-        return "done";
-      default:
-        break;
-    }
-  }
-
-  if (printedText) {
-    process.stdout.write("\n");
-  }
-  return "done";
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatToolResult(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+async function collectQuestionApprovalAnswers(
+  rl: readline.Interface,
+  questions: QuestionApprovalItem[],
+): Promise<string[][]> {
+  const collectOne = async (index: number): Promise<string[][]> => {
+    if (index >= questions.length) {
+      return [];
+    }
+
+    const question = questions[index]!;
+    process.stdout.write(`\n[question] ${question.header}\n`);
+    process.stdout.write(`${question.question}\n`);
+
+    question.options.forEach((option, optionIndex) => {
+      const suffix = option.description ? ` - ${option.description}` : "";
+      process.stdout.write(`  ${optionIndex + 1}. ${option.label}${suffix}\n`);
+    });
+
+    if (question.custom) {
+      process.stdout.write("  t. Type your own answer\n");
+    }
+
+    const prompt =
+      question.options.length > 0
+        ? question.multiple
+          ? "Select option(s) comma-separated (default 1): "
+          : "Select an option (default 1): "
+        : "Answer: ";
+    const rawSelection = (await ask(rl, prompt)).trim();
+
+    let selectedAnswers: string[];
+    if (question.custom && rawSelection.toLowerCase() === "t") {
+      const typedPrompt = question.multiple
+        ? "Type your answer(s) (comma-separated): "
+        : "Type your answer: ";
+      const typedAnswer = await ask(rl, typedPrompt);
+      selectedAnswers = resolveQuestionSelection(question, typedAnswer);
+    } else {
+      selectedAnswers = resolveQuestionSelection(question, rawSelection);
+    }
+
+    const remaining = await collectOne(index + 1);
+    return [selectedAnswers, ...remaining];
+  };
+
+  return collectOne(0);
+}
+
+function isReadlineOpen(rl: readline.Interface | null): rl is readline.Interface {
+  if (!rl) {
+    return false;
+  }
+  return !(rl as readline.Interface & { closed?: boolean }).closed;
+}
+
+function createApprovalPrompt(rl: readline.Interface | null): {
+  rl: readline.Interface;
+  close: () => void;
+} | null {
+  if (isReadlineOpen(rl) && process.stdin.isTTY && process.stdout.isTTY) {
+    return {
+      rl,
+      close: () => {},
+    };
+  }
+
+  if (!process.stdout.isTTY) {
+    return null;
+  }
+
+  try {
+    const input = createReadStream("/dev/tty");
+    const output = createWriteStream("/dev/tty");
+    const ttyRl = readline.createInterface({ input, output });
+    return {
+      rl: ttyRl,
+      close: () => {
+        ttyRl.close();
+        input.close();
+        output.end();
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function startBuilderAgent(
@@ -1343,6 +1428,7 @@ async function startBuilderAgent(
     conversationId,
     content: goal,
     model: resolvedModel,
+    authSource: "shared",
     autoApprove: true,
   });
 
@@ -1351,7 +1437,108 @@ async function startBuilderAgent(
   console.log(`  generation id: ${started.generationId}`);
   console.log(`  model: ${resolvedModel}`);
   console.log("\nBuilder output:\n");
-  await streamGenerationUntilTerminal(client, started.generationId);
+  const promptRl =
+    process.stdin.isTTY && process.stdout.isTTY
+      ? readline.createInterface({ input: process.stdin, output: process.stdout })
+      : null;
+
+  try {
+    await runGenerationStream({
+      client,
+      generationId: started.generationId,
+      callbacks: {
+        onText: (content) => {
+          process.stdout.write(content);
+        },
+        onSystem: ({ content }) => {
+          process.stdout.write(`\n[system] ${content}\n`);
+        },
+        onThinking: (thinking) => {
+          process.stdout.write(`\n[thinking] ${thinking.content}\n`);
+        },
+        onToolUse: (toolUse) => {
+          process.stdout.write(`\n[tool_use] ${toolUse.toolName}\n`);
+          if (toolUse.integration) {
+            process.stdout.write(`[tool_integration] ${toolUse.integration}\n`);
+          }
+          if (typeof toolUse.isWrite === "boolean") {
+            process.stdout.write(`[tool_is_write] ${toolUse.isWrite}\n`);
+          }
+          process.stdout.write(`[tool_input] ${JSON.stringify(toolUse.toolInput)}\n`);
+        },
+        onToolResult: (toolName, result) => {
+          if (toolName === "question") {
+            process.stdout.write(`\n[tool_result] ${toolName} ${JSON.stringify(result)}\n`);
+            return;
+          }
+
+          process.stdout.write(`\n[tool_result] ${toolName}\n`);
+          process.stdout.write(`[tool_result_data] ${formatToolResult(result)}\n`);
+        },
+        onPendingApproval: async (approval) => {
+          process.stdout.write(`\n[approval_needed] ${approval.toolName}\n`);
+          process.stdout.write(
+            `[approval_input] ${JSON.stringify({
+              integration: approval.integration,
+              operation: approval.operation,
+              command: approval.command,
+              toolInput: approval.toolInput,
+            })}\n`,
+          );
+          const questionItems = parseQuestionApprovalInput(approval.toolInput);
+          if (!questionItems) {
+            process.stdout.write(
+              " -> coworker builder CLI only supports interactive question approvals right now.\n",
+            );
+            return;
+          }
+
+          const approvalPrompt = createApprovalPrompt(promptRl);
+          if (!approvalPrompt) {
+            process.stdout.write(
+              `\n[question_pending] ${approval.toolUseId}\n -> no interactive prompt available, leaving question interrupt pending.\n`,
+            );
+            return;
+          }
+
+          const questionAnswers = await (async () => {
+            try {
+              return await collectQuestionApprovalAnswers(approvalPrompt.rl, questionItems);
+            } finally {
+              approvalPrompt.close();
+            }
+          })();
+
+          await client.generation.submitApproval({
+            generationId: approval.generationId,
+            toolUseId: approval.toolUseId,
+            decision: "approve",
+            questionAnswers,
+          });
+        },
+        onApprovalResult: (toolUseId, decision) => {
+          process.stdout.write(`\n[approval_${decision}] ${toolUseId}\n`);
+        },
+        onStatusChange: (status, metadata) => {
+          process.stdout.write(`\n[status] ${status}\n`);
+          if (metadata) {
+            process.stdout.write(`[status_metadata] ${JSON.stringify(metadata)}\n`);
+          }
+        },
+        onError: (error) => {
+          process.stdout.write(`\nBuilder generation error: ${error.message}\n`);
+        },
+        onCancelled: () => {
+          process.stdout.write("\nBuilder generation cancelled.\n");
+        },
+        onDone: () => {
+          process.stdout.write("\n");
+        },
+      },
+    });
+  } finally {
+    promptRl?.close();
+  }
 
   const updated = await client.coworker.get({ id: coworkerId });
   console.log("\nCoworker after builder run:");

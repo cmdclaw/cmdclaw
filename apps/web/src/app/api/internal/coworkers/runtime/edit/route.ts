@@ -21,11 +21,31 @@ const requestSchema = z.object({
   changes: coworkerBuilderEditSchema,
 });
 
+function formatValidationDetails(error: z.ZodError): string[] {
+  return error.issues.map((issue) => {
+    const path =
+      issue.path.length > 0
+        ? issue.path
+            .map((segment) => (typeof segment === "number" ? `[${segment}]` : segment))
+            .join(".")
+            .replace(/\.\[/g, "[")
+        : "request";
+
+    return `${path}: ${issue.message}`;
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const parsed = requestSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return Response.json({ error: "invalid_request" }, { status: 400 });
+      return Response.json(
+        {
+          error: "invalid_request",
+          details: formatValidationDetails(parsed.error),
+        },
+        { status: 400 },
+      );
     }
 
     const authorized = await authorizeRuntimeTurn({

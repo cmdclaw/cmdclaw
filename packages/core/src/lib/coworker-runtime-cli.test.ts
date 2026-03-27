@@ -59,7 +59,7 @@ describe("coworker-runtime-cli", () => {
       toolName: "Bash",
       toolInput: {
         command:
-          'coworker edit cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --changes \'{"prompt":"new"}\' --json',
+          "coworker edit cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --changes-file /tmp/cw-1-edit.json --json",
       },
       toolResult: {
         stdout: JSON.stringify({

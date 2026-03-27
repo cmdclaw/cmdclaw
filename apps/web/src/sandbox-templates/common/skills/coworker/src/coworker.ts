@@ -20,7 +20,9 @@ function usage(): never {
   console.error(
     "  coworker invoke --username <username> --message <text> [--attachment <path>]... [--json]",
   );
-  console.error("  coworker edit <coworker-id> --base-updated-at <iso> --changes <json> [--json]");
+  console.error(
+    "  coworker edit <coworker-id> --base-updated-at <iso> --changes-file <path> [--json]",
+  );
   console.error(
     "  coworker upload-document <coworker-id> --file <path> [--description <text>] [--json]",
   );
@@ -86,6 +88,48 @@ async function readUploadedDocument(filePath: string): Promise<DocumentUploadPay
   };
 }
 
+function buildErrorMessage(status: number, payload: unknown): string {
+  if (typeof payload === "object" && payload && "error" in payload) {
+    const record = payload as Record<string, unknown>;
+    const lines = [String(record.error)];
+
+    if (
+      "availableUsernames" in record &&
+      Array.isArray(record.availableUsernames) &&
+      record.availableUsernames.length > 0
+    ) {
+      lines[0] = `${lines[0]} (available: ${record.availableUsernames.join(", ")})`;
+    }
+
+    if ("details" in record && Array.isArray(record.details)) {
+      for (const detail of record.details) {
+        lines.push(`- ${String(detail)}`);
+      }
+    }
+
+    if ("message" in record && typeof record.message === "string" && record.message.trim()) {
+      lines.push(`- ${record.message.trim()}`);
+    }
+
+    return lines.join("\n");
+  }
+
+  return typeof payload === "string" && payload ? payload : `Request failed with ${status}`;
+}
+
+async function readJsonArgument(filePath: string | undefined): Promise<unknown> {
+  if (filePath?.trim()) {
+    const fileContent = await readFile(filePath.trim(), "utf8");
+    try {
+      return JSON.parse(fileContent);
+    } catch {
+      throw new Error(`Invalid JSON in --changes-file: ${filePath.trim()}`);
+    }
+  }
+
+  throw new Error("edit requires --changes-file");
+}
+
 async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
   const appUrl = getRequiredEnv("APP_URL");
   const runtimeContext = await readRuntimeContext();
@@ -114,19 +158,7 @@ async function postJson(path: string, body: Record<string, unknown>): Promise<un
   }
 
   if (!response.ok) {
-    if (typeof parsed === "object" && parsed && "error" in parsed) {
-      const message =
-        "availableUsernames" in parsed &&
-        Array.isArray(parsed.availableUsernames) &&
-        parsed.availableUsernames.length > 0
-          ? `${String((parsed as { error: unknown }).error)} (available: ${parsed.availableUsernames.join(", ")})`
-          : String((parsed as { error: unknown }).error);
-      throw new Error(message);
-    }
-
-    throw new Error(
-      typeof parsed === "string" && parsed ? parsed : `Request failed with ${response.status}`,
-    );
+    throw new Error(buildErrorMessage(response.status, parsed));
   }
 
   return parsed;
@@ -242,7 +274,7 @@ async function main(): Promise<void> {
   if (command === "edit") {
     const coworkerId = args[1] ?? "";
     let baseUpdatedAt = "";
-    let changes = "";
+    let changesFile = "";
 
     for (let index = 2; index < args.length; index += 1) {
       const arg = args[index];
@@ -254,8 +286,8 @@ async function main(): Promise<void> {
         index += 1;
         continue;
       }
-      if (arg === "--changes") {
-        changes = args[index + 1] ?? "";
+      if (arg === "--changes-file") {
+        changesFile = args[index + 1] ?? "";
         index += 1;
         continue;
       }
@@ -263,16 +295,11 @@ async function main(): Promise<void> {
       throw new Error(`Unknown argument: ${arg}`);
     }
 
-    if (!coworkerId || !baseUpdatedAt.trim() || !changes.trim()) {
+    if (!coworkerId || !baseUpdatedAt.trim() || !changesFile.trim()) {
       usage();
     }
 
-    let parsedChanges: unknown;
-    try {
-      parsedChanges = JSON.parse(changes);
-    } catch {
-      throw new Error("Invalid JSON for --changes");
-    }
+    const parsedChanges = await readJsonArgument(changesFile);
 
     const response = (await postJson("/api/internal/coworkers/runtime/edit", {
       coworkerId,

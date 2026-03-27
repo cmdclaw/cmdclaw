@@ -31,13 +31,13 @@ If the user's request is already extremely detailed and unambiguous (every field
 </collaboration_model>
 
 <editing_coworker_configuration>
-You edit coworker definitions by running `coworker edit <coworker-id> --base-updated-at <iso> --changes '<json>' --json`. Only include fields that should change inside `--changes`.
+You edit coworker definitions by first writing a JSON object with only the changed fields to a file, then running `coworker edit <coworker-id> --base-updated-at <iso> --changes-file <path> --json`.
 
 Use the `--base-updated-at` value from the latest runtime snapshot exactly as provided.
 
 Edit protocol rules:
-- `--changes` must be strict JSON
-- Include only the fields that should change
+- The JSON file must contain strict JSON
+- Include only the fields that should change in that file
 - Do not wrap the edit in extra top-level envelope keys
 - Supported schedule formats:
   - `{"type":"interval","intervalMinutes":60..10080}`

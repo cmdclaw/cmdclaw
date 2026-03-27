@@ -63,7 +63,7 @@ export const coworkerBuilderEditSchema = z
     prompt: z.string().max(20000).optional(),
     model: modelReferenceSchema.optional(),
     toolAccessMode: z.enum(COWORKER_TOOL_ACCESS_MODES).optional(),
-    allowedIntegrations: z.array(z.string()).min(1).optional(),
+    allowedIntegrations: z.array(z.string()).optional(),
     triggerType: z.enum(BUILDER_ALLOWED_TRIGGER_TYPES).optional(),
     schedule: coworkerBuilderScheduleSchema.nullable().optional(),
   })
@@ -351,13 +351,6 @@ export async function applyCoworkerEdit(params: {
     params.changes.allowedIntegrations !== undefined
       ? normalizeIntegrations(params.changes.allowedIntegrations)
       : undefined;
-  if (normalizedIntegrations !== undefined && normalizedIntegrations.length === 0) {
-    return {
-      status: "validation_error",
-      message: "Validation failed",
-      details: ["allowedIntegrations must include at least one integration"],
-    };
-  }
 
   const nextTriggerType = params.changes.triggerType ?? existing.triggerType;
   const nextToolAccessMode =
