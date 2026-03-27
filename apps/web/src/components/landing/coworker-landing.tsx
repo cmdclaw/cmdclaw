@@ -499,7 +499,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   );
 
   const redirectToLogin = useCallback(() => {
-    window.location.assign("/login?callbackUrl=%2Fcoworkers%2Fnew");
+    window.location.assign("/login?callbackUrl=%2F");
   }, []);
 
   const handlePromptComposerSubmit = useCallback(
