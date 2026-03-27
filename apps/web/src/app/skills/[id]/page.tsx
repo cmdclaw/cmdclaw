@@ -134,7 +134,7 @@ function SkillEditorPageContent() {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const displayNameRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
-  const descriptionRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // For SKILL.md - separate state for metadata and body
@@ -143,9 +143,28 @@ function SkillEditorPageContent() {
   const [skillDescription, setSkillDescription] = useState("");
   const [skillIcon, setSkillIcon] = useState<string | null>(null);
   const [skillBody, setSkillBody] = useState("");
+  const [skillFrontmatter, setSkillFrontmatter] = useState("");
+  const [skillMarkdownSource, setSkillMarkdownSource] = useState("");
 
   // For other files - raw content
   const [editedContent, setEditedContent] = useState("");
+
+  const syncSkillMarkdownState = useCallback(
+    (content: string) => {
+      const parsed = parseSkillContent(content);
+      setSkillFrontmatter(parsed.frontmatter);
+      setSkillMarkdownSource(content);
+      setSkillBody(parsed.body);
+      if (parsed.name) {
+        setSkillSlug(parsed.name);
+      }
+      if (parsed.description) {
+        setSkillDescription(parsed.description);
+      }
+      return parsed;
+    },
+    [setSkillBody, setSkillDescription, setSkillFrontmatter, setSkillMarkdownSource, setSkillSlug],
+  );
 
   // Set initial selected file and content when skill loads
   useEffect(() => {
@@ -162,24 +181,27 @@ function SkillEditorPageContent() {
       if (initialFile && !selectedFileId && !selectedDocumentId) {
         setSelectedFileId(initialFile.id);
         if (initialFile.path === "SKILL.md") {
-          const parsed = parseSkillContent(initialFile.content);
-          setSkillBody(parsed.body);
+          syncSkillMarkdownState(initialFile.content);
         } else {
           setEditedContent(initialFile.content);
         }
       }
     }
-  }, [skill, selectedFileId, selectedDocumentId]);
+  }, [selectedDocumentId, selectedFileId, skill, syncSkillMarkdownState]);
 
   const handleDisplayNameChange = useCallback(
     (value: string) => {
       setSkillDisplayName(value);
       // Auto-generate slug if user hasn't manually edited it
       if (!isEditingSlug) {
-        setSkillSlug(generateSlug(value));
+        const nextSlug = generateSlug(value);
+        setSkillSlug(nextSlug);
+        setSkillMarkdownSource(
+          serializeSkillContent(nextSlug, skillDescription, skillBody, skillFrontmatter),
+        );
       }
     },
-    [isEditingSlug],
+    [isEditingSlug, skillBody, skillDescription, skillFrontmatter],
   );
 
   const handleSaveFile = useCallback(
@@ -195,7 +217,9 @@ function SkillEditorPageContent() {
 
       const content =
         selectedFile.path === "SKILL.md"
-          ? serializeSkillContent(skillSlug, skillDescription, skillBody)
+          ? skillMarkdownViewMode === "source"
+            ? skillMarkdownSource
+            : serializeSkillContent(skillSlug, skillDescription, skillBody, skillFrontmatter)
           : editedContent;
 
       // Check if there are actual changes
@@ -252,6 +276,9 @@ function SkillEditorPageContent() {
       skillSlug,
       skillDescription,
       skillBody,
+      skillFrontmatter,
+      skillMarkdownSource,
+      skillMarkdownViewMode,
       editedContent,
       skillDisplayName,
       skillIcon,
@@ -274,15 +301,14 @@ function SkillEditorPageContent() {
         setSelectedDocumentId(null);
         setDocumentUrl(null);
         if (file.path === "SKILL.md") {
-          const parsed = parseSkillContent(file.content);
-          setSkillBody(parsed.body);
+          syncSkillMarkdownState(file.content);
           setSkillMarkdownViewMode("preview");
         } else {
           setEditedContent(file.content);
         }
       }
     },
-    [handleSaveFile, selectedFileId, skill?.files],
+    [handleSaveFile, selectedFileId, skill?.files, syncSkillMarkdownState],
   );
 
   const handleSelectDocument = useCallback(
@@ -342,8 +368,7 @@ function SkillEditorPageContent() {
         const skillMd = skill?.files.find((f) => f.path === "SKILL.md");
         if (skillMd) {
           setSelectedFileId(skillMd.id);
-          const parsed = parseSkillContent(skillMd.content);
-          setSkillBody(parsed.body);
+          syncSkillMarkdownState(skillMd.content);
         }
       }
       setNotification({ type: "success", message: "File deleted" });
@@ -352,7 +377,7 @@ function SkillEditorPageContent() {
     } catch {
       setNotification({ type: "error", message: "Failed to delete file" });
     }
-  }, [deleteFile, fileToDelete, refetch, selectedFileId, skill?.files]);
+  }, [deleteFile, fileToDelete, refetch, selectedFileId, skill?.files, syncSkillMarkdownState]);
 
   const handleDeleteSkill = useCallback(async () => {
     if (!confirm(`Delete skill "${skillDisplayName}"? This cannot be undone.`)) {
@@ -436,8 +461,7 @@ function SkillEditorPageContent() {
           setSelectedFileId(skillMd.id);
           setSelectedDocumentId(null);
           setDocumentUrl(null);
-          const parsed = parseSkillContent(skillMd.content);
-          setSkillBody(parsed.body);
+          syncSkillMarkdownState(skillMd.content);
         }
       }
       setNotification({ type: "success", message: "Document deleted" });
@@ -446,7 +470,14 @@ function SkillEditorPageContent() {
     } catch {
       setNotification({ type: "error", message: "Failed to delete document" });
     }
-  }, [deleteDocument, documentToDelete, refetch, selectedDocumentId, skill?.files]);
+  }, [
+    deleteDocument,
+    documentToDelete,
+    refetch,
+    selectedDocumentId,
+    skill?.files,
+    syncSkillMarkdownState,
+  ]);
 
   const getDocumentIcon = (mimeType: string) => {
     if (mimeType.startsWith("image/")) {
@@ -529,14 +560,19 @@ function SkillEditorPageContent() {
     [handleDisplayNameChange],
   );
 
-  const handleSlugInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setSkillSlug(
-      event.target.value
+  const handleSlugInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const nextSlug = event.target.value
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, "-")
-        .replace(/-+/g, "-"),
-    );
-  }, []);
+        .replace(/-+/g, "-");
+      setSkillSlug(nextSlug);
+      setSkillMarkdownSource(
+        serializeSkillContent(nextSlug, skillDescription, skillBody, skillFrontmatter),
+      );
+    },
+    [skillBody, skillDescription, skillFrontmatter],
+  );
 
   const handleStopEditingSlug = useCallback(() => {
     setIsEditingSlug(false);
@@ -552,17 +588,24 @@ function SkillEditorPageContent() {
     setIsEditingSlug(true);
   }, []);
 
-  const handleDescriptionInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setSkillDescription(event.target.value);
-  }, []);
+  const handleDescriptionInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const nextDescription = event.target.value;
+      setSkillDescription(nextDescription);
+      setSkillMarkdownSource(
+        serializeSkillContent(skillSlug, nextDescription, skillBody, skillFrontmatter),
+      );
+    },
+    [skillBody, skillFrontmatter, skillSlug],
+  );
 
   const handleStopEditingDescription = useCallback(() => {
     setIsEditingDescription(false);
   }, []);
 
   const handleDescriptionInputKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter" || event.key === "Escape") {
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Escape") {
         setIsEditingDescription(false);
       }
     },
@@ -661,7 +704,10 @@ function SkillEditorPageContent() {
 
   const handleMarkdownSourceChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const parsed = parseSkillContent(event.target.value);
+      const nextContent = event.target.value;
+      const parsed = parseSkillContent(nextContent);
+      setSkillMarkdownSource(nextContent);
+      setSkillFrontmatter(parsed.frontmatter);
       setSkillSlug(parsed.name);
       setSkillDescription(parsed.description);
       setSkillBody(parsed.body);
@@ -819,21 +865,20 @@ function SkillEditorPageContent() {
 
           {/* Description - Muted text, expands to input on click */}
           {isEditingDescription ? (
-            <input
+            <textarea
               ref={descriptionRef}
-              type="text"
               value={skillDescription}
               onChange={handleDescriptionInputChange}
               onBlur={handleStopEditingDescription}
               onKeyDown={handleDescriptionInputKeyDown}
               placeholder="Add a description..."
-              className="text-muted-foreground placeholder:text-muted-foreground/50 w-full bg-transparent text-sm outline-none"
+              className="text-muted-foreground placeholder:text-muted-foreground/50 min-h-20 w-full resize-y bg-transparent text-sm outline-none"
               autoFocus
             />
           ) : (
             <button
               onClick={handleStartEditingDescription}
-              className="text-muted-foreground hover:text-foreground text-left text-sm"
+              className="text-muted-foreground hover:text-foreground text-left text-sm whitespace-pre-wrap"
             >
               {skillDescription || (
                 <span className="text-muted-foreground/50">Add a description...</span>
@@ -1009,7 +1054,7 @@ function SkillEditorPageContent() {
                 </div>
               ) : isSkillMd && skillMarkdownViewMode === "source" ? (
                 <textarea
-                  value={serializeSkillContent(skillSlug, skillDescription, skillBody)}
+                  value={skillMarkdownSource}
                   onChange={handleMarkdownSourceChange}
                   className="bg-background focus:ring-ring h-full w-full resize-none rounded-lg border p-4 font-mono text-sm focus:ring-2 focus:outline-none"
                   placeholder="---

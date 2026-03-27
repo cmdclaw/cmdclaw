@@ -114,13 +114,13 @@ description: Build a weekly report
     expect(result).toEqual({
       id: "skill-1",
       name: "weekly-report",
-      displayName: "Weekly Report",
+      displayName: "weekly-report",
       description: "Build a weekly report",
       enabled: false,
     });
     expect(database.insertedSkills[0]).toMatchObject({
       name: "weekly-report",
-      displayName: "Weekly Report",
+      displayName: "weekly-report",
       enabled: false,
     });
     expect(database.insertedFiles[0]).toEqual(
@@ -191,7 +191,72 @@ description: Build a weekly report
     });
 
     expect(result.name).toBe("weekly-report-2");
-    expect(result.displayName).toBe("Weekly Report (Imported 2)");
+    expect(result.displayName).toBe("weekly-report");
+  });
+
+  it("uses frontmatter name for displayName instead of placeholder headings", async () => {
+    const database = createDatabase();
+
+    const result = await importSkill(database.db as never, "user-1", {
+      mode: "folder",
+      files: [
+        {
+          path: "SKILL.md",
+          mimeType: "text/markdown",
+          contentBase64: Buffer.from(`---
+name: qa
+description: Test and fix bugs
+---
+
+# {Title}
+
+Real content here.
+`).toString("base64"),
+        },
+      ],
+    });
+
+    expect(result.name).toBe("qa");
+    expect(result.displayName).toBe("qa");
+    expect(database.insertedSkills[0]).toMatchObject({
+      name: "qa",
+      displayName: "qa",
+    });
+  });
+
+  it("imports multiline descriptions from YAML block scalars", async () => {
+    const database = createDatabase();
+
+    const result = await importSkill(database.db as never, "user-1", {
+      mode: "folder",
+      files: [
+        {
+          path: "SKILL.md",
+          mimeType: "text/markdown",
+          contentBase64: Buffer.from(`---
+name: qa
+version: 2.0.0
+description: |
+  Systematically QA test a web application and fix bugs found.
+  Produces before/after health scores.
+allowed-tools:
+  - Bash
+  - Read
+---
+
+# QA
+`).toString("base64"),
+        },
+      ],
+    });
+
+    expect(result.description).toBe(
+      "Systematically QA test a web application and fix bugs found.\nProduces before/after health scores.",
+    );
+    expect(database.insertedSkills[0]).toMatchObject({
+      description:
+        "Systematically QA test a web application and fix bugs found.\nProduces before/after health scores.",
+    });
   });
 
   it("rejects traversal paths in folder imports", async () => {
