@@ -43,9 +43,11 @@ function totalSegmentLength(segments: PromptSegment[]): number {
 function RichPlaceholderOverlay({
   segments,
   charPos,
+  showCursor = true,
 }: {
   segments: PromptSegment[];
   charPos: number;
+  showCursor?: boolean;
 }) {
   let consumed = 0;
   const elements: React.ReactNode[] = [];
@@ -88,7 +90,7 @@ function RichPlaceholderOverlay({
   return (
     <span className="inline" style={RICH_PLACEHOLDER_LINE_HEIGHT_STYLE}>
       {elements}
-      {charPos > 0 ? (
+      {showCursor && charPos > 0 ? (
         <span
           className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
           style={RICH_PLACEHOLDER_CURSOR_STYLE}
@@ -240,9 +242,6 @@ export function PromptComposer({
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
-    const el = e.target;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -253,9 +252,6 @@ export function PromptComposer({
 
     onSubmit(trimmed);
     setText("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
   }, [isSubmitting, onSubmit, text]);
 
   const handleKeyDown = useCallback(
@@ -270,6 +266,9 @@ export function PromptComposer({
 
   const currentRichSegments =
     richAnimatedPlaceholders?.[richIndex % (richAnimatedPlaceholders?.length || 1)];
+  const richPlaceholderMeasureCharPos = currentRichSegments
+    ? totalSegmentLength(currentRichSegments)
+    : 0;
 
   return (
     <div className={cn("w-full", className)}>
@@ -282,6 +281,22 @@ export function PromptComposer({
         )}
       >
         <div className="relative px-4 pt-4">
+          <div
+            className="pointer-events-none invisible text-sm leading-relaxed break-words whitespace-pre-wrap"
+            aria-hidden
+          >
+            {text.length > 0 ? (
+              <span>{text.endsWith("\n") ? `${text} ` : text}</span>
+            ) : shouldAnimateRich && currentRichSegments ? (
+              <RichPlaceholderOverlay
+                segments={currentRichSegments}
+                charPos={richPlaceholderMeasureCharPos}
+                showCursor={false}
+              />
+            ) : (
+              <span>{activePlaceholder || " "}</span>
+            )}
+          </div>
           {/* Rich animated placeholder overlay */}
           {shouldAnimateRich && currentRichSegments && (
             <div
@@ -299,7 +314,7 @@ export function PromptComposer({
             placeholder={shouldAnimateRich ? undefined : activePlaceholder}
             rows={2}
             className={cn(
-              "relative z-10 min-h-12 w-full resize-none bg-transparent text-sm leading-relaxed outline-none",
+              "absolute inset-0 z-10 min-h-12 w-full resize-none bg-transparent px-4 pt-4 text-sm leading-relaxed outline-none",
               variant === "hero"
                 ? "placeholder:text-slate-700/90 text-slate-950"
                 : "placeholder:text-muted-foreground/50 text-foreground",

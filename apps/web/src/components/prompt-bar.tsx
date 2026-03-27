@@ -71,9 +71,11 @@ function totalSegmentLength(segments: PromptSegment[]): number {
 function RichPlaceholderOverlay({
   segments,
   charPos,
+  showCursor = true,
 }: {
   segments: PromptSegment[];
   charPos: number;
+  showCursor?: boolean;
 }) {
   let consumed = 0;
   const elements: React.ReactNode[] = [];
@@ -113,7 +115,7 @@ function RichPlaceholderOverlay({
   return (
     <span className="inline" style={RICH_PLACEHOLDER_LINE_HEIGHT_STYLE}>
       {elements}
-      {charPos > 0 ? (
+      {showCursor && charPos > 0 ? (
         <span
           className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
           style={RICH_PLACEHOLDER_CURSOR_STYLE}
@@ -314,15 +316,9 @@ export function PromptBar({
 
   const currentRichSegments =
     richAnimatedPlaceholders?.[richIndex % (richAnimatedPlaceholders?.length || 1)];
-
-  // ── Auto-resize ──
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-    }
-  }, [text]);
+  const richPlaceholderMeasureCharPos = currentRichSegments
+    ? totalSegmentLength(currentRichSegments)
+    : 0;
 
   // ── File handling ──
   const addFiles = useCallback(
@@ -554,18 +550,26 @@ export function PromptBar({
 
         {/* Textarea area */}
         <div className="relative px-5 pt-4 pb-2">
-          {/* Hidden measurer: sets min-height so the container fits the placeholder */}
-          {shouldAnimateRich && currentRichSegments && (
-            <div
-              className={cn(
-                "pointer-events-none invisible text-[15px] leading-relaxed",
-                isHero ? HERO_PROMPT_MIN_HEIGHT_CLASS : DEFAULT_PROMPT_MIN_HEIGHT_CLASS,
-              )}
-              aria-hidden
-            >
-              <RichPlaceholderOverlay segments={currentRichSegments} charPos={richCharPos} />
-            </div>
-          )}
+          {/* Hidden measurer: keeps layout stable across placeholder and typed states */}
+          <div
+            className={cn(
+              "pointer-events-none invisible whitespace-pre-wrap break-words text-[15px] leading-relaxed",
+              isHero ? HERO_PROMPT_MIN_HEIGHT_CLASS : DEFAULT_PROMPT_MIN_HEIGHT_CLASS,
+            )}
+            aria-hidden
+          >
+            {text.length > 0 ? (
+              <span>{text.endsWith("\n") ? `${text} ` : text}</span>
+            ) : shouldAnimateRich && currentRichSegments ? (
+              <RichPlaceholderOverlay
+                segments={currentRichSegments}
+                charPos={richPlaceholderMeasureCharPos}
+                showCursor={false}
+              />
+            ) : (
+              <span>{activePlaceholder || " "}</span>
+            )}
+          </div>
           {/* Visible placeholder overlay */}
           {shouldAnimateRich && currentRichSegments && (
             <div
@@ -584,8 +588,7 @@ export function PromptBar({
             disabled={disabled}
             rows={2}
             className={cn(
-              "w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none",
-              shouldAnimateRich ? "absolute inset-0 z-10 px-5 pt-4 pb-2" : "relative z-10",
+              "absolute inset-0 z-10 w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[15px] leading-relaxed outline-none",
               isHero
                 ? cn(HERO_PROMPT_MIN_HEIGHT_CLASS, "placeholder:text-slate-500/80 text-slate-950")
                 : cn(

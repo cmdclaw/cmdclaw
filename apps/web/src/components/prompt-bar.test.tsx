@@ -101,5 +101,7 @@ describe("PromptBar", () => {
 
     const measurer = container.querySelector("div[aria-hidden='true'].invisible");
     expect(measurer).toHaveClass("min-h-[4.6rem]");
+    expect(measurer).toHaveTextContent("Every hour, triage new");
+    expect(measurer).toHaveTextContent("Zendesk");
   });
 });
