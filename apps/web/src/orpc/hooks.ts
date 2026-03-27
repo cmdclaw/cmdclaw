@@ -246,8 +246,12 @@ export function useAddGoogleAccessAllowlistEntry() {
     mutationFn: ({ email }: { email: string }) =>
       client.integration.addGoogleAccessAllowlistEntry({ email }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["integration", "google-access-allowlist"] });
-      queryClient.invalidateQueries({ queryKey: ["integration", "google-access-status"] });
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "google-access-allowlist"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "google-access-status"],
+      });
     },
   });
 }
@@ -259,8 +263,12 @@ export function useRemoveGoogleAccessAllowlistEntry() {
     mutationFn: ({ id }: { id: string }) =>
       client.integration.removeGoogleAccessAllowlistEntry({ id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["integration", "google-access-allowlist"] });
-      queryClient.invalidateQueries({ queryKey: ["integration", "google-access-status"] });
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "google-access-allowlist"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "google-access-status"],
+      });
     },
   });
 }
@@ -282,7 +290,9 @@ export function useRequestGoogleAccess() {
       source?: "integrations" | "chat" | "onboarding";
     }) => client.integration.requestGoogleAccess({ integration, source }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["integration", "google-access-status"] });
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "google-access-status"],
+      });
     },
   });
 }
@@ -486,6 +496,14 @@ export function useExecutorSourceList() {
   });
 }
 
+export function useAdminExecutorSourceList(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["executorSource", "admin", workspaceId],
+    queryFn: () => client.executorSource.adminList({ workspaceId: workspaceId! }),
+    enabled: Boolean(workspaceId),
+  });
+}
+
 export function useCreateExecutorSource() {
   const queryClient = useQueryClient();
 
@@ -506,6 +524,33 @@ export function useCreateExecutorSource() {
       authPrefix?: string | null;
       enabled?: boolean;
     }) => client.executorSource.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useAdminCreateExecutorSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      workspaceId: string;
+      kind: "mcp" | "openapi";
+      name: string;
+      namespace: string;
+      endpoint: string;
+      specUrl?: string | null;
+      transport?: string | null;
+      headers?: Record<string, string>;
+      queryParams?: Record<string, string>;
+      defaultHeaders?: Record<string, string>;
+      authType?: "none" | "api_key" | "bearer";
+      authHeaderName?: string | null;
+      authQueryParam?: string | null;
+      authPrefix?: string | null;
+      enabled?: boolean;
+    }) => client.executorSource.adminCreate(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
@@ -539,11 +584,51 @@ export function useUpdateExecutorSource() {
   });
 }
 
+export function useAdminUpdateExecutorSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      workspaceId: string;
+      id: string;
+      kind: "mcp" | "openapi";
+      name: string;
+      namespace: string;
+      endpoint: string;
+      specUrl?: string | null;
+      transport?: string | null;
+      headers?: Record<string, string>;
+      queryParams?: Record<string, string>;
+      defaultHeaders?: Record<string, string>;
+      authType?: "none" | "api_key" | "bearer";
+      authHeaderName?: string | null;
+      authQueryParam?: string | null;
+      authPrefix?: string | null;
+      enabled?: boolean;
+    }) => client.executorSource.adminUpdate(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
 export function useDeleteExecutorSource() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: string) => client.executorSource.delete({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useAdminDeleteExecutorSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; id: string }) =>
+      client.executorSource.adminDelete(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
@@ -566,12 +651,41 @@ export function useSetExecutorSourceCredential() {
   });
 }
 
+export function useAdminSetExecutorSourceCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      workspaceId: string;
+      workspaceExecutorSourceId: string;
+      secret: string;
+      displayName?: string | null;
+      enabled?: boolean;
+    }) => client.executorSource.adminSetCredential(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
 export function useDisconnectExecutorSourceCredential() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (workspaceExecutorSourceId: string) =>
       client.executorSource.disconnectCredential({ workspaceExecutorSourceId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useAdminDisconnectExecutorSourceCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; workspaceExecutorSourceId: string }) =>
+      client.executorSource.adminDisconnectCredential(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
@@ -593,6 +707,21 @@ export function useToggleExecutorSourceCredential() {
         workspaceExecutorSourceId,
         enabled,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useAdminToggleExecutorSourceCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      workspaceId: string;
+      workspaceExecutorSourceId: string;
+      enabled: boolean;
+    }) => client.executorSource.adminToggleCredential(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
@@ -975,7 +1104,9 @@ export function useEditCoworker() {
     }) => client.coworker.edit(input),
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
-      queryClient.invalidateQueries({ queryKey: ["coworker", "get", input.coworkerId] });
+      queryClient.invalidateQueries({
+        queryKey: ["coworker", "get", input.coworkerId],
+      });
     },
   });
 }
@@ -1138,7 +1269,9 @@ export function useCreateCoworkerForwardingAlias() {
   return useMutation({
     mutationFn: (coworkerId: string) => client.coworker.createForwardingAlias({ id: coworkerId }),
     onSuccess: (_, coworkerId) => {
-      queryClient.invalidateQueries({ queryKey: ["coworker", "forwarding-alias", coworkerId] });
+      queryClient.invalidateQueries({
+        queryKey: ["coworker", "forwarding-alias", coworkerId],
+      });
     },
   });
 }
@@ -1149,7 +1282,9 @@ export function useDisableCoworkerForwardingAlias() {
   return useMutation({
     mutationFn: (coworkerId: string) => client.coworker.disableForwardingAlias({ id: coworkerId }),
     onSuccess: (_, coworkerId) => {
-      queryClient.invalidateQueries({ queryKey: ["coworker", "forwarding-alias", coworkerId] });
+      queryClient.invalidateQueries({
+        queryKey: ["coworker", "forwarding-alias", coworkerId],
+      });
     },
   });
 }
@@ -1160,7 +1295,9 @@ export function useRotateCoworkerForwardingAlias() {
   return useMutation({
     mutationFn: (coworkerId: string) => client.coworker.rotateForwardingAlias({ id: coworkerId }),
     onSuccess: (_, coworkerId) => {
-      queryClient.invalidateQueries({ queryKey: ["coworker", "forwarding-alias", coworkerId] });
+      queryClient.invalidateQueries({
+        queryKey: ["coworker", "forwarding-alias", coworkerId],
+      });
     },
   });
 }
@@ -1444,7 +1581,9 @@ export function useAdminAddWorkspaceMembers() {
     mutationFn: (input: { workspaceId: string; emails: string[] }) =>
       client.billing.adminAddWorkspaceMembers(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "admin-workspaces"],
+      });
     },
   });
 }
@@ -1456,7 +1595,9 @@ export function useAdminRemoveWorkspaceMember() {
     mutationFn: (input: { workspaceId: string; email: string }) =>
       client.billing.adminRemoveWorkspaceMember(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "admin-workspaces"],
+      });
     },
   });
 }
@@ -1468,7 +1609,9 @@ export function useAdminCreateWorkspace() {
     mutationFn: (input: { name: string; ownerEmail: string }) =>
       client.billing.adminCreateWorkspace(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "admin-workspaces"],
+      });
     },
   });
 }
@@ -1480,7 +1623,9 @@ export function useAdminRenameWorkspace() {
     mutationFn: (input: { workspaceId: string; name: string }) =>
       client.billing.adminRenameWorkspace(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["billing", "admin-workspaces"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "admin-workspaces"],
+      });
     },
   });
 }
@@ -1492,7 +1637,9 @@ export function useAdminManualBillingTopUp() {
     mutationFn: (input: { targetUserId: string; usdAmount: number }) =>
       client.billing.adminManualTopUp(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["billing", "admin-user-overview"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "admin-user-overview"],
+      });
     },
   });
 }
@@ -1938,7 +2085,13 @@ export function useSubmitApproval() {
       toolUseId: string;
       decision: "approve" | "deny";
       questionAnswers?: string[][];
-    }) => client.generation.submitApproval({ generationId, toolUseId, decision, questionAnswers }),
+    }) =>
+      client.generation.submitApproval({
+        generationId,
+        toolUseId,
+        decision,
+        questionAnswers,
+      }),
   });
 }
 
