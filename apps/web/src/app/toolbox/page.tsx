@@ -2,6 +2,7 @@
 
 import {
   ArrowUp,
+  Copy,
   FileInput,
   FileOutput,
   Globe,
@@ -9,6 +10,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Share2,
   Table,
   Trash2,
   Wand2,
@@ -60,7 +62,10 @@ import {
   useCreateSkill,
   useImportSkill,
   useDeleteSkill,
+  useSaveSharedSkill,
   useRequestGoogleAccess,
+  useShareSkill,
+  useUnshareSkill,
 } from "@/orpc/hooks";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -484,6 +489,9 @@ function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled:
 function CustomToolCard({
   skill,
   onDelete,
+  onShare,
+  onUnshare,
+  onSaveShared,
 }: {
   skill: {
     id: string;
@@ -492,8 +500,19 @@ function CustomToolCard({
     description: string;
     icon: string | null;
     enabled: boolean;
+    visibility: "private" | "public";
+    owner: {
+      id: string;
+      name: string | null;
+      email: string | null;
+    };
+    isOwnedByCurrentUser: boolean;
+    canEdit: boolean;
   };
   onDelete: (id: string, displayName: string) => Promise<void>;
+  onShare: (id: string, displayName: string) => Promise<void>;
+  onUnshare: (id: string, displayName: string) => Promise<void>;
+  onSaveShared: (id: string, displayName: string) => Promise<void>;
 }) {
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {
@@ -503,6 +522,34 @@ function CustomToolCard({
     },
     [onDelete, skill.id, skill.displayName],
   );
+
+  const handleShare = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void onShare(skill.id, skill.displayName);
+    },
+    [onShare, skill.displayName, skill.id],
+  );
+
+  const handleUnshare = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void onUnshare(skill.id, skill.displayName);
+    },
+    [onUnshare, skill.displayName, skill.id],
+  );
+
+  const handleSaveShared = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void onSaveShared(skill.id, skill.displayName);
+    },
+    [onSaveShared, skill.displayName, skill.id],
+  );
+
   const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
   }, []);
@@ -530,6 +577,13 @@ function CustomToolCard({
             <div className="min-w-0">
               <p className="text-[13px] leading-tight font-medium">{skill.displayName}</p>
               <span className="text-muted-foreground font-mono text-[10px]">{skill.name}</span>
+              <span className="text-muted-foreground mt-1 block text-[10px]">
+                {skill.isOwnedByCurrentUser
+                  ? skill.visibility === "public"
+                    ? "Workspace public"
+                    : "Private to you"
+                  : `Shared by ${skill.owner.name ?? skill.owner.email ?? "workspace"}`}
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -550,23 +604,41 @@ function CustomToolCard({
 
         {/* Footer */}
         <div className="mt-auto flex items-center justify-between pt-4">
-          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            Custom
+          <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+            {skill.visibility === "public" ? <Share2 className="h-3 w-3" /> : null}
+            {skill.isOwnedByCurrentUser ? "Custom" : "Shared"}
           </span>
           <div className="flex items-center gap-0.5" onClick={handleCardActionClick}>
-            <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-              <Link href={`/skills/${skill.id}`}>
-                <Pencil className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive h-7 w-7"
-              onClick={handleDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+            {skill.canEdit ? (
+              <>
+                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                  <Link href={`/skills/${skill.id}`}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={skill.visibility === "public" ? handleUnshare : handleShare}
+                  title={skill.visibility === "public" ? "Unshare" : "Share with workspace"}
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-destructive h-7 w-7"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveShared}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         </div>
       </Link>
@@ -600,6 +672,9 @@ function ToolboxPageContent() {
   const createSkill = useCreateSkill();
   const importSkill = useImportSkill();
   const deleteSkill = useDeleteSkill();
+  const shareSkill = useShareSkill();
+  const unshareSkill = useUnshareSkill();
+  const saveSharedSkill = useSaveSharedSkill();
 
   // Local state
   const [connectingType, setConnectingType] = useState<string | null>(null);
@@ -644,6 +719,15 @@ function ToolboxPageContent() {
 
   // Skill data
   const skillsList = useMemo(() => (Array.isArray(skills) ? skills : []), [skills]);
+  const ownedSkillsList = useMemo(
+    () => skillsList.filter((skill) => skill.isOwnedByCurrentUser),
+    [skillsList],
+  );
+  const sharedSkillsList = useMemo(
+    () =>
+      skillsList.filter((skill) => !skill.isOwnedByCurrentUser && skill.visibility === "public"),
+    [skillsList],
+  );
 
   // ─── LinkedIn redirect handling ─────────────────────────────────────────────
   useEffect(() => {
@@ -874,6 +958,45 @@ function ToolboxPageContent() {
     [deleteSkill, refetchSkills],
   );
 
+  const handleShareSkill = useCallback(
+    async (id: string, displayName: string) => {
+      try {
+        await shareSkill.mutateAsync(id);
+        toast.success(`Shared "${displayName}" with the workspace.`);
+        refetchSkills();
+      } catch (error) {
+        toast.error(toErrorMessage(error, "Failed to share skill."));
+      }
+    },
+    [refetchSkills, shareSkill],
+  );
+
+  const handleUnshareSkill = useCallback(
+    async (id: string, displayName: string) => {
+      try {
+        await unshareSkill.mutateAsync(id);
+        toast.success(`Unshared "${displayName}".`);
+        refetchSkills();
+      } catch (error) {
+        toast.error(toErrorMessage(error, "Failed to unshare skill."));
+      }
+    },
+    [refetchSkills, unshareSkill],
+  );
+
+  const handleSaveSharedSkill = useCallback(
+    async (id: string, displayName: string) => {
+      try {
+        const saved = await saveSharedSkill.mutateAsync(id);
+        toast.success(`Saved "${displayName}" to your skills.`);
+        router.push(`/skills/${saved.id}`);
+      } catch (error) {
+        toast.error(toErrorMessage(error, "Failed to save shared skill."));
+      }
+    },
+    [router, saveSharedSkill],
+  );
+
   // ─── Community skill handlers ─────────────────────────────────────────────
   const handleCommunitySkillToggle = useCallback((id: string, value: boolean) => {
     setCommunitySkillToggles((prev) => ({ ...prev, [id]: value }));
@@ -908,8 +1031,8 @@ function ToolboxPageContent() {
     });
   }, [visibleIntegrations, q, activeTab, connectedIntegrations]);
 
-  const filteredCustomSkills = useMemo(() => {
-    let filtered = skillsList;
+  const filteredOwnedSkills = useMemo(() => {
+    let filtered = ownedSkillsList;
     if (q) {
       filtered = filtered.filter(
         (s) =>
@@ -925,7 +1048,27 @@ function ToolboxPageContent() {
       return []; // skills never need setup
     }
     return filtered;
-  }, [skillsList, q, activeTab]);
+  }, [ownedSkillsList, q, activeTab]);
+
+  const filteredSharedSkills = useMemo(() => {
+    let filtered = sharedSkillsList;
+    if (q) {
+      filtered = filtered.filter(
+        (s) =>
+          s.displayName.toLowerCase().includes(q) ||
+          s.description.toLowerCase().includes(q) ||
+          s.name.toLowerCase().includes(q) ||
+          (s.owner.name ?? s.owner.email ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (activeTab === "active") {
+      filtered = filtered.filter((s) => s.enabled);
+    }
+    if (activeTab === "needs_setup") {
+      return [];
+    }
+    return filtered;
+  }, [activeTab, q, sharedSkillsList]);
 
   const filteredCommunitySkills = useMemo(() => {
     let filtered = COMMUNITY_SKILLS;
@@ -969,7 +1112,8 @@ function ToolboxPageContent() {
 
   const hasResults =
     filteredIntegrations.length > 0 ||
-    filteredCustomSkills.length > 0 ||
+    filteredOwnedSkills.length > 0 ||
+    filteredSharedSkills.length > 0 ||
     filteredCommunitySkills.length > 0;
 
   const tabs: { id: FilterTab; label: string; count: number }[] = [
@@ -1255,25 +1399,64 @@ function ToolboxPageContent() {
         </motion.div>
       ) : (
         <div className="space-y-10">
-          {/* Custom Skills section */}
-          {filteredCustomSkills.length > 0 && (
+          {/* Personal skills section */}
+          {filteredOwnedSkills.length > 0 && (
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-semibold">My Skills</h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    Custom skills you&apos;ve created
+                    Private skills you own in this workspace
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredCustomSkills.length} tool
-                  {filteredCustomSkills.length !== 1 ? "s" : ""}
+                  {filteredOwnedSkills.length} tool
+                  {filteredOwnedSkills.length !== 1 ? "s" : ""}
                 </p>
               </div>
               <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <AnimatePresence mode="popLayout">
-                  {filteredCustomSkills.map((skill) => (
-                    <CustomToolCard key={skill.id} skill={skill} onDelete={handleSkillDelete} />
+                  {filteredOwnedSkills.map((skill) => (
+                    <CustomToolCard
+                      key={skill.id}
+                      skill={skill}
+                      onDelete={handleSkillDelete}
+                      onShare={handleShareSkill}
+                      onUnshare={handleUnshareSkill}
+                      onSaveShared={handleSaveSharedSkill}
+                    />
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            </section>
+          )}
+
+          {/* Shared skills section */}
+          {filteredSharedSkills.length > 0 && (
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">Workspace Skills</h2>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    Public skills shared by other people in your workspace
+                  </p>
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  {filteredSharedSkills.length} tool
+                  {filteredSharedSkills.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <AnimatePresence mode="popLayout">
+                  {filteredSharedSkills.map((skill) => (
+                    <CustomToolCard
+                      key={skill.id}
+                      skill={skill}
+                      onDelete={handleSkillDelete}
+                      onShare={handleShareSkill}
+                      onUnshare={handleUnshareSkill}
+                      onSaveShared={handleSaveSharedSkill}
+                    />
                   ))}
                 </AnimatePresence>
               </motion.div>

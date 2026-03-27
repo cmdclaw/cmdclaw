@@ -1,4 +1,5 @@
 import type { db as database } from "@cmdclaw/db/client";
+import { resolveUniqueSkillNameInWorkspace } from "@cmdclaw/core/server/services/workspace-skill-service";
 import {
   ensureBucket,
   generateStorageKey,
@@ -6,7 +7,6 @@ import {
 } from "@cmdclaw/core/server/storage/s3-client";
 import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { eq } from "drizzle-orm";
 import { lookup as lookupMimeType } from "mime-types";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
@@ -442,31 +442,6 @@ async function collectRawEntries(input: ImportSkillInput): Promise<RawImportEntr
   return await readZipEntries(Buffer.from(input.contentBase64, "base64"));
 }
 
-async function resolveUniqueSkillSlug(
-  database: DatabaseLike,
-  userId: string,
-  baseSlug: string,
-): Promise<string> {
-  const existing = await database.query.skill.findMany({
-    where: eq(skill.userId, userId),
-    columns: { name: true },
-  });
-
-  const usedNames = new Set(existing.map((record) => record.name));
-  if (!usedNames.has(baseSlug)) {
-    return baseSlug;
-  }
-
-  for (let index = 2; index < 1000; index += 1) {
-    const candidate = toSkillSlug(`${baseSlug}-${index}`);
-    if (candidate && !usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw badRequest(`Could not allocate a unique imported skill name for '${baseSlug}'.`);
-}
-
 function resolveImportedDisplayName(
   baseDisplayName: string,
   _baseSlug: string,
@@ -478,6 +453,7 @@ function resolveImportedDisplayName(
 export async function importSkill(
   database: DatabaseLike,
   userId: string,
+  workspaceId: string,
   input: ImportSkillInput,
 ): Promise<{
   id: string;
@@ -493,7 +469,15 @@ export async function importSkill(
   }
 
   const parsedMetadata = parseSkillMetadata(skillMarkdown.content);
-  const resolvedSlug = await resolveUniqueSkillSlug(database, userId, parsedMetadata.slug);
+  const resolvedSlug = await resolveUniqueSkillNameInWorkspace(
+    database,
+    workspaceId,
+    parsedMetadata.slug,
+  ).catch((error) => {
+    throw badRequest(
+      error instanceof Error ? error.message : "Could not allocate a unique skill name.",
+    );
+  });
   const resolvedDisplayName = resolveImportedDisplayName(
     parsedMetadata.displayName,
     parsedMetadata.slug,
@@ -507,10 +491,12 @@ export async function importSkill(
       .insert(skill)
       .values({
         userId,
+        workspaceId,
         name: resolvedSlug,
         displayName: resolvedDisplayName,
         description: parsedMetadata.description,
         icon: null,
+        visibility: "private",
         enabled: false,
       })
       .returning({

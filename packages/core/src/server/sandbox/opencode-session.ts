@@ -1,10 +1,10 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type Dockerode from "dockerode";
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { ObservabilityContext } from "../utils/observability";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
-import { conversationRuntime, message, skill, type ContentPart } from "@cmdclaw/db/schema";
+import { conversationRuntime, message, type ContentPart } from "@cmdclaw/db/schema";
 import {
   canConnectDockerDaemon,
   createDockerClient,
@@ -20,6 +20,7 @@ import {
 import { getOrCreateSession as getOrCreateE2BSession, injectProviderAuth } from "./e2b";
 import { getPreferredCloudSandboxProvider } from "./factory";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
+import { listAccessibleEnabledSkillsForUser } from "../services/workspace-skill-service";
 import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
 import { COMPACTION_SUMMARY_PREFIX, SESSION_BOUNDARY_PREFIX } from "../services/session-constants";
 import { downloadFromS3 } from "../storage/s3-client";
@@ -819,17 +820,7 @@ export async function writeSkillsToSandbox(
   userId: string,
   allowedSkillNames?: string[],
 ): Promise<string[]> {
-  const skills = await db.query.skill.findMany({
-    where: and(eq(skill.userId, userId), eq(skill.enabled, true)),
-    with: {
-      files: true,
-      documents: true,
-    },
-  });
-  const allowedSet =
-    allowedSkillNames && allowedSkillNames.length > 0 ? new Set(allowedSkillNames) : null;
-  const filteredSkills =
-    allowedSet === null ? skills : skills.filter((entry) => allowedSet.has(entry.name));
+  const filteredSkills = await listAccessibleEnabledSkillsForUser(userId, allowedSkillNames);
 
   if (filteredSkills.length === 0) {
     return [];

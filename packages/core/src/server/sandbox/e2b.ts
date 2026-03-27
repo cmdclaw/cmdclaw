@@ -1,12 +1,13 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { eq, and, asc, isNotNull } from "drizzle-orm";
+import { eq, asc, isNotNull } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
-import { skill, message, conversation, conversationRuntime } from "@cmdclaw/db/schema";
+import { message, conversation, conversationRuntime } from "@cmdclaw/db/schema";
 import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
+import { listAccessibleEnabledSkillsForUser } from "../services/workspace-skill-service";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
@@ -1011,14 +1012,7 @@ export function isE2BConfigured(): boolean {
  * Write user's skills to the sandbox as AGENTS.md format
  */
 export async function writeSkillsToSandbox(sandbox: Sandbox, userId: string): Promise<string[]> {
-  // Fetch all enabled skills for user with their files and documents
-  const skills = await db.query.skill.findMany({
-    where: and(eq(skill.userId, userId), eq(skill.enabled, true)),
-    with: {
-      files: true,
-      documents: true,
-    },
-  });
+  const skills = await listAccessibleEnabledSkillsForUser(userId);
 
   if (skills.length === 0) {
     return [];

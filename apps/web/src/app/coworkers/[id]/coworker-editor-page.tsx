@@ -87,6 +87,7 @@ import {
   useCoworkerRun,
   useCoworkerRuns,
   useEnqueueConversationMessage,
+  useExecutorSourceList,
   useTriggerCoworker,
   useGetOrCreateBuilderConversation,
   usePlatformSkillList,
@@ -159,6 +160,7 @@ type CoworkerEditorPayload = {
   autoApprove: boolean;
   toolAccessMode: CoworkerToolAccessMode;
   allowedIntegrations: IntegrationType[];
+  allowedExecutorSourceIds: string[];
   allowedSkillSlugs: string[];
   schedule: CoworkerSchedule | null;
 };
@@ -331,7 +333,7 @@ function CoworkerChatPanel({
 }: {
   conversationId: string | null;
   coworkerId: string;
-  onCoworkerSync: (coworkerId: string) => void;
+  onCoworkerSync: (payload: { coworkerId: string; prompt?: string; updatedAt?: string }) => void;
   skillSelectionScopeKey: string;
   isLoading: boolean;
   errorMessage: string | null;
@@ -378,7 +380,8 @@ export default function CoworkerEditorPage() {
   const { isAdmin } = useIsAdmin();
   const { data: coworker, isLoading, refetch: refetchCoworker } = useCoworker(coworkerId);
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
-  const { data: personalSkills, isLoading: isPersonalSkillsLoading } = useSkillList();
+  const { data: accessibleSkills, isLoading: isAccessibleSkillsLoading } = useSkillList();
+  const { data: executorSourceData } = useExecutorSourceList();
   const { data: providerAuthStatus } = useProviderAuthStatus();
   const { data: coworkerForwardingAlias } = useCoworkerForwardingAlias(coworkerId);
   const { data: runs, refetch: refetchRuns } = useCoworkerRuns(coworkerId);
@@ -402,6 +405,7 @@ export default function CoworkerEditorPage() {
   const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const [toolAccessMode, setToolAccessMode] = useState<CoworkerToolAccessMode>("all");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
+  const [allowedExecutorSourceIds, setAllowedExecutorSourceIds] = useState<string[]>([]);
   const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);
   const [status, setStatus] = useState<"on" | "off">("off");
   const [autoApprove, setAutoApprove] = useState(true);
@@ -561,15 +565,32 @@ export default function CoworkerEditorPage() {
         title: skill.title,
         source: "Platform" as const,
       })),
-      ...((personalSkills ?? [])
+      ...((accessibleSkills ?? [])
         .filter((skill) => skill.enabled)
         .map((skill) => ({
           key: `${CUSTOM_SKILL_PREFIX}${skill.name}`,
           title: skill.displayName,
-          source: "Custom" as const,
+          source: skill.isOwnedByCurrentUser
+            ? skill.visibility === "public"
+              ? ("Custom Public" as const)
+              : ("Custom Private" as const)
+            : ("Shared" as const),
         })) ?? []),
     ],
-    [personalSkills, platformSkills],
+    [accessibleSkills, platformSkills],
+  );
+  const executorSourceEntries = useMemo(
+    () =>
+      (executorSourceData?.sources ?? [])
+        .filter((source) => source.enabled)
+        .map((source) => ({
+          id: source.id,
+          title: source.name,
+          namespace: source.namespace,
+          kind: source.kind,
+          connected: source.connected,
+        })),
+    [executorSourceData?.sources],
   );
   const restrictTools = toolAccessMode === "selected";
 
@@ -652,6 +673,7 @@ export default function CoworkerEditorPage() {
       setAutoApprove(payload.autoApprove);
       setToolAccessMode(payload.toolAccessMode);
       setAllowedIntegrations(payload.allowedIntegrations);
+      setAllowedExecutorSourceIds(payload.allowedExecutorSourceIds);
       setAllowedSkillSlugs(payload.allowedSkillSlugs);
       applyScheduleState(payload.schedule);
     },
@@ -675,11 +697,13 @@ export default function CoworkerEditorPage() {
       autoApprove,
       toolAccessMode,
       allowedIntegrations,
+      allowedExecutorSourceIds,
       allowedSkillSlugs,
       schedule: buildSchedule(),
     };
   }, [
     allowedIntegrations,
+    allowedExecutorSourceIds,
     allowedSkillSlugs,
     autoApprove,
     buildSchedule,
@@ -700,6 +724,7 @@ export default function CoworkerEditorPage() {
       JSON.stringify({
         ...input,
         allowedIntegrations: [...input.allowedIntegrations].toSorted(),
+        allowedExecutorSourceIds: [...input.allowedExecutorSourceIds].toSorted(),
         allowedSkillSlugs: [...input.allowedSkillSlugs].toSorted(),
         schedule: normalizeScheduleForComparison(input.schedule),
       }),
@@ -761,6 +786,7 @@ export default function CoworkerEditorPage() {
       autoApprove: coworker.autoApprove ?? true,
       toolAccessMode: coworker.toolAccessMode,
       allowedIntegrations: coworkerAllowedIntegrations,
+      allowedExecutorSourceIds: coworker.allowedExecutorSourceIds ?? [],
       allowedSkillSlugs: coworker.allowedSkillSlugs ?? [],
       schedule: (coworker.schedule as CoworkerSchedule | null) ?? null,
     };
@@ -827,6 +853,14 @@ export default function CoworkerEditorPage() {
         )
       ) {
         setAllowedIntegrations(payloadFromCoworker.allowedIntegrations);
+      }
+      if (
+        stringArraysEqual(
+          currentLocalPayload.allowedExecutorSourceIds,
+          lastSavedPayload.allowedExecutorSourceIds,
+        )
+      ) {
+        setAllowedExecutorSourceIds(payloadFromCoworker.allowedExecutorSourceIds);
       }
       if (
         stringArraysEqual(currentLocalPayload.allowedSkillSlugs, lastSavedPayload.allowedSkillSlugs)
@@ -910,14 +944,53 @@ export default function CoworkerEditorPage() {
   }, [coworkerId, loadBuilderConversation]);
 
   const handleCoworkerSyncFromChat = useCallback(
-    (updatedCoworkerId: string) => {
-      if (!coworkerId || updatedCoworkerId !== coworkerId) {
+    (sync: { coworkerId: string; prompt?: string; updatedAt?: string }) => {
+      if (!coworkerId || sync.coworkerId !== coworkerId) {
         return;
       }
 
-      void refetchCoworker();
+      const lastSavedPayload = lastSavedPayloadSnapshotRef.current;
+      const promptWasLocallyEdited =
+        typeof lastSavedPayload?.prompt === "string" && prompt !== lastSavedPayload.prompt;
+
+      if (!promptWasLocallyEdited && typeof sync.prompt === "string") {
+        setPrompt(sync.prompt);
+
+        const optimisticPayload = getCoworkerUpdateInput();
+        if (optimisticPayload) {
+          const nextSavedPayload = {
+            ...optimisticPayload,
+            prompt: sync.prompt,
+          };
+          lastSavedPayloadSnapshotRef.current = nextSavedPayload;
+          lastSavedPayloadRef.current = getCoworkerPayloadSignature(nextSavedPayload);
+        }
+      }
+
+      const retryRefetch = async (attempt: number): Promise<void> => {
+        const result = await refetchCoworker();
+        const refetchedCoworker = result.data;
+        const refetchedUpdatedAt = refetchedCoworker?.updatedAt
+          ? refetchedCoworker.updatedAt instanceof Date
+            ? refetchedCoworker.updatedAt.toISOString()
+            : new Date(refetchedCoworker.updatedAt).toISOString()
+          : null;
+
+        if (
+          (sync.updatedAt && refetchedUpdatedAt === sync.updatedAt) ||
+          (sync.prompt && refetchedCoworker?.prompt === sync.prompt) ||
+          attempt >= 2
+        ) {
+          return;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 150));
+        await retryRefetch(attempt + 1);
+      };
+
+      void retryRefetch(0);
     },
-    [coworkerId, refetchCoworker],
+    [coworkerId, getCoworkerPayloadSignature, getCoworkerUpdateInput, prompt, refetchCoworker],
   );
 
   const handleUploadDocuments = useCallback(
@@ -1163,6 +1236,16 @@ export default function CoworkerEditorPage() {
     },
     [selectedSkillKeys],
   );
+  const handleToggleExecutorSourceChecked = useCallback((sourceId: string) => {
+    setAllowedExecutorSourceIds((current) =>
+      current.includes(sourceId)
+        ? current.filter((value) => value !== sourceId)
+        : [...current, sourceId],
+    );
+  }, []);
+  const handleClearExecutorSources = useCallback(() => {
+    setAllowedExecutorSourceIds([]);
+  }, []);
   const handleClearSkills = useCallback(() => {
     setAllowedSkillSlugs([]);
   }, []);
@@ -1256,6 +1339,7 @@ export default function CoworkerEditorPage() {
     };
   }, [
     allowedIntegrations,
+    allowedExecutorSourceIds,
     autoApprove,
     buildSchedule,
     description,
@@ -1475,7 +1559,9 @@ export default function CoworkerEditorPage() {
         providerAvailability={providerAvailability}
         availableSkills={availableSkills}
         selectedSkillKeys={selectedSkillKeys}
-        isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
+        executorSourceEntries={executorSourceEntries}
+        selectedExecutorSourceIds={allowedExecutorSourceIds}
+        isSkillsLoading={isPlatformSkillsLoading || isAccessibleSkillsLoading}
         restrictTools={restrictTools}
         allowedIntegrations={allowedIntegrations}
         allIntegrationTypes={allIntegrationTypes}
@@ -1519,6 +1605,8 @@ export default function CoworkerEditorPage() {
         onModelChange={handleModelSelectionChange}
         onClearSkills={handleClearSkills}
         onToggleSkillChecked={handleToggleSkillChecked}
+        onClearExecutorSources={handleClearExecutorSources}
+        onToggleExecutorSourceChecked={handleToggleExecutorSourceChecked}
         onRestrictToolsChange={handleRestrictToolsChange}
         onSelectAllIntegrations={handleSelectAllIntegrations}
         onClearIntegrations={handleClearIntegrations}
@@ -1552,8 +1640,10 @@ export default function CoworkerEditorPage() {
       model,
       availableSkills,
       selectedSkillKeys,
+      executorSourceEntries,
+      allowedExecutorSourceIds,
       isPlatformSkillsLoading,
-      isPersonalSkillsLoading,
+      isAccessibleSkillsLoading,
       restrictTools,
       allowedIntegrations,
       allIntegrationTypes,
@@ -1597,6 +1687,8 @@ export default function CoworkerEditorPage() {
       setModel,
       handleClearSkills,
       handleToggleSkillChecked,
+      handleClearExecutorSources,
+      handleToggleExecutorSourceChecked,
       handleRestrictToolsChange,
       handleSelectAllIntegrations,
       handleClearIntegrations,
@@ -1699,7 +1791,9 @@ export default function CoworkerEditorPage() {
               providerAvailability={providerAvailability}
               availableSkills={availableSkills}
               selectedSkillKeys={selectedSkillKeys}
-              isSkillsLoading={isPlatformSkillsLoading || isPersonalSkillsLoading}
+              executorSourceEntries={executorSourceEntries}
+              selectedExecutorSourceIds={allowedExecutorSourceIds}
+              isSkillsLoading={isPlatformSkillsLoading || isAccessibleSkillsLoading}
               restrictTools={restrictTools}
               allowedIntegrations={allowedIntegrations}
               allIntegrationTypes={allIntegrationTypes}
@@ -1743,6 +1837,8 @@ export default function CoworkerEditorPage() {
               onModelChange={handleModelSelectionChange}
               onClearSkills={handleClearSkills}
               onToggleSkillChecked={handleToggleSkillChecked}
+              onClearExecutorSources={handleClearExecutorSources}
+              onToggleExecutorSourceChecked={handleToggleExecutorSourceChecked}
               onRestrictToolsChange={handleRestrictToolsChange}
               onSelectAllIntegrations={handleSelectAllIntegrations}
               onClearIntegrations={handleClearIntegrations}
@@ -1954,8 +2050,16 @@ type CoworkerSettingsPanelProps = {
   model: string;
   modelAuthSource: ProviderAuthSource | null;
   providerAvailability: ProviderAuthAvailabilityByProvider;
-  availableSkills: { key: string; title: string; source: "Platform" | "Custom" }[];
+  availableSkills: { key: string; title: string; source: string }[];
   selectedSkillKeys: string[];
+  executorSourceEntries: {
+    id: string;
+    title: string;
+    namespace: string;
+    kind: string;
+    connected: boolean;
+  }[];
+  selectedExecutorSourceIds: string[];
   isSkillsLoading: boolean;
   restrictTools: boolean;
   allowedIntegrations: IntegrationType[];
@@ -2014,6 +2118,8 @@ type CoworkerSettingsPanelProps = {
   onModelChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
   onClearSkills: () => void;
   onToggleSkillChecked: (skillKey: string) => void;
+  onClearExecutorSources: () => void;
+  onToggleExecutorSourceChecked: (sourceId: string) => void;
   onRestrictToolsChange: (checked: boolean) => void;
   onSelectAllIntegrations: () => void;
   onClearIntegrations: () => void;
@@ -2049,6 +2155,8 @@ function CoworkerSettingsPanel({
   providerAvailability,
   availableSkills,
   selectedSkillKeys,
+  executorSourceEntries,
+  selectedExecutorSourceIds,
   isSkillsLoading,
   restrictTools,
   allowedIntegrations,
@@ -2093,6 +2201,8 @@ function CoworkerSettingsPanel({
   onModelChange,
   onClearSkills,
   onToggleSkillChecked,
+  onClearExecutorSources,
+  onToggleExecutorSourceChecked,
   onRestrictToolsChange,
   onSelectAllIntegrations,
   onClearIntegrations,
@@ -2153,6 +2263,16 @@ function CoworkerSettingsPanel({
       onToggleSkillChecked(skillKey);
     },
     [onToggleSkillChecked],
+  );
+  const handleExecutorSourceButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const sourceId = event.currentTarget.dataset.executorSourceId;
+      if (!sourceId) {
+        return;
+      }
+      onToggleExecutorSourceChecked(sourceId);
+    },
+    [onToggleExecutorSourceChecked],
   );
 
   const handleOpenDeleteDialog = useCallback(() => {
@@ -3040,6 +3160,82 @@ function CoworkerSettingsPanel({
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                      Executor Sources
+                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground text-[10px]">
+                        {selectedExecutorSourceIds.length}/{executorSourceEntries.length}
+                      </span>
+                      {selectedExecutorSourceIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={onClearExecutorSources}
+                          className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {executorSourceEntries.length === 0 ? (
+                    <p className="text-muted-foreground py-4 text-center text-xs">
+                      No workspace Executor sources available.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {executorSourceEntries.map((source) => {
+                        const isActive = selectedExecutorSourceIds.includes(source.id);
+                        return (
+                          <button
+                            key={source.id}
+                            type="button"
+                            data-executor-source-id={source.id}
+                            onClick={handleExecutorSourceButtonClick}
+                            className={cn(
+                              "group relative flex items-center gap-2.5 rounded-lg border p-3 text-left transition-all duration-150",
+                              isActive
+                                ? "border-primary/30 bg-primary/5 shadow-sm"
+                                : "border-border/40 bg-card hover:border-border/70 opacity-60 hover:opacity-100",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold uppercase",
+                                isActive
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted/60 text-muted-foreground",
+                              )}
+                            >
+                              {source.kind === "mcp" ? "MCP" : "API"}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12px] leading-tight font-medium">
+                                {source.title}
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-1">
+                                <span
+                                  className={cn(
+                                    "inline-block h-1.5 w-1.5 rounded-full",
+                                    source.connected ? "bg-emerald-500" : "bg-amber-500",
+                                  )}
+                                />
+                                <span className="text-muted-foreground text-[9px] font-medium tracking-wide uppercase">
+                                  {source.namespace}
+                                  {source.connected ? "" : " · connect"}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                {/* Skills section */}
+                <section>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                       Skills
                     </h3>
                     <div className="flex items-center gap-1.5">
@@ -3091,7 +3287,7 @@ function CoworkerSettingsPanel({
                               )}
                             >
                               <span className="text-sm">
-                                {skill.source === "Custom" ? "⚡" : "🔧"}
+                                {skill.source === "Platform" ? "🔧" : "⚡"}
                               </span>
                             </div>
                             <div className="min-w-0 flex-1">

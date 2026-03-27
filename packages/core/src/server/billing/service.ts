@@ -15,6 +15,7 @@ import {
   conversation,
   coworker,
   coworkerRun,
+  skill,
   user,
   workspace,
   workspaceMember,
@@ -341,6 +342,11 @@ export async function backfillLegacyWorkspaceDataForUser(userId: string, workspa
     .update(coworker)
     .set({ workspaceId })
     .where(and(eq(coworker.ownerId, userId), sql`${coworker.workspaceId} is null`));
+
+  await db
+    .update(skill)
+    .set({ workspaceId, visibility: "private" })
+    .where(and(eq(skill.userId, userId), sql`${skill.workspaceId} is null`));
 
   await db.execute(sql`
     update ${coworkerRun} as run

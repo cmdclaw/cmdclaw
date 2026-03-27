@@ -24,7 +24,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { usePostHog } from "posthog-js/react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import type { IntegrationType } from "@/lib/integration-icons";
+import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -103,7 +103,7 @@ type Props = {
   conversationId?: string;
   forceCoworkerQuerySync?: boolean;
   coworkerIdForSync?: string;
-  onCoworkerSync?: (coworkerId: string) => void;
+  onCoworkerSync?: (payload: { coworkerId: string; prompt?: string; updatedAt?: string }) => void;
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
 };
@@ -146,6 +146,36 @@ const EMPTY_SELECTED_SKILLS: string[] = [];
 const EMPTY_ACTIVITY_ITEMS: ActivityItemData[] = [];
 const CUSTOM_SKILL_PREFIX = "custom:";
 const DEFAULT_VISIBLE_CHAT_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
+
+function extractCoworkerSyncDataFromToolResult(result: unknown): {
+  coworkerId?: string;
+  prompt?: string;
+  updatedAt?: string;
+} {
+  if (typeof result === "object" && result !== null) {
+    const maybeCoworkerId = (result as { coworkerId?: unknown }).coworkerId;
+    const maybeCoworker = (
+      result as {
+        coworker?: { prompt?: unknown; updatedAt?: unknown };
+      }
+    ).coworker;
+    return {
+      coworkerId: typeof maybeCoworkerId === "string" ? maybeCoworkerId : undefined,
+      prompt: typeof maybeCoworker?.prompt === "string" ? maybeCoworker.prompt : undefined,
+      updatedAt: typeof maybeCoworker?.updatedAt === "string" ? maybeCoworker.updatedAt : undefined,
+    };
+  }
+
+  if (typeof result !== "string") {
+    return {};
+  }
+
+  try {
+    return extractCoworkerSyncDataFromToolResult(JSON.parse(result));
+  } catch {
+    return {};
+  }
+}
 
 type PersistedContentPart =
   | { type: "text"; text: string }
@@ -553,7 +583,7 @@ export function ChatArea({
   const queryClient = useQueryClient();
   const posthog = usePostHog();
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
-  const { data: personalSkills, isLoading: isPersonalSkillsLoading } = useSkillList();
+  const { data: accessibleSkills, isLoading: isAccessibleSkillsLoading } = useSkillList();
   const { data: existingConversation, isLoading } = useConversation(conversationId);
   const { startGeneration, subscribeToGeneration, abort } = useGeneration();
   const { mutateAsync: submitApproval, isPending: isApproving } = useSubmitApproval();
@@ -571,6 +601,7 @@ export function ChatArea({
   // Track current generation ID
   const currentGenerationIdRef = useRef<string | undefined>(undefined);
   const runtimeRef = useRef<GenerationRuntime | null>(null);
+  const coworkerEditToolUseIdsRef = useRef(new Set<string>());
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingParts, setStreamingParts] = useState<MessagePart[]>([]);
@@ -616,7 +647,7 @@ export function ChatArea({
 
   // Segmented activity feed state
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
-  const [, setIntegrationsUsed] = useState<Set<IntegrationType>>(new Set());
+  const [, setIntegrationsUsed] = useState<Set<DisplayIntegrationType>>(new Set());
   const [, setTraceStatus] = useState<TraceStatus>("complete");
   const [agentInitStatus, setAgentInitStatus] = useState<string | null>(null);
   const [streamClockNow, setStreamClockNow] = useState(() => Date.now());
@@ -1028,6 +1059,74 @@ export function ChatArea({
     return Math.max(0, streamClockNow - initTrackingStartedAtRef.current);
   }, [streamClockNow]);
 
+  const clearTrackedCoworkerEditToolUses = useCallback(() => {
+    coworkerEditToolUseIdsRef.current.clear();
+  }, []);
+  const triggerCoworkerSync = useCallback(
+    ({
+      coworkerId,
+      prompt,
+      updatedAt,
+    }: {
+      coworkerId: string;
+      prompt?: string;
+      updatedAt?: string;
+    }) => {
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker", "get", coworkerId] });
+      onCoworkerSync?.({ coworkerId, prompt, updatedAt });
+    },
+    [onCoworkerSync, queryClient],
+  );
+  const trackCoworkerEditToolUse = useCallback(
+    ({
+      toolUseId,
+      integration,
+      operation,
+    }: {
+      toolUseId?: string;
+      integration?: string;
+      operation?: string;
+    }) => {
+      if (!forceCoworkerQuerySync || !toolUseId) {
+        return;
+      }
+
+      if (integration === "coworker" && operation === "edit") {
+        coworkerEditToolUseIdsRef.current.add(toolUseId);
+        return;
+      }
+
+      coworkerEditToolUseIdsRef.current.delete(toolUseId);
+    },
+    [forceCoworkerQuerySync],
+  );
+  const syncCoworkerAfterToolResult = useCallback(
+    (toolUseId: string | undefined, result: unknown) => {
+      if (!forceCoworkerQuerySync || !toolUseId) {
+        return;
+      }
+
+      if (!coworkerEditToolUseIdsRef.current.has(toolUseId)) {
+        return;
+      }
+      coworkerEditToolUseIdsRef.current.delete(toolUseId);
+
+      const syncData = extractCoworkerSyncDataFromToolResult(result);
+      const syncedCoworkerId = syncData.coworkerId ?? coworkerIdForSync;
+      if (!syncedCoworkerId) {
+        return;
+      }
+
+      triggerCoworkerSync({
+        coworkerId: syncedCoworkerId,
+        prompt: syncData.prompt,
+        updatedAt: syncData.updatedAt,
+      });
+    },
+    [coworkerIdForSync, forceCoworkerQuerySync, triggerCoworkerSync],
+  );
+
   const initElapsedLabel = useMemo(() => {
     if (!isStreaming || segments.length > 0 || streamElapsedMs === null) {
       return null;
@@ -1063,10 +1162,18 @@ export function ChatArea({
         setStreamError("Agent initialization failed. Please retry.");
         currentGenerationIdRef.current = undefined;
         runtimeRef.current = null;
+        clearTrackedCoworkerEditToolUses();
         resetInitTracking();
       }
     },
-    [markInitMissingAtEnd, markInitSignal, normalizedSelectedModel, posthog, resetInitTracking],
+    [
+      clearTrackedCoworkerEditToolUses,
+      markInitMissingAtEnd,
+      markInitSignal,
+      normalizedSelectedModel,
+      posthog,
+      resetInitTracking,
+    ],
   );
 
   const syncFromRuntime = useCallback((runtime: GenerationRuntime) => {
@@ -1077,11 +1184,11 @@ export function ChatArea({
         ...seg,
         items: seg.items.map((item) => ({
           ...item,
-          integration: item.integration as IntegrationType | undefined,
+          integration: item.integration as DisplayIntegrationType | undefined,
         })),
       })),
     );
-    setIntegrationsUsed(new Set(snapshot.integrationsUsed as IntegrationType[]));
+    setIntegrationsUsed(new Set(snapshot.integrationsUsed as DisplayIntegrationType[]));
     setStreamingSandboxFiles(snapshot.sandboxFiles as SandboxFileData[]);
     setTraceStatus(snapshot.traceStatus);
   }, []);
@@ -1093,8 +1200,9 @@ export function ChatArea({
     setTraceStatus("complete");
     currentGenerationIdRef.current = undefined;
     runtimeRef.current = null;
+    clearTrackedCoworkerEditToolUses();
     resetInitTracking();
-  }, [resetInitTracking]);
+  }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
 
   const handleVisibleGenerationError = useCallback(
     (error: NormalizedGenerationError, runtime?: GenerationRuntime | null) => {
@@ -1140,15 +1248,17 @@ export function ChatArea({
     setStreamError(null);
     currentGenerationIdRef.current = undefined;
     runtimeRef.current = null;
+    clearTrackedCoworkerEditToolUses();
     resetInitTracking();
-  }, [resetInitTracking]);
+  }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
 
   const handleGenerationCancelledUi = useCallback(() => {
     setIsStreaming(false);
     currentGenerationIdRef.current = undefined;
     runtimeRef.current = null;
+    clearTrackedCoworkerEditToolUses();
     resetInitTracking();
-  }, [resetInitTracking]);
+  }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
 
   const upsertMessageById = useCallback((nextMessage: Message) => {
     setMessages((prev) => {
@@ -1239,7 +1349,7 @@ export function ChatArea({
           sandboxFiles: assistant.sandboxFiles as SandboxFileData[] | undefined,
           timing,
         } as Message & {
-          integrationsUsed?: IntegrationType[];
+          integrationsUsed?: string[];
           sandboxFiles?: SandboxFileData[];
         },
       ]);
@@ -1314,13 +1424,14 @@ export function ChatArea({
     setStreamError(null);
     setStreamingSandboxFiles([]);
     currentGenerationIdRef.current = undefined;
+    clearTrackedCoworkerEditToolUses();
     resetInitTracking();
 
     if (!conversationId) {
       setMessages([]);
       setLocalAutoApprove(false);
     }
-  }, [abort, conversationId, resetInitTracking]);
+  }, [abort, clearTrackedCoworkerEditToolUses, conversationId, resetInitTracking]);
 
   // Listen for "new-chat" event to reset state when user clicks New Chat
   useEffect(() => {
@@ -1341,11 +1452,12 @@ export function ChatArea({
       viewedConversationIdRef.current = undefined;
       setDraftConversationId(undefined);
       setLocalAutoApprove(false);
+      clearTrackedCoworkerEditToolUses();
       resetInitTracking();
     };
     window.addEventListener("new-chat", handleNewChat);
     return () => window.removeEventListener("new-chat", handleNewChat);
-  }, [abort, resetInitTracking]);
+  }, [abort, clearTrackedCoworkerEditToolUses, resetInitTracking]);
 
   // Reconnect to active generation on mount
   useEffect(() => {
@@ -1413,9 +1525,7 @@ export function ChatArea({
           runtime.handleSystem(data.content);
           syncFromRuntime(runtime);
           if (forceCoworkerQuerySync && data.coworkerId) {
-            queryClient.invalidateQueries({ queryKey: ["coworker"] });
-            queryClient.invalidateQueries({ queryKey: ["coworker", "get", data.coworkerId] });
-            onCoworkerSync?.(data.coworkerId);
+            triggerCoworkerSync({ coworkerId: data.coworkerId });
           }
         },
         onThinking: (data) => {
@@ -1437,6 +1547,7 @@ export function ChatArea({
             return;
           }
           markInitSignal("tool_use", { toolName: data.toolName });
+          trackCoworkerEditToolUse(data);
           runtime.handleToolUse(data);
           syncFromRuntime(runtime);
         },
@@ -1449,6 +1560,7 @@ export function ChatArea({
           }
           markInitSignal("tool_result", { toolName });
           runtime.handleToolResult(toolName, result, toolUseId);
+          syncCoworkerAfterToolResult(toolUseId, result);
           syncFromRuntime(runtime);
         },
         onPendingApproval: async (data) => {
@@ -1671,6 +1783,7 @@ export function ChatArea({
     activeGeneration?.status,
     autoApproveEnabled,
     beginInitTracking,
+    clearTrackedCoworkerEditToolUses,
     conversationId,
     forceCoworkerQuerySync,
     handleInitStatusChange,
@@ -1680,12 +1793,14 @@ export function ChatArea({
     handleGenerationDoneUi,
     onCoworkerSync,
     persistInterruptedRuntimeMessage,
-    queryClient,
     resetInitTracking,
+    syncCoworkerAfterToolResult,
     submitApproval,
     subscribeToGeneration,
     syncFromRuntime,
     syncConversationForNewChat,
+    trackCoworkerEditToolUse,
+    triggerCoworkerSync,
     handleVisibleGenerationError,
     hydrateAssistantMessage,
     isStreamEventForActiveScope,
@@ -1780,10 +1895,12 @@ export function ChatArea({
     setSegments([]);
     setTraceStatus("complete");
     markInitMissingAtEnd("user_stopped");
+    clearTrackedCoworkerEditToolUses();
     resetInitTracking();
   }, [
     abort,
     cancelGeneration,
+    clearTrackedCoworkerEditToolUses,
     markInitMissingAtEnd,
     persistInterruptedRuntimeMessage,
     resetInitTracking,
@@ -1830,6 +1947,7 @@ export function ChatArea({
       setIntegrationsUsed(new Set());
       setTraceStatus("streaming");
       beginInitTracking("new_generation");
+      clearTrackedCoworkerEditToolUses();
 
       const runtime = createGenerationRuntime();
       runtimeRef.current = runtime;
@@ -1862,8 +1980,7 @@ export function ChatArea({
             streamGenerationId = generationId;
             currentGenerationIdRef.current = generationId;
             if (forceCoworkerQuerySync && coworkerIdForSync) {
-              queryClient.invalidateQueries({ queryKey: ["coworker"] });
-              queryClient.invalidateQueries({ queryKey: ["coworker", "get", coworkerIdForSync] });
+              triggerCoworkerSync({ coworkerId: coworkerIdForSync });
             }
             console.info(
               `[AgentInit][Client] generation_started generationId=${generationId} conversationId=${newConversationId}`,
@@ -1893,9 +2010,7 @@ export function ChatArea({
             runtime.handleSystem(data.content);
             syncFromRuntime(runtime);
             if (forceCoworkerQuerySync && data.coworkerId) {
-              queryClient.invalidateQueries({ queryKey: ["coworker"] });
-              queryClient.invalidateQueries({ queryKey: ["coworker", "get", data.coworkerId] });
-              onCoworkerSync?.(data.coworkerId);
+              triggerCoworkerSync({ coworkerId: data.coworkerId });
             }
           },
           onThinking: (data) => {
@@ -1917,6 +2032,7 @@ export function ChatArea({
               return;
             }
             markInitSignal("tool_use", { toolName: data.toolName });
+            trackCoworkerEditToolUse(data);
             runtime.handleToolUse(data);
             syncFromRuntime(runtime);
           },
@@ -1929,6 +2045,7 @@ export function ChatArea({
             }
             markInitSignal("tool_result", { toolName });
             runtime.handleToolResult(toolName, result, toolUseId);
+            syncCoworkerAfterToolResult(toolUseId, result);
             syncFromRuntime(runtime);
           },
           onPendingApproval: async (data) => {
@@ -2152,6 +2269,7 @@ export function ChatArea({
     [
       beginInitTracking,
       autoApproveEnabled,
+      clearTrackedCoworkerEditToolUses,
       conversationId,
       coworkerIdForSync,
       forceCoworkerQuerySync,
@@ -2161,15 +2279,17 @@ export function ChatArea({
       handleGenerationCancelledUi,
       handleGenerationDoneUi,
       persistInterruptedRuntimeMessage,
-      onCoworkerSync,
       queryClient,
       selectedSkillKeys,
       normalizedSelectedModel,
       selectedAuthSource,
       startGeneration,
       submitApproval,
+      syncCoworkerAfterToolResult,
       syncFromRuntime,
       syncConversationForNewChat,
+      trackCoworkerEditToolUse,
+      triggerCoworkerSync,
       handleVisibleGenerationError,
       hydrateAssistantMessage,
       isStreamEventForActiveScope,
@@ -2521,12 +2641,19 @@ export function ChatArea({
         title: skill.title,
         searchable: `${skill.title} ${skill.slug}`.toLowerCase(),
       })),
-      ...((personalSkills ?? [])
+      ...((accessibleSkills ?? [])
         .filter((skill) => skill.enabled)
         .map((skill) => ({
           key: `${CUSTOM_SKILL_PREFIX}${skill.name}`,
           title: skill.displayName,
-          searchable: `${skill.displayName} ${skill.name}`.toLowerCase(),
+          subtitle: skill.isOwnedByCurrentUser
+            ? skill.visibility === "public"
+              ? "Custom · Public"
+              : "Custom · Private"
+            : `Shared · ${skill.owner.name ?? skill.owner.email ?? "Workspace"}`,
+          searchable: `${skill.displayName} ${skill.name} ${skill.owner.name ?? ""} ${
+            skill.owner.email ?? ""
+          } ${skill.visibility}`.toLowerCase(),
         })) ?? []),
     ];
 
@@ -2539,21 +2666,29 @@ export function ChatArea({
       return only?.title ?? fallback.replace(CUSTOM_SKILL_PREFIX, "");
     }
     return `${selectedSkillKeys.length} skills`;
-  }, [platformSkills, personalSkills, selectedSkillKeys]);
+  }, [platformSkills, accessibleSkills, selectedSkillKeys]);
 
   const filteredSelectableSkills = useMemo(() => {
     const selectableSkills = [
       ...(platformSkills ?? []).map((skill) => ({
         key: skill.slug,
         title: skill.title,
+        subtitle: "Platform",
         searchable: `${skill.title} ${skill.slug}`.toLowerCase(),
       })),
-      ...((personalSkills ?? [])
+      ...((accessibleSkills ?? [])
         .filter((skill) => skill.enabled)
         .map((skill) => ({
           key: `${CUSTOM_SKILL_PREFIX}${skill.name}`,
           title: skill.displayName,
-          searchable: `${skill.displayName} ${skill.name}`.toLowerCase(),
+          subtitle: skill.isOwnedByCurrentUser
+            ? skill.visibility === "public"
+              ? "Custom · Public"
+              : "Custom · Private"
+            : `Shared · ${skill.owner.name ?? skill.owner.email ?? "Workspace"}`,
+          searchable: `${skill.displayName} ${skill.name} ${skill.owner.name ?? ""} ${
+            skill.owner.email ?? ""
+          } ${skill.visibility}`.toLowerCase(),
         })) ?? []),
     ];
     const query = skillSearchQuery.trim().toLowerCase();
@@ -2561,7 +2696,7 @@ export function ChatArea({
       return selectableSkills;
     }
     return selectableSkills.filter((skill) => skill.searchable.includes(query));
-  }, [platformSkills, personalSkills, skillSearchQuery]);
+  }, [platformSkills, accessibleSkills, skillSearchQuery]);
 
   const handleSkillDropdownSelect = useCallback(
     (event: Event) => {
@@ -2630,7 +2765,7 @@ export function ChatArea({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <div className="min-h-0 flex-1 overflow-y-auto p-1">
-            {isPlatformSkillsLoading || isPersonalSkillsLoading ? (
+            {isPlatformSkillsLoading || isAccessibleSkillsLoading ? (
               <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
             ) : filteredSelectableSkills.length === 0 ? (
               <DropdownMenuItem disabled>No skills found</DropdownMenuItem>
@@ -2644,7 +2779,12 @@ export function ChatArea({
                     onSelect={handleSkillDropdownSelect}
                   >
                     <Check className={isSelected ? "h-4 w-4 opacity-100" : "h-4 w-4 opacity-0"} />
-                    <span className="truncate">{skill.title}</span>
+                    <div className="min-w-0">
+                      <div className="truncate">{skill.title}</div>
+                      <div className="text-muted-foreground truncate text-[10px]">
+                        {skill.subtitle}
+                      </div>
+                    </div>
                   </DropdownMenuItem>
                 );
               })
@@ -2680,7 +2820,7 @@ export function ChatArea({
       handleOpenSkillsChange,
       handleSkillDropdownSelect,
       handleSkillSearchChange,
-      isPersonalSkillsLoading,
+      isAccessibleSkillsLoading,
       isPlatformSkillsLoading,
       selectedSkillKeys,
       selectedSkillLabel,
@@ -2899,7 +3039,7 @@ export function ChatArea({
                           new Set(
                             visibleNextSegmentItems
                               .filter((item) => item.integration)
-                              .map((item) => item.integration as IntegrationType),
+                              .map((item) => item.integration as DisplayIntegrationType),
                           ),
                         );
 
@@ -2938,7 +3078,7 @@ export function ChatArea({
                         new Set(
                           visibleSegmentItems
                             .filter((item) => item.integration)
-                            .map((item) => item.integration as IntegrationType),
+                            .map((item) => item.integration as DisplayIntegrationType),
                         ),
                       );
 

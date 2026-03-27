@@ -197,6 +197,41 @@ export function useGoogleAccessStatus() {
   });
 }
 
+export function useApprovedLoginEmailAllowlist() {
+  return useQuery({
+    queryKey: ["integration", "approved-login-email-allowlist"],
+    queryFn: () => client.integration.listApprovedLoginEmailAllowlist(),
+  });
+}
+
+export function useAddApprovedLoginEmailAllowlistEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ email }: { email: string }) =>
+      client.integration.addApprovedLoginEmailAllowlistEntry({ email }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "approved-login-email-allowlist"],
+      });
+    },
+  });
+}
+
+export function useRemoveApprovedLoginEmailAllowlistEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      client.integration.removeApprovedLoginEmailAllowlistEntry({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["integration", "approved-login-email-allowlist"],
+      });
+    },
+  });
+}
+
 export function useGoogleAccessAllowlist() {
   return useQuery({
     queryKey: ["integration", "google-access-allowlist"],
@@ -442,6 +477,128 @@ export function useGetCustomAuthUrl() {
   });
 }
 
+// ========== EXECUTOR SOURCE HOOKS ==========
+
+export function useExecutorSourceList() {
+  return useQuery({
+    queryKey: ["executorSource", "list"],
+    queryFn: () => client.executorSource.list(),
+  });
+}
+
+export function useCreateExecutorSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      kind: "mcp" | "openapi";
+      name: string;
+      namespace: string;
+      endpoint: string;
+      specUrl?: string | null;
+      transport?: string | null;
+      headers?: Record<string, string>;
+      queryParams?: Record<string, string>;
+      defaultHeaders?: Record<string, string>;
+      authType?: "none" | "api_key" | "bearer";
+      authHeaderName?: string | null;
+      authQueryParam?: string | null;
+      authPrefix?: string | null;
+      enabled?: boolean;
+    }) => client.executorSource.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useUpdateExecutorSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      kind: "mcp" | "openapi";
+      name: string;
+      namespace: string;
+      endpoint: string;
+      specUrl?: string | null;
+      transport?: string | null;
+      headers?: Record<string, string>;
+      queryParams?: Record<string, string>;
+      defaultHeaders?: Record<string, string>;
+      authType?: "none" | "api_key" | "bearer";
+      authHeaderName?: string | null;
+      authQueryParam?: string | null;
+      authPrefix?: string | null;
+      enabled?: boolean;
+    }) => client.executorSource.update(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useDeleteExecutorSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => client.executorSource.delete({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useSetExecutorSourceCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      workspaceExecutorSourceId: string;
+      secret: string;
+      displayName?: string | null;
+      enabled?: boolean;
+    }) => client.executorSource.setCredential(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useDisconnectExecutorSourceCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workspaceExecutorSourceId: string) =>
+      client.executorSource.disconnectCredential({ workspaceExecutorSourceId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useToggleExecutorSourceCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      workspaceExecutorSourceId,
+      enabled,
+    }: {
+      workspaceExecutorSourceId: string;
+      enabled: boolean;
+    }) =>
+      client.executorSource.toggleCredential({
+        workspaceExecutorSourceId,
+        enabled,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
 // ========== INTEGRATION SKILL HOOKS ==========
 
 export function useIntegrationSkillListBySlug(slug: string | undefined) {
@@ -603,6 +760,39 @@ export function useDeleteSkill() {
   });
 }
 
+export function useShareSkill() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => client.skill.share({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["skill"] });
+    },
+  });
+}
+
+export function useUnshareSkill() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => client.skill.unshare({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["skill"] });
+    },
+  });
+}
+
+export function useSaveSharedSkill() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (sourceSkillId: string) => client.skill.saveShared({ sourceSkillId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["skill"] });
+    },
+  });
+}
+
 // Hook for adding a file to a skill
 export function useAddSkillFile() {
   const queryClient = useQueryClient();
@@ -682,6 +872,7 @@ export function useCreateCoworker() {
         | "reddit"
         | "twitter"
       )[];
+      allowedExecutorSourceIds?: string[];
       allowedSkillSlugs?: string[];
     }) => client.coworker.create(input),
     onSuccess: () => {
@@ -734,6 +925,7 @@ export function useUpdateCoworker() {
         | "reddit"
         | "twitter"
       )[];
+      allowedExecutorSourceIds?: string[];
       allowedSkillSlugs?: string[];
       schedule?: CoworkerSchedule | null;
     }) => client.coworker.update(input),
