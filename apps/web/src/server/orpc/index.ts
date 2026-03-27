@@ -3,6 +3,7 @@ import { adminSharedProviderAuthRouter } from "./routers/admin-shared-provider-a
 import { billingRouter } from "./routers/billing";
 import { conversationRouter } from "./routers/conversation";
 import { coworkerRouter } from "./routers/coworker";
+import { executorSourceRouter } from "./routers/executor-source";
 import { generationRouter } from "./routers/generation";
 import { integrationRouter } from "./routers/integration";
 import { integrationSkillRouter } from "./routers/integration-skill";
@@ -26,6 +27,7 @@ export const appRouter = {
   integrationSkill: integrationSkillRouter,
   notification: notificationRouter,
   providerAuth: providerAuthRouter,
+  executorSource: executorSourceRouter,
   skill: skillRouter,
   user: userRouter,
   voice: voiceRouter,

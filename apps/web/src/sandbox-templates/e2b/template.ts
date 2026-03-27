@@ -22,8 +22,9 @@ export const template = Template({
   .runCmd("curl -fsSL https://bun.sh/install | bash")
   .runCmd("sudo ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
   // Install OpenCode runtime + tsx for TypeScript CLI tools
-  .runCmd(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx`)
+  .runCmd(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx executor`)
   .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
+  .runCmd("sudo ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
   .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
   // Install Agent Sandbox SDK runtime (OpenCode compatibility at /opencode)
   .runCmd("sudo npm install -g @sandbox-agent/cli@0.2.x")

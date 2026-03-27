@@ -23,6 +23,8 @@ export type IntegrationLinkStatus = {
 
 export type DelegatedRuntimeCredentialsRequest = {
   integrationTypes: string[];
+  workspaceId?: string;
+  allowedExecutorSourceIds?: string[];
 };
 
 export type DelegatedRuntimeCredentialsResponse = {
@@ -36,6 +38,19 @@ export type DelegatedRuntimeCredentialsResponse = {
     refreshToken: string | null;
     expiresAt: number | null;
   }>;
+  executorBootstrap: {
+    revisionHash: string;
+    configJson: string;
+    workspaceStateJson: string;
+    sources: Array<{
+      id: string;
+      name: string;
+      namespace: string;
+      kind: string;
+      enabled: boolean;
+      connected: boolean;
+    }>;
+  } | null;
   issuedAt: string;
 };
 
