@@ -2,14 +2,30 @@
 
 import { CircleHelp, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ExecutorSourcesManager } from "@/components/admin/executor-sources-manager";
 import { useChatAdvancedSettingsStore } from "@/components/chat/chat-advanced-settings-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   useAddApprovedLoginEmailAllowlistEntry,
+  useAdminCreateExecutorSource,
+  useAdminDeleteExecutorSource,
+  useAdminDisconnectExecutorSourceCredential,
+  useAdminExecutorSourceList,
+  useAdminSetExecutorSourceCredential,
+  useAdminToggleExecutorSourceCredential,
+  useAdminUpdateExecutorSource,
+  useAdminWorkspaces,
   useAddGoogleAccessAllowlistEntry,
   useApprovedLoginEmailAllowlist,
   useGoogleAccessAllowlist,
@@ -38,6 +54,16 @@ export default function AdminPage() {
   const removeApprovedLoginEntry = useRemoveApprovedLoginEmailAllowlistEntry();
   const removeEntry = useRemoveGoogleAccessAllowlistEntry();
   const resetOnboarding = useResetOnboarding();
+  const { data: adminWorkspacesData, isLoading: isAdminWorkspacesLoading } = useAdminWorkspaces();
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const { data: executorData, isLoading: isExecutorLoading } =
+    useAdminExecutorSourceList(selectedWorkspaceId);
+  const createExecutorSource = useAdminCreateExecutorSource();
+  const updateExecutorSource = useAdminUpdateExecutorSource();
+  const deleteExecutorSource = useAdminDeleteExecutorSource();
+  const setExecutorCredential = useAdminSetExecutorSourceCredential();
+  const disconnectExecutorCredential = useAdminDisconnectExecutorSourceCredential();
+  const toggleExecutorCredential = useAdminToggleExecutorSourceCredential();
   const displayAdvancedMetrics = useChatAdvancedSettingsStore(
     (state) => state.displayAdvancedMetrics,
   );
@@ -55,6 +81,23 @@ export default function AdminPage() {
     [approvedLoginData],
   );
   const entries = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+  const adminWorkspaces = useMemo(
+    () => (Array.isArray(adminWorkspacesData) ? adminWorkspacesData : []),
+    [adminWorkspacesData],
+  );
+
+  useEffect(() => {
+    if (adminWorkspaces.length === 0) {
+      setSelectedWorkspaceId(null);
+      return;
+    }
+
+    setSelectedWorkspaceId((current) =>
+      current && adminWorkspaces.some((workspace) => workspace.id === current)
+        ? current
+        : (adminWorkspaces[0]?.id ?? null),
+    );
+  }, [adminWorkspaces]);
 
   const handleApprovedLoginEmailChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,6 +217,129 @@ export default function AdminPage() {
       setActionError(toErrorMessage(err, "Failed to reset onboarding."));
     }
   }, [resetOnboarding, router]);
+
+  const handleSelectedWorkspaceChange = useCallback((workspaceId: string) => {
+    setSelectedWorkspaceId(workspaceId);
+  }, []);
+
+  const handleCreateExecutorSource = useCallback(
+    async (input: {
+      kind: "mcp" | "openapi";
+      name: string;
+      namespace: string;
+      endpoint: string;
+      specUrl?: string | null;
+      transport?: string | null;
+      headers?: Record<string, string>;
+      queryParams?: Record<string, string>;
+      defaultHeaders?: Record<string, string>;
+      authType?: "none" | "api_key" | "bearer";
+      authHeaderName?: string | null;
+      authQueryParam?: string | null;
+      authPrefix?: string | null;
+      enabled?: boolean;
+    }) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace first.");
+      }
+
+      return await createExecutorSource.mutateAsync({
+        workspaceId: selectedWorkspaceId,
+        ...input,
+      });
+    },
+    [createExecutorSource, selectedWorkspaceId],
+  );
+
+  const handleUpdateExecutorSource = useCallback(
+    async (input: {
+      id: string;
+      kind: "mcp" | "openapi";
+      name: string;
+      namespace: string;
+      endpoint: string;
+      specUrl?: string | null;
+      transport?: string | null;
+      headers?: Record<string, string>;
+      queryParams?: Record<string, string>;
+      defaultHeaders?: Record<string, string>;
+      authType?: "none" | "api_key" | "bearer";
+      authHeaderName?: string | null;
+      authQueryParam?: string | null;
+      authPrefix?: string | null;
+      enabled?: boolean;
+    }) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace first.");
+      }
+
+      await updateExecutorSource.mutateAsync({
+        workspaceId: selectedWorkspaceId,
+        ...input,
+      });
+    },
+    [selectedWorkspaceId, updateExecutorSource],
+  );
+
+  const handleDeleteExecutorSource = useCallback(
+    async (sourceId: string) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace first.");
+      }
+
+      await deleteExecutorSource.mutateAsync({
+        workspaceId: selectedWorkspaceId,
+        id: sourceId,
+      });
+    },
+    [deleteExecutorSource, selectedWorkspaceId],
+  );
+
+  const handleSaveExecutorCredential = useCallback(
+    async (sourceId: string, secret: string, displayName: string) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace first.");
+      }
+
+      await setExecutorCredential.mutateAsync({
+        workspaceId: selectedWorkspaceId,
+        workspaceExecutorSourceId: sourceId,
+        secret,
+        displayName: displayName || null,
+        enabled: true,
+      });
+    },
+    [selectedWorkspaceId, setExecutorCredential],
+  );
+
+  const handleDisconnectExecutorCredential = useCallback(
+    async (sourceId: string) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace first.");
+      }
+
+      await disconnectExecutorCredential.mutateAsync({
+        workspaceId: selectedWorkspaceId,
+        workspaceExecutorSourceId: sourceId,
+      });
+    },
+    [disconnectExecutorCredential, selectedWorkspaceId],
+  );
+
+  const handleToggleExecutorCredential = useCallback(
+    async (sourceId: string, enabled: boolean) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace first.");
+      }
+
+      await toggleExecutorCredential.mutateAsync({
+        workspaceId: selectedWorkspaceId,
+        workspaceExecutorSourceId: sourceId,
+        enabled,
+      });
+    },
+    [selectedWorkspaceId, toggleExecutorCredential],
+  );
 
   return (
     <div>
@@ -338,6 +504,62 @@ export default function AdminPage() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="bg-card mt-6 rounded-lg border p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-base font-semibold">Executor Sources</h3>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Shared MCP and OpenAPI sources for the selected workspace. Definitions are shared, but
+              each member connects their own credentials.
+            </p>
+          </div>
+
+          <div className="w-full md:max-w-xs">
+            <label className="text-sm font-medium">Workspace</label>
+            {isAdminWorkspacesLoading ? (
+              <div className="mt-2 flex h-10 items-center rounded-md border px-3">
+                <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+              </div>
+            ) : adminWorkspaces.length > 0 && selectedWorkspaceId ? (
+              <Select value={selectedWorkspaceId} onValueChange={handleSelectedWorkspaceChange}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Select workspace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {adminWorkspaces.map((workspace) => (
+                    <SelectItem key={workspace.id} value={workspace.id}>
+                      {workspace.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-muted-foreground mt-2 text-sm">No workspaces available.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <ExecutorSourcesManager
+            data={executorData}
+            isLoading={Boolean(selectedWorkspaceId) && isExecutorLoading}
+            canManageExecutorSources={Boolean(selectedWorkspaceId)}
+            createPending={createExecutorSource.isPending}
+            updatePending={updateExecutorSource.isPending}
+            deletePending={deleteExecutorSource.isPending}
+            saveCredentialPending={setExecutorCredential.isPending}
+            disconnectCredentialPending={disconnectExecutorCredential.isPending}
+            toggleCredentialPending={toggleExecutorCredential.isPending}
+            onCreateSource={handleCreateExecutorSource}
+            onUpdateSource={handleUpdateExecutorSource}
+            onDeleteSource={handleDeleteExecutorSource}
+            onSaveCredential={handleSaveExecutorCredential}
+            onDisconnectCredential={handleDisconnectExecutorCredential}
+            onToggleCredential={handleToggleExecutorCredential}
+          />
+        </div>
       </div>
 
       <div className="bg-card mt-6 rounded-lg border p-6">
