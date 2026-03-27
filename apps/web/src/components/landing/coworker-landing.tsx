@@ -630,14 +630,22 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
           <Image
-            src="/landing/ocean-bg.avif"
+            src="/landing/brick-building-mobile.avif"
             alt=""
             fill
             priority
             sizes="100vw"
-            unoptimized
             aria-hidden
-            className="animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover opacity-80 saturate-110"
+            className="animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover object-center opacity-80 saturate-110 md:hidden"
+          />
+          <Image
+            src="/landing/brick-building.avif"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            aria-hidden
+            className="hidden animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover object-[74%_60%] opacity-80 saturate-110 md:block lg:object-center"
           />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,8,23,0.24)_0%,rgba(3,8,23,0.5)_45%,rgba(3,8,23,0.76)_100%)]" />
         </div>
@@ -671,7 +679,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
                 />
                 ?
               </h1>
-              <p className="mb-8 text-center text-base text-white/70 md:text-lg">
+              <p className="mb-8 text-center text-base text-white md:text-lg">
                 Describe a task and we&apos;ll build it step by step
               </p>
               <PromptBar
@@ -709,7 +717,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-white">Templates</h2>
-                <p className="mt-0.5 text-xs text-slate-100/85">Start from a pre-built coworker</p>
+                <p className="mt-0.5 text-xs text-white">Start from a pre-built coworker</p>
               </div>
               <Button
                 variant="outline"
