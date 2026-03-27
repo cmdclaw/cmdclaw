@@ -105,6 +105,8 @@ export async function getDelegatedRuntimeCredentials(
       body: JSON.stringify({
         cloudUserId,
         integrationTypes: input.integrationTypes,
+        workspaceId: input.workspaceId,
+        allowedExecutorSourceIds: input.allowedExecutorSourceIds,
       }),
     },
   );

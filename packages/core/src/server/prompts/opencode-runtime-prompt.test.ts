@@ -23,6 +23,7 @@ describe("composeOpencodePromptSpec", () => {
     const result = composeOpencodePromptSpec({
       kind: "chat",
       cliInstructions: "CLI instructions",
+      executorInstructions: "Executor instructions",
       skillsInstructions: "Skills instructions",
       integrationSkillsInstructions: "Integration skills instructions",
       memoryInstructions: "Memory instructions",
@@ -36,6 +37,7 @@ describe("composeOpencodePromptSpec", () => {
       "file_sharing",
       "user_timezone",
       "cli",
+      "executor",
       "coworker_cli",
       "skills",
       "selected_platform_skills",
@@ -47,6 +49,7 @@ describe("composeOpencodePromptSpec", () => {
     expect(result.systemPrompt).toContain("## User Timezone");
     expect(result.systemPrompt).toContain("Europe/Dublin");
     expect(result.systemPrompt).toContain("CLI instructions");
+    expect(result.systemPrompt).toContain("Executor instructions");
     expect(result.systemPrompt).toContain("# Selected Platform Skills");
     expect(result.systemPrompt).toContain("/app/.opencode/integration-skill-drafts/<slug>.json");
   });

@@ -9,6 +9,7 @@ import {
   coworker,
   coworkerRun,
   coworkerRunEvent,
+  workspaceExecutorSource,
 } from "@cmdclaw/db/schema";
 import {
   normalizeCoworkerAllowedSkillSlugs,
@@ -256,6 +257,22 @@ export async function triggerCoworkerRun(params: {
       : Array.isArray(wf.allowedCustomIntegrations)
         ? wf.allowedCustomIntegrations.filter((value): value is string => typeof value === "string")
         : [];
+  const allowedExecutorSourceIds =
+    toolAccessMode === "all"
+      ? (
+          await db.query.workspaceExecutorSource.findMany({
+            where: and(
+              eq(workspaceExecutorSource.workspaceId, wf.workspaceId ?? ""),
+              eq(workspaceExecutorSource.enabled, true),
+            ),
+            columns: {
+              id: true,
+            },
+          })
+        ).map((entry) => entry.id)
+      : Array.isArray(wf.allowedExecutorSourceIds)
+        ? wf.allowedExecutorSourceIds.filter((value): value is string => typeof value === "string")
+        : [];
   const allowedSkillSlugs =
     toolAccessMode === "all" ? undefined : normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs);
 
@@ -273,6 +290,7 @@ export async function triggerCoworkerRun(params: {
       autoApprove: wf.autoApprove,
       allowedIntegrations,
       allowedCustomIntegrations,
+      allowedExecutorSourceIds,
       allowedSkillSlugs,
       fileAttachments: params.fileAttachments,
     });

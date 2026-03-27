@@ -24,8 +24,9 @@ export const image = Image.debianSlim()
   .runCommands("agent-browser install")
   .runCommands("curl -fsSL https://bun.sh/install | bash")
   .runCommands("ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
-  .runCommands(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx`)
+  .runCommands(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx executor`)
   .runCommands("ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
+  .runCommands("ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
   .runCommands("ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
   // Install TypeScript tool runtime deps resolved from /app/.opencode/tools/*.ts
   .runCommands(

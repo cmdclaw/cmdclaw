@@ -19,6 +19,7 @@ export type ResolvedPromptSpec = {
 
 type SharedPromptInput = {
   cliInstructions?: string | null;
+  executorInstructions?: string | null;
   skillsInstructions?: string | null;
   integrationSkillsInstructions?: string | null;
   memoryInstructions?: string | null;
@@ -193,6 +194,7 @@ function composeChatPrompt(input: ChatPromptInput): ResolvedPromptSpec {
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
+  appendSection(sections, "executor", input.executorInstructions);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
@@ -214,6 +216,7 @@ function composeCoworkerBuilderPrompt(input: CoworkerBuilderPromptInput): Resolv
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
+  appendSection(sections, "executor", input.executorInstructions);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
@@ -239,6 +242,7 @@ function composeCoworkerRunnerPrompt(input: CoworkerRunnerPromptInput): Resolved
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
+  appendSection(sections, "executor", input.executorInstructions);
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
     sections,
