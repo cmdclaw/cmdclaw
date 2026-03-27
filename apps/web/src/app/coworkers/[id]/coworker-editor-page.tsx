@@ -2534,7 +2534,7 @@ function CoworkerSettingsPanel({
                 </div>
               ) : (
                 <p className="text-muted-foreground/60 text-sm italic">
-                  Describe what this coworker should do…
+                  Your new coworker’s instructions will appear here
                 </p>
               )}
             </button>
@@ -2567,7 +2567,7 @@ function CoworkerSettingsPanel({
                       className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
                       value={prompt}
                       onChange={onPromptChange}
-                      placeholder="Describe what this coworker should do…&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
+                      placeholder="Your new coworker’s instructions will appear here&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
                       autoFocus
                     />
                   </div>
@@ -2584,7 +2584,7 @@ function CoworkerSettingsPanel({
                         className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
                         value={prompt}
                         onChange={onPromptChange}
-                        placeholder="Describe what this coworker should do…&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
+                        placeholder="Your new coworker’s instructions will appear here&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
                         autoFocus
                       />
                     </div>

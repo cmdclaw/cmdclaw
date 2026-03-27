@@ -88,10 +88,12 @@ function RichPlaceholderOverlay({
   return (
     <span className="inline" style={RICH_PLACEHOLDER_LINE_HEIGHT_STYLE}>
       {elements}
-      <span
-        className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
-        style={RICH_PLACEHOLDER_CURSOR_STYLE}
-      />
+      {charPos > 0 ? (
+        <span
+          className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
+          style={RICH_PLACEHOLDER_CURSOR_STYLE}
+        />
+      ) : null}
     </span>
   );
 }

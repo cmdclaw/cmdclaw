@@ -394,6 +394,7 @@ const DISPLAY_INTEGRATION_NAMES: Record<DisplayIntegrationType, string> = {
 
 const DISPLAY_INTEGRATION_LOGOS: Partial<Record<DisplayIntegrationType, string>> = {
   ...INTEGRATION_LOGOS,
+  coworker: "/tools/lobster.svg",
 };
 
 const DISPLAY_INTEGRATION_OPERATION_LABELS: Partial<

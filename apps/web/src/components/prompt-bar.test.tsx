@@ -4,10 +4,18 @@ import type React from "react";
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PromptSegment } from "@/lib/prompt-segments";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
 import { PromptBar } from "./prompt-bar";
 
 void jestDomVitest;
+
+const heroRichAnimatedPlaceholders: PromptSegment[][] = [
+  [
+    { type: "text", content: "Every hour, triage new " },
+    { type: "brand", name: "Zendesk", icon: "/zendesk.svg" },
+  ],
+];
 
 vi.mock("next/image", () => ({
   default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
@@ -77,5 +85,21 @@ describe("PromptBar", () => {
       expect(onSubmit).toHaveBeenCalledWith("Keep this draft", undefined);
     });
     expect(input).toHaveValue("Keep this draft");
+  });
+
+  it("reserves two lines of height for the hero rich placeholder", () => {
+    const { container } = render(
+      <PromptBar
+        onSubmit={vi.fn()}
+        variant="hero"
+        richAnimatedPlaceholders={heroRichAnimatedPlaceholders}
+      />,
+    );
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveClass("min-h-[4.6rem]");
+
+    const measurer = container.querySelector("div[aria-hidden='true'].invisible");
+    expect(measurer).toHaveClass("min-h-[4.6rem]");
   });
 });

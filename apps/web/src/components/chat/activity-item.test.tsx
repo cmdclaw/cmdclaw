@@ -69,10 +69,10 @@ describe("ActivityItem", () => {
   });
 
   it("uses coworker command metadata for bash activity labels", () => {
-    const { container } = render(<ActivityItem item={coworkerToolCallFixture} />);
+    render(<ActivityItem item={coworkerToolCallFixture} />);
 
     expect(screen.getByText("Invoking coworker")).toBeInTheDocument();
     expect(screen.queryByText("Running command")).not.toBeInTheDocument();
-    expect(container.querySelector(".lucide-bot")).not.toBeNull();
+    expect(screen.getByAltText("Coworker")).toBeInTheDocument();
   });
 });
