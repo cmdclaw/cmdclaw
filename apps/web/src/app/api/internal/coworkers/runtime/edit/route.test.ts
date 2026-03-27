@@ -150,4 +150,30 @@ describe("POST /api/internal/coworkers/runtime/edit", () => {
     await expect(response.json()).resolves.toEqual({ error: "stale_turn" });
     expect(applyCoworkerEditMock).not.toHaveBeenCalled();
   });
+
+  it("returns validation details for invalid edit payloads", async () => {
+    const request = new Request("https://app.example.com/api/internal/coworkers/runtime/edit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer runtime-token",
+      },
+      body: JSON.stringify({
+        runtimeId: "rt-1",
+        turnSeq: 2,
+        coworkerId: "cw-1",
+        baseUpdatedAt: "2026-03-03T12:00:00.000Z",
+        changes: {},
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_request",
+      details: ["changes: Edit must include at least one editable field"],
+    });
+    expect(applyCoworkerEditMock).not.toHaveBeenCalled();
+  });
 });
