@@ -44,6 +44,9 @@ export default async function Home() {
     headers: requestHeaders,
   });
   const initialHasSession = Boolean(sessionData?.session && sessionData?.user);
+  const initialFirstName = sessionData?.user?.name?.trim().split(/\s+/, 1).find(Boolean) ?? null;
 
-  return <CoworkerLanding initialHasSession={initialHasSession} />;
+  return (
+    <CoworkerLanding initialHasSession={initialHasSession} initialFirstName={initialFirstName} />
+  );
 }
