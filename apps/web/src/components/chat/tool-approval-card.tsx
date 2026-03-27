@@ -109,9 +109,6 @@ export function ToolApprovalCard({
   status,
   isLoading,
 }: ToolApprovalCardProps) {
-  const logo = getIntegrationLogo(integration);
-  const IntegrationIcon = getIntegrationIcon(integration);
-  const displayName = getIntegrationDisplayName(integration);
   const isQuestionRequest = isQuestionApprovalRequest({ toolName, integration, operation });
   const questionPayload = useMemo(
     () => (isQuestionRequest ? parseQuestionRequestPayload(toolInput) : null),
@@ -196,6 +193,11 @@ export function ToolApprovalCard({
     }
     return parseCliCommand(command);
   }, [command]);
+  const displayIntegration = parsedCommand?.integration ?? integration;
+  const displayOperation = parsedCommand?.operation ?? operation;
+  const logo = getIntegrationLogo(displayIntegration);
+  const IntegrationIcon = getIntegrationIcon(displayIntegration);
+  const displayName = getIntegrationDisplayName(displayIntegration);
 
   // Build preview props
   const previewProps = useMemo(() => {
@@ -678,7 +680,9 @@ export function ToolApprovalCard({
           <>
             <span className="font-medium">{displayName}</span>
             <span className="text-muted-foreground">wants to</span>
-            <span className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{operation}</span>
+            <span className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+              {displayOperation}
+            </span>
           </>
         )}
 

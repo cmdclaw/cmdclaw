@@ -3,7 +3,7 @@
 import { Check, AlertCircle, ChevronRight, Eye, StopCircle, Timer } from "lucide-react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useCallback, useMemo, useState } from "react";
-import type { IntegrationType } from "@/lib/integration-icons";
+import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import type { MessageTiming } from "./chat-performance-metrics";
 import { ActivityItem, type ActivityItemData } from "./activity-item";
@@ -20,7 +20,7 @@ const COLLAPSED_TRACE_EXPANDED_TRANSITION: Transition = {
 
 type Props = {
   messageId: string;
-  integrationsUsed: IntegrationType[];
+  integrationsUsed: DisplayIntegrationType[];
   hasError: boolean;
   activityItems?: ActivityItemData[];
   timing?: MessageTiming;

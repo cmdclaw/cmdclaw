@@ -233,15 +233,33 @@ function loadCustomPermissions() {
   }
 }
 
+function extractCommandCandidate(command: string): string | null {
+  const segments = command
+    .split(/&&|\|\||;|\n/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    const firstToken = segment.split(/\s+/, 1)[0];
+    if (firstToken && CLI_TO_INTEGRATION[firstToken]) {
+      return segment;
+    }
+  }
+
+  const trimmed = command.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /**
  * Parse a Bash command to extract integration and operation
  */
 function parseBashCommand(command: string): { integration: string; operation: string } | null {
-  const trimmed = command.trim();
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 0) {
+  const trimmed = extractCommandCandidate(command);
+  if (!trimmed) {
     return null;
   }
+  const parts = trimmed.split(/\s+/);
 
   const cliName = parts[0];
   let integration = CLI_TO_INTEGRATION[cliName];

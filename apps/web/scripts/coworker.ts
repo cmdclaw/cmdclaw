@@ -19,6 +19,7 @@ import {
   resolveQuestionSelection,
   type QuestionApprovalItem,
 } from "./lib/question-approval";
+import { resolveCliToolMetadata } from "./lib/tool-metadata";
 
 type ParsedArgs = {
   serverUrl?: string;
@@ -1457,12 +1458,13 @@ async function startBuilderAgent(
           process.stdout.write(`\n[thinking] ${thinking.content}\n`);
         },
         onToolUse: (toolUse) => {
+          const metadata = resolveCliToolMetadata(toolUse);
           process.stdout.write(`\n[tool_use] ${toolUse.toolName}\n`);
-          if (toolUse.integration) {
-            process.stdout.write(`[tool_integration] ${toolUse.integration}\n`);
+          if (metadata.integration) {
+            process.stdout.write(`[tool_integration] ${metadata.integration}\n`);
           }
-          if (typeof toolUse.isWrite === "boolean") {
-            process.stdout.write(`[tool_is_write] ${toolUse.isWrite}\n`);
+          if (typeof metadata.isWrite === "boolean") {
+            process.stdout.write(`[tool_is_write] ${metadata.isWrite}\n`);
           }
           process.stdout.write(`[tool_input] ${JSON.stringify(toolUse.toolInput)}\n`);
         },

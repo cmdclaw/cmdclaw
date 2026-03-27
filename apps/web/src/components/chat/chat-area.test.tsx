@@ -340,4 +340,52 @@ describe("ChatArea generation errors", () => {
       expect.any(Object),
     );
   });
+
+  it("syncs coworker queries when a coworker edit tool completes", async () => {
+    const onCoworkerSync = vi.fn();
+
+    mockStartGeneration.mockImplementationOnce(async (_input, callbacks) => {
+      callbacks.onStarted?.("gen-1", "conv-1");
+      mockInvalidateQueries.mockClear();
+      callbacks.onToolUse?.({
+        toolName: "Bash",
+        toolInput: {
+          command: "coworker edit cw-1 --changes-file /tmp/coworker.json --json",
+        },
+        toolUseId: "tool-1",
+        integration: "coworker",
+        operation: "edit",
+      });
+      callbacks.onToolResult?.(
+        "Bash",
+        {
+          kind: "coworker_edit_apply",
+          status: "applied",
+          coworkerId: "cw-1",
+        },
+        "tool-1",
+      );
+      return null;
+    });
+
+    render(
+      <ChatArea conversationId="conv-1" forceCoworkerQuerySync onCoworkerSync={onCoworkerSync} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenNthCalledWith(1, {
+        queryKey: ["coworker"],
+      });
+      expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
+        queryKey: ["coworker", "get", "cw-1"],
+      });
+    });
+    expect(onCoworkerSync).toHaveBeenCalledWith({
+      coworkerId: "cw-1",
+      prompt: undefined,
+      updatedAt: undefined,
+    });
+  });
 });

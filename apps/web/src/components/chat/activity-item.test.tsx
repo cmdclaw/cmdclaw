@@ -26,6 +26,18 @@ const textTableFixture: ActivityItemData = {
   content: `| City | Country |\n| --- | --- |\n| Dublin | Ireland |`,
 };
 
+const coworkerToolCallFixture: ActivityItemData = {
+  id: "tool-2",
+  timestamp: 2,
+  type: "tool_call",
+  content: "Bash",
+  toolName: "Bash",
+  status: "running",
+  input: {
+    command: 'coworker invoke --username linkedin-digest --message "Review this inbox" --json',
+  },
+};
+
 describe("ActivityItem", () => {
   it("renders GFM table content for text activity items", () => {
     render(<ActivityItem item={textTableFixture} />);
@@ -54,5 +66,13 @@ describe("ActivityItem", () => {
     expect(screen.getByText("Request (Bash)")).toBeInTheDocument();
     expect(screen.getByText("google-gmail list -l 1")).toBeInTheDocument();
     expect(screen.getByText("done")).toBeInTheDocument();
+  });
+
+  it("uses coworker command metadata for bash activity labels", () => {
+    const { container } = render(<ActivityItem item={coworkerToolCallFixture} />);
+
+    expect(screen.getByText("Invoking coworker")).toBeInTheDocument();
+    expect(screen.queryByText("Running command")).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-bot")).not.toBeNull();
   });
 });

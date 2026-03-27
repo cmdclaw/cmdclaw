@@ -49,6 +49,10 @@ const MULTI_QUESTION_TOOL_INPUT = {
   ],
 };
 
+const COWORKER_APPROVAL_TOOL_INPUT = {
+  command: 'coworker invoke --username linkedin-digest --message "Review this inbox" --json',
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -201,5 +205,26 @@ describe("ToolApprovalCard", () => {
       expect(screen.getByText("Choose third")).toBeInTheDocument();
       expect(screen.getAllByText("Saved answer")).toHaveLength(3);
     });
+  });
+
+  it("uses coworker command metadata for the approval header", () => {
+    render(
+      <ToolApprovalCard
+        toolUseId="coworker-1"
+        toolName="Bash"
+        toolInput={COWORKER_APPROVAL_TOOL_INPUT}
+        integration="cmdclaw"
+        operation="patch"
+        command='coworker invoke --username linkedin-digest --message "Review this inbox" --json'
+        onApprove={vi.fn()}
+        onDeny={vi.fn()}
+        status="pending"
+      />,
+    );
+
+    expect(screen.getByText("Coworker")).toBeInTheDocument();
+    expect(screen.getByText("invoke")).toBeInTheDocument();
+    expect(screen.queryByText("cmdclaw")).not.toBeInTheDocument();
+    expect(screen.queryByText("patch")).not.toBeInTheDocument();
   });
 });
