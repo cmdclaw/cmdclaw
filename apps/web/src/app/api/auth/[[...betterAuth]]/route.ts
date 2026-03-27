@@ -1,7 +1,9 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { auth } from "@/lib/auth";
+import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
 
 const trustedOrigins = new Set(getTrustedOrigins());
@@ -27,9 +29,46 @@ const {
   DELETE: deleteHandler,
 } = toNextJsHandler(auth);
 
+async function isInviteOnlyErrorResponse(response: Response): Promise<boolean> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return false;
+  }
+
+  try {
+    const body = (await response.clone().json()) as {
+      code?: string;
+      message?: string;
+    };
+    return body.code === INVITE_ONLY_LOGIN_ERROR || body.message === INVITE_ONLY_LOGIN_ERROR;
+  } catch {
+    return false;
+  }
+}
+
+async function redirectInviteOnlyAuthError(
+  request: NextRequest,
+  response: Response,
+): Promise<Response | null> {
+  const callbackPrefix = "/api/auth/callback/";
+  if (!request.nextUrl.pathname.startsWith(callbackPrefix)) {
+    return null;
+  }
+
+  if (!(await isInviteOnlyErrorResponse(response))) {
+    return null;
+  }
+
+  const provider = request.nextUrl.pathname.slice(callbackPrefix.length);
+  const inviteOnlyUrl = buildRequestAwareUrl("/invite-only", request);
+  inviteOnlyUrl.searchParams.set("source", provider ? `social-${provider}` : "social");
+  return NextResponse.redirect(inviteOnlyUrl);
+}
+
 async function withCors(request: NextRequest, handler: (req: NextRequest) => Promise<Response>) {
   const origin = request.headers.get("origin");
-  const response = await handler(request);
+  const handledResponse = await handler(request);
+  const response = (await redirectInviteOnlyAuthError(request, handledResponse)) ?? handledResponse;
   const corsHeaders = getCorsHeaders(origin);
 
   const newResponse = new NextResponse(response.body, response);

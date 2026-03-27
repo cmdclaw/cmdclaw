@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { CloudLoginClient } from "@/components/login/cloud-login-client";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { auth } from "@/lib/auth";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
 
@@ -13,6 +14,8 @@ type LoginPageProps = {
   searchParams: Promise<{
     callbackUrl?: string;
     error?: string;
+    email?: string;
+    source?: string;
   }>;
 };
 
@@ -41,6 +44,8 @@ function LoginCard({
 
 function getSelfHostedErrorMessage(error: string | undefined) {
   switch (error) {
+    case INVITE_ONLY_LOGIN_ERROR:
+      return "This app is invite-only. Only approved email addresses can sign in.";
     case "cloud_auth_not_configured":
       return "Cloud login is not configured for this self-hosted instance.";
     case "invalid_state":
@@ -60,8 +65,28 @@ function getSelfHostedErrorMessage(error: string | undefined) {
   }
 }
 
+function getCloudErrorMessage(error: string | undefined) {
+  switch (error) {
+    case INVITE_ONLY_LOGIN_ERROR:
+      return "This app is invite-only. Only approved email addresses can sign in.";
+    default:
+      return null;
+  }
+}
+
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
+  if (params.error === INVITE_ONLY_LOGIN_ERROR) {
+    const inviteOnlyUrl = new URL("/invite-only", "http://localhost");
+    if (params.email) {
+      inviteOnlyUrl.searchParams.set("email", params.email);
+    }
+    if (params.source) {
+      inviteOnlyUrl.searchParams.set("source", params.source);
+    }
+    redirect(`${inviteOnlyUrl.pathname}${inviteOnlyUrl.search}`);
+  }
+
   const callbackUrl = sanitizeReturnPath(params.callbackUrl, "/chat");
   const requestHeaders = await headers();
   const sessionData = await auth.api.getSession({
@@ -73,9 +98,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   if (!isSelfHostedEdition()) {
+    const errorMessage = getCloudErrorMessage(params.error);
+
     return (
       <div className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
-        <CloudLoginClient callbackUrl={callbackUrl} />
+        <CloudLoginClient callbackUrl={callbackUrl} initialError={errorMessage} />
       </div>
     );
   }

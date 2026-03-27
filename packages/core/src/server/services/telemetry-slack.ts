@@ -133,6 +133,28 @@ export function buildSignupSlackMessage(params: {
   return lines.join("\n");
 }
 
+export function buildInviteOnlyAccessRequestSlackMessage(params: {
+  email: string;
+  source?: string | null;
+  occurredAt: Date;
+  referrer?: string | null;
+}): string {
+  const lines = [
+    "Invite-only access request",
+    "",
+    `Email: ${params.email}`,
+    `Source: ${params.source?.trim() || "unknown"}`,
+  ];
+
+  if (params.referrer?.trim()) {
+    lines.push(`Referrer: ${params.referrer.trim()}`);
+  }
+
+  lines.push(`Requested at: ${params.occurredAt.toISOString()}`);
+
+  return lines.join("\n");
+}
+
 export async function postSignupSlackNotification(params: {
   email: string;
   name?: string | null;
@@ -141,4 +163,13 @@ export async function postSignupSlackNotification(params: {
   occurredAt: Date;
 }): Promise<boolean> {
   return postMessageToOpsTelemetryChannel(buildSignupSlackMessage(params));
+}
+
+export async function postInviteOnlyAccessRequestSlackNotification(params: {
+  email: string;
+  source?: string | null;
+  occurredAt: Date;
+  referrer?: string | null;
+}): Promise<boolean> {
+  return postMessageToOpsTelemetryChannel(buildInviteOnlyAccessRequestSlackMessage(params));
 }

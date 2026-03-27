@@ -8,7 +8,8 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { randomBytes, randomUUID } from "node:crypto";
 import { env } from "@/env";
-import { shouldGrantAdminRole } from "@/lib/admin-emails";
+import { INVITE_ONLY_LOGIN_ERROR, shouldGrantAdminRole } from "@/lib/admin-emails";
+import { isApprovedLoginEmail } from "@/server/lib/approved-login-emails";
 
 function getDefaultName(email: string, fallbackName: string | null) {
   if (fallbackName?.trim()) {
@@ -24,6 +25,14 @@ function getSessionCookieName(requestUrl: string) {
   return new URL(appUrl).protocol === "https:"
     ? "__Secure-better-auth.session_token"
     : "better-auth.session_token";
+}
+
+async function assertInviteOnlyLogin(email: string) {
+  if (await isApprovedLoginEmail(email)) {
+    return;
+  }
+
+  throw new Error(INVITE_ONLY_LOGIN_ERROR);
 }
 
 async function createLocalSession(userId: string) {
@@ -46,6 +55,8 @@ async function createLocalSession(userId: string) {
 export async function resolveOrCreateLocalUserFromCloudIdentity(
   identity: CloudAuthExchangePayload,
 ): Promise<string> {
+  await assertInviteOnlyLogin(identity.email);
+
   const now = new Date();
   const linkedUser = await db.query.cloudAccountLink.findFirst({
     where: eq(cloudAccountLink.cloudUserId, identity.cloudUserId),
