@@ -14,6 +14,7 @@ import {
   integrationToken,
   customIntegration,
   customIntegrationCredential,
+  approvedLoginEmailAllowlist,
   googleIntegrationAccessAllowlist,
   user,
 } from "@cmdclaw/db/schema";
@@ -22,6 +23,7 @@ import { createHash, randomBytes } from "crypto";
 import { and, eq, or } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "@/env";
+import { shouldGrantAdminRole } from "@/lib/admin-emails";
 import {
   isUnipileMissingCredentialsError,
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
@@ -32,6 +34,10 @@ import {
   deleteUnipileAccount,
   getUnipileAccount,
 } from "@/server/integrations/unipile";
+import {
+  listApprovedLoginEmailEntries,
+  normalizeApprovedLoginEmail,
+} from "@/server/lib/approved-login-emails";
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 
 const GOOGLE_INTEGRATION_TYPES = new Set<IntegrationType>([
@@ -272,6 +278,107 @@ const listGoogleAccessAllowlist = protectedProcedure.handler(async ({ context })
     orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.createdAt)],
   });
 });
+
+const listApprovedLoginEmailAllowlist = protectedProcedure.handler(async ({ context }) => {
+  await ensureAdmin(context);
+  return listApprovedLoginEmailEntries();
+});
+
+const addApprovedLoginEmailAllowlistEntry = protectedProcedure
+  .input(
+    z.object({
+      email: z.string().email(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await ensureAdmin(context);
+
+    const normalizedEmail = normalizeApprovedLoginEmail(input.email);
+    const inserted = await context.db
+      .insert(approvedLoginEmailAllowlist)
+      .values({
+        email: normalizedEmail,
+        createdByUserId: context.user.id,
+      })
+      .onConflictDoNothing({
+        target: [approvedLoginEmailAllowlist.email],
+      })
+      .returning({
+        id: approvedLoginEmailAllowlist.id,
+        email: approvedLoginEmailAllowlist.email,
+        createdByUserId: approvedLoginEmailAllowlist.createdByUserId,
+        createdAt: approvedLoginEmailAllowlist.createdAt,
+      });
+
+    if (inserted[0]) {
+      return {
+        ...inserted[0],
+        isBuiltIn: false as const,
+      };
+    }
+
+    if (shouldGrantAdminRole(normalizedEmail)) {
+      return {
+        id: `builtin:${normalizedEmail}`,
+        email: normalizedEmail,
+        createdByUserId: null,
+        createdAt: null,
+        isBuiltIn: true as const,
+      };
+    }
+
+    const existing = await context.db.query.approvedLoginEmailAllowlist.findFirst({
+      where: eq(approvedLoginEmailAllowlist.email, normalizedEmail),
+      columns: {
+        id: true,
+        email: true,
+        createdByUserId: true,
+        createdAt: true,
+      },
+    });
+
+    if (!existing) {
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to add approved login email",
+      });
+    }
+
+    return {
+      ...existing,
+      isBuiltIn: false as const,
+    };
+  });
+
+const removeApprovedLoginEmailAllowlistEntry = protectedProcedure
+  .input(
+    z.object({
+      id: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await ensureAdmin(context);
+
+    if (input.id.startsWith("builtin:")) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Built-in admin emails cannot be removed",
+      });
+    }
+
+    const removed = await context.db
+      .delete(approvedLoginEmailAllowlist)
+      .where(eq(approvedLoginEmailAllowlist.id, input.id))
+      .returning({
+        id: approvedLoginEmailAllowlist.id,
+      });
+
+    if (!removed[0]) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Approved login email not found",
+      });
+    }
+
+    return { success: true as const };
+  });
 
 const addGoogleAccessAllowlistEntry = protectedProcedure
   .input(
@@ -1292,6 +1399,9 @@ const handleCustomCallback = protectedProcedure
 export const integrationRouter = {
   list,
   getGoogleAccessStatus,
+  listApprovedLoginEmailAllowlist,
+  addApprovedLoginEmailAllowlistEntry,
+  removeApprovedLoginEmailAllowlistEntry,
   listGoogleAccessAllowlist,
   addGoogleAccessAllowlistEntry,
   removeGoogleAccessAllowlistEntry,

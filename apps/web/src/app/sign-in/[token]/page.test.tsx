@@ -122,4 +122,25 @@ describe("/sign-in/[token] page", () => {
 
     expect(screen.getByText("We sent a new sign-in link to pilot@cmdclaw.ai.")).not.toBeNull();
   });
+
+  it("shows an invite-only error when the email is not approved", async () => {
+    resolveMagicLinkPageStateMock.mockResolvedValue({
+      status: "pending",
+      email: "pilot@cmdclaw.ai",
+      callbackUrl: "/chat",
+      newUserCallbackUrl: "/chat",
+      errorCallbackUrl: "/login?error=magic-link",
+    });
+
+    render(
+      await SignInTokenPage({
+        params: Promise.resolve({ token: "abc123" }),
+        searchParams: Promise.resolve({ error: "invite_only" }),
+      }),
+    );
+
+    expect(
+      screen.getByText("This app is invite-only. That email address is not approved yet."),
+    ).not.toBeNull();
+  });
 });

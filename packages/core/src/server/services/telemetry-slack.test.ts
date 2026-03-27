@@ -6,7 +6,10 @@ vi.mock("../../env", () => ({
   },
 }));
 
-import { buildSignupSlackMessage } from "./telemetry-slack";
+import {
+  buildInviteOnlyAccessRequestSlackMessage,
+  buildSignupSlackMessage,
+} from "./telemetry-slack";
 
 describe("telemetry Slack helpers", () => {
   it("formats a readable signup message", () => {
@@ -24,5 +27,20 @@ describe("telemetry Slack helpers", () => {
     expect(message).toContain("Method: google");
     expect(message).toContain("User ID: user-1");
     expect(message).toContain("Created at: 2026-03-13T10:00:00.000Z");
+  });
+
+  it("formats a readable invite-only access request message", () => {
+    const message = buildInviteOnlyAccessRequestSlackMessage({
+      email: "waitlist@example.com",
+      source: "magic-link",
+      referrer: "https://app.cmdclaw.ai/invite-only?source=magic-link",
+      occurredAt: new Date("2026-03-27T12:00:00.000Z"),
+    });
+
+    expect(message).toContain("Invite-only access request");
+    expect(message).toContain("Email: waitlist@example.com");
+    expect(message).toContain("Source: magic-link");
+    expect(message).toContain("Referrer: https://app.cmdclaw.ai/invite-only?source=magic-link");
+    expect(message).toContain("Requested at: 2026-03-27T12:00:00.000Z");
   });
 });

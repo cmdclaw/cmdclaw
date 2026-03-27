@@ -120,4 +120,19 @@ describe("GET /api/control-plane/auth/callback", () => {
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe("https://app.example.com/chat");
   });
+
+  it("redirects invite-only users to the request-access page", async () => {
+    resolveOrCreateLocalUserMock.mockRejectedValueOnce(new Error("invite_only"));
+
+    const response = await GET(
+      new Request(
+        "http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1",
+      ),
+    );
+
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "http://selfhost.local/invite-only?source=selfhost-cloud-login&email=user%40example.com",
+    );
+  });
 });

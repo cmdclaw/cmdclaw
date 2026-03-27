@@ -161,4 +161,66 @@ describe("POST /sign-in/[token]/confirm", () => {
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe("https://cmdclaw.ai/sign-in/abc123");
   });
+
+  it("redirects invite-only users to the request-access page", async () => {
+    resolveMagicLinkPageStateMock.mockResolvedValue({
+      status: "pending",
+      email: "pilot@cmdclaw.ai",
+      callbackUrl: "/chat",
+      newUserCallbackUrl: "/welcome",
+      errorCallbackUrl: "/login?error=magic-link",
+    });
+    magicLinkVerifyMock.mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: {
+          location: "https://cmdclaw.ai/sign-in/abc123?error=invite_only",
+        },
+      }),
+    );
+
+    const response = await POST(
+      new NextRequest("https://cmdclaw.ai/sign-in/abc123/confirm", { method: "POST" }),
+      {
+        params: Promise.resolve({ token: "abc123" }),
+      },
+    );
+
+    expect(markMagicLinkRequestConsumedMock).toHaveBeenCalledWith("abc123");
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "https://cmdclaw.ai/invite-only?email=pilot%40cmdclaw.ai&source=magic-link-confirm",
+    );
+  });
+
+  it("redirects invite-only JSON auth errors to the request-access page", async () => {
+    resolveMagicLinkPageStateMock.mockResolvedValue({
+      status: "pending",
+      email: "pilot@cmdclaw.ai",
+      callbackUrl: "/chat",
+      newUserCallbackUrl: "/welcome",
+      errorCallbackUrl: "/login?error=magic-link",
+    });
+    magicLinkVerifyMock.mockResolvedValue(
+      new Response(JSON.stringify({ code: "invite_only", message: "invite_only" }), {
+        status: 403,
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+    );
+
+    const response = await POST(
+      new NextRequest("https://cmdclaw.ai/sign-in/abc123/confirm", { method: "POST" }),
+      {
+        params: Promise.resolve({ token: "abc123" }),
+      },
+    );
+
+    expect(markMagicLinkRequestConsumedMock).toHaveBeenCalledWith("abc123");
+    expect(response.status).toBe(307);
+    expect(getLocation(response)).toBe(
+      "https://cmdclaw.ai/invite-only?email=pilot%40cmdclaw.ai&source=magic-link-confirm",
+    );
+  });
 });

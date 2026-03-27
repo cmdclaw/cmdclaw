@@ -4,6 +4,7 @@ import {
 } from "@cmdclaw/core/server/control-plane/client";
 import { consumeControlPlaneAuthState } from "@cmdclaw/core/server/control-plane/local-auth";
 import { NextResponse } from "next/server";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
 import {
@@ -16,6 +17,15 @@ function redirectToLogin(requestUrl: string, callbackUrl: string, error: string)
   loginUrl.searchParams.set("callbackUrl", callbackUrl);
   loginUrl.searchParams.set("error", error);
   return NextResponse.redirect(loginUrl);
+}
+
+function redirectToInviteOnly(requestUrl: string, email?: string) {
+  const inviteOnlyUrl = buildRequestAwareUrl("/invite-only", requestUrl);
+  inviteOnlyUrl.searchParams.set("source", "selfhost-cloud-login");
+  if (email) {
+    inviteOnlyUrl.searchParams.set("email", email);
+  }
+  return NextResponse.redirect(inviteOnlyUrl);
 }
 
 export async function GET(request: Request) {
@@ -37,9 +47,11 @@ export async function GET(request: Request) {
   }
 
   const callbackUrl = sanitizeReturnPath(authState.returnPath, "/chat");
+  let exchangedIdentityEmail: string | undefined;
 
   try {
     const identity = await exchangeCloudAuth(code);
+    exchangedIdentityEmail = identity.email;
     const userId = await resolveOrCreateLocalUserFromCloudIdentity(identity);
     const redirectUrl = buildRequestAwareUrl(callbackUrl, request);
     return createLocalSessionRedirectResponse({
@@ -49,6 +61,9 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to complete cloud login";
+    if (message === INVITE_ONLY_LOGIN_ERROR) {
+      return redirectToInviteOnly(request.url, exchangedIdentityEmail);
+    }
     const errorKey =
       message === "Cloud control plane is not configured"
         ? "cloud_auth_not_configured"

@@ -1,25 +1,39 @@
 import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { trackSignupFromSession } from "@cmdclaw/core/server/services/user-telemetry";
 import { db } from "@cmdclaw/db/client";
-import { authSchema } from "@cmdclaw/db/schema";
+import { authSchema, user as userTable } from "@cmdclaw/db/schema";
 import { autumn } from "autumn-js/better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware, APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin, bearer, lastLoginMethod, magicLink } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { env } from "@/env";
-import { shouldGrantAdminRole } from "@/lib/admin-emails";
+import { INVITE_ONLY_LOGIN_ERROR, shouldGrantAdminRole } from "@/lib/admin-emails";
 import { buildMagicLinkEmailPayload } from "@/lib/magic-link-email";
 import { MAGIC_LINK_TTL_SECONDS } from "@/lib/magic-link-request";
 import { buildSignInMagicLinkUrl } from "@/lib/magic-link-request";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
+import { isApprovedLoginEmail } from "@/server/lib/approved-login-emails";
 import { createMagicLinkRequestState } from "@/server/lib/magic-link-request-state";
 
 const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
 const appUrl =
   env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+
+async function assertInviteOnlyLogin(email: string) {
+  if (await isApprovedLoginEmail(email)) {
+    return;
+  }
+
+  throw new APIError("FORBIDDEN", {
+    code: INVITE_ONLY_LOGIN_ERROR,
+    message: INVITE_ONLY_LOGIN_ERROR,
+  });
+}
 
 const socialProviders = isSelfHostedEdition()
   ? {}
@@ -60,6 +74,20 @@ export const auth = betterAuth({
   }),
   socialProviders,
   trustedOrigins: getTrustedOrigins(),
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/magic-link/send") {
+        return;
+      }
+
+      const email = typeof ctx.body?.email === "string" ? ctx.body.email : null;
+      if (!email) {
+        return;
+      }
+
+      await assertInviteOnlyLogin(email);
+    }),
+  },
   // Don't forget to regenerate the schema if you add a new plugin
   // Run "bun auth:generate" to regenerate the schema
   plugins: [
@@ -111,6 +139,7 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
+          await assertInviteOnlyLogin(user.email);
           if (shouldGrantAdminRole(user.email)) {
             return { data: { ...user, role: "admin" } };
           }
@@ -120,6 +149,18 @@ export const auth = betterAuth({
     },
     session: {
       create: {
+        before: async (session) => {
+          const existingUser = await db.query.user.findFirst({
+            where: eq(userTable.id, session.userId),
+            columns: {
+              email: true,
+            },
+          });
+
+          if (existingUser?.email) {
+            await assertInviteOnlyLogin(existingUser.email);
+          }
+        },
         after: async (session, context) => {
           try {
             await trackSignupFromSession({ session, context });

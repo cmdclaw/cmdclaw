@@ -1,6 +1,7 @@
 import type React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { buildSignInMagicLinkPath } from "@/lib/magic-link-request";
 import { resolveMagicLinkPageState } from "@/server/lib/magic-link-request-state";
 
@@ -44,6 +45,10 @@ export default async function SignInTokenPage({ params, searchParams }: SignInTo
   const resendPath = `${signInPath}/resend`;
   const hasResentBanner = query.resent === "1" && state.status !== "invalid";
   const hasGenericError = Boolean(query.error);
+  const errorMessage =
+    query.error === INVITE_ONLY_LOGIN_ERROR
+      ? "This app is invite-only. That email address is not approved yet."
+      : "We couldn't complete that sign-in. Request a new link and try again.";
 
   const title =
     state.status === "pending"
@@ -74,7 +79,7 @@ export default async function SignInTokenPage({ params, searchParams }: SignInTo
 
         {hasGenericError ? (
           <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border p-3 text-sm">
-            We couldn&apos;t complete that sign-in. Request a new link and try again.
+            {errorMessage}
           </div>
         ) : null}
 

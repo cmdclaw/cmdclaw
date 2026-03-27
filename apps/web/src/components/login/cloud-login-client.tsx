@@ -1,12 +1,18 @@
 "use client";
 
 import type React from "react";
+import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { authClient } from "@/lib/auth-client";
 
 type SignInState = "idle" | "sending" | "sent" | "error";
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 
 function GoogleIcon() {
   return (
@@ -47,9 +53,16 @@ function LastUsedBadge() {
   );
 }
 
-export function CloudLoginClient({ callbackUrl }: { callbackUrl: string }) {
+export function CloudLoginClient({
+  callbackUrl,
+  initialError,
+}: {
+  callbackUrl: string;
+  initialError?: string | null;
+}) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [status, setStatus] = useState<SignInState>("idle");
   const lastMethod = authClient.getLastUsedLoginMethod();
 
@@ -67,6 +80,13 @@ export function CloudLoginClient({ callbackUrl }: { callbackUrl: string }) {
       });
 
       if (signInError) {
+        if (signInError.message === INVITE_ONLY_LOGIN_ERROR) {
+          router.push(
+            `/invite-only?source=magic-link&email=${encodeURIComponent(normalizeEmail(email))}`,
+          );
+          return;
+        }
+
         setStatus("error");
         setError(signInError.message || "Unable to send the magic link right now.");
         return;
@@ -74,13 +94,14 @@ export function CloudLoginClient({ callbackUrl }: { callbackUrl: string }) {
 
       setStatus("sent");
     },
-    [callbackUrl, email],
+    [callbackUrl, email, router],
   );
 
   const handleGoogleSignIn = useCallback(async () => {
     await authClient.signIn.social({
       provider: "google",
       callbackURL: callbackUrl,
+      errorCallbackURL: "/invite-only?source=social-google",
     });
   }, [callbackUrl]);
 
@@ -88,6 +109,7 @@ export function CloudLoginClient({ callbackUrl }: { callbackUrl: string }) {
     await authClient.signIn.social({
       provider: "apple",
       callbackURL: callbackUrl,
+      errorCallbackURL: "/invite-only?source=social-apple",
     });
   }, [callbackUrl]);
 
@@ -102,7 +124,9 @@ export function CloudLoginClient({ callbackUrl }: { callbackUrl: string }) {
           CmdClaw
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
-        <p className="text-muted-foreground text-sm">Enter your email to get a magic link.</p>
+        <p className="text-muted-foreground text-sm">
+          CmdClaw is currently invite-only. Enter an approved email to get a magic link.
+        </p>
       </div>
 
       <div className="space-y-4">
