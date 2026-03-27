@@ -3,7 +3,7 @@
 import { Paperclip, Download, FileIcon, Eye } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
-import type { IntegrationType } from "@/lib/integration-icons";
+import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { useDownloadAttachment, useDownloadSandboxFile } from "@/orpc/hooks";
 import type { ActivityItemData } from "./activity-item";
 import type { MessagePart, AttachmentData, SandboxFileData } from "./message-list";
@@ -225,7 +225,7 @@ export function MessageItem({
           type: "tool_call",
           content: part.name,
           toolName: part.name,
-          integration: part.integration as IntegrationType | undefined,
+          integration: part.integration as DisplayIntegrationType | undefined,
           operation: part.operation,
           status:
             part.result !== undefined
@@ -532,7 +532,7 @@ export function MessageItem({
                     new Set(
                       nextSegment.items
                         .filter((item) => item.integration)
-                        .map((item) => item.integration as IntegrationType),
+                        .map((item) => item.integration as DisplayIntegrationType),
                     ),
                   );
                   const isNextExpanded = expandedSegments.has(nextSegment.id);
@@ -571,7 +571,7 @@ export function MessageItem({
                   new Set(
                     segment.items
                       .filter((item) => item.integration)
-                      .map((item) => item.integration as IntegrationType),
+                      .map((item) => item.integration as DisplayIntegrationType),
                   ),
                 );
                 const isExpanded = expandedSegments.has(segment.id);
@@ -618,13 +618,13 @@ export function MessageItem({
             messageId={id}
             integrationsUsed={
               integrationsUsed
-                ? (integrationsUsed as IntegrationType[])
+                ? (integrationsUsed as DisplayIntegrationType[])
                 : Array.from(
                     new Set(
                       segments.flatMap((seg) =>
                         seg.items
                           .filter((item) => item.integration)
-                          .map((item) => item.integration as IntegrationType),
+                          .map((item) => item.integration as DisplayIntegrationType),
                       ),
                     ),
                   )

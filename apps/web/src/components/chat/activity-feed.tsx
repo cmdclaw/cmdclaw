@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronUp, Activity, Timer } from "lucide-react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import type { IntegrationType } from "@/lib/integration-icons";
+import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { ActivityItem, type ActivityItemData } from "./activity-item";
 import { formatDuration } from "./chat-performance-metrics";
@@ -16,7 +16,7 @@ type Props = {
   isStreaming: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  integrationsUsed: IntegrationType[];
+  integrationsUsed: DisplayIntegrationType[];
   elapsedMs?: number;
 };
 

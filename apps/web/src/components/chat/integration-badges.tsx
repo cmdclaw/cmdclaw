@@ -3,13 +3,14 @@
 import Image from "next/image";
 import {
   getIntegrationLogo,
+  getIntegrationIcon,
   getIntegrationDisplayName,
-  type IntegrationType,
+  type DisplayIntegrationType,
 } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  integrations: IntegrationType[];
+  integrations: DisplayIntegrationType[];
   size?: "sm" | "md";
   className?: string;
 };
@@ -32,10 +33,11 @@ function IntegrationBadge({
   integration,
   size,
 }: {
-  integration: IntegrationType;
+  integration: DisplayIntegrationType;
   size: "sm" | "md";
 }) {
   const logo = getIntegrationLogo(integration);
+  const Icon = getIntegrationIcon(integration);
   const name = getIntegrationDisplayName(integration);
 
   const sizeClasses = size === "sm" ? "px-1.5 py-0.5 text-xs gap-1" : "px-2 py-1 text-sm gap-1.5";
@@ -52,9 +54,11 @@ function IntegrationBadge({
       )}
       title={name}
     >
-      {logo && (
+      {logo ? (
         <Image src={logo} alt={name} width={iconPixels} height={iconPixels} className={iconSize} />
-      )}
+      ) : Icon ? (
+        <Icon className={cn(size === "sm" ? "h-3 w-3" : "h-4 w-4", "text-blue-500")} />
+      ) : null}
       <span className={cn("truncate", nameMaxWidth)}>{name}</span>
     </div>
   );

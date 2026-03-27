@@ -26,6 +26,7 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   dynamics: "dynamics",
   reddit: "reddit",
   twitter: "twitter",
+  coworker: "coworker",
 };
 
 const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
@@ -184,6 +185,10 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
       "unfollow",
     ],
   },
+  coworker: {
+    read: ["list", "show", "runs", "logs"],
+    write: ["invoke", "edit", "upload-document", "run", "approve", "builder"],
+  },
 };
 
 const INTEGRATION_NAMES: Record<string, string> = {
@@ -205,7 +210,10 @@ const INTEGRATION_NAMES: Record<string, string> = {
   dynamics: "Microsoft Dynamics 365",
   reddit: "Reddit",
   twitter: "X (Twitter)",
+  coworker: "Coworker",
 };
+
+const INTERNAL_DISPLAY_ONLY_INTEGRATIONS = new Set(["coworker"]);
 
 export interface ParsedCommand {
   integration: string;
@@ -214,11 +222,32 @@ export interface ParsedCommand {
   isWrite: boolean;
 }
 
+function extractCommandCandidate(command: string): string | null {
+  const segments = command
+    .split(/&&|\|\||;|\n/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    const firstToken = segment.split(/\s+/, 1)[0];
+    if (firstToken && CLI_TO_INTEGRATION[firstToken]) {
+      return segment;
+    }
+  }
+
+  const fallback = command.trim();
+  return fallback.length > 0 ? fallback : null;
+}
+
 /**
  * Parse a bash command to extract integration and operation.
  */
 export function parseBashCommand(command: string): ParsedCommand | null {
-  const trimmed = command.trim();
+  const trimmed = extractCommandCandidate(command);
+  if (!trimmed) {
+    return null;
+  }
   const parts = trimmed.split(/\s+/);
   if (parts.length === 0) {
     return null;
@@ -302,6 +331,10 @@ export function checkToolPermissions(
 
   // Not an integration command - auto-allow
   if (!parsed) {
+    return { allowed: true, needsApproval: false, needsAuth: false };
+  }
+
+  if (INTERNAL_DISPLAY_ONLY_INTEGRATIONS.has(parsed.integration)) {
     return { allowed: true, needsApproval: false, needsAuth: false };
   }
 

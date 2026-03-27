@@ -5,6 +5,7 @@
  */
 
 import {
+  Bot,
   Mail,
   Calendar,
   FileText,
@@ -42,6 +43,8 @@ export type IntegrationType =
   | "dynamics"
   | "reddit"
   | "twitter";
+
+export type DisplayIntegrationType = IntegrationType | "coworker";
 
 export const ALL_INTEGRATION_TYPES: IntegrationType[] = [
   "google_gmail",
@@ -379,18 +382,44 @@ export const INTEGRATION_OPERATION_LABELS: Record<IntegrationType, Record<string
   },
 };
 
+const DISPLAY_INTEGRATION_ICONS: Record<DisplayIntegrationType, LucideIcon> = {
+  ...INTEGRATION_ICONS,
+  coworker: Bot,
+};
+
+const DISPLAY_INTEGRATION_NAMES: Record<DisplayIntegrationType, string> = {
+  ...INTEGRATION_DISPLAY_NAMES,
+  coworker: "Coworker",
+};
+
+const DISPLAY_INTEGRATION_LOGOS: Partial<Record<DisplayIntegrationType, string>> = {
+  ...INTEGRATION_LOGOS,
+};
+
+const DISPLAY_INTEGRATION_OPERATION_LABELS: Partial<
+  Record<DisplayIntegrationType, Record<string, string>>
+> = {
+  ...INTEGRATION_OPERATION_LABELS,
+  coworker: {
+    list: "Listing coworkers",
+    invoke: "Invoking coworker",
+    edit: "Editing coworker",
+    "upload-document": "Uploading coworker document",
+  },
+};
+
 /**
  * Get the icon component for an integration
  */
 export function getIntegrationIcon(integration: string): LucideIcon | null {
-  return INTEGRATION_ICONS[integration as IntegrationType] || null;
+  return DISPLAY_INTEGRATION_ICONS[integration as DisplayIntegrationType] || null;
 }
 
 /**
  * Get the display name for an integration (with custom integration fallback)
  */
 export function getIntegrationDisplayName(integration: string): string {
-  return INTEGRATION_DISPLAY_NAMES[integration as IntegrationType] || integration;
+  return DISPLAY_INTEGRATION_NAMES[integration as DisplayIntegrationType] || integration;
 }
 
 /**
@@ -404,7 +433,7 @@ export function getIntegrationColor(integration: string): string {
  * Get the logo path for an integration
  */
 export function getIntegrationLogo(integration: string): string | null {
-  return INTEGRATION_LOGOS[integration as IntegrationType] || null;
+  return DISPLAY_INTEGRATION_LOGOS[integration as DisplayIntegrationType] || null;
 }
 
 /**
@@ -422,7 +451,7 @@ export function getCustomIntegrationDisplayInfo(name: string, iconUrl?: string |
  * Get the human-readable label for an integration operation
  */
 export function getOperationLabel(integration: string, operation: string): string {
-  const labels = INTEGRATION_OPERATION_LABELS[integration as IntegrationType];
+  const labels = DISPLAY_INTEGRATION_OPERATION_LABELS[integration as DisplayIntegrationType];
   if (labels && labels[operation]) {
     return labels[operation];
   }
@@ -434,7 +463,7 @@ export function getOperationLabel(integration: string, operation: string): strin
  * Get all available actions for an integration as display-friendly labels
  */
 export function getIntegrationActions(integration: string): { key: string; label: string }[] {
-  const labels = INTEGRATION_OPERATION_LABELS[integration as IntegrationType];
+  const labels = DISPLAY_INTEGRATION_OPERATION_LABELS[integration as DisplayIntegrationType];
   if (!labels) {
     return [];
   }

@@ -21,12 +21,14 @@ import Image from "next/image";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { IntegrationType } from "@/lib/integration-icons";
+import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import {
   getIntegrationLogo,
   getIntegrationDisplayName,
+  getIntegrationIcon,
   getOperationLabel,
 } from "@/lib/integration-icons";
+import { parseCliCommand } from "@/lib/parse-cli-command";
 
 // Map internal SDK tool names to user-friendly display names
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
@@ -67,7 +69,7 @@ export type ActivityItemData = {
   content: string;
   toolUseId?: string;
   toolName?: string;
-  integration?: IntegrationType;
+  integration?: DisplayIntegrationType;
   operation?: string;
   status?: "running" | "complete" | "error" | "interrupted";
   input?: unknown;
@@ -131,6 +133,19 @@ function getInputDescription(input: unknown): string | null {
 export function ActivityItem({ item }: Props) {
   const { type, content, toolName, integration, operation, status, input, result } = item;
   const [showDetails, setShowDetails] = useState(false);
+  const parsedCommand = useMemo(() => {
+    if (toolName !== "Bash" || typeof input !== "object" || input === null) {
+      return null;
+    }
+
+    const command = (input as { command?: unknown }).command;
+    return typeof command === "string" ? parseCliCommand(command) : null;
+  }, [input, toolName]);
+  const displayIntegration = (parsedCommand?.integration ?? integration) as
+    | DisplayIntegrationType
+    | "coworker"
+    | undefined;
+  const displayOperation = parsedCommand?.operation ?? operation;
   const handleToggleDetails = useCallback(() => {
     setShowDetails((prev) => !prev);
   }, []);
@@ -165,18 +180,23 @@ export function ActivityItem({ item }: Props) {
     }
 
     // Integration icons take priority
-    if (integration) {
-      const logo = getIntegrationLogo(integration);
+    if (displayIntegration) {
+      const logo = getIntegrationLogo(displayIntegration);
       if (logo) {
         return (
           <Image
             src={logo}
-            alt={getIntegrationDisplayName(integration)}
+            alt={getIntegrationDisplayName(displayIntegration)}
             width={14}
             height={14}
             className="h-3.5 w-auto flex-shrink-0"
           />
         );
+      }
+
+      const IntegrationIcon = getIntegrationIcon(displayIntegration);
+      if (IntegrationIcon) {
+        return <IntegrationIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
       }
     }
 
@@ -247,10 +267,11 @@ export function ActivityItem({ item }: Props) {
       return inputDescription;
     }
 
-    if (integration) {
-      // Use operation or toolName (which may contain the operation)
-      const op = operation || toolName;
-      return op ? getOperationLabel(integration, op) : getIntegrationDisplayName(integration);
+    if (displayIntegration) {
+      const op = displayOperation || toolName;
+      return op
+        ? getOperationLabel(displayIntegration, op)
+        : getIntegrationDisplayName(displayIntegration);
     }
     return toolName ? getToolDisplayName(toolName) : content;
   })();

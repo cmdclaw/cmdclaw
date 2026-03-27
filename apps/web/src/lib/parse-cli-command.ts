@@ -13,6 +13,24 @@ export type ParsedCommand = {
   rawCommand: string;
 };
 
+function extractCommandCandidate(command: string): string | null {
+  const segments = command
+    .split(/&&|\|\||;|\n/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    const firstToken = segment.split(/\s+/, 1)[0];
+    if (firstToken && CLI_TO_INTEGRATION[firstToken]) {
+      return segment;
+    }
+  }
+
+  const trimmed = command.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 // CLI name to integration type mapping
 const CLI_TO_INTEGRATION: Record<string, string> = {
   slack: "slack",
@@ -33,13 +51,14 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   dynamics: "dynamics",
   reddit: "reddit",
   twitter: "twitter",
+  coworker: "coworker",
 };
 
 /**
  * Parse a CLI command string into structured data
  */
 export function parseCliCommand(command: string): ParsedCommand | null {
-  const trimmed = command.trim();
+  const trimmed = extractCommandCandidate(command);
   if (!trimmed) {
     return null;
   }
