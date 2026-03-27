@@ -387,9 +387,17 @@ function AnimatedDepartment({
 
 type CoworkerLandingProps = {
   initialHasSession?: boolean;
+  initialFirstName?: string | null;
 };
 
-export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingProps) {
+function getFirstName(name: string | null | undefined) {
+  return name?.trim().split(/\s+/, 1).find(Boolean) ?? null;
+}
+
+export function CoworkerLanding({
+  initialHasSession = false,
+  initialFirstName = null,
+}: CoworkerLandingProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
@@ -408,6 +416,7 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   } | null>(null);
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [isAnonymous, setShowFooter] = useState(!initialHasSession);
+  const [userFirstName, setUserFirstName] = useState<string | null>(initialFirstName);
   const resumePendingPromptRef = useRef(false);
   const isRecordingRef = useRef(false);
   const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
@@ -423,6 +432,9 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
   );
 
   const activeExample = HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length];
+  const loggedInHeadline = userFirstName
+    ? `What do you want to automate ${userFirstName}?`
+    : "What do you want to automate today?";
   const handleModelChange = useCallback(
     (input: { model: string; authSource?: ProviderAuthSource | null }) => {
       const normalized = normalizeChatModelSelection(input);
@@ -547,11 +559,14 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
           return;
         }
 
-        setShowFooter(!(result?.data?.session && result?.data?.user));
+        const hasSession = Boolean(result?.data?.session && result?.data?.user);
+        setShowFooter(!hasSession);
+        setUserFirstName(hasSession ? getFirstName(result?.data?.user?.name) : null);
       })
       .catch(() => {
         if (mounted) {
           setShowFooter(true);
+          setUserFirstName(null);
         }
       });
 
@@ -671,13 +686,19 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
           <section className="flex min-h-[62vh] items-center justify-center pt-8 md:min-h-[max(22rem,calc(100dvh-21rem))] md:pt-10 lg:min-h-[max(23rem,calc(100dvh-22rem))] lg:pt-12">
             <div className="mx-auto w-full max-w-3xl">
               <h1 className="mb-3 text-center text-3xl font-semibold tracking-tight text-white drop-shadow-[0_0_30px_rgba(56,189,248,0.25)] md:text-4xl lg:text-5xl">
-                What do you want to automate in{" "}
-                <AnimatedDepartment
-                  department={activeExample?.department ?? "your team"}
-                  color={activeExample?.color ?? "#3B82F6"}
-                  isActive
-                />
-                ?
+                {isAnonymous ? (
+                  <>
+                    What do you want to automate in{" "}
+                    <AnimatedDepartment
+                      department={activeExample?.department ?? "your team"}
+                      color={activeExample?.color ?? "#3B82F6"}
+                      isActive
+                    />
+                    ?
+                  </>
+                ) : (
+                  loggedInHeadline
+                )}
               </h1>
               <p className="mb-8 text-center text-base text-white md:text-lg">
                 Describe a task and we&apos;ll build it step by step
@@ -740,8 +761,8 @@ export function CoworkerLanding({ initialHasSession = false }: CoworkerLandingPr
 
       {/* ── Footer ── */}
       {isAnonymous ? (
-        <footer className="border-border/60 bg-background border-t px-6 py-5">
-          <div className="text-muted-foreground mx-auto flex max-w-[1500px] items-center justify-between text-xs">
+        <footer className="border-border/60 bg-background border-t px-6 py-3 sm:py-5">
+          <div className="text-muted-foreground mx-auto flex max-w-[1500px] items-center justify-between text-xs leading-none">
             <div className="flex items-center gap-3">
               <a
                 href="https://github.com/baptistecolle/cmdclaw"
