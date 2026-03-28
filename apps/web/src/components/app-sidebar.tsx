@@ -7,7 +7,7 @@ import {
   Check,
   ChevronDown,
   Cuboid,
-  Home,
+  WandSparkles,
   LoaderCircle,
   LogOut,
   MessageSquare,
@@ -318,7 +318,7 @@ export function AppSidebar() {
   );
 
   const mainNavItems: NavItem[] = [
-    { icon: Home, label: "Home", href: "/" },
+    { icon: WandSparkles, label: "Create", href: "/" },
     { icon: LayoutTemplate, label: "Templates", href: "/templates" },
   ];
 
