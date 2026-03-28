@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getTemplateById } from "@/lib/template-data";
 import { buildTemplateDeployPayload, renderTemplateDeployPrompt } from "@/lib/template-deploy";
+import { callFollowUpTemplate } from "@/test/template-catalog-fixtures";
 
 const PROMPT_TEMPLATE = `Create it with name {{name}}
 
@@ -16,9 +16,7 @@ Instructions
 
 describe("renderTemplateDeployPrompt", () => {
   it("fills all placeholders and keeps the required sections", () => {
-    const template = getTemplateById("call-follow-up");
-
-    expect(renderTemplateDeployPrompt(PROMPT_TEMPLATE, template))
+    expect(renderTemplateDeployPrompt(PROMPT_TEMPLATE, callFollowUpTemplate))
       .toBe(`Create it with name Send polished follow-ups right after every call
 
 Trigger
@@ -44,8 +42,7 @@ If no contact is found, skip Gmail draft and still create the HubSpot task with 
 
 describe("buildTemplateDeployPayload", () => {
   it("maps template fields into coworker create payload and builder message", () => {
-    const template = getTemplateById("call-follow-up");
-    const payload = buildTemplateDeployPayload(template, PROMPT_TEMPLATE);
+    const payload = buildTemplateDeployPayload(callFollowUpTemplate, PROMPT_TEMPLATE);
 
     expect(payload.createPayload).toEqual({
       name: "Send polished follow-ups right after every call",

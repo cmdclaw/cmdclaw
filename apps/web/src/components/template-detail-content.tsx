@@ -1,5 +1,6 @@
 "use client";
 
+import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { ArrowRight, Check, Link2, Play, Share2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,9 +8,12 @@ import { useCallback, useEffect, useState } from "react";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS } from "@/lib/integration-icons";
-import { type TemplateContent, base64Url } from "@/lib/template-data";
 
-export function TemplateDetailContent({ template }: { template: TemplateContent }) {
+function base64Url(input: string) {
+  return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export function TemplateDetailContent({ template }: { template: TemplateCatalogTemplate }) {
   const [copied, setCopied] = useState(false);
   const mermaidImage = `https://mermaid.ink/img/${base64Url(template.mermaid)}?bgColor=f8f8f8`;
   const templatePath = `/template/${template.id}`;
@@ -105,7 +109,7 @@ export function TemplateDetailContent({ template }: { template: TemplateContent 
                 Category
               </p>
               <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
-                {template.category}
+                {template.industry}
               </span>
             </div>
 

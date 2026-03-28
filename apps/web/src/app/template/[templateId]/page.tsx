@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { TemplateDetailContent } from "@/components/template-detail-content";
-import { getTemplateById } from "@/lib/template-data";
+import { getTemplateCatalogEntryById } from "@/server/services/template-catalog";
 
 type PageProps = {
   params: Promise<{
@@ -12,7 +13,14 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { templateId } = await params;
-  const template = getTemplateById(templateId);
+  const template = await getTemplateCatalogEntryById(templateId);
+
+  if (!template) {
+    return {
+      title: "Template not found | CmdClaw",
+    };
+  }
+
   return {
     title: `${template.title} | CmdClaw`,
     description: template.description,
@@ -21,7 +29,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function TemplatePage({ params }: PageProps) {
   const { templateId } = await params;
-  const template = getTemplateById(templateId);
+  const template = await getTemplateCatalogEntryById(templateId);
+
+  if (!template) {
+    notFound();
+  }
 
   return (
     <div className="mx-auto max-w-3xl pb-8">

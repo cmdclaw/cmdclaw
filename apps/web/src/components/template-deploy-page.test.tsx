@@ -4,6 +4,7 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import { callFollowUpTemplate } from "@/test/template-catalog-fixtures";
 
 void jestDomVitest;
 
@@ -74,7 +75,7 @@ Instructions
   });
 
   it("creates a coworker from the template and redirects to its editor", async () => {
-    render(<TemplateDeployPage templateId="call-follow-up" />);
+    render(<TemplateDeployPage template={callFollowUpTemplate} />);
 
     await waitFor(() => {
       expect(mockCreateCoworkerMutateAsync).toHaveBeenCalledWith({
@@ -112,7 +113,7 @@ If no contact is found, skip Gmail draft and still create the HubSpot task with 
   });
 
   it("shows an error when the template id is invalid", async () => {
-    render(<TemplateDeployPage templateId="missing" />);
+    render(<TemplateDeployPage template={null} />);
 
     await waitFor(() => {
       expect(screen.getByText("Template not found.")).toBeInTheDocument();
@@ -133,7 +134,7 @@ If no contact is found, skip Gmail draft and still create the HubSpot task with 
       },
     });
 
-    render(<TemplateDeployPage templateId="call-follow-up" />);
+    render(<TemplateDeployPage template={callFollowUpTemplate} />);
 
     await waitFor(() => {
       expect(

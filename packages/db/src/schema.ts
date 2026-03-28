@@ -14,6 +14,12 @@ import {
   unique,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import type {
+  TemplateCatalogConnectedApp,
+  TemplateCatalogSummaryBlock,
+  TemplateIntegrationType,
+  TemplateTriggerType,
+} from "./template-catalog";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -1510,6 +1516,37 @@ export const skillDocumentRelations = relations(skillDocument, ({ one }) => ({
     references: [skill.id],
   }),
 }));
+
+export const templateCatalog = pgTable(
+  "template_catalog",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    triggerType: text("trigger_type").$type<TemplateTriggerType>().notNull(),
+    industry: text("industry").notNull(),
+    useCase: text("use_case").notNull(),
+    integrations: jsonb("integrations").$type<TemplateIntegrationType[]>().notNull(),
+    triggerTitle: text("trigger_title").notNull(),
+    triggerDescription: text("trigger_description").notNull(),
+    agentInstructions: jsonb("agent_instructions").$type<string[]>().notNull(),
+    heroCta: text("hero_cta").notNull(),
+    summaryBlocks: jsonb("summary_blocks").$type<TemplateCatalogSummaryBlock[]>().notNull(),
+    mermaid: text("mermaid").notNull(),
+    connectedApps: jsonb("connected_apps").$type<TemplateCatalogConnectedApp[]>().notNull(),
+    featured: boolean("featured").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("template_catalog_featured_idx").on(table.featured),
+    index("template_catalog_created_at_idx").on(table.createdAt),
+    index("template_catalog_title_idx").on(table.title),
+  ],
+);
 
 // ========== MEMORY SCHEMA ==========
 

@@ -1,9 +1,9 @@
-import type { TemplateContent } from "@/lib/template-data";
+import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 
 export type TemplateDeployPayload = {
   createPayload: {
     name: string;
-    triggerType: TemplateContent["triggerType"];
+    triggerType: TemplateCatalogTemplate["triggerType"];
     prompt: string;
   };
   initialBuilderMessage: string;
@@ -13,11 +13,14 @@ function replacePlaceholder(template: string, placeholder: string, value: string
   return template.replaceAll(`{{${placeholder}}}`, value);
 }
 
-export function buildTemplateInstructionsText(template: TemplateContent) {
+export function buildTemplateInstructionsText(template: TemplateCatalogTemplate) {
   return template.agentInstructions.join("\n");
 }
 
-export function renderTemplateDeployPrompt(templateSource: string, template: TemplateContent) {
+export function renderTemplateDeployPrompt(
+  templateSource: string,
+  template: TemplateCatalogTemplate,
+) {
   const instructions = buildTemplateInstructionsText(template);
 
   return replacePlaceholder(
@@ -36,7 +39,7 @@ export function renderTemplateDeployPrompt(templateSource: string, template: Tem
 }
 
 export function buildTemplateDeployPayload(
-  template: TemplateContent,
+  template: TemplateCatalogTemplate,
   templateSource: string,
 ): TemplateDeployPayload {
   return {
