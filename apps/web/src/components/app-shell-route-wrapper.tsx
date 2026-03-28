@@ -47,14 +47,19 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { data: user, isLoading: userLoading, isFetching: userFetching } = useCurrentUser();
   const shouldWaitForFreshUser = Boolean(user && !user.onboardedAt && userFetching);
+  const shouldEnforceOnboarding = false;
 
   useEffect(() => {
-    if (!userLoading && !userFetching && user && !user.onboardedAt) {
+    // Temporarily disable the onboarding redirect while iterating on the post-connection flow.
+    if (shouldEnforceOnboarding && !userLoading && !userFetching && user && !user.onboardedAt) {
       router.replace("/onboarding/subscriptions");
     }
-  }, [userFetching, userLoading, user, router]);
+  }, [shouldEnforceOnboarding, userFetching, userLoading, user, router]);
 
-  if (userLoading || shouldWaitForFreshUser || (user && !user.onboardedAt)) {
+  if (
+    shouldEnforceOnboarding &&
+    (userLoading || shouldWaitForFreshUser || (user && !user.onboardedAt))
+  ) {
     return (
       <div className="bg-background flex h-screen items-center justify-center">
         <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
