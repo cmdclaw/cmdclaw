@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { CoworkerLanding } from "@/components/landing/coworker-landing";
 import { env } from "@/env";
 import { auth } from "@/lib/auth";
+import { listFeaturedTemplateCatalogEntries } from "@/server/services/template-catalog";
 
 const isSelfHostedEdition = env.CMDCLAW_EDITION === "selfhost";
 const siteUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? "https://cmdclaw.ai";
@@ -43,10 +44,15 @@ export default async function Home() {
   const sessionData = await auth.api.getSession({
     headers: requestHeaders,
   });
+  const featuredTemplates = await listFeaturedTemplateCatalogEntries({ limit: 8 });
   const initialHasSession = Boolean(sessionData?.session && sessionData?.user);
   const initialFirstName = sessionData?.user?.name?.trim().split(/\s+/, 1).find(Boolean) ?? null;
 
   return (
-    <CoworkerLanding initialHasSession={initialHasSession} initialFirstName={initialFirstName} />
+    <CoworkerLanding
+      initialHasSession={initialHasSession}
+      initialFirstName={initialFirstName}
+      featuredTemplates={featuredTemplates}
+    />
   );
 }

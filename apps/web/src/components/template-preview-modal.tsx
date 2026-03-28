@@ -1,5 +1,6 @@
 "use client";
 
+import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { Maximize2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,13 +14,12 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getTemplateById } from "@/lib/template-data";
 
 export function TemplatePreviewModal({
-  templateId,
+  template,
   closeHref = "/templates",
 }: {
-  templateId: string | null;
+  template: TemplateCatalogTemplate | null;
   closeHref?: string;
 }) {
   const router = useRouter();
@@ -42,14 +42,11 @@ export function TemplatePreviewModal({
     event.preventDefault();
   }, []);
 
-  // Reset scroll position when template changes
   useEffect(() => {
-    if (templateId && scrollRef.current) {
+    if (template && scrollRef.current) {
       scrollRef.current.scrollTop = 0;
     }
-  }, [templateId]);
-
-  const template = templateId ? getTemplateById(templateId) : null;
+  }, [template]);
 
   if (!template) {
     return null;

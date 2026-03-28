@@ -1,18 +1,18 @@
 "use client";
 
+import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
-import { findTemplateById } from "@/lib/template-data";
 import { buildTemplateDeployPayload } from "@/lib/template-deploy";
 import { client } from "@/orpc/client";
 import { useCreateCoworker } from "@/orpc/hooks";
 
 const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 
-export function TemplateDeployPage({ templateId }: { templateId: string }) {
+export function TemplateDeployPage({ template }: { template: TemplateCatalogTemplate | null }) {
   const createCoworker = useCreateCoworker();
   const startedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,6 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
       return;
     }
 
-    const template = findTemplateById(templateId);
     if (!template) {
       setError("Template not found.");
       return;
@@ -84,7 +83,7 @@ export function TemplateDeployPage({ templateId }: { templateId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [createCoworker, templateId]);
+  }, [createCoworker, template]);
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] w-full items-center justify-center">

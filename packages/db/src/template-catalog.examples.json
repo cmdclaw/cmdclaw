@@ -1,0 +1,796 @@
+{
+  "version": 1,
+  "exportedAt": "2026-03-28T06:30:00.000Z",
+  "templates": [
+    {
+      "id": "call-follow-up",
+      "title": "Send polished follow-ups right after every call",
+      "description": "As soon as a transcript arrives, this coworker builds a short recap, drafts the email, and creates the matching CRM follow-up task.",
+      "triggerType": "webhook",
+      "industry": "Sales",
+      "useCase": "Follow-ups",
+      "integrations": ["google_gmail", "hubspot"],
+      "triggerTitle": "Call Transcription Ready",
+      "triggerDescription": "When an Aircall call transcription becomes available.",
+      "agentInstructions": [
+        "Get call details with aircall_get_call using your Aircall connection ID.",
+        "Get transcription with aircall_get_transcription using your Aircall connection ID.",
+        "Extract the external participant phone number from number.raw_digits.",
+        "Search HubSpot contacts by phone with hubspot_search_contacts and request properties: email, firstname, lastname.",
+        "If contact payload is incomplete, call hubspot_get_contact to fill missing fields.",
+        "Generate a 2-3 sentence call summary and explicit action items for both parties.",
+        "If contact email exists, create a Gmail draft with friendly greeting, short summary, bullet action items, and professional closing.",
+        "Create a HubSpot task with subject 'Follow up on call with [Contact Name]', include summary + actions, and schedule for tomorrow at 9 AM.",
+        "If contact exists, associate task to contact using HUBSPOT_DEFINED association type 204.",
+        "If no contact is found, skip Gmail draft and still create the HubSpot task with the phone number in the body."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Capture new call transcript",
+          "body": "Watches for a completed transcript and pulls metadata for the contact context.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Find the matching CRM contact",
+          "body": "Searches HubSpot by phone and enriches the lead record before writing the follow-up.",
+          "integrations": ["hubspot"]
+        },
+        {
+          "title": "Draft the follow-up in one shot",
+          "body": "Writes concise notes and creates both a Gmail draft and CRM task.",
+          "integrations": ["google_gmail", "hubspot"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Transcript ready] --> B[Fetch transcript and call metadata]\n    B --> C[Lookup contact in HubSpot]\n    C --> D[Generate follow-up summary]\n    D --> E[Create Gmail draft]\n    D --> F[Create HubSpot task]",
+      "connectedApps": [
+        { "name": "Aircall", "tools": 2, "fallbackLabel": "A" },
+        { "name": "HubSpot", "tools": 4, "integration": "hubspot" },
+        { "name": "Gmail", "tools": 1, "integration": "google_gmail" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "company-list-finance-leads",
+      "title": "Turn your company list into finance leads ready to call",
+      "description": "Process one row at a time from Google Sheets, find the best finance decision-maker, enrich contact data, and push to CRM.",
+      "triggerType": "manual",
+      "industry": "Sales",
+      "useCase": "Lead Generation",
+      "integrations": ["google_sheets", "linkedin", "hubspot"],
+      "triggerTitle": "Row Selected For Enrichment",
+      "triggerDescription": "Run manually on an unprocessed company row from your spreadsheet.",
+      "agentInstructions": [
+        "Read the selected company row from Google Sheets and capture company name, website, country, and any notes.",
+        "Research the company to identify the best finance decision-maker for outbound outreach.",
+        "Use LinkedIn data to validate the person, title, seniority, and company fit.",
+        "Return one primary contact and one backup contact when available.",
+        "Normalize the contact name, title, LinkedIn URL, and confidence notes.",
+        "Upsert the contact into HubSpot and attach the source company row reference.",
+        "Write enrichment status and the selected contact back to the spreadsheet."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Read the next target company",
+          "body": "Loads one spreadsheet row at a time so the workflow stays reviewable and deterministic.",
+          "integrations": ["google_sheets"]
+        },
+        {
+          "title": "Find the finance buyer",
+          "body": "Researches likely economic buyers and validates them against the company profile.",
+          "integrations": ["linkedin"]
+        },
+        {
+          "title": "Write the lead into CRM",
+          "body": "Pushes the selected contact to HubSpot and marks the row as processed.",
+          "integrations": ["hubspot", "google_sheets"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Manual row selection] --> B[Read company row]\n    B --> C[Research finance leadership]\n    C --> D[Validate best contact]\n    D --> E[Upsert contact in HubSpot]\n    E --> F[Update sheet status]",
+      "connectedApps": [
+        { "name": "Google Sheets", "tools": 2, "integration": "google_sheets" },
+        { "name": "LinkedIn", "tools": 2, "integration": "linkedin" },
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "calendly-qualify",
+      "title": "Qualify every new Calendly booking before the meeting",
+      "description": "When a new meeting is booked, this coworker researches the person and company, enriches the CRM, and sends a concise briefing.",
+      "triggerType": "webhook",
+      "industry": "Sales",
+      "useCase": "Meeting Prep",
+      "integrations": ["google_calendar", "linkedin", "hubspot", "slack"],
+      "triggerTitle": "New Meeting Booked",
+      "triggerDescription": "When a qualifying meeting lands on your calendar from Calendly.",
+      "agentInstructions": [
+        "Watch for new sales meetings added to the connected calendar.",
+        "Extract attendee name, email domain, company clues, and meeting owner.",
+        "Research the person and company using LinkedIn and public context.",
+        "Check HubSpot for existing contact and company records before creating anything new.",
+        "Create or update the CRM contact with role, seniority, and fit notes.",
+        "Produce a short briefing with who they are, why they may be buying, and what to ask.",
+        "Send the briefing to the assigned rep in Slack before the meeting."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Capture the meeting context",
+          "body": "Pulls attendees and timing from the booked calendar event.",
+          "integrations": ["google_calendar"]
+        },
+        {
+          "title": "Research the attendee",
+          "body": "Builds a lightweight qualification brief from person and company context.",
+          "integrations": ["linkedin", "hubspot"]
+        },
+        {
+          "title": "Send the rep a prep note",
+          "body": "Posts a concise Slack briefing so the rep walks into the call informed.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Meeting booked] --> B[Load event details]\n    B --> C[Research attendee and company]\n    C --> D[Update CRM context]\n    D --> E[Draft briefing]\n    E --> F[Send to Slack]",
+      "connectedApps": [
+        { "name": "Calendly", "tools": 1, "fallbackLabel": "C" },
+        { "name": "Google Calendar", "tools": 2, "integration": "google_calendar" },
+        { "name": "LinkedIn", "tools": 2, "integration": "linkedin" },
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "deal-decision-makers",
+      "title": "Map every decision-maker in your top deals automatically",
+      "description": "Every Monday morning, this coworker scans emails, Slack, call notes, and CRM data across your key deals to identify missing stakeholders.",
+      "triggerType": "schedule",
+      "industry": "Sales",
+      "useCase": "Data Enrichment",
+      "integrations": ["google_gmail", "slack", "hubspot", "linkedin", "salesforce"],
+      "triggerTitle": "Weekly Deal Stakeholder Sweep",
+      "triggerDescription": "Run each Monday morning for open strategic deals.",
+      "agentInstructions": [
+        "List active high-value deals from Salesforce or HubSpot based on stage and amount.",
+        "Review recent emails, call summaries, and Slack mentions related to each deal.",
+        "Identify named stakeholders, blockers, and likely missing decision-makers.",
+        "Research missing stakeholders on LinkedIn and match them to the target account.",
+        "Write stakeholder recommendations and confidence notes back to the CRM.",
+        "Post a short digest of the riskiest stakeholder gaps to Slack."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Scan your key deals",
+          "body": "Starts from a filtered set of high-priority opportunities.",
+          "integrations": ["salesforce", "hubspot"]
+        },
+        {
+          "title": "Find stakeholder gaps",
+          "body": "Combines recent communication signals with account research to spot missing buyers.",
+          "integrations": ["google_gmail", "slack", "linkedin"]
+        },
+        {
+          "title": "Push insights back to the team",
+          "body": "Updates CRM notes and flags the riskiest deals for the account team.",
+          "integrations": ["hubspot", "salesforce", "slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Weekly schedule] --> B[Load priority deals]\n    B --> C[Scan comms and notes]\n    C --> D[Identify missing stakeholders]\n    D --> E[Research on LinkedIn]\n    E --> F[Update CRM and Slack]",
+      "connectedApps": [
+        { "name": "Gmail", "tools": 1, "integration": "google_gmail" },
+        { "name": "Slack", "tools": 1, "integration": "slack" },
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" },
+        { "name": "LinkedIn", "tools": 1, "integration": "linkedin" },
+        { "name": "Salesforce", "tools": 2, "integration": "salesforce" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "meeting-prep",
+      "title": "Know who you meet in your next sales call",
+      "description": "Walk into every call already knowing who they are and what they care about. Let your coworker do the homework you never have time to finish.",
+      "triggerType": "schedule",
+      "industry": "Sales",
+      "useCase": "Meeting Prep",
+      "integrations": ["google_calendar", "linkedin", "slack"],
+      "triggerTitle": "Upcoming Meeting Prep Window",
+      "triggerDescription": "Run shortly before the next sales call on your calendar.",
+      "agentInstructions": [
+        "Find the next qualifying sales meeting on the connected calendar.",
+        "Extract attendee names, domains, role hints, and internal owner.",
+        "Research each attendee and company using LinkedIn and public context.",
+        "Summarize likely goals, risks, and recent company signals.",
+        "Prepare a short meeting brief with suggested talk tracks and questions.",
+        "Send the brief to Slack for the meeting owner."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Watch the upcoming calendar",
+          "body": "Targets the next relevant meeting so prep stays timely.",
+          "integrations": ["google_calendar"]
+        },
+        {
+          "title": "Research the people in the room",
+          "body": "Builds fast context around attendee role, company, and likely agenda.",
+          "integrations": ["linkedin"]
+        },
+        {
+          "title": "Deliver a focused brief",
+          "body": "Sends a short prep note with questions and likely objections.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Before next meeting] --> B[Load attendee list]\n    B --> C[Research people and company]\n    C --> D[Prepare talk track]\n    D --> E[Send meeting brief]",
+      "connectedApps": [
+        { "name": "Google Calendar", "tools": 2, "integration": "google_calendar" },
+        { "name": "LinkedIn", "tools": 2, "integration": "linkedin" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "call-transcript-crm",
+      "title": "Turn every call transcript into CRM-ready deal intelligence",
+      "description": "This coworker polls CloudTalk, extracts structured commercial insight from each transcript, and logs clean records in your CRM.",
+      "triggerType": "webhook",
+      "industry": "Sales",
+      "useCase": "CRM Sync",
+      "integrations": ["salesforce", "hubspot", "slack"],
+      "triggerTitle": "Call Transcript Processed",
+      "triggerDescription": "When a new CloudTalk call transcript is finalized.",
+      "agentInstructions": [
+        "Capture the call transcript and metadata when the call provider marks it complete.",
+        "Extract summary, pains, buying signals, objections, next steps, and competitor mentions.",
+        "Match the call to the right contact, company, and open opportunity in the CRM.",
+        "Write a structured note or activity entry back to the CRM.",
+        "Flag calls with high urgency, risk, or clear follow-up gaps.",
+        "Send an exception alert to Slack when the CRM match is missing."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Ingest the transcript",
+          "body": "Receives the finished transcript together with the call metadata.",
+          "integrations": []
+        },
+        {
+          "title": "Extract commercial insight",
+          "body": "Normalizes the transcript into CRM-friendly sales signals.",
+          "integrations": ["hubspot", "salesforce"]
+        },
+        {
+          "title": "Sync and escalate exceptions",
+          "body": "Logs the note in CRM and alerts Slack if a clean match is missing.",
+          "integrations": ["slack", "hubspot", "salesforce"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Transcript complete] --> B[Parse transcript]\n    B --> C[Extract deal signals]\n    C --> D[Match CRM record]\n    D --> E[Write structured note]\n    D --> F[Alert Slack on mismatch]",
+      "connectedApps": [
+        { "name": "CloudTalk", "tools": 1, "fallbackLabel": "C" },
+        { "name": "Salesforce", "tools": 2, "integration": "salesforce" },
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "closed-lost-lessons",
+      "title": "Capture closed-lost lessons before they get buried",
+      "description": "When a HubSpot deal moves to closed-lost, this coworker reviews deal activity and writes a reusable company-level loss brief.",
+      "triggerType": "email",
+      "industry": "Sales",
+      "useCase": "Reporting",
+      "integrations": ["hubspot", "slack"],
+      "triggerTitle": "Deal Marked Closed Lost",
+      "triggerDescription": "When a closed-lost signal is received from the CRM or revenue ops inbox.",
+      "agentInstructions": [
+        "Watch for a closed-lost status change on an opportunity.",
+        "Review deal notes, emails, stage history, and associated tasks.",
+        "Extract likely loss reasons, internal misses, and competitive patterns.",
+        "Write a concise loss summary that can be reused across similar accounts.",
+        "Store the insight on the account or opportunity record.",
+        "Post a short lesson summary to Slack for the team."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Detect the loss event",
+          "body": "Starts when a deal officially moves to closed-lost.",
+          "integrations": ["hubspot"]
+        },
+        {
+          "title": "Review what happened",
+          "body": "Pulls together notes and context to identify why the deal was lost.",
+          "integrations": ["hubspot"]
+        },
+        {
+          "title": "Share the lesson",
+          "body": "Captures a reusable loss brief and posts the headline takeaway to Slack.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Closed-lost update] --> B[Load deal history]\n    B --> C[Extract loss reasons]\n    C --> D[Write reusable brief]\n    D --> E[Share in Slack]",
+      "connectedApps": [
+        { "name": "HubSpot", "tools": 3, "integration": "hubspot" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "gmail-to-hubspot-contacts",
+      "title": "Turn labeled Gmail threads into clean HubSpot contacts",
+      "description": "Apply one Gmail label and this coworker extracts contact details from the latest message, upserts people in HubSpot, and logs the interaction.",
+      "triggerType": "email",
+      "industry": "Sales",
+      "useCase": "CRM Sync",
+      "integrations": ["google_gmail", "hubspot"],
+      "triggerTitle": "Thread Labeled For CRM Capture",
+      "triggerDescription": "When a Gmail thread is tagged with the dedicated processing label.",
+      "agentInstructions": [
+        "List the newest message in the labeled Gmail thread.",
+        "Extract contact name, email, company, title, phone number, and message context.",
+        "Check HubSpot for an existing matching contact before creating anything new.",
+        "Upsert the contact record with the best available structured data.",
+        "Attach a summary of the interaction to the contact timeline.",
+        "Mark the thread or label state to prevent duplicate processing."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Read the labeled email thread",
+          "body": "Targets only the conversations you explicitly tagged for CRM capture.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Extract structured contact data",
+          "body": "Pulls the important fields from the latest message and signature.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Upsert HubSpot cleanly",
+          "body": "Creates or updates the contact and stores a lightweight interaction summary.",
+          "integrations": ["hubspot"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Gmail label applied] --> B[Read latest thread message]\n    B --> C[Extract contact fields]\n    C --> D[Upsert HubSpot contact]\n    D --> E[Log interaction summary]",
+      "connectedApps": [
+        { "name": "Gmail", "tools": 2, "integration": "google_gmail" },
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "daily-call-list",
+      "title": "Build a daily call list from your company sheet with verified phone numbers",
+      "description": "Every weekday, this coworker reads unprocessed companies from Google Sheets, finds decision-makers in Apollo, and prepares a call-ready list.",
+      "triggerType": "schedule",
+      "industry": "Sales",
+      "useCase": "Lead Generation",
+      "integrations": ["google_sheets", "linkedin", "hubspot"],
+      "triggerTitle": "Daily Prospecting Build",
+      "triggerDescription": "Run each weekday morning before outbound calling starts.",
+      "agentInstructions": [
+        "Find unprocessed company rows in the source spreadsheet.",
+        "Research the best reachable decision-maker and verify role fit.",
+        "Enrich the company and contact with confidence notes and source links.",
+        "Verify or collect the most reliable phone number available.",
+        "Write the final call-ready queue back to the sheet and CRM.",
+        "Mark skipped rows with the reason when no valid contact is found."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Load fresh prospect rows",
+          "body": "Pulls only companies that still need outbound research.",
+          "integrations": ["google_sheets"]
+        },
+        {
+          "title": "Enrich for calling",
+          "body": "Finds the right buyer and verifies that the contact is worth dialing.",
+          "integrations": ["linkedin"]
+        },
+        {
+          "title": "Write back a usable queue",
+          "body": "Produces a clean call list with status and contact details.",
+          "integrations": ["google_sheets", "hubspot"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Daily schedule] --> B[Read pending companies]\n    B --> C[Find buyer and phone]\n    C --> D[Write call queue]\n    D --> E[Mark processed rows]",
+      "connectedApps": [
+        { "name": "Google Sheets", "tools": 2, "integration": "google_sheets" },
+        { "name": "LinkedIn", "tools": 1, "integration": "linkedin" },
+        { "name": "Apollo", "tools": 1, "fallbackLabel": "A" },
+        { "name": "HubSpot", "tools": 1, "integration": "hubspot" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "weekly-campaign-report",
+      "title": "Generate weekly campaign performance reports automatically",
+      "description": "Every Monday, pull campaign metrics from HubSpot and Google Sheets, generate a summary, and post it to Slack.",
+      "triggerType": "schedule",
+      "industry": "Marketing",
+      "useCase": "Reporting",
+      "integrations": ["hubspot", "google_sheets", "slack"],
+      "triggerTitle": "Weekly Campaign Reporting",
+      "triggerDescription": "Run every Monday morning for the prior full week.",
+      "agentInstructions": [
+        "Pull the latest campaign metrics from HubSpot and any supporting spreadsheet targets.",
+        "Calculate week-over-week changes for spend, leads, pipeline, and conversion metrics.",
+        "Highlight campaigns that significantly improved or deteriorated.",
+        "Write a concise summary with the top insights and actions.",
+        "Post the report to Slack and optionally update the reporting sheet."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Collect campaign metrics",
+          "body": "Loads the prior week's source data from CRM and reporting sheets.",
+          "integrations": ["hubspot", "google_sheets"]
+        },
+        {
+          "title": "Summarize the movers",
+          "body": "Finds the biggest wins, regressions, and efficiency changes.",
+          "integrations": ["hubspot"]
+        },
+        {
+          "title": "Share the weekly digest",
+          "body": "Posts the final report to Slack so the team starts the week aligned.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Monday schedule] --> B[Load campaign metrics]\n    B --> C[Calculate changes]\n    C --> D[Write weekly summary]\n    D --> E[Post to Slack]",
+      "connectedApps": [
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" },
+        { "name": "Google Sheets", "tools": 1, "integration": "google_sheets" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "lead-scoring-enrichment",
+      "title": "Score and enrich every new inbound lead instantly",
+      "description": "When a new contact lands in HubSpot, enrich their profile with LinkedIn data and assign a lead score.",
+      "triggerType": "webhook",
+      "industry": "Marketing",
+      "useCase": "Data Enrichment",
+      "integrations": ["hubspot", "linkedin", "slack"],
+      "triggerTitle": "New Inbound Lead Created",
+      "triggerDescription": "When an inbound lead is created or promoted into the marketing queue.",
+      "agentInstructions": [
+        "Watch for newly created inbound contacts in HubSpot.",
+        "Research the person and company on LinkedIn to validate role, team, and size.",
+        "Assign a transparent lead score based on fit and intent signals available in the record.",
+        "Write the score rationale and enrichment back to HubSpot.",
+        "Notify Slack only when the lead exceeds a high-priority threshold."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Pick up the new lead",
+          "body": "Starts as soon as a new inbound contact arrives in CRM.",
+          "integrations": ["hubspot"]
+        },
+        {
+          "title": "Enrich and score the record",
+          "body": "Adds firmographic context and a defendable lead score.",
+          "integrations": ["linkedin", "hubspot"]
+        },
+        {
+          "title": "Escalate the best leads",
+          "body": "Sends Slack alerts only when the lead is ready for fast follow-up.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[New lead] --> B[Research person and company]\n    B --> C[Assign lead score]\n    C --> D[Update HubSpot]\n    D --> E[Alert Slack if hot]",
+      "connectedApps": [
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" },
+        { "name": "LinkedIn", "tools": 1, "integration": "linkedin" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "churn-alert",
+      "title": "Alert your team the moment a customer shows churn signals",
+      "description": "Monitor usage data and support tickets to detect churn risk, then notify the customer success team in Slack with context.",
+      "triggerType": "schedule",
+      "industry": "Customer Success",
+      "useCase": "Notifications",
+      "integrations": ["hubspot", "slack", "google_gmail"],
+      "triggerTitle": "Daily Churn Signal Review",
+      "triggerDescription": "Run daily across active accounts to flag fresh churn risk.",
+      "agentInstructions": [
+        "Review recent product usage, support volume, renewal timing, and account notes.",
+        "Detect churn risk patterns such as drops in usage, repeated complaints, or stalled onboarding.",
+        "Summarize the reason for the alert in plain language.",
+        "Include the recommended next action for the customer success owner.",
+        "Post the alert to Slack and optionally email the owner when the risk is severe."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Scan for customer risk",
+          "body": "Checks recent account behavior and support signals for change.",
+          "integrations": ["hubspot"]
+        },
+        {
+          "title": "Explain why the account is risky",
+          "body": "Turns noisy signals into a short reasoned narrative.",
+          "integrations": ["hubspot", "google_gmail"]
+        },
+        {
+          "title": "Alert the owning team",
+          "body": "Posts a contextual Slack warning with suggested follow-up.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Daily scan] --> B[Review account signals]\n    B --> C[Detect churn patterns]\n    C --> D[Draft owner guidance]\n    D --> E[Send Slack alert]",
+      "connectedApps": [
+        { "name": "HubSpot", "tools": 2, "integration": "hubspot" },
+        { "name": "Slack", "tools": 1, "integration": "slack" },
+        { "name": "Gmail", "tools": 1, "integration": "google_gmail" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "onboarding-checklist",
+      "title": "Send personalized onboarding sequences to new customers",
+      "description": "When a deal closes in Salesforce, kick off a tailored onboarding email sequence with milestones and internal coordination.",
+      "triggerType": "webhook",
+      "industry": "Customer Success",
+      "useCase": "Follow-ups",
+      "integrations": ["salesforce", "google_gmail", "slack"],
+      "triggerTitle": "Customer Closed Won",
+      "triggerDescription": "When a new customer opportunity moves into a won stage.",
+      "agentInstructions": [
+        "Detect a newly won deal and collect implementation context from Salesforce.",
+        "Determine the onboarding path based on plan, use case, and owner notes.",
+        "Draft the welcome email and first milestone sequence in Gmail.",
+        "Create an internal Slack handoff with implementation context and deadlines.",
+        "Track the onboarding kickoff status on the account or opportunity."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Start from the won deal",
+          "body": "Uses the CRM close-won event as the trigger for onboarding.",
+          "integrations": ["salesforce"]
+        },
+        {
+          "title": "Personalize the kickoff",
+          "body": "Builds onboarding messages around customer plan and goals.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Coordinate the internal team",
+          "body": "Sends Slack context so the handoff happens immediately.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Deal won] --> B[Load account context]\n    B --> C[Prepare onboarding sequence]\n    C --> D[Send welcome email]\n    D --> E[Notify internal team]",
+      "connectedApps": [
+        { "name": "Salesforce", "tools": 2, "integration": "salesforce" },
+        { "name": "Gmail", "tools": 1, "integration": "google_gmail" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "invoice-reconciliation",
+      "title": "Reconcile invoices with payments every week",
+      "description": "Every Friday, match incoming payments against open invoices in Google Sheets and flag discrepancies for review.",
+      "triggerType": "schedule",
+      "industry": "Finance",
+      "useCase": "Reporting",
+      "integrations": ["google_sheets", "google_gmail", "slack"],
+      "triggerTitle": "Weekly Invoice Reconciliation",
+      "triggerDescription": "Run every Friday after the latest payment exports land.",
+      "agentInstructions": [
+        "Load the open invoice ledger and the latest incoming payment records.",
+        "Match payments to invoices using invoice ids, amount, customer, and date windows.",
+        "Flag overpayments, underpayments, and unmatched transactions.",
+        "Write a reconciliation summary and update the tracking sheet.",
+        "Send any discrepancies to Slack and optionally email finance owners."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Load invoice and payment data",
+          "body": "Reads the latest ledgers from the finance spreadsheet and inbox.",
+          "integrations": ["google_sheets", "google_gmail"]
+        },
+        {
+          "title": "Match the records",
+          "body": "Finds clean matches and isolates the exceptions worth review.",
+          "integrations": ["google_sheets"]
+        },
+        {
+          "title": "Report discrepancies",
+          "body": "Publishes a concise list of items finance still needs to resolve.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Friday schedule] --> B[Load invoices and payments]\n    B --> C[Match records]\n    C --> D[Update reconciliation sheet]\n    D --> E[Alert on discrepancies]",
+      "connectedApps": [
+        { "name": "Google Sheets", "tools": 2, "integration": "google_sheets" },
+        { "name": "Gmail", "tools": 1, "integration": "google_gmail" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "candidate-enrichment",
+      "title": "Enrich candidate profiles as soon as they apply",
+      "description": "When a new application arrives, pull the candidate's LinkedIn profile and prepare a brief for the hiring manager.",
+      "triggerType": "webhook",
+      "industry": "HR",
+      "useCase": "Data Enrichment",
+      "integrations": ["google_gmail", "linkedin", "notion"],
+      "triggerTitle": "New Candidate Application",
+      "triggerDescription": "When an application or recruiting inbox message arrives.",
+      "agentInstructions": [
+        "Capture the new candidate details and resume or source link.",
+        "Research the candidate's background, relevant roles, and public profile.",
+        "Summarize fit for the job opening using concise hiring-manager language.",
+        "Write the brief into Notion or the recruiting workspace.",
+        "Include notable risks, strengths, and interview topics."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Capture the application",
+          "body": "Starts from the inbound candidate message or application event.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Research the candidate",
+          "body": "Builds fast context around role history and relevant experience.",
+          "integrations": ["linkedin"]
+        },
+        {
+          "title": "Publish the hiring brief",
+          "body": "Saves a digestible summary to the team's Notion workspace.",
+          "integrations": ["notion"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[New application] --> B[Load candidate details]\n    B --> C[Research background]\n    C --> D[Write hiring brief]\n    D --> E[Publish to Notion]",
+      "connectedApps": [
+        { "name": "Gmail", "tools": 1, "integration": "google_gmail" },
+        { "name": "LinkedIn", "tools": 1, "integration": "linkedin" },
+        { "name": "Notion", "tools": 1, "integration": "notion" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "incident-slack-notify",
+      "title": "Post GitHub incident alerts to Slack with full context",
+      "description": "When a critical issue is opened on GitHub, gather related pull requests and recent commits, then post a rich summary to Slack.",
+      "triggerType": "webhook",
+      "industry": "Engineering",
+      "useCase": "Notifications",
+      "integrations": ["github", "slack"],
+      "triggerTitle": "Critical GitHub Issue Opened",
+      "triggerDescription": "When a new incident or high-priority issue is opened in GitHub.",
+      "agentInstructions": [
+        "Watch for newly created GitHub issues tagged as incidents or critical priority.",
+        "Collect issue details, assignee, labels, recent commits, and linked pull requests.",
+        "Summarize probable blast radius, ownership, and latest code changes.",
+        "Format a concise incident context note for the response channel.",
+        "Post the alert to Slack with links back to the issue and related PRs."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Capture the incident issue",
+          "body": "Starts the moment a critical GitHub issue appears.",
+          "integrations": ["github"]
+        },
+        {
+          "title": "Pull the latest code context",
+          "body": "Finds recent pull requests and commits most likely tied to the incident.",
+          "integrations": ["github"]
+        },
+        {
+          "title": "Publish a response-ready alert",
+          "body": "Posts the situation summary to Slack with the links responders need first.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Critical issue opened] --> B[Collect issue details]\n    B --> C[Find recent PRs and commits]\n    C --> D[Draft incident summary]\n    D --> E[Send Slack alert]",
+      "connectedApps": [
+        { "name": "GitHub", "tools": 3, "integration": "github" },
+        { "name": "Slack", "tools": 1, "integration": "slack" }
+      ],
+      "featured": true
+    },
+    {
+      "id": "ops-daily-standup",
+      "title": "Compile a daily ops standup from all your tools",
+      "description": "Every morning, pull updates from Linear, Slack, and Google Sheets into a structured standup summary.",
+      "triggerType": "schedule",
+      "industry": "Operations",
+      "useCase": "Reporting",
+      "integrations": ["linear", "slack", "google_sheets"],
+      "triggerTitle": "Morning Ops Standup",
+      "triggerDescription": "Run every weekday morning before the ops team check-in.",
+      "agentInstructions": [
+        "Load yesterday's updates from Linear, Slack, and the relevant operations sheet.",
+        "Group work into shipped, blocked, and at-risk buckets.",
+        "Highlight items that need escalation or owner clarification.",
+        "Write a concise standup summary using a consistent structure.",
+        "Post it to Slack for the daily meeting."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Collect updates from core systems",
+          "body": "Pulls status changes and discussions from the tools the ops team already uses.",
+          "integrations": ["linear", "slack", "google_sheets"]
+        },
+        {
+          "title": "Structure the standup",
+          "body": "Turns scattered updates into a quick read with clear status buckets.",
+          "integrations": ["linear"]
+        },
+        {
+          "title": "Share before the meeting",
+          "body": "Posts the summary to Slack so the team enters the standup aligned.",
+          "integrations": ["slack"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Weekday morning] --> B[Load updates]\n    B --> C[Group by status]\n    C --> D[Write standup summary]\n    D --> E[Post to Slack]",
+      "connectedApps": [
+        { "name": "Linear", "tools": 1, "integration": "linear" },
+        { "name": "Slack", "tools": 1, "integration": "slack" },
+        { "name": "Google Sheets", "tools": 1, "integration": "google_sheets" }
+      ],
+      "featured": false
+    },
+    {
+      "id": "daily-email-digest",
+      "title": "Summarize unread emails into a morning briefing",
+      "description": "Every morning, read unread emails from the last 24 hours and send a clean digest with action items.",
+      "triggerType": "schedule",
+      "industry": "Operations",
+      "useCase": "Notifications",
+      "integrations": ["google_gmail"],
+      "triggerTitle": "Morning Inbox Briefing",
+      "triggerDescription": "Run each morning against unread email from the last 24 hours.",
+      "agentInstructions": [
+        "Find unread emails received in the last 24 hours.",
+        "Cluster the messages by urgency, sender, and topic.",
+        "Summarize only the items worth acting on today.",
+        "List concrete next actions and who each email is from.",
+        "Send the digest to the user in a compact morning briefing format."
+      ],
+      "heroCta": "Deploy this coworker",
+      "summaryBlocks": [
+        {
+          "title": "Review unread mail",
+          "body": "Looks only at fresh unread email so the digest stays short and useful.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Extract priorities and actions",
+          "body": "Separates important email from noise and identifies what needs a reply.",
+          "integrations": ["google_gmail"]
+        },
+        {
+          "title": "Deliver the morning briefing",
+          "body": "Produces a clear inbox digest with action items for the day.",
+          "integrations": ["google_gmail"]
+        }
+      ],
+      "mermaid": "flowchart TD\n    A[Morning schedule] --> B[List unread emails]\n    B --> C[Rank by priority]\n    C --> D[Write digest]\n    D --> E[Send briefing]",
+      "connectedApps": [
+        { "name": "Gmail", "tools": 3, "integration": "google_gmail" }
+      ],
+      "featured": true
+    }
+  ]
+}

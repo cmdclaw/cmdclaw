@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -10,6 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
+import type { PromptSegment } from "@/lib/prompt-segments";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
 import {
@@ -28,19 +30,6 @@ import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/i
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { client } from "@/orpc/client";
 import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type TemplateItem = {
-  id: string;
-  title: string;
-  description: string;
-  triggerType: "manual" | "schedule" | "email" | "webhook";
-  integrations: IntegrationType[];
-  prompt: string;
-};
-
-import type { PromptSegment } from "@/lib/prompt-segments";
 
 type HeroPromptExample = {
   department: string;
@@ -180,89 +169,6 @@ function getTriggerLabel(triggerType: string) {
   return map[triggerType] ?? triggerType;
 }
 
-const FEATURED_TEMPLATES: TemplateItem[] = [
-  {
-    id: "call-follow-up",
-    title: "Send polished follow-ups right after every call",
-    description:
-      "As soon as a call transcript is ready, draft a personalized follow-up email and create the matching CRM entry.",
-    triggerType: "webhook",
-    integrations: ["google_gmail", "hubspot"],
-    prompt:
-      "When a call transcript is ready, draft a personalized follow-up email summarizing key points and next steps, then log it in HubSpot.",
-  },
-  {
-    id: "company-list-finance-leads",
-    title: "Turn your company list into finance leads ready to call",
-    description:
-      "Process rows from Google Sheets, find decision-makers, enrich contact data, and push to CRM.",
-    triggerType: "manual",
-    integrations: ["google_sheets", "linkedin", "hubspot"],
-    prompt:
-      "Process one row at a time from Google Sheets, find the best finance decision-maker, enrich contact data via LinkedIn, and push to HubSpot.",
-  },
-  {
-    id: "calendly-qualify",
-    title: "Qualify every new booking before the meeting",
-    description:
-      "When a meeting is booked, research the person and company then send a concise briefing.",
-    triggerType: "webhook",
-    integrations: ["google_calendar", "linkedin", "hubspot", "slack"],
-    prompt:
-      "When a new meeting is booked, research the person and company on LinkedIn, enrich in HubSpot, and send a briefing to Slack.",
-  },
-  {
-    id: "daily-email-digest",
-    title: "Summarize unread emails into a morning briefing",
-    description:
-      "Every morning, read unread emails from the last 24 hours and send a clean digest with action items.",
-    triggerType: "schedule",
-    integrations: ["google_gmail"],
-    prompt:
-      "Every morning at 8am, read my unread emails from the last 24 hours, summarize the most important ones, and send me a digest email with key action items.",
-  },
-  {
-    id: "incident-slack-notify",
-    title: "Post GitHub incident alerts to Slack with full context",
-    description:
-      "When a critical issue is opened on GitHub, gather related PRs and commits, then post a summary to Slack.",
-    triggerType: "webhook",
-    integrations: ["github", "slack"],
-    prompt:
-      "When a critical issue is opened on GitHub, gather related PRs and recent commits, then post a rich summary to the #incidents Slack channel.",
-  },
-  {
-    id: "weekly-campaign-report",
-    title: "Generate weekly campaign performance reports",
-    description:
-      "Every Monday, pull campaign metrics from HubSpot and Sheets, generate a summary, and post to Slack.",
-    triggerType: "schedule",
-    integrations: ["hubspot", "google_sheets", "slack"],
-    prompt:
-      "Every Monday, pull campaign metrics from HubSpot and Google Sheets, generate a performance summary, and post to Slack.",
-  },
-  {
-    id: "churn-alert",
-    title: "Alert your team the moment a customer shows churn signals",
-    description:
-      "Monitor usage data and support tickets to detect churn risk, then notify the CS team in Slack.",
-    triggerType: "schedule",
-    integrations: ["hubspot", "slack", "google_gmail"],
-    prompt:
-      "Monitor usage data and support tickets daily. When churn risk is detected, notify the CS team in Slack with full context and suggested actions.",
-  },
-  {
-    id: "gmail-to-hubspot-contacts",
-    title: "Turn labeled Gmail threads into clean HubSpot contacts",
-    description:
-      "Apply one Gmail label and this coworker extracts contact details, upserts people in HubSpot, and logs the interaction.",
-    triggerType: "email",
-    integrations: ["google_gmail", "hubspot"],
-    prompt:
-      "When a Gmail thread is labeled, extract contact details from the latest message, upsert the person in HubSpot, and log the interaction.",
-  },
-];
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function IntegrationLogos({ integrations }: { integrations: IntegrationType[] }) {
@@ -288,7 +194,13 @@ function IntegrationLogos({ integrations }: { integrations: IntegrationType[] })
   );
 }
 
-function TemplateCard({ template, isMobile }: { template: TemplateItem; isMobile: boolean }) {
+function TemplateCard({
+  template,
+  isMobile,
+}: {
+  template: TemplateCatalogTemplate;
+  isMobile: boolean;
+}) {
   return (
     <Link
       href={isMobile ? `/template/${template.id}` : `/?preview=${template.id}`}
@@ -380,6 +292,7 @@ function AnimatedDepartment({
 type CoworkerLandingProps = {
   initialHasSession?: boolean;
   initialFirstName?: string | null;
+  featuredTemplates: TemplateCatalogTemplate[];
 };
 
 function getFirstName(name: string | null | undefined) {
@@ -389,6 +302,7 @@ function getFirstName(name: string | null | undefined) {
 export function CoworkerLanding({
   initialHasSession = false,
   initialFirstName = null,
+  featuredTemplates,
 }: CoworkerLandingProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -749,13 +663,18 @@ export function CoworkerLanding({
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {FEATURED_TEMPLATES.map((template) => (
+              {featuredTemplates.map((template) => (
                 <TemplateCard key={template.id} template={template} isMobile={isMobile} />
               ))}
             </div>
           </section>
         </div>
-        {!isMobile && <TemplatePreviewModal templateId={previewId} closeHref="/" />}
+        {!isMobile ? (
+          <TemplatePreviewModal
+            template={featuredTemplates.find((template) => template.id === previewId) ?? null}
+            closeHref="/"
+          />
+        ) : null}
       </div>
 
       {/* ── Footer ── */}

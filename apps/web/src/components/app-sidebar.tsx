@@ -366,6 +366,7 @@ export function AppSidebar() {
   const adminModeNavItems: NavItem[] = clientEditionCapabilities.hasSupportAdmin
     ? [
         { icon: Settings, label: "Settings", href: "/admin" },
+        { icon: LayoutTemplate, label: "Templates", href: "/admin/templates" },
         { icon: CreditCard, label: "AI Subscriptions", href: "/admin/subscriptions" },
         { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
         { icon: Coins, label: "Credits", href: "/admin/credits" },

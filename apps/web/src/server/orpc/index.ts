@@ -10,6 +10,7 @@ import { integrationSkillRouter } from "./routers/integration-skill";
 import { notificationRouter } from "./routers/notification";
 import { providerAuthRouter } from "./routers/provider-auth";
 import { skillRouter } from "./routers/skill";
+import { templateRouter } from "./routers/template";
 import { userRouter } from "./routers/user";
 import { voiceRouter } from "./routers/voice";
 
@@ -29,6 +30,7 @@ export const appRouter = {
   providerAuth: providerAuthRouter,
   executorSource: executorSourceRouter,
   skill: skillRouter,
+  template: templateRouter,
   user: userRouter,
   voice: voiceRouter,
   coworker: coworkerRouter,

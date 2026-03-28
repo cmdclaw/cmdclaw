@@ -1563,6 +1563,54 @@ export function useAdminWorkspaces() {
   });
 }
 
+export function useAdminTemplateCatalogList() {
+  return useQuery({
+    queryKey: ["template", "admin-list"],
+    queryFn: () => client.template.list(),
+  });
+}
+
+export function useAdminExportTemplateCatalog() {
+  return useMutation({
+    mutationFn: () => client.template.exportCatalog({}),
+  });
+}
+
+export function useAdminImportTemplateCatalog() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ definitionJson }: { definitionJson: string }) =>
+      client.template.importCatalog({ definitionJson }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["template", "admin-list"] });
+    },
+  });
+}
+
+export function useAdminDeleteTemplateCatalogEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => client.template.delete({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["template", "admin-list"] });
+    },
+  });
+}
+
+export function useAdminSetTemplateCatalogFeatured() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, featured }: { id: string; featured: boolean }) =>
+      client.template.setFeatured({ id, featured }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["template", "admin-list"] });
+    },
+  });
+}
+
 export function useAdminJoinWorkspace() {
   const queryClient = useQueryClient();
 
