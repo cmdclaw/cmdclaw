@@ -335,6 +335,7 @@ export function PromptComposer({
             Enter to send
           </p>
           <Button
+            variant="brand"
             size="sm"
             onClick={handleSubmit}
             disabled={!text.trim() || isSubmitting}

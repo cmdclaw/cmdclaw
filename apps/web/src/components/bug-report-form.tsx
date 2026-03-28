@@ -97,7 +97,7 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
           onChange={handleMessageChange}
           placeholder="Describe the bug..."
           autoFocus
-          className="border-input bg-background text-foreground placeholder:text-muted-foreground/80 focus:border-ring/60 min-h-[180px] w-full resize-none rounded-xl border px-4 py-3 text-[15px] leading-relaxed transition-[border-color,background-color] outline-none sm:min-h-[220px]"
+          className="border-input bg-background text-foreground placeholder:text-muted-foreground/80 focus:border-foreground/20 min-h-[180px] w-full resize-none rounded-xl border px-4 py-3 text-[15px] leading-relaxed transition-[border-color,background-color] outline-none sm:min-h-[220px]"
         />
         <input
           ref={attachmentInputRef}
