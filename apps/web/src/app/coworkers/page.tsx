@@ -3,7 +3,17 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
-import { Download, Eye, Loader2, PenLine, Play, Power, Share2, Trash2, Upload } from "lucide-react";
+import {
+  Download,
+  Ellipsis,
+  Eye,
+  Loader2,
+  PenLine,
+  Play,
+  Share2,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,13 +35,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -39,6 +42,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
@@ -246,9 +256,6 @@ function CoworkerCard({
   const handleOpen = useCallback(() => {
     onOpen(coworker.id);
   }, [onOpen, coworker.id]);
-  const handleToggleStatus = useCallback(() => {
-    onToggleStatus(coworker);
-  }, [coworker, onToggleStatus]);
   const handleDelete = useCallback(() => {
     onDelete(coworker);
   }, [coworker, onDelete]);
@@ -268,154 +275,186 @@ function CoworkerCard({
     },
     [onOpen, coworker.id],
   );
+  const handleToggleStatusClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggleStatus(coworker);
+    },
+    [coworker, onToggleStatus],
+  );
+  const handleMenuTriggerClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          tabIndex={0}
-          onClick={handleOpen}
-          onKeyDown={handleKeyDown}
-          className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 shadow-sm transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="space-y-1">
-              <p className="text-sm leading-tight font-medium">
-                {getCoworkerDisplayName(coworker.name)}
-              </p>
-              {coworker.username ? (
-                <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
-                  @{coworker.username}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
+    <div
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={handleKeyDown}
+      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 shadow-sm transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1">
+          <p className="text-sm leading-tight font-medium">
+            {getCoworkerDisplayName(coworker.name)}
+          </p>
+          {coworker.username ? (
+            <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
+              @{coworker.username}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={handleMenuTriggerClick}
+                className={cn(
+                  "text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors",
+                  "opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100",
+                  "max-sm:opacity-100",
+                )}
+              >
+                <Ellipsis className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem
+                onSelect={handleToggleShare}
+                disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
+              >
+                <Share2 className="size-4" />
+                {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={handleExport}
+                disabled={isExporting || isDeleting || isUpdatingStatus}
+              >
+                <Download className="size-4" />
+                Export as JSON
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={handleDelete}
+                disabled={isDeleting || isUpdatingStatus}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="size-4" />
+                Delete coworker
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            type="button"
+            onClick={handleToggleStatusClick}
+            disabled={isUpdatingStatus || isDeleting}
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+              "disabled:pointer-events-none disabled:opacity-50",
+              isOn
+                ? "border-green-500/20 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:text-green-400"
+                : "border-border bg-muted/60 text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {isUpdatingStatus ? (
+              <Loader2 className="size-2.5 animate-spin" />
+            ) : (
               <span
                 className={cn(
-                  "mt-0.5 size-2 rounded-full",
-                  isOn ? "bg-green-500" : "bg-muted-foreground/30",
+                  "size-2 rounded-full",
+                  isOn ? "bg-green-500" : "bg-muted-foreground/40",
                 )}
               />
-              <span className="text-muted-foreground text-xs">{isOn ? "On" : "Off"}</span>
-            </div>
-          </div>
-
-          {coworker.description && (
-            <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
-              {coworker.description}
-            </p>
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-              {getTriggerLabel(coworker.triggerType)}
-            </span>
-            {coworker.sharedAt ? (
-              <span className="text-foreground/70 bg-foreground/[0.06] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
-                <Share2 className="size-2.5 opacity-60" />
-                Shared
-              </span>
-            ) : null}
-            {toolSummary.visibleIntegrations.length > 0 && (
-              <div className="flex items-center gap-1">
-                {toolSummary.visibleIntegrations.map((key) => {
-                  const logo = INTEGRATION_LOGOS[key];
-                  if (!logo) {
-                    return null;
-                  }
-                  return (
-                    <Image
-                      key={key}
-                      src={logo}
-                      alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
-                      width={14}
-                      height={14}
-                      className="size-3.5 shrink-0"
-                      title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
-                    />
-                  );
-                })}
-              </div>
             )}
-            {toolSummary.showSkillBadge ? (
-              <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-                {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
-              </span>
-            ) : null}
-            {toolSummary.overflowCount > 0 ? (
-              <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
-                +{toolSummary.overflowCount}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="text-muted-foreground/70 text-xs">
-            {recentRun ? (
-              <span>
-                Last run:{" "}
-                <span className="text-muted-foreground">
-                  {getCoworkerRunStatusLabel(recentRun.status)}
-                </span>{" "}
-                · {formatDate(recentRun.startedAt) ?? "—"}
-              </span>
-            ) : (
-              <span>No runs yet</span>
-            )}
-          </div>
-
-          <div className="mt-auto flex items-center gap-1.5 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={handleRun}
-              disabled={isRunning}
-            >
-              {isRunning ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Play className="size-3" />
-              )}
-              Run
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" asChild>
-              <Link href={`/coworkers/${coworker.id}`}>
-                <PenLine className="size-3" />
-                Edit
-              </Link>
-            </Button>
-          </div>
+            {isOn ? "On" : "Off"}
+          </button>
         </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
-        <ContextMenuItem onSelect={handleToggleStatus} disabled={isUpdatingStatus || isDeleting}>
-          <Power className="size-4" />
-          {isOn ? "Turn off" : "Turn on"}
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={handleToggleShare}
-          disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
+      </div>
+
+      {coworker.description && (
+        <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
+          {coworker.description}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {getTriggerLabel(coworker.triggerType)}
+        </span>
+        {coworker.sharedAt ? (
+          <span className="text-foreground/70 bg-foreground/[0.06] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+            <Share2 className="size-2.5 opacity-60" />
+            Shared
+          </span>
+        ) : null}
+        {toolSummary.visibleIntegrations.length > 0 && (
+          <div className="flex items-center gap-1">
+            {toolSummary.visibleIntegrations.map((key) => {
+              const logo = INTEGRATION_LOGOS[key];
+              if (!logo) {
+                return null;
+              }
+              return (
+                <Image
+                  key={key}
+                  src={logo}
+                  alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                  width={14}
+                  height={14}
+                  className="size-3.5 shrink-0"
+                  title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                />
+              );
+            })}
+          </div>
+        )}
+        {toolSummary.showSkillBadge ? (
+          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+            {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {toolSummary.overflowCount > 0 ? (
+          <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
+            +{toolSummary.overflowCount}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="text-muted-foreground/70 text-xs">
+        {recentRun ? (
+          <span>
+            Last run:{" "}
+            <span className="text-muted-foreground">
+              {getCoworkerRunStatusLabel(recentRun.status)}
+            </span>{" "}
+            · {formatDate(recentRun.startedAt) ?? "—"}
+          </span>
+        ) : (
+          <span>No runs yet</span>
+        )}
+      </div>
+
+      <div className="mt-auto flex items-center gap-1.5 pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleRun}
+          disabled={isRunning}
         >
-          <Share2 className="size-4" />
-          {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={handleExport}
-          disabled={isExporting || isDeleting || isUpdatingStatus}
-        >
-          <Download className="size-4" />
-          Export as JSON
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={handleDelete}
-          disabled={isDeleting || isUpdatingStatus}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="size-4" />
-          Delete coworker
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+          {isRunning ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+          Run
+        </Button>
+        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" asChild>
+          <Link href={`/coworkers/${coworker.id}`}>
+            <PenLine className="size-3" />
+            Edit
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
