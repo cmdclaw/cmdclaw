@@ -5331,13 +5331,20 @@ class GenerationManager {
         clearTimeout(promptTimeoutId);
         clearPromptTimeout = undefined;
       };
-      const promptPromise = runtimeClient.prompt({
-        sessionID: sessionId,
-        parts: promptParts,
-        agent: promptSpec.agentId,
-        system: promptSpec.systemPrompt,
-        model: modelConfig,
-      });
+      // Guard the in-flight prompt so runtime rejections stay scoped to this generation.
+      const promptResultPromise = runtimeClient
+        .prompt({
+          sessionID: sessionId,
+          parts: promptParts,
+          agent: promptSpec.agentId,
+          system: promptSpec.systemPrompt,
+          model: modelConfig,
+        })
+        .then(
+          () => ({ ok: true as const }),
+          (error) => ({ ok: false as const, error }),
+        );
+      let sessionErrorMessage: string | null = null;
 
       // Process SSE events
       for await (const rawEvent of eventStream) {
@@ -5438,13 +5445,21 @@ class GenerationManager {
               sessionId,
             },
           );
-          throw new Error(errorMessage);
+          if (!sessionErrorMessage) {
+            sessionErrorMessage = errorMessage;
+          }
+          break;
         }
       }
 
-      // Wait for prompt to complete
-      await promptPromise;
+      const promptResult = await promptResultPromise;
       clearPromptTimeout?.();
+      if (!promptResult.ok) {
+        throw promptResult.error;
+      }
+      if (sessionErrorMessage) {
+        throw new Error(sessionErrorMessage);
+      }
       const promptElapsedMs = Date.now() - promptSentAtMs;
       if (promptTimeoutTriggered || promptElapsedMs >= remainingRunTimeMs) {
         promptTimeoutTriggered = true;
