@@ -367,18 +367,10 @@ function AnimatedDepartment({
   }, [displayedText, department, isTyping, isActive]);
 
   const textStyle = useMemo(() => ({ color }), [color]);
-  const cursorStyle = useMemo(
-    () => ({
-      backgroundColor: color,
-      animation: "blink-cursor 1s step-end infinite",
-    }),
-    [color],
-  );
 
   return (
     <span className="inline-flex items-baseline">
       <span style={textStyle}>{displayedText}</span>
-      <span className="ml-[1px] inline-block w-[2px] self-stretch" style={cursorStyle} />
     </span>
   );
 }

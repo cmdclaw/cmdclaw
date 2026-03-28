@@ -54,11 +54,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_FILES = 5;
 const HERO_PROMPT_MIN_HEIGHT_CLASS = "min-h-[4.6rem]";
 const DEFAULT_PROMPT_MIN_HEIGHT_CLASS = "min-h-[2.8rem]";
-const RICH_PLACEHOLDER_LINE_HEIGHT_STYLE = { lineHeight: "2rem" } as const;
-const RICH_PLACEHOLDER_CURSOR_STYLE = {
-  animation: "blink-cursor 1s step-end infinite",
-} as const;
-
 // ─── Rich Placeholder Overlay ───────────────────────────────────────────────
 
 function totalSegmentLength(segments: PromptSegment[]): number {
@@ -71,11 +66,9 @@ function totalSegmentLength(segments: PromptSegment[]): number {
 function RichPlaceholderOverlay({
   segments,
   charPos,
-  showCursor = true,
 }: {
   segments: PromptSegment[];
   charPos: number;
-  showCursor?: boolean;
 }) {
   let consumed = 0;
   const elements: React.ReactNode[] = [];
@@ -112,17 +105,7 @@ function RichPlaceholderOverlay({
     }
   }
 
-  return (
-    <span className="inline" style={RICH_PLACEHOLDER_LINE_HEIGHT_STYLE}>
-      {elements}
-      {showCursor && charPos > 0 ? (
-        <span
-          className="ml-[1px] inline-block h-[1.1em] w-[2px] translate-y-[1px] bg-slate-600"
-          style={RICH_PLACEHOLDER_CURSOR_STYLE}
-        />
-      ) : null}
-    </span>
-  );
+  return <span className="inline">{elements}</span>;
 }
 
 // ─── File helpers ───────────────────────────────────────────────────────────
@@ -564,7 +547,6 @@ export function PromptBar({
               <RichPlaceholderOverlay
                 segments={currentRichSegments}
                 charPos={richPlaceholderMeasureCharPos}
-                showCursor={false}
               />
             ) : (
               <span>{activePlaceholder || " "}</span>
