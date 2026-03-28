@@ -1,15 +1,18 @@
 "use client";
 
 import {
+  ArrowLeft,
   BarChart3,
   Bug,
+  Building2,
   CheckCheck,
   Check,
-  ChevronDown,
+  Coins,
+  CreditCard,
   Cuboid,
-  WandSparkles,
   LoaderCircle,
   LogOut,
+  MessageCircle,
   MessageSquare,
   MoreHorizontal,
   Pencil,
@@ -19,6 +22,8 @@ import {
   Shield,
   Toolbox,
   Trash2,
+  UserCog,
+  WandSparkles,
   LayoutTemplate,
 } from "lucide-react";
 import Image from "next/image";
@@ -197,7 +202,7 @@ export function AppSidebar() {
   const [session, setSession] = useState<SessionData>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminAnimState, setAdminAnimState] = useState<"idle" | "entering" | "exiting">("idle");
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
@@ -246,12 +251,20 @@ export function AppSidebar() {
     };
   }, []);
 
-  // Auto-expand admin section when on admin routes
+  // Derive admin mode from pathname
+  const isAdminRoute = pathname?.startsWith("/admin") || pathname?.startsWith("/instance");
+  const prevAdminRouteRef = useRef(isAdminRoute);
   useEffect(() => {
-    if (pathname?.startsWith("/admin") || pathname?.startsWith("/instance")) {
-      setAdminOpen(true);
+    if (prevAdminRouteRef.current !== isAdminRoute) {
+      setAdminAnimState(isAdminRoute ? "entering" : "exiting");
+      prevAdminRouteRef.current = isAdminRoute;
     }
-  }, [pathname]);
+  }, [isAdminRoute]);
+  useEffect(() => {
+    if (adminAnimState !== "idle") {
+      requestAnimationFrame(() => setAdminAnimState("idle"));
+    }
+  }, [adminAnimState]);
 
   const handleSignOut = useCallback(async () => {
     const { error } = await authClient.signOut();
@@ -317,6 +330,28 @@ export function AppSidebar() {
     [recentAnimState, recentDirection],
   );
 
+  const normalPanelStyle = useMemo(
+    () =>
+      adminAnimState === "entering"
+        ? { opacity: 0, transform: "translateX(-40px)" }
+        : {
+            opacity: isAdminRoute && adminAnimState === "idle" ? 0 : 1,
+            transform: "translateX(0)",
+          },
+    [adminAnimState, isAdminRoute],
+  );
+
+  const adminPanelStyle = useMemo(
+    () =>
+      adminAnimState === "exiting"
+        ? { opacity: 0, transform: "translateX(40px)" }
+        : {
+            opacity: !isAdminRoute && adminAnimState === "idle" ? 0 : 1,
+            transform: "translateX(0)",
+          },
+    [adminAnimState, isAdminRoute],
+  );
+
   const mainNavItems: NavItem[] = [
     { icon: WandSparkles, label: "Create", href: "/" },
     { icon: LayoutTemplate, label: "Templates", href: "/templates" },
@@ -328,8 +363,16 @@ export function AppSidebar() {
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
   ];
 
-  const adminNavItems: NavItem[] = clientEditionCapabilities.hasSupportAdmin
-    ? [{ icon: Shield, label: "Admin", href: "/admin" }]
+  const adminModeNavItems: NavItem[] = clientEditionCapabilities.hasSupportAdmin
+    ? [
+        { icon: Settings, label: "Settings", href: "/admin" },
+        { icon: CreditCard, label: "AI Subscriptions", href: "/admin/subscriptions" },
+        { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
+        { icon: Coins, label: "Credits", href: "/admin/credits" },
+        { icon: BarChart3, label: "Usage", href: "/admin/usage" },
+        { icon: UserCog, label: "Impersonation", href: "/admin/impersonation" },
+        { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
+      ]
     : clientEditionCapabilities.hasInstanceAdmin
       ? [{ icon: Shield, label: "Instance", href: "/instance" }]
       : [];
@@ -512,9 +555,13 @@ export function AppSidebar() {
     setReportOpen(true);
   }, []);
 
-  const toggleAdmin = useCallback(() => {
-    setAdminOpen((prev) => !prev);
-  }, []);
+  const enterAdminMode = useCallback(() => {
+    router.push("/admin");
+  }, [router]);
+
+  const exitAdminMode = useCallback(() => {
+    router.push("/");
+  }, [router]);
 
   const handleChatNavClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -593,168 +640,262 @@ export function AppSidebar() {
 
         {/* Scrollable nav */}
         <div className="relative min-h-0 flex-1">
-          <nav className="flex h-full flex-col gap-5 overflow-y-auto px-2.5 pt-1 pb-10">
-            {/* Main nav */}
-            <div className="flex flex-col gap-0.5">
-              {mainNavItems.map((item) => (
-                <NavLink key={item.href} item={item} active={isActive(item.href)} />
-              ))}
-              <NavButton icon={Bug} label="Bug report" onClick={openReportDialog} />
-            </div>
-
-            {/* Coworker section */}
-            <div className="flex flex-col gap-1.5">
-              <SectionLabel>Coworker</SectionLabel>
+          <nav className="relative h-full overflow-y-auto px-2.5 pt-1 pb-10">
+            {/* Normal mode panel */}
+            <div
+              className={cn(
+                "flex flex-col gap-5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                isAdminRoute && adminAnimState === "idle" && "pointer-events-none invisible",
+              )}
+              style={normalPanelStyle}
+            >
+              {/* Main nav */}
               <div className="flex flex-col gap-0.5">
-                {coworkerNavItems.map((item) => (
-                  <NavLink
-                    key={item.href}
-                    item={item}
-                    active={isActive(item.href)}
-                    onClick={item.href === "/chat" ? handleChatNavClick : undefined}
-                  />
+                {mainNavItems.map((item) => (
+                  <NavLink key={item.href} item={item} active={isActive(item.href)} />
                 ))}
+                <NavButton icon={Bug} label="Bug report" onClick={openReportDialog} />
               </div>
-            </div>
 
-            {/* Admin section (collapsible, admin only) */}
-            {isAdmin && (
+              {/* Coworker section */}
               <div className="flex flex-col gap-1.5">
-                <button
-                  type="button"
-                  onClick={toggleAdmin}
-                  className="text-sidebar-foreground/40 hover:text-sidebar-foreground/60 flex w-full items-center justify-between px-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors"
-                >
-                  <span>Admin</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-3 w-3 transition-transform duration-200",
-                      !adminOpen && "-rotate-90",
-                    )}
-                  />
-                </button>
-                {adminOpen && (
-                  <div className="flex flex-col gap-0.5">
-                    {adminNavItems.map((item) => (
-                      <NavLink key={item.href} item={item} active={isActive(item.href)} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Recent — contextual: chats on all pages, runs on coworker page */}
-            <div className="flex flex-col gap-1.5 overflow-hidden">
-              <div
-                className="flex flex-col gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                style={recentContentStyle}
-              >
-                <div
-                  className={cn(
-                    "flex items-center justify-between gap-2 px-2.5",
-                    !isCoworkerPage && "group/recent-chats-header",
-                  )}
-                >
-                  <span className="text-sidebar-foreground/40 text-[11px] font-semibold tracking-wider uppercase">
-                    {isCoworkerPage ? "Recent Runs" : "Recent Chats"}
-                  </span>
-                  {!isCoworkerPage ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          className={cn(
-                            "text-sidebar-foreground/45 hover:text-sidebar-foreground h-5 w-5 rounded-sm transition-all",
-                            "pointer-events-none opacity-0 group-hover/recent-chats-header:pointer-events-auto group-hover/recent-chats-header:opacity-100",
-                            "focus-visible:pointer-events-auto focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100",
-                          )}
-                          aria-label="Recent chat actions"
-                        >
-                          <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="bottom">
-                        <DropdownMenuItem
-                          onClick={handleMarkAllReadClick}
-                          disabled={
-                            unreadConversationCount === 0 ||
-                            markAllConversationsSeenMutation.isPending
-                          }
-                        >
-                          {markAllConversationsSeenMutation.isPending ? (
-                            <LoaderCircle className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <CheckCheck className="h-4 w-4" />
-                          )}
-                          <span>Mark all as read</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : null}
-                </div>
+                <SectionLabel>Coworker</SectionLabel>
                 <div className="flex flex-col gap-0.5">
-                  {!isCoworkerPage ? (
-                    conversationsLoading ? (
-                      <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
-                        Loading...
-                      </span>
-                    ) : recentConversations.length === 0 ? (
+                  {coworkerNavItems.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      item={item}
+                      active={isActive(item.href)}
+                      onClick={item.href === "/chat" ? handleChatNavClick : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Admin trigger (admin only) */}
+              {isAdmin && (
+                <div className="flex flex-col gap-1.5">
+                  <SectionLabel>Admin</SectionLabel>
+                  <div className="flex flex-col gap-0.5">
+                    <NavButton icon={Shield} label="Admin" onClick={enterAdminMode} />
+                  </div>
+                </div>
+              )}
+
+              {/* Recent — contextual: chats on all pages, runs on coworker page */}
+              <div className="flex flex-col gap-1.5 overflow-hidden">
+                <div
+                  className="flex flex-col gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                  style={recentContentStyle}
+                >
+                  <div
+                    className={cn(
+                      "flex items-center justify-between gap-2 px-2.5",
+                      !isCoworkerPage && "group/recent-chats-header",
+                    )}
+                  >
+                    <span className="text-sidebar-foreground/40 text-[11px] font-semibold tracking-wider uppercase">
+                      {isCoworkerPage ? "Recent Runs" : "Recent Chats"}
+                    </span>
+                    {!isCoworkerPage ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "text-sidebar-foreground/45 hover:text-sidebar-foreground h-5 w-5 rounded-sm transition-all",
+                              "pointer-events-none opacity-0 group-hover/recent-chats-header:pointer-events-auto group-hover/recent-chats-header:opacity-100",
+                              "focus-visible:pointer-events-auto focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100",
+                            )}
+                            aria-label="Recent chat actions"
+                          >
+                            <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="bottom">
+                          <DropdownMenuItem
+                            onClick={handleMarkAllReadClick}
+                            disabled={
+                              unreadConversationCount === 0 ||
+                              markAllConversationsSeenMutation.isPending
+                            }
+                          >
+                            {markAllConversationsSeenMutation.isPending ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCheck className="h-4 w-4" />
+                            )}
+                            <span>Mark all as read</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {!isCoworkerPage ? (
+                      conversationsLoading ? (
+                        <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
+                          Loading...
+                        </span>
+                      ) : recentConversations.length === 0 ? (
+                        <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
+                          No conversations yet
+                        </div>
+                      ) : (
+                        recentConversations.map((conversation) => {
+                          const isConversationActive = isActive(`/chat/${conversation.id}`);
+                          const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
+                            conversation.generationStatus,
+                          );
+                          const hasUnreadResults = hasUnreadConversationResults({
+                            isConversationActive,
+                            isConversationRunning,
+                            messageCount: conversation.messageCount,
+                            serverSeenCount: conversation.seenMessageCount,
+                            optimisticSeenCount: latestSeenRef.current[conversation.id],
+                          });
+                          const showConversationIndicator =
+                            isConversationRunning || hasUnreadResults;
+
+                          return (
+                            <div
+                              key={conversation.id}
+                              className={cn(
+                                "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
+                                isConversationActive
+                                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                  : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                              )}
+                            >
+                              <Link
+                                href={`/chat/${conversation.id}`}
+                                prefetch={false}
+                                className="flex min-w-0 flex-1 items-center"
+                              >
+                                {isConversationRunning ? (
+                                  <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                ) : hasUnreadResults ? (
+                                  <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
+                                    aria-label="New unread results"
+                                  />
+                                ) : null}
+                                <span
+                                  className={cn(
+                                    "min-w-0 flex-1 truncate",
+                                    showConversationIndicator && "ml-2",
+                                  )}
+                                >
+                                  {conversation.title || "Untitled"}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
+                                    "group-hover:opacity-0 group-focus-within:opacity-0",
+                                  )}
+                                >
+                                  {formatRelativeShort(new Date(conversation.updatedAt))}
+                                </span>
+                              </Link>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
+                                      "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
+                                      "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                                      "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
+                                      isConversationActive
+                                        ? "before:from-sidebar-accent"
+                                        : "before:from-sidebar",
+                                    )}
+                                    aria-label="Conversation actions"
+                                  >
+                                    <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" side="right">
+                                  <DropdownMenuItem
+                                    data-conversation-id={conversation.id}
+                                    data-conversation-pinned={
+                                      conversation.isPinned ? "true" : "false"
+                                    }
+                                    onClick={handlePinMenuClick}
+                                  >
+                                    {conversation.isPinned ? (
+                                      <PinOff className="h-4 w-4" />
+                                    ) : (
+                                      <Pin className="h-4 w-4" />
+                                    )}
+                                    <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    data-conversation-id={conversation.id}
+                                    data-conversation-title={conversation.title ?? "Untitled"}
+                                    onClick={handleUsageMenuClick}
+                                  >
+                                    <BarChart3 className="h-4 w-4" />
+                                    <span>Show usage</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    data-conversation-id={conversation.id}
+                                    data-conversation-title={conversation.title ?? ""}
+                                    onClick={handleRenameMenuClick}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                    <span>Rename</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    data-conversation-id={conversation.id}
+                                    onClick={handleDeleteMenuClick}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    <span>Delete</span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          );
+                        })
+                      )
+                    ) : recentCoworkerRuns.length === 0 ? (
                       <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
-                        No conversations yet
+                        No runs yet
                       </div>
                     ) : (
-                      recentConversations.map((conversation) => {
-                        const isConversationActive = isActive(`/chat/${conversation.id}`);
-                        const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
-                          conversation.generationStatus,
-                        );
-                        const hasUnreadResults = hasUnreadConversationResults({
-                          isConversationActive,
-                          isConversationRunning,
-                          messageCount: conversation.messageCount,
-                          serverSeenCount: conversation.seenMessageCount,
-                          optimisticSeenCount: latestSeenRef.current[conversation.id],
-                        });
-                        const showConversationIndicator = isConversationRunning || hasUnreadResults;
+                      recentCoworkerRuns.map((run) => {
+                        const runPath = `/coworkers/runs/${run.id}`;
 
                         return (
                           <div
-                            key={conversation.id}
+                            key={run.id}
                             className={cn(
-                              "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
-                              isConversationActive
+                              "group relative rounded-md text-[13px] transition-colors",
+                              pathname === runPath
                                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                                : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                             )}
                           >
                             <Link
-                              href={`/chat/${conversation.id}`}
+                              href={runPath}
                               prefetch={false}
-                              className="flex min-w-0 flex-1 items-center"
+                              className="flex min-h-10 flex-col justify-center px-2.5 py-1.5 pr-8"
                             >
-                              {isConversationRunning ? (
-                                <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                              ) : hasUnreadResults ? (
+                              <span className="flex items-center gap-2">
+                                <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
                                 <span
-                                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
-                                  aria-label="New unread results"
-                                />
-                              ) : null}
-                              <span
-                                className={cn(
-                                  "min-w-0 flex-1 truncate",
-                                  showConversationIndicator && "ml-2",
-                                )}
-                              >
-                                {conversation.title || "Untitled"}
+                                  className={cn(
+                                    "text-sidebar-foreground/45 shrink-0 text-[11px] transition-opacity",
+                                    "group-hover:opacity-0 group-focus-within:opacity-0",
+                                  )}
+                                >
+                                  {formatRelativeShortNullable(run.startedAt)}
+                                </span>
                               </span>
-                              <span
-                                className={cn(
-                                  "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
-                                  "group-hover:opacity-0 group-focus-within:opacity-0",
-                                )}
-                              >
-                                {formatRelativeShort(new Date(conversation.updatedAt))}
+                              <span className="text-sidebar-foreground/45 truncate text-[11px]">
+                                {getCoworkerRunStatusLabel(run.status)}
                               </span>
                             </Link>
                             <DropdownMenu>
@@ -766,132 +907,53 @@ export function AppSidebar() {
                                     "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
                                     "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
                                     "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
-                                    isConversationActive
+                                    pathname === runPath
                                       ? "before:from-sidebar-accent"
                                       : "before:from-sidebar",
                                   )}
-                                  aria-label="Conversation actions"
+                                  aria-label="Run actions"
                                 >
                                   <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" side="right">
                                 <DropdownMenuItem
-                                  data-conversation-id={conversation.id}
-                                  data-conversation-pinned={
-                                    conversation.isPinned ? "true" : "false"
-                                  }
-                                  onClick={handlePinMenuClick}
-                                >
-                                  {conversation.isPinned ? (
-                                    <PinOff className="h-4 w-4" />
-                                  ) : (
-                                    <Pin className="h-4 w-4" />
-                                  )}
-                                  <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  data-conversation-id={conversation.id}
-                                  data-conversation-title={conversation.title ?? "Untitled"}
-                                  onClick={handleUsageMenuClick}
+                                  data-conversation-id={run.conversationId ?? ""}
+                                  data-run-title={run.coworkerName}
+                                  onClick={handleRunUsageMenuClick}
                                 >
                                   <BarChart3 className="h-4 w-4" />
                                   <span>Show usage</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  data-conversation-id={conversation.id}
-                                  data-conversation-title={conversation.title ?? ""}
-                                  onClick={handleRenameMenuClick}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                  <span>Rename</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  data-conversation-id={conversation.id}
-                                  onClick={handleDeleteMenuClick}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  <span>Delete</span>
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
                         );
                       })
-                    )
-                  ) : recentCoworkerRuns.length === 0 ? (
-                    <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
-                      No runs yet
-                    </div>
-                  ) : (
-                    recentCoworkerRuns.map((run) => {
-                      const runPath = `/coworkers/runs/${run.id}`;
-
-                      return (
-                        <div
-                          key={run.id}
-                          className={cn(
-                            "group relative rounded-md text-[13px] transition-colors",
-                            pathname === runPath
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                          )}
-                        >
-                          <Link
-                            href={runPath}
-                            prefetch={false}
-                            className="flex min-h-10 flex-col justify-center px-2.5 py-1.5 pr-8"
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
-                              <span
-                                className={cn(
-                                  "text-sidebar-foreground/45 shrink-0 text-[11px] transition-opacity",
-                                  "group-hover:opacity-0 group-focus-within:opacity-0",
-                                )}
-                              >
-                                {formatRelativeShortNullable(run.startedAt)}
-                              </span>
-                            </span>
-                            <span className="text-sidebar-foreground/45 truncate text-[11px]">
-                              {getCoworkerRunStatusLabel(run.status)}
-                            </span>
-                          </Link>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className={cn(
-                                  "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
-                                  "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
-                                  "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
-                                  "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
-                                  pathname === runPath
-                                    ? "before:from-sidebar-accent"
-                                    : "before:from-sidebar",
-                                )}
-                                aria-label="Run actions"
-                              >
-                                <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" side="right">
-                              <DropdownMenuItem
-                                data-conversation-id={run.conversationId ?? ""}
-                                data-run-title={run.coworkerName}
-                                onClick={handleRunUsageMenuClick}
-                              >
-                                <BarChart3 className="h-4 w-4" />
-                                <span>Show usage</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      );
-                    })
-                  )}
+                    )}
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Admin mode panel */}
+            <div
+              className={cn(
+                "absolute inset-x-2.5 top-1 flex flex-col gap-5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                !isAdminRoute && adminAnimState === "idle" && "pointer-events-none invisible",
+              )}
+              style={adminPanelStyle}
+            >
+              <div className="flex flex-col gap-1.5">
+                <SectionLabel>Admin</SectionLabel>
+                <div className="flex flex-col gap-0.5">
+                  {adminModeNavItems.map((item) => (
+                    <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <NavButton icon={ArrowLeft} label="Exit Admin" onClick={exitAdminMode} />
               </div>
             </div>
           </nav>
