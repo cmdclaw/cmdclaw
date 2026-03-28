@@ -2,7 +2,7 @@
 
 import type React from "react";
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShellRouteWrapper } from "./app-shell-route-wrapper";
 
@@ -52,7 +52,7 @@ describe("AppShellRouteWrapper", () => {
     };
   });
 
-  it("waits for a refetch before redirecting an incomplete user", async () => {
+  it("does not redirect while onboarding enforcement is disabled", async () => {
     mocks.currentUser = {
       data: { onboardedAt: null },
       isLoading: false,
@@ -84,15 +84,14 @@ describe("AppShellRouteWrapper", () => {
     });
   });
 
-  it("redirects once the incomplete user state is confirmed", async () => {
+  it("renders the child content for an incomplete user", () => {
     render(
       <AppShellRouteWrapper initialHasSession>
         <div>child</div>
       </AppShellRouteWrapper>,
     );
 
-    await waitFor(() => {
-      expect(mocks.replace).toHaveBeenCalledWith("/onboarding/subscriptions");
-    });
+    expect(screen.getByText("child")).toBeInTheDocument();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 });
