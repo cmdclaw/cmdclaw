@@ -662,7 +662,7 @@ export function CoworkerLanding({
         <div className="relative z-10 mx-auto w-full max-w-[1500px] px-6 pb-10">
           {/* ── Top bar ── */}
           {isAnonymous ? (
-            <div className="flex items-center justify-end pt-5">
+            <div className="flex items-center justify-end gap-2 pt-5">
               <Button
                 variant="outline"
                 size="sm"
@@ -670,6 +670,13 @@ export function CoworkerLanding({
                 className="border-white/45 bg-white/80 hover:bg-white"
               >
                 <Link href="/login">Log in</Link>
+              </Button>
+              <Button
+                size="sm"
+                asChild
+                className="bg-slate-950 text-white shadow-[0_16px_32px_rgba(2,6,23,0.35)] hover:bg-slate-900"
+              >
+                <Link href="/login">Get Started</Link>
               </Button>
             </div>
           ) : null}
