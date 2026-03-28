@@ -187,8 +187,14 @@ export function DualPanelWorkspace({
     [isCollapsed, leftWidth],
   );
   const rightPanelStyle = useMemo(
-    () => ({ width: `${effectiveRightWidth}%` }),
-    [effectiveRightWidth],
+    () =>
+      isCollapsed
+        ? {
+            width: "0%",
+            minWidth: 0,
+          }
+        : { width: `${effectiveRightWidth}%` },
+    [effectiveRightWidth, isCollapsed],
   );
   const handleSeparatorKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
