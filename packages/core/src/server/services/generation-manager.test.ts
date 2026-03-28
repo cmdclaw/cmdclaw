@@ -361,9 +361,17 @@ vi.mock("../sandbox/prep/memory-prep", () => ({
   writeSessionTranscriptFromConversation: vi.fn(),
 }));
 
+vi.mock("../sandbox/prep/executor-prep", () => ({
+  prepareExecutorInSandbox: vi.fn(() => null),
+}));
+
 vi.mock("./sandbox-file-service", () => ({
   uploadSandboxFile: vi.fn(),
   collectNewSandboxFiles: vi.fn(() => []),
+}));
+
+vi.mock("./workspace-skill-service", () => ({
+  listAccessibleEnabledSkillMetadataForUser: vi.fn(() => []),
 }));
 
 vi.mock("../storage/s3-client", () => ({
@@ -3377,6 +3385,88 @@ describe("generationManager transitions", () => {
     expect(resolveRuntimeFailureSpy).toHaveBeenCalled();
     expect(scheduleRecoverySpy).toHaveBeenCalled();
     expect(finishSpy).not.toHaveBeenCalledWith(expect.anything(), "error");
+  });
+
+  it("waits for the in-flight prompt rejection after a session.error before finalizing", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-session-error",
+      title: "Conversation",
+    });
+
+    let promptStartedResolve: (() => void) | undefined;
+    const promptStarted = new Promise<void>((resolve) => {
+      promptStartedResolve = resolve;
+    });
+    let rejectPrompt: ((error: Error) => void) | undefined;
+    const upstreamError = new Error("Internal error: API Error: 400 quota exceeded");
+    const promptMock = vi.fn().mockImplementation(
+      () =>
+        new Promise((_, reject: (error: Error) => void) => {
+          promptStartedResolve?.();
+          rejectPrompt = reject;
+        }),
+    );
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        {
+          type: "session.error",
+          properties: {
+            error: {
+              message: upstreamError.message,
+            },
+          },
+        },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({
+      type: "none",
+    });
+    vi.spyOn(mgr as never, "resolveRuntimeFailure").mockResolvedValue(undefined);
+
+    const runPromise = mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-session-error",
+        conversationId: "conv-session-error",
+        backendType: "opencode",
+        model: "anthropic/claude-sonnet-4-6",
+      }),
+    );
+
+    await promptStarted;
+    await Promise.resolve();
+    expect(finishSpy).not.toHaveBeenCalled();
+
+    rejectPrompt?.(upstreamError);
+    await runPromise;
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(finishSpy).toHaveBeenCalledWith(expect.anything(), "error");
   });
 
   it("treats a live pending-tool export as recoverable on the first disconnect", () => {
