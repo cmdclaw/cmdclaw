@@ -1,6 +1,6 @@
 "use client";
 
-import { Cuboid, Home, LayoutTemplate, Menu, MessageSquare, X } from "lucide-react";
+import { Cuboid, LayoutTemplate, Menu, MessageSquare, WandSparkles, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -16,7 +16,7 @@ type BottomTab = {
 
 const tabs: BottomTab[] = [
   { icon: MessageSquare, label: "Chat", href: "/chat" },
-  { icon: Home, label: "Home", href: "/" },
+  { icon: WandSparkles, label: "Create", href: "/" },
   { icon: Cuboid, label: "Coworkers", href: "/coworkers" },
   { icon: LayoutTemplate, label: "Templates", href: "/templates" },
 ];
