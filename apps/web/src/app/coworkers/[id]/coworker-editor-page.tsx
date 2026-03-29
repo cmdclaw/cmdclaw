@@ -1936,6 +1936,7 @@ export default function CoworkerEditorPage() {
         defaultRightWidth={50}
         minRightWidth={50}
         collapsible
+        collapsedSidebar
         showExpandedCollapseButton={false}
         showTitles={false}
         leftTitle="Chat"
