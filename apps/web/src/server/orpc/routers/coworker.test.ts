@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 function createProcedureStub() {
   const stub = {
@@ -21,6 +22,8 @@ const {
   uploadCoworkerDocumentMock,
   deleteCoworkerDocumentMock,
   downloadFromS3Mock,
+  listConfiguredRemoteIntegrationTargetsMock,
+  searchRemoteIntegrationUsersMock,
 } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn(),
   syncCoworkerScheduleJobMock: vi.fn(),
@@ -31,6 +34,8 @@ const {
   uploadCoworkerDocumentMock: vi.fn(),
   deleteCoworkerDocumentMock: vi.fn(),
   downloadFromS3Mock: vi.fn(),
+  listConfiguredRemoteIntegrationTargetsMock: vi.fn(),
+  searchRemoteIntegrationUsersMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -69,6 +74,21 @@ vi.mock("@/server/services/coworker-document", () => ({
 vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
   downloadFromS3: downloadFromS3Mock,
 }));
+
+vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
+  return {
+    listConfiguredRemoteIntegrationTargets: listConfiguredRemoteIntegrationTargetsMock,
+    searchRemoteIntegrationUsers: searchRemoteIntegrationUsersMock,
+    remoteIntegrationTargetEnvSchema: z.enum(["staging", "prod"]),
+    remoteIntegrationSourceSchema: z.object({
+      targetEnv: z.enum(["staging", "prod"]),
+      remoteUserId: z.string().min(1),
+      requestedByUserId: z.string().min(1).optional(),
+      requestedByEmail: z.string().email().nullable().optional(),
+      remoteUserEmail: z.string().email().nullable().optional(),
+    }),
+  };
+});
 
 vi.mock("../workspace-access", () => ({
   requireActiveWorkspaceAccess: vi.fn(async () => ({
@@ -221,6 +241,15 @@ describe("coworkerRouter", () => {
       filename: "brief.pdf",
     });
     downloadFromS3Mock.mockResolvedValue(Buffer.from("hello world"));
+    listConfiguredRemoteIntegrationTargetsMock.mockReturnValue(["staging", "prod"]);
+    searchRemoteIntegrationUsersMock.mockResolvedValue([
+      {
+        id: "remote-user-1",
+        email: "client@example.com",
+        name: "Client User",
+        enabledIntegrationTypes: ["google_gmail", "hubspot"],
+      },
+    ]);
   });
 
   it("creates a coworker and syncs schedule on happy path", async () => {
@@ -1362,6 +1391,7 @@ describe("coworkerRouter", () => {
             toolAccessMode: "selected",
             allowedIntegrations: ["slack"],
             allowedCustomIntegrations: ["custom-1"],
+            allowedExecutorSourceIds: [],
             allowedSkillSlugs: ["skill-a"],
             schedule: {
               type: "daily",
@@ -1464,6 +1494,104 @@ describe("coworkerRouter", () => {
       triggerPayload: {},
       userId: "user-1",
       userRole: null,
+    });
+  });
+
+  it("passes remote integration source and actor metadata for admin triggers", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({
+      role: "admin",
+      email: "admin@example.com",
+    });
+
+    await coworkerRouterAny.trigger({
+      input: {
+        id: "wf-1",
+        payload: { source: "manual" },
+        remoteIntegrationSource: {
+          targetEnv: "prod",
+          remoteUserId: "remote-user-1",
+        },
+      },
+      context,
+    });
+
+    expect(triggerCoworkerRunMock).toHaveBeenCalledWith({
+      coworkerId: "wf-1",
+      triggerPayload: { source: "manual" },
+      userId: "user-1",
+      userRole: "admin",
+      remoteIntegrationSource: {
+        targetEnv: "prod",
+        remoteUserId: "remote-user-1",
+        requestedByUserId: "user-1",
+        requestedByEmail: "admin@example.com",
+      },
+    });
+  });
+
+  it("rejects remote integration triggers for non-admin users", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({
+      role: "member",
+      email: "member@example.com",
+    });
+
+    await expect(
+      coworkerRouterAny.trigger({
+        input: {
+          id: "wf-1",
+          remoteIntegrationSource: {
+            targetEnv: "staging",
+            remoteUserId: "remote-user-1",
+          },
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("lists configured remote integration targets for admins", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({
+      role: "admin",
+      email: "admin@example.com",
+    });
+
+    const result = await coworkerRouterAny.listRemoteIntegrationTargets({
+      input: {},
+      context,
+    });
+
+    expect(result).toEqual({ targets: ["staging", "prod"] });
+  });
+
+  it("searches remote integration users for admins", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({
+      role: "admin",
+      email: "admin@example.com",
+    });
+
+    const result = await coworkerRouterAny.searchRemoteIntegrationUsers({
+      input: { targetEnv: "prod", query: "client" },
+      context,
+    });
+
+    expect(searchRemoteIntegrationUsersMock).toHaveBeenCalledWith({
+      targetEnv: "prod",
+      query: "client",
+      limit: undefined,
+    });
+    expect(result).toEqual({
+      users: [
+        {
+          id: "remote-user-1",
+          email: "client@example.com",
+          name: "Client User",
+          enabledIntegrationTypes: ["google_gmail", "hubspot"],
+        },
+      ],
     });
   });
 

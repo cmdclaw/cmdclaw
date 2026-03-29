@@ -334,6 +334,8 @@ vi.mock("@/orpc/hooks", () => ({
       shared: { openai: { connectedAt: new Date("2026-03-12T10:00:00.000Z") } },
     },
   }),
+  useRemoteIntegrationTargets: () => ({ data: { targets: [] } }),
+  useSearchRemoteIntegrationUsers: () => ({ data: { users: [] }, isFetching: false }),
   useSkillList: () => ({ data: [], isLoading: false }),
   useUploadCoworkerDocument: () => ({ mutateAsync: vi.fn() }),
 }));

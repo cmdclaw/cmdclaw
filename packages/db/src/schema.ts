@@ -652,6 +652,13 @@ export type GenerationExecutionPolicy = {
   allowedCustomIntegrations?: string[];
   allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
+  remoteIntegrationSource?: {
+    targetEnv: "staging" | "prod";
+    remoteUserId: string;
+    requestedByUserId?: string;
+    requestedByEmail?: string | null;
+    remoteUserEmail?: string | null;
+  };
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];

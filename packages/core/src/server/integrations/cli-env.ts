@@ -12,7 +12,7 @@ import {
 import { getValidTokensForUser, getValidCustomTokens } from "./token-refresh";
 
 // Token-based integrations map to their access token env var
-const ENV_VAR_MAP: Record<Exclude<IntegrationType, "linkedin">, string> = {
+export const TOKEN_ENV_VAR_MAP: Record<Exclude<IntegrationType, "linkedin">, string> = {
   google_gmail: "GMAIL_ACCESS_TOKEN",
   outlook: "OUTLOOK_ACCESS_TOKEN",
   outlook_calendar: "OUTLOOK_CALENDAR_ACCESS_TOKEN",
@@ -32,6 +32,33 @@ const ENV_VAR_MAP: Record<Exclude<IntegrationType, "linkedin">, string> = {
   twitter: "TWITTER_ACCESS_TOKEN",
 };
 
+const CLI_ENV_INTEGRATION_MAP: Record<string, IntegrationType> = {
+  ...Object.fromEntries(
+    Object.entries(TOKEN_ENV_VAR_MAP).map(([integrationType, envVar]) => [envVar, integrationType]),
+  ),
+  SALESFORCE_INSTANCE_URL: "salesforce",
+  DYNAMICS_INSTANCE_URL: "dynamics",
+  LINKEDIN_ACCOUNT_ID: "linkedin",
+  UNIPILE_API_KEY: "linkedin",
+  UNIPILE_DSN: "linkedin",
+};
+
+export function filterCliEnvToAllowedIntegrations(
+  cliEnv: Record<string, string>,
+  allowedIntegrations?: IntegrationType[],
+): Record<string, string> {
+  if (!allowedIntegrations) {
+    return { ...cliEnv };
+  }
+
+  return Object.fromEntries(
+    Object.entries(cliEnv).filter(([key]) => {
+      const integrationType = CLI_ENV_INTEGRATION_MAP[key];
+      return integrationType ? allowedIntegrations.includes(integrationType) : true;
+    }),
+  );
+}
+
 export async function getCliEnvForUser(userId: string): Promise<Record<string, string>> {
   if (isSelfHostedEdition()) {
     const delegated = await getDelegatedRuntimeCredentials(userId, { integrationTypes: [] });
@@ -46,7 +73,7 @@ export async function getCliEnvForUser(userId: string): Promise<Record<string, s
   const tokens = await getValidTokensForUser(userId);
 
   for (const [type, accessToken] of tokens) {
-    const envVar = ENV_VAR_MAP[type as Exclude<IntegrationType, "linkedin">];
+    const envVar = TOKEN_ENV_VAR_MAP[type as Exclude<IntegrationType, "linkedin">];
     if (envVar) {
       cliEnv[envVar] = accessToken;
     }
@@ -589,7 +616,7 @@ export async function getTokensForIntegrations(
 
   const tokens: Record<string, string> = {};
   const requestedTokenIntegrations = integrationTypes.filter(
-    (type): type is Exclude<IntegrationType, "linkedin"> => type in ENV_VAR_MAP,
+    (type): type is Exclude<IntegrationType, "linkedin"> => type in TOKEN_ENV_VAR_MAP,
   );
 
   // Get valid tokens only for requested token-based integrations
@@ -597,7 +624,7 @@ export async function getTokensForIntegrations(
 
   for (const [type, accessToken] of allTokens) {
     if (integrationTypes.includes(type)) {
-      const envVar = ENV_VAR_MAP[type as Exclude<IntegrationType, "linkedin">];
+      const envVar = TOKEN_ENV_VAR_MAP[type as Exclude<IntegrationType, "linkedin">];
       if (envVar) {
         tokens[envVar] = accessToken;
       }
