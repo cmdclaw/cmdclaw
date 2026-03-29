@@ -25,6 +25,8 @@ type DualPanelWorkspaceProps = {
   className?: string;
   collapsible?: boolean;
   defaultRightCollapsed?: boolean;
+  rightCollapsed?: boolean;
+  onRightCollapsedChange?: (collapsed: boolean) => void;
   showTitles?: boolean;
   leftPanelClassName?: string;
   rightPanelClassName?: string;
@@ -60,6 +62,8 @@ export function DualPanelWorkspace({
   className,
   collapsible = false,
   defaultRightCollapsed = false,
+  rightCollapsed,
+  onRightCollapsedChange,
   showTitles = true,
   leftPanelClassName,
   rightPanelClassName,
@@ -73,7 +77,7 @@ export function DualPanelWorkspace({
   const containerRef = useRef<HTMLDivElement>(null);
   const [mobilePanel, setMobilePanel] = useState<"left" | "right">("right");
   const [isDragging, setIsDragging] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(defaultRightCollapsed);
+  const [uncontrolledIsCollapsed, setUncontrolledIsCollapsed] = useState(defaultRightCollapsed);
   const savedWidthRef = useRef<number | null>(null);
   const [rightWidth, setRightWidth] = useState(() => {
     if (!storageKey || typeof window === "undefined") {
@@ -88,6 +92,17 @@ export function DualPanelWorkspace({
     const minRight = minRightWidth;
     return Math.min(Math.max(minRight, maxRight), Math.max(minRight, parsed));
   });
+  const isCollapsed = rightCollapsed ?? uncontrolledIsCollapsed;
+
+  const setCollapsed = useCallback(
+    (nextCollapsed: boolean) => {
+      if (rightCollapsed === undefined) {
+        setUncontrolledIsCollapsed(nextCollapsed);
+      }
+      onRightCollapsedChange?.(nextCollapsed);
+    },
+    [onRightCollapsedChange, rightCollapsed],
+  );
 
   const bounds = useMemo(() => {
     const maxRight = 100 - minLeftWidth;
@@ -156,13 +171,13 @@ export function DualPanelWorkspace({
       // Restore saved width
       const restoreWidth = savedWidthRef.current ?? defaultRightWidth;
       setWidthWithinBounds(restoreWidth);
-      setIsCollapsed(false);
+      setCollapsed(false);
     } else {
       // Save current width and collapse
       savedWidthRef.current = rightWidth;
-      setIsCollapsed(true);
+      setCollapsed(true);
     }
-  }, [isCollapsed, rightWidth, defaultRightWidth, setWidthWithinBounds]);
+  }, [defaultRightWidth, isCollapsed, rightWidth, setCollapsed, setWidthWithinBounds]);
 
   // Expose collapse toggle to child content
   useEffect(() => {
