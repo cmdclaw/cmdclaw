@@ -31,6 +31,8 @@ type DualPanelWorkspaceProps = {
   separatorClassName?: string;
   /** Label shown on the collapsed sidebar button (e.g. coworker name). When set, replaces the chevron with a labeled button. */
   collapsedLabel?: string;
+  /** When true, the collapsed state renders a full-viewport-height sidebar strip instead of hiding the panel. */
+  collapsedSidebar?: boolean;
   /** Hide the separator collapse button while expanded when the panel already offers its own close affordance. */
   showExpandedCollapseButton?: boolean;
   /** Expose collapse toggle so child content can trigger it (e.g. an X close button inside the panel). */
@@ -43,6 +45,8 @@ const DEFAULT_RIGHT_WIDTH = 48;
 const DEFAULT_MIN_LEFT = 28;
 const DEFAULT_MIN_RIGHT = 30;
 const COLLAPSED_SEPARATOR_WIDTH_REM = 2;
+const COLLAPSED_SIDEBAR_WIDTH_PX = 48;
+const COLLAPSED_SIDEBAR_STYLE = { width: COLLAPSED_SIDEBAR_WIDTH_PX } as const;
 
 export function DualPanelWorkspace({
   left,
@@ -61,6 +65,7 @@ export function DualPanelWorkspace({
   rightPanelClassName,
   separatorClassName,
   collapsedLabel,
+  collapsedSidebar = false,
   showExpandedCollapseButton = true,
   onCollapseToggleRef,
   hideMobileToggle = false,
@@ -182,9 +187,11 @@ export function DualPanelWorkspace({
   const leftPanelStyle = useMemo(
     () =>
       isCollapsed
-        ? { width: `calc(100% - ${COLLAPSED_SEPARATOR_WIDTH_REM}rem)` }
+        ? collapsedSidebar
+          ? { width: `calc(100% - ${COLLAPSED_SIDEBAR_WIDTH_PX}px)` }
+          : { width: `calc(100% - ${COLLAPSED_SEPARATOR_WIDTH_REM}rem)` }
         : { width: `${leftWidth}%` },
-    [isCollapsed, leftWidth],
+    [isCollapsed, collapsedSidebar, leftWidth],
   );
   const rightPanelStyle = useMemo(
     () =>
@@ -281,80 +288,102 @@ export function DualPanelWorkspace({
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{left}</div>
         </section>
 
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize panels"
-          tabIndex={collapsible ? -1 : 0}
-          onPointerDown={isCollapsed ? undefined : startDrag}
-          onKeyDown={isCollapsed ? undefined : handleSeparatorKeyDown}
-          className={cn(
-            "relative shrink-0 transition-[width] duration-200 ease-out",
-            isCollapsed ? "w-8" : "w-3",
-            !isCollapsed && "cursor-col-resize",
-          )}
-        >
-          {!isCollapsed && (
-            <>
-              {separatorClassName ? (
-                <div
-                  aria-hidden="true"
-                  className={cn("absolute inset-y-0 left-1/2 right-0", separatorClassName)}
-                />
-              ) : null}
-              <div className="bg-border absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
-            </>
-          )}
-          {collapsible &&
-            (isCollapsed || showExpandedCollapseButton) &&
-            (collapsedLabel ? (
-              // Labeled collapse button — only visible when collapsed; when expanded, the panel provides its own close button
-              isCollapsed && (
+        {/* Separator — hidden when collapsed sidebar mode is active */}
+        {!(collapsedSidebar && isCollapsed) && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panels"
+            tabIndex={collapsible ? -1 : 0}
+            onPointerDown={isCollapsed ? undefined : startDrag}
+            onKeyDown={isCollapsed ? undefined : handleSeparatorKeyDown}
+            className={cn(
+              "relative shrink-0 transition-[width] duration-200 ease-out",
+              isCollapsed ? "w-8" : "w-3",
+              !isCollapsed && "cursor-col-resize",
+            )}
+          >
+            {!isCollapsed && (
+              <>
+                {separatorClassName ? (
+                  <div
+                    aria-hidden="true"
+                    className={cn("absolute inset-y-0 left-1/2 right-0", separatorClassName)}
+                  />
+                ) : null}
+                <div className="bg-border absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
+              </>
+            )}
+            {collapsible &&
+              (isCollapsed || showExpandedCollapseButton) &&
+              (collapsedLabel ? (
+                isCollapsed && (
+                  <button
+                    type="button"
+                    onClick={handleCollapseToggle}
+                    className="hover:bg-muted bg-background absolute top-3 right-2 z-10 flex items-center gap-1.5 rounded-lg border py-1.5 pr-2 pl-2.5 text-xs font-medium shadow-sm transition-colors"
+                    aria-label="Expand right panel"
+                  >
+                    <PanelRight className="h-3.5 w-3.5" />
+                    {collapsedLabel}
+                  </button>
+                )
+              ) : (
                 <button
                   type="button"
                   onClick={handleCollapseToggle}
-                  className="hover:bg-muted bg-background absolute top-3 right-2 z-10 flex items-center gap-1.5 rounded-lg border py-1.5 pr-2 pl-2.5 text-xs font-medium shadow-sm transition-colors"
-                  aria-label="Expand right panel"
+                  className="hover:bg-muted bg-background absolute top-3 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border shadow-sm transition-colors"
+                  aria-label={isCollapsed ? "Expand right panel" : "Collapse right panel"}
                 >
-                  <PanelRight className="h-3.5 w-3.5" />
-                  {collapsedLabel}
+                  {isCollapsed ? (
+                    <ChevronLeft className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
                 </button>
-              )
-            ) : (
-              <button
-                type="button"
-                onClick={handleCollapseToggle}
-                className="hover:bg-muted bg-background absolute top-3 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border shadow-sm transition-colors"
-                aria-label={isCollapsed ? "Expand right panel" : "Collapse right panel"}
-              >
-                {isCollapsed ? (
-                  <ChevronLeft className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-              </button>
-            ))}
-        </div>
+              ))}
+          </div>
+        )}
 
-        <section
-          className={cn(
-            "bg-background flex min-h-0 flex-col overflow-hidden rounded-r-xl border transition-[width] duration-200 ease-out",
-            isCollapsed && "border-0",
-            rightPanelClassName,
-          )}
-          style={rightPanelStyle}
-        >
-          {!isCollapsed && (
-            <>
-              {showTitles && (
-                <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
-                  {rightTitle}
-                </div>
-              )}
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{right}</div>
-            </>
-          )}
-        </section>
+        {/* Collapsed sidebar strip — full viewport height */}
+        {collapsedSidebar && isCollapsed && (
+          <div
+            className="bg-muted/30 fixed top-0 right-0 bottom-0 z-40 flex flex-col items-center border-l transition-opacity duration-200"
+            style={COLLAPSED_SIDEBAR_STYLE}
+          >
+            <button
+              type="button"
+              onClick={handleCollapseToggle}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted/80 mt-3 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+              aria-label="Expand right panel"
+            >
+              <PanelRight className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Right panel — hidden when collapsed sidebar is active */}
+        {!(collapsedSidebar && isCollapsed) && (
+          <section
+            className={cn(
+              "bg-background flex min-h-0 flex-col overflow-hidden rounded-r-xl border transition-[width] duration-200 ease-out",
+              isCollapsed && "border-0",
+              rightPanelClassName,
+            )}
+            style={rightPanelStyle}
+          >
+            {!isCollapsed && (
+              <>
+                {showTitles && (
+                  <div className="text-muted-foreground border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+                    {rightTitle}
+                  </div>
+                )}
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{right}</div>
+              </>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );
