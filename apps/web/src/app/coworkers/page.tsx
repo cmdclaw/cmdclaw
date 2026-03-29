@@ -16,6 +16,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -122,6 +123,13 @@ type SharedCoworkerItem = {
 
 const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 const MAX_VISIBLE_TOOL_INDICATORS = 3;
+
+const CARD_MOTION = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+  transition: { duration: 0.2, ease: "easeOut" },
+} as const;
 
 function formatDate(value?: Date | string | null) {
   if (!value) {
@@ -1104,37 +1112,57 @@ export default function CoworkersPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-              <Link
-                href="/"
-                className="border-foreground/20 hover:border-foreground/30 hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed transition-all duration-150"
-              >
-                <div className="bg-muted/50 group-hover:bg-muted flex size-10 items-center justify-center rounded-xl transition-colors">
-                  <Plus className="text-muted-foreground size-5" />
-                </div>
-                <span className="text-muted-foreground text-sm font-medium">
-                  Create new coworker
-                </span>
-              </Link>
-              {displayedCoworkerList.map((wf) => (
-                <CoworkerCard
-                  key={wf.id}
-                  coworker={wf}
-                  connectedIntegrationTypes={connectedIntegrationTypes}
-                  isRunning={runningCoworkerId === wf.id}
-                  isUpdatingStatus={statusCoworkerId === wf.id}
-                  isUpdatingShare={shareCoworkerId === wf.id}
-                  isExporting={exportingCoworkerId === wf.id}
-                  isDeleting={deletingCoworkerId === wf.id}
-                  onRun={handleRunCoworker}
-                  onOpen={handleOpenCoworker}
-                  onToggleStatus={handleToggleCoworkerStatus}
-                  onToggleShare={handleToggleShare}
-                  onExport={handleExportCoworker}
-                  onDelete={handleDeleteRequest}
-                />
-              ))}
-            </div>
+            <motion.div layout className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <AnimatePresence mode="popLayout">
+                <motion.div
+                  key="create-new"
+                  layout
+                  className="h-full"
+                  initial={CARD_MOTION.initial}
+                  animate={CARD_MOTION.animate}
+                  exit={CARD_MOTION.exit}
+                  transition={CARD_MOTION.transition}
+                >
+                  <Link
+                    href="/"
+                    className="border-foreground/20 hover:border-foreground/30 hover:bg-muted/30 group flex h-full min-h-[180px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed transition-all duration-150"
+                  >
+                    <div className="bg-muted/50 group-hover:bg-muted flex size-10 items-center justify-center rounded-xl transition-colors">
+                      <Plus className="text-muted-foreground size-5" />
+                    </div>
+                    <span className="text-muted-foreground text-sm font-medium">
+                      Create new coworker
+                    </span>
+                  </Link>
+                </motion.div>
+                {displayedCoworkerList.map((wf) => (
+                  <motion.div
+                    key={wf.id}
+                    layout
+                    initial={CARD_MOTION.initial}
+                    animate={CARD_MOTION.animate}
+                    exit={CARD_MOTION.exit}
+                    transition={CARD_MOTION.transition}
+                  >
+                    <CoworkerCard
+                      coworker={wf}
+                      connectedIntegrationTypes={connectedIntegrationTypes}
+                      isRunning={runningCoworkerId === wf.id}
+                      isUpdatingStatus={statusCoworkerId === wf.id}
+                      isUpdatingShare={shareCoworkerId === wf.id}
+                      isExporting={exportingCoworkerId === wf.id}
+                      isDeleting={deletingCoworkerId === wf.id}
+                      onRun={handleRunCoworker}
+                      onOpen={handleOpenCoworker}
+                      onToggleStatus={handleToggleCoworkerStatus}
+                      onToggleShare={handleToggleShare}
+                      onExport={handleExportCoworker}
+                      onDelete={handleDeleteRequest}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
           )}
         </div>
       )}
@@ -1146,17 +1174,27 @@ export default function CoworkersPage() {
               Install a coworker into your own workspace environment.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {displayedSharedCoworkerList.map((coworker) => (
-              <SharedCoworkerCard
-                key={coworker.id}
-                coworker={coworker}
-                connectedIntegrationTypes={connectedIntegrationTypes}
-                isImporting={importingSharedCoworkerId === coworker.id}
-                onImport={handleImportSharedCoworker}
-              />
-            ))}
-          </div>
+          <motion.div layout className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <AnimatePresence mode="popLayout">
+              {displayedSharedCoworkerList.map((coworker) => (
+                <motion.div
+                  key={coworker.id}
+                  layout
+                  initial={CARD_MOTION.initial}
+                  animate={CARD_MOTION.animate}
+                  exit={CARD_MOTION.exit}
+                  transition={CARD_MOTION.transition}
+                >
+                  <SharedCoworkerCard
+                    coworker={coworker}
+                    connectedIntegrationTypes={connectedIntegrationTypes}
+                    isImporting={importingSharedCoworkerId === coworker.id}
+                    onImport={handleImportSharedCoworker}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
         </section>
       ) : null}
       <AlertDialog open={coworkerPendingDelete !== null} onOpenChange={handleDeleteDialogChange}>

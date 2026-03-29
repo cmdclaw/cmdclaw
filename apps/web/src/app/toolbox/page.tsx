@@ -265,7 +265,7 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
 const CARD_MOTION = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.96 },
+  exit: { opacity: 0, y: -8 },
   transition: { duration: 0.2, ease: "easeOut" },
 } as const;
 
