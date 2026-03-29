@@ -295,7 +295,7 @@ function CoworkerCard({
     },
     [coworker, onToggleStatus],
   );
-  const handleMenuTriggerClick = useCallback((e: React.MouseEvent) => {
+  const handleStopPropagation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
   }, []);
 
@@ -304,7 +304,7 @@ function CoworkerCard({
       tabIndex={0}
       onClick={handleOpen}
       onKeyDown={handleKeyDown}
-      className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group flex h-full min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
@@ -322,7 +322,7 @@ function CoworkerCard({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                onClick={handleMenuTriggerClick}
+                onClick={handleStopPropagation}
                 className={cn(
                   "text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors",
                   "opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100",
@@ -448,23 +448,33 @@ function CoworkerCard({
         )}
       </div>
 
-      <div className="mt-auto flex items-center gap-1.5 pt-1">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
-          onClick={handleRun}
-          disabled={isRunning}
-        >
-          {isRunning ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
-          Run
-        </Button>
-        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" asChild>
-          <Link href={`/coworkers/${coworker.id}`}>
-            <PenLine className="size-3" />
-            Edit
+      <div className="mt-auto flex items-center justify-between pt-3">
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          Coworker
+        </span>
+        <div className="flex items-center gap-0.5">
+          <Link
+            href={`/coworkers/${coworker.id}`}
+            onClick={handleStopPropagation}
+            className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors"
+            title="Edit coworker"
+          >
+            <PenLine className="size-3.5" />
           </Link>
-        </Button>
+          <button
+            type="button"
+            onClick={handleRun}
+            disabled={isRunning || isDeleting}
+            className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
+            title="Run coworker"
+          >
+            {isRunning ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Play className="size-3.5" />
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -491,7 +501,7 @@ function SharedCoworkerCard({
   );
 
   return (
-    <div className="border-border bg-card flex min-h-[160px] flex-col gap-3 rounded-xl border p-5">
+    <div className="border-border bg-card flex h-full min-h-[160px] flex-col gap-3 rounded-xl border p-5">
       <div className="space-y-1">
         <p className="text-sm leading-tight font-medium">{getCoworkerDisplayName(coworker.name)}</p>
         <p className="text-muted-foreground text-xs">
@@ -1139,6 +1149,7 @@ export default function CoworkersPage() {
                   <motion.div
                     key={wf.id}
                     layout
+                    className="h-full"
                     initial={CARD_MOTION.initial}
                     animate={CARD_MOTION.animate}
                     exit={CARD_MOTION.exit}
@@ -1180,6 +1191,7 @@ export default function CoworkersPage() {
                 <motion.div
                   key={coworker.id}
                   layout
+                  className="h-full"
                   initial={CARD_MOTION.initial}
                   animate={CARD_MOTION.animate}
                   exit={CARD_MOTION.exit}
