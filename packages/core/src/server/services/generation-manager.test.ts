@@ -338,6 +338,7 @@ vi.mock("../integrations/cli-env", () => ({
   getCliInstructions: vi.fn(() => ""),
   getCliInstructionsWithCustom: vi.fn(() => ""),
   getEnabledIntegrationTypes: vi.fn(() => []),
+  filterCliEnvToAllowedIntegrations: vi.fn((cliEnv: Record<string, string>) => ({ ...cliEnv })),
 }));
 
 vi.mock("../utils/generate-title", () => ({
