@@ -10,6 +10,8 @@ import {
   Loader2,
   PenLine,
   Play,
+  Plus,
+  Search,
   Share2,
   Trash2,
   Upload,
@@ -21,8 +23,9 @@ import { type ChangeEvent, useCallback, useMemo, useRef, useState } from "react"
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { VoiceIndicator } from "@/components/chat/voice-indicator";
-import { PromptBar } from "@/components/prompt-bar";
+// Commented out — prompt bar removed from coworkers page
+// import { VoiceIndicator } from "@/components/chat/voice-indicator";
+// import { PromptBar } from "@/components/prompt-bar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +52,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
@@ -292,7 +296,7 @@ function CoworkerCard({
       tabIndex={0}
       onClick={handleOpen}
       onKeyDown={handleKeyDown}
-      className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 shadow-sm transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
@@ -479,7 +483,7 @@ function SharedCoworkerCard({
   );
 
   return (
-    <div className="border-border/40 bg-card flex min-h-[160px] flex-col gap-3 rounded-xl border p-5 shadow-sm">
+    <div className="border-border bg-card flex min-h-[160px] flex-col gap-3 rounded-xl border p-5">
       <div className="space-y-1">
         <p className="text-sm leading-tight font-medium">{getCoworkerDisplayName(coworker.name)}</p>
         <p className="text-muted-foreground text-xs">
@@ -590,11 +594,11 @@ export default function CoworkersPage() {
   const exportCoworkerDefinition = useExportCoworkerDefinition();
   const importCoworkerDefinition = useImportCoworkerDefinition();
   const importSharedCoworker = useImportSharedCoworker();
-  const { isRecording, error: voiceError, startRecording, stopRecording } = useVoiceRecording();
+  const { isRecording, error: _voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
   const [isCreating, setIsCreating] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
-  const [inputPrefillRequest, setInputPrefillRequest] = useState<{
+  const [_inputPrefillRequest, setInputPrefillRequest] = useState<{
     id: string;
     text: string;
     mode?: "replace" | "append";
@@ -610,6 +614,11 @@ export default function CoworkersPage() {
   const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const [filterShared, setFilterShared] = useState(false);
   const handleToggleFilterShared = useCallback(() => setFilterShared((v) => !v), []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const handleSearchChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value),
+    [],
+  );
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const isRecordingRef = useRef(false);
   const coworkerList = useMemo(() => {
@@ -652,10 +661,25 @@ export default function CoworkersPage() {
     () => coworkerList.filter((c) => c.sharedAt != null).length,
     [coworkerList],
   );
-  const displayedCoworkerList = useMemo(
-    () => (filterShared ? coworkerList.filter((c) => c.sharedAt != null) : coworkerList),
-    [coworkerList, filterShared],
-  );
+  const displayedCoworkerList = useMemo(() => {
+    let list = filterShared ? coworkerList.filter((c) => c.sharedAt != null) : coworkerList;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (c) => c.name?.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [coworkerList, filterShared, searchQuery]);
+  const displayedSharedCoworkerList = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return sharedCoworkerList;
+    }
+    const q = searchQuery.toLowerCase();
+    return sharedCoworkerList.filter(
+      (c) => c.name?.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q),
+    );
+  }, [sharedCoworkerList, searchQuery]);
 
   const handleRunCoworker = useCallback(
     async (coworker: CoworkerItem) => {
@@ -808,7 +832,7 @@ export default function CoworkersPage() {
     }
   }, [coworkerPendingDelete, deleteCoworker]);
 
-  const stopRecordingAndTranscribe = useCallback(async () => {
+  const _stopRecordingAndTranscribe = useCallback(async () => {
     if (!isRecordingRef.current) {
       return;
     }
@@ -841,7 +865,7 @@ export default function CoworkersPage() {
     }
   }, [stopRecording, transcribe]);
 
-  const handleStartRecording = useCallback(() => {
+  const _handleStartRecording = useCallback(() => {
     if (isCreating || isProcessingVoice || isRecordingRef.current) {
       return;
     }
@@ -861,7 +885,7 @@ export default function CoworkersPage() {
     },
     [],
   );
-  const modelSelectorNode = useMemo(
+  const _modelSelectorNode = useMemo(
     () => (
       <ModelSelector
         selectedModel={model}
@@ -928,7 +952,7 @@ export default function CoworkersPage() {
     [createCoworker, model, modelAuthSource],
   );
 
-  const handlePromptSubmit = useCallback(
+  const _handlePromptSubmit = useCallback(
     async (text: string) => {
       const trimmedText = text.trim();
       if (!trimmedText || isCreating || isProcessingVoice) {
@@ -953,6 +977,7 @@ export default function CoworkersPage() {
 
   return (
     <div className="space-y-10">
+      {/* Prompt bar — commented out, kept for future reference
       <div className="px-4 pt-[12vh] pb-8">
         <div className="mx-auto max-w-xl">
           <h1 className="text-foreground mb-2 text-center text-xl font-semibold tracking-tight">
@@ -983,45 +1008,69 @@ export default function CoworkersPage() {
               />
             </div>
           )}
-          <div className="mt-4 flex justify-center">
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              aria-label="Import coworker JSON file"
-              onChange={handleImportCoworkerFileChange}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={handleImportCoworkerClick}
-              disabled={importCoworkerDefinition.isPending}
-            >
-              {importCoworkerDefinition.isPending ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Upload className="size-3" />
-              )}
-              Import coworker
-            </Button>
-          </div>
         </div>
       </div>
+      */}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="text-muted-foreground size-5 animate-spin" />
         </div>
-      ) : coworkerList.length === 0 ? (
-        <div className="border-border/40 rounded-xl border border-dashed p-10 text-center">
-          <p className="text-muted-foreground text-sm">No coworkers yet.</p>
+      ) : coworkerList.length === 0 && !searchQuery.trim() ? (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
+          <div className="bg-muted/50 mb-6 flex size-14 items-center justify-center rounded-2xl">
+            <svg
+              className="text-muted-foreground size-7"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 8V4H8" />
+              <rect width="16" height="12" x="4" y="8" rx="2" />
+              <path d="M2 14h2" />
+              <path d="M20 14h2" />
+              <path d="M15 13v2" />
+              <path d="M9 13v2" />
+            </svg>
+          </div>
+          <h2 className="text-foreground mb-1.5 text-center text-xl font-semibold tracking-tight">
+            Start building your first coworker
+          </h2>
+          <p className="text-muted-foreground mb-8 max-w-sm text-center text-sm">
+            Create an AI coworker to automate tasks, answer questions, and work alongside your team.
+          </p>
+          <Link
+            href="/"
+            className="bg-foreground text-background hover:bg-foreground/90 inline-flex h-10 items-center justify-center rounded-lg px-6 text-sm font-medium transition-colors"
+          >
+            Start building
+          </Link>
         </div>
       ) : (
         <div className="space-y-4">
-          {sharedByMeCount > 0 ? (
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+              My coworkers
+              <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium tabular-nums">
+                {coworkerList.length}
+              </span>
+            </h2>
+            <div className="relative w-full sm:w-64">
+              <Search className="text-muted-foreground/60 pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+              <Input
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search coworkers..."
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {sharedByMeCount > 0 ? (
               <button
                 type="button"
                 onClick={handleToggleFilterShared}
@@ -1043,31 +1092,71 @@ export default function CoworkersPage() {
                   {sharedByMeCount}
                 </span>
               </button>
-            </div>
-          ) : null}
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {displayedCoworkerList.map((wf) => (
-              <CoworkerCard
-                key={wf.id}
-                coworker={wf}
-                connectedIntegrationTypes={connectedIntegrationTypes}
-                isRunning={runningCoworkerId === wf.id}
-                isUpdatingStatus={statusCoworkerId === wf.id}
-                isUpdatingShare={shareCoworkerId === wf.id}
-                isExporting={exportingCoworkerId === wf.id}
-                isDeleting={deletingCoworkerId === wf.id}
-                onRun={handleRunCoworker}
-                onOpen={handleOpenCoworker}
-                onToggleStatus={handleToggleCoworkerStatus}
-                onToggleShare={handleToggleShare}
-                onExport={handleExportCoworker}
-                onDelete={handleDeleteRequest}
-              />
-            ))}
+            ) : null}
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              aria-label="Import coworker JSON file"
+              onChange={handleImportCoworkerFileChange}
+            />
+            <button
+              type="button"
+              onClick={handleImportCoworkerClick}
+              disabled={importCoworkerDefinition.isPending}
+              className="border-border/60 text-muted-foreground hover:border-border hover:text-foreground inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
+            >
+              {importCoworkerDefinition.isPending ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Upload className="size-3" />
+              )}
+              Import coworker
+            </button>
           </div>
+          {displayedCoworkerList.length === 0 ? (
+            <div className="border-border rounded-xl border border-dashed p-10 text-center">
+              <p className="text-muted-foreground text-sm">
+                No coworkers match &ldquo;{searchQuery}&rdquo;
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <Link
+                href="/"
+                className="border-foreground/20 hover:border-foreground/30 hover:bg-muted/30 group flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed transition-all duration-150"
+              >
+                <div className="bg-muted/50 group-hover:bg-muted flex size-10 items-center justify-center rounded-xl transition-colors">
+                  <Plus className="text-muted-foreground size-5" />
+                </div>
+                <span className="text-muted-foreground text-sm font-medium">
+                  Create new coworker
+                </span>
+              </Link>
+              {displayedCoworkerList.map((wf) => (
+                <CoworkerCard
+                  key={wf.id}
+                  coworker={wf}
+                  connectedIntegrationTypes={connectedIntegrationTypes}
+                  isRunning={runningCoworkerId === wf.id}
+                  isUpdatingStatus={statusCoworkerId === wf.id}
+                  isUpdatingShare={shareCoworkerId === wf.id}
+                  isExporting={exportingCoworkerId === wf.id}
+                  isDeleting={deletingCoworkerId === wf.id}
+                  onRun={handleRunCoworker}
+                  onOpen={handleOpenCoworker}
+                  onToggleStatus={handleToggleCoworkerStatus}
+                  onToggleShare={handleToggleShare}
+                  onExport={handleExportCoworker}
+                  onDelete={handleDeleteRequest}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
-      {sharedCoworkerList.length > 0 ? (
+      {displayedSharedCoworkerList.length > 0 ? (
         <section className="space-y-4">
           <div>
             <h2 className="text-base font-semibold">Shared by teammates</h2>
@@ -1076,7 +1165,7 @@ export default function CoworkersPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {sharedCoworkerList.map((coworker) => (
+            {displayedSharedCoworkerList.map((coworker) => (
               <SharedCoworkerCard
                 key={coworker.id}
                 coworker={coworker}
