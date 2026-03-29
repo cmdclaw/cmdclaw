@@ -228,7 +228,7 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
       <div className="bg-background min-h-screen">
         <div className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
           <div className="mb-4 flex items-center gap-3 md:mb-8">
-            <div className="border-border flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 md:max-w-lg md:flex-none">
+            <div className="border-border flex h-11 flex-1 items-center gap-3 rounded-xl border px-4 md:max-w-xl">
               <Search className="text-muted-foreground/60 size-4 shrink-0" />
               <input
                 type="text"
@@ -241,10 +241,9 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
 
             <Button
               variant="outline"
-              size="sm"
               onClick={toggleFilters}
               aria-expanded={filtersOpen}
-              className={cn("gap-2 rounded-xl", filtersOpen && "bg-muted border-border")}
+              className={cn("h-11 gap-2 rounded-xl px-4", filtersOpen && "bg-muted border-border")}
             >
               <SlidersHorizontal className="size-3.5" />
               <span className="hidden sm:inline">Filters</span>
@@ -411,7 +410,7 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
                     </Button>
                   )}
                   <SheetClose asChild>
-                    <Button variant="brand" size="sm" className="ml-auto">
+                    <Button variant="default" size="sm" className="ml-auto">
                       Show {filtered.length} template{filtered.length !== 1 ? "s" : ""}
                     </Button>
                   </SheetClose>
