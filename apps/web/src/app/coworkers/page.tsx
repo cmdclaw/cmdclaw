@@ -1018,30 +1018,12 @@ export default function CoworkersPage() {
         </div>
       ) : coworkerList.length === 0 && !searchQuery.trim() ? (
         <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
-          <div className="bg-muted/50 mb-6 flex size-14 items-center justify-center rounded-2xl">
-            <svg
-              className="text-muted-foreground size-7"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 8V4H8" />
-              <rect width="16" height="12" x="4" y="8" rx="2" />
-              <path d="M2 14h2" />
-              <path d="M20 14h2" />
-              <path d="M15 13v2" />
-              <path d="M9 13v2" />
-            </svg>
-          </div>
+          <Image src="/tools/lobster.svg" alt="" width={64} height={64} className="mb-6" />
           <h2 className="text-foreground mb-1.5 text-center text-xl font-semibold tracking-tight">
-            Start building your first coworker
+            Build your first coworker
           </h2>
           <p className="text-muted-foreground mb-8 max-w-sm text-center text-sm">
-            Create an AI coworker to automate tasks, answer questions, and work alongside your team.
+            Put repetitive tasks on autopilot.
           </p>
           <Link
             href="/"
