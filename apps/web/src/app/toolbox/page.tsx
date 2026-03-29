@@ -1261,16 +1261,42 @@ function ToolboxPageContent() {
 
   return (
     <>
-      {/* Header - hidden on mobile */}
-      <div className="mb-10 hidden sm:block">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-foreground text-2xl font-semibold tracking-tight">Toolbox</h1>
-            <p className="text-muted-foreground mt-2 text-sm">
-              Integrations, skills, and capabilities for your coworker
-            </p>
+      {/* Filters row */}
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <AnimatedTabs
+          activeKey={activeTab}
+          onTabChange={handleTabChange}
+          className="w-full grid-cols-3 sm:flex sm:w-fit"
+        >
+          {tabs.map((tab) => (
+            <AnimatedTab key={tab.id} value={tab.id} className="text-[11px] sm:text-sm">
+              {tab.label}
+              <span
+                className={cn(
+                  "ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:ml-1.5 sm:text-xs",
+                  activeTab === tab.id
+                    ? "bg-foreground/10 text-foreground/70"
+                    : "bg-muted-foreground/15 text-muted-foreground",
+                )}
+              >
+                {tab.count}
+              </span>
+            </AnimatedTab>
+          ))}
+        </AnimatedTabs>
+
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="border-border flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5 sm:w-72 sm:flex-initial">
+            <Search className="text-muted-foreground/60 size-4 shrink-0" />
+            <input
+              type="text"
+              value={search}
+              onChange={handleSearchChange}
+              placeholder="Search tools…"
+              className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
+            />
           </div>
-          <div className="flex items-center gap-2 self-start">
+          <div className="hidden items-center gap-2 sm:flex">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" disabled={importSkill.isPending}>
@@ -1298,7 +1324,7 @@ function ToolboxPageContent() {
                 ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button onClick={handleCreateSkill} disabled={isCreating} className="self-start">
+            <Button onClick={handleCreateSkill} disabled={isCreating}>
               {isCreating ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -1306,61 +1332,23 @@ function ToolboxPageContent() {
               )}
               Create Skill
             </Button>
-            <input
-              ref={zipImportInputRef}
-              type="file"
-              accept=".zip,application/zip"
-              className="hidden"
-              aria-label="Import skill zip"
-              onChange={handleImportZipChange}
-            />
-            <input
-              ref={folderImportInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              aria-label="Import skill folder"
-              onChange={handleImportFolderChange}
-            />
           </div>
-        </div>
-      </div>
-
-      {/* Filters row */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <AnimatedTabs
-          activeKey={activeTab}
-          onTabChange={handleTabChange}
-          className="w-full grid-cols-3 sm:flex sm:w-fit"
-        >
-          {tabs.map((tab) => (
-            <AnimatedTab key={tab.id} value={tab.id} className="text-[11px] sm:text-sm">
-              {tab.label}
-              <span
-                className={cn(
-                  "ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:ml-1.5 sm:text-xs",
-                  activeTab === tab.id
-                    ? "bg-foreground/10 text-foreground/70"
-                    : "bg-muted-foreground/15 text-muted-foreground",
-                )}
-              >
-                {tab.count}
-              </span>
-            </AnimatedTab>
-          ))}
-        </AnimatedTabs>
-
-        <div className="flex w-full items-center gap-2 sm:w-72">
-          <div className="border-border flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5">
-            <Search className="text-muted-foreground/60 size-4 shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={handleSearchChange}
-              placeholder="Search tools…"
-              className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
-            />
-          </div>
+          <input
+            ref={zipImportInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            aria-label="Import skill zip"
+            onChange={handleImportZipChange}
+          />
+          <input
+            ref={folderImportInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            aria-label="Import skill folder"
+            onChange={handleImportFolderChange}
+          />
           <Button
             onClick={handleCreateSkill}
             disabled={isCreating}

@@ -1,14 +1,16 @@
 "use client";
 
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
-import { ArrowUp, Search } from "lucide-react";
+import { ArrowUp, Search, SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { Sheet, SheetContent, SheetClose } from "@/components/animate-ui/components/radix/sheet";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
+import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { INTEGRATION_DISPLAY_NAMES, INTEGRATION_LOGOS } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
@@ -63,6 +65,9 @@ const FADE_IN_MOTION = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
 } as const;
+const FILTER_PANEL_TRANSITION = { duration: 0.2, ease: "easeInOut" } as const;
+const FILTER_PANEL_INITIAL = { height: 0, opacity: 0 } as const;
+const FILTER_PANEL_ANIMATE = { height: "auto", opacity: 1 } as const;
 
 function getTriggerLabel(triggerType: string) {
   const map: Record<string, string> = {
@@ -164,9 +169,13 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
   );
 
   const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeIndustries, setActiveIndustries] = useState<string[]>([]);
   const [activeUseCases, setActiveUseCases] = useState<string[]>([]);
   const [activeIntegrations, setActiveIntegrations] = useState<IntegrationType[]>([]);
+
+  const activeFilterCount =
+    activeIndustries.length + activeUseCases.length + activeIntegrations.length;
 
   const clearFilters = useCallback(() => {
     setActiveIndustries([]);
@@ -197,10 +206,13 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
     [templates, search, activeIndustries, activeUseCases, activeIntegrations],
   );
 
-  const hasActiveFilter =
-    activeIndustries.length > 0 || activeUseCases.length > 0 || activeIntegrations.length > 0;
+  const hasActiveFilter = activeFilterCount > 0;
   const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
+  }, []);
+
+  const toggleFilters = useCallback(() => {
+    setFiltersOpen((prev) => !prev);
   }, []);
 
   useEffect(() => {
@@ -215,85 +227,214 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
     <>
       <div className="bg-background min-h-screen">
         <div className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
-          <div className="mb-10 hidden md:block">
-            <h1 className="text-foreground text-2xl font-semibold tracking-tight">Templates</h1>
-            <p className="text-muted-foreground mt-2 text-sm">
-              Pre-built coworkers ready to deploy
-            </p>
-          </div>
-
-          <div className="border-border mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 md:mb-8">
-            <Search className="text-muted-foreground/60 size-4 shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={handleSearchChange}
-              placeholder="Search templates…"
-              className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
-            />
-          </div>
-
-          <div className="mb-3 space-y-1.5 md:mb-10 md:space-y-4">
-            <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
-              <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
-                Industry
-              </span>
-              {INDUSTRIES.map((industry) => (
-                <FilterPill
-                  key={industry}
-                  value={industry}
-                  label={industry}
-                  active={activeIndustries.includes(industry)}
-                  onSelect={toggleIndustry}
-                />
-              ))}
+          <div className="mb-4 flex items-center gap-3 md:mb-8">
+            <div className="border-border flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 md:max-w-lg md:flex-none">
+              <Search className="text-muted-foreground/60 size-4 shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={handleSearchChange}
+                placeholder="Search templates…"
+                className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
+              />
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
-              <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
-                Use case
-              </span>
-              {USE_CASES.map((useCase) => (
-                <FilterPill
-                  key={useCase}
-                  value={useCase}
-                  label={useCase}
-                  active={activeUseCases.includes(useCase)}
-                  onSelect={toggleUseCase}
-                />
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
-              <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
-                App
-              </span>
-              {INTEGRATIONS_FILTER.map((integration) => (
-                <FilterPill
-                  key={integration}
-                  value={integration}
-                  label={INTEGRATION_DISPLAY_NAMES[integration]}
-                  active={activeIntegrations.includes(integration)}
-                  onSelect={toggleIntegration}
-                  iconSrc={INTEGRATION_LOGOS[integration]}
-                />
-              ))}
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggleFilters}
+              aria-expanded={filtersOpen}
+              className={cn("gap-2 rounded-xl", filtersOpen && "bg-muted border-border")}
+            >
+              <SlidersHorizontal className="size-3.5" />
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-foreground text-background inline-flex size-4.5 items-center justify-center rounded-full text-[10px] leading-none font-semibold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
           </div>
+
+          {/* Desktop: collapsible filter panel */}
+          <AnimatePresence initial={false}>
+            {filtersOpen && !isMobile && (
+              <motion.div
+                initial={FILTER_PANEL_INITIAL}
+                animate={FILTER_PANEL_ANIMATE}
+                exit={FILTER_PANEL_INITIAL}
+                transition={FILTER_PANEL_TRANSITION}
+                className="overflow-hidden"
+              >
+                <div className="mb-3 space-y-1.5 md:mb-10 md:space-y-4">
+                  <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
+                    <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
+                      Industry
+                    </span>
+                    {INDUSTRIES.map((industry) => (
+                      <FilterPill
+                        key={industry}
+                        value={industry}
+                        label={industry}
+                        active={activeIndustries.includes(industry)}
+                        onSelect={toggleIndustry}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
+                    <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
+                      Use case
+                    </span>
+                    {USE_CASES.map((useCase) => (
+                      <FilterPill
+                        key={useCase}
+                        value={useCase}
+                        label={useCase}
+                        active={activeUseCases.includes(useCase)}
+                        onSelect={toggleUseCase}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
+                    <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
+                      App
+                    </span>
+                    {INTEGRATIONS_FILTER.map((integration) => (
+                      <FilterPill
+                        key={integration}
+                        value={integration}
+                        label={INTEGRATION_DISPLAY_NAMES[integration]}
+                        active={activeIntegrations.includes(integration)}
+                        onSelect={toggleIntegration}
+                        iconSrc={INTEGRATION_LOGOS[integration]}
+                      />
+                    ))}
+                  </div>
+
+                  {hasActiveFilter && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+                      >
+                        Clear all filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Mobile: bottom sheet with filters */}
+          {isMobile && (
+            <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <SheetContent
+                side="bottom"
+                title="Filters"
+                showCloseButton={false}
+                className="h-auto max-h-[80vh] rounded-t-2xl"
+              >
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                  <span className="text-sm font-semibold">Filters</span>
+                  <SheetClose className="text-muted-foreground hover:text-foreground text-xs transition-colors">
+                    Done
+                  </SheetClose>
+                </div>
+
+                <div className="space-y-5 overflow-y-auto px-5 py-4">
+                  <div>
+                    <span className="text-muted-foreground/50 mb-2 block text-[11px] font-medium tracking-wider uppercase">
+                      Industry
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {INDUSTRIES.map((industry) => (
+                        <FilterPill
+                          key={industry}
+                          value={industry}
+                          label={industry}
+                          active={activeIndustries.includes(industry)}
+                          onSelect={toggleIndustry}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-muted-foreground/50 mb-2 block text-[11px] font-medium tracking-wider uppercase">
+                      Use case
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {USE_CASES.map((useCase) => (
+                        <FilterPill
+                          key={useCase}
+                          value={useCase}
+                          label={useCase}
+                          active={activeUseCases.includes(useCase)}
+                          onSelect={toggleUseCase}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-muted-foreground/50 mb-2 block text-[11px] font-medium tracking-wider uppercase">
+                      App
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {INTEGRATIONS_FILTER.map((integration) => (
+                        <FilterPill
+                          key={integration}
+                          value={integration}
+                          label={INTEGRATION_DISPLAY_NAMES[integration]}
+                          active={activeIntegrations.includes(integration)}
+                          onSelect={toggleIntegration}
+                          iconSrc={INTEGRATION_LOGOS[integration]}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 border-t px-5 py-4">
+                  {hasActiveFilter && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
+                      className="text-muted-foreground"
+                    >
+                      Clear all
+                    </Button>
+                  )}
+                  <SheetClose asChild>
+                    <Button variant="brand" size="sm" className="ml-auto">
+                      Show {filtered.length} template{filtered.length !== 1 ? "s" : ""}
+                    </Button>
+                  </SheetClose>
+                </div>
+              </SheetContent>
+            </Sheet>
+          )}
 
           <div className="mb-3 flex items-center justify-between md:mb-5">
             <p className="text-muted-foreground text-xs">
               {filtered.length} template{filtered.length !== 1 ? "s" : ""}
             </p>
-            {hasActiveFilter ? (
+            {hasActiveFilter && !filtersOpen && (
               <button
                 type="button"
                 onClick={clearFilters}
                 className="text-muted-foreground hover:text-foreground text-xs transition-colors"
               >
-                Clear filters
+                {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active
+                {" · "}
+                <span className="underline">Clear</span>
               </button>
-            ) : null}
+            )}
           </div>
 
           <motion.div layout className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
