@@ -1,16 +1,14 @@
 "use client";
 
-import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
+
+export const COWORKERS_OPEN_RECENT_DRAWER_EVENT = "coworkers:open-recent-drawer";
 
 export default function CoworkersLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [recentDrawerOpen, setRecentDrawerOpen] = useState(false);
-  const openRecentDrawer = useCallback(() => {
-    setRecentDrawerOpen(true);
-  }, []);
   const isRunsRoute = pathname?.startsWith("/coworkers/runs");
   const isGridRoute = pathname === "/coworkers/grid";
   const isDeployRoute = pathname?.startsWith("/coworkers/deploy/");
@@ -21,22 +19,14 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
     !isRunsRoute &&
     !isGridRoute;
 
+  useEffect(() => {
+    const handleOpenDrawer = () => setRecentDrawerOpen(true);
+    window.addEventListener(COWORKERS_OPEN_RECENT_DRAWER_EVENT, handleOpenDrawer);
+    return () => window.removeEventListener(COWORKERS_OPEN_RECENT_DRAWER_EVENT, handleOpenDrawer);
+  }, []);
+
   return (
     <>
-      {/* Mobile hamburger for recent runs — hidden in coworker editor which has its own mobile bar */}
-      {!isCoworkerEditorRoute && (
-        <div className="flex h-12 items-center px-4 md:hidden">
-          <button
-            type="button"
-            onClick={openRecentDrawer}
-            className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md"
-            aria-label="Recent runs"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-        </div>
-      )}
-
       {isRunsRoute ? (
         children
       ) : isCoworkerEditorRoute ? (
