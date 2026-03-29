@@ -74,8 +74,8 @@ export function AppShell({
       <div
         className={cn(
           "app-shell-scroll-container relative h-full min-w-0 flex-1",
-          isChatRoute ? "overflow-hidden pb-0" : "overflow-auto",
-          showNav ? "pb-16 md:pb-0" : "pb-0",
+          isChatRoute ? "overflow-hidden" : "overflow-auto",
+          !isChatRoute && showNav ? "pb-16 md:pb-0" : "pb-0",
         )}
         style={APP_SHELL_CONTENT_STYLE}
       >

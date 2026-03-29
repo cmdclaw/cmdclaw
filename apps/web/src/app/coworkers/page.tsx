@@ -8,6 +8,7 @@ import {
   Ellipsis,
   Eye,
   Loader2,
+  Menu,
   PenLine,
   Play,
   Plus,
@@ -23,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { type ChangeEvent, useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/app/coworkers/layout";
 import { ModelSelector } from "@/components/chat/model-selector";
 // Commented out — prompt bar removed from coworkers page
 // import { VoiceIndicator } from "@/components/chat/voice-indicator";
@@ -614,6 +616,9 @@ export default function CoworkersPage() {
   const importSharedCoworker = useImportSharedCoworker();
   const { isRecording, error: _voiceError, startRecording, stopRecording } = useVoiceRecording();
   const { mutateAsync: transcribe } = useTranscribe();
+  const openRecentDrawer = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(COWORKERS_OPEN_RECENT_DRAWER_EVENT));
+  }, []);
   const [isCreating, setIsCreating] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [_inputPrefillRequest, setInputPrefillRequest] = useState<{
@@ -1053,12 +1058,22 @@ export default function CoworkersPage() {
       ) : (
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
-              My coworkers
-              <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium tabular-nums">
-                {coworkerList.length}
-              </span>
-            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={openRecentDrawer}
+                className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md md:hidden"
+                aria-label="Recent runs"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                My coworkers
+                <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium tabular-nums">
+                  {coworkerList.length}
+                </span>
+              </h2>
+            </div>
             <div className="relative w-full sm:w-64">
               <Search className="text-muted-foreground/60 pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
               <Input

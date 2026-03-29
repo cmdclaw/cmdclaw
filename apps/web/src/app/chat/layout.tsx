@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeftOpen } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
@@ -74,7 +74,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
           className="text-muted-foreground hover:text-foreground -ml-1 flex h-9 w-9 items-center justify-center rounded-xl md:hidden"
           aria-label="Recent chats"
         >
-          <PanelLeftOpen className="h-5 w-5" />
+          <Menu className="h-5 w-5" />
         </button>
         {isAdmin && liveConversationId && (
           <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
