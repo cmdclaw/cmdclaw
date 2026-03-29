@@ -51,9 +51,9 @@ const INTEGRATIONS_FILTER: IntegrationType[] = [
 
 const FILTER_PILL_TRANSITION = { type: "spring", duration: 0.4, bounce: 0.15 } as const;
 const TEMPLATE_CARD_MOTION = {
-  initial: { opacity: 0, scale: 0.96 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.96 },
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
   transition: { duration: 0.2, ease: "easeOut" },
 } as const;
 const ACTIVE_PILL_MOTION = {
