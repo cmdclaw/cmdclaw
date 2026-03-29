@@ -222,8 +222,8 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
             </p>
           </div>
 
-          <div className="border-border/50 bg-card mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm md:mb-8">
-            <Search className="text-muted-foreground/50 size-4 shrink-0" />
+          <div className="border-border mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 md:mb-8">
+            <Search className="text-muted-foreground/60 size-4 shrink-0" />
             <input
               type="text"
               value={search}
@@ -312,7 +312,7 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
                       isMobile ? `/template/${template.id}` : `/templates?preview=${template.id}`
                     }
                     scroll={false}
-                    className="border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200"
+                    className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group relative flex h-full w-full flex-col rounded-xl border p-5 transition-all duration-150"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-[13px] leading-snug font-medium">{template.title}</p>

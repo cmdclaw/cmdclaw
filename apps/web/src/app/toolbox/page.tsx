@@ -319,7 +319,7 @@ function IntegrationToolCard({
         href={href}
         scroll={false}
         className={cn(
-          "border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200",
+          "border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 transition-all duration-150",
           isPreviewOnly && "opacity-50",
           connectError && "border-red-500/30",
         )}
@@ -427,7 +427,7 @@ function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled:
         href={`/toolbox?preview=community:${skill.id}`}
         scroll={false}
         className={cn(
-          "border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200",
+          "border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 transition-all duration-150",
         )}
       >
         {/* Header */}
@@ -565,7 +565,7 @@ function CustomToolCard({
       <Link
         href={`/skills/${skill.id}`}
         className={cn(
-          "border-border/40 bg-card hover:border-border/80 hover:bg-muted/20 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 shadow-sm transition-all duration-200",
+          "border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 transition-all duration-150",
         )}
       >
         {/* Header */}
@@ -1351,8 +1351,8 @@ function ToolboxPageContent() {
         </AnimatedTabs>
 
         <div className="flex w-full items-center gap-2 sm:w-72">
-          <div className="border-border/50 bg-card flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5 shadow-sm">
-            <Search className="text-muted-foreground/50 size-4 shrink-0" />
+          <div className="border-border flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5">
+            <Search className="text-muted-foreground/60 size-4 shrink-0" />
             <input
               type="text"
               value={search}
