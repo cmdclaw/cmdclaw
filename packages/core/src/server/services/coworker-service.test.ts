@@ -15,6 +15,9 @@ process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
 const coworkerFindFirstMock = vi.fn();
 const coworkerRunFindManyMock = vi.fn();
 const coworkerRunFindFirstMock = vi.fn();
+const workspaceExecutorSourceFindManyMock = vi.fn();
+const getEnabledIntegrationTypesMock = vi.fn();
+const getRemoteIntegrationCredentialsMock = vi.fn();
 
 const insertValuesMock = vi.fn();
 const insertMock = vi.fn(() => ({ values: insertValuesMock }));
@@ -31,6 +34,12 @@ const dbMock = {
     coworkerRun: {
       findMany: coworkerRunFindManyMock,
       findFirst: coworkerRunFindFirstMock,
+    },
+    workspaceExecutorSource: {
+      findMany: workspaceExecutorSourceFindManyMock,
+    },
+    customIntegrationCredential: {
+      findMany: vi.fn(),
     },
   },
   insert: insertMock,
@@ -50,6 +59,20 @@ vi.mock("./generation-manager", () => ({
   },
 }));
 
+vi.mock("../integrations/cli-env", () => ({
+  getEnabledIntegrationTypes: getEnabledIntegrationTypesMock,
+}));
+
+vi.mock("../integrations/remote-integrations", async () => {
+  const actual = await vi.importActual<
+    typeof import("../integrations/remote-integrations")
+  >("../integrations/remote-integrations");
+  return {
+    ...actual,
+    getRemoteIntegrationCredentials: getRemoteIntegrationCredentialsMock,
+  };
+});
+
 let triggerCoworkerRun: typeof import("./coworker-service").triggerCoworkerRun;
 
 describe("triggerCoworkerRun", () => {
@@ -64,10 +87,14 @@ describe("triggerCoworkerRun", () => {
     coworkerFindFirstMock.mockResolvedValue({
       id: "wf-1",
       ownerId: "user-1",
+      workspaceId: "ws-1",
       status: "on",
       autoApprove: true,
+      toolAccessMode: "all",
       allowedIntegrations: ["slack"],
       allowedCustomIntegrations: ["custom-crm"],
+      allowedExecutorSourceIds: [],
+      allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "Do the coworker",
       promptDo: "Do this",
@@ -76,6 +103,19 @@ describe("triggerCoworkerRun", () => {
 
     coworkerRunFindManyMock.mockResolvedValue([]);
     coworkerRunFindFirstMock.mockResolvedValue(null);
+    workspaceExecutorSourceFindManyMock.mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    getEnabledIntegrationTypesMock.mockResolvedValue(["slack"]);
+    getRemoteIntegrationCredentialsMock.mockResolvedValue({
+      remoteUserId: "remote-user-1",
+      remoteUserEmail: "client@example.com",
+      remoteUserName: "Client",
+      enabledIntegrations: ["google_gmail", "hubspot"],
+      tokens: {
+        GMAIL_ACCESS_TOKEN: "remote-gmail-token",
+        HUBSPOT_ACCESS_TOKEN: "remote-hubspot-token",
+      },
+    });
 
     insertValuesMock.mockImplementation((values: unknown) => ({
       returning: vi.fn().mockResolvedValue([
@@ -169,7 +209,43 @@ describe("triggerCoworkerRun", () => {
         model: "anthropic/claude-sonnet-4-6",
         userId: "user-1",
         allowedIntegrations: ["slack"],
-        allowedCustomIntegrations: ["custom-crm"],
+        allowedCustomIntegrations: [],
+      }),
+    );
+  });
+
+  it("uses remote enabled integrations for all-tools manual runs", async () => {
+    await triggerCoworkerRun({
+      coworkerId: "wf-1",
+      triggerPayload: { source: "manual" },
+      userId: "user-1",
+      userRole: "admin",
+      remoteIntegrationSource: {
+        targetEnv: "prod",
+        remoteUserId: "remote-user-1",
+        requestedByUserId: "user-1",
+        requestedByEmail: "admin@example.com",
+      },
+    });
+
+    expect(getRemoteIntegrationCredentialsMock).toHaveBeenCalledWith({
+      targetEnv: "prod",
+      remoteUserId: "remote-user-1",
+      integrationTypes: ["slack"],
+      requestedByUserId: "user-1",
+      requestedByEmail: "admin@example.com",
+    });
+
+    expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedIntegrations: ["google_gmail", "hubspot"],
+        remoteIntegrationSource: {
+          targetEnv: "prod",
+          remoteUserId: "remote-user-1",
+          requestedByUserId: "user-1",
+          requestedByEmail: "admin@example.com",
+          remoteUserEmail: "client@example.com",
+        },
       }),
     );
   });

@@ -62,10 +62,16 @@ import { getProviderModels } from "../ai/subscription-providers";
 import { trackGenerationBilling } from "../billing/service";
 import { hasConnectedProviderAuthForUser } from "../control-plane/subscription-providers";
 import {
+  filterCliEnvToAllowedIntegrations,
   getCliEnvForUser,
   getCliInstructionsWithCustom,
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
+import {
+  getRemoteIntegrationCredentials,
+  remoteIntegrationSourceSchema,
+  type RemoteIntegrationSource,
+} from "../integrations/remote-integrations";
 import {
   composeOpencodePromptSpec,
   type OpencodePromptCompositionInput,
@@ -370,6 +376,7 @@ interface GenerationContext {
   allowedCustomIntegrations?: string[];
   allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
+  remoteIntegrationSource?: RemoteIntegrationSource;
   coworkerPrompt?: string;
   coworkerPromptDo?: string;
   coworkerPromptDont?: string;
@@ -596,6 +603,7 @@ function buildExecutionPolicy(params: {
   allowedCustomIntegrations?: string[];
   allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
+  remoteIntegrationSource?: RemoteIntegrationSource;
   autoApprove: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
@@ -606,6 +614,7 @@ function buildExecutionPolicy(params: {
     allowedCustomIntegrations: params.allowedCustomIntegrations,
     allowedExecutorSourceIds: params.allowedExecutorSourceIds,
     allowedSkillSlugs: params.allowedSkillSlugs,
+    remoteIntegrationSource: params.remoteIntegrationSource,
     autoApprove: params.autoApprove,
     sandboxProvider: params.sandboxProvider,
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
@@ -1673,6 +1682,7 @@ class GenerationManager {
     allowedCustomIntegrations?: string[];
     allowedExecutorSourceIds?: string[];
     allowedSkillSlugs?: string[];
+    remoteIntegrationSource?: RemoteIntegrationSource;
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
     selectedPlatformSkillSlugs?: string[];
@@ -1686,11 +1696,17 @@ class GenerationManager {
           (entry): entry is IntegrationType => typeof entry === "string",
         ) as IntegrationType[])
       : undefined;
+    const remoteIntegrationSource = remoteIntegrationSourceSchema.safeParse(
+      policy?.remoteIntegrationSource,
+    );
     return {
       allowedIntegrations,
       allowedCustomIntegrations: policy?.allowedCustomIntegrations,
       allowedExecutorSourceIds: policy?.allowedExecutorSourceIds,
       allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(policy?.allowedSkillSlugs),
+      remoteIntegrationSource: remoteIntegrationSource.success
+        ? remoteIntegrationSource.data
+        : undefined,
       autoApprove: policy?.autoApprove ?? fallbackAutoApprove,
       sandboxProvider:
         policy?.sandboxProvider === "e2b" ||
@@ -1965,6 +1981,7 @@ class GenerationManager {
     allowedIntegrations?: IntegrationType[];
     fileAttachments?: UserFileAttachment[];
     selectedPlatformSkillSlugs?: string[];
+    remoteIntegrationSource?: RemoteIntegrationSource;
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model, autoApprove } = params;
     const fileAttachments = params.fileAttachments;
@@ -2274,6 +2291,7 @@ class GenerationManager {
     // Create generation record
     const executionPolicy = buildExecutionPolicy({
       allowedIntegrations: params.allowedIntegrations,
+      remoteIntegrationSource: params.remoteIntegrationSource,
       autoApprove: autoApprove ?? conv.autoApprove,
       sandboxProvider: params.sandboxProvider,
       selectedPlatformSkillSlugs,
@@ -2392,6 +2410,7 @@ class GenerationManager {
       backendType,
       sandboxProviderOverride: params.sandboxProvider,
       allowedIntegrations: params.allowedIntegrations,
+      remoteIntegrationSource: params.remoteIntegrationSource,
       autoApprove: autoApprove ?? conv.autoApprove,
       attachments: fileAttachments,
       builderCoworkerContext,
@@ -2471,6 +2490,7 @@ class GenerationManager {
     allowedExecutorSourceIds?: string[];
     allowedSkillSlugs?: string[];
     fileAttachments?: UserFileAttachment[];
+    remoteIntegrationSource?: RemoteIntegrationSource;
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model } = params;
     const resolvedModel = await resolveCoworkerModel(model);
@@ -2532,6 +2552,7 @@ class GenerationManager {
       allowedCustomIntegrations: params.allowedCustomIntegrations,
       allowedExecutorSourceIds: params.allowedExecutorSourceIds,
       allowedSkillSlugs: normalizedAllowedSkillSlugs,
+      remoteIntegrationSource: params.remoteIntegrationSource,
       autoApprove: params.autoApprove,
       sandboxProvider: params.sandboxProvider,
       selectedPlatformSkillSlugs,
@@ -2624,6 +2645,7 @@ class GenerationManager {
       allowedCustomIntegrations: params.allowedCustomIntegrations,
       allowedExecutorSourceIds: params.allowedExecutorSourceIds,
       allowedSkillSlugs: normalizedAllowedSkillSlugs,
+      remoteIntegrationSource: params.remoteIntegrationSource,
       coworkerPrompt: undefined,
       coworkerPromptDo: undefined,
       coworkerPromptDont: undefined,
@@ -2820,6 +2842,7 @@ class GenerationManager {
         executionPolicy.allowedCustomIntegrations ??
         linkedCoworker?.allowedCustomIntegrations ??
         undefined,
+      remoteIntegrationSource: executionPolicy.remoteIntegrationSource,
       allowedExecutorSourceIds:
         executionPolicy.allowedExecutorSourceIds ??
         linkedCoworker?.allowedExecutorSourceIds ??
@@ -4677,36 +4700,41 @@ class GenerationManager {
       const allowedIntegrations = ctx.allowedIntegrations ?? enabledIntegrations;
 
       const cliInstructions = await getCliInstructionsWithCustom(allowedIntegrations, ctx.userId);
-      const filteredCliEnv =
-        ctx.allowedIntegrations !== undefined
-          ? Object.fromEntries(
-              Object.entries(cliEnv).filter(([key]) => {
-                const envToIntegration: Record<string, IntegrationType> = {
-                  GMAIL_ACCESS_TOKEN: "google_gmail",
-                  OUTLOOK_ACCESS_TOKEN: "outlook",
-                  OUTLOOK_CALENDAR_ACCESS_TOKEN: "outlook_calendar",
-                  GOOGLE_CALENDAR_ACCESS_TOKEN: "google_calendar",
-                  GOOGLE_DOCS_ACCESS_TOKEN: "google_docs",
-                  GOOGLE_SHEETS_ACCESS_TOKEN: "google_sheets",
-                  GOOGLE_DRIVE_ACCESS_TOKEN: "google_drive",
-                  NOTION_ACCESS_TOKEN: "notion",
-                  LINEAR_ACCESS_TOKEN: "linear",
-                  GITHUB_ACCESS_TOKEN: "github",
-                  AIRTABLE_ACCESS_TOKEN: "airtable",
-                  SLACK_ACCESS_TOKEN: "slack",
-                  HUBSPOT_ACCESS_TOKEN: "hubspot",
-                  SALESFORCE_ACCESS_TOKEN: "salesforce",
-                  DYNAMICS_ACCESS_TOKEN: "dynamics",
-                  DYNAMICS_INSTANCE_URL: "dynamics",
-                  LINKEDIN_ACCOUNT_ID: "linkedin",
-                  UNIPILE_API_KEY: "linkedin",
-                  UNIPILE_DSN: "linkedin",
-                };
-                const integration = envToIntegration[key];
-                return integration ? ctx.allowedIntegrations!.includes(integration) : true;
-              }),
-            )
-          : cliEnv;
+      let filteredCliEnv = filterCliEnvToAllowedIntegrations(cliEnv, ctx.allowedIntegrations);
+
+      if (ctx.remoteIntegrationSource && allowedIntegrations.length > 0) {
+        const remoteCredentials = await getRemoteIntegrationCredentials({
+          targetEnv: ctx.remoteIntegrationSource.targetEnv,
+          remoteUserId: ctx.remoteIntegrationSource.remoteUserId,
+          integrationTypes: allowedIntegrations,
+          requestedByUserId: ctx.remoteIntegrationSource.requestedByUserId,
+          requestedByEmail: ctx.remoteIntegrationSource.requestedByEmail ?? null,
+        });
+
+        logServerEvent(
+          "info",
+          "REMOTE_INTEGRATION_CREDENTIALS_ATTACHED",
+          {
+            targetEnv: ctx.remoteIntegrationSource.targetEnv,
+            remoteUserId: ctx.remoteIntegrationSource.remoteUserId,
+            remoteUserEmail:
+              ctx.remoteIntegrationSource.remoteUserEmail ?? remoteCredentials.remoteUserEmail,
+            integrationTypes: [...allowedIntegrations].toSorted(),
+          },
+          {
+            source: "generation-manager",
+            traceId: ctx.traceId,
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+          },
+        );
+
+        filteredCliEnv = {
+          ...filteredCliEnv,
+          ...remoteCredentials.tokens,
+        };
+      }
 
       if (ctx.allowedIntegrations !== undefined) {
         filteredCliEnv.ALLOWED_INTEGRATIONS = ctx.allowedIntegrations.join(",");

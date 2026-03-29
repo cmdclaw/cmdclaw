@@ -16,6 +16,11 @@ import {
   normalizeCoworkerToolAccessMode,
 } from "../../lib/coworker-tool-policy";
 import { getEnabledIntegrationTypes } from "../integrations/cli-env";
+import {
+  getRemoteIntegrationCredentials,
+  type RemoteIntegrationSource,
+} from "../integrations/remote-integrations";
+import { logServerEvent } from "../utils/observability";
 import { generationManager } from "./generation-manager";
 import { generationInterruptService } from "./generation-interrupt-service";
 
@@ -166,6 +171,7 @@ export async function triggerCoworkerRun(params: {
   userId?: string;
   userRole?: string | null;
   fileAttachments?: CoworkerFileAttachment[];
+  remoteIntegrationSource?: RemoteIntegrationSource;
 }): Promise<{
   coworkerId: string;
   runId: string;
@@ -231,7 +237,7 @@ export async function triggerCoworkerRun(params: {
   const userContent = coworkerSections.join("\n\n");
 
   const toolAccessMode = normalizeCoworkerToolAccessMode(wf.toolAccessMode, wf.allowedIntegrations);
-  const allowedIntegrations =
+  let allowedIntegrations =
     toolAccessMode === "all"
       ? await getEnabledIntegrationTypes(wf.ownerId)
       : (wf.allowedIntegrations ?? []).filter(
@@ -275,6 +281,56 @@ export async function triggerCoworkerRun(params: {
         : [];
   const allowedSkillSlugs =
     toolAccessMode === "all" ? undefined : normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs);
+  let resolvedRemoteIntegrationSource: RemoteIntegrationSource | undefined;
+
+  if (params.remoteIntegrationSource) {
+    const remoteCredentials = await getRemoteIntegrationCredentials({
+      targetEnv: params.remoteIntegrationSource.targetEnv,
+      remoteUserId: params.remoteIntegrationSource.remoteUserId,
+      integrationTypes: allowedIntegrations,
+      requestedByUserId: params.remoteIntegrationSource.requestedByUserId,
+      requestedByEmail: params.remoteIntegrationSource.requestedByEmail ?? null,
+    });
+
+    resolvedRemoteIntegrationSource = {
+      ...params.remoteIntegrationSource,
+      remoteUserEmail: remoteCredentials.remoteUserEmail,
+    };
+
+    if (toolAccessMode === "all") {
+      allowedIntegrations = remoteCredentials.enabledIntegrations;
+    }
+
+    logServerEvent(
+      "info",
+      "COWORKER_REMOTE_INTEGRATION_SOURCE_SELECTED",
+      {
+        coworkerId: wf.id,
+        coworkerRunId: run.id,
+        targetEnv: resolvedRemoteIntegrationSource.targetEnv,
+        remoteUserId: resolvedRemoteIntegrationSource.remoteUserId,
+        remoteUserEmail: resolvedRemoteIntegrationSource.remoteUserEmail ?? null,
+        actorUserId: resolvedRemoteIntegrationSource.requestedByUserId ?? null,
+        actorUserEmail: resolvedRemoteIntegrationSource.requestedByEmail ?? null,
+      },
+      {
+        source: "coworker-service",
+        userId: wf.ownerId,
+      },
+    );
+
+    await db.insert(coworkerRunEvent).values({
+      coworkerRunId: run.id,
+      type: "remote_integration_source",
+      payload: {
+        targetEnv: resolvedRemoteIntegrationSource.targetEnv,
+        remoteUserId: resolvedRemoteIntegrationSource.remoteUserId,
+        remoteUserEmail: resolvedRemoteIntegrationSource.remoteUserEmail ?? null,
+        actorUserId: resolvedRemoteIntegrationSource.requestedByUserId ?? null,
+        actorUserEmail: resolvedRemoteIntegrationSource.requestedByEmail ?? null,
+      },
+    });
+  }
 
   let generationId: string;
   let conversationId: string;
@@ -293,6 +349,7 @@ export async function triggerCoworkerRun(params: {
       allowedExecutorSourceIds,
       allowedSkillSlugs,
       fileAttachments: params.fileAttachments,
+      remoteIntegrationSource: resolvedRemoteIntegrationSource,
     });
 
     generationId = startResult.generationId;

@@ -19,6 +19,12 @@ import {
   type ProviderAuthSource,
 } from "@cmdclaw/core/lib/provider-auth-source";
 import {
+  listConfiguredRemoteIntegrationTargets,
+  remoteIntegrationSourceSchema,
+  remoteIntegrationTargetEnvSchema,
+  searchRemoteIntegrationUsers,
+} from "@cmdclaw/core/server/integrations/remote-integrations";
+import {
   applyCoworkerEdit,
   coworkerBuilderEditSchema,
 } from "@cmdclaw/core/server/services/coworker-builder-service";
@@ -194,6 +200,25 @@ async function requireOwnedCoworkerInActiveWorkspace(
     workspaceId,
     membershipRole: access.membership.role,
   };
+}
+
+async function requireAdminUser(context: {
+  user: { id: string };
+  db: typeof import("@cmdclaw/db/client").db;
+}) {
+  const dbUser = await context.db.query.user.findFirst({
+    where: eq(user.id, context.user.id),
+    columns: {
+      role: true,
+      email: true,
+    },
+  });
+
+  if (dbUser?.role !== "admin") {
+    throw new ORPCError("FORBIDDEN", { message: "Admin access required" });
+  }
+
+  return dbUser;
 }
 
 async function copyCoworkerDocuments(params: {
@@ -902,21 +927,65 @@ const trigger = protectedProcedure
     z.object({
       id: z.string(),
       payload: z.unknown().optional(),
+      remoteIntegrationSource: remoteIntegrationSourceSchema
+        .pick({
+          targetEnv: true,
+          remoteUserId: true,
+        })
+        .optional(),
     }),
   )
   .handler(async ({ input, context }) => {
     await requireOwnedCoworkerInActiveWorkspace(context, input.id);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
-      columns: { role: true },
+      columns: { role: true, email: true },
     });
+
+    if (input.remoteIntegrationSource && dbUser?.role !== "admin") {
+      throw new ORPCError("FORBIDDEN", { message: "Admin access required" });
+    }
 
     return triggerCoworkerRun({
       coworkerId: input.id,
       triggerPayload: input.payload ?? {},
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
+      remoteIntegrationSource: input.remoteIntegrationSource
+        ? {
+            ...input.remoteIntegrationSource,
+            requestedByUserId: context.user.id,
+            requestedByEmail: dbUser?.email ?? null,
+          }
+        : undefined,
     });
+  });
+
+const listRemoteIntegrationTargets = protectedProcedure.handler(async ({ context }) => {
+  await requireAdminUser(context);
+  return {
+    targets: listConfiguredRemoteIntegrationTargets(),
+  };
+});
+
+const searchRemoteIntegrationUsersProcedure = protectedProcedure
+  .input(
+    z.object({
+      targetEnv: remoteIntegrationTargetEnvSchema,
+      query: z.string().default(""),
+      limit: z.number().int().min(1).max(25).optional(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await requireAdminUser(context);
+
+    return {
+      users: await searchRemoteIntegrationUsers({
+        targetEnv: input.targetEnv,
+        query: input.query,
+        limit: input.limit,
+      }),
+    };
   });
 
 const getRun = protectedProcedure
@@ -1789,6 +1858,8 @@ export const coworkerRouter = {
   deleteDocument,
   delete: del,
   trigger,
+  listRemoteIntegrationTargets,
+  searchRemoteIntegrationUsers: searchRemoteIntegrationUsersProcedure,
   getRun,
   listRuns,
   getForwardingAlias,

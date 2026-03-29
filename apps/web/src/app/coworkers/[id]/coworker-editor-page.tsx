@@ -13,6 +13,7 @@ import {
   Play,
   ChevronDown,
   Circle,
+  Shield,
   Upload,
   FileText,
   X,
@@ -28,7 +29,16 @@ import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type MouseEvent,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -63,6 +73,7 @@ import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
+import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
   INTEGRATION_DISPLAY_NAMES,
   INTEGRATION_LOGOS,
@@ -92,6 +103,8 @@ import {
   useGetOrCreateBuilderConversation,
   usePlatformSkillList,
   useProviderAuthStatus,
+  useRemoteIntegrationTargets,
+  useSearchRemoteIntegrationUsers,
   useSkillList,
   useUploadCoworkerDocument,
   type CoworkerSchedule,
@@ -130,7 +143,14 @@ const runListMotionExit = { opacity: 0, x: -24 } as const;
 const runMotionTransition = { duration: 0.2, ease: "easeOut" } as const;
 const statusTextMotionTransition = { duration: 0.15 } as const;
 const DEFAULT_COWORKER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
-type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox";
+type CoworkerTab = "chat" | "instruction" | "runs" | "docs" | "toolbox" | "admin";
+type RemoteIntegrationTargetEnv = "staging" | "prod";
+type RemoteIntegrationUserOption = {
+  id: string;
+  email: string;
+  name: string | null;
+  enabledIntegrationTypes: IntegrationType[];
+};
 
 type CoworkerDocumentRecord = {
   id: string;
@@ -404,6 +424,9 @@ export default function CoworkerEditorPage() {
   const { data: accessibleSkills, isLoading: isAccessibleSkillsLoading } = useSkillList();
   const { data: executorSourceData } = useExecutorSourceList();
   const { data: providerAuthStatus } = useProviderAuthStatus();
+  const { data: remoteIntegrationTargetsData } = useRemoteIntegrationTargets({
+    enabled: isAdmin,
+  });
   const { data: coworkerForwardingAlias } = useCoworkerForwardingAlias(coworkerId);
   const { data: runs, refetch: refetchRuns } = useCoworkerRuns(coworkerId);
   const updateCoworker = useUpdateCoworker();
@@ -442,7 +465,24 @@ export default function CoworkerEditorPage() {
   const [builderConversationError, setBuilderConversationError] = useState<string | null>(null);
   const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
   const [deletingDocumentIds, setDeletingDocumentIds] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<CoworkerTab>("instruction");
+  const [remoteTargetEnv, setRemoteTargetEnv] = useState<RemoteIntegrationTargetEnv | null>(null);
+  const [remoteUserQuery, setRemoteUserQuery] = useState("");
+  const [selectedRemoteUser, setSelectedRemoteUser] = useState<RemoteIntegrationUserOption | null>(
+    null,
+  );
   const isMobile = useIsMobile();
+  const deferredRemoteUserQuery = useDeferredValue(remoteUserQuery);
+  const availableRemoteIntegrationTargets = useMemo(
+    () => remoteIntegrationTargetsData?.targets ?? [],
+    [remoteIntegrationTargetsData],
+  );
+  const remoteUserSearchEnabled = isAdmin && activeTab === "admin" && Boolean(remoteTargetEnv);
+  const { data: remoteUserSearchData, isFetching: isRemoteUserSearchFetching } =
+    useSearchRemoteIntegrationUsers(remoteTargetEnv, deferredRemoteUserQuery, {
+      enabled: remoteUserSearchEnabled,
+      limit: 12,
+    });
   const routeRunId = useMemo(() => {
     if (!coworkerId || !pathname) {
       return null;
@@ -456,7 +496,6 @@ export default function CoworkerEditorPage() {
     const runId = pathname.slice(prefix.length);
     return runId.length > 0 ? runId : null;
   }, [coworkerId, pathname]);
-  const [activeTab, setActiveTab] = useState<CoworkerTab>("instruction");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(routeRunId);
   const isRunsRoute = pathname?.startsWith(`/coworkers/${coworkerId}/runs`) ?? false;
   const baseTabParam = searchParams.get("tab");
@@ -464,10 +503,42 @@ export default function CoworkerEditorPage() {
     baseTabParam === "chat" ||
     baseTabParam === "instruction" ||
     baseTabParam === "docs" ||
-    baseTabParam === "toolbox"
+    baseTabParam === "toolbox" ||
+    baseTabParam === "admin"
       ? baseTabParam
       : null;
   const hasSetMobileDefaultRef = useRef(false);
+  const remoteUserOptions = useMemo(
+    () => (remoteUserSearchData?.users as RemoteIntegrationUserOption[] | undefined) ?? [],
+    [remoteUserSearchData],
+  );
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === "admin") {
+      setActiveTab("instruction");
+    }
+  }, [activeTab, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setRemoteTargetEnv(null);
+      setSelectedRemoteUser(null);
+      setRemoteUserQuery("");
+      return;
+    }
+
+    if (remoteTargetEnv && availableRemoteIntegrationTargets.includes(remoteTargetEnv)) {
+      return;
+    }
+
+    setRemoteTargetEnv(
+      availableRemoteIntegrationTargets.length > 0 ? availableRemoteIntegrationTargets[0] : null,
+    );
+  }, [availableRemoteIntegrationTargets, isAdmin, remoteTargetEnv]);
+
+  useEffect(() => {
+    setSelectedRemoteUser(null);
+  }, [remoteTargetEnv]);
   useEffect(() => {
     if (!isMobile || hasSetMobileDefaultRef.current) {
       return;
@@ -1381,34 +1452,46 @@ export default function CoworkerEditorPage() {
     coworkerId,
   ]);
 
-  const handleRun = useCallback(async () => {
-    if (!coworkerId || isStartingRun) {
-      return null;
-    }
-
-    setIsStartingRun(true);
-    try {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-      const saveSucceeded = await persistCoworker({ force: true });
-      if (!saveSucceeded) {
-        toast.error("Failed to save coworker before test run.");
+  const handleRun = useCallback(
+    async (options?: {
+      remoteIntegrationSource?: {
+        targetEnv: RemoteIntegrationTargetEnv;
+        remoteUserId: string;
+      };
+    }) => {
+      if (!coworkerId || isStartingRun) {
         return null;
       }
 
-      const result = await triggerCoworker.mutateAsync({ id: coworkerId, payload: {} });
-      toast.success("Run started.");
-      void refetchRuns();
-      return result;
-    } catch (error) {
-      console.error("Failed to run coworker:", error);
-      toast.error("Failed to start run.");
-      return null;
-    } finally {
-      setIsStartingRun(false);
-    }
-  }, [isStartingRun, persistCoworker, refetchRuns, triggerCoworker, coworkerId]);
+      setIsStartingRun(true);
+      try {
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+        }
+        const saveSucceeded = await persistCoworker({ force: true });
+        if (!saveSucceeded) {
+          toast.error("Failed to save coworker before test run.");
+          return null;
+        }
+
+        const result = await triggerCoworker.mutateAsync({
+          id: coworkerId,
+          payload: {},
+          remoteIntegrationSource: options?.remoteIntegrationSource,
+        });
+        toast.success("Run started.");
+        void refetchRuns();
+        return result;
+      } catch (error) {
+        console.error("Failed to run coworker:", error);
+        toast.error(normalizeGenerationError(error, "start_rpc").message);
+        return null;
+      } finally {
+        setIsStartingRun(false);
+      }
+    },
+    [isStartingRun, persistCoworker, refetchRuns, triggerCoworker, coworkerId],
+  );
 
   const hasAgentInstructions = prompt.trim().length > 0;
   const coworkerDisplayName = coworker?.name?.trim().length ? coworker.name : "New Coworker";
@@ -1484,6 +1567,36 @@ export default function CoworkerEditorPage() {
     [buildCoworkerPanelHref, handleRun, isMobile, router],
   );
 
+  const handleRemoteRunClick = useCallback(async () => {
+    if (!remoteTargetEnv || !selectedRemoteUser) {
+      toast.error("Select a remote environment and a remote user first.");
+      return;
+    }
+
+    const result = await handleRun({
+      remoteIntegrationSource: {
+        targetEnv: remoteTargetEnv,
+        remoteUserId: selectedRemoteUser.id,
+      },
+    });
+    if (!result?.runId) {
+      return;
+    }
+
+    setActiveTab("runs");
+    setSelectedRunId(result.runId);
+    if (isMobile) {
+      router.replace(buildCoworkerPanelHref({ runId: result.runId }));
+      return;
+    }
+
+    window.history.replaceState(
+      window.history.state,
+      "",
+      buildCoworkerPanelHref({ runId: result.runId }),
+    );
+  }, [buildCoworkerPanelHref, handleRun, isMobile, remoteTargetEnv, router, selectedRemoteUser]);
+
   const isRunDisabled =
     !hasAgentInstructions || status !== "on" || triggerCoworker.isPending || isStartingRun;
   const isRunning = triggerCoworker.isPending || isStartingRun;
@@ -1555,6 +1668,12 @@ export default function CoworkerEditorPage() {
   const handleOpenDeleteDialog = useCallback(() => {
     setShowDeleteDialog(true);
   }, []);
+  const handleRemoteTargetEnvChange = useCallback((value: string) => {
+    setRemoteTargetEnv(value as RemoteIntegrationTargetEnv);
+  }, []);
+  const handleRemoteUserQueryChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setRemoteUserQuery(event.target.value);
+  }, []);
   const chatPanel = useMemo(
     () => (
       <CoworkerChatPanel
@@ -1575,6 +1694,38 @@ export default function CoworkerEditorPage() {
       handleRetryBuilderConversation,
       isBuilderConversationLoading,
       skillSelectionScopeKey,
+    ],
+  );
+
+  const adminPanel = useMemo(
+    () => (
+      <RemoteIntegrationAdminPanel
+        availableTargets={availableRemoteIntegrationTargets}
+        selectedTargetEnv={remoteTargetEnv}
+        remoteUserQuery={remoteUserQuery}
+        remoteUserOptions={remoteUserOptions}
+        selectedRemoteUser={selectedRemoteUser}
+        isSearching={isRemoteUserSearchFetching}
+        isRunDisabled={isRunDisabled}
+        isRunning={isRunning}
+        onTargetEnvChange={handleRemoteTargetEnvChange}
+        onRemoteUserQueryChange={handleRemoteUserQueryChange}
+        onSelectRemoteUser={setSelectedRemoteUser}
+        onRun={handleRemoteRunClick}
+      />
+    ),
+    [
+      availableRemoteIntegrationTargets,
+      handleRemoteRunClick,
+      handleRemoteTargetEnvChange,
+      handleRemoteUserQueryChange,
+      isRemoteUserSearchFetching,
+      isRunDisabled,
+      isRunning,
+      remoteTargetEnv,
+      remoteUserOptions,
+      remoteUserQuery,
+      selectedRemoteUser,
     ],
   );
 
@@ -1660,6 +1811,8 @@ export default function CoworkerEditorPage() {
         onShowDeleteDialogChange={setShowDeleteDialog}
         onDelete={handleDelete}
         isDeleting={deleteCoworker.isPending}
+        showAdminTab={isAdmin}
+        adminContent={adminPanel}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dep list tracks all panel props
@@ -1741,6 +1894,8 @@ export default function CoworkerEditorPage() {
       setShowDeleteDialog,
       handleDelete,
       deleteCoworker.isPending,
+      isAdmin,
+      adminPanel,
     ],
   );
 
@@ -1773,6 +1928,11 @@ export default function CoworkerEditorPage() {
             <AnimatedTab value="toolbox" className="px-2.5">
               <Wrench className="h-4 w-4" aria-label="Toolbox" />
             </AnimatedTab>
+            {isAdmin ? (
+              <AnimatedTab value="admin" className="px-2.5">
+                <Shield className="h-4 w-4" aria-label="Admin" />
+              </AnimatedTab>
+            ) : null}
           </AnimatedTabs>
           <div className="flex shrink-0 items-center gap-1.5">
             <Switch checked={status === "on"} onCheckedChange={handleStatusChange} />
@@ -1884,6 +2044,8 @@ export default function CoworkerEditorPage() {
               onShowDeleteDialogChange={setShowDeleteDialog}
               onDelete={handleDelete}
               isDeleting={deleteCoworker.isPending}
+              showAdminTab={isAdmin}
+              adminContent={adminPanel}
               hideHeader
             />
           )}
@@ -2067,6 +2229,227 @@ function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void 
   );
 }
 
+function RemoteIntegrationAdminPanel({
+  availableTargets,
+  selectedTargetEnv,
+  remoteUserQuery,
+  remoteUserOptions,
+  selectedRemoteUser,
+  isSearching,
+  isRunDisabled,
+  isRunning,
+  onTargetEnvChange,
+  onRemoteUserQueryChange,
+  onSelectRemoteUser,
+  onRun,
+}: {
+  availableTargets: RemoteIntegrationTargetEnv[];
+  selectedTargetEnv: RemoteIntegrationTargetEnv | null;
+  remoteUserQuery: string;
+  remoteUserOptions: RemoteIntegrationUserOption[];
+  selectedRemoteUser: RemoteIntegrationUserOption | null;
+  isSearching: boolean;
+  isRunDisabled: boolean;
+  isRunning: boolean;
+  onTargetEnvChange: (value: string) => void;
+  onRemoteUserQueryChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSelectRemoteUser: (user: RemoteIntegrationUserOption) => void;
+  onRun: () => void | Promise<void>;
+}) {
+  const handleRemoteUserButtonClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      const remoteUserId = event.currentTarget.dataset.remoteUserId;
+      if (!remoteUserId) {
+        return;
+      }
+
+      const remoteUser = remoteUserOptions.find((entry) => entry.id === remoteUserId);
+      if (!remoteUser) {
+        return;
+      }
+
+      onSelectRemoteUser(remoteUser);
+    },
+    [onSelectRemoteUser, remoteUserOptions],
+  );
+  const handleRunClick = useCallback(() => {
+    void onRun();
+  }, [onRun]);
+
+  return (
+    <div className="space-y-4">
+      <div className="border-border/40 rounded-xl border p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <Shield className="h-4 w-4" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Run with remote integrations</p>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              This admin-only test path keeps the coworker local but borrows built-in OAuth
+              integrations from a remote user in staging or prod for a single manual run.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {availableTargets.length === 0 ? (
+        <div className="text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-xs">
+          No remote integration targets are configured for this environment.
+        </div>
+      ) : null}
+
+      {availableTargets.length > 0 ? (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+              Source environment
+            </label>
+            <Select value={selectedTargetEnv ?? undefined} onValueChange={onTargetEnvChange}>
+              <SelectTrigger className="h-9 w-full bg-transparent text-sm">
+                <SelectValue placeholder="Select a remote environment" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTargets.map((target) => (
+                  <SelectItem key={target} value={target}>
+                    {target === "prod" ? "Production" : "Staging"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedTargetEnv === "prod" ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+              Production is selected. This run can mutate real client data through the remote
+              user&apos;s integrations.
+            </div>
+          ) : null}
+
+          <div className="space-y-1.5">
+            <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+              Remote user email
+            </label>
+            <Input
+              value={remoteUserQuery}
+              onChange={onRemoteUserQueryChange}
+              placeholder="Search by email"
+              className="bg-transparent text-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Matching users
+              </span>
+              {isSearching ? (
+                <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+              ) : null}
+            </div>
+
+            {remoteUserOptions.length === 0 ? (
+              <div className="text-muted-foreground rounded-xl border border-dashed px-4 py-5 text-xs">
+                {isSearching
+                  ? "Searching remote users…"
+                  : "No remote users found with enabled built-in integrations."}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {remoteUserOptions.map((remoteUser) => {
+                  const isSelected = selectedRemoteUser?.id === remoteUser.id;
+                  return (
+                    <button
+                      key={remoteUser.id}
+                      type="button"
+                      data-remote-user-id={remoteUser.id}
+                      onClick={handleRemoteUserButtonClick}
+                      className={cn(
+                        "w-full rounded-xl border px-4 py-3 text-left transition-colors",
+                        isSelected
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-border/40 hover:bg-muted/30",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {remoteUser.name?.trim() || remoteUser.email}
+                          </p>
+                          <p className="text-muted-foreground truncate text-xs">
+                            {remoteUser.email}
+                          </p>
+                        </div>
+                        {isSelected ? (
+                          <span className="text-primary text-[10px] font-semibold tracking-[0.14em] uppercase">
+                            Selected
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {remoteUser.enabledIntegrationTypes.map((type) => (
+                          <span
+                            key={`${remoteUser.id}-${type}`}
+                            className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium"
+                          >
+                            {INTEGRATION_DISPLAY_NAMES[type] ?? type}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {selectedRemoteUser ? (
+            <div className="border-border/40 bg-muted/20 rounded-xl border px-4 py-3">
+              <div className="space-y-1">
+                <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                  Selected remote user
+                </p>
+                <p className="text-sm font-medium">
+                  {selectedRemoteUser.name?.trim() || selectedRemoteUser.email}
+                </p>
+                <p className="text-muted-foreground text-xs">{selectedRemoteUser.email}</p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {selectedRemoteUser.enabledIntegrationTypes.map((type) => (
+                  <span
+                    key={`selected-${type}`}
+                    className="bg-background text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                  >
+                    {INTEGRATION_DISPLAY_NAMES[type] ?? type}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-4 text-xs font-medium"
+              onClick={handleRunClick}
+              disabled={isRunDisabled || !selectedTargetEnv || !selectedRemoteUser}
+            >
+              {isRunning ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+              Run with remote integrations
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type CoworkerSettingsPanelProps = {
   name: string;
   description: string;
@@ -2169,6 +2552,8 @@ type CoworkerSettingsPanelProps = {
   onDelete: () => void;
   isDeleting: boolean;
   hideHeader?: boolean;
+  showAdminTab?: boolean;
+  adminContent?: React.ReactNode;
 };
 
 function CoworkerSettingsPanel({
@@ -2253,6 +2638,8 @@ function CoworkerSettingsPanel({
   onDelete,
   isDeleting,
   hideHeader,
+  showAdminTab = false,
+  adminContent,
 }: CoworkerSettingsPanelProps) {
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
   const [triggerExpanded, setTriggerExpanded] = useState(false);
@@ -2400,6 +2787,7 @@ function CoworkerSettingsPanel({
               <AnimatedTab value="runs">Runs</AnimatedTab>
               <AnimatedTab value="docs">Docs</AnimatedTab>
               <AnimatedTab value="toolbox">Toolbox</AnimatedTab>
+              {showAdminTab ? <AnimatedTab value="admin">Admin</AnimatedTab> : null}
             </AnimatedTabs>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -3362,6 +3750,12 @@ function CoworkerSettingsPanel({
               <span className="text-muted-foreground">Manage in Toolbox</span>
               <ArrowRight className="text-muted-foreground h-3.5 w-3.5" />
             </Link>
+          </div>
+        )}
+
+        {activeTab === "admin" && (
+          <div className="px-4 py-3">
+            {adminContent ?? <p className="text-xs">No admin actions.</p>}
           </div>
         )}
       </div>

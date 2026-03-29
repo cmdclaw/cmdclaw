@@ -1168,10 +1168,42 @@ export function useTriggerCoworker() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { id: string; payload?: unknown }) => client.coworker.trigger(input),
+    mutationFn: (input: {
+      id: string;
+      payload?: unknown;
+      remoteIntegrationSource?: {
+        targetEnv: "staging" | "prod";
+        remoteUserId: string;
+      };
+    }) => client.coworker.trigger(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
     },
+  });
+}
+
+export function useRemoteIntegrationTargets(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["coworker", "remote-integration-targets"],
+    queryFn: () => client.coworker.listRemoteIntegrationTargets(),
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useSearchRemoteIntegrationUsers(
+  targetEnv: "staging" | "prod" | null,
+  query: string,
+  options?: { enabled?: boolean; limit?: number },
+) {
+  return useQuery({
+    queryKey: ["coworker", "remote-integration-users", targetEnv, query, options?.limit],
+    queryFn: () =>
+      client.coworker.searchRemoteIntegrationUsers({
+        targetEnv: targetEnv!,
+        query,
+        limit: options?.limit,
+      }),
+    enabled: Boolean(targetEnv) && (options?.enabled ?? true),
   });
 }
 
