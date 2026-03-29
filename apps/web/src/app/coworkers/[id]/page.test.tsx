@@ -70,6 +70,13 @@ function MockContainer({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
 }
 
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 function MockImage() {
   return <div data-testid="mock-image" />;
 }
@@ -139,12 +146,21 @@ vi.mock("@/components/chat/chat-area", () => ({
         updatedAt: "2026-03-12T10:05:00.000Z",
       });
     }, [onCoworkerSync]);
+    const handleMetadataSync = React.useCallback(() => {
+      onCoworkerSync?.({
+        coworkerId: "cw-1",
+        updatedAt: "2026-03-12T10:05:00.000Z",
+      });
+    }, [onCoworkerSync]);
 
     return (
       <div>
         <div>Chat</div>
         <button type="button" onClick={handleSync}>
           Sync coworker
+        </button>
+        <button type="button" onClick={handleMetadataSync}>
+          Sync coworker metadata
         </button>
       </div>
     );
@@ -220,10 +236,20 @@ vi.mock("@/components/ui/dialog", () => {
 });
 
 vi.mock("@/components/ui/dual-panel-workspace", () => ({
-  DualPanelWorkspace: ({ left, right }: { left: React.ReactNode; right: React.ReactNode }) => (
+  DualPanelWorkspace: ({
+    left,
+    right,
+    rightCollapsed,
+  }: {
+    left: React.ReactNode;
+    right: React.ReactNode;
+    rightCollapsed?: boolean;
+  }) => (
     <div>
       <div>{left}</div>
-      <div>{right}</div>
+      <div data-testid="mock-right-panel" data-collapsed={String(Boolean(rightCollapsed))}>
+        {right}
+      </div>
     </div>
   ),
 }));
@@ -530,6 +556,7 @@ describe("CoworkerEditorPage", () => {
   it("refreshes the instruction panel when the coworker is patched externally", async () => {
     const { rerender } = render(<CoworkerEditorPage />);
 
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
     expect(screen.getByDisplayValue("Existing prompt")).toBeInTheDocument();
 
     mockCoworkerData.current = {
@@ -580,22 +607,116 @@ describe("CoworkerEditorPage", () => {
 
     const { rerender } = render(<CoworkerEditorPage />);
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await flushMicrotasks();
 
     expect(screen.getByText("Chat")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Existing prompt")).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /sync coworker/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Sync coworker" }));
       await Promise.resolve();
       rerender(<CoworkerEditorPage />);
       await Promise.resolve();
     });
 
     expect(mockCoworkerRefetch).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
     expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+  });
+
+  it("collapses the builder panel when there are no instructions", () => {
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      prompt: "",
+    };
+
+    render(<CoworkerEditorPage />);
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "true");
+  });
+
+  it("expands the builder panel once a sync adds instructions", async () => {
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      prompt: "",
+    };
+    mockCoworkerRefetch.mockImplementation(async () => {
+      mockCoworkerData.current = {
+        ...mockCoworkerData.current,
+        prompt: "Builder patched prompt",
+        updatedAt: new Date("2026-03-12T10:05:00.000Z"),
+      };
+      return { data: mockCoworkerData.current };
+    });
+
+    const { rerender } = render(<CoworkerEditorPage />);
+    await flushMicrotasks();
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "true");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sync coworker" }));
+      await Promise.resolve();
+      rerender(<CoworkerEditorPage />);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
+    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+  });
+
+  it("does not expand the builder panel before instructions are updated", async () => {
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      prompt: "",
+    };
+    mockCoworkerRefetch.mockImplementation(async () => ({
+      data: {
+        ...mockCoworkerData.current,
+        updatedAt: new Date("2026-03-12T10:05:00.000Z"),
+      },
+    }));
+
+    render(<CoworkerEditorPage />);
+    await flushMicrotasks();
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "true");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sync coworker metadata" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "true");
+  });
+
+  it("collapses the builder panel when instructions are cleared", async () => {
+    const { rerender } = render(<CoworkerEditorPage />);
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
+
+    mockCoworkerData.current = {
+      ...mockCoworkerData.current,
+      prompt: "",
+      updatedAt: new Date("2026-03-12T10:05:00.000Z"),
+    };
+
+    await act(async () => {
+      rerender(<CoworkerEditorPage />);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "true");
+  });
+
+  it("allows manually closing the builder panel while instructions exist", () => {
+    render(<CoworkerEditorPage />);
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
+
+    expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "true");
   });
 
   it("switches right-panel tabs without routing through next navigation", async () => {

@@ -490,9 +490,10 @@ export default function CoworkerEditorPage() {
     setActiveTab("runs");
     setSelectedRunId(routeRunId);
   }, [isRunsRoute, routeBaseTab, routeRunId]);
-  const collapseToggleRef = useRef<(() => void) | null>(null);
+  const [isInstructionPanelCollapsed, setIsInstructionPanelCollapsed] = useState(true);
+  const previousHasAgentInstructionsRef = useRef(false);
   const handleClose = useCallback(() => {
-    collapseToggleRef.current?.();
+    setIsInstructionPanelCollapsed(true);
   }, []);
   const handleDelete = useCallback(() => {
     if (!coworkerId) {
@@ -1412,6 +1413,22 @@ export default function CoworkerEditorPage() {
   const hasAgentInstructions = prompt.trim().length > 0;
   const coworkerDisplayName = coworker?.name?.trim().length ? coworker.name : "New Coworker";
 
+  useEffect(() => {
+    const previousHasAgentInstructions = previousHasAgentInstructionsRef.current;
+
+    if (!hasAgentInstructions) {
+      setIsInstructionPanelCollapsed(true);
+      previousHasAgentInstructionsRef.current = false;
+      return;
+    }
+
+    if (!previousHasAgentInstructions) {
+      setIsInstructionPanelCollapsed(false);
+    }
+
+    previousHasAgentInstructionsRef.current = true;
+  }, [hasAgentInstructions]);
+
   const buildCoworkerEditorHref = useCallback(
     (tab?: Exclude<CoworkerTab, "runs"> | null) => {
       if (!coworkerId) {
@@ -1538,10 +1555,6 @@ export default function CoworkerEditorPage() {
   const handleOpenDeleteDialog = useCallback(() => {
     setShowDeleteDialog(true);
   }, []);
-  const handleNavigateToCoworkers = useCallback(() => {
-    router.push("/coworkers");
-  }, [router]);
-
   const chatPanel = useMemo(
     () => (
       <CoworkerChatPanel
@@ -1784,14 +1797,6 @@ export default function CoworkerEditorPage() {
             >
               <Trash2 className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={handleNavigateToCoworkers}
-              className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
         </div>
         {/* Mobile content area */}
@@ -1939,6 +1944,8 @@ export default function CoworkerEditorPage() {
         collapsedSidebar
         showExpandedCollapseButton={false}
         showTitles={false}
+        rightCollapsed={isInstructionPanelCollapsed}
+        onRightCollapsedChange={setIsInstructionPanelCollapsed}
         leftTitle="Chat"
         rightTitle={coworkerDisplayName}
         leftPanelClassName="border-0 rounded-none"
@@ -1946,7 +1953,6 @@ export default function CoworkerEditorPage() {
         rightPanelClassName="border-0 rounded-none bg-muted/30 md:min-w-[34rem]"
         left={chatPanel}
         right={settingsPanel}
-        onCollapseToggleRef={collapseToggleRef}
         hideMobileToggle
       />
       <AlertDialog
@@ -2157,6 +2163,7 @@ type CoworkerSettingsPanelProps = {
   onDisableCoworkerAlias: () => void;
   onCreateCoworkerAlias: () => void;
   onClose: () => void;
+  showCloseButton?: boolean;
   showDeleteDialog: boolean;
   onShowDeleteDialogChange: (open: boolean) => void;
   onDelete: () => void;
@@ -2240,6 +2247,7 @@ function CoworkerSettingsPanel({
   onDisableCoworkerAlias,
   onCreateCoworkerAlias,
   onClose,
+  showCloseButton = true,
   showDeleteDialog,
   onShowDeleteDialogChange,
   onDelete,
@@ -2438,14 +2446,16 @@ function CoworkerSettingsPanel({
             >
               <Trash2 className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-              aria-label="Close panel"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {showCloseButton ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+                aria-label="Close panel"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
             <AlertDialog open={showDeleteDialog} onOpenChange={onShowDeleteDialogChange}>
               <AlertDialogContent>
                 <AlertDialogHeader>
