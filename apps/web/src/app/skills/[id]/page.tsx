@@ -8,8 +8,6 @@ import {
   FileText,
   CheckCircle2,
   XCircle,
-  Eye,
-  Code2,
   Pencil,
   FileUp,
   Download,
@@ -24,6 +22,8 @@ import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { IntegrationBadges } from "@/components/chat/integration-badges";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,6 +33,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
+import {
+  MarkdownEditorModeToggle,
+  type MarkdownEditorMode,
+} from "@/components/ui/markdown-editor-mode-toggle";
+import { MilkdownEditor } from "@/components/ui/milkdown-editor";
 import { parseSkillContent, serializeSkillContent } from "@/lib/skill-markdown";
 import { cn } from "@/lib/utils";
 import {
@@ -48,7 +53,7 @@ import {
   useSaveSharedSkill,
 } from "@/orpc/hooks";
 
-type SkillMarkdownViewMode = "preview" | "source";
+type SkillMarkdownViewMode = MarkdownEditorMode;
 const markdownRemarkPlugins = [remarkGfm];
 
 function generateSlug(displayName: string): string {
@@ -111,7 +116,7 @@ function SkillEditorPageContent() {
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [skillMarkdownViewMode, setSkillMarkdownViewMode] =
-    useState<SkillMarkdownViewMode>("preview");
+    useState<SkillMarkdownViewMode>("wysiwyg");
   const [isSaving, setIsSaving] = useState(false);
   const [showAddFile, setShowAddFile] = useState(false);
   const [newFilePath, setNewFilePath] = useState("");
@@ -309,7 +314,7 @@ function SkillEditorPageContent() {
         setDocumentUrl(null);
         if (file.path === "SKILL.md") {
           syncSkillMarkdownState(file.content);
-          setSkillMarkdownViewMode("preview");
+          setSkillMarkdownViewMode("wysiwyg");
         } else {
           setEditedContent(file.content);
         }
@@ -718,13 +723,28 @@ function SkillEditorPageContent() {
     fileInputRef.current?.click();
   }, []);
 
-  const handleSetMarkdownViewPreview = useCallback(() => {
-    setSkillMarkdownViewMode("preview");
-  }, []);
-
-  const handleSetMarkdownViewSource = useCallback(() => {
-    setSkillMarkdownViewMode("source");
-  }, []);
+  const handleMarkdownViewModeChange = useCallback(
+    (nextMode: MarkdownEditorMode) => {
+      if (nextMode === "wysiwyg" && skillMarkdownViewMode === "source") {
+        syncSkillMarkdownState(skillMarkdownSource);
+      }
+      if (nextMode === "source" && skillMarkdownViewMode === "wysiwyg") {
+        setSkillMarkdownSource(
+          serializeSkillContent(skillSlug, skillDescription, skillBody, skillFrontmatter),
+        );
+      }
+      setSkillMarkdownViewMode(nextMode);
+    },
+    [
+      skillMarkdownViewMode,
+      skillMarkdownSource,
+      skillSlug,
+      skillDescription,
+      skillBody,
+      skillFrontmatter,
+      syncSkillMarkdownState,
+    ],
+  );
 
   const handleNewFilePathChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setNewFilePath(event.target.value);
@@ -761,6 +781,16 @@ function SkillEditorPageContent() {
       }
     },
     [skillSlug],
+  );
+
+  const handleSkillBodyChange = useCallback(
+    (nextBody: string) => {
+      setSkillBody(nextBody);
+      setSkillMarkdownSource(
+        serializeSkillContent(skillSlug, skillDescription, nextBody, skillFrontmatter),
+      );
+    },
+    [skillSlug, skillDescription, skillFrontmatter],
   );
 
   const handleNonSkillFileContentChange = useCallback(
@@ -806,6 +836,7 @@ function SkillEditorPageContent() {
   const selectedFile = skill.files.find((f) => f.id === selectedFileId);
   const isSkillMd = selectedFile?.path === "SKILL.md";
   const canEdit = skill.canEdit;
+  const toolIntegrations = (skill.toolIntegrations ?? []) as DisplayIntegrationType[];
 
   return (
     <div className="h-[calc(100dvh-5rem)]">
@@ -960,6 +991,15 @@ function SkillEditorPageContent() {
               )}
             </button>
           )}
+
+          {toolIntegrations.length > 0 ? (
+            <div className="pt-2">
+              <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
+                Tool Integrations
+              </p>
+              <IntegrationBadges integrations={toolIntegrations} size="md" />
+            </div>
+          ) : null}
         </div>
 
         {/* File tabs - subtle style, above editor */}
@@ -1072,31 +1112,11 @@ function SkillEditorPageContent() {
 
           {/* Mode toggle - far right */}
           {isSkillMd && (
-            <div className="ml-auto flex items-center gap-0.5">
-              <button
-                onClick={handleSetMarkdownViewPreview}
-                className={cn(
-                  "rounded p-1.5 transition-colors",
-                  skillMarkdownViewMode === "preview"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                title="Preview"
-              >
-                <Eye className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={handleSetMarkdownViewSource}
-                className={cn(
-                  "rounded p-1.5 transition-colors",
-                  skillMarkdownViewMode === "source"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                title="Source"
-              >
-                <Code2 className="h-3.5 w-3.5" />
-              </button>
+            <div className="ml-auto">
+              <MarkdownEditorModeToggle
+                mode={skillMarkdownViewMode}
+                onModeChange={handleMarkdownViewModeChange}
+              />
             </div>
           )}
         </div>
@@ -1125,12 +1145,25 @@ function SkillEditorPageContent() {
         <div className="min-h-0 flex-1">
           {selectedFile && !selectedDocumentId && (
             <>
-              {isSkillMd && skillMarkdownViewMode === "preview" ? (
-                <div className="h-full overflow-y-auto rounded-lg border p-4">
-                  <article className="prose prose-sm dark:prose-invert max-w-none">
-                    <ReactMarkdown remarkPlugins={markdownRemarkPlugins}>{skillBody}</ReactMarkdown>
-                  </article>
-                </div>
+              {isSkillMd && skillMarkdownViewMode === "wysiwyg" ? (
+                canEdit ? (
+                  <div className="h-full overflow-hidden rounded-lg border">
+                    <MilkdownEditor
+                      value={skillBody}
+                      onChange={handleSkillBodyChange}
+                      placeholder="Add your skill instructions here..."
+                      className="h-full"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-full overflow-y-auto rounded-lg border p-4">
+                    <article className="prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown remarkPlugins={markdownRemarkPlugins}>
+                        {skillBody}
+                      </ReactMarkdown>
+                    </article>
+                  </div>
+                )
               ) : isSkillMd && skillMarkdownViewMode === "source" ? (
                 <textarea
                   value={skillMarkdownSource}

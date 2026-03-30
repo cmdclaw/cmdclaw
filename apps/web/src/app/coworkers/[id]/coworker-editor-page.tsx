@@ -24,8 +24,6 @@ import {
   MessageSquare,
   Wrench,
   CirclePlay,
-  Code,
-  Eye,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
@@ -66,6 +64,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DualPanelWorkspace } from "@/components/ui/dual-panel-workspace";
 import { Input } from "@/components/ui/input";
+import {
+  MarkdownEditorModeToggle,
+  type MarkdownEditorMode,
+} from "@/components/ui/markdown-editor-mode-toggle";
 import { MilkdownEditor } from "@/components/ui/milkdown-editor";
 import {
   Select,
@@ -2701,7 +2703,7 @@ function CoworkerSettingsPanel({
   adminContent,
 }: CoworkerSettingsPanelProps) {
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
-  const [instructionEditorMode, setInstructionEditorMode] = useState<"wysiwyg" | "raw">("wysiwyg");
+  const [instructionEditorMode, setInstructionEditorMode] = useState<MarkdownEditorMode>("wysiwyg");
   const [triggerExpanded, setTriggerExpanded] = useState(false);
   const [isDocumentDragActive, setIsDocumentDragActive] = useState(false);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
@@ -2712,14 +2714,6 @@ function CoworkerSettingsPanel({
 
   const handleCloseInstructionModal = useCallback(() => {
     setInstructionModalOpen(false);
-  }, []);
-
-  const handleSetEditorModeWysiwyg = useCallback(() => {
-    setInstructionEditorMode("wysiwyg");
-  }, []);
-
-  const handleSetEditorModeRaw = useCallback(() => {
-    setInstructionEditorMode("raw");
   }, []);
 
   const handleRawPromptChange = useCallback(
@@ -3027,34 +3021,10 @@ function CoworkerSettingsPanel({
                 <DialogHeader className="border-border/40 flex-row items-center justify-between border-b px-5 py-3.5">
                   <DialogTitle className="text-sm font-semibold">Edit instructions</DialogTitle>
                   <div className="flex items-center gap-1">
-                    <div className="border-border/40 flex items-center rounded-md border">
-                      <button
-                        type="button"
-                        onClick={handleSetEditorModeWysiwyg}
-                        className={cn(
-                          "flex h-7 items-center gap-1.5 rounded-l-md px-2.5 text-xs font-medium transition-colors",
-                          instructionEditorMode === "wysiwyg"
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Eye className="h-3 w-3" />
-                        Preview
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSetEditorModeRaw}
-                        className={cn(
-                          "flex h-7 items-center gap-1.5 rounded-r-md px-2.5 text-xs font-medium transition-colors",
-                          instructionEditorMode === "raw"
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Code className="h-3 w-3" />
-                        Code
-                      </button>
-                    </div>
+                    <MarkdownEditorModeToggle
+                      mode={instructionEditorMode}
+                      onModeChange={setInstructionEditorMode}
+                    />
                     <button
                       type="button"
                       onClick={handleCloseInstructionModal}
@@ -3064,7 +3034,7 @@ function CoworkerSettingsPanel({
                     </button>
                   </div>
                 </DialogHeader>
-                {instructionEditorMode === "raw" ? (
+                {instructionEditorMode === "source" ? (
                   <div className="flex flex-1 flex-col overflow-hidden">
                     <textarea
                       className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
