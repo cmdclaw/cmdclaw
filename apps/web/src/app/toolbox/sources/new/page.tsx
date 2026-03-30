@@ -119,7 +119,7 @@ function NewSourceContent() {
             onFieldChange={handleFieldChange}
           />
 
-          {form.authType !== "none" && (
+          {form.authType !== "none" && form.authType !== "oauth2" && (
             <>
               <div className="space-y-2 md:col-span-2">
                 <label htmlFor="new-source-secret" className="text-sm font-medium">

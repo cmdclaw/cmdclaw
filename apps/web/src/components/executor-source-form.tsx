@@ -23,7 +23,7 @@ export type ExecutorSourceFormState = {
   headersText: string;
   queryParamsText: string;
   defaultHeadersText: string;
-  authType: "none" | "api_key" | "bearer";
+  authType: "none" | "api_key" | "bearer" | "oauth2";
   authHeaderName: string;
   authQueryParam: string;
   authPrefix: string;
@@ -46,7 +46,7 @@ export type ExecutorSourceListItem = {
   headers: Record<string, string> | null;
   queryParams: Record<string, string> | null;
   defaultHeaders: Record<string, string> | null;
-  authType: "none" | "api_key" | "bearer";
+  authType: "none" | "api_key" | "bearer" | "oauth2";
   authHeaderName: string | null;
   authQueryParam: string | null;
   authPrefix: string | null;
@@ -62,7 +62,7 @@ export type ExecutorSourceMutationInput = {
   headers?: Record<string, string>;
   queryParams?: Record<string, string>;
   defaultHeaders?: Record<string, string>;
-  authType?: "none" | "api_key" | "bearer";
+  authType?: "none" | "api_key" | "bearer" | "oauth2";
   authHeaderName?: string | null;
   authQueryParam?: string | null;
   authPrefix?: string | null;
@@ -167,7 +167,10 @@ export function buildMutationInputFromForm(
         ? parseStringMap(form.defaultHeadersText, "Default headers")
         : undefined,
     authType: form.authType,
-    authHeaderName: form.authType === "none" ? null : form.authHeaderName.trim() || null,
+    authHeaderName:
+      form.authType === "none" || form.authType === "oauth2"
+        ? null
+        : form.authHeaderName.trim() || null,
     authQueryParam:
       form.kind === "mcp" && form.authType === "api_key"
         ? form.authQueryParam.trim() || null
@@ -229,9 +232,12 @@ export function ExecutorSourceFields({
 
   const handleKindChange = useCallback(
     (value: string) => {
+      if (value === "openapi" && form.authType === "oauth2") {
+        onFieldChange("authType", "none");
+      }
       onFieldChange("kind", value);
     },
-    [onFieldChange],
+    [form.authType, onFieldChange],
   );
 
   const handleAuthTypeChange = useCallback(
@@ -269,6 +275,7 @@ export function ExecutorSourceFields({
           <SelectContent>
             <SelectItem value="bearer">Bearer token</SelectItem>
             <SelectItem value="api_key">API key</SelectItem>
+            {form.kind === "mcp" ? <SelectItem value="oauth2">OAuth 2.0</SelectItem> : null}
             <SelectItem value="none">No auth</SelectItem>
           </SelectContent>
         </Select>
@@ -362,7 +369,7 @@ export function ExecutorSourceFields({
         </>
       )}
 
-      {form.authType !== "none" ? (
+      {form.authType !== "none" && form.authType !== "oauth2" ? (
         <>
           <div className="space-y-2">
             <label htmlFor={`${formIdPrefix}-auth-header-name`} className="text-sm font-medium">

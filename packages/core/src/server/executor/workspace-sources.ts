@@ -7,11 +7,15 @@ import {
 } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { decrypt, encrypt } from "../utils/encryption";
+import {
+  type McpOAuthMetadata,
+  ensureValidMcpOAuthCredential,
+} from "./mcp-oauth";
 
 type DatabaseLike = typeof db;
 
 export type ExecutorSourceKind = "mcp" | "openapi";
-export type ExecutorSourceAuthType = "none" | "api_key" | "bearer";
+export type ExecutorSourceAuthType = "none" | "api_key" | "bearer" | "oauth2";
 
 export type WorkspaceExecutorSourceRecord = typeof workspaceExecutorSource.$inferSelect;
 export type WorkspaceExecutorSourceCredentialRecord =
@@ -51,6 +55,18 @@ type LocalWorkspaceState = {
   >;
   policies: Record<string, never>;
 };
+
+const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
+  /re-authorization is required/i,
+  /reauthorization is required/i,
+  /requires authentication/i,
+  /authorization required/i,
+  /invalid_grant/i,
+  /invalid token/i,
+  /expired/i,
+  /revoked/i,
+];
 
 export function normalizeExecutorNamespace(value: string): string {
   const normalized = value
@@ -159,21 +175,240 @@ function buildWorkspaceState(
   };
 }
 
+function hasStoredCredentialSecret(
+  source: WorkspaceExecutorSourceRecord,
+  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined,
+): boolean {
+  if (!credential) {
+    return false;
+  }
+
+  if (source.authType === "oauth2") {
+    return Boolean(credential.accessToken);
+  }
+
+  return Boolean(credential.secret);
+}
+
+function shouldRefreshOauthCredential(expiresAt: Date | null): boolean {
+  if (!expiresAt) {
+    return false;
+  }
+
+  return Date.now() >= expiresAt.getTime() - EXPIRY_BUFFER_MS;
+}
+
+function shouldTreatAsReauthRequired(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return DEFINITIVE_OAUTH_REAUTH_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function decryptExecutorSourceToken(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const decrypted = decrypt(value);
+  return decrypted.trim().length > 0 ? decrypted : null;
+}
+
+type StoredExecutorSourceOauthCredential = {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: Date | null;
+  metadata: McpOAuthMetadata;
+};
+
+function readStoredExecutorSourceOauthCredential(
+  source: WorkspaceExecutorSourceRecord,
+  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined,
+): StoredExecutorSourceOauthCredential | null {
+  if (source.authType !== "oauth2" || !credential?.oauthMetadata) {
+    return null;
+  }
+
+  const accessToken = decryptExecutorSourceToken(credential.accessToken);
+  if (!accessToken) {
+    return null;
+  }
+
+  const metadata = credential.oauthMetadata as McpOAuthMetadata;
+  if (!metadata.redirectUri || !metadata.tokenType) {
+    return null;
+  }
+
+  return {
+    accessToken,
+    refreshToken: decryptExecutorSourceToken(credential.refreshToken),
+    expiresAt: credential.expiresAt ?? null,
+    metadata,
+  };
+}
+
+async function upsertWorkspaceExecutorSourceOAuthCredential(input: {
+  database?: DatabaseLike;
+  workspaceExecutorSourceId: string;
+  userId: string;
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: Date | null;
+  oauthMetadata: McpOAuthMetadata;
+  displayName?: string | null;
+  enabled?: boolean;
+}) {
+  const database = input.database ?? db;
+
+  await database
+    .insert(workspaceExecutorSourceCredential)
+    .values({
+      workspaceExecutorSourceId: input.workspaceExecutorSourceId,
+      userId: input.userId,
+      secret: null,
+      accessToken: encrypt(input.accessToken),
+      refreshToken: input.refreshToken ? encrypt(input.refreshToken) : null,
+      expiresAt: input.expiresAt,
+      oauthMetadata: input.oauthMetadata,
+      displayName: input.displayName?.trim() || null,
+      enabled: input.enabled ?? true,
+    })
+    .onConflictDoUpdate({
+      target: [
+        workspaceExecutorSourceCredential.userId,
+        workspaceExecutorSourceCredential.workspaceExecutorSourceId,
+      ],
+      set: {
+        secret: null,
+        accessToken: encrypt(input.accessToken),
+        refreshToken: input.refreshToken ? encrypt(input.refreshToken) : null,
+        expiresAt: input.expiresAt,
+        oauthMetadata: input.oauthMetadata,
+        displayName: input.displayName?.trim() || null,
+        enabled: input.enabled ?? true,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+async function markWorkspaceExecutorSourceOAuthCredentialDisconnected(input: {
+  database?: DatabaseLike;
+  credentialId: string;
+}) {
+  const database = input.database ?? db;
+
+  await database
+    .update(workspaceExecutorSourceCredential)
+    .set({
+      accessToken: null,
+      refreshToken: null,
+      expiresAt: null,
+      oauthMetadata: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(workspaceExecutorSourceCredential.id, input.credentialId));
+}
+
+async function getHydratedExecutorSourceOauthCredential(input: {
+  database?: DatabaseLike;
+  source: WorkspaceExecutorSourceRecord;
+  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined;
+}): Promise<StoredExecutorSourceOauthCredential | null> {
+  const database = input.database ?? db;
+  const stored = readStoredExecutorSourceOauthCredential(input.source, input.credential);
+  if (!stored) {
+    return null;
+  }
+
+  if (!shouldRefreshOauthCredential(stored.expiresAt)) {
+    return stored;
+  }
+
+  try {
+    const result = await ensureValidMcpOAuthCredential({
+      endpoint: input.source.endpoint,
+      accessToken: stored.accessToken,
+      refreshToken: stored.refreshToken,
+      expiresAt: stored.expiresAt,
+      metadata: stored.metadata,
+    });
+
+    if (result.reauthRequired) {
+      if (input.credential?.id) {
+        await markWorkspaceExecutorSourceOAuthCredentialDisconnected({
+          database,
+          credentialId: input.credential.id,
+        });
+      }
+      return null;
+    }
+
+    if (result.refreshed && input.credential) {
+      await upsertWorkspaceExecutorSourceOAuthCredential({
+        database,
+        workspaceExecutorSourceId: input.source.id,
+        userId: input.credential.userId,
+        accessToken: result.credential.accessToken,
+        refreshToken: result.credential.refreshToken,
+        expiresAt: result.credential.expiresAt,
+        oauthMetadata: result.credential.metadata,
+        displayName: input.credential.displayName,
+        enabled: input.credential.enabled,
+      });
+    }
+
+    return result.credential;
+  } catch (error) {
+    if (stored.expiresAt && stored.expiresAt.getTime() > Date.now()) {
+      return stored;
+    }
+
+    if (input.credential?.id && shouldTreatAsReauthRequired(error)) {
+      await markWorkspaceExecutorSourceOAuthCredentialDisconnected({
+        database,
+        credentialId: input.credential.id,
+      });
+      return null;
+    }
+
+    return stored;
+  }
+}
+
 function mergeAuthIntoSourceConfig(input: {
+  database?: DatabaseLike;
   source: WorkspaceExecutorSourceRecord;
   credential: WorkspaceExecutorSourceCredentialRecord | null | undefined;
   config: LocalExecutorConfigSource;
-}): LocalExecutorConfigSource {
+}): Promise<LocalExecutorConfigSource> {
   const next = JSON.parse(JSON.stringify(input.config)) as LocalExecutorConfigSource;
+  if (input.source.authType === "none" || !input.credential?.enabled) {
+    return Promise.resolve(next);
+  }
+
+  if (input.source.authType === "oauth2") {
+    return getHydratedExecutorSourceOauthCredential({
+      database: input.database,
+      source: input.source,
+      credential: input.credential,
+    }).then((oauthCredential) => {
+      if (!oauthCredential) {
+        return next;
+      }
+
+      const binding = (next.binding ?? {}) as Record<string, unknown>;
+      const headers = {
+        ...((binding.headers as Record<string, string> | null | undefined) ?? {}),
+      };
+      headers.Authorization = `${oauthCredential.metadata.tokenType} ${oauthCredential.accessToken}`;
+      binding.headers = headers;
+      next.binding = binding;
+      return next;
+    });
+  }
+
   const secret = input.credential?.secret ? decrypt(input.credential.secret) : null;
 
-  if (
-    input.source.authType === "none" ||
-    !input.credential?.enabled ||
-    !secret ||
-    secret.trim().length === 0
-  ) {
-    return next;
+  if (!secret || secret.trim().length === 0) {
+    return Promise.resolve(next);
   }
 
   if (input.source.kind === "openapi") {
@@ -191,7 +426,7 @@ function mergeAuthIntoSourceConfig(input: {
 
     binding.defaultHeaders = defaultHeaders;
     next.binding = binding;
-    return next;
+    return Promise.resolve(next);
   }
 
   const binding = (next.binding ?? {}) as Record<string, unknown>;
@@ -214,7 +449,7 @@ function mergeAuthIntoSourceConfig(input: {
   binding.headers = headers;
   binding.queryParams = queryParams;
   next.binding = binding;
-  return next;
+  return Promise.resolve(next);
 }
 
 export async function listWorkspaceExecutorSources(input: {
@@ -243,7 +478,7 @@ export async function listWorkspaceExecutorSources(input: {
     const credential = credentialBySourceId.get(source.id);
     return {
       ...source,
-      connected: Boolean(credential?.secret),
+      connected: hasStoredCredentialSecret(source, credential),
       credentialEnabled: credential?.enabled ?? false,
       credentialDisplayName: credential?.displayName ?? null,
       credentialUpdatedAt: credential?.updatedAt ?? null,
@@ -377,6 +612,10 @@ export async function setWorkspaceExecutorSourceCredential(input: {
       workspaceExecutorSourceId: input.workspaceExecutorSourceId,
       userId: input.userId,
       secret: encrypt(normalizedSecret),
+      accessToken: null,
+      refreshToken: null,
+      expiresAt: null,
+      oauthMetadata: null,
       displayName: input.displayName?.trim() || null,
       enabled: input.enabled ?? true,
     })
@@ -387,11 +626,29 @@ export async function setWorkspaceExecutorSourceCredential(input: {
       ],
       set: {
         secret: encrypt(normalizedSecret),
+        accessToken: null,
+        refreshToken: null,
+        expiresAt: null,
+        oauthMetadata: null,
         displayName: input.displayName?.trim() || null,
         enabled: input.enabled ?? true,
         updatedAt: new Date(),
       },
     });
+}
+
+export async function setWorkspaceExecutorSourceOAuthCredential(input: {
+  database?: DatabaseLike;
+  workspaceExecutorSourceId: string;
+  userId: string;
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: Date | null;
+  oauthMetadata: McpOAuthMetadata;
+  displayName?: string | null;
+  enabled?: boolean;
+}) {
+  await upsertWorkspaceExecutorSourceOAuthCredential(input);
 }
 
 export async function getWorkspaceExecutorBootstrap(input: {
@@ -424,36 +681,72 @@ export async function getWorkspaceExecutorBootstrap(input: {
   ]);
 
   const config = JSON.parse(packageRow.configJson) as LocalExecutorConfig;
+  const workspaceState = JSON.parse(packageRow.workspaceStateJson) as LocalWorkspaceState;
   const credentialBySourceId = new Map(
     credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
   );
 
-  const hydratedSources = Object.fromEntries(
-    sources.map((source) => {
+  const hydratedSourceEntries = await Promise.all(
+    sources.map(async (source) => {
       const baseConfig = config.sources[source.id] ?? buildBaseSourceConfig(source);
-      const hydratedConfig = mergeAuthIntoSourceConfig({
+      const credential = credentialBySourceId.get(source.id);
+      const hydratedConfig = await mergeAuthIntoSourceConfig({
+        database,
         source,
-        credential: credentialBySourceId.get(source.id),
+        credential,
         config: baseConfig,
       });
-      return [source.id, hydratedConfig];
+      const refreshedCredential = source.authType === "oauth2"
+        ? await database.query.workspaceExecutorSourceCredential.findFirst({
+            where: and(
+              eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
+              eq(workspaceExecutorSourceCredential.userId, input.userId),
+            ),
+          })
+        : credential;
+      const connected = Boolean(
+        source.authType === "oauth2"
+          ? refreshedCredential?.accessToken && refreshedCredential.enabled
+          : credential?.secret && credential.enabled,
+      );
+
+      return {
+        sourceId: source.id,
+        config: hydratedConfig,
+        connected,
+      };
     }),
   );
+  const hydratedSources = Object.fromEntries(
+    hydratedSourceEntries.map((entry) => [entry.sourceId, entry.config]),
+  );
+  const hydratedWorkspaceState: LocalWorkspaceState = {
+    ...workspaceState,
+    sources: Object.fromEntries(
+      Object.entries(workspaceState.sources).map(([sourceId, sourceState]) => {
+        const sourceStatus = hydratedSourceEntries.find((entry) => entry.sourceId === sourceId);
+        return [
+          sourceId,
+          sourceStatus && !sourceStatus.connected
+            ? { ...sourceState, status: "auth_required" as const }
+            : sourceState,
+        ];
+      }),
+    ),
+  };
 
   return {
     revisionHash: packageRow.revisionHash,
     configJson: `${JSON.stringify({ ...config, sources: hydratedSources }, null, 2)}\n`,
-    workspaceStateJson: packageRow.workspaceStateJson,
-    sources: sources.map((source) => {
-      const credential = credentialBySourceId.get(source.id);
-      return {
-        id: source.id,
-        name: source.name,
-        namespace: source.namespace,
-        kind: source.kind,
-        enabled: source.enabled,
-        connected: Boolean(credential?.secret && credential.enabled),
-      };
-    }),
+    workspaceStateJson: `${JSON.stringify(hydratedWorkspaceState, null, 2)}\n`,
+    sources: sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      namespace: source.namespace,
+      kind: source.kind,
+      enabled: source.enabled,
+      connected:
+        hydratedSourceEntries.find((entry) => entry.sourceId === source.id)?.connected ?? false,
+    })),
   };
 }
