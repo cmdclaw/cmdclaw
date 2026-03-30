@@ -140,7 +140,9 @@ export const executorSourceAuthTypeEnum = pgEnum("executor_source_auth_type", [
   "none",
   "api_key",
   "bearer",
+  "oauth2",
 ]);
+export const inboxItemKindEnum = pgEnum("inbox_item_kind", ["coworker", "chat"]);
 
 export const workspace = pgTable(
   "workspace",
@@ -1093,6 +1095,39 @@ export const coworkerRunEvent = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("coworker_run_event_run_id_idx").on(table.coworkerRunId)],
+);
+
+export const inboxReadState = pgTable(
+  "inbox_read_state",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    itemKind: inboxItemKindEnum("item_kind").notNull(),
+    itemId: text("item_id").notNull(),
+    readAt: timestamp("read_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("inbox_read_state_user_workspace_item_idx").on(
+      table.userId,
+      table.workspaceId,
+      table.itemKind,
+      table.itemId,
+    ),
+    index("inbox_read_state_user_workspace_idx").on(table.userId, table.workspaceId),
+    index("inbox_read_state_read_at_idx").on(table.readAt),
+  ],
 );
 
 // ========== INTEGRATION SCHEMA ==========
@@ -2104,6 +2139,19 @@ export const workspaceExecutorSourceCredential = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     secret: text("secret"),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    expiresAt: timestamp("expires_at"),
+    oauthMetadata: jsonb("oauth_metadata").$type<{
+      tokenType: string;
+      scope: string | null;
+      redirectUri: string;
+      resourceMetadataUrl: string | null;
+      authorizationServerUrl: string | null;
+      resourceMetadata: Record<string, unknown> | null;
+      authorizationServerMetadata: Record<string, unknown> | null;
+      clientInformation: Record<string, unknown> | null;
+    }>(),
     enabled: boolean("enabled").default(true).notNull(),
     displayName: text("display_name"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

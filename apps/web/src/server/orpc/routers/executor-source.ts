@@ -1,4 +1,8 @@
 import {
+  resolveMcpEndpoint,
+  startMcpOAuthAuthorization,
+} from "@cmdclaw/core/server/executor/mcp-oauth";
+import {
   computeWorkspaceExecutorSourceRevisionHash,
   ensureWorkspaceExecutorPackage,
   listWorkspaceExecutorSources,
@@ -14,14 +18,23 @@ import {
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { storeExecutorSourceOAuthPending } from "@/server/executor-source-oauth";
 import type { AuthenticatedContext } from "../middleware";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 
 const stringMapSchema = z.record(z.string(), z.string()).default({});
 const executorSourceKindSchema = z.enum(["mcp", "openapi"]);
-const executorSourceAuthTypeSchema = z.enum(["none", "api_key", "bearer"]);
+const executorSourceAuthTypeSchema = z.enum(["none", "api_key", "bearer", "oauth2"]);
 const workspaceIdSchema = z.object({ workspaceId: z.string() });
+
+function generateState(): string {
+  return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+}
+
+function getAppUrl(): string {
+  return process.env.APP_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+}
 
 const executorSourceBaseSchema = z.object({
   kind: executorSourceKindSchema,
@@ -59,9 +72,19 @@ function validateExecutorSourceInput(
       message: "OpenAPI sources currently support header-based auth only.",
     });
   }
+
+  if (value.kind === "openapi" && value.authType === "oauth2") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["authType"],
+      message: "OpenAPI sources do not support OAuth 2.0 executor auth.",
+    });
+  }
 }
 
-const executorSourceInputSchema = executorSourceBaseSchema.superRefine(validateExecutorSourceInput);
+export const executorSourceInputSchema = executorSourceBaseSchema.superRefine(
+  validateExecutorSourceInput,
+);
 
 const adminExecutorSourceBaseSchema = workspaceIdSchema.extend(executorSourceBaseSchema.shape);
 
@@ -69,7 +92,7 @@ const adminExecutorSourceInputSchema = adminExecutorSourceBaseSchema.superRefine
   validateExecutorSourceInput,
 );
 
-const executorSourceUpdateInputSchema = executorSourceBaseSchema
+export const executorSourceUpdateInputSchema = executorSourceBaseSchema
   .extend({ id: z.string() })
   .superRefine(validateExecutorSourceInput);
 
@@ -89,6 +112,28 @@ function normalizeStringMap(
     .filter(([key, entryValue]) => key.length > 0 && entryValue.length > 0);
 
   return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function normalizeAuthSettings(input: {
+  kind: z.infer<typeof executorSourceKindSchema>;
+  authType: z.infer<typeof executorSourceAuthTypeSchema>;
+  authHeaderName?: string | null;
+  authQueryParam?: string | null;
+  authPrefix?: string | null;
+}) {
+  if (input.authType === "oauth2") {
+    return {
+      authHeaderName: null,
+      authQueryParam: null,
+      authPrefix: null,
+    };
+  }
+
+  return {
+    authHeaderName: input.authHeaderName?.trim() || null,
+    authQueryParam: input.kind === "mcp" ? input.authQueryParam?.trim() || null : null,
+    authPrefix: input.authPrefix ?? null,
+  };
 }
 
 async function requireAdmin(context: Pick<AuthenticatedContext, "db" | "user">) {
@@ -185,6 +230,55 @@ const adminList = protectedProcedure
     };
   });
 
+const startOAuth = protectedProcedure
+  .input(
+    z.object({
+      workspaceExecutorSourceId: z.string(),
+      redirectUrl: z.string().url(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const access = await requireActiveWorkspaceAccess(context.user.id);
+    const source = await context.db.query.workspaceExecutorSource.findFirst({
+      where: and(
+        eq(workspaceExecutorSource.id, input.workspaceExecutorSourceId),
+        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+      ),
+    });
+
+    if (!source) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Executor source not found.",
+      });
+    }
+
+    if (source.kind !== "mcp" || source.authType !== "oauth2") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This source is not configured for MCP OAuth.",
+      });
+    }
+
+    const state = generateState();
+    const { authorizationUrl, session } = await startMcpOAuthAuthorization({
+      endpoint: resolveMcpEndpoint({
+        endpoint: source.endpoint,
+        queryParams: source.queryParams,
+      }),
+      redirectUrl: `${getAppUrl()}/api/oauth/callback`,
+      state,
+    });
+
+    await storeExecutorSourceOAuthPending({
+      state,
+      userId: context.user.id,
+      sourceId: source.id,
+      redirectUrl: input.redirectUrl,
+      session,
+    });
+
+    return { authUrl: authorizationUrl };
+  });
+
 const create = protectedProcedure
   .input(executorSourceInputSchema)
   .handler(async ({ input, context }) => {
@@ -214,9 +308,7 @@ const create = protectedProcedure
       queryParams: normalizeStringMap(input.queryParams),
       defaultHeaders: normalizeStringMap(input.defaultHeaders),
       authType: input.authType,
-      authHeaderName: input.authHeaderName?.trim() || null,
-      authQueryParam: input.authQueryParam?.trim() || null,
-      authPrefix: input.authPrefix ?? null,
+      ...normalizeAuthSettings(input),
       enabled: input.enabled,
     });
 
@@ -234,9 +326,7 @@ const create = protectedProcedure
         queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
         defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
         authType: input.authType,
-        authHeaderName: input.authHeaderName?.trim() || null,
-        authQueryParam: input.kind === "mcp" ? input.authQueryParam?.trim() || null : null,
-        authPrefix: input.authPrefix ?? null,
+        ...normalizeAuthSettings(input),
         enabled: input.enabled,
         revisionHash,
         createdByUserId: context.user.id,
@@ -282,9 +372,7 @@ const adminCreate = protectedProcedure
       queryParams: normalizeStringMap(input.queryParams),
       defaultHeaders: normalizeStringMap(input.defaultHeaders),
       authType: input.authType,
-      authHeaderName: input.authHeaderName?.trim() || null,
-      authQueryParam: input.authQueryParam?.trim() || null,
-      authPrefix: input.authPrefix ?? null,
+      ...normalizeAuthSettings(input),
       enabled: input.enabled,
     });
 
@@ -302,9 +390,7 @@ const adminCreate = protectedProcedure
         queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
         defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
         authType: input.authType,
-        authHeaderName: input.authHeaderName?.trim() || null,
-        authQueryParam: input.kind === "mcp" ? input.authQueryParam?.trim() || null : null,
-        authPrefix: input.authPrefix ?? null,
+        ...normalizeAuthSettings(input),
         enabled: input.enabled,
         revisionHash,
         createdByUserId: context.user.id,
@@ -363,9 +449,7 @@ const update = protectedProcedure
       queryParams: normalizeStringMap(input.queryParams),
       defaultHeaders: normalizeStringMap(input.defaultHeaders),
       authType: input.authType,
-      authHeaderName: input.authHeaderName?.trim() || null,
-      authQueryParam: input.authQueryParam?.trim() || null,
-      authPrefix: input.authPrefix ?? null,
+      ...normalizeAuthSettings(input),
       enabled: input.enabled,
     });
 
@@ -382,9 +466,7 @@ const update = protectedProcedure
         queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
         defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
         authType: input.authType,
-        authHeaderName: input.authHeaderName?.trim() || null,
-        authQueryParam: input.kind === "mcp" ? input.authQueryParam?.trim() || null : null,
-        authPrefix: input.authPrefix ?? null,
+        ...normalizeAuthSettings(input),
         enabled: input.enabled,
         revisionHash,
         updatedByUserId: context.user.id,
@@ -442,9 +524,7 @@ const adminUpdate = protectedProcedure
       queryParams: normalizeStringMap(input.queryParams),
       defaultHeaders: normalizeStringMap(input.defaultHeaders),
       authType: input.authType,
-      authHeaderName: input.authHeaderName?.trim() || null,
-      authQueryParam: input.authQueryParam?.trim() || null,
-      authPrefix: input.authPrefix ?? null,
+      ...normalizeAuthSettings(input),
       enabled: input.enabled,
     });
 
@@ -461,9 +541,7 @@ const adminUpdate = protectedProcedure
         queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
         defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
         authType: input.authType,
-        authHeaderName: input.authHeaderName?.trim() || null,
-        authQueryParam: input.kind === "mcp" ? input.authQueryParam?.trim() || null : null,
-        authPrefix: input.authPrefix ?? null,
+        ...normalizeAuthSettings(input),
         enabled: input.enabled,
         revisionHash,
         updatedByUserId: context.user.id,
@@ -561,6 +639,12 @@ const setCredential = protectedProcedure
       });
     }
 
+    if (source.authType === "oauth2") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "OAuth sources must be connected through the OAuth flow.",
+      });
+    }
+
     await setWorkspaceExecutorSourceCredential({
       database: context.db,
       workspaceExecutorSourceId: source.id,
@@ -589,6 +673,12 @@ const adminSetCredential = protectedProcedure
       input.workspaceId,
       input.workspaceExecutorSourceId,
     );
+
+    if (source.authType === "oauth2") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "OAuth sources must be connected through the OAuth flow.",
+      });
+    }
 
     await setWorkspaceExecutorSourceCredential({
       database: context.db,
@@ -743,6 +833,7 @@ const adminToggleCredential = protectedProcedure
 export const executorSourceRouter = {
   list,
   adminList,
+  startOAuth,
   create,
   adminCreate,
   update,

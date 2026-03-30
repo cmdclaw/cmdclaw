@@ -123,6 +123,19 @@ export function useInboxEditApprovalAndResend() {
   });
 }
 
+export function useInboxMarkAsRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { kind: "coworker" | "chat"; id: string }) =>
+      client.inbox.markAsRead(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+    },
+  });
+}
+
 // Hook for getting a single conversation
 export function useConversation(id: string | undefined) {
   return useQuery({
@@ -577,7 +590,7 @@ export function useCreateExecutorSource() {
       headers?: Record<string, string>;
       queryParams?: Record<string, string>;
       defaultHeaders?: Record<string, string>;
-      authType?: "none" | "api_key" | "bearer";
+      authType?: "none" | "api_key" | "bearer" | "oauth2";
       authHeaderName?: string | null;
       authQueryParam?: string | null;
       authPrefix?: string | null;
@@ -604,7 +617,7 @@ export function useAdminCreateExecutorSource() {
       headers?: Record<string, string>;
       queryParams?: Record<string, string>;
       defaultHeaders?: Record<string, string>;
-      authType?: "none" | "api_key" | "bearer";
+      authType?: "none" | "api_key" | "bearer" | "oauth2";
       authHeaderName?: string | null;
       authQueryParam?: string | null;
       authPrefix?: string | null;
@@ -631,7 +644,7 @@ export function useUpdateExecutorSource() {
       headers?: Record<string, string>;
       queryParams?: Record<string, string>;
       defaultHeaders?: Record<string, string>;
-      authType?: "none" | "api_key" | "bearer";
+      authType?: "none" | "api_key" | "bearer" | "oauth2";
       authHeaderName?: string | null;
       authQueryParam?: string | null;
       authPrefix?: string | null;
@@ -659,7 +672,7 @@ export function useAdminUpdateExecutorSource() {
       headers?: Record<string, string>;
       queryParams?: Record<string, string>;
       defaultHeaders?: Record<string, string>;
-      authType?: "none" | "api_key" | "bearer";
+      authType?: "none" | "api_key" | "bearer" | "oauth2";
       authHeaderName?: string | null;
       authQueryParam?: string | null;
       authPrefix?: string | null;
@@ -676,6 +689,18 @@ export function useDeleteExecutorSource() {
 
   return useMutation({
     mutationFn: (id: string) => client.executorSource.delete({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useStartExecutorSourceOAuth() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceExecutorSourceId: string; redirectUrl: string }) =>
+      client.executorSource.startOAuth(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },

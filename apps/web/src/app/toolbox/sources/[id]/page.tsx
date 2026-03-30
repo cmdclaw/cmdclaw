@@ -3,7 +3,7 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -20,6 +20,7 @@ import {
   useExecutorSourceList,
   useUpdateExecutorSource,
   useDeleteExecutorSource,
+  useStartExecutorSourceOAuth,
   useSetExecutorSourceCredential,
   useDisconnectExecutorSourceCredential,
   useToggleExecutorSourceCredential,
@@ -28,10 +29,12 @@ import {
 function SourceDetailContent() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const { data, isLoading } = useExecutorSourceList();
   const updateSource = useUpdateExecutorSource();
   const deleteSource = useDeleteExecutorSource();
+  const startOAuth = useStartExecutorSourceOAuth();
   const setCredential = useSetExecutorSourceCredential();
   const disconnectCredential = useDisconnectExecutorSourceCredential();
   const toggleCredential = useToggleExecutorSourceCredential();
@@ -59,6 +62,21 @@ function SourceDetailContent() {
       setCredDisplayName(source.credentialDisplayName ?? "");
     }
   }, [source]);
+
+  useEffect(() => {
+    const oauthStatus = searchParams.get("oauth");
+    if (!oauthStatus) {
+      return;
+    }
+
+    if (oauthStatus === "success") {
+      toast.success("OAuth connected.");
+    } else {
+      toast.error(searchParams.get("oauth_error") ?? "OAuth connection failed.");
+    }
+
+    router.replace(`/toolbox/sources/${id}`);
+  }, [id, router, searchParams]);
 
   const handleEditFieldChange = useCallback(
     (field: keyof ExecutorSourceFormState, value: string) => {
@@ -166,6 +184,22 @@ function SourceDetailContent() {
       toast.error(error instanceof Error ? error.message : "Failed to save credential.");
     }
   }, [credDisplayName, secret, setCredential, source]);
+
+  const handleStartOAuth = useCallback(async () => {
+    if (!source) {
+      return;
+    }
+
+    try {
+      const result = await startOAuth.mutateAsync({
+        workspaceExecutorSourceId: source.id,
+        redirectUrl: window.location.href,
+      });
+      window.location.assign(result.authUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start OAuth.");
+    }
+  }, [source, startOAuth]);
 
   const handleDisconnectCredential = useCallback(async () => {
     if (!source) {
@@ -310,7 +344,9 @@ function SourceDetailContent() {
                   ? "None"
                   : source.authType === "bearer"
                     ? "Bearer token"
-                    : "API key"}
+                    : source.authType === "oauth2"
+                      ? "OAuth 2.0"
+                      : "API key"}
               </p>
             </div>
           )}
@@ -328,7 +364,37 @@ function SourceDetailContent() {
               : "Connect your personal credential to use this source."}
         </p>
 
-        {source.authType !== "none" && (
+        {source.authType === "oauth2" ? (
+          <div className="mt-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={handleStartOAuth} disabled={startOAuth.isPending}>
+                {startOAuth.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {source.connected ? "Reconnect OAuth" : "Connect OAuth"}
+              </Button>
+
+              {source.connected && (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={handleDisconnectCredential}
+                    disabled={disconnectCredential.isPending}
+                  >
+                    Disconnect
+                  </Button>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs">Credential active</span>
+                    <Switch
+                      checked={source.credentialEnabled}
+                      disabled={toggleCredential.isPending}
+                      onCheckedChange={handleToggleCredential}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ) : source.authType !== "none" ? (
           <div className="mt-4 space-y-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
               <Input
@@ -392,7 +458,7 @@ function SourceDetailContent() {
               </p>
             )}
           </div>
-        )}
+        ) : null}
       </section>
     </div>
   );
