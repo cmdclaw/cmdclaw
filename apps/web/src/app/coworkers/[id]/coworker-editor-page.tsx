@@ -47,6 +47,10 @@ import { CHAT_EXTERNAL_SEND_EVENT, ChatArea } from "@/components/chat/chat-area"
 import { useChatSkillStore } from "@/components/chat/chat-skill-store";
 import { ModelSelector } from "@/components/chat/model-selector";
 import {
+  extractRemoteRunSourceDetails,
+  RemoteRunSourceBanner,
+} from "@/components/coworkers/remote-run-source-banner";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -2168,6 +2172,8 @@ function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void 
     );
   }
 
+  const remoteRunSource = extractRemoteRunSourceDetails(run);
+
   if (!run.conversationId) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -2181,6 +2187,7 @@ function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void 
             Runs
           </button>
         </div>
+        <RemoteRunSourceBanner source={remoteRunSource} />
         <div className="px-4 py-2">
           <p className="text-muted-foreground text-xs">
             This run does not have a linked conversation.
@@ -2223,6 +2230,7 @@ function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void 
           {formatRelativeTime(run.startedAt)}
         </span>
       </div>
+      <RemoteRunSourceBanner source={remoteRunSource} />
       {run.status === "error" || run.status === "cancelled" ? (
         <div className="border-border/20 border-b px-4 py-2">
           <p className="text-muted-foreground text-xs">{run.errorMessage ?? "Run failed."}</p>
