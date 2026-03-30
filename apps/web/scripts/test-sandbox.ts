@@ -4,6 +4,7 @@
  *
  * Usage:
  *   bun run e2b:sandbox
+ *   bun run e2b:sandbox -- --workspace-slug <workspace-slug>
  *   bun run e2b:sandbox -- --sandbox-id <sandbox-id>
  *   bun run e2b:sandbox -- --conversation-id <conversation-id>
  *   bun run e2b:sandbox -- --run-id <coworker-run-id>
@@ -13,6 +14,8 @@
  * Attach mode reconnects to an existing E2B sandbox without creating a new one.
  */
 
+import type { SandboxHandle } from "@cmdclaw/core/server/sandbox/core/types";
+import { prepareExecutorInSandbox } from "@cmdclaw/core/server/sandbox/prep/executor-prep";
 import { closePool, db } from "@cmdclaw/db/client";
 import * as schema from "@cmdclaw/db/schema";
 import * as dotenvConfig from "dotenv/config";
@@ -24,18 +27,20 @@ void dotenvConfig;
 
 const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
 const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
-const DEFAULT_CREATE_USER_EMAIL = "collebaptiste@gmail.com";
+export const DEFAULT_CREATE_USER_EMAIL = "baptiste@heybap.com";
+export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
 const EXECUTOR_WEB_PORT = 8788;
 const EXECUTOR_WEB_LOG_PATH = "/tmp/executor-web.log";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
 
-type ParsedArgs = {
+export type ParsedArgs = {
   sandboxId?: string;
   conversationId?: string;
   runId?: string;
   builderCoworkerId?: string;
   userEmail: string;
+  workspaceSlug: string;
   help: boolean;
 };
 
@@ -50,6 +55,20 @@ type ExistingSandboxTarget = {
   model: string | null;
   source: SandboxSource;
   sourceId: string;
+  workspaceId?: string | null;
+  workspaceSlug?: string | null;
+  workspaceName?: string | null;
+};
+
+type CreateWorkspaceTarget = {
+  id: string;
+  slug: string | null;
+  name: string;
+};
+
+type CreateUserContext = {
+  id: string;
+  integrationEnvs: Record<string, string>;
 };
 
 const ENV_VAR_MAP: Record<IntegrationType, string> = {
@@ -66,6 +85,10 @@ function formatDuration(ms: number): string {
     return `${ms}ms`;
   }
   return `${(ms / 1000).toFixed(2)}s (${ms}ms)`;
+}
+
+function escapeShell(value: string): string {
+  return `"${value.replace(/["$`\\]/g, "\\$&")}"`;
 }
 
 function shouldUsePty(cmd: string): boolean {
@@ -90,9 +113,10 @@ function requireArgValue(argv: string[], index: number, flag: string): string {
   return value;
 }
 
-function parseArgs(argv: string[]): ParsedArgs {
+export function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
     userEmail: DEFAULT_CREATE_USER_EMAIL,
+    workspaceSlug: DEFAULT_CREATE_WORKSPACE_SLUG,
     help: false,
   };
 
@@ -118,6 +142,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--user-email":
         args.userEmail = requireArgValue(argv, i + 1, arg);
+        i += 1;
+        break;
+      case "--workspace-slug":
+        args.workspaceSlug = requireArgValue(argv, i + 1, arg);
         i += 1;
         break;
       case "--help":
@@ -149,12 +177,14 @@ function printUsage(): void {
   console.log(`
 Usage:
   bun run e2b:sandbox
+  bun run e2b:sandbox -- --workspace-slug <workspace-slug>
   bun run e2b:sandbox -- --sandbox-id <sandbox-id>
   bun run e2b:sandbox -- --conversation-id <conversation-id>
   bun run e2b:sandbox -- --run-id <coworker-run-id>
   bun run e2b:sandbox -- --builder-coworker-id <coworker-id>
 
 Options:
+  --workspace-slug <slug>     Workspace slug to bootstrap in create mode
   --sandbox-id <id>            Attach directly to an existing E2B sandbox
   --conversation-id <id>       Attach via a chat or coworker conversation runtime
   --run-id <id>                Attach via a coworker run
@@ -350,7 +380,7 @@ async function runInteractiveCommandWithPty(sandbox: Sandbox, cmd: string): Prom
   }
 }
 
-async function getIntegrationTokens(userEmail: string): Promise<Record<string, string>> {
+async function getCreateUserContext(userEmail: string): Promise<CreateUserContext> {
   const [foundUser] = await db
     .select({ id: schema.user.id })
     .from(schema.user)
@@ -358,8 +388,7 @@ async function getIntegrationTokens(userEmail: string): Promise<Record<string, s
     .limit(1);
 
   if (!foundUser) {
-    console.error(`User not found: ${userEmail}`);
-    return {};
+    throw new Error(`User not found: ${userEmail}`);
   }
 
   const results = await db
@@ -382,7 +411,89 @@ async function getIntegrationTokens(userEmail: string): Promise<Record<string, s
     }
   }
 
-  return envVars;
+  return {
+    id: foundUser.id,
+    integrationEnvs: envVars,
+  };
+}
+
+async function resolveCreateWorkspace(workspaceSlug: string): Promise<CreateWorkspaceTarget> {
+  const normalizedWorkspaceSlug = workspaceSlug.trim();
+
+  if (!normalizedWorkspaceSlug) {
+    throw new Error(
+      "Workspace slug is required for create mode. Pass --workspace-slug <slug> or set DEFAULT_CREATE_WORKSPACE_SLUG in scripts/test-sandbox.ts.",
+    );
+  }
+
+  const workspace = await db.query.workspace.findFirst({
+    where: eq(schema.workspace.slug, normalizedWorkspaceSlug),
+    columns: {
+      id: true,
+      slug: true,
+      name: true,
+    },
+  });
+
+  if (!workspace) {
+    throw new Error(`Workspace not found for slug: ${normalizedWorkspaceSlug}`);
+  }
+
+  if (!workspace.slug) {
+    throw new Error(`Workspace ${workspace.id} (${workspace.name}) does not have a slug.`);
+  }
+
+  return workspace;
+}
+
+async function getEnabledExecutorSourceIds(workspaceId: string): Promise<string[]> {
+  const rows = await db.query.workspaceExecutorSource.findMany({
+    where: and(
+      eq(schema.workspaceExecutorSource.workspaceId, workspaceId),
+      eq(schema.workspaceExecutorSource.enabled, true),
+    ),
+    columns: {
+      id: true,
+    },
+  });
+
+  return rows.map((row) => row.id);
+}
+
+function createE2BSandboxHandle(sandbox: Sandbox): SandboxHandle {
+  return {
+    provider: "e2b",
+    sandboxId: sandbox.sandboxId,
+    async exec(command, opts) {
+      const result = await sandbox.commands.run(command, {
+        timeoutMs: opts?.timeoutMs,
+        envs: opts?.env,
+        background: opts?.background,
+        onStderr: opts?.onStderr,
+      });
+
+      return {
+        exitCode: result.exitCode ?? 0,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+      };
+    },
+    async writeFile(path, content) {
+      await sandbox.files.write(path, content);
+    },
+    async readFile(path) {
+      return await sandbox.files.read(path);
+    },
+    async ensureDir(path) {
+      const result = await sandbox.commands.run(`mkdir -p ${escapeShell(path)}`, {
+        timeoutMs: 15_000,
+      });
+
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr.trim() || `Failed to create sandbox directory: ${path}`);
+      }
+    },
+  };
 }
 
 async function getRuntimeTargetByConversationId(
@@ -585,6 +696,11 @@ function printSandboxInfo(target: ExistingSandboxTarget, mode: "create" | "attac
   console.log(`  sessionId: ${target.sessionId ?? "<unknown>"}`);
   console.log(`  provider: ${target.sandboxProvider ?? "e2b"}`);
   console.log(`  model: ${target.model ?? "<unknown>"}`);
+  if (target.workspaceId) {
+    console.log(`  workspaceId: ${target.workspaceId}`);
+    console.log(`  workspaceSlug: ${target.workspaceSlug ?? "<unknown>"}`);
+    console.log(`  workspaceName: ${target.workspaceName ?? "<unknown>"}`);
+  }
 }
 
 function printPublicAccessInfo(sandbox: Sandbox): void {
@@ -792,43 +908,53 @@ async function main(): Promise<void> {
     throw new Error("DATABASE_URL environment variable required");
   }
 
+  console.log(`Resolving workspace slug ${args.workspaceSlug}...`);
+  const workspace = await resolveCreateWorkspace(args.workspaceSlug);
+
   console.log(`Loading integration tokens for ${args.userEmail}...`);
-  const integrationEnvs = await getIntegrationTokens(args.userEmail);
-  await closePool().catch(() => undefined);
+  const userContext = await getCreateUserContext(args.userEmail);
+  const enabledExecutorSourceIds = await getEnabledExecutorSourceIds(workspace.id);
+
+  if (enabledExecutorSourceIds.length === 0) {
+    throw new Error(
+      `Workspace ${workspace.slug} (${workspace.name}) has no enabled executor sources.`,
+    );
+  }
 
   const envs: Record<string, string> = {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    ...integrationEnvs,
+    ...userContext.integrationEnvs,
   };
 
-  if (integrationEnvs.GMAIL_ACCESS_TOKEN) {
+  if (userContext.integrationEnvs.GMAIL_ACCESS_TOKEN) {
     console.log("✓ Google Gmail integration enabled");
   } else {
     console.log("○ Google Gmail integration not found in database");
   }
 
-  if (integrationEnvs.SLACK_ACCESS_TOKEN) {
+  if (userContext.integrationEnvs.SLACK_ACCESS_TOKEN) {
     console.log("✓ Slack integration enabled");
   } else {
     console.log("○ Slack integration not found in database");
   }
 
-  if (integrationEnvs.NOTION_ACCESS_TOKEN) {
+  if (userContext.integrationEnvs.NOTION_ACCESS_TOKEN) {
     console.log("✓ Notion integration enabled");
   }
 
-  if (integrationEnvs.LINEAR_ACCESS_TOKEN) {
+  if (userContext.integrationEnvs.LINEAR_ACCESS_TOKEN) {
     console.log("✓ Linear integration enabled");
   }
 
-  if (integrationEnvs.GITHUB_ACCESS_TOKEN) {
+  if (userContext.integrationEnvs.GITHUB_ACCESS_TOKEN) {
     console.log("✓ GitHub integration enabled");
   }
 
-  if (integrationEnvs.AIRTABLE_ACCESS_TOKEN) {
+  if (userContext.integrationEnvs.AIRTABLE_ACCESS_TOKEN) {
     console.log("✓ Airtable integration enabled");
   }
 
+  console.log(`✓ Using workspace: ${workspace.name} (${workspace.slug})`);
   console.log(`\nCreating sandbox from template: ${TEMPLATE_NAME}...`);
 
   const bootStart = Date.now();
@@ -847,10 +973,32 @@ async function main(): Promise<void> {
     model: null,
     source: "new",
     sourceId: TEMPLATE_NAME,
+    workspaceId: workspace.id,
+    workspaceSlug: workspace.slug,
+    workspaceName: workspace.name,
   };
 
   console.log(`✓ Sandbox created: ${sandbox.sandboxId}`);
   console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
+  const executorBootstrap = await prepareExecutorInSandbox({
+    sandbox: createE2BSandboxHandle(sandbox),
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    userId: userContext.id,
+    allowedSourceIds: enabledExecutorSourceIds,
+  });
+
+  if (!executorBootstrap) {
+    throw new Error(
+      `Workspace ${workspace.slug} (${workspace.name}) did not produce any executor bootstrap sources.`,
+    );
+  }
+
+  console.log(
+    `✓ Bootstrapped executor workspace with ${executorBootstrap.sourceCount} source(s) from ${workspace.name}`,
+  );
+  console.log(`✓ Executor revision: ${executorBootstrap.revisionHash}`);
+  await closePool().catch(() => undefined);
   const executorState = await ensureExecutorWebStarted(sandbox);
   console.log(
     executorState === "already_running"
@@ -863,8 +1011,10 @@ async function main(): Promise<void> {
   await startRepl(sandbox, target, "create");
 }
 
-main().catch(async (error) => {
-  await closePool().catch(() => undefined);
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch(async (error) => {
+    await closePool().catch(() => undefined);
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
+}

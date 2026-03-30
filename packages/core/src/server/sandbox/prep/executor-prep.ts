@@ -16,6 +16,47 @@ export type ExecutorSandboxBootstrap = {
   instructions: string;
 };
 
+type ExecutorStatus = {
+  reachable?: boolean;
+};
+
+function isCommandExitErrorLike(
+  error: unknown,
+): error is { result: { exitCode?: number; stdout?: string; stderr?: string } } {
+  return typeof error === "object" && error !== null && "result" in error;
+}
+
+async function execNoThrow(
+  sandbox: SandboxHandle,
+  command: string,
+  opts?: {
+    timeoutMs?: number;
+    env?: Record<string, string>;
+  },
+) {
+  try {
+    return await sandbox.exec(command, opts);
+  } catch (error) {
+    if (!isCommandExitErrorLike(error)) {
+      throw error;
+    }
+
+    return {
+      exitCode: error.result.exitCode ?? 1,
+      stdout: error.result.stdout ?? "",
+      stderr: error.result.stderr ?? "",
+    };
+  }
+}
+
+function parseExecutorStatus(raw: string): ExecutorStatus | null {
+  try {
+    return JSON.parse(raw) as ExecutorStatus;
+  } catch {
+    return null;
+  }
+}
+
 export async function prepareExecutorInSandbox(input: {
   sandbox: SandboxHandle;
   workspaceId: string | null | undefined;
@@ -52,27 +93,41 @@ export async function prepareExecutorInSandbox(input: {
 
   const startCommand = [
     "set -euo pipefail",
-    `export EXECUTOR_HOME=${escapeShell(homeDirectory)}`,
     `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)}`,
-    `if executor status --base-url ${escapeShell(EXECUTOR_BASE_URL)} --json >/tmp/cmdclaw-executor-status.json 2>/dev/null; then exit 0; fi`,
-    `nohup executor up --base-url ${escapeShell(EXECUTOR_BASE_URL)} >/tmp/cmdclaw-executor.log 2>&1 &`,
-    "for i in $(seq 1 60); do",
-    `  if executor status --base-url ${escapeShell(EXECUTOR_BASE_URL)} --json >/tmp/cmdclaw-executor-status.json 2>/dev/null; then exit 0; fi`,
-    "  sleep 0.5",
-    "done",
-    'cat /tmp/cmdclaw-executor.log >&2 || true',
-    'echo "executor failed to become ready" >&2',
-    "exit 1",
+    `executor up --base-url ${escapeShell(EXECUTOR_BASE_URL)}`,
   ].join("\n");
 
-  const startResult = await input.sandbox.exec(`bash -lc ${escapeShell(startCommand)}`, {
+  const startResult = await execNoThrow(input.sandbox, `bash -lc ${escapeShell(startCommand)}`, {
     timeoutMs: 45_000,
+    env: {
+      EXECUTOR_HOME: homeDirectory,
+    },
   });
 
   if (startResult.exitCode !== 0) {
     throw new Error(
       `Executor bootstrap failed (exit=${startResult.exitCode}): ${
         startResult.stderr || startResult.stdout || "unknown error"
+      }`,
+    );
+  }
+
+  const statusResult = await execNoThrow(
+    input.sandbox,
+    `executor status --base-url ${escapeShell(EXECUTOR_BASE_URL)} --json`,
+    {
+      timeoutMs: 15_000,
+      env: {
+        EXECUTOR_HOME: homeDirectory,
+      },
+    },
+  );
+
+  const parsedStatus = parseExecutorStatus(statusResult.stdout);
+  if (statusResult.exitCode !== 0 || !parsedStatus?.reachable) {
+    throw new Error(
+      `Executor status check failed (exit=${statusResult.exitCode}): ${
+        statusResult.stderr || statusResult.stdout || "unknown error"
       }`,
     );
   }
