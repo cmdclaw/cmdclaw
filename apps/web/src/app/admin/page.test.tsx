@@ -15,7 +15,6 @@ const {
   addAllowlistEntryMutateAsyncMock,
   removeAllowlistEntryMutateAsyncMock,
   setDisplayAdvancedMetricsMock,
-  adminExecutorManagerPropsMock,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   addApprovedLoginEntryMutateAsyncMock: vi.fn(),
@@ -24,7 +23,6 @@ const {
   addAllowlistEntryMutateAsyncMock: vi.fn(),
   removeAllowlistEntryMutateAsyncMock: vi.fn(),
   setDisplayAdvancedMetricsMock: vi.fn(),
-  adminExecutorManagerPropsMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -49,25 +47,10 @@ vi.mock("@/components/ui/input", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
-vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectItem: ({ children }: { children: React.ReactNode; value: string }) => <div>{children}</div>,
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-}));
-
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock("@/components/admin/executor-sources-manager", () => ({
-  ExecutorSourcesManager: (props: unknown) => {
-    adminExecutorManagerPropsMock(props);
-    return <div>Executor Sources Manager</div>;
-  },
 }));
 
 vi.mock("@/components/chat/chat-advanced-settings-store", () => ({
@@ -120,41 +103,6 @@ vi.mock("@/orpc/hooks", () => ({
   }),
   useResetOnboarding: () => ({
     mutateAsync: resetOnboardingMutateAsyncMock,
-    isPending: false,
-  }),
-  useAdminWorkspaces: () => ({
-    data: [
-      { id: "workspace-1", name: "Workspace One" },
-      { id: "workspace-2", name: "Workspace Two" },
-    ],
-    isLoading: false,
-  }),
-  useAdminExecutorSourceList: () => ({
-    data: { sources: [], packageRevisionHash: null },
-    isLoading: false,
-  }),
-  useAdminCreateExecutorSource: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useAdminUpdateExecutorSource: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useAdminDeleteExecutorSource: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useAdminSetExecutorSourceCredential: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useAdminDisconnectExecutorSourceCredential: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useAdminToggleExecutorSourceCredential: () => ({
-    mutateAsync: vi.fn(),
     isPending: false,
   }),
 }));
@@ -220,15 +168,5 @@ describe("AdminPage", () => {
         email: "user@example.com",
       });
     });
-  });
-
-  it("shows executor sources on admin with a workspace selector", () => {
-    render(<AdminPage />);
-
-    expect(screen.getByText("Executor Sources")).toBeInTheDocument();
-    expect(screen.getByText("Workspace")).toBeInTheDocument();
-    expect(screen.getByText("Workspace One")).toBeInTheDocument();
-    expect(screen.getByText("Executor Sources Manager")).toBeInTheDocument();
-    expect(adminExecutorManagerPropsMock).toHaveBeenCalled();
   });
 });

@@ -1,0 +1,411 @@
+"use client";
+
+import type { ChangeEvent } from "react";
+import { useCallback } from "react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// ─── Types ──────────────────────────────────────────────────────────────────────
+
+export type ExecutorSourceFormState = {
+  kind: "mcp" | "openapi";
+  name: string;
+  namespace: string;
+  endpoint: string;
+  specUrl: string;
+  transport: string;
+  headersText: string;
+  queryParamsText: string;
+  defaultHeadersText: string;
+  authType: "none" | "api_key" | "bearer";
+  authHeaderName: string;
+  authQueryParam: string;
+  authPrefix: string;
+  secret: string;
+  displayName: string;
+};
+
+export type ExecutorSourceListItem = {
+  id: string;
+  name: string;
+  namespace: string;
+  kind: "mcp" | "openapi";
+  endpoint: string;
+  enabled: boolean;
+  connected: boolean;
+  credentialEnabled: boolean;
+  credentialDisplayName: string | null;
+  specUrl: string | null;
+  transport: string | null;
+  headers: Record<string, string> | null;
+  queryParams: Record<string, string> | null;
+  defaultHeaders: Record<string, string> | null;
+  authType: "none" | "api_key" | "bearer";
+  authHeaderName: string | null;
+  authQueryParam: string | null;
+  authPrefix: string | null;
+};
+
+export type ExecutorSourceMutationInput = {
+  kind: "mcp" | "openapi";
+  name: string;
+  namespace: string;
+  endpoint: string;
+  specUrl?: string | null;
+  transport?: string | null;
+  headers?: Record<string, string>;
+  queryParams?: Record<string, string>;
+  defaultHeaders?: Record<string, string>;
+  authType?: "none" | "api_key" | "bearer";
+  authHeaderName?: string | null;
+  authQueryParam?: string | null;
+  authPrefix?: string | null;
+  enabled?: boolean;
+};
+
+// ─── Constants ──────────────────────────────────────────────────────────────────
+
+export const DEFAULT_EXECUTOR_SOURCE_FORM: ExecutorSourceFormState = {
+  kind: "openapi",
+  name: "",
+  namespace: "",
+  endpoint: "",
+  specUrl: "",
+  transport: "streamable-http",
+  headersText: "",
+  queryParamsText: "",
+  defaultHeadersText: "",
+  authType: "bearer",
+  authHeaderName: "Authorization",
+  authQueryParam: "",
+  authPrefix: "Bearer ",
+  secret: "",
+  displayName: "",
+};
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+export function formatStringMap(value: Record<string, string> | null | undefined): string {
+  if (!value || Object.keys(value).length === 0) {
+    return "";
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
+export function parseStringMap(value: string, label: string): Record<string, string> | undefined {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return undefined;
+  }
+
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(trimmedValue);
+  } catch {
+    throw new Error(`${label} must be valid JSON.`);
+  }
+
+  if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
+    throw new Error(`${label} must be a JSON object with string values.`);
+  }
+
+  const entries = Object.entries(parsedValue);
+  if (
+    entries.some(([key, entryValue]) => typeof key !== "string" || typeof entryValue !== "string")
+  ) {
+    throw new Error(`${label} must be a JSON object with string values.`);
+  }
+
+  return Object.fromEntries(entries);
+}
+
+export function getSourceFormState(source: ExecutorSourceListItem): ExecutorSourceFormState {
+  return {
+    kind: source.kind,
+    name: source.name,
+    namespace: source.namespace,
+    endpoint: source.endpoint,
+    specUrl: source.specUrl ?? "",
+    transport: source.transport ?? "streamable-http",
+    headersText: formatStringMap(source.headers),
+    queryParamsText: formatStringMap(source.queryParams),
+    defaultHeadersText: formatStringMap(source.defaultHeaders),
+    authType: source.authType,
+    authHeaderName: source.authHeaderName ?? "",
+    authQueryParam: source.authQueryParam ?? "",
+    authPrefix: source.authPrefix ?? "",
+    secret: "",
+    displayName: source.credentialDisplayName ?? "",
+  };
+}
+
+export function buildMutationInputFromForm(
+  form: ExecutorSourceFormState,
+): ExecutorSourceMutationInput {
+  const authPrefix = form.authPrefix.trim().length > 0 ? form.authPrefix : null;
+
+  return {
+    kind: form.kind,
+    name: form.name.trim(),
+    namespace: form.namespace.trim(),
+    endpoint: form.endpoint.trim(),
+    specUrl: form.kind === "openapi" ? form.specUrl.trim() || null : null,
+    transport: form.kind === "mcp" ? form.transport.trim() || null : null,
+    headers: form.kind === "mcp" ? parseStringMap(form.headersText, "Headers") : undefined,
+    queryParams:
+      form.kind === "mcp" ? parseStringMap(form.queryParamsText, "Query params") : undefined,
+    defaultHeaders:
+      form.kind === "openapi"
+        ? parseStringMap(form.defaultHeadersText, "Default headers")
+        : undefined,
+    authType: form.authType,
+    authHeaderName: form.authType === "none" ? null : form.authHeaderName.trim() || null,
+    authQueryParam:
+      form.kind === "mcp" && form.authType === "api_key"
+        ? form.authQueryParam.trim() || null
+        : null,
+    authPrefix: form.authType === "bearer" ? authPrefix : null,
+  };
+}
+
+// ─── Components ─────────────────────────────────────────────────────────────────
+
+export function JsonMapField({
+  id,
+  label,
+  placeholder,
+  value,
+  onChange,
+  className,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        spellCheck={false}
+        className="border-input bg-background mt-2 min-h-28 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none"
+      />
+    </div>
+  );
+}
+
+export function ExecutorSourceFields({
+  form,
+  formIdPrefix,
+  onFieldChange,
+}: {
+  form: ExecutorSourceFormState;
+  formIdPrefix: string;
+  onFieldChange: (field: keyof ExecutorSourceFormState, value: string) => void;
+}) {
+  const handleFieldInputChange = useCallback(
+    (field: keyof ExecutorSourceFormState) =>
+      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        onFieldChange(field, event.target.value);
+      },
+    [onFieldChange],
+  );
+
+  const handleKindChange = useCallback(
+    (value: string) => {
+      onFieldChange("kind", value);
+    },
+    [onFieldChange],
+  );
+
+  const handleAuthTypeChange = useCallback(
+    (value: string) => {
+      onFieldChange("authType", value);
+    },
+    [onFieldChange],
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-kind`} className="text-sm font-medium">
+          Kind
+        </label>
+        <Select value={form.kind} onValueChange={handleKindChange}>
+          <SelectTrigger id={`${formIdPrefix}-kind`}>
+            <SelectValue placeholder="Select source type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="openapi">OpenAPI</SelectItem>
+            <SelectItem value="mcp">Remote MCP</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-auth-type`} className="text-sm font-medium">
+          Auth
+        </label>
+        <Select value={form.authType} onValueChange={handleAuthTypeChange}>
+          <SelectTrigger id={`${formIdPrefix}-auth-type`}>
+            <SelectValue placeholder="Select auth" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bearer">Bearer token</SelectItem>
+            <SelectItem value="api_key">API key</SelectItem>
+            <SelectItem value="none">No auth</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-name`} className="text-sm font-medium">
+          Name
+        </label>
+        <Input
+          id={`${formIdPrefix}-name`}
+          value={form.name}
+          onChange={handleFieldInputChange("name")}
+          placeholder="Display name"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-namespace`} className="text-sm font-medium">
+          Namespace
+        </label>
+        <Input
+          id={`${formIdPrefix}-namespace`}
+          value={form.namespace}
+          onChange={handleFieldInputChange("namespace")}
+          placeholder="Namespace (for example salesforce-prod)"
+        />
+      </div>
+
+      <div className="space-y-2 md:col-span-2">
+        <label htmlFor={`${formIdPrefix}-endpoint`} className="text-sm font-medium">
+          Endpoint
+        </label>
+        <Input
+          id={`${formIdPrefix}-endpoint`}
+          value={form.endpoint}
+          onChange={handleFieldInputChange("endpoint")}
+          placeholder="Endpoint URL"
+        />
+      </div>
+
+      {form.kind === "openapi" ? (
+        <>
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor={`${formIdPrefix}-spec-url`} className="text-sm font-medium">
+              OpenAPI spec URL
+            </label>
+            <Input
+              id={`${formIdPrefix}-spec-url`}
+              value={form.specUrl}
+              onChange={handleFieldInputChange("specUrl")}
+              placeholder="OpenAPI spec URL"
+            />
+          </div>
+          <JsonMapField
+            id={`${formIdPrefix}-default-headers`}
+            label="Default headers"
+            value={form.defaultHeadersText}
+            onChange={handleFieldInputChange("defaultHeadersText")}
+            placeholder={`{\n  "X-Region": "eu-west-1"\n}`}
+            className="md:col-span-2"
+          />
+        </>
+      ) : (
+        <>
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor={`${formIdPrefix}-transport`} className="text-sm font-medium">
+              Transport
+            </label>
+            <Input
+              id={`${formIdPrefix}-transport`}
+              value={form.transport}
+              onChange={handleFieldInputChange("transport")}
+              placeholder="Transport (for example streamable-http)"
+            />
+          </div>
+          <JsonMapField
+            id={`${formIdPrefix}-headers`}
+            label="Headers"
+            value={form.headersText}
+            onChange={handleFieldInputChange("headersText")}
+            placeholder={`{\n  "X-Team": "sales"\n}`}
+          />
+          <JsonMapField
+            id={`${formIdPrefix}-query-params`}
+            label="Query params"
+            value={form.queryParamsText}
+            onChange={handleFieldInputChange("queryParamsText")}
+            placeholder={`{\n  "region": "eu"\n}`}
+          />
+        </>
+      )}
+
+      {form.authType !== "none" ? (
+        <>
+          <div className="space-y-2">
+            <label htmlFor={`${formIdPrefix}-auth-header-name`} className="text-sm font-medium">
+              Auth header name
+            </label>
+            <Input
+              id={`${formIdPrefix}-auth-header-name`}
+              value={form.authHeaderName}
+              onChange={handleFieldInputChange("authHeaderName")}
+              placeholder="Auth header name"
+            />
+          </div>
+
+          {form.kind === "mcp" && form.authType === "api_key" ? (
+            <div className="space-y-2">
+              <label htmlFor={`${formIdPrefix}-auth-query-param`} className="text-sm font-medium">
+                Auth query param
+              </label>
+              <Input
+                id={`${formIdPrefix}-auth-query-param`}
+                value={form.authQueryParam}
+                onChange={handleFieldInputChange("authQueryParam")}
+                placeholder="Optional query param name"
+              />
+            </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor={`${formIdPrefix}-auth-prefix`} className="text-sm font-medium">
+              Auth prefix
+            </label>
+            <Input
+              id={`${formIdPrefix}-auth-prefix`}
+              value={form.authType === "bearer" ? form.authPrefix : ""}
+              onChange={handleFieldInputChange("authPrefix")}
+              placeholder="Auth prefix"
+              disabled={form.authType !== "bearer"}
+            />
+          </div>
+        </>
+      ) : null}
+    </>
+  );
+}
