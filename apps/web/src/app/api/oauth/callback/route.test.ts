@@ -8,7 +8,12 @@ const {
   getOAuthConfigMock,
   fetchDynamicsInstancesMock,
   submitAuthResultMock,
+  consumeExecutorSourceOAuthPendingMock,
+  exchangeMcpOAuthAuthorizationCodeMock,
+  setWorkspaceExecutorSourceOAuthCredentialMock,
   integrationFindFirstMock,
+  workspaceExecutorSourceFindFirstMock,
+  workspaceExecutorSourceCredentialFindFirstMock,
   updateWhereMock,
   deleteWhereMock,
   insertReturningMock,
@@ -19,8 +24,13 @@ const {
   const getOAuthConfigMock = vi.fn();
   const fetchDynamicsInstancesMock = vi.fn();
   const submitAuthResultMock = vi.fn();
+  const consumeExecutorSourceOAuthPendingMock = vi.fn();
+  const exchangeMcpOAuthAuthorizationCodeMock = vi.fn();
+  const setWorkspaceExecutorSourceOAuthCredentialMock = vi.fn();
 
   const integrationFindFirstMock = vi.fn();
+  const workspaceExecutorSourceFindFirstMock = vi.fn();
+  const workspaceExecutorSourceCredentialFindFirstMock = vi.fn();
 
   const updateWhereMock = vi.fn();
   const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
@@ -38,6 +48,12 @@ const {
       integration: {
         findFirst: integrationFindFirstMock,
       },
+      workspaceExecutorSource: {
+        findFirst: workspaceExecutorSourceFindFirstMock,
+      },
+      workspaceExecutorSourceCredential: {
+        findFirst: workspaceExecutorSourceCredentialFindFirstMock,
+      },
     },
     update: updateMock,
     delete: deleteMock,
@@ -49,7 +65,12 @@ const {
     getOAuthConfigMock,
     fetchDynamicsInstancesMock,
     submitAuthResultMock,
+    consumeExecutorSourceOAuthPendingMock,
+    exchangeMcpOAuthAuthorizationCodeMock,
+    setWorkspaceExecutorSourceOAuthCredentialMock,
     integrationFindFirstMock,
+    workspaceExecutorSourceFindFirstMock,
+    workspaceExecutorSourceCredentialFindFirstMock,
     updateWhereMock,
     deleteWhereMock,
     insertReturningMock,
@@ -74,8 +95,20 @@ vi.mock("@cmdclaw/core/server/oauth/config", () => ({
   getOAuthConfig: getOAuthConfigMock,
 }));
 
+vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
+  exchangeMcpOAuthAuthorizationCode: exchangeMcpOAuthAuthorizationCodeMock,
+}));
+
+vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
+  setWorkspaceExecutorSourceOAuthCredential: setWorkspaceExecutorSourceOAuthCredentialMock,
+}));
+
 vi.mock("@/server/integrations/dynamics", () => ({
   fetchDynamicsInstances: fetchDynamicsInstancesMock,
+}));
+
+vi.mock("@/server/executor-source-oauth", () => ({
+  consumeExecutorSourceOAuthPending: consumeExecutorSourceOAuthPendingMock,
 }));
 
 vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
@@ -113,7 +146,26 @@ describe("GET /api/oauth/callback", () => {
       },
     ]);
     submitAuthResultMock.mockResolvedValue(true);
+    consumeExecutorSourceOAuthPendingMock.mockResolvedValue(undefined);
+    exchangeMcpOAuthAuthorizationCodeMock.mockResolvedValue({
+      accessToken: "oauth-access",
+      refreshToken: "oauth-refresh",
+      expiresAt: new Date("2025-01-01T00:00:00.000Z"),
+      metadata: {
+        tokenType: "Bearer",
+        scope: "read write",
+        redirectUri: "https://app.example.com/api/oauth/callback",
+        resourceMetadataUrl: null,
+        authorizationServerUrl: null,
+        resourceMetadata: null,
+        authorizationServerMetadata: null,
+        clientInformation: null,
+      },
+    });
+    setWorkspaceExecutorSourceOAuthCredentialMock.mockResolvedValue(undefined);
     integrationFindFirstMock.mockResolvedValue(null);
+    workspaceExecutorSourceFindFirstMock.mockResolvedValue(null);
+    workspaceExecutorSourceCredentialFindFirstMock.mockResolvedValue(null);
     insertReturningMock.mockResolvedValue([{ id: "integration-1" }]);
     deleteWhereMock.mockResolvedValue(undefined);
     updateWhereMock.mockResolvedValue(undefined);
@@ -186,6 +238,87 @@ describe("GET /api/oauth/callback", () => {
     const response = await GET(request);
 
     expect(getLocation(response)).toBe("https://app.example.com/integrations?error=user_mismatch");
+  });
+
+  it("redirects executor-source OAuth errors back to the source page", async () => {
+    consumeExecutorSourceOAuthPendingMock.mockResolvedValue({
+      userId: "user-1",
+      sourceId: "src-1",
+      redirectUrl: "https://app.example.com/toolbox/sources/src-1",
+      session: {
+        endpoint: "https://mcp.linear.app/mcp",
+        redirectUrl: "https://app.example.com/api/oauth/callback",
+        codeVerifier: "verifier",
+        resourceMetadataUrl: null,
+        authorizationServerUrl: null,
+        resourceMetadata: null,
+        authorizationServerMetadata: null,
+        clientInformation: null,
+      },
+    });
+
+    const request = new NextRequest(
+      "https://app.example.com/api/oauth/callback?state=executor-state&error=access_denied",
+    );
+
+    const response = await GET(request);
+
+    expect(getLocation(response)).toBe(
+      "https://app.example.com/toolbox/sources/src-1?oauth=error&oauth_error=access_denied",
+    );
+  });
+
+  it("stores executor-source OAuth credentials and redirects back to the source page", async () => {
+    consumeExecutorSourceOAuthPendingMock.mockResolvedValue({
+      userId: "user-1",
+      sourceId: "src-1",
+      redirectUrl: "https://app.example.com/toolbox/sources/src-1",
+      session: {
+        endpoint: "https://mcp.linear.app/mcp",
+        redirectUrl: "https://app.example.com/api/oauth/callback",
+        codeVerifier: "verifier",
+        resourceMetadataUrl: null,
+        authorizationServerUrl: null,
+        resourceMetadata: null,
+        authorizationServerMetadata: null,
+        clientInformation: null,
+      },
+    });
+    workspaceExecutorSourceFindFirstMock.mockResolvedValue({
+      id: "src-1",
+      kind: "mcp",
+      authType: "oauth2",
+    });
+    workspaceExecutorSourceCredentialFindFirstMock.mockResolvedValue({
+      displayName: "Linear",
+      enabled: false,
+    });
+
+    const request = new NextRequest(
+      "https://app.example.com/api/oauth/callback?code=oauth-code&state=executor-state",
+    );
+
+    const response = await GET(request);
+
+    expect(exchangeMcpOAuthAuthorizationCodeMock).toHaveBeenCalledWith({
+      session: expect.objectContaining({
+        endpoint: "https://mcp.linear.app/mcp",
+      }),
+      code: "oauth-code",
+    });
+    expect(setWorkspaceExecutorSourceOAuthCredentialMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceExecutorSourceId: "src-1",
+        userId: "user-1",
+        accessToken: "oauth-access",
+        refreshToken: "oauth-refresh",
+        displayName: "Linear",
+        enabled: false,
+      }),
+    );
+    expect(getLocation(response)).toBe(
+      "https://app.example.com/toolbox/sources/src-1?oauth=success",
+    );
   });
 
   it("redirects with token_exchange_failed when token exchange fails", async () => {

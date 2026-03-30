@@ -1,12 +1,33 @@
+import { exchangeMcpOAuthAuthorizationCode } from "@cmdclaw/core/server/executor/mcp-oauth";
+import { setWorkspaceExecutorSourceOAuthCredential } from "@cmdclaw/core/server/executor/workspace-sources";
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { db } from "@cmdclaw/db/client";
-import { integration, integrationToken } from "@cmdclaw/db/schema";
+import {
+  integration,
+  integrationToken,
+  workspaceExecutorSource,
+  workspaceExecutorSourceCredential,
+} from "@cmdclaw/db/schema";
 import { eq, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";
+import { consumeExecutorSourceOAuthPending } from "@/server/executor-source-oauth";
 import { fetchDynamicsInstances } from "@/server/integrations/dynamics";
+
+function buildExecutorSourceRedirectUrl(raw: string, request: NextRequest): URL {
+  try {
+    return new URL(raw);
+  } catch {
+    return buildRequestAwareUrl(raw, request);
+  }
+}
+
+function appendExecutorSourceRedirectParam(redirectUrl: URL, key: string, value: string) {
+  redirectUrl.searchParams.set(key, value);
+  return redirectUrl;
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -15,6 +36,16 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   if (error) {
+    if (state) {
+      const executorPending = await consumeExecutorSourceOAuthPending(state).catch(() => undefined);
+      if (executorPending) {
+        const redirectUrl = buildExecutorSourceRedirectUrl(executorPending.redirectUrl, request);
+        appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
+        appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", error);
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
+
     console.error("OAuth error:", error);
     return NextResponse.redirect(buildRequestAwareUrl(`/integrations?error=${error}`, request));
   }
@@ -32,6 +63,61 @@ export async function GET(request: NextRequest) {
 
   if (!sessionData?.user) {
     return NextResponse.redirect(buildRequestAwareUrl("/login?error=unauthorized", request));
+  }
+
+  const executorPending = state ? await consumeExecutorSourceOAuthPending(state) : undefined;
+  if (executorPending) {
+    const redirectUrl = buildExecutorSourceRedirectUrl(executorPending.redirectUrl, request);
+
+    if (executorPending.userId !== sessionData.user.id) {
+      appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
+      appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", "user_mismatch");
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    try {
+      const source = await db.query.workspaceExecutorSource.findFirst({
+        where: eq(workspaceExecutorSource.id, executorPending.sourceId),
+      });
+
+      if (!source || source.kind !== "mcp" || source.authType !== "oauth2") {
+        appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
+        appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", "invalid_source");
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      const credential = await exchangeMcpOAuthAuthorizationCode({
+        session: executorPending.session,
+        code,
+      });
+
+      const existingCredential = await db.query.workspaceExecutorSourceCredential.findFirst({
+        where: and(
+          eq(workspaceExecutorSourceCredential.userId, sessionData.user.id),
+          eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
+        ),
+      });
+
+      await setWorkspaceExecutorSourceOAuthCredential({
+        database: db,
+        workspaceExecutorSourceId: source.id,
+        userId: sessionData.user.id,
+        accessToken: credential.accessToken,
+        refreshToken: credential.refreshToken,
+        expiresAt: credential.expiresAt,
+        oauthMetadata: credential.metadata,
+        displayName: existingCredential?.displayName ?? null,
+        enabled: existingCredential?.enabled ?? true,
+      });
+
+      appendExecutorSourceRedirectParam(redirectUrl, "oauth", "success");
+      return NextResponse.redirect(redirectUrl);
+    } catch (callbackError) {
+      console.error("Executor source OAuth callback error:", callbackError);
+      appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
+      appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", "callback_failed");
+      return NextResponse.redirect(redirectUrl);
+    }
   }
 
   // Parse state
