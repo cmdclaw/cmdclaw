@@ -22,8 +22,8 @@ In this codebase, an example of"closing the loop" is:
 1. Keep the web, worker, and WS runtimes running (`bun run dev`, with worker/server visible in tmux logs).
 2. Make a change.
 3. Read the workflow guide directly from the repo when needed: `bun run cat close-the-loop-definition.md`.
-4. Validate behavior via `bun run chat` (real prompt, real execution path).
-   Example: `bun run chat --message "send a message on slack saying hi" --model openai/gpt-5.4-mini`
+4. Validate behavior via `bun run cmdclaw -- chat` (real prompt, real execution path).
+   Example: `bun run cmdclaw -- chat --message "send a message on slack saying hi" --model openai/gpt-5.4-mini`
    In a real terminal, `--message` seeds the first turn and then keeps the same chat open at `followup>` so you can continue iterating without restarting the CLI.
 5. Read tmux logs to confirm server + worker behavior and catch regressions.
 6. Iterate immediately until the prompt result matches expected behavior.
@@ -32,16 +32,16 @@ That is a closed loop because implementation, runtime execution, and verificatio
 
 ## Coworker debug loop
 
-For coworker debugging, the equivalent runner is `bun run coworker`, not `bun run chat coworker`.
+For coworker debugging, the equivalent runner is `bun run cmdclaw -- coworker`, not `bun run cmdclaw -- chat coworker`.
 
 Use this loop when you want to reproduce a coworker issue and watch it live:
 
 1. Start a fresh coworker run from the current saved definition and monitor it in one session:
-   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun run coworker run <coworker-id> --debug`
+   `cd /Users/baptiste/Git/cmdclaw && bun run cmdclaw -- coworker run <coworker-id>`
 2. If you already have a run id, tail only that run:
-   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun run coworker logs <run-id> --watch`
+   `cd /Users/baptiste/Git/cmdclaw && bun run cmdclaw -- coworker logs <run-id> --watch`
 3. Run a chat control case through the same runtime to compare behavior:
-   `cd /Users/baptiste/Git/cmdclaw/apps/web && bun run chat --message "<repro prompt>" --model openai/gpt-5.4 --auto-approve`
+   `cd /Users/baptiste/Git/cmdclaw && bun run cmdclaw -- chat --message "<repro prompt>" --model openai/gpt-5.4 --auto-approve`
 4. Inspect the persisted DB state directly if you want a separate raw query:
    `cd /Users/baptiste/Git/cmdclaw/apps/web && bun -e 'import { db } from "@cmdclaw/db/client"; import { coworkerRun } from "@cmdclaw/db/schema"; import { eq } from "drizzle-orm"; const id = "<run-id>"; console.log(JSON.stringify(await db.query.coworkerRun.findFirst({ where: eq(coworkerRun.id, id), with: { generation: true } }), null, 2)); process.exit(0);'`
 

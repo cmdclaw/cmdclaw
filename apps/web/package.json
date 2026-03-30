@@ -7,13 +7,8 @@
     "auth:inspect": "bun scripts/auth-inspect.ts",
     "env": "infisical export --output-file=./.env",
     "build": "next build",
-    "chat": "bun run chat:auth && bun scripts/chat.ts",
-    "chat:auth": "bun --env-file=.env scripts/chat-auth.ts",
-    "chat:daytona": "SANDBOX_DEFAULT=daytona bun run chat",
-    "chat:e2b": "SANDBOX_DEFAULT=e2b bun run chat",
+    "chat:auth": "bun run --cwd ../cli start -- auth login",
     "check": "bun run typecheck && bun run lint",
-    "coworker": "bun scripts/coworker.ts",
-    "workflow": "bun scripts/coworker.ts",
     "daytona:build:dev": "bun src/sandbox-templates/daytona/build.dev.ts",
     "daytona:build:prod": "bun src/sandbox-templates/daytona/build.prod.ts",
     "daytona:cleanup": "bun scripts/daytona-cleanup.ts",
@@ -71,6 +66,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@cmdclaw/client": "workspace:*",
     "@anthropic-ai/sdk": "^0.71.2",
     "@aws-sdk/client-s3": "^3.968.0",
     "@aws-sdk/s3-request-presigner": "^3.968.0",
