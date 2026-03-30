@@ -6,11 +6,11 @@ import { postMessageToOpsTelemetryChannel } from "./telemetry-slack";
 
 const OPS_DAILY_DIGEST_TIME = "09:00";
 const DEFAULT_DIGEST_TIMEZONE = "Europe/Dublin";
-const MAX_SIGNUP_PREVIEW_COUNT = 10;
+const MAX_USER_PREVIEW_COUNT = 10;
 
 export const DAILY_TELEMETRY_DIGEST_SCHEDULER_ID = "telemetry:daily-digest";
 
-type SignupPreview = {
+type UserPreview = {
   id: string;
   email: string;
   name: string;
@@ -23,11 +23,17 @@ export type DailyTelemetryDigestSummary = {
   newSignups: number;
   activeUsers: number;
   returningActiveUsers: number;
-  signupsPreview: SignupPreview[];
+  signupsPreview: UserPreview[];
+  activeUsersPreview: UserPreview[];
+  returningActiveUsersPreview: UserPreview[];
   appUrl: string | null;
   appUrlDomain: string | null;
   appUrlSource: AppUrlSource | null;
 };
+
+function formatUserPreviewLabel(preview: UserPreview): string {
+  return preview.name.trim().length > 0 ? `${preview.name} <${preview.email}>` : preview.email;
+}
 
 function parseDigestTime(time: string): { hour: number; minute: number } {
   const [hour, minute] = time.split(":").map((value) => Number(value));
@@ -98,32 +104,60 @@ export async function getDailyTelemetryDigestSummary(now = new Date()): Promise<
   const { start, end, activityDate } = getPreviousDayWindow(now);
   const appUrlInfo = resolveDigestAppUrl();
 
-  const [[{ value: newSignups }], [{ value: activeUsers }], [{ value: returningActiveUsers }], signupsPreview] =
-    await Promise.all([
-      db
-        .select({ value: count() })
-        .from(user)
-        .where(and(gte(user.createdAt, start), lt(user.createdAt, end))),
-      db
-        .select({ value: count() })
-        .from(userDailyActivity)
-        .where(eq(userDailyActivity.activityDate, activityDate)),
-      db
-        .select({ value: count() })
-        .from(userDailyActivity)
-        .innerJoin(user, eq(userDailyActivity.userId, user.id))
-        .where(and(eq(userDailyActivity.activityDate, activityDate), lt(user.createdAt, start))),
-      db.query.user.findMany({
-        where: and(gte(user.createdAt, start), lt(user.createdAt, end)),
-        columns: {
-          id: true,
-          email: true,
-          name: true,
-        },
-        orderBy: [asc(user.createdAt)],
-        limit: MAX_SIGNUP_PREVIEW_COUNT,
-      }),
-    ]);
+  const [
+    [{ value: newSignups }],
+    [{ value: activeUsers }],
+    [{ value: returningActiveUsers }],
+    signupsPreview,
+    activeUsersPreview,
+    returningActiveUsersPreview,
+  ] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(user)
+      .where(and(gte(user.createdAt, start), lt(user.createdAt, end))),
+    db
+      .select({ value: count() })
+      .from(userDailyActivity)
+      .where(eq(userDailyActivity.activityDate, activityDate)),
+    db
+      .select({ value: count() })
+      .from(userDailyActivity)
+      .innerJoin(user, eq(userDailyActivity.userId, user.id))
+      .where(and(eq(userDailyActivity.activityDate, activityDate), lt(user.createdAt, start))),
+    db.query.user.findMany({
+      where: and(gte(user.createdAt, start), lt(user.createdAt, end)),
+      columns: {
+        id: true,
+        email: true,
+        name: true,
+      },
+      orderBy: [asc(user.createdAt)],
+      limit: MAX_USER_PREVIEW_COUNT,
+    }),
+    db
+      .select({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      })
+      .from(userDailyActivity)
+      .innerJoin(user, eq(userDailyActivity.userId, user.id))
+      .where(eq(userDailyActivity.activityDate, activityDate))
+      .orderBy(asc(userDailyActivity.firstSeenAt), asc(user.name), asc(user.email))
+      .limit(MAX_USER_PREVIEW_COUNT),
+    db
+      .select({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      })
+      .from(userDailyActivity)
+      .innerJoin(user, eq(userDailyActivity.userId, user.id))
+      .where(and(eq(userDailyActivity.activityDate, activityDate), lt(user.createdAt, start)))
+      .orderBy(asc(userDailyActivity.firstSeenAt), asc(user.name), asc(user.email))
+      .limit(MAX_USER_PREVIEW_COUNT),
+  ]);
 
   return {
     activityDate,
@@ -134,6 +168,16 @@ export async function getDailyTelemetryDigestSummary(now = new Date()): Promise<
       id: signup.id,
       email: signup.email,
       name: signup.name,
+    })),
+    activeUsersPreview: activeUsersPreview.map((preview) => ({
+      id: preview.id,
+      email: preview.email,
+      name: preview.name,
+    })),
+    returningActiveUsersPreview: returningActiveUsersPreview.map((preview) => ({
+      id: preview.id,
+      email: preview.email,
+      name: preview.name,
     })),
     appUrl: appUrlInfo.appUrl,
     appUrlDomain: appUrlInfo.appUrlDomain,
@@ -156,8 +200,21 @@ export function buildDailyTelemetryDigestMessage(summary: DailyTelemetryDigestSu
   if (summary.signupsPreview.length > 0) {
     lines.push("", "New signup preview:");
     for (const signup of summary.signupsPreview) {
-      const label = signup.name.trim().length > 0 ? `${signup.name} <${signup.email}>` : signup.email;
-      lines.push(`- ${label}`);
+      lines.push(`- ${formatUserPreviewLabel(signup)}`);
+    }
+  }
+
+  if (summary.activeUsersPreview.length > 0) {
+    lines.push("", "Active user preview:");
+    for (const preview of summary.activeUsersPreview) {
+      lines.push(`- ${formatUserPreviewLabel(preview)}`);
+    }
+  }
+
+  if (summary.returningActiveUsersPreview.length > 0) {
+    lines.push("", "Returning active user preview:");
+    for (const preview of summary.returningActiveUsersPreview) {
+      lines.push(`- ${formatUserPreviewLabel(preview)}`);
     }
   }
 
