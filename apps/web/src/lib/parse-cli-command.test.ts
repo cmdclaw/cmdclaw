@@ -57,4 +57,18 @@ describe("parseCliCommand", () => {
         "python -c \"print('hi')\" && coworker edit cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --changes-file /tmp/changes.json --json",
     });
   });
+
+  it("parses agent-browser commands at the end of compound shell commands", () => {
+    expect(
+      parseCliCommand("echo preparing && agent-browser screenshot --full /tmp/example.png"),
+    ).toEqual({
+      integration: "agent-browser",
+      operation: "screenshot",
+      args: {
+        full: "/tmp/example.png",
+      },
+      positionalArgs: [],
+      rawCommand: "echo preparing && agent-browser screenshot --full /tmp/example.png",
+    });
+  });
 });

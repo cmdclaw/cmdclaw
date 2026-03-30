@@ -27,6 +27,7 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   reddit: "reddit",
   twitter: "twitter",
   coworker: "coworker",
+  "agent-browser": "agent-browser",
 };
 
 const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
@@ -211,9 +212,10 @@ const INTEGRATION_NAMES: Record<string, string> = {
   reddit: "Reddit",
   twitter: "X (Twitter)",
   coworker: "Coworker",
+  "agent-browser": "Agent Browser",
 };
 
-const INTERNAL_DISPLAY_ONLY_INTEGRATIONS = new Set(["coworker"]);
+const INTERNAL_DISPLAY_ONLY_INTEGRATIONS = new Set(["coworker", "agent-browser"]);
 
 export interface ParsedCommand {
   integration: string;

@@ -15,6 +15,7 @@ import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, count, eq } from "drizzle-orm";
 import { z } from "zod";
+import { extractSkillToolIntegrations } from "@/lib/skill-markdown";
 import { importSkill } from "@/server/services/skill-import";
 import { validateFileUpload } from "@/server/storage/validation";
 import { protectedProcedure } from "../middleware";
@@ -52,7 +53,10 @@ function formatSkillSummary(
     visibility: "private" | "public";
     createdAt: Date;
     updatedAt: Date;
-    files: Array<unknown>;
+    files: Array<{
+      path: string;
+      content: string;
+    }>;
     user: {
       id: string;
       name: string | null;
@@ -63,6 +67,7 @@ function formatSkillSummary(
   currentUserId: string,
 ) {
   const isOwnedByCurrentUser = row.userId === currentUserId;
+  const skillMd = row.files.find((file) => file.path === "SKILL.md");
   return {
     id: row.id,
     name: row.name,
@@ -78,6 +83,7 @@ function formatSkillSummary(
     },
     isOwnedByCurrentUser,
     canEdit: isOwnedByCurrentUser,
+    toolIntegrations: skillMd ? extractSkillToolIntegrations(skillMd.content) : [],
     fileCount: row.files.length,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -183,6 +189,9 @@ const get = protectedProcedure
       },
       isOwnedByCurrentUser,
       canEdit: isOwnedByCurrentUser,
+      toolIntegrations: extractSkillToolIntegrations(
+        existingSkill.files.find((file) => file.path === "SKILL.md")?.content ?? "",
+      ),
       files: existingSkill.files.map((file) => ({
         id: file.id,
         path: file.path,

@@ -44,4 +44,31 @@ describe("permission-checker", () => {
       isWrite: true,
     });
   });
+
+  it("parses agent-browser commands for tool metadata", () => {
+    expect(
+      parseBashCommand("agent-browser screenshot --full /tmp/example.png"),
+    ).toEqual({
+      integration: "agent-browser",
+      operation: "screenshot",
+      integrationName: "Agent Browser",
+      isWrite: false,
+    });
+  });
+
+  it("does not require auth or approval for agent-browser commands", () => {
+    expect(
+      checkToolPermissions(
+        "bash",
+        {
+          command: "agent-browser open https://example.com",
+        },
+        [],
+      ),
+    ).toEqual({
+      allowed: true,
+      needsApproval: false,
+      needsAuth: false,
+    });
+  });
 });

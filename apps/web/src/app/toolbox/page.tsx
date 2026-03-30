@@ -29,6 +29,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { IntegrationBadges } from "@/components/chat/integration-badges";
 import { ToolboxPreviewModal } from "@/components/toolbox-preview-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,7 @@ import {
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
 } from "@/lib/integration-errors";
 import {
+  type DisplayIntegrationType,
   isComingSoonIntegration,
   type IntegrationType as IntegrationIconType,
 } from "@/lib/integration-icons";
@@ -204,6 +206,7 @@ type CommunitySkill = {
   icon: React.ReactNode;
   logoUrl?: string;
   category: string;
+  kind: "skill" | "tool-integration";
   enabled: boolean;
 };
 
@@ -211,11 +214,13 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
   {
     id: "agent-browser",
     slug: "agent-browser",
-    displayName: "Agent Browser",
+    displayName: "Browser",
     description:
       "Browse the web autonomously — search, navigate, extract data, and interact with pages on behalf of the user.",
     icon: <Globe className="h-5 w-5" />,
+    logoUrl: "/tools/browser.svg",
     category: "Automation",
+    kind: "tool-integration",
     enabled: true,
   },
   {
@@ -226,6 +231,7 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
       "Fill PDF form fields programmatically from structured data. Supports text fields, checkboxes, and dropdowns.",
     icon: <FileInput className="h-5 w-5" />,
     category: "Documents",
+    kind: "skill",
     enabled: true,
   },
   {
@@ -237,6 +243,7 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
     icon: <FileOutput className="h-5 w-5" />,
     logoUrl: "/integrations/google-docs.svg",
     category: "Documents",
+    kind: "skill",
     enabled: true,
   },
   {
@@ -248,6 +255,7 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
     icon: <Table className="h-5 w-5" />,
     logoUrl: "/integrations/google-sheets.svg",
     category: "Documents",
+    kind: "skill",
     enabled: false,
   },
   {
@@ -258,6 +266,7 @@ const COMMUNITY_SKILLS: CommunitySkill[] = [
       "Describe what you need in plain language and this skill generates a fully functional new skill with instructions and files.",
     icon: <Wand2 className="h-5 w-5" />,
     category: "Utilities",
+    kind: "skill",
     enabled: true,
   },
 ];
@@ -415,6 +424,8 @@ function IntegrationToolCard({
 }
 
 function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled: boolean }) {
+  const isToolIntegration = skill.kind === "tool-integration";
+
   return (
     <motion.div
       layout
@@ -435,8 +446,9 @@ function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled:
           <div className="flex items-center gap-3">
             <div
               className={cn(
-                "bg-muted/60 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors",
-                enabled ? "text-foreground" : "text-muted-foreground",
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors",
+                skill.logoUrl ? "border bg-white p-1.5 shadow-sm dark:bg-gray-800" : "bg-muted/60",
+                !skill.logoUrl && (enabled ? "text-foreground" : "text-muted-foreground"),
               )}
             >
               {skill.logoUrl ? (
@@ -445,7 +457,7 @@ function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled:
                   alt={skill.displayName}
                   width={22}
                   height={22}
-                  className="size-[22px]"
+                  className="h-auto max-h-[22px] w-auto max-w-[22px] object-contain"
                 />
               ) : (
                 skill.icon
@@ -477,7 +489,7 @@ function CommunityToolCard({ skill, enabled }: { skill: CommunitySkill; enabled:
         {/* Footer */}
         <div className="mt-auto flex items-center justify-between pt-4">
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            Skill
+            {isToolIntegration ? "Tool Integration" : "Skill"}
           </span>
           <ArrowUp className="text-muted-foreground/30 group-hover:text-muted-foreground size-3.5 rotate-45 transition-colors" />
         </div>
@@ -508,6 +520,7 @@ function CustomToolCard({
     };
     isOwnedByCurrentUser: boolean;
     canEdit: boolean;
+    toolIntegrations: string[];
   };
   onDelete: (id: string, displayName: string) => Promise<void>;
   onShare: (id: string, displayName: string) => Promise<void>;
@@ -601,6 +614,13 @@ function CustomToolCard({
         <p className="text-muted-foreground mt-3 line-clamp-2 text-xs leading-relaxed">
           {skill.description}
         </p>
+
+        {skill.toolIntegrations.length > 0 ? (
+          <IntegrationBadges
+            integrations={skill.toolIntegrations as DisplayIntegrationType[]}
+            className="mt-3"
+          />
+        ) : null}
 
         {/* Footer */}
         <div className="mt-auto flex items-center justify-between pt-4">
