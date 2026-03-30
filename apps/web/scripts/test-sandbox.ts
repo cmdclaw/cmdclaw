@@ -25,6 +25,8 @@ void dotenvConfig;
 const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
 const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_CREATE_USER_EMAIL = "collebaptiste@gmail.com";
+const EXECUTOR_WEB_PORT = 8788;
+const EXECUTOR_WEB_LOG_PATH = "/tmp/executor-web.log";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
 
@@ -585,6 +587,48 @@ function printSandboxInfo(target: ExistingSandboxTarget, mode: "create" | "attac
   console.log(`  model: ${target.model ?? "<unknown>"}`);
 }
 
+function printPublicAccessInfo(sandbox: Sandbox): void {
+  console.log(`  public services: https://<port>-${sandbox.sandboxId}.${sandbox.sandboxDomain}/`);
+  console.log(`  executor web: https://${sandbox.getHost(EXECUTOR_WEB_PORT)}/`);
+  console.log("  note: bind your debug server to 0.0.0.0:<port> inside the sandbox");
+}
+
+async function ensureExecutorWebStarted(sandbox: Sandbox): Promise<"already_running" | "started"> {
+  const result = await sandbox.commands.run(
+    `bash -lc '
+if curl -fsS http://127.0.0.1:${EXECUTOR_WEB_PORT} >/dev/null 2>&1; then
+  echo already_running
+  exit 0
+fi
+nohup executor web --port ${EXECUTOR_WEB_PORT} >${EXECUTOR_WEB_LOG_PATH} 2>&1 &
+for i in $(seq 1 40); do
+  if curl -fsS http://127.0.0.1:${EXECUTOR_WEB_PORT} >/dev/null 2>&1; then
+    echo started
+    exit 0
+  fi
+  sleep 0.25
+done
+echo "executor web did not become ready; see ${EXECUTOR_WEB_LOG_PATH}" >&2
+tail -n 40 ${EXECUTOR_WEB_LOG_PATH} >&2 || true
+exit 1
+'`,
+    {
+      timeoutMs: 30_000,
+    },
+  );
+
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || "Failed to start executor web.");
+  }
+
+  const state = result.stdout.trim();
+  if (state === "already_running" || state === "started") {
+    return state;
+  }
+
+  throw new Error(`Unexpected executor state: ${state}`);
+}
+
 async function startRepl(
   sandbox: Sandbox,
   target: ExistingSandboxTarget,
@@ -651,6 +695,7 @@ Commands:
 
       if (cmd === "info") {
         printSandboxInfo(target, mode);
+        printPublicAccessInfo(sandbox);
         prompt();
         return;
       }
@@ -726,7 +771,14 @@ async function main(): Promise<void> {
     console.log(`Connecting to existing sandbox ${target.sandboxId}...`);
     const sandbox = await connectSandboxById(target.sandboxId);
     console.log(`✓ Connected to sandbox: ${sandbox.sandboxId}`);
+    const executorState = await ensureExecutorWebStarted(sandbox);
+    console.log(
+      executorState === "already_running"
+        ? `✓ Executor web already running on port ${EXECUTOR_WEB_PORT}`
+        : `✓ Started executor web on port ${EXECUTOR_WEB_PORT}`,
+    );
     printSandboxInfo(target, "attach");
+    printPublicAccessInfo(sandbox);
     printAvailableCommands();
     await startRepl(sandbox, target, "attach");
     return;
@@ -799,7 +851,14 @@ async function main(): Promise<void> {
 
   console.log(`✓ Sandbox created: ${sandbox.sandboxId}`);
   console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
+  const executorState = await ensureExecutorWebStarted(sandbox);
+  console.log(
+    executorState === "already_running"
+      ? `✓ Executor web already running on port ${EXECUTOR_WEB_PORT}`
+      : `✓ Started executor web on port ${EXECUTOR_WEB_PORT}`,
+  );
   printSandboxInfo(target, "create");
+  printPublicAccessInfo(sandbox);
   printAvailableCommands();
   await startRepl(sandbox, target, "create");
 }
