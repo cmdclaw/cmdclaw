@@ -23,5 +23,16 @@
     "integration-permissions",
     "memory"
   ],
+  "mcp": {
+    "executor": {
+      "type": "local",
+      "command": [
+        "executor",
+        "mcp",
+        "--stdio"
+      ],
+      "enabled": true
+    }
+  },
   "default_agent": "cmdclaw-chat"
 }
