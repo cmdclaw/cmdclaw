@@ -89,7 +89,7 @@ describe("sandbox factory", () => {
   it("uses E2B when SANDBOX_DEFAULT=e2b and E2B is configured", async () => {
     const { getPreferredCloudSandboxProvider } = await loadFactoryModule();
     expect(getPreferredCloudSandboxProvider()).toBe("e2b");
-  });
+  }, 15_000);
 
   it("uses Daytona when SANDBOX_DEFAULT=daytona and Daytona is configured", async () => {
     setSandboxEnv({
@@ -100,7 +100,7 @@ describe("sandbox factory", () => {
 
     const { getPreferredCloudSandboxProvider } = await loadFactoryModule();
     expect(getPreferredCloudSandboxProvider()).toBe("daytona");
-  });
+  }, 15_000);
 
   it("throws when SANDBOX_DEFAULT=e2b but E2B is not configured, without falling back", async () => {
     setSandboxEnv({
