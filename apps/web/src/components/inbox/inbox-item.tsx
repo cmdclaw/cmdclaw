@@ -2,44 +2,29 @@
 
 import {
   AlertTriangle,
-  Check,
   ChevronRight,
-  CircleOff,
+  ExternalLink,
   KeyRound,
   Loader2,
-  Pause,
   Pencil,
-  RotateCcw,
   Send,
   ShieldCheck,
   Square,
-  X,
+  Wrench,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AuthRequestCard } from "@/components/chat/auth-request-card";
 import { ToolApprovalCard } from "@/components/chat/tool-approval-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type {
-  InboxItem as InboxItemType,
-  InboxItemStatus,
-  ToolApprovalData,
-} from "./inbox-mock-data";
+import type { InboxItem as InboxItemType, ToolApprovalData } from "./types";
 import { InboxEditForm } from "./inbox-edit-form";
-import { useInboxStore } from "./inbox-store";
 
-const STATUS_CONFIG: Record<
-  InboxItemStatus,
-  { color: string; pulse?: boolean; icon: React.ComponentType<{ className?: string }> }
-> = {
-  running: { color: "bg-blue-500", pulse: true, icon: Loader2 },
-  awaiting_approval: { color: "bg-amber-500", pulse: true, icon: ShieldCheck },
-  awaiting_auth: { color: "bg-orange-500", pulse: true, icon: KeyRound },
-  paused: { color: "bg-zinc-500", icon: Pause },
-  completed: { color: "bg-emerald-500", icon: Check },
+const STATUS_CONFIG = {
+  awaiting_approval: { color: "bg-amber-500", icon: ShieldCheck },
+  awaiting_auth: { color: "bg-orange-500", icon: KeyRound },
   error: { color: "bg-red-500", icon: AlertTriangle },
-  cancelled: { color: "bg-zinc-500", icon: CircleOff },
-};
+} as const;
 
 function formatRelative(date: Date): string {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -58,39 +43,40 @@ function formatRelative(date: Date): string {
   return `${days}d`;
 }
 
-function StatusDot({ status }: { status: InboxItemStatus }) {
+function StatusDot({ status }: { status: InboxItemType["status"] }) {
   const config = STATUS_CONFIG[status];
   return (
     <span className="relative flex h-2.5 w-2.5 shrink-0">
-      {config.pulse && (
-        <span
-          className={cn("absolute inset-0 rounded-full opacity-40 animate-ping", config.color)}
-        />
-      )}
+      <span className={cn("absolute inset-0 animate-ping rounded-full opacity-40", config.color)} />
       <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", config.color)} />
     </span>
   );
 }
 
-function InboxItemReplyField() {
-  const [reply, setReply] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setReply(e.target.value);
+function ReplyField({
+  disabled,
+  onSend,
+}: {
+  disabled?: boolean;
+  onSend: (message: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setValue(event.target.value);
   }, []);
 
   const handleSend = useCallback(() => {
-    if (!reply.trim()) {
+    const trimmed = value.trim();
+    if (!trimmed) {
       return;
     }
-    setReply("");
-  }, [reply]);
-
+    onSend(trimmed);
+    setValue("");
+  }, [onSend, value]);
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
         handleSend();
       }
     },
@@ -99,355 +85,218 @@ function InboxItemReplyField() {
 
   return (
     <div className="flex items-center gap-2">
-      <div className="relative flex-1">
-        <input
-          ref={inputRef}
-          type="text"
-          value={reply}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Reply to agent..."
-          className="border-border/50 bg-background text-foreground placeholder:text-muted-foreground/50 focus:border-ring focus:ring-ring/50 h-8 w-full rounded-md border px-3 pr-8 text-[12px] transition-colors outline-none focus:ring-1"
-        />
-        {reply.trim() && (
-          <button
-            type="button"
-            onClick={handleSend}
-            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 transition-colors"
-          >
-            <Send className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder="Reply and open thread..."
+        disabled={disabled}
+        className="border-border/50 bg-background text-foreground placeholder:text-muted-foreground/50 focus:border-ring focus:ring-ring/50 h-8 w-full rounded-md border px-3 text-[12px] outline-none focus:ring-1 disabled:opacity-50"
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8"
+        disabled={disabled || !value.trim()}
+        onClick={handleSend}
+      >
+        <Send className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
 
-export function InboxItem({ item }: { item: InboxItemType }) {
-  const {
-    expandedIds,
-    editingIds,
-    toggleExpanded,
-    toggleEditing,
-    updateStatus,
-    updateToolApproval,
-  } = useInboxStore();
-  const isExpanded = expandedIds.has(item.id);
-  const isEditing = editingIds.has(item.id);
+type Props = {
+  item: InboxItemType;
+  isExpanded: boolean;
+  isEditing: boolean;
+  isBusy?: boolean;
+  onToggle: () => void;
+  onToggleEditing: () => void;
+  onApprove: (questionAnswers?: string[][]) => void;
+  onDeny: () => void;
+  onStop: () => void;
+  onAuthConnect: (integration: string) => void;
+  onAuthCancel: () => void;
+  onSaveEdit: (updated: ToolApprovalData) => void;
+  onReply: (message: string) => void;
+  onOpenTarget: () => void;
+  onOpenBuilder?: () => void;
+};
+
+export function InboxItem({
+  item,
+  isExpanded,
+  isEditing,
+  isBusy,
+  onToggle,
+  onToggleEditing,
+  onApprove,
+  onDeny,
+  onStop,
+  onAuthConnect,
+  onAuthCancel,
+  onSaveEdit,
+  onReply,
+  onOpenTarget,
+  onOpenBuilder,
+}: Props) {
   const statusConfig = STATUS_CONFIG[item.status];
   const StatusIcon = statusConfig.icon;
-
-  const needsAction =
-    item.status === "awaiting_approval" ||
-    item.status === "awaiting_auth" ||
-    item.status === "error";
-
-  const handleToggle = useCallback(() => {
-    toggleExpanded(item.id);
-  }, [item.id, toggleExpanded]);
-
-  const handleApprove = useCallback(() => {
-    updateStatus(item.id, "running");
-  }, [item.id, updateStatus]);
-
-  const handleReject = useCallback(() => {
-    updateStatus(item.id, "cancelled");
-  }, [item.id, updateStatus]);
-
-  const handleRetry = useCallback(() => {
-    updateStatus(item.id, "running");
-  }, [item.id, updateStatus]);
-
-  const handleStop = useCallback(() => {
-    updateStatus(item.id, "cancelled");
-  }, [item.id, updateStatus]);
-
-  const handleApproveInline = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      handleApprove();
-    },
-    [handleApprove],
+  const sourceLabel = useMemo(
+    () => (item.kind === "coworker" ? `@${item.coworkerName}` : "Chat"),
+    [item],
   );
 
-  const handleRejectInline = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      handleReject();
-    },
-    [handleReject],
-  );
-
-  const handleRetryInline = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      handleRetry();
-    },
-    [handleRetry],
-  );
-
-  const handleStopInline = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      handleStop();
-    },
-    [handleStop],
-  );
-
-  // Auth request handlers
-  const handleAuthConnect = useCallback(() => {
-    updateStatus(item.id, "running");
-  }, [item.id, updateStatus]);
-
-  const handleAuthCancel = useCallback(() => {
-    updateStatus(item.id, "cancelled");
-  }, [item.id, updateStatus]);
-
-  // Edit handlers
-  const handleEditToggle = useCallback(() => {
-    toggleEditing(item.id);
-  }, [item.id, toggleEditing]);
-
-  const handleEditSave = useCallback(
-    (updated: ToolApprovalData) => {
-      updateToolApproval(item.id, updated);
-    },
-    [item.id, updateToolApproval],
-  );
-
-  const handleEditCancel = useCallback(() => {
-    toggleEditing(item.id);
-  }, [item.id, toggleEditing]);
-
-  // Determine the approval card status based on item status
-  const approvalCardStatus =
-    item.status === "awaiting_approval"
-      ? "pending"
-      : item.status === "cancelled"
-        ? "denied"
-        : "approved";
+  const showStop = Boolean(item.generationId) && item.status !== "error";
+  const showBuilder = item.kind === "coworker" && item.status === "error" && item.builderAvailable;
 
   return (
-    <div
-      className={cn(
-        "group/item rounded-lg border transition-colors overflow-hidden",
-        needsAction && "bg-accent/20",
-        isExpanded && "bg-accent/20",
-      )}
-    >
-      {/* Main row */}
+    <div className="group/item overflow-hidden rounded-lg border transition-colors">
       <button
         type="button"
-        onClick={handleToggle}
+        onClick={onToggle}
         className="hover:bg-accent/30 flex w-full items-center gap-3.5 px-5 py-4 text-left transition-colors"
       >
         <StatusDot status={item.status} />
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span
-            className={cn(
-              "truncate text-sm font-medium",
-              item.status === "completed" || item.status === "cancelled"
-                ? "text-muted-foreground line-through decoration-muted-foreground/30"
-                : "text-foreground",
-            )}
-          >
-            {item.title}
-          </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium">{item.title}</span>
+            <span className="bg-secondary text-secondary-foreground rounded-full px-2 py-0.5 text-[10px] uppercase">
+              {item.kind}
+            </span>
+          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Inline action buttons — visible on hover, hidden when expanded */}
-          {!isExpanded && (
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100">
-              {item.status === "awaiting_approval" && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-[11px] text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400"
-                    onClick={handleApproveInline}
-                  >
-                    <Check className="mr-1 h-3 w-3" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-[11px] text-red-500 hover:bg-red-500/10 hover:text-red-400"
-                    onClick={handleRejectInline}
-                  >
-                    <X className="mr-1 h-3 w-3" />
-                    Reject
-                  </Button>
-                </>
-              )}
-              {item.status === "error" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-foreground h-6 px-2 text-[11px]"
-                  onClick={handleRetryInline}
-                >
-                  <RotateCcw className="mr-1 h-3 w-3" />
-                  Retry
-                </Button>
-              )}
-              {(item.status === "running" || item.status === "paused") && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-foreground h-6 px-2 text-[11px]"
-                  onClick={handleStopInline}
-                >
-                  <Square className="mr-1 h-3 w-3" />
-                  Stop
-                </Button>
-              )}
-            </div>
-          )}
+        <div className="text-muted-foreground hidden items-center text-xs sm:inline-flex">
+          {sourceLabel}
+        </div>
 
-          {/* Agent @username */}
-          <span className="text-muted-foreground hidden items-center text-xs sm:inline-flex">
-            @{item.agentName.toLowerCase().replaceAll(" ", "-")}
-          </span>
+        <span className="text-muted-foreground/60 w-8 text-right text-xs tabular-nums">
+          {formatRelative(item.updatedAt)}
+        </span>
 
-          {/* Timestamp */}
-          <span className="text-muted-foreground/60 w-8 text-right text-xs tabular-nums">
-            {formatRelative(item.updatedAt)}
-          </span>
-
+        {isBusy ? (
+          <Loader2 className="text-muted-foreground/40 h-3.5 w-3.5 animate-spin" />
+        ) : (
           <ChevronRight
             className={cn(
-              "h-3.5 w-3.5 text-muted-foreground/40 transition-transform duration-150",
+              "text-muted-foreground/40 h-3.5 w-3.5 transition-transform duration-150",
               isExpanded && "rotate-90",
             )}
           />
-        </div>
+        )}
       </button>
 
-      {/* Expanded detail panel */}
-      {isExpanded && (
+      {isExpanded ? (
         <div className="border-border/30 min-w-0 space-y-4 overflow-hidden border-t px-5 py-4">
-          {/* Status detail line */}
-          <div className="text-muted-foreground flex items-center gap-2 text-[12px]">
+          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-[12px]">
             <StatusIcon
               className={cn(
                 "h-3.5 w-3.5",
-                item.status === "running" && "animate-spin text-blue-400",
                 item.status === "awaiting_approval" && "text-amber-400",
                 item.status === "awaiting_auth" && "text-orange-400",
                 item.status === "error" && "text-red-400",
-                item.status === "completed" && "text-emerald-400",
-                item.status === "paused" && "text-zinc-400",
-                item.status === "cancelled" && "text-zinc-400",
               )}
             />
             <span className="font-mono text-[11px] tracking-wide uppercase">
               {item.status.replaceAll("_", " ")}
             </span>
             <span className="text-muted-foreground/40">|</span>
-            <span>@{item.agentName.toLowerCase().replaceAll(" ", "-")}</span>
+            <span>{sourceLabel}</span>
             <span className="text-muted-foreground/40">|</span>
             <span className="tabular-nums">{formatRelative(item.createdAt)} ago</span>
           </div>
 
-          {/* Tool Approval Card — shows the full preview of what the agent wants to do */}
-          {item.toolApproval && !isEditing && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onOpenTarget}>
+              <ExternalLink className="mr-1 h-3.5 w-3.5" />
+              Open
+            </Button>
+            {showBuilder && onOpenBuilder ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[12px]"
+                onClick={onOpenBuilder}
+              >
+                <Wrench className="mr-1 h-3.5 w-3.5" />
+                Builder
+              </Button>
+            ) : null}
+            {showStop ? (
+              <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onStop}>
+                <Square className="mr-1 h-3.5 w-3.5" />
+                Stop
+              </Button>
+            ) : null}
+          </div>
+
+          {item.pendingApproval && !isEditing ? (
             <div className="space-y-2">
               <div className="[&_.whitespace-pre-wrap]:break-words [&_pre]:break-words [&_pre]:whitespace-pre-wrap">
                 <ToolApprovalCard
-                  toolUseId={item.toolApproval.toolUseId}
-                  toolName={item.toolApproval.toolName}
-                  toolInput={item.toolApproval.toolInput}
-                  integration={item.toolApproval.integration}
-                  operation={item.toolApproval.operation}
-                  command={item.toolApproval.command}
-                  status={approvalCardStatus}
-                  onApprove={handleApprove}
-                  onDeny={handleReject}
+                  toolUseId={item.pendingApproval.toolUseId}
+                  toolName={item.pendingApproval.toolName}
+                  toolInput={item.pendingApproval.toolInput}
+                  integration={item.pendingApproval.integration}
+                  operation={item.pendingApproval.operation}
+                  command={item.pendingApproval.command}
+                  status="pending"
+                  onApprove={onApprove}
+                  onDeny={onDeny}
+                  isLoading={isBusy}
                 />
               </div>
-              {item.status === "awaiting_approval" && (
-                <div className="flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2">
-                  <Pencil className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                  <span className="text-muted-foreground flex-1 text-[12px]">
-                    Want to modify the action before approving?
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 border-blue-500/30 text-[12px] text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
-                    onClick={handleEditToggle}
-                  >
-                    <Pencil className="mr-1.5 h-3 w-3" />
-                    Edit
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+                <Pencil className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                <span className="text-muted-foreground flex-1 text-[12px]">
+                  Want to modify the action before approving?
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-blue-500/30 text-[12px] text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
+                  onClick={onToggleEditing}
+                >
+                  <Pencil className="mr-1.5 h-3 w-3" />
+                  Edit
+                </Button>
+              </div>
             </div>
-          )}
+          ) : null}
 
-          {/* Edit form — replaces the approval card when editing */}
-          {item.toolApproval && isEditing && (
+          {item.pendingApproval && isEditing ? (
             <InboxEditForm
-              toolApproval={item.toolApproval}
-              onSave={handleEditSave}
-              onCancel={handleEditCancel}
+              toolApproval={item.pendingApproval}
+              onSave={onSaveEdit}
+              onCancel={onToggleEditing}
             />
-          )}
+          ) : null}
 
-          {/* Auth Request Card — shows which integrations need connecting */}
-          {item.authRequest && (
+          {item.pendingAuth ? (
             <AuthRequestCard
-              integrations={item.authRequest.integrations}
-              connectedIntegrations={item.authRequest.connectedIntegrations}
-              reason={item.authRequest.reason}
-              status={item.status === "awaiting_auth" ? "pending" : "cancelled"}
-              onConnect={handleAuthConnect}
-              onCancel={handleAuthCancel}
+              integrations={item.pendingAuth.integrations}
+              connectedIntegrations={item.pendingAuth.connectedIntegrations}
+              reason={item.pendingAuth.reason}
+              status="pending"
+              onConnect={onAuthConnect}
+              onCancel={onAuthCancel}
+              isLoading={isBusy}
             />
-          )}
+          ) : null}
 
-          {/* Error message */}
-          {item.errorMessage && item.status === "error" && (
+          {item.errorMessage ? (
             <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2">
               <p className="font-mono text-[12px] text-red-400">{item.errorMessage}</p>
             </div>
-          )}
+          ) : null}
 
-          {/* Action buttons for statuses without a card */}
-          {!item.toolApproval && !item.authRequest && (
-            <div className="flex items-center gap-2">
-              {item.status === "error" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[12px]"
-                  onClick={handleRetry}
-                >
-                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                  Retry
-                </Button>
-              )}
-              {(item.status === "running" || item.status === "paused") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[12px]"
-                  onClick={handleStop}
-                >
-                  <Square className="mr-1 h-3.5 w-3.5" />
-                  Stop
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Reply field */}
-          <InboxItemReplyField />
+          <ReplyField disabled={isBusy} onSend={onReply} />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
