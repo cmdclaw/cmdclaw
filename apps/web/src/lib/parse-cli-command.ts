@@ -52,6 +52,7 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   reddit: "reddit",
   twitter: "twitter",
   coworker: "coworker",
+  "agent-browser": "agent-browser",
 };
 
 /**

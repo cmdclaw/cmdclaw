@@ -53,6 +53,10 @@ const COWORKER_APPROVAL_TOOL_INPUT = {
   command: 'coworker invoke --username linkedin-digest --message "Review this inbox" --json',
 };
 
+const AGENT_BROWSER_APPROVAL_TOOL_INPUT = {
+  command: "agent-browser screenshot --full /tmp/example.png",
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -224,6 +228,28 @@ describe("ToolApprovalCard", () => {
 
     expect(screen.getByText("Coworker")).toBeInTheDocument();
     expect(screen.getByText("invoke")).toBeInTheDocument();
+    expect(screen.queryByText("cmdclaw")).not.toBeInTheDocument();
+    expect(screen.queryByText("patch")).not.toBeInTheDocument();
+  });
+
+  it("uses agent-browser command metadata for the approval header", () => {
+    render(
+      <ToolApprovalCard
+        toolUseId="agent-browser-1"
+        toolName="Bash"
+        toolInput={AGENT_BROWSER_APPROVAL_TOOL_INPUT}
+        integration="cmdclaw"
+        operation="patch"
+        command="agent-browser screenshot --full /tmp/example.png"
+        onApprove={vi.fn()}
+        onDeny={vi.fn()}
+        status="pending"
+      />,
+    );
+
+    expect(screen.getByText("Browser")).toBeInTheDocument();
+    expect(screen.getByText("screenshot")).toBeInTheDocument();
+    expect(screen.getByAltText("Browser")).toBeInTheDocument();
     expect(screen.queryByText("cmdclaw")).not.toBeInTheDocument();
     expect(screen.queryByText("patch")).not.toBeInTheDocument();
   });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseSkillContent, serializeSkillContent } from "./skill-markdown";
+import {
+  extractSkillToolIntegrations,
+  parseSkillContent,
+  serializeSkillContent,
+} from "./skill-markdown";
 
 describe("skill-markdown", () => {
   it("parses multiline YAML block scalars for description", () => {
@@ -61,5 +65,35 @@ allowed-tools:
     expect(serialized).toContain("description: |");
     expect(serialized).toContain("  Produces before/after health scores.");
     expect(serialized).toContain("\n---\n\n# QA\n");
+  });
+
+  it("extracts agent-browser integration from inline allowed-tools syntax", () => {
+    const content = `---
+name: browser-capture
+description: Capture the current page
+allowed-tools: Bash(agent-browser:*)
+---
+
+# Browser capture
+`;
+
+    expect(extractSkillToolIntegrations(content)).toEqual(["agent-browser"]);
+  });
+
+  it("ignores generic tools and deduplicates extracted integrations", () => {
+    const content = `---
+name: mixed-skill
+description: Mixed tool permissions
+allowed-tools:
+  - Bash
+  - Read
+  - Bash(agent-browser:*)
+  - Bash(agent-browser:open)
+---
+
+# Mixed skill
+`;
+
+    expect(extractSkillToolIntegrations(content)).toEqual(["agent-browser"]);
   });
 });
