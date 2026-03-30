@@ -1715,6 +1715,7 @@ describe("coworkerRouter", () => {
       startedAt: createdAt,
       finishedAt: createdAt,
       errorMessage: null,
+      debugInfo: null,
       events: [
         {
           id: "evt-1",
