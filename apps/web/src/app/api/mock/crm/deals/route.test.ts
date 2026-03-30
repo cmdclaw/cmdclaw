@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { GET, POST } from "./route";
 
-const authHeaders = {
-  authorization: "Bearer test-secret",
-};
-
 describe("GET /api/mock/crm/deals", () => {
   it("returns fixture-backed deals and supports filtering", async () => {
     const response = await GET(
-      new Request("https://app.example.com/api/mock/crm/deals?stage=qualified", {
-        headers: authHeaders,
-      }),
+      new Request("https://app.example.com/api/mock/crm/deals?stage=qualified"),
     );
     const body = await response.json();
 
@@ -22,13 +16,12 @@ describe("GET /api/mock/crm/deals", () => {
     });
   });
 
-  it("returns unauthorized without the bearer token", async () => {
+  it("returns deals without requiring authorization", async () => {
     const response = await GET(new Request("https://app.example.com/api/mock/crm/deals"));
 
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({
-      error: "unauthorized",
-      message: "Authorization header must be Bearer test-secret.",
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      count: 2,
     });
   });
 });
@@ -39,7 +32,6 @@ describe("POST /api/mock/crm/deals", () => {
       new Request("https://app.example.com/api/mock/crm/deals", {
         method: "POST",
         headers: {
-          ...authHeaders,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -70,7 +62,6 @@ describe("POST /api/mock/crm/deals", () => {
       new Request("https://app.example.com/api/mock/crm/deals", {
         method: "POST",
         headers: {
-          ...authHeaders,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

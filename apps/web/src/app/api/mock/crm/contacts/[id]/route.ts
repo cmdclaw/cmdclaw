@@ -3,7 +3,6 @@ import {
   findContactById,
   notFoundResponse,
   readJsonBody,
-  requireMockCrmAuth,
   updateContactInputSchema,
   validationErrorResponse,
 } from "@/lib/mock-openapi/crm";
@@ -15,11 +14,6 @@ type RouteContext = {
 };
 
 export async function GET(request: Request, context: RouteContext) {
-  const unauthorized = requireMockCrmAuth(request);
-  if (unauthorized) {
-    return unauthorized;
-  }
-
   const { id } = await context.params;
   const contact = findContactById(id);
   if (!contact) {
@@ -30,11 +24,6 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const unauthorized = requireMockCrmAuth(request);
-  if (unauthorized) {
-    return unauthorized;
-  }
-
   const { id } = await context.params;
   const existing = findContactById(id);
   if (!existing) {
