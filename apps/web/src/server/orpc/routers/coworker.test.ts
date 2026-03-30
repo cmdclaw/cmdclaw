@@ -1530,6 +1530,40 @@ describe("coworkerRouter", () => {
     });
   });
 
+  it("passes manual trigger attachments through to triggerCoworkerRun", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "member" });
+
+    await coworkerRouterAny.trigger({
+      input: {
+        id: "wf-1",
+        payload: { source: "manual_inbox", message: "Check this" },
+        fileAttachments: [
+          {
+            name: "notes.txt",
+            mimeType: "text/plain",
+            dataUrl: "data:text/plain;base64,bm90ZXM=",
+          },
+        ],
+      },
+      context,
+    });
+
+    expect(triggerCoworkerRunMock).toHaveBeenCalledWith({
+      coworkerId: "wf-1",
+      triggerPayload: { source: "manual_inbox", message: "Check this" },
+      fileAttachments: [
+        {
+          name: "notes.txt",
+          mimeType: "text/plain",
+          dataUrl: "data:text/plain;base64,bm90ZXM=",
+        },
+      ],
+      userId: "user-1",
+      userRole: "member",
+    });
+  });
+
   it("rejects remote integration triggers for non-admin users", async () => {
     const context = createContext();
     context.db.query.user.findFirst.mockResolvedValue({

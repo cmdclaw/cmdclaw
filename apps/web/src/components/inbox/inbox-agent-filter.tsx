@@ -1,19 +1,16 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { MOCK_AGENTS } from "./inbox-mock-data";
-import { useInboxStore } from "./inbox-store";
+import type { InboxItemStatus, InboxSourceOption } from "./types";
 
 function FilterChip({
   label,
   active,
-  count,
   onClick,
 }: {
   label: string;
   active: boolean;
-  count?: number;
   onClick: () => void;
 }) {
   return (
@@ -28,81 +25,98 @@ function FilterChip({
       )}
     >
       {label}
-      {count !== undefined && count > 0 && (
-        <span
-          className={cn(
-            "tabular-nums text-[10px]",
-            active ? "text-background/60" : "text-muted-foreground/50",
-          )}
-        >
-          {count}
-        </span>
-      )}
     </button>
   );
 }
 
-export function InboxAgentFilter() {
-  const items = useInboxStore((s) => s.items);
-  const agentFilter = useInboxStore((s) => s.agentFilter);
-  const setAgentFilter = useInboxStore((s) => s.setAgentFilter);
+type Props = {
+  typeFilter: "all" | "coworkers" | "chats";
+  onTypeFilterChange: (next: "all" | "coworkers" | "chats") => void;
+  statusFilters: InboxItemStatus[];
+  onToggleStatus: (status: InboxItemStatus) => void;
+  sourceCoworkerId?: string;
+  onSourceCoworkerChange: (coworkerId?: string) => void;
+  sourceOptions: InboxSourceOption[];
+};
 
-  const agentCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of items) {
-      counts.set(item.agentId, (counts.get(item.agentId) ?? 0) + 1);
-    }
-    return counts;
-  }, [items]);
-
-  // Only show agents that have items
-  const activeAgents = useMemo(
-    () => MOCK_AGENTS.filter((agent) => agentCounts.has(agent.id)),
-    [agentCounts],
+export function InboxAgentFilter({
+  typeFilter,
+  onTypeFilterChange,
+  statusFilters,
+  onToggleStatus,
+  sourceCoworkerId,
+  onSourceCoworkerChange,
+  sourceOptions,
+}: Props) {
+  const handleAllTypeClick = useCallback(() => {
+    onTypeFilterChange("all");
+  }, [onTypeFilterChange]);
+  const handleCoworkersTypeClick = useCallback(() => {
+    onTypeFilterChange("coworkers");
+  }, [onTypeFilterChange]);
+  const handleChatsTypeClick = useCallback(() => {
+    onTypeFilterChange("chats");
+  }, [onTypeFilterChange]);
+  const handleAwaitingApprovalToggle = useCallback(() => {
+    onToggleStatus("awaiting_approval");
+  }, [onToggleStatus]);
+  const handleAwaitingAuthToggle = useCallback(() => {
+    onToggleStatus("awaiting_auth");
+  }, [onToggleStatus]);
+  const handleErrorToggle = useCallback(() => {
+    onToggleStatus("error");
+  }, [onToggleStatus]);
+  const handleSourceChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextValue = event.target.value.trim();
+      onSourceCoworkerChange(nextValue ? nextValue : undefined);
+    },
+    [onSourceCoworkerChange],
   );
-
-  const handleAllClick = useCallback(() => {
-    setAgentFilter(null);
-  }, [setAgentFilter]);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <FilterChip
-        label="All"
-        active={agentFilter === null}
-        count={items.length}
-        onClick={handleAllClick}
-      />
-      {activeAgents.map((agent) => (
-        <AgentFilterChip
-          key={agent.id}
-          agentId={agent.id}
-          agentName={agent.name}
-          count={agentCounts.get(agent.id) ?? 0}
-          active={agentFilter === agent.id}
-          onSelect={setAgentFilter}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterChip label="All" active={typeFilter === "all"} onClick={handleAllTypeClick} />
+        <FilterChip
+          label="Coworkers"
+          active={typeFilter === "coworkers"}
+          onClick={handleCoworkersTypeClick}
         />
-      ))}
+        <FilterChip label="Chats" active={typeFilter === "chats"} onClick={handleChatsTypeClick} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterChip
+          label="Awaiting approval"
+          active={statusFilters.includes("awaiting_approval")}
+          onClick={handleAwaitingApprovalToggle}
+        />
+        <FilterChip
+          label="Awaiting auth"
+          active={statusFilters.includes("awaiting_auth")}
+          onClick={handleAwaitingAuthToggle}
+        />
+        <FilterChip
+          label="Error"
+          active={statusFilters.includes("error")}
+          onClick={handleErrorToggle}
+        />
+
+        <select
+          value={typeFilter === "chats" ? "" : (sourceCoworkerId ?? "")}
+          onChange={handleSourceChange}
+          disabled={typeFilter === "chats" || sourceOptions.length === 0}
+          className="bg-background text-foreground border-border/50 h-8 rounded-md border px-2.5 text-[12px] outline-none disabled:opacity-50"
+        >
+          <option value="">All coworkers</option>
+          {sourceOptions.map((option) => (
+            <option key={option.coworkerId} value={option.coworkerId}>
+              {option.coworkerName}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
-}
-
-function AgentFilterChip({
-  agentId,
-  agentName,
-  count,
-  active,
-  onSelect,
-}: {
-  agentId: string;
-  agentName: string;
-  count: number;
-  active: boolean;
-  onSelect: (id: string | null) => void;
-}) {
-  const handleClick = useCallback(() => {
-    onSelect(active ? null : agentId);
-  }, [active, agentId, onSelect]);
-
-  return <FilterChip label={agentName} active={active} count={count} onClick={handleClick} />;
 }

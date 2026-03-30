@@ -927,6 +927,15 @@ const trigger = protectedProcedure
     z.object({
       id: z.string(),
       payload: z.unknown().optional(),
+      fileAttachments: z
+        .array(
+          z.object({
+            name: z.string(),
+            mimeType: z.string(),
+            dataUrl: z.string(),
+          }),
+        )
+        .optional(),
       remoteIntegrationSource: remoteIntegrationSourceSchema
         .pick({
           targetEnv: true,
@@ -949,6 +958,7 @@ const trigger = protectedProcedure
     return triggerCoworkerRun({
       coworkerId: input.id,
       triggerPayload: input.payload ?? {},
+      fileAttachments: input.fileAttachments,
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
       remoteIntegrationSource: input.remoteIntegrationSource

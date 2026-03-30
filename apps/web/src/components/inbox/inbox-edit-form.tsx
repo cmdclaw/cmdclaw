@@ -6,7 +6,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getIntegrationDisplayName, getIntegrationLogo } from "@/lib/integration-icons";
-import type { ToolApprovalData } from "./inbox-mock-data";
+import type { ToolApprovalData } from "./types";
 
 type EditableField = {
   key: string;
