@@ -10,6 +10,7 @@ import {
   Coins,
   CreditCard,
   Cuboid,
+  Inbox,
   LoaderCircle,
   LogOut,
   MessageCircle,
@@ -358,6 +359,7 @@ export function AppSidebar() {
   ];
 
   const coworkerNavItems: NavItem[] = [
+    { icon: Inbox, label: "Inbox", href: "/inbox" },
     { icon: MessageSquare, label: "Chat", href: "/chat" },
     { icon: Cuboid, label: "Coworkers", href: "/coworkers" },
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
