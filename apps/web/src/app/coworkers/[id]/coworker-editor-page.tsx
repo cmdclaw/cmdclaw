@@ -24,6 +24,8 @@ import {
   MessageSquare,
   Wrench,
   CirclePlay,
+  Code,
+  Eye,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
@@ -64,6 +66,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DualPanelWorkspace } from "@/components/ui/dual-panel-workspace";
 import { Input } from "@/components/ui/input";
+import { MilkdownEditor } from "@/components/ui/milkdown-editor";
 import {
   Select,
   SelectContent,
@@ -1299,8 +1302,8 @@ export default function CoworkerEditorPage() {
     setScheduleDayOfMonth(parseInt(value, 10));
   }, []);
 
-  const handlePromptChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPrompt(event.target.value);
+  const handlePromptChange = useCallback((value: string) => {
+    setPrompt(value);
   }, []);
 
   const handleRestrictToolsChange = useCallback((checked: boolean) => {
@@ -2581,7 +2584,7 @@ type CoworkerSettingsPanelProps = {
   onUsernameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
-  onPromptChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onPromptChange: (value: string) => void;
   onModelChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
   onClearSkills: () => void;
   onToggleSkillChecked: (skillKey: string) => void;
@@ -2698,6 +2701,7 @@ function CoworkerSettingsPanel({
   adminContent,
 }: CoworkerSettingsPanelProps) {
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
+  const [instructionEditorMode, setInstructionEditorMode] = useState<"wysiwyg" | "raw">("wysiwyg");
   const [triggerExpanded, setTriggerExpanded] = useState(false);
   const [isDocumentDragActive, setIsDocumentDragActive] = useState(false);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
@@ -2709,6 +2713,21 @@ function CoworkerSettingsPanel({
   const handleCloseInstructionModal = useCallback(() => {
     setInstructionModalOpen(false);
   }, []);
+
+  const handleSetEditorModeWysiwyg = useCallback(() => {
+    setInstructionEditorMode("wysiwyg");
+  }, []);
+
+  const handleSetEditorModeRaw = useCallback(() => {
+    setInstructionEditorMode("raw");
+  }, []);
+
+  const handleRawPromptChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      onPromptChange(e.target.value);
+    },
+    [onPromptChange],
+  );
 
   const handleToggleTriggerExpanded = useCallback(() => {
     setTriggerExpanded((value) => !value);
@@ -2982,7 +3001,7 @@ function CoworkerSettingsPanel({
               </div>
               {prompt ? (
                 <div className="relative max-h-[120px] overflow-hidden">
-                  <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1.5 prose-code:text-xs max-w-none text-sm leading-relaxed">
+                  <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1.5 prose-headings:text-sm prose-headings:font-semibold prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1.5 prose-code:text-xs max-w-none text-sm leading-relaxed">
                     <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>{prompt}</ReactMarkdown>
                   </div>
                   <div className="from-background group-hover:from-muted/20 pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
@@ -3007,63 +3026,65 @@ function CoworkerSettingsPanel({
               >
                 <DialogHeader className="border-border/40 flex-row items-center justify-between border-b px-5 py-3.5">
                   <DialogTitle className="text-sm font-semibold">Edit instructions</DialogTitle>
-                  <button
-                    type="button"
-                    onClick={handleCloseInstructionModal}
-                    className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <div className="border-border/40 flex items-center rounded-md border">
+                      <button
+                        type="button"
+                        onClick={handleSetEditorModeWysiwyg}
+                        className={cn(
+                          "flex h-7 items-center gap-1.5 rounded-l-md px-2.5 text-xs font-medium transition-colors",
+                          instructionEditorMode === "wysiwyg"
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Eye className="h-3 w-3" />
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSetEditorModeRaw}
+                        className={cn(
+                          "flex h-7 items-center gap-1.5 rounded-r-md px-2.5 text-xs font-medium transition-colors",
+                          instructionEditorMode === "raw"
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Code className="h-3 w-3" />
+                        Code
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCloseInstructionModal}
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </DialogHeader>
-                {hideHeader ? (
-                  /* Mobile: single pane editor, no side-by-side split */
+                {instructionEditorMode === "raw" ? (
                   <div className="flex flex-1 flex-col overflow-hidden">
                     <textarea
                       className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
                       value={prompt}
-                      onChange={onPromptChange}
-                      placeholder="Your new coworker’s instructions will appear here&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
+                      onChange={handleRawPromptChange}
+                      placeholder={
+                        "Your new coworker’s instructions will appear here\n\nYou can use markdown for formatting:\n- **Bold** for emphasis\n- `code` for technical terms\n- Lists for step-by-step instructions"
+                      }
                       autoFocus
                     />
                   </div>
                 ) : (
-                  <div className="grid flex-1 grid-cols-2 divide-x overflow-hidden">
-                    {/* Editor pane */}
-                    <div className="flex flex-col overflow-hidden">
-                      <div className="border-border/40 border-b px-4 py-2">
-                        <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                          Write
-                        </span>
-                      </div>
-                      <textarea
-                        className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
-                        value={prompt}
-                        onChange={onPromptChange}
-                        placeholder="Your new coworker’s instructions will appear here&#10;&#10;You can use markdown for formatting:&#10;- **Bold** for emphasis&#10;- `code` for technical terms&#10;- Lists for step-by-step instructions"
-                        autoFocus
-                      />
-                    </div>
-                    {/* Preview pane */}
-                    <div className="bg-muted/20 flex flex-col overflow-hidden">
-                      <div className="border-border/40 border-b px-4 py-2">
-                        <span className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                          Preview
-                        </span>
-                      </div>
-                      <div className="flex-1 overflow-y-auto px-4 py-3">
-                        {prompt ? (
-                          <div className="prose prose-sm dark:prose-invert prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-code:text-xs max-w-none text-sm leading-relaxed">
-                            <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>
-                              {prompt}
-                            </ReactMarkdown>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground/40 text-sm italic">
-                            Preview will appear here…
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                  <div className="flex flex-1 flex-col overflow-hidden">
+                    <MilkdownEditor
+                      value={prompt}
+                      onChange={onPromptChange}
+                      placeholder="Your new coworker’s instructions will appear here..."
+                      autoFocus
+                      className="h-full"
+                    />
                   </div>
                 )}
               </DialogContent>

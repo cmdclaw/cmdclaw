@@ -172,3 +172,48 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Milkdown / ProseMirror structural styles */
+.milkdown-wrap .milkdown {
+  height: 100%;
+}
+
+.milkdown-wrap .ProseMirror {
+  outline: none;
+  min-height: 100%;
+  caret-color: var(--foreground);
+}
+
+.milkdown-wrap .ProseMirror > *:first-child {
+  margin-top: 0;
+}
+
+.milkdown-wrap .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  pointer-events: none;
+  height: 0;
+  color: var(--muted-foreground);
+  opacity: 0.5;
+}
+
+.milkdown-wrap .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.milkdown-wrap .ProseMirror th,
+.milkdown-wrap .ProseMirror td {
+  border: 1px solid var(--border);
+  padding: 0.375rem 0.75rem;
+}
+
+.milkdown-wrap .ProseMirror th {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+.milkdown-wrap .ProseMirror input[type="checkbox"] {
+  margin-right: 0.375rem;
+  accent-color: var(--brand);
+}
