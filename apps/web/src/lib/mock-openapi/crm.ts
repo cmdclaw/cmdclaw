@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-export const MOCK_CRM_BEARER_TOKEN = "test-secret";
-
 export const contactStatusSchema = z.enum(["lead", "customer", "inactive"]);
 export const dealStageSchema = z.enum(["prospecting", "qualified", "won", "lost"]);
 
@@ -163,21 +161,6 @@ function buildSyntheticId(prefix: "contact" | "deal", seed: string): string {
   return `${prefix}_${createHash("sha256").update(seed).digest("hex").slice(0, 10)}`;
 }
 
-export function requireMockCrmAuth(request: Request): Response | null {
-  const authorization = request.headers.get("authorization");
-  if (authorization === `Bearer ${MOCK_CRM_BEARER_TOKEN}`) {
-    return null;
-  }
-
-  return Response.json(
-    errorResponseSchema.parse({
-      error: "unauthorized",
-      message: "Authorization header must be Bearer test-secret.",
-    }),
-    { status: 401 },
-  );
-}
-
 export function notFoundResponse(resource: "contact" | "deal", id: string): Response {
   return Response.json(
     errorResponseSchema.parse({
@@ -303,16 +286,7 @@ export function buildMockCrmOpenApiDocument(origin: string) {
       description: "Fixture-backed CRM API used to test executor OpenAPI imports and calls.",
     },
     servers: [{ url: `${origin}/api/mock/crm` }],
-    security: [{ bearerAuth: [] }],
     components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: "http",
-          scheme: "bearer",
-          bearerFormat: "opaque",
-          description: "Use Authorization: Bearer test-secret",
-        },
-      },
       schemas: {
         Contact: toOpenApiSchema(contactSchema),
         Deal: toOpenApiSchema(dealSchema),
@@ -330,7 +304,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
         get: {
           operationId: "listContacts",
           summary: "List contacts",
-          security: [{ bearerAuth: [] }],
           parameters: [
             {
               name: "email",
@@ -354,14 +327,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
                 },
               },
             },
-            401: {
-              description: "Unauthorized",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/ErrorResponse" },
-                },
-              },
-            },
             422: {
               description: "Invalid filters",
               content: {
@@ -375,7 +340,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
         post: {
           operationId: "createContact",
           summary: "Create a contact",
-          security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -390,14 +354,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/Contact" },
-                },
-              },
-            },
-            401: {
-              description: "Unauthorized",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/ErrorResponse" },
                 },
               },
             },
@@ -416,7 +372,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
         get: {
           operationId: "getContact",
           summary: "Get a contact by id",
-          security: [{ bearerAuth: [] }],
           parameters: [
             {
               name: "id",
@@ -434,14 +389,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
                 },
               },
             },
-            401: {
-              description: "Unauthorized",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/ErrorResponse" },
-                },
-              },
-            },
             404: {
               description: "Not found",
               content: {
@@ -455,7 +402,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
         patch: {
           operationId: "updateContact",
           summary: "Update a contact by id",
-          security: [{ bearerAuth: [] }],
           parameters: [
             {
               name: "id",
@@ -478,14 +424,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/Contact" },
-                },
-              },
-            },
-            401: {
-              description: "Unauthorized",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/ErrorResponse" },
                 },
               },
             },
@@ -512,7 +450,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
         get: {
           operationId: "listDeals",
           summary: "List deals",
-          security: [{ bearerAuth: [] }],
           parameters: [
             {
               name: "contactId",
@@ -536,14 +473,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
                 },
               },
             },
-            401: {
-              description: "Unauthorized",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/ErrorResponse" },
-                },
-              },
-            },
             422: {
               description: "Invalid filters",
               content: {
@@ -557,7 +486,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
         post: {
           operationId: "createDeal",
           summary: "Create a deal",
-          security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -572,14 +500,6 @@ export function buildMockCrmOpenApiDocument(origin: string) {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/Deal" },
-                },
-              },
-            },
-            401: {
-              description: "Unauthorized",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/ErrorResponse" },
                 },
               },
             },
