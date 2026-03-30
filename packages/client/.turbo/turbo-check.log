@@ -1,0 +1,1 @@
+$ bunx tsc --noEmit -p tsconfig.json

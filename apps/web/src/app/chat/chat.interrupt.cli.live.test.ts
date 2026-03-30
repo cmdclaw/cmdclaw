@@ -155,7 +155,17 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       const prompt = `${promptBase}\nInterrupt token: ${interruptToken}`;
 
       const runPromise = runChatCommand(
-        ["run", "chat", "--", "--message", prompt, "--model", liveModel, "--no-validate"],
+        [
+          "run",
+          "cmdclaw",
+          "--",
+          "chat",
+          "--message",
+          prompt,
+          "--model",
+          liveModel,
+          "--no-validate",
+        ],
         Math.max(responseTimeoutMs, 180_000),
       );
 

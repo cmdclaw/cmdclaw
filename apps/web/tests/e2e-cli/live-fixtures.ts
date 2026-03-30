@@ -1,10 +1,10 @@
 import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
+import { createRpcClient, defaultProfileStore } from "@cmdclaw/client";
 import { getValidTokensForUser } from "@cmdclaw/core/server/integrations/token-refresh";
 import { closePool, db } from "@cmdclaw/db/client";
 import { integration, integrationToken, user } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
-import { loadConfig, createRpcClient } from "../../scripts/lib/cli-shared";
 import { resolveLiveE2EModel } from "../e2e/live-chat-model";
 import {
   assertSandboxRowsUseProvider,
@@ -179,8 +179,8 @@ export function assertExitOk(result: CommandResult, label: string): void {
 }
 
 export async function ensureCliAuth(): Promise<void> {
-  const authResult = await runBunCommand(["run", "chat:auth"], 120_000);
-  assertExitOk(authResult, "bun run chat:auth");
+  const authResult = await runBunCommand(["run", "cmdclaw", "--", "auth", "login"], 120_000);
+  assertExitOk(authResult, "bun run cmdclaw -- auth login");
 }
 
 export async function withIntegrationTokensTemporarilyRemoved<T>(args: {
@@ -240,10 +240,10 @@ export async function resolveLiveModel(): Promise<string> {
 
 export function getCliClient() {
   const serverUrl = process.env.CMDCLAW_SERVER_URL || defaultServerUrl;
-  const config = loadConfig(serverUrl);
+  const config = defaultProfileStore.load(serverUrl);
   if (!config?.token) {
     throw new Error(
-      `Missing CLI auth token for ${serverUrl}. Run: bun run chat -- --server ${serverUrl} --auth`,
+      `Missing CLI auth token for ${serverUrl}. Run: bun run cmdclaw -- auth login --server ${serverUrl}`,
     );
   }
   return createRpcClient(serverUrl, config.token);
@@ -279,7 +279,7 @@ export async function runChatMessage(args: {
   sandboxProvider?: SandboxProvider;
   timeoutMs?: number;
 }): Promise<CommandResult> {
-  const commandArgs = ["run", "chat", "--", "--message", args.message, "--no-validate"];
+  const commandArgs = ["run", "cmdclaw", "--", "chat", "--message", args.message, "--no-validate"];
 
   if (args.model) {
     commandArgs.push("--model", args.model);

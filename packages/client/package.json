@@ -1,0 +1,32 @@
+{
+  "name": "@cmdclaw/client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./api": "./src/api.ts",
+    "./chat": "./src/chat.ts",
+    "./coworker": "./src/coworker.ts",
+    "./generation-errors": "./src/generation-errors.ts",
+    "./generation-runtime": "./src/generation-runtime.ts",
+    "./generation-stream": "./src/generation-stream.ts",
+    "./profile-store": "./src/profile-store.ts",
+    "./types": "./src/types.ts",
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bunx tsc --noEmit -p tsconfig.json",
+    "check": "bunx tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cmdclaw/core": "workspace:*",
+    "@orpc/client": "^1.13.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.6",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

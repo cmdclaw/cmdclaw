@@ -7,11 +7,11 @@
 -  Run `bun run check` to validate types and lint.
 
 ## Testing workflow
--  After implementing a feature, test it with `bun run chat` when possible.
--  Example chat validation command: `bun run chat -- --message "what's my latest email on gmail?" --model openai/gpt-5.2-codex`
--  After implementing a coworker feature, or when chat is not enough to cover the user flow, test it with `bun run coworker`.
--  Example coworker validation command: `bun run coworker -- --message "create automation that check my latest email every hour"`
--  If `bun run chat` is not sufficient to validate the change, clearly report that limitation. If applicable, say how you would change `bun run chat` to support testing this feature.
+-  After implementing a feature, test it with `bun run cmdclaw -- chat` when possible.
+-  Example chat validation command: `bun run cmdclaw -- chat --message "what's my latest email on gmail?" --model openai/gpt-5.2-codex`
+-  After implementing a coworker feature, or when chat is not enough to cover the user flow, test it with `bun run cmdclaw -- coworker`.
+-  Example coworker validation command: `bun run cmdclaw -- coworker create --name "Email Check" --trigger manual --prompt "check my latest email every hour" --auto-approve`
+-  If `bun run cmdclaw -- chat` is not sufficient to validate the change, clearly report that limitation. If applicable, say how you would change `cmdclaw chat` to support testing this feature.
 -  Don't forget to always typecheck and lint via `bun run check`.
 -  After a large codebase change, run `bun run test`.
 -  When creating a test, always run it to check if it is correct. Maybe the test uncovers a bug, so stop if you think this is the case and report it to the user.

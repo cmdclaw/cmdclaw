@@ -447,7 +447,7 @@ async function main(): Promise<void> {
   const config = loadConfig(args.serverUrl);
   if (!config?.token) {
     console.error(
-      `[profiler] missing CLI auth token for ${args.serverUrl}. Run: bun run chat:auth`,
+      `[profiler] missing CLI auth token for ${args.serverUrl}. Run: bun run cmdclaw -- auth login --server ${args.serverUrl}`,
     );
     process.exit(1);
   }
