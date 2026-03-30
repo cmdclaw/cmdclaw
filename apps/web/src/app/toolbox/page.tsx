@@ -3,12 +3,15 @@
 import {
   ArrowUp,
   Copy,
+  FileCode,
   FileInput,
   FileOutput,
   Globe,
   Loader2,
   Pencil,
+  Plug,
   Plus,
+  Puzzle,
   Search,
   Share2,
   Table,
@@ -68,6 +71,7 @@ import {
   useRequestGoogleAccess,
   useShareSkill,
   useUnshareSkill,
+  useExecutorSourceList,
 } from "@/orpc/hooks";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -666,6 +670,109 @@ function CustomToolCard({
   );
 }
 
+function ExecutorSourceToolCard({
+  source,
+}: {
+  source: {
+    id: string;
+    name: string;
+    namespace: string;
+    kind: "mcp" | "openapi";
+    endpoint: string;
+    enabled: boolean;
+    connected: boolean;
+    credentialEnabled: boolean;
+  };
+}) {
+  const isActive = source.enabled && source.connected && source.credentialEnabled;
+  const needsSetup = !source.connected;
+
+  return (
+    <motion.div
+      layout
+      initial={CARD_MOTION.initial}
+      animate={CARD_MOTION.animate}
+      exit={CARD_MOTION.exit}
+      transition={CARD_MOTION.transition}
+    >
+      <Link
+        href={`/toolbox/sources/${source.id}`}
+        className={cn(
+          "border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group relative flex h-full min-h-[180px] w-full flex-col rounded-xl border p-5 transition-all duration-150",
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-muted/60 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+              {source.kind === "mcp" ? (
+                <Puzzle className="text-foreground h-5 w-5" />
+              ) : (
+                <FileCode className="text-foreground h-5 w-5" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] leading-tight font-medium">{source.name}</p>
+              <div className="mt-1 flex items-center gap-1.5">
+                {isActive ? (
+                  <>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                      Connected
+                    </span>
+                  </>
+                ) : source.connected && !source.credentialEnabled ? (
+                  <>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Paused
+                    </span>
+                  </>
+                ) : needsSetup ? (
+                  <span className="text-muted-foreground text-[10px] font-medium">
+                    Not connected
+                  </span>
+                ) : (
+                  <>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Disabled
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "mt-0.5 size-2 rounded-full",
+                isActive ? "bg-green-500" : "bg-muted-foreground/30",
+              )}
+            />
+            <span className="text-muted-foreground text-xs">{isActive ? "On" : "Off"}</span>
+          </div>
+        </div>
+
+        {/* Description */}
+        <p className="text-muted-foreground mt-3 line-clamp-2 text-xs leading-relaxed">
+          {source.namespace} · {source.endpoint}
+        </p>
+
+        {/* Footer */}
+        <div className="mt-auto flex items-center justify-between pt-4">
+          <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+            <Plug className="h-3 w-3" />
+            {source.kind === "openapi" ? "OpenAPI" : "MCP"}
+          </span>
+          <ArrowUp className="text-muted-foreground/30 group-hover:text-muted-foreground size-3.5 rotate-45 transition-colors" />
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
 // ─── Page content ───────────────────────────────────────────────────────────────
 
 function ToolboxPageContent() {
@@ -686,6 +793,9 @@ function ToolboxPageContent() {
   const toggleIntegration = useToggleIntegration();
   const disconnectIntegration = useDisconnectIntegration();
   const linkLinkedIn = useLinkLinkedIn();
+
+  // Executor source hooks
+  const { data: executorData, isLoading: executorLoading } = useExecutorSourceList();
 
   // Skill hooks
   const { data: skills, isLoading: skillsLoading, refetch: refetchSkills } = useSkillList();
@@ -712,7 +822,10 @@ function ToolboxPageContent() {
   const folderImportInputRef = useRef<HTMLInputElement>(null);
   const [supportsFolderImport, setSupportsFolderImport] = useState(false);
 
-  const isLoading = integrationsLoading || skillsLoading;
+  const isLoading = integrationsLoading || skillsLoading || executorLoading;
+  const isWorkspaceAdmin =
+    executorData?.membershipRole === "admin" || executorData?.membershipRole === "owner";
+  const executorSources = useMemo(() => executorData?.sources ?? [], [executorData?.sources]);
   const lacksGoogleAccess = googleAccessStatus?.allowed === false;
 
   // Integration data
@@ -1109,6 +1222,25 @@ function ToolboxPageContent() {
     return filtered;
   }, [q, activeTab, communitySkillToggles]);
 
+  const filteredExecutorSources = useMemo(() => {
+    let filtered = executorSources;
+    if (q) {
+      filtered = filtered.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.namespace.toLowerCase().includes(q) ||
+          s.endpoint.toLowerCase().includes(q),
+      );
+    }
+    if (activeTab === "active") {
+      filtered = filtered.filter((s) => s.enabled && s.connected && s.credentialEnabled);
+    }
+    if (activeTab === "needs_setup") {
+      filtered = filtered.filter((s) => !s.connected);
+    }
+    return filtered;
+  }, [executorSources, q, activeTab]);
+
   // ─── Counts ─────────────────────────────────────────────────────────────────
   const totalActive = useMemo(() => {
     const activeIntegrations = visibleIntegrations.filter(([type]) => {
@@ -1119,22 +1251,38 @@ function ToolboxPageContent() {
     const activeCommunity = COMMUNITY_SKILLS.filter(
       (s) => communitySkillToggles[s.id] ?? s.enabled,
     ).length;
-    return activeIntegrations + activeCustom + activeCommunity;
-  }, [visibleIntegrations, connectedIntegrations, skillsList, communitySkillToggles]);
+    const activeExecutorSources = executorSources.filter(
+      (s) => s.enabled && s.connected && s.credentialEnabled,
+    ).length;
+    return activeIntegrations + activeCustom + activeCommunity + activeExecutorSources;
+  }, [
+    visibleIntegrations,
+    connectedIntegrations,
+    skillsList,
+    communitySkillToggles,
+    executorSources,
+  ]);
 
   const totalNeedsSetup = useMemo(() => {
-    return visibleIntegrations.filter(([type]) => {
+    const integrationNeedsSetup = visibleIntegrations.filter(([type]) => {
       return !connectedIntegrations.get(type) && !adminPreviewOnlyIntegrations.has(type);
     }).length;
-  }, [visibleIntegrations, connectedIntegrations]);
+    const executorNeedsSetup = executorSources.filter((s) => !s.connected).length;
+    return integrationNeedsSetup + executorNeedsSetup;
+  }, [visibleIntegrations, connectedIntegrations, executorSources]);
 
-  const totalAll = visibleIntegrations.length + skillsList.length + COMMUNITY_SKILLS.length;
+  const totalAll =
+    visibleIntegrations.length +
+    skillsList.length +
+    COMMUNITY_SKILLS.length +
+    executorSources.length;
 
   const hasResults =
     filteredIntegrations.length > 0 ||
     filteredOwnedSkills.length > 0 ||
     filteredSharedSkills.length > 0 ||
-    filteredCommunitySkills.length > 0;
+    filteredCommunitySkills.length > 0 ||
+    filteredExecutorSources.length > 0;
 
   const tabs: { id: FilterTab; label: string; count: number }[] = [
     { id: "all", label: "All", count: totalAll },
@@ -1317,6 +1465,22 @@ function ToolboxPageContent() {
             />
           </div>
           <div className="hidden items-center gap-2 sm:flex">
+            {isWorkspaceAdmin && (
+              <>
+                <Button variant="outline" asChild>
+                  <Link href="/toolbox/sources/new?kind=openapi">
+                    <FileCode className="mr-2 h-4 w-4" />
+                    Add OpenAPI
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/toolbox/sources/new?kind=mcp">
+                    <Puzzle className="mr-2 h-4 w-4" />
+                    Add MCP
+                  </Link>
+                </Button>
+              </>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" disabled={importSkill.isPending}>
@@ -1509,6 +1673,31 @@ function ToolboxPageContent() {
                       />
                     );
                   })}
+                </AnimatePresence>
+              </motion.div>
+            </section>
+          )}
+
+          {/* Executor Sources section */}
+          {filteredExecutorSources.length > 0 && (
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">APIs & MCP Servers</h2>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    OpenAPI and MCP sources configured for your workspace
+                  </p>
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  {filteredExecutorSources.length} source
+                  {filteredExecutorSources.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <AnimatePresence mode="popLayout">
+                  {filteredExecutorSources.map((source) => (
+                    <ExecutorSourceToolCard key={source.id} source={source} />
+                  ))}
                 </AnimatePresence>
               </motion.div>
             </section>
