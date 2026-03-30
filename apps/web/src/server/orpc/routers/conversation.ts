@@ -132,7 +132,6 @@ const getUsage = protectedProcedure
         eq(conversation.id, input.id),
         eq(conversation.userId, context.user.id),
         eq(conversation.workspaceId, workspaceId),
-        eq(conversation.type, "chat"),
       ),
       columns: {
         id: true,
