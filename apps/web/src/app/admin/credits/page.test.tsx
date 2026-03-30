@@ -6,13 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 void jestDomVitest;
 
-const { listUsersMock, manualTopUpMutateAsyncMock, refetchMock, useAdminBillingUserOverviewMock } =
-  vi.hoisted(() => ({
-    listUsersMock: vi.fn(),
-    manualTopUpMutateAsyncMock: vi.fn(),
-    refetchMock: vi.fn().mockResolvedValue(undefined),
-    useAdminBillingUserOverviewMock: vi.fn(),
-  }));
+const {
+  listUsersMock,
+  manualTopUpMutateAsyncMock,
+  refetchMock,
+  useAdminBillingUserOverviewMock,
+  toastSuccessMock,
+  toastErrorMock,
+} = vi.hoisted(() => ({
+  listUsersMock: vi.fn(),
+  manualTopUpMutateAsyncMock: vi.fn(),
+  refetchMock: vi.fn().mockResolvedValue(undefined),
+  useAdminBillingUserOverviewMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+}));
 
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
@@ -30,6 +38,13 @@ vi.mock("@/orpc/hooks", () => ({
   }),
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    success: toastSuccessMock,
+    error: toastErrorMock,
+  },
+}));
+
 import AdminCreditsPage from "./page";
 
 describe("AdminCreditsPage", () => {
@@ -40,6 +55,8 @@ describe("AdminCreditsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     refetchMock.mockResolvedValue(undefined);
+    toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
     manualTopUpMutateAsyncMock.mockResolvedValue({
       id: "topup-1",
       creditsGranted: 2500,
@@ -134,8 +151,8 @@ describe("AdminCreditsPage", () => {
       }),
     });
     expect(screen.getByText("Alice Workspace")).toBeInTheDocument();
-    expect(screen.getByText("Top-up balance")).toBeInTheDocument();
-    expect(screen.getByText("Recent top-ups")).toBeInTheDocument();
+    expect(screen.getByText(/Top-up bal\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Recent Top-Ups/i)).toBeInTheDocument();
   });
 
   it("submits email search and refreshes the user list", async () => {
@@ -162,10 +179,11 @@ describe("AdminCreditsPage", () => {
       expect(listUsersMock).toHaveBeenCalledTimes(1);
     });
 
-    fireEvent.change(screen.getByPlaceholderText("Search users by email"), {
+    const searchInput = screen.getByPlaceholderText(/search by email/i);
+    fireEvent.change(searchInput, {
       target: { value: "bob" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.submit(searchInput.closest("form")!);
 
     await waitFor(() => {
       expect(listUsersMock).toHaveBeenLastCalledWith({
@@ -175,7 +193,11 @@ describe("AdminCreditsPage", () => {
       });
     });
 
-    expect(screen.getByRole("button", { name: /bob bob@example.com member/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(listUsersMock).toHaveBeenCalledTimes(2);
+      expect(screen.getAllByText(/bob@example\.com/i).length).toBeGreaterThan(0);
+      expect(screen.getByText("None")).toBeInTheDocument();
+    });
   });
 
   it("disables top-up when the selected user has no active workspace", async () => {
@@ -188,12 +210,10 @@ describe("AdminCreditsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /bob@example.com/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/does not currently have a usable active workspace/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText("None")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: /add 2,500 credits/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^grant$/i })).toBeDisabled();
   });
 
   it("shows success feedback and refetches after a top-up", async () => {
@@ -203,7 +223,7 @@ describe("AdminCreditsPage", () => {
       expect(screen.getByText("Alice Workspace")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /add 2,500 credits/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^grant$/i }));
 
     await waitFor(() => {
       expect(manualTopUpMutateAsyncMock).toHaveBeenCalledWith({
@@ -212,13 +232,11 @@ describe("AdminCreditsPage", () => {
       });
     });
 
-    expect(
-      await screen.findByText(/granted 2,500 credits to alice@example.com/i),
-    ).toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Granted 2,500 credits to alice@example.com.");
     expect(refetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows inline errors when the top-up request fails", async () => {
+  it("shows toast errors when the top-up request fails", async () => {
     manualTopUpMutateAsyncMock.mockRejectedValueOnce(new Error("Grant failed."));
 
     render(<AdminCreditsPage />);
@@ -227,8 +245,10 @@ describe("AdminCreditsPage", () => {
       expect(screen.getByText("Alice Workspace")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /add 2,500 credits/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^grant$/i }));
 
-    expect(await screen.findByText("Grant failed.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("Grant failed.");
+    });
   });
 });

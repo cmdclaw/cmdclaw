@@ -200,6 +200,26 @@ vi.mock("@/components/ui/context-menu", () => ({
   ContextMenuSeparator: () => <div />,
 }));
 
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" onClick={onSelect} disabled={disabled}>
+      {children}
+    </button>
+  ),
+  DropdownMenuSeparator: () => <div />,
+}));
+
 vi.mock("@/hooks/use-voice-recording", () => ({
   blobToBase64: vi.fn(),
   useVoiceRecording: () => ({
@@ -333,10 +353,10 @@ describe("CoworkersPage", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   });
 
-  it("turns off a coworker from the card context menu", async () => {
+  it("turns off a coworker from the card status button", async () => {
     render(<CoworkersPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /turn off/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^on$/i }));
 
     await waitFor(() => {
       expect(mockUpdateCoworkerMutateAsync).toHaveBeenCalledWith({
@@ -347,10 +367,10 @@ describe("CoworkersPage", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith("Coworker turned off.");
   });
 
-  it("deletes a coworker from the card context menu after confirmation", async () => {
+  it("deletes a coworker from the card menu after confirmation", async () => {
     render(<CoworkersPage />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /delete coworker/i })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: /delete coworker/i }));
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => {
@@ -359,37 +379,17 @@ describe("CoworkersPage", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith("Coworker deleted.");
   });
 
-  it("creates a coworker with the selected builder model", async () => {
+  it("renders the create new coworker card as a link to the builder entrypoint", async () => {
     render(<CoworkersPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /model selector:/i }));
-    fireEvent.click(screen.getByRole("button", { name: /submit prompt/i }));
-
-    await waitFor(() => {
-      expect(mockCreateCoworkerMutateAsync).toHaveBeenCalledWith({
-        name: "",
-        triggerType: "manual",
-        prompt: "",
-        model: "openai/gpt-5.2-codex",
-        authSource: "shared",
-        toolAccessMode: "all",
-        allowedIntegrations: expect.any(Array),
-      });
-    });
-
-    expect(mockStartGeneration).toHaveBeenCalledWith({
-      conversationId: "conv-1",
-      content: "Build me a coworker",
-      model: "openai/gpt-5.2-codex",
-      authSource: "shared",
-      autoApprove: true,
-    });
+    const link = screen.getByRole("link", { name: /create new coworker/i });
+    expect(link).toHaveAttribute("href", "/");
   });
 
   it("navigates to the runs page when running a coworker from the card", async () => {
     render(<CoworkersPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^run$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /run coworker/i }));
 
     await waitFor(() => {
       expect(mockTriggerCoworkerMutateAsync).toHaveBeenCalledWith({ id: "cw-1", payload: {} });
