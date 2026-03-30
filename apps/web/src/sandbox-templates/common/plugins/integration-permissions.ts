@@ -27,6 +27,7 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   dynamics: "dynamics",
   twitter: "twitter",
   discord: "discord",
+  "agent-browser": "agent-browser",
 };
 
 // Tool permissions: read operations auto-approve, write operations require approval
@@ -217,7 +218,10 @@ const INTEGRATION_NAMES: Record<string, string> = {
   dynamics: "Microsoft Dynamics 365",
   twitter: "X (Twitter)",
   discord: "Discord",
+  "agent-browser": "Agent Browser",
 };
+
+const INTERNAL_DISPLAY_ONLY_INTEGRATIONS = new Set(["agent-browser"]);
 
 // Custom integration permissions loaded from env var
 let customPermissions: Record<string, { read: string[]; write: string[] }> = {};
@@ -726,6 +730,11 @@ export const IntegrationPermissionsPlugin = async () => {
       }
 
       console.log(`[Plugin] Detected integration command: ${integration} ${operation}`);
+
+      if (INTERNAL_DISPLAY_ONLY_INTEGRATIONS.has(integration)) {
+        console.log(`[Plugin] ${integration} is display-only, skipping auth and approval checks`);
+        return;
+      }
 
       // Check if integration token is available
       const tokenEnvVar = TOKEN_ENV_VARS[integration];

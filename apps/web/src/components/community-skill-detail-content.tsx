@@ -8,6 +8,7 @@ import {
   Lightbulb,
   ExternalLink,
 } from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
@@ -29,6 +30,8 @@ export type CommunitySkillContent = {
   category: string;
   description: string;
   iconName: string;
+  logoUrl?: string;
+  kind: "skill" | "tool-integration";
   githubUrl: string;
   summaryBlocks: SummaryBlock[];
   howItWorks: string[];
@@ -60,11 +63,13 @@ function SkillIcon({ name, className }: { name: string; className?: string }) {
 export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
   "agent-browser": {
     id: "agent-browser",
-    title: "Agent Browser",
+    title: "Browser",
     category: "Automation",
     description:
       "Browse the web autonomously — search, navigate, extract data, and interact with pages on behalf of the user. The agent can fill forms, click buttons, scrape content, and chain multi-step web tasks.",
     iconName: "globe",
+    logoUrl: "/tools/browser.svg",
+    kind: "tool-integration",
     githubUrl:
       "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/agent-browser/SKILL.md",
     summaryBlocks: [
@@ -111,6 +116,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     description:
       "Fill PDF form fields programmatically from structured data. Supports text fields, checkboxes, dropdowns, and signature placeholders.",
     iconName: "file-input",
+    kind: "skill",
     githubUrl:
       "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/fill-pdf/SKILL.md",
     summaryBlocks: [
@@ -156,6 +162,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     description:
       "Generate polished Word documents from templates or scratch — headings, tables, images, and custom styles. Output professional reports, proposals, and contracts automatically.",
     iconName: "file-output",
+    kind: "skill",
     githubUrl:
       "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/docx/SKILL.md",
     summaryBlocks: [
@@ -202,6 +209,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     description:
       "Create and manipulate Excel spreadsheets — multiple sheets, formulas, conditional formatting, and charts. Build reports, dashboards, and data exports programmatically.",
     iconName: "table",
+    kind: "skill",
     githubUrl:
       "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/xlsx/SKILL.md",
     summaryBlocks: [
@@ -248,6 +256,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     description:
       "Describe what you need in plain language and this meta-skill generates a fully functional new skill with instructions, files, and configuration. Bootstrap custom skills in seconds.",
     iconName: "wand",
+    kind: "skill",
     githubUrl:
       "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/skill-creator/SKILL.md",
     summaryBlocks: [
@@ -306,8 +315,24 @@ export function CommunitySkillDetailContent({
         {/* Intro */}
         <div className="flex flex-col">
           {/* Skill icon */}
-          <div className="bg-muted mb-5 inline-flex size-14 items-center justify-center rounded-xl">
-            <SkillIcon name={skill.iconName} className="size-6" />
+          <div
+            className={
+              skill.logoUrl
+                ? "mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-white p-2 shadow-sm dark:bg-gray-800"
+                : "bg-muted mb-5 inline-flex size-14 items-center justify-center rounded-xl"
+            }
+          >
+            {skill.logoUrl ? (
+              <Image
+                src={skill.logoUrl}
+                alt={skill.title}
+                width={28}
+                height={28}
+                className="h-auto max-h-7 w-auto max-w-7 object-contain"
+              />
+            ) : (
+              <SkillIcon name={skill.iconName} className="size-6" />
+            )}
           </div>
 
           <h1 className="text-foreground text-xl font-semibold tracking-tight md:text-2xl md:leading-snug">
@@ -364,7 +389,7 @@ export function CommunitySkillDetailContent({
                 Type
               </p>
               <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
-                Community
+                {skill.kind === "tool-integration" ? "Tool integration" : "Community skill"}
               </span>
             </div>
           </div>

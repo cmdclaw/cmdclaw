@@ -5,6 +5,29 @@ export type ParsedSkillContent = {
   frontmatter: string;
 };
 
+const ALLOWED_TOOL_INTEGRATION_MAP: Record<string, string> = {
+  "agent-browser": "agent-browser",
+  coworker: "coworker",
+  slack: "slack",
+  "google-gmail": "google_gmail",
+  "outlook-mail": "outlook",
+  "outlook-calendar": "outlook_calendar",
+  "google-calendar": "google_calendar",
+  "google-docs": "google_docs",
+  "google-sheets": "google_sheets",
+  "google-drive": "google_drive",
+  notion: "notion",
+  linear: "linear",
+  github: "github",
+  airtable: "airtable",
+  hubspot: "hubspot",
+  linkedin: "linkedin",
+  salesforce: "salesforce",
+  dynamics: "dynamics",
+  reddit: "reddit",
+  twitter: "twitter",
+};
+
 type ParsedFrontmatterField = {
   start: number;
   end: number;
@@ -169,6 +192,56 @@ function replaceFrontmatterField(frontmatter: string, key: string, value: string
     .join("\n");
 }
 
+function parseFrontmatterListField(frontmatter: string, key: string): string[] {
+  const lines = frontmatter.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^[\t ]/.test(line)) {
+      continue;
+    }
+
+    const match = line.match(new RegExp(`^${key}:\\s*(.*)$`));
+    if (!match) {
+      continue;
+    }
+
+    const rawValue = match[1] ?? "";
+    const trimmedValue = rawValue.trim();
+    if (trimmedValue.length > 0) {
+      return [unquoteYamlValue(trimmedValue)].filter(Boolean);
+    }
+
+    const values: string[] = [];
+    let cursor = index + 1;
+    while (cursor < lines.length) {
+      const entry = lines[cursor];
+      if (entry.trim() !== "" && !/^[\t ]/.test(entry)) {
+        break;
+      }
+
+      const itemMatch = entry.trim().match(/^-\s*(.+)$/);
+      if (itemMatch?.[1]) {
+        values.push(unquoteYamlValue(itemMatch[1]));
+      }
+      cursor += 1;
+    }
+
+    return values;
+  }
+
+  return [];
+}
+
+function parseAllowedToolIntegrationEntry(entry: string): string | null {
+  const bashMatch = entry.trim().match(/^Bash\(([^):]+)(?::[^)]*)?\)$/i);
+  if (bashMatch?.[1]) {
+    return ALLOWED_TOOL_INTEGRATION_MAP[bashMatch[1].toLowerCase()] ?? null;
+  }
+
+  return ALLOWED_TOOL_INTEGRATION_MAP[entry.trim().toLowerCase()] ?? null;
+}
+
 export function parseSkillContent(content: string): ParsedSkillContent {
   const splitContent = splitSkillContent(content);
 
@@ -186,6 +259,26 @@ export function parseSkillContent(content: string): ParsedSkillContent {
     body: body.replace(/^\n/, ""),
     frontmatter,
   };
+}
+
+export function extractSkillToolIntegrations(content: string): string[] {
+  const { frontmatter } = parseSkillContent(content);
+  if (!frontmatter) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const integrations: string[] = [];
+  for (const entry of parseFrontmatterListField(frontmatter, "allowed-tools")) {
+    const integration = parseAllowedToolIntegrationEntry(entry);
+    if (!integration || seen.has(integration)) {
+      continue;
+    }
+    seen.add(integration);
+    integrations.push(integration);
+  }
+
+  return integrations;
 }
 
 export function serializeSkillContent(

@@ -21,6 +21,7 @@ import {
   Cloud,
   MessageCircle,
   Twitter,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 
@@ -44,7 +45,7 @@ export type IntegrationType =
   | "reddit"
   | "twitter";
 
-export type DisplayIntegrationType = IntegrationType | "coworker";
+export type DisplayIntegrationType = IntegrationType | "coworker" | "agent-browser";
 
 export const ALL_INTEGRATION_TYPES: IntegrationType[] = [
   "google_gmail",
@@ -385,16 +386,19 @@ export const INTEGRATION_OPERATION_LABELS: Record<IntegrationType, Record<string
 const DISPLAY_INTEGRATION_ICONS: Record<DisplayIntegrationType, LucideIcon> = {
   ...INTEGRATION_ICONS,
   coworker: Bot,
+  "agent-browser": Globe,
 };
 
 const DISPLAY_INTEGRATION_NAMES: Record<DisplayIntegrationType, string> = {
   ...INTEGRATION_DISPLAY_NAMES,
   coworker: "Coworker",
+  "agent-browser": "Browser",
 };
 
 const DISPLAY_INTEGRATION_LOGOS: Partial<Record<DisplayIntegrationType, string>> = {
   ...INTEGRATION_LOGOS,
   coworker: "/tools/lobster.svg",
+  "agent-browser": "/tools/browser.svg",
 };
 
 const DISPLAY_INTEGRATION_OPERATION_LABELS: Partial<
@@ -406,6 +410,28 @@ const DISPLAY_INTEGRATION_OPERATION_LABELS: Partial<
     invoke: "Invoking coworker",
     edit: "Editing coworker",
     "upload-document": "Uploading coworker document",
+  },
+  "agent-browser": {
+    open: "Opening page",
+    goto: "Opening page",
+    navigate: "Opening page",
+    snapshot: "Inspecting page",
+    click: "Clicking element",
+    tap: "Tapping element",
+    fill: "Filling field",
+    type: "Typing text",
+    select: "Selecting option",
+    check: "Checking option",
+    press: "Pressing key",
+    scroll: "Scrolling page",
+    get: "Getting page data",
+    wait: "Waiting for page",
+    screenshot: "Taking screenshot",
+    pdf: "Saving PDF",
+    close: "Closing browser",
+    state: "Managing browser state",
+    find: "Finding page element",
+    swipe: "Swiping page",
   },
 };
 
