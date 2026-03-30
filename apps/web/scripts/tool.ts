@@ -115,7 +115,7 @@ async function resolveCliEnv(serverUrl: string): Promise<Record<string, string>>
   const config = loadConfig(serverUrl);
   if (!config?.token) {
     throw new Error(
-      `Missing CLI auth token for ${serverUrl}. Run: bun run chat -- --server ${serverUrl} --auth`,
+      `Missing CLI auth token for ${serverUrl}. Run: bun run cmdclaw -- auth login --server ${serverUrl}`,
     );
   }
 

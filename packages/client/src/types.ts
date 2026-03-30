@@ -1,0 +1,510 @@
+import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { RuntimeAssistantMessage } from "./generation-runtime";
+
+export type CmdclawProfile = {
+  serverUrl: string;
+  token: string;
+};
+
+export type CmdclawUser = {
+  id: string;
+  email: string;
+};
+
+export type ProviderAuthStatus = {
+  connected?: Record<string, unknown>;
+  shared?: Record<string, unknown>;
+};
+
+export type FreeModel = {
+  id: string;
+  name: string;
+};
+
+export type FreeModelsResponse = {
+  models: FreeModel[];
+};
+
+export type GenerationUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalCostUsd: number;
+};
+
+export type StatusChangeMetadata = {
+  sandboxProvider?: "e2b" | "daytona" | "docker";
+  runtimeHarness?: "opencode" | "agent-sdk";
+  runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
+  sandboxId?: string;
+  sessionId?: string;
+};
+
+export type SandboxFileData = {
+  fileId: string;
+  path: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number | null;
+};
+
+export type GenerationPendingApprovalData = {
+  generationId: string;
+  conversationId: string;
+  toolUseId: string;
+  toolName: string;
+  toolInput: unknown;
+  integration: string;
+  operation: string;
+  command?: string;
+};
+
+export type GenerationApprovalData = {
+  toolUseId: string;
+  toolName: string;
+  toolInput: unknown;
+  integration: string;
+  operation: string;
+  command?: string;
+  status: "approved" | "denied";
+  questionAnswers?: string[][];
+};
+
+export type AuthNeededData = {
+  generationId: string;
+  conversationId: string;
+  integrations: string[];
+  reason?: string;
+};
+
+export type ThinkingData = {
+  content: string;
+  thinkingId: string;
+};
+
+export type ToolUseData = {
+  toolName: string;
+  toolInput: unknown;
+  toolUseId?: string;
+  integration?: string;
+  operation?: string;
+  isWrite?: boolean;
+};
+
+export type DoneArtifactsData = {
+  timing?: {
+    sandboxStartupDurationMs?: number;
+    sandboxStartupMode?: "created" | "reused" | "unknown";
+    generationDurationMs?: number;
+    phaseDurationsMs?: {
+      sandboxConnectOrCreateMs?: number;
+      opencodeReadyMs?: number;
+      sessionReadyMs?: number;
+      agentInitMs?: number;
+      prePromptSetupMs?: number;
+      agentReadyToPromptMs?: number;
+      waitForFirstEventMs?: number;
+      promptToFirstTokenMs?: number;
+      generationToFirstTokenMs?: number;
+      promptToFirstVisibleOutputMs?: number;
+      generationToFirstVisibleOutputMs?: number;
+      modelStreamMs?: number;
+      postProcessingMs?: number;
+    };
+    phaseTimestamps?: Array<{
+      phase: string;
+      at: string;
+      elapsedMs: number;
+    }>;
+  };
+  attachments: Array<{
+    id: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+  }>;
+  sandboxFiles: SandboxFileData[];
+};
+
+export type GenerationStartInput = {
+  conversationId?: string;
+  content: string;
+  model?: string;
+  authSource?: ProviderAuthSource | null;
+  autoApprove?: boolean;
+  sandboxProvider?: "e2b" | "daytona" | "docker";
+  selectedPlatformSkillSlugs?: string[];
+  fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
+};
+
+export type GenerationStreamEvent =
+  | { type: "text"; content: string }
+  | { type: "system"; content: string; coworkerId?: string }
+  | { type: "thinking"; content: string; thinkingId: string }
+  | {
+      type: "tool_use";
+      toolName: string;
+      toolInput: unknown;
+      toolUseId?: string;
+      integration?: string;
+      operation?: string;
+      isWrite?: boolean;
+    }
+  | { type: "tool_result"; toolName: string; result: unknown; toolUseId?: string }
+  | {
+      type: "interrupt_pending";
+      generationId: string;
+      conversationId: string;
+      kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
+      providerToolUseId: string;
+      display: {
+        title: string;
+        integration?: string;
+        operation?: string;
+        command?: string;
+        toolInput?: Record<string, unknown>;
+        authSpec?: {
+          integrations: string[];
+          reason?: string;
+        };
+      };
+    }
+  | {
+      type: "interrupt_resolved";
+      status: "pending" | "accepted" | "rejected" | "expired" | "cancelled";
+      kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
+      providerToolUseId: string;
+      display: {
+        title: string;
+        integration?: string;
+        operation?: string;
+        command?: string;
+        toolInput?: Record<string, unknown>;
+        authSpec?: {
+          integrations: string[];
+          reason?: string;
+        };
+      };
+      responsePayload?: {
+        questionAnswers?: string[][];
+        connectedIntegrations?: string[];
+      };
+    }
+  | {
+      type: "done";
+      generationId: string;
+      conversationId: string;
+      messageId: string;
+      usage: GenerationUsage;
+      artifacts?: DoneArtifactsData;
+    }
+  | { type: "error"; message: string }
+  | { type: "cancelled"; generationId: string; conversationId: string; messageId?: string }
+  | { type: "status_change"; status: string; metadata?: StatusChangeMetadata }
+  | {
+      type: "sandbox_file";
+      fileId: string;
+      path: string;
+      filename: string;
+      mimeType: string;
+      sizeBytes: number | null;
+    };
+
+export type GenerationSubscription = AsyncIterable<GenerationStreamEvent>;
+
+export type CoworkerSchedule =
+  | { type: "interval"; intervalMinutes: number }
+  | { type: "daily"; time: string; timezone?: string }
+  | { type: "weekly"; time: string; daysOfWeek: number[]; timezone?: string }
+  | { type: "monthly"; time: string; dayOfMonth: number; timezone?: string }
+  | null;
+
+export type CoworkerSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  username: string | null;
+  status: string;
+  triggerType: string;
+  schedule: CoworkerSchedule;
+  lastRunStatus: string | null;
+  lastRunAt: string | Date | null;
+};
+
+export type CoworkerDetails = {
+  id: string;
+  name: string;
+  description: string | null;
+  username: string | null;
+  status: string;
+  triggerType: string;
+  prompt: string;
+  model: string;
+  authSource: ProviderAuthSource | null;
+  promptDo: string | null;
+  promptDont: string | null;
+  autoApprove: boolean;
+  toolAccessMode: string;
+  allowedIntegrations: string[];
+  allowedCustomIntegrations: string[];
+  allowedExecutorSourceIds: string[];
+  allowedSkillSlugs: string[];
+  schedule: CoworkerSchedule;
+  sharedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  documents: Array<{
+    id: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+    description: string | null;
+    createdAt: string | Date;
+  }>;
+  runs: Array<{
+    id: string;
+    status: string;
+    startedAt: string | Date;
+    finishedAt: string | Date | null;
+    errorMessage: string | null;
+  }>;
+};
+
+export type CoworkerCreateInput = {
+  name?: string;
+  description?: string | null;
+  username?: string | null;
+  triggerType: string;
+  prompt: string;
+  model?: string;
+  authSource?: ProviderAuthSource | null;
+  promptDo?: string;
+  promptDont?: string;
+  autoApprove?: boolean;
+  toolAccessMode?: string;
+  allowedIntegrations?: string[];
+  allowedCustomIntegrations?: string[];
+  allowedExecutorSourceIds?: string[];
+  allowedSkillSlugs?: string[];
+  schedule?: CoworkerSchedule;
+};
+
+export type CoworkerCreateResult = {
+  id: string;
+  name: string;
+  description: string | null;
+  username: string | null;
+  status: string;
+};
+
+export type CoworkerTriggerResult = {
+  coworkerId: string;
+  runId: string;
+  generationId: string;
+  conversationId: string;
+};
+
+export type CoworkerRunEvent = {
+  id: string;
+  type: string;
+  payload: unknown;
+  createdAt: string | Date;
+};
+
+export type CoworkerRun = {
+  id: string;
+  coworkerId: string;
+  coworkerName: string | null;
+  coworkerUsername: string | null;
+  status: string;
+  triggerPayload: unknown;
+  generationId: string | null;
+  conversationId: string | null;
+  startedAt: string | Date;
+  finishedAt: string | Date | null;
+  errorMessage: string | null;
+  debugInfo: unknown;
+  events: CoworkerRunEvent[];
+};
+
+export type CoworkerRunSummary = {
+  id: string;
+  status: string;
+  startedAt: string | Date;
+  finishedAt: string | Date | null;
+  errorMessage: string | null;
+};
+
+export type ConversationMessage = {
+  id: string;
+  role: string;
+  content: string;
+  contentParts: unknown[] | null;
+  attachments: Array<{
+    id?: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes?: number;
+  }>;
+  sandboxFiles: Array<{
+    fileId: string;
+    path: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes?: number | null;
+  }>;
+};
+
+export type ConversationDetails = {
+  id: string;
+  type: string;
+  title: string | null;
+  model: string | null;
+  authSource: ProviderAuthSource | null;
+  autoApprove: boolean;
+  messages: ConversationMessage[];
+};
+
+export interface CmdclawApiClient {
+  user: {
+    me(): Promise<CmdclawUser>;
+  };
+  providerAuth: {
+    status(): Promise<ProviderAuthStatus>;
+    freeModels(): Promise<FreeModelsResponse>;
+  };
+  generation: {
+    startGeneration(input: GenerationStartInput): Promise<{
+      generationId: string;
+      conversationId: string;
+    }>;
+    subscribeGeneration(
+      input: { generationId: string },
+      options?: { signal?: AbortSignal },
+    ): Promise<GenerationSubscription>;
+    submitApproval(input: {
+      generationId: string;
+      toolUseId: string;
+      decision: "approve" | "deny";
+      questionAnswers?: string[][];
+    }): Promise<{ success: boolean }>;
+    submitAuthResult(input: {
+      generationId: string;
+      integration: string;
+      success: boolean;
+    }): Promise<{ success: boolean }>;
+    cancelGeneration(input: { generationId: string }): Promise<{ success: boolean }>;
+  };
+  integration: {
+    getAuthUrl(input: { type: string; redirectUrl: string }): Promise<{ authUrl: string }>;
+  };
+  coworker: {
+    list(): Promise<CoworkerSummary[]>;
+    get(input: { id: string }): Promise<CoworkerDetails>;
+    create(input: CoworkerCreateInput): Promise<CoworkerCreateResult>;
+    trigger(input: { id: string; payload?: unknown }): Promise<CoworkerTriggerResult>;
+    getRun(input: { id: string }): Promise<CoworkerRun>;
+    listRuns(input: { coworkerId: string; limit: number }): Promise<CoworkerRunSummary[]>;
+  };
+  conversation: {
+    get(input: { id: string }): Promise<ConversationDetails>;
+    downloadSandboxFile(input: { fileId: string }): Promise<{
+      url: string;
+      filename: string;
+      mimeType: string;
+      path: string;
+      sizeBytes: number | null;
+    }>;
+  };
+}
+
+export interface CmdclawProfileStore {
+  getConfigPathForServerUrl(serverUrl: string): string;
+  load(serverUrl?: string): CmdclawProfile | null;
+  save(config: CmdclawProfile): void;
+  clear(serverUrl?: string): void;
+}
+
+export type GenerationNeedsAuth = {
+  generationId: string;
+  conversationId: string;
+  integrations: string[];
+  reason?: string;
+};
+
+export type GenerationNeedsApproval = {
+  generationId: string;
+  conversationId: string;
+  toolUseId: string;
+  toolName: string;
+  toolInput: unknown;
+  integration: string;
+  operation: string;
+  command?: string;
+};
+
+export type GenerationCompletedResult = {
+  status: "completed";
+  generationId: string;
+  conversationId: string;
+  messageId: string;
+  usage?: GenerationUsage;
+  artifacts?: DoneArtifactsData;
+  assistant: RuntimeAssistantMessage;
+};
+
+export type GenerationNeedsAuthResult = {
+  status: "needs_auth";
+  generationId: string;
+  conversationId: string;
+  auth: GenerationNeedsAuth;
+  assistant: RuntimeAssistantMessage;
+};
+
+export type GenerationNeedsApprovalResult = {
+  status: "needs_approval";
+  generationId: string;
+  conversationId: string;
+  approval: GenerationNeedsApproval;
+  assistant: RuntimeAssistantMessage;
+};
+
+export type GenerationFailedResult = {
+  status: "failed";
+  generationId?: string;
+  conversationId?: string;
+  error: {
+    code: string;
+    message: string;
+    phase: string;
+    transportCode?: string;
+  };
+  assistant: RuntimeAssistantMessage;
+};
+
+export type GenerationCancelledResult = {
+  status: "cancelled";
+  generationId: string;
+  conversationId: string;
+  messageId?: string;
+  assistant: RuntimeAssistantMessage;
+};
+
+export type GenerationResult =
+  | GenerationCompletedResult
+  | GenerationNeedsAuthResult
+  | GenerationNeedsApprovalResult
+  | GenerationFailedResult
+  | GenerationCancelledResult;
+
+export interface ChatSessionRunner {
+  run(input: GenerationStartInput): Promise<GenerationResult>;
+}
+
+export interface CoworkerRunner {
+  resolveReference(reference: string): Promise<string>;
+  list(): Promise<CoworkerSummary[]>;
+  get(reference: string): Promise<CoworkerDetails>;
+  create(input: CoworkerCreateInput): Promise<CoworkerCreateResult>;
+  run(reference: string, payload?: unknown): Promise<CoworkerTriggerResult>;
+  logs(runId: string): Promise<CoworkerRun>;
+}

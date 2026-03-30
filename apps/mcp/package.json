@@ -1,0 +1,24 @@
+{
+  "name": "@cmdclaw/mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "xmcp build",
+    "dev": "xmcp dev",
+    "start": "bun dist/stdio.js",
+    "check": "bunx tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cmdclaw/client": "workspace:*",
+    "xmcp": "0.6.5",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.6",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

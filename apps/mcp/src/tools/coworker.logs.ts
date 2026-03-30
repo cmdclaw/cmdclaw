@@ -1,0 +1,27 @@
+import { z } from "zod";
+import { type InferSchema, type ToolMetadata } from "xmcp";
+import { createMcpClient } from "../lib/client";
+import { handleCoworkerLogs } from "../lib/handlers";
+
+export const schema = {
+  runId: z.string().describe("Coworker run ID"),
+  serverUrl: z.string().url().optional().describe("Override the CmdClaw server URL"),
+};
+
+export const metadata: ToolMetadata = {
+  name: "coworker.logs",
+  description: "Get coworker run details and events",
+  annotations: {
+    title: "Coworker logs",
+    readOnlyHint: true,
+    idempotentHint: true,
+  },
+};
+
+export default async function coworkerLogs(params: InferSchema<typeof schema>) {
+  const clientState = createMcpClient(params.serverUrl);
+  if (clientState.status !== "ready") {
+    return clientState;
+  }
+  return handleCoworkerLogs(clientState.client, params.runId);
+}
