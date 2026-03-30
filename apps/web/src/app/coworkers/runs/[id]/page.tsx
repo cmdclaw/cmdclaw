@@ -43,7 +43,7 @@ export default function CoworkerRunPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <RemoteRunSourceBanner source={remoteRunSource} />
       {(run.status === "error" || run.status === "cancelled") && (
         <div className="border-b p-4">
@@ -51,9 +51,7 @@ export default function CoworkerRunPage() {
           <RunDebugDetails debugInfo={run.debugInfo} />
         </div>
       )}
-      <div className="min-h-0 flex-1">
-        <ChatArea conversationId={run.conversationId} />
-      </div>
+      <ChatArea conversationId={run.conversationId} />
     </div>
   );
 }
