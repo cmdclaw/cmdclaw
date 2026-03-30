@@ -1032,6 +1032,7 @@ const getRun = protectedProcedure
           where: eq(generation.id, run.generationId),
           columns: {
             conversationId: true,
+            debugInfo: true,
           },
         })
       : null;
@@ -1048,6 +1049,7 @@ const getRun = protectedProcedure
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
       errorMessage: run.errorMessage,
+      debugInfo: run.debugInfo ?? gen?.debugInfo ?? null,
       events: events.map((evt) => ({
         id: evt.id,
         type: evt.type,
@@ -1744,6 +1746,7 @@ const adminGetWorkspaceRun = protectedProcedure
           where: eq(generation.id, run.generationId),
           columns: {
             conversationId: true,
+            debugInfo: true,
           },
         })
       : null;
@@ -1754,6 +1757,7 @@ const adminGetWorkspaceRun = protectedProcedure
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
       errorMessage: run.errorMessage,
+      debugInfo: run.debugInfo ?? gen?.debugInfo ?? null,
       conversationId: gen?.conversationId ?? null,
       coworker: run.coworker
         ? {

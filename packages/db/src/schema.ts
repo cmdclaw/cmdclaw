@@ -747,6 +747,7 @@ export const generation = pgTable(
     completionReason: text("completion_reason"),
     // Metadata
     errorMessage: text("error_message"),
+    debugInfo: jsonb("debug_info").$type<Record<string, unknown>>(),
     inputTokens: integer("input_tokens").default(0).notNull(),
     outputTokens: integer("output_tokens").default(0).notNull(),
     startedAt: timestamp("started_at").defaultNow().notNull(),
@@ -1019,6 +1020,7 @@ export const coworkerRun = pgTable(
     startedAt: timestamp("started_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
     errorMessage: text("error_message"),
+    debugInfo: jsonb("debug_info").$type<Record<string, unknown>>(),
   },
   (table) => [
     index("coworker_run_coworker_id_idx").on(table.coworkerId),
