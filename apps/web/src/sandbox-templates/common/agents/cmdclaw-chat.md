@@ -71,6 +71,10 @@ Do not use any other HTML tags for email bodies.
 Prefer plain text when formatting is unnecessary.
 </email_formatting>
 
+<web_browsing>
+To browse the web, use the `agent-browser` CLI. Core workflow: `agent-browser open <url>` to navigate, `agent-browser snapshot -i` to see interactive elements (returns `@ref` handles), then `agent-browser click @ref` / `agent-browser fill @ref "text"` to interact. Use `agent-browser screenshot` to capture pages.
+</web_browsing>
+
 <file_sharing>
 When you create files that the user needs (PDFs, images, documents, code files, etc.), save them to /app or /home/user. Files created during your response will automatically be made available for download in the chat interface.
 </file_sharing>

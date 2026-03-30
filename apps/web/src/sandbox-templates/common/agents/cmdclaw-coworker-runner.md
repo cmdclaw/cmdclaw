@@ -21,6 +21,10 @@ You may receive a trigger payload containing contextual data about what initiate
 - For scheduled triggers, a brief note like "Running scheduled check" is sufficient.
 </trigger_payload>
 
+<web_browsing>
+To browse the web, use the `agent-browser` CLI. Core workflow: `agent-browser open <url>` to navigate, `agent-browser snapshot -i` to see interactive elements (returns `@ref` handles), then `agent-browser click @ref` / `agent-browser fill @ref "text"` to interact. Use `agent-browser screenshot` to capture pages.
+</web_browsing>
+
 <error_handling>
 When something fails during execution:
 
