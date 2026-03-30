@@ -3,6 +3,10 @@
 import { Loader2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { ChatArea } from "@/components/chat/chat-area";
+import {
+  extractRemoteRunSourceDetails,
+  RemoteRunSourceBanner,
+} from "@/components/coworkers/remote-run-source-banner";
 import { useCoworkerRun } from "@/orpc/hooks";
 
 export default function CoworkerRunPage() {
@@ -22,10 +26,13 @@ export default function CoworkerRunPage() {
     return <div className="text-muted-foreground p-6 text-sm">Run not found.</div>;
   }
 
+  const remoteRunSource = extractRemoteRunSourceDetails(run);
+
   if (!run.conversationId) {
     return (
       <div className="space-y-4 p-6">
         <h3 className="text-lg font-semibold">Run details unavailable in chat view</h3>
+        <RemoteRunSourceBanner source={remoteRunSource} />
         <p className="text-muted-foreground text-sm">
           This run does not have a linked conversation, so it cannot be opened in the chat
           interface.
@@ -37,6 +44,7 @@ export default function CoworkerRunPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <RemoteRunSourceBanner source={remoteRunSource} />
       {(run.status === "error" || run.status === "cancelled") && (
         <div className="border-b p-4">
           <p className="text-muted-foreground text-sm">{run.errorMessage ?? "Run failed."}</p>

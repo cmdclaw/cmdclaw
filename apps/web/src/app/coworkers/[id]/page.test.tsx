@@ -22,6 +22,7 @@ const {
   mockSearchParamsData,
   mockCoworkerData,
   mockCoworkerRunsData,
+  mockCoworkerRunData,
 } = vi.hoisted(() => ({
   mockCoworkerRefetch: vi.fn(),
   mockUpdateCoworkerMutateAsync: vi.fn(),
@@ -63,6 +64,28 @@ const {
       finishedAt: Date | null;
       errorMessage: string | null;
     }>,
+  },
+  mockCoworkerRunData: {
+    current: null as {
+      id: string;
+      coworkerId: string;
+      coworkerName: string;
+      coworkerUsername: string;
+      status: string;
+      triggerPayload: Record<string, unknown>;
+      generationId: string | null;
+      conversationId: string | null;
+      startedAt: Date;
+      finishedAt: Date | null;
+      errorMessage: string | null;
+      debugInfo: unknown;
+      events: Array<{
+        id: string;
+        type: string;
+        payload: unknown;
+        createdAt: Date;
+      }>;
+    } | null,
   },
 }));
 
@@ -318,7 +341,7 @@ vi.mock("@/orpc/hooks", () => ({
   useCoworkerForwardingAlias: () => ({ data: null }),
   useUpdateCoworker: () => ({ mutateAsync: mockUpdateCoworkerMutateAsync }),
   useDeleteCoworker: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useCoworkerRun: () => ({ data: null, isLoading: false }),
+  useCoworkerRun: () => ({ data: mockCoworkerRunData.current, isLoading: false }),
   useCoworkerRuns: () => ({ data: mockCoworkerRunsData.current, refetch: vi.fn() }),
   useEnqueueConversationMessage: () => ({ mutateAsync: vi.fn() }),
   useTriggerCoworker: () => ({ mutateAsync: mockTriggerCoworkerMutateAsync, isPending: false }),
@@ -389,6 +412,7 @@ describe("CoworkerEditorPage", () => {
       runs: [],
     };
     mockCoworkerRunsData.current = [];
+    mockCoworkerRunData.current = null;
     mockUpdateCoworkerMutateAsync.mockResolvedValue({ success: true });
     mockTriggerCoworkerMutateAsync.mockResolvedValue({ runId: "run-1" });
   });
@@ -528,6 +552,47 @@ describe("CoworkerEditorPage", () => {
     });
 
     expect(screen.getByText("Run not found.")).toBeInTheDocument();
+  });
+
+  it("shows the remote integration source banner for persisted remote runs", async () => {
+    mockPathnameData.current = "/coworkers/cw-1/runs/run-remote";
+    mockParamsData.current = { id: "cw-1", runId: "run-remote" };
+    mockCoworkerRunData.current = {
+      id: "run-remote",
+      coworkerId: "cw-1",
+      coworkerName: "Existing Coworker",
+      coworkerUsername: "existing-user",
+      status: "completed",
+      triggerPayload: { source: "manual" },
+      generationId: "gen-1",
+      conversationId: "conv-1",
+      startedAt: new Date("2026-03-12T10:00:00.000Z"),
+      finishedAt: new Date("2026-03-12T10:05:00.000Z"),
+      errorMessage: null,
+      debugInfo: null,
+      events: [
+        {
+          id: "evt-1",
+          type: "remote_integration_source",
+          payload: {
+            targetEnv: "prod",
+            remoteUserId: "remote-user-1",
+            remoteUserEmail: "remote@example.com",
+          },
+          createdAt: new Date("2026-03-12T10:00:01.000Z"),
+        },
+      ],
+    };
+
+    render(<CoworkerEditorPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Remote integration source")).toBeInTheDocument();
+    expect(screen.getByText("Environment: Production")).toBeInTheDocument();
+    expect(screen.getByText("User: remote@example.com")).toBeInTheDocument();
   });
 
   it("saves model changes before starting a run", async () => {
