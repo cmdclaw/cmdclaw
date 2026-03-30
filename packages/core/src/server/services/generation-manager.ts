@@ -331,6 +331,7 @@ interface GenerationContext {
   lastRuntimeEventAt: Date;
   recoveryAttempts: number;
   completionReason?: GenerationCompletionReason | null;
+  debugInfo?: GenerationDebugInfo;
   contentParts: ContentPart[];
   assistantContent: string;
   abortController: AbortController;
@@ -762,6 +763,47 @@ function isMissingSandboxError(error: unknown): boolean {
       message.includes("dead") ||
       message.includes("paused"))
   );
+}
+
+type RemoteRunDebugPhase =
+  | "remote_credentials_fetched"
+  | "sandbox_created"
+  | "prompt_sent"
+  | "session_error";
+
+type GenerationDebugInfo = {
+  originalErrorMessage?: string | null;
+  originalErrorName?: string | null;
+  originalErrorPhase?: string | null;
+  runtimeFailure?: RuntimeFailureClassification | null;
+  remoteRun?: {
+    targetEnv?: RemoteIntegrationSource["targetEnv"];
+    remoteUserId?: string;
+    remoteUserEmail?: string | null;
+    allowedIntegrations?: string[];
+    attachedTokenEnvVarNames?: string[];
+    phases?: Partial<Record<RemoteRunDebugPhase, string>>;
+    sessionErrorMessage?: string | null;
+  } | null;
+};
+
+function buildInitialDebugInfo(
+  remoteIntegrationSource?: RemoteIntegrationSource,
+  allowedIntegrations?: IntegrationType[],
+): GenerationDebugInfo | undefined {
+  if (!remoteIntegrationSource) {
+    return undefined;
+  }
+
+  return {
+    remoteRun: {
+      targetEnv: remoteIntegrationSource.targetEnv,
+      remoteUserId: remoteIntegrationSource.remoteUserId,
+      remoteUserEmail: remoteIntegrationSource.remoteUserEmail ?? null,
+      allowedIntegrations: allowedIntegrations ? [...allowedIntegrations] : undefined,
+      phases: {},
+    },
+  };
 }
 
 type ExportedAssistantPart = {
@@ -1331,6 +1373,132 @@ class GenerationManager {
     reason: GenerationCompletionReason | null | undefined,
   ): void {
     ctx.completionReason = reason ?? null;
+  }
+
+  private getCurrentPhase(ctx: GenerationContext): string | null {
+    const latestPhase = ctx.phaseTimeline?.[ctx.phaseTimeline.length - 1];
+    return latestPhase?.phase ?? null;
+  }
+
+  private updateDebugInfo(ctx: GenerationContext, patch: Partial<GenerationDebugInfo>): void {
+    const existing = ctx.debugInfo ?? {};
+    const remoteRunPatch = patch.remoteRun;
+
+    ctx.debugInfo = {
+      ...existing,
+      ...patch,
+      remoteRun:
+        remoteRunPatch === undefined
+          ? existing.remoteRun
+          : {
+              ...(existing.remoteRun ?? {}),
+              ...remoteRunPatch,
+              phases: {
+                ...(existing.remoteRun?.phases ?? {}),
+                ...(remoteRunPatch?.phases ?? {}),
+              },
+            },
+    };
+  }
+
+  private ensureRemoteRunDebugInfo(ctx: GenerationContext): void {
+    if (!ctx.remoteIntegrationSource) {
+      return;
+    }
+
+    this.updateDebugInfo(ctx, {
+      remoteRun: {
+        targetEnv: ctx.remoteIntegrationSource.targetEnv,
+        remoteUserId: ctx.remoteIntegrationSource.remoteUserId,
+        remoteUserEmail: ctx.remoteIntegrationSource.remoteUserEmail ?? null,
+        allowedIntegrations: ctx.allowedIntegrations ? [...ctx.allowedIntegrations] : undefined,
+      },
+    });
+  }
+
+  private recordRemoteRunPhase(
+    ctx: GenerationContext,
+    phase: RemoteRunDebugPhase,
+    extra?: Partial<NonNullable<GenerationDebugInfo["remoteRun"]>>,
+  ): void {
+    if (!ctx.remoteIntegrationSource) {
+      return;
+    }
+
+    this.ensureRemoteRunDebugInfo(ctx);
+    this.updateDebugInfo(ctx, {
+      remoteRun: {
+        ...extra,
+        phases: {
+          [phase]: new Date().toISOString(),
+        },
+      },
+    });
+    this.scheduleSave(ctx);
+
+    logServerEvent(
+      "info",
+      "REMOTE_RUN_PHASE",
+      {
+        phase,
+        targetEnv: ctx.remoteIntegrationSource.targetEnv,
+        remoteUserId: ctx.remoteIntegrationSource.remoteUserId,
+        allowedIntegrations: ctx.allowedIntegrations ?? null,
+        attachedTokenEnvVarNames: extra?.attachedTokenEnvVarNames ?? null,
+        sessionErrorMessage: extra?.sessionErrorMessage ?? null,
+      },
+      {
+        source: "generation-manager",
+        traceId: ctx.traceId,
+        generationId: ctx.id,
+        conversationId: ctx.conversationId,
+        userId: ctx.userId,
+      },
+    );
+  }
+
+  private captureOriginalError(
+    ctx: GenerationContext,
+    error: unknown,
+    options?: {
+      phase?: string | null;
+      runtimeFailure?: RuntimeFailureClassification | null;
+    },
+  ): void {
+    const phase = options?.phase ?? this.getCurrentPhase(ctx);
+    const formatted = formatErrorMessage(error);
+
+    if (!ctx.debugInfo?.originalErrorMessage) {
+      this.updateDebugInfo(ctx, {
+        originalErrorMessage: formatted,
+        originalErrorName: error instanceof Error ? error.name : null,
+        originalErrorPhase: phase,
+      });
+    }
+    if (options?.runtimeFailure !== undefined) {
+      this.updateDebugInfo(ctx, {
+        runtimeFailure: options.runtimeFailure,
+      });
+    }
+    this.scheduleSave(ctx);
+
+    logServerEvent(
+      "error",
+      "GENERATION_CAUGHT_ERROR",
+      {
+        phase,
+        runtimeFailure: options?.runtimeFailure ?? null,
+        originalErrorMessage: formatted,
+        originalErrorName: error instanceof Error ? error.name : null,
+      },
+      {
+        source: "generation-manager",
+        traceId: ctx.traceId,
+        generationId: ctx.id,
+        conversationId: ctx.conversationId,
+        userId: ctx.userId,
+      },
+    );
   }
 
   private getRemainingRunTimeMs(ctx: Pick<GenerationContext, "deadlineAt">): number {
@@ -2304,6 +2472,7 @@ class GenerationManager {
         conversationId: conv.id,
         status: "running",
         executionPolicy,
+        debugInfo: buildInitialDebugInfo(params.remoteIntegrationSource, params.allowedIntegrations),
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
@@ -2389,6 +2558,7 @@ class GenerationManager {
       lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
       recoveryAttempts: lifecycle.recoveryAttempts,
       completionReason: lifecycle.completionReason,
+      debugInfo: buildInitialDebugInfo(params.remoteIntegrationSource, params.allowedIntegrations),
       contentParts: [],
       assistantContent: "",
       abortController: new AbortController(),
@@ -2565,6 +2735,7 @@ class GenerationManager {
         conversationId: newConv.id,
         status: "running",
         executionPolicy,
+        debugInfo: buildInitialDebugInfo(params.remoteIntegrationSource, params.allowedIntegrations),
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
@@ -2620,6 +2791,7 @@ class GenerationManager {
       lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
       recoveryAttempts: lifecycle.recoveryAttempts,
       completionReason: lifecycle.completionReason,
+      debugInfo: buildInitialDebugInfo(params.remoteIntegrationSource, params.allowedIntegrations),
       contentParts: [],
       assistantContent: "",
       abortController: new AbortController(),
@@ -2803,6 +2975,7 @@ class GenerationManager {
       lastRuntimeEventAt: genRecord.lastRuntimeEventAt ?? genRecord.startedAt,
       recoveryAttempts: genRecord.recoveryAttempts ?? 0,
       completionReason: (genRecord.completionReason as GenerationCompletionReason | null) ?? null,
+      debugInfo: (genRecord.debugInfo as GenerationDebugInfo | null) ?? undefined,
       contentParts: (genRecord.contentParts as ContentPart[] | null) ?? [],
       assistantContent: "",
       abortController: new AbortController(),
@@ -4636,6 +4809,7 @@ class GenerationManager {
       clearReattachTimeout?.();
       console.error("[GenerationManager] Recovery reattach error:", error);
       const runtimeFailure = await this.resolveRuntimeFailure(ctx, runtimeClient);
+      this.captureOriginalError(ctx, error, { runtimeFailure });
       if (runtimeFailure === "waiting_approval" || runtimeFailure === "waiting_auth") {
         return;
       }
@@ -4698,6 +4872,7 @@ class GenerationManager {
       const { customSkillNames } = splitCoworkerAllowedSkillSlugs(ctx.allowedSkillSlugs ?? []);
 
       const allowedIntegrations = ctx.allowedIntegrations ?? enabledIntegrations;
+      this.ensureRemoteRunDebugInfo(ctx);
 
       const cliInstructions = await getCliInstructionsWithCustom(allowedIntegrations, ctx.userId);
       let filteredCliEnv = filterCliEnvToAllowedIntegrations(cliEnv, ctx.allowedIntegrations);
@@ -4719,7 +4894,8 @@ class GenerationManager {
             remoteUserId: ctx.remoteIntegrationSource.remoteUserId,
             remoteUserEmail:
               ctx.remoteIntegrationSource.remoteUserEmail ?? remoteCredentials.remoteUserEmail,
-            integrationTypes: [...allowedIntegrations].toSorted(),
+            allowedIntegrations: [...allowedIntegrations].toSorted(),
+            attachedTokenEnvVarNames: Object.keys(remoteCredentials.tokens).toSorted(),
           },
           {
             source: "generation-manager",
@@ -4734,6 +4910,9 @@ class GenerationManager {
           ...filteredCliEnv,
           ...remoteCredentials.tokens,
         };
+        this.recordRemoteRunPhase(ctx, "remote_credentials_fetched", {
+          attachedTokenEnvVarNames: Object.keys(remoteCredentials.tokens).toSorted(),
+        });
       }
 
       if (ctx.allowedIntegrations !== undefined) {
@@ -4916,6 +5095,9 @@ class GenerationManager {
         runtimeMetadata,
         sessionId,
       });
+      if (ctx.remoteIntegrationSource) {
+        this.recordRemoteRunPhase(ctx, "sandbox_created");
+      }
       await this.setSnapshotRestoreAllowance(ctx, false);
 
       // Record marker time for file collection and store sandbox reference
@@ -5328,6 +5510,9 @@ class GenerationManager {
           sessionId,
         },
       );
+      if (ctx.remoteIntegrationSource) {
+        this.recordRemoteRunPhase(ctx, "prompt_sent");
+      }
       this.markPhase(ctx, "prompt_sent");
       const promptSentAtMs = Date.now();
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
@@ -5476,6 +5661,11 @@ class GenerationManager {
           if (!sessionErrorMessage) {
             sessionErrorMessage = errorMessage;
           }
+          if (ctx.remoteIntegrationSource) {
+            this.recordRemoteRunPhase(ctx, "session_error", {
+              sessionErrorMessage: errorMessage,
+            });
+          }
           break;
         }
       }
@@ -5620,6 +5810,9 @@ class GenerationManager {
       clearPromptTimeout?.();
       let promptTimeoutError: Error | null = null;
       if (isBootstrapTimeoutError(error)) {
+        this.captureOriginalError(ctx, error, {
+          phase: this.getCurrentPhase(ctx) ?? "agent_init_failed",
+        });
         this.setCompletionReason(ctx, "bootstrap_timeout");
         ctx.errorMessage = error instanceof Error ? error.message : formatErrorMessage(error);
         await this.finishGeneration(ctx, "error");
@@ -5635,6 +5828,7 @@ class GenerationManager {
       }
       console.error("[GenerationManager] Error:", error);
       const runtimeFailure = await this.resolveRuntimeFailure(ctx, client);
+      this.captureOriginalError(ctx, error, { runtimeFailure });
       if (runtimeFailure === "recoverable_live_runtime") {
         this.scheduleRecoveryReattach(ctx);
         return;
@@ -7401,6 +7595,7 @@ class GenerationManager {
           pendingAuth: null,
           contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
           errorMessage: ctx.errorMessage,
+          debugInfo: ctx.debugInfo ?? null,
           lastRuntimeEventAt: ctx.lastRuntimeEventAt,
           recoveryAttempts: ctx.recoveryAttempts,
           completionReason:
@@ -7472,6 +7667,7 @@ class GenerationManager {
               status === "completed" ? "completed" : status === "cancelled" ? "cancelled" : "error",
             finishedAt: new Date(),
             errorMessage: ctx.errorMessage,
+            debugInfo: ctx.debugInfo ?? null,
           })
           .where(eq(coworkerRun.id, ctx.coworkerRunId));
       }
@@ -7583,6 +7779,7 @@ class GenerationManager {
         lastRuntimeEventAt: ctx.lastRuntimeEventAt,
         recoveryAttempts: ctx.recoveryAttempts,
         completionReason: ctx.completionReason ?? null,
+        debugInfo: ctx.debugInfo ?? null,
       })
       .where(eq(generation.id, ctx.id));
   }
