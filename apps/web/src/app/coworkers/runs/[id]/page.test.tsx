@@ -39,7 +39,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/chat/chat-area", () => ({
-  ChatArea: ({ conversationId }: { conversationId: string }) => <div>Chat {conversationId}</div>,
+  ChatArea: ({ conversationId }: { conversationId: string }) => (
+    <div data-testid="chat-area">Chat {conversationId}</div>
+  ),
 }));
 
 vi.mock("@/orpc/hooks", () => ({
@@ -91,5 +93,17 @@ describe("CoworkerRunPage", () => {
     render(<CoworkerRunPage />);
 
     expect(screen.queryByText("Remote integration source")).not.toBeInTheDocument();
+  });
+
+  it("renders chat area directly inside the flex viewport container", () => {
+    render(<CoworkerRunPage />);
+
+    expect(screen.getByTestId("chat-area").parentElement).toHaveClass(
+      "flex",
+      "min-h-0",
+      "flex-1",
+      "flex-col",
+      "overflow-hidden",
+    );
   });
 });
