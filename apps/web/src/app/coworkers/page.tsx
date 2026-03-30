@@ -4,6 +4,7 @@ import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source"
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
 import {
+  Circle,
   Download,
   Ellipsis,
   Eye,
@@ -25,6 +26,7 @@ import { type ChangeEvent, useCallback, useMemo, useRef, useState } from "react"
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/app/coworkers/layout";
+import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { ModelSelector } from "@/components/chat/model-selector";
 // Commented out — prompt bar removed from coworkers page
 // import { VoiceIndicator } from "@/components/chat/voice-indicator";
@@ -56,6 +58,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
@@ -223,6 +227,51 @@ function buildToolSummary(
   };
 }
 
+function getRunStatusColor(status: string) {
+  if (status === "completed") {
+    return "text-emerald-500";
+  }
+  if (status === "running" || status === "awaiting_approval" || status === "awaiting_auth") {
+    return "text-blue-500";
+  }
+  if (status === "paused") {
+    return "text-amber-500";
+  }
+  if (status === "error" || status === "cancelled") {
+    return "text-red-500";
+  }
+  return "text-muted-foreground";
+}
+
+function RunsList({ runs }: { runs: NonNullable<CoworkerItem["recentRuns"]> }) {
+  return (
+    <div className="flex flex-col">
+      <div className="px-3 py-2">
+        <p className="text-xs font-bold">Recent runs</p>
+      </div>
+      <div className="max-h-64 overflow-y-auto">
+        {runs.map((run) => (
+          <Link
+            key={run.id}
+            href={`/coworkers/runs/${run.id}`}
+            className="hover:bg-muted/50 flex items-center gap-2.5 px-3 py-2 transition-colors"
+          >
+            <Circle
+              className={cn("h-1.5 w-1.5 shrink-0 fill-current", getRunStatusColor(run.status))}
+            />
+            <span className="text-foreground/70 text-xs">
+              {getCoworkerRunStatusLabel(run.status)}
+            </span>
+            <span className="text-muted-foreground ml-auto text-xs">
+              {formatDate(run.startedAt) ?? "—"}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CoworkerCard({
   coworker,
   connectedIntegrationTypes,
@@ -252,8 +301,11 @@ function CoworkerCard({
   onExport: (coworker: CoworkerItem) => void;
   onDelete: (coworker: CoworkerItem) => void;
 }) {
+  const isMobile = useIsMobile();
+  const [runsOpen, setRunsOpen] = useState(false);
   const isOn = coworker.status === "on";
   const recentRun = Array.isArray(coworker.recentRuns) ? coworker.recentRuns[0] : null;
+  const hasRuns = Array.isArray(coworker.recentRuns) && coworker.recentRuns.length > 0;
   const toolSummary = useMemo(
     () => buildToolSummary(coworker, connectedIntegrationTypes),
     [connectedIntegrationTypes, coworker],
@@ -298,6 +350,14 @@ function CoworkerCard({
     [coworker, onToggleStatus],
   );
   const handleStopPropagation = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+  const handleOpenRunsSheet = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRunsOpen(true);
+  }, []);
+  const handleRunsTriggerClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
   }, []);
 
@@ -436,19 +496,62 @@ function CoworkerCard({
         ) : null}
       </div>
 
-      <div className="text-muted-foreground/70 text-xs">
-        {recentRun ? (
-          <span>
-            Last run:{" "}
-            <span className="text-muted-foreground">
-              {getCoworkerRunStatusLabel(recentRun.status)}
-            </span>{" "}
-            · {formatDate(recentRun.startedAt) ?? "—"}
-          </span>
+      {hasRuns ? (
+        isMobile ? (
+          <Sheet open={runsOpen} onOpenChange={setRunsOpen}>
+            <button
+              type="button"
+              onClick={handleOpenRunsSheet}
+              className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
+            >
+              {recentRun ? (
+                <span>
+                  Last run:{" "}
+                  <span className="text-muted-foreground">
+                    {getCoworkerRunStatusLabel(recentRun.status)}
+                  </span>{" "}
+                  · {formatDate(recentRun.startedAt) ?? "—"}
+                </span>
+              ) : null}
+            </button>
+            <SheetContent
+              side="bottom"
+              showCloseButton={false}
+              title={`${getCoworkerDisplayName(coworker.name)} runs`}
+              className="h-auto max-h-[60vh]"
+            >
+              <RunsList runs={coworker.recentRuns!} />
+            </SheetContent>
+          </Sheet>
         ) : (
+          <Popover open={runsOpen} onOpenChange={setRunsOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onClick={handleRunsTriggerClick}
+                className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
+              >
+                {recentRun ? (
+                  <span>
+                    Last run:{" "}
+                    <span className="text-muted-foreground">
+                      {getCoworkerRunStatusLabel(recentRun.status)}
+                    </span>{" "}
+                    · {formatDate(recentRun.startedAt) ?? "—"}
+                  </span>
+                ) : null}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-0" onClick={handleStopPropagation}>
+              <RunsList runs={coworker.recentRuns!} />
+            </PopoverContent>
+          </Popover>
+        )
+      ) : (
+        <div className="text-muted-foreground/70 text-xs">
           <span>No runs yet</span>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="mt-auto flex items-center justify-between pt-3">
         <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
