@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { GET, PATCH } from "./route";
 
-const authHeaders = {
-  authorization: "Bearer test-secret",
-};
-
 const contactParams = (id: string) => Promise.resolve({ id });
 
 describe("GET /api/mock/crm/contacts/[id]", () => {
   it("returns not found for unknown contacts", async () => {
     const response = await GET(
-      new Request("https://app.example.com/api/mock/crm/contacts/missing", {
-        headers: authHeaders,
-      }),
+      new Request("https://app.example.com/api/mock/crm/contacts/missing"),
       { params: contactParams("missing") },
     );
 
@@ -30,7 +24,6 @@ describe("PATCH /api/mock/crm/contacts/[id]", () => {
       new Request("https://app.example.com/api/mock/crm/contacts/contact_ava_stone", {
         method: "PATCH",
         headers: {
-          ...authHeaders,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -51,9 +44,7 @@ describe("PATCH /api/mock/crm/contacts/[id]", () => {
     });
 
     const getResponse = await GET(
-      new Request("https://app.example.com/api/mock/crm/contacts/contact_ava_stone", {
-        headers: authHeaders,
-      }),
+      new Request("https://app.example.com/api/mock/crm/contacts/contact_ava_stone"),
       { params: contactParams("contact_ava_stone") },
     );
     const getBody = await getResponse.json();
@@ -72,7 +63,6 @@ describe("PATCH /api/mock/crm/contacts/[id]", () => {
       new Request("https://app.example.com/api/mock/crm/contacts/contact_ava_stone", {
         method: "PATCH",
         headers: {
-          ...authHeaders,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({}),

@@ -5,16 +5,10 @@ import {
   createContactInputSchema,
   listContacts,
   readJsonBody,
-  requireMockCrmAuth,
   validationErrorResponse,
 } from "@/lib/mock-openapi/crm";
 
 export async function GET(request: Request) {
-  const unauthorized = requireMockCrmAuth(request);
-  if (unauthorized) {
-    return unauthorized;
-  }
-
   const url = new URL(request.url);
   const parsed = contactsListQuerySchema.safeParse({
     email: url.searchParams.get("email") ?? undefined,
@@ -30,11 +24,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = requireMockCrmAuth(request);
-  if (unauthorized) {
-    return unauthorized;
-  }
-
   const bodyResult = await readJsonBody(request);
   if (!bodyResult.ok) {
     return bodyResult.response;

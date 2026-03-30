@@ -9,11 +9,8 @@ describe("GET /api/mock/crm/openapi.json", () => {
     expect(response.status).toBe(200);
     expect(body.openapi).toBe("3.1.0");
     expect(body.servers).toEqual([{ url: "https://demo.localcan.dev/api/mock/crm" }]);
-    expect(body.components.securitySchemes.bearerAuth).toMatchObject({
-      type: "http",
-      scheme: "bearer",
-    });
-    expect(body.paths["/contacts"].get.security).toEqual([{ bearerAuth: [] }]);
+    expect(body.components.securitySchemes).toBeUndefined();
+    expect(body.paths["/contacts"].get.security).toBeUndefined();
     expect(
       body.paths["/contacts/{id}"].patch.requestBody.content["application/json"].schema,
     ).toEqual({ $ref: "#/components/schemas/UpdateContactInput" });
