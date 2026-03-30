@@ -1,53 +1,14 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { AnimatedTab, AnimatedTabs } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { clientEditionCapabilities } from "@/lib/edition";
 
-const adminTabs = [
-  { key: "settings", label: "Settings", href: "/admin" },
-  { key: "templates", label: "Templates", href: "/admin/templates" },
-  { key: "subscriptions", label: "AI Subscriptions", href: "/admin/subscriptions" },
-  { key: "workspaces", label: "Workspaces", href: "/admin/workspaces" },
-  { key: "credits", label: "Credits", href: "/admin/credits" },
-  { key: "usage", label: "Usage", href: "/admin/usage" },
-  { key: "impersonation", label: "Impersonation", href: "/admin/impersonation" },
-  { key: "whatsapp", label: "WhatsApp", href: "/admin/whatsapp" },
-] as const;
-
-function getActiveKey(pathname: string) {
-  if (pathname.startsWith("/admin/templates")) {
-    return "templates";
-  }
-  if (pathname.startsWith("/admin/subscriptions")) {
-    return "subscriptions";
-  }
-  if (pathname.startsWith("/admin/workspaces")) {
-    return "workspaces";
-  }
-  if (pathname.startsWith("/admin/credits")) {
-    return "credits";
-  }
-  if (pathname.startsWith("/admin/usage")) {
-    return "usage";
-  }
-  if (pathname.startsWith("/admin/impersonation")) {
-    return "impersonation";
-  }
-  if (pathname.startsWith("/admin/whatsapp")) {
-    return "whatsapp";
-  }
-  return "settings";
-}
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
   const router = useRouter();
   const { isAdmin, isLoading } = useIsAdmin();
-  const activeKey = getActiveKey(pathname);
 
   useEffect(() => {
     if (!clientEditionCapabilities.hasSupportAdmin) {
@@ -79,18 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             You do not have access to this section.
           </div>
         ) : (
-          <>
-            <div className="mb-6">
-              <AnimatedTabs activeKey={activeKey}>
-                {adminTabs.map((tab) => (
-                  <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>
-                    {tab.label}
-                  </AnimatedTab>
-                ))}
-              </AnimatedTabs>
-            </div>
-            {children}
-          </>
+          children
         )}
       </main>
     </div>
