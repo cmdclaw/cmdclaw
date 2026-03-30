@@ -83,6 +83,7 @@ describe("conversationRouter.getUsage", () => {
   it("returns stored usage from the conversation row", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
+      type: "chat",
       inputTokens: 11,
       outputTokens: 13,
       totalTokens: 24,
@@ -109,6 +110,7 @@ describe("conversationRouter.getUsage", () => {
   it("returns zero usage when no assistant usage has been stored yet", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",
+      type: "chat",
       usageInputTokens: 0,
       usageOutputTokens: 0,
       usageTotalTokens: 0,
@@ -125,6 +127,29 @@ describe("conversationRouter.getUsage", () => {
       outputTokens: 0,
       totalTokens: 0,
       assistantMessageCount: 0,
+    });
+  });
+
+  it("returns stored usage for coworker conversations used by runs", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-run-1",
+      type: "coworker",
+      usageInputTokens: 17,
+      usageOutputTokens: 5,
+      usageTotalTokens: 22,
+      usageAssistantMessageCount: 1,
+    });
+
+    await expect(
+      conversationRouterAny.getUsage({
+        input: { id: "conv-run-1" },
+        context,
+      }),
+    ).resolves.toEqual({
+      inputTokens: 17,
+      outputTokens: 5,
+      totalTokens: 22,
+      assistantMessageCount: 1,
     });
   });
 });
