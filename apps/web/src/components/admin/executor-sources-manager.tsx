@@ -22,8 +22,12 @@ type ExecutorSourceFormState = {
   endpoint: string;
   specUrl: string;
   transport: string;
+  headersText: string;
+  queryParamsText: string;
+  defaultHeadersText: string;
   authType: "none" | "api_key" | "bearer";
   authHeaderName: string;
+  authQueryParam: string;
   authPrefix: string;
   secret: string;
   displayName: string;
@@ -79,12 +83,331 @@ const DEFAULT_EXECUTOR_SOURCE_FORM: ExecutorSourceFormState = {
   endpoint: "",
   specUrl: "",
   transport: "streamable-http",
+  headersText: "",
+  queryParamsText: "",
+  defaultHeadersText: "",
   authType: "bearer",
   authHeaderName: "Authorization",
+  authQueryParam: "",
   authPrefix: "Bearer ",
   secret: "",
   displayName: "",
 };
+
+function formatStringMap(value: Record<string, string> | null | undefined): string {
+  if (!value || Object.keys(value).length === 0) {
+    return "";
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
+function parseStringMap(value: string, label: string): Record<string, string> | undefined {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return undefined;
+  }
+
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(trimmedValue);
+  } catch {
+    throw new Error(`${label} must be valid JSON.`);
+  }
+
+  if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
+    throw new Error(`${label} must be a JSON object with string values.`);
+  }
+
+  const entries = Object.entries(parsedValue);
+  if (
+    entries.some(([key, entryValue]) => typeof key !== "string" || typeof entryValue !== "string")
+  ) {
+    throw new Error(`${label} must be a JSON object with string values.`);
+  }
+
+  return Object.fromEntries(entries);
+}
+
+function getSourceFormState(source: ExecutorSourceListItem): ExecutorSourceFormState {
+  return {
+    kind: source.kind,
+    name: source.name,
+    namespace: source.namespace,
+    endpoint: source.endpoint,
+    specUrl: source.specUrl ?? "",
+    transport: source.transport ?? "streamable-http",
+    headersText: formatStringMap(source.headers),
+    queryParamsText: formatStringMap(source.queryParams),
+    defaultHeadersText: formatStringMap(source.defaultHeaders),
+    authType: source.authType,
+    authHeaderName: source.authHeaderName ?? "",
+    authQueryParam: source.authQueryParam ?? "",
+    authPrefix: source.authPrefix ?? "",
+    secret: "",
+    displayName: source.credentialDisplayName ?? "",
+  };
+}
+
+function buildMutationInputFromForm(form: ExecutorSourceFormState): ExecutorSourceMutationInput {
+  const authPrefix = form.authPrefix.trim().length > 0 ? form.authPrefix : null;
+
+  return {
+    kind: form.kind,
+    name: form.name.trim(),
+    namespace: form.namespace.trim(),
+    endpoint: form.endpoint.trim(),
+    specUrl: form.kind === "openapi" ? form.specUrl.trim() || null : null,
+    transport: form.kind === "mcp" ? form.transport.trim() || null : null,
+    headers: form.kind === "mcp" ? parseStringMap(form.headersText, "Headers") : undefined,
+    queryParams:
+      form.kind === "mcp" ? parseStringMap(form.queryParamsText, "Query params") : undefined,
+    defaultHeaders:
+      form.kind === "openapi"
+        ? parseStringMap(form.defaultHeadersText, "Default headers")
+        : undefined,
+    authType: form.authType,
+    authHeaderName: form.authType === "none" ? null : form.authHeaderName.trim() || null,
+    authQueryParam:
+      form.kind === "mcp" && form.authType === "api_key"
+        ? form.authQueryParam.trim() || null
+        : null,
+    authPrefix: form.authType === "bearer" ? authPrefix : null,
+  };
+}
+
+function JsonMapField({
+  id,
+  label,
+  placeholder,
+  value,
+  onChange,
+  className,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        spellCheck={false}
+        className="border-input bg-background mt-2 min-h-28 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none"
+      />
+    </div>
+  );
+}
+
+function ExecutorSourceFields({
+  form,
+  formIdPrefix,
+  onFieldChange,
+}: {
+  form: ExecutorSourceFormState;
+  formIdPrefix: string;
+  onFieldChange: (field: keyof ExecutorSourceFormState, value: string) => void;
+}) {
+  const handleFieldInputChange = useCallback(
+    (field: keyof ExecutorSourceFormState) =>
+      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        onFieldChange(field, event.target.value);
+      },
+    [onFieldChange],
+  );
+
+  const handleKindChange = useCallback(
+    (value: string) => {
+      onFieldChange("kind", value);
+    },
+    [onFieldChange],
+  );
+
+  const handleAuthTypeChange = useCallback(
+    (value: string) => {
+      onFieldChange("authType", value);
+    },
+    [onFieldChange],
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-kind`} className="text-sm font-medium">
+          Kind
+        </label>
+        <Select value={form.kind} onValueChange={handleKindChange}>
+          <SelectTrigger id={`${formIdPrefix}-kind`}>
+            <SelectValue placeholder="Select source type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="openapi">OpenAPI</SelectItem>
+            <SelectItem value="mcp">Remote MCP</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-auth-type`} className="text-sm font-medium">
+          Auth
+        </label>
+        <Select value={form.authType} onValueChange={handleAuthTypeChange}>
+          <SelectTrigger id={`${formIdPrefix}-auth-type`}>
+            <SelectValue placeholder="Select auth" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bearer">Bearer token</SelectItem>
+            <SelectItem value="api_key">API key</SelectItem>
+            <SelectItem value="none">No auth</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-name`} className="text-sm font-medium">
+          Name
+        </label>
+        <Input
+          id={`${formIdPrefix}-name`}
+          value={form.name}
+          onChange={handleFieldInputChange("name")}
+          placeholder="Display name"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${formIdPrefix}-namespace`} className="text-sm font-medium">
+          Namespace
+        </label>
+        <Input
+          id={`${formIdPrefix}-namespace`}
+          value={form.namespace}
+          onChange={handleFieldInputChange("namespace")}
+          placeholder="Namespace (for example salesforce-prod)"
+        />
+      </div>
+
+      <div className="space-y-2 md:col-span-2">
+        <label htmlFor={`${formIdPrefix}-endpoint`} className="text-sm font-medium">
+          Endpoint
+        </label>
+        <Input
+          id={`${formIdPrefix}-endpoint`}
+          value={form.endpoint}
+          onChange={handleFieldInputChange("endpoint")}
+          placeholder="Endpoint URL"
+        />
+      </div>
+
+      {form.kind === "openapi" ? (
+        <>
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor={`${formIdPrefix}-spec-url`} className="text-sm font-medium">
+              OpenAPI spec URL
+            </label>
+            <Input
+              id={`${formIdPrefix}-spec-url`}
+              value={form.specUrl}
+              onChange={handleFieldInputChange("specUrl")}
+              placeholder="OpenAPI spec URL"
+            />
+          </div>
+          <JsonMapField
+            id={`${formIdPrefix}-default-headers`}
+            label="Default headers"
+            value={form.defaultHeadersText}
+            onChange={handleFieldInputChange("defaultHeadersText")}
+            placeholder={`{\n  "X-Region": "eu-west-1"\n}`}
+            className="md:col-span-2"
+          />
+        </>
+      ) : (
+        <>
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor={`${formIdPrefix}-transport`} className="text-sm font-medium">
+              Transport
+            </label>
+            <Input
+              id={`${formIdPrefix}-transport`}
+              value={form.transport}
+              onChange={handleFieldInputChange("transport")}
+              placeholder="Transport (for example streamable-http)"
+            />
+          </div>
+          <JsonMapField
+            id={`${formIdPrefix}-headers`}
+            label="Headers"
+            value={form.headersText}
+            onChange={handleFieldInputChange("headersText")}
+            placeholder={`{\n  "X-Team": "sales"\n}`}
+          />
+          <JsonMapField
+            id={`${formIdPrefix}-query-params`}
+            label="Query params"
+            value={form.queryParamsText}
+            onChange={handleFieldInputChange("queryParamsText")}
+            placeholder={`{\n  "region": "eu"\n}`}
+          />
+        </>
+      )}
+
+      {form.authType !== "none" ? (
+        <>
+          <div className="space-y-2">
+            <label htmlFor={`${formIdPrefix}-auth-header-name`} className="text-sm font-medium">
+              Auth header name
+            </label>
+            <Input
+              id={`${formIdPrefix}-auth-header-name`}
+              value={form.authHeaderName}
+              onChange={handleFieldInputChange("authHeaderName")}
+              placeholder="Auth header name"
+            />
+          </div>
+
+          {form.kind === "mcp" && form.authType === "api_key" ? (
+            <div className="space-y-2">
+              <label htmlFor={`${formIdPrefix}-auth-query-param`} className="text-sm font-medium">
+                Auth query param
+              </label>
+              <Input
+                id={`${formIdPrefix}-auth-query-param`}
+                value={form.authQueryParam}
+                onChange={handleFieldInputChange("authQueryParam")}
+                placeholder="Optional query param name"
+              />
+            </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor={`${formIdPrefix}-auth-prefix`} className="text-sm font-medium">
+              Auth prefix
+            </label>
+            <Input
+              id={`${formIdPrefix}-auth-prefix`}
+              value={form.authType === "bearer" ? form.authPrefix : ""}
+              onChange={handleFieldInputChange("authPrefix")}
+              placeholder="Auth prefix"
+              disabled={form.authType !== "bearer"}
+            />
+          </div>
+        </>
+      ) : null}
+    </>
+  );
+}
 
 function ExecutorSourceCard({
   source,
@@ -94,6 +417,7 @@ function ExecutorSourceCard({
   isSavingCredential,
   isDisconnectingCredential,
   isTogglingCredential,
+  onUpdateSource,
   onToggleSource,
   onDeleteSource,
   onSaveCredential,
@@ -107,18 +431,34 @@ function ExecutorSourceCard({
   isSavingCredential: boolean;
   isDisconnectingCredential: boolean;
   isTogglingCredential: boolean;
+  onUpdateSource: (input: ExecutorSourceMutationInput & { id: string }) => Promise<void>;
   onToggleSource: (sourceId: string, enabled: boolean) => void | Promise<void>;
   onDeleteSource: (sourceId: string) => void | Promise<void>;
   onSaveCredential: (sourceId: string, secret: string, displayName: string) => void | Promise<void>;
   onDisconnectCredential: (sourceId: string) => void | Promise<void>;
   onToggleCredential: (sourceId: string, enabled: boolean) => void | Promise<void>;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<ExecutorSourceFormState>(() =>
+    getSourceFormState(source),
+  );
   const [secret, setSecret] = useState("");
   const [displayName, setDisplayName] = useState(source.credentialDisplayName ?? "");
 
   useEffect(() => {
+    setEditForm(getSourceFormState(source));
     setDisplayName(source.credentialDisplayName ?? "");
-  }, [source.credentialDisplayName]);
+  }, [source]);
+
+  const handleEditFieldChange = useCallback(
+    (field: keyof ExecutorSourceFormState, value: string) => {
+      setEditForm((current) => ({
+        ...current,
+        [field]: value,
+      }));
+    },
+    [],
+  );
 
   const handleSourceEnabledChange = useCallback(
     (value: boolean) => {
@@ -130,6 +470,35 @@ function ExecutorSourceCard({
   const handleDeleteClick = useCallback(() => {
     void onDeleteSource(source.id);
   }, [onDeleteSource, source.id]);
+
+  const handleEditClick = useCallback(() => {
+    setEditForm(getSourceFormState(source));
+    setIsEditing(true);
+  }, [source]);
+
+  const handleCancelEditClick = useCallback(() => {
+    setEditForm(getSourceFormState(source));
+    setIsEditing(false);
+  }, [source]);
+
+  const handleSaveEdit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      try {
+        await onUpdateSource({
+          id: source.id,
+          ...buildMutationInputFromForm(editForm),
+          enabled: source.enabled,
+        });
+        setIsEditing(false);
+        toast.success("Executor source updated.");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to update executor source.");
+      }
+    },
+    [editForm, onUpdateSource, source.enabled, source.id],
+  );
 
   const handleSecretChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSecret(event.target.value);
@@ -182,17 +551,50 @@ function ExecutorSourceCard({
             />
           </div>
           {canManageExecutorSources ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDeleteClick}
-              disabled={isDeletingSource}
-            >
-              Delete
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEditClick}
+                disabled={isUpdatingSource}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteClick}
+                disabled={isDeletingSource}
+              >
+                Delete
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
+
+      {isEditing ? (
+        <form
+          aria-label={`Edit ${source.name} executor source`}
+          onSubmit={handleSaveEdit}
+          className="grid gap-3 rounded-lg border border-dashed p-4 md:grid-cols-2"
+        >
+          <ExecutorSourceFields
+            form={editForm}
+            formIdPrefix={`executor-source-${source.id}`}
+            onFieldChange={handleEditFieldChange}
+          />
+
+          <div className="flex justify-end gap-2 md:col-span-2">
+            <Button type="button" variant="ghost" onClick={handleCancelEditClick}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isUpdatingSource}>
+              {isUpdatingSource ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
+            </Button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-[1fr_220px_auto_auto]">
         <Input
@@ -282,69 +684,6 @@ export function ExecutorSourcesManager({
     [],
   );
 
-  const handleExecutorKindChange = useCallback(
-    (value: string) => {
-      handleExecutorFieldChange("kind", value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorAuthTypeChange = useCallback(
-    (value: string) => {
-      handleExecutorFieldChange("authType", value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorNameChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("name", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorNamespaceChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("namespace", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorEndpointChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("endpoint", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorSpecUrlChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("specUrl", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorTransportChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("transport", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorAuthHeaderNameChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("authHeaderName", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
-  const handleExecutorAuthPrefixChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      handleExecutorFieldChange("authPrefix", event.target.value);
-    },
-    [handleExecutorFieldChange],
-  );
-
   const handleExecutorSecretChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       handleExecutorFieldChange("secret", event.target.value);
@@ -364,17 +703,7 @@ export function ExecutorSourcesManager({
       event.preventDefault();
 
       try {
-        const result = await onCreateSource({
-          kind: executorForm.kind,
-          name: executorForm.name,
-          namespace: executorForm.namespace,
-          endpoint: executorForm.endpoint,
-          specUrl: executorForm.kind === "openapi" ? executorForm.specUrl : null,
-          transport: executorForm.kind === "mcp" ? executorForm.transport : null,
-          authType: executorForm.authType,
-          authHeaderName: executorForm.authHeaderName || null,
-          authPrefix: executorForm.authType === "bearer" ? executorForm.authPrefix || null : null,
-        });
+        const result = await onCreateSource(buildMutationInputFromForm(executorForm));
 
         if (executorForm.secret.trim() && result?.id) {
           await onSaveCredential(result.id, executorForm.secret, executorForm.displayName);
@@ -470,92 +799,44 @@ export function ExecutorSourcesManager({
       ) : null}
 
       {canManageExecutorSources ? (
-        <form onSubmit={handleCreateExecutorSource} className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Kind</label>
-            <Select value={executorForm.kind} onValueChange={handleExecutorKindChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select source type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="openapi">OpenAPI</SelectItem>
-                <SelectItem value="mcp">Remote MCP</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Auth</label>
-            <Select value={executorForm.authType} onValueChange={handleExecutorAuthTypeChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select auth" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bearer">Bearer token</SelectItem>
-                <SelectItem value="api_key">API key</SelectItem>
-                <SelectItem value="none">No auth</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Input
-            value={executorForm.name}
-            onChange={handleExecutorNameChange}
-            placeholder="Display name"
+        <form
+          aria-label="Create executor source"
+          onSubmit={handleCreateExecutorSource}
+          className="mt-4 grid gap-3 md:grid-cols-2"
+        >
+          <ExecutorSourceFields
+            form={executorForm}
+            formIdPrefix="executor-source-create"
+            onFieldChange={handleExecutorFieldChange}
           />
-          <Input
-            value={executorForm.namespace}
-            onChange={handleExecutorNamespaceChange}
-            placeholder="Namespace (for example salesforce-prod)"
-          />
-          <Input
-            value={executorForm.endpoint}
-            onChange={handleExecutorEndpointChange}
-            placeholder="Endpoint URL"
-            className="md:col-span-2"
-          />
-
-          {executorForm.kind === "openapi" ? (
-            <Input
-              value={executorForm.specUrl}
-              onChange={handleExecutorSpecUrlChange}
-              placeholder="OpenAPI spec URL"
-              className="md:col-span-2"
-            />
-          ) : (
-            <Input
-              value={executorForm.transport}
-              onChange={handleExecutorTransportChange}
-              placeholder="Transport (for example streamable-http)"
-              className="md:col-span-2"
-            />
-          )}
 
           {executorForm.authType !== "none" ? (
             <>
-              <Input
-                value={executorForm.authHeaderName}
-                onChange={handleExecutorAuthHeaderNameChange}
-                placeholder="Auth header name"
-              />
-              <Input
-                value={executorForm.authType === "bearer" ? executorForm.authPrefix : ""}
-                onChange={handleExecutorAuthPrefixChange}
-                placeholder="Auth prefix"
-                disabled={executorForm.authType !== "bearer"}
-              />
-              <Input
-                value={executorForm.secret}
-                onChange={handleExecutorSecretChange}
-                placeholder="Your credential secret (optional at create time)"
-                className="md:col-span-2"
-              />
-              <Input
-                value={executorForm.displayName}
-                onChange={handleExecutorDisplayNameChange}
-                placeholder="Credential label (optional)"
-                className="md:col-span-2"
-              />
+              <div className="space-y-2 md:col-span-2">
+                <label htmlFor="executor-source-create-secret" className="text-sm font-medium">
+                  Credential secret
+                </label>
+                <Input
+                  id="executor-source-create-secret"
+                  value={executorForm.secret}
+                  onChange={handleExecutorSecretChange}
+                  placeholder="Your credential secret (optional at create time)"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label
+                  htmlFor="executor-source-create-display-name"
+                  className="text-sm font-medium"
+                >
+                  Credential label
+                </label>
+                <Input
+                  id="executor-source-create-display-name"
+                  value={executorForm.displayName}
+                  onChange={handleExecutorDisplayNameChange}
+                  placeholder="Credential label (optional)"
+                />
+              </div>
             </>
           ) : null}
 
@@ -591,6 +872,7 @@ export function ExecutorSourcesManager({
               isSavingCredential={saveCredentialPending}
               isDisconnectingCredential={disconnectCredentialPending}
               isTogglingCredential={toggleCredentialPending}
+              onUpdateSource={onUpdateSource}
               onToggleSource={handleToggleExecutorSource}
               onDeleteSource={onDeleteSource}
               onSaveCredential={handleSaveExecutorCredential}
