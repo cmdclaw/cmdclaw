@@ -64,6 +64,65 @@ export function useConversationList(options?: { limit?: number }) {
   });
 }
 
+export function useInboxItems(input?: {
+  limit?: number;
+  type?: "all" | "coworkers" | "chats";
+  statuses?: Array<"awaiting_approval" | "awaiting_auth" | "error">;
+  sourceCoworkerId?: string;
+  query?: string;
+}) {
+  return useQuery({
+    queryKey: [
+      "inbox",
+      "list",
+      input?.limit ?? 20,
+      input?.type ?? "all",
+      input?.statuses ?? [],
+      input?.sourceCoworkerId ?? null,
+      input?.query ?? "",
+    ],
+    queryFn: () =>
+      client.inbox.list({
+        limit: input?.limit ?? 20,
+        type: input?.type ?? "all",
+        statuses: input?.statuses ?? [],
+        sourceCoworkerId: input?.sourceCoworkerId,
+        query: input?.query ?? "",
+      }),
+    refetchInterval: 2000,
+  });
+}
+
+export function useInboxEditApprovalAndResend() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input:
+        | {
+            kind: "chat";
+            generationId: string;
+            toolUseId: string;
+            updatedToolInput: unknown;
+            conversationId: string;
+          }
+        | {
+            kind: "coworker";
+            generationId: string;
+            toolUseId: string;
+            updatedToolInput: unknown;
+            conversationId: string;
+            runId: string;
+          },
+    ) => client.inbox.editApprovalAndResend(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["generation"] });
+    },
+  });
+}
+
 // Hook for getting a single conversation
 export function useConversation(id: string | undefined) {
   return useQuery({
@@ -1171,6 +1230,7 @@ export function useTriggerCoworker() {
     mutationFn: (input: {
       id: string;
       payload?: unknown;
+      fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
       remoteIntegrationSource?: {
         targetEnv: "staging" | "prod";
         remoteUserId: string;
@@ -1178,6 +1238,7 @@ export function useTriggerCoworker() {
     }) => client.coworker.trigger(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
 }
@@ -2147,13 +2208,21 @@ export function useRemoveConversationQueuedMessage() {
 
 // Hook for canceling a generation
 export function useCancelGeneration() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (generationId: string) => client.generation.cancelGeneration({ generationId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["generation"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
   });
 }
 
 // Hook for submitting tool approval (new generation system)
 export function useSubmitApproval() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       generationId,
@@ -2172,11 +2241,18 @@ export function useSubmitApproval() {
         decision,
         questionAnswers,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["generation"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
   });
 }
 
 // Hook for submitting auth result (after OAuth completes)
 export function useSubmitAuthResult() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       generationId,
@@ -2192,6 +2268,12 @@ export function useSubmitAuthResult() {
         integration,
         success,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["generation"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
   });
 }
 

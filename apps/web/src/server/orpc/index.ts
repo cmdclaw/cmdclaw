@@ -5,6 +5,7 @@ import { conversationRouter } from "./routers/conversation";
 import { coworkerRouter } from "./routers/coworker";
 import { executorSourceRouter } from "./routers/executor-source";
 import { generationRouter } from "./routers/generation";
+import { inboxRouter } from "./routers/inbox";
 import { integrationRouter } from "./routers/integration";
 import { integrationSkillRouter } from "./routers/integration-skill";
 import { notificationRouter } from "./routers/notification";
@@ -24,6 +25,7 @@ export const appRouter = {
   billing: billingRouter,
   conversation: conversationRouter,
   generation: generationRouter,
+  inbox: inboxRouter,
   integration: integrationRouter,
   integrationSkill: integrationSkillRouter,
   notification: notificationRouter,
