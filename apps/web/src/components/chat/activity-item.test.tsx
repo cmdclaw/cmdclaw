@@ -38,6 +38,34 @@ const coworkerToolCallFixture: ActivityItemData = {
   },
 };
 
+const agentBrowserToolCallFixture: ActivityItemData = {
+  id: "tool-3",
+  timestamp: 3,
+  type: "tool_call",
+  content: "Bash",
+  toolName: "Bash",
+  status: "complete",
+  input: {
+    command: "agent-browser screenshot --full /tmp/example.png",
+  },
+};
+
+const ansiResultToolCallFixture: ActivityItemData = {
+  id: "tool-4",
+  timestamp: 4,
+  type: "tool_call",
+  content: "Bash",
+  toolName: "Bash",
+  status: "complete",
+  input: {
+    command:
+      "agent-browser open https://example.com && agent-browser screenshot /app/example-com.png",
+    description: "Opens example.com and captures screenshot",
+  },
+  result:
+    "\u001b[32m✓\u001b[0m \u001b[1mExample Domain\u001b[0m\n  \u001b[2mhttps://example.com/\u001b[0m\n\u001b[32m✓\u001b[0m Done\n\u001b[32m✓\u001b[0m Screenshot saved to \u001b[32m/app/example-com.png\u001b[0m",
+};
+
 describe("ActivityItem", () => {
   it("renders GFM table content for text activity items", () => {
     render(<ActivityItem item={textTableFixture} />);
@@ -74,5 +102,28 @@ describe("ActivityItem", () => {
     expect(screen.getByText("Invoking coworker")).toBeInTheDocument();
     expect(screen.queryByText("Running command")).not.toBeInTheDocument();
     expect(screen.getByAltText("Coworker")).toBeInTheDocument();
+  });
+
+  it("uses agent-browser command metadata for bash activity labels", () => {
+    render(<ActivityItem item={agentBrowserToolCallFixture} />);
+
+    expect(screen.getByText("Taking screenshot")).toBeInTheDocument();
+    expect(screen.queryByText("Running command")).not.toBeInTheDocument();
+    expect(screen.getByAltText("Browser")).toBeInTheDocument();
+  });
+
+  it("strips ANSI escape codes from bash results before rendering", () => {
+    const { container } = render(<ActivityItem item={ansiResultToolCallFixture} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show tool details" }));
+
+    expect(screen.getByText("Response")).toBeInTheDocument();
+    expect(container).toHaveTextContent("✓ Example Domain");
+    expect(container).toHaveTextContent("https://example.com/");
+    expect(container).toHaveTextContent("✓ Done");
+    expect(container).toHaveTextContent("✓ Screenshot saved to /app/example-com.png");
+    expect(container.textContent).not.toContain("\u001b");
+    expect(container.textContent).not.toContain("[32m");
+    expect(container.textContent).not.toContain("[0m");
   });
 });
