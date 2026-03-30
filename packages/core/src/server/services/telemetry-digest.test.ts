@@ -37,6 +37,16 @@ function mockCountSelect(value: number) {
   return { where, innerJoin, from };
 }
 
+function mockPreviewSelect(rows: Array<{ id: string; email: string; name: string }>) {
+  const limit = vi.fn().mockResolvedValue(rows);
+  const orderBy = vi.fn(() => ({ limit }));
+  const where = vi.fn(() => ({ orderBy }));
+  const innerJoin = vi.fn(() => ({ where }));
+  const from = vi.fn(() => ({ where, innerJoin }));
+  dbMock.select.mockReturnValueOnce({ from });
+  return { from, innerJoin, where, orderBy, limit };
+}
+
 describe("telemetry digest", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,6 +63,14 @@ describe("telemetry digest", () => {
       { id: "user-1", email: "alice@example.com", name: "Alice" },
       { id: "user-2", email: "bob@example.com", name: "Bob" },
     ]);
+    mockPreviewSelect([
+      { id: "user-3", email: "carol@example.com", name: "Carol" },
+      { id: "user-4", email: "dan@example.com", name: "Dan" },
+    ]);
+    mockPreviewSelect([
+      { id: "user-3", email: "carol@example.com", name: "Carol" },
+      { id: "user-5", email: "eve@example.com", name: "Eve" },
+    ]);
 
     const summary = await getDailyTelemetryDigestSummary(new Date(2026, 2, 13, 9, 0, 0));
 
@@ -64,6 +82,14 @@ describe("telemetry digest", () => {
       signupsPreview: [
         { id: "user-1", email: "alice@example.com", name: "Alice" },
         { id: "user-2", email: "bob@example.com", name: "Bob" },
+      ],
+      activeUsersPreview: [
+        { id: "user-3", email: "carol@example.com", name: "Carol" },
+        { id: "user-4", email: "dan@example.com", name: "Dan" },
+      ],
+      returningActiveUsersPreview: [
+        { id: "user-3", email: "carol@example.com", name: "Carol" },
+        { id: "user-5", email: "eve@example.com", name: "Eve" },
       ],
       appUrl: "https://app.cmdclaw.ai",
       appUrlDomain: "app.cmdclaw.ai",
@@ -81,6 +107,13 @@ describe("telemetry digest", () => {
         { id: "user-1", email: "alice@example.com", name: "Alice" },
         { id: "user-2", email: "bob@example.com", name: "" },
       ],
+      activeUsersPreview: [
+        { id: "user-3", email: "carol@example.com", name: "Carol" },
+        { id: "user-4", email: "dan@example.com", name: "" },
+      ],
+      returningActiveUsersPreview: [
+        { id: "user-3", email: "carol@example.com", name: "Carol" },
+      ],
       appUrl: "https://app.cmdclaw.ai",
       appUrlDomain: "app.cmdclaw.ai",
       appUrlSource: "APP_URL",
@@ -93,5 +126,9 @@ describe("telemetry digest", () => {
     expect(message).toContain("Returning active users: 6");
     expect(message).toContain("- Alice <alice@example.com>");
     expect(message).toContain("- bob@example.com");
+    expect(message).toContain("Active user preview:");
+    expect(message).toContain("- Carol <carol@example.com>");
+    expect(message).toContain("- dan@example.com");
+    expect(message).toContain("Returning active user preview:");
   });
 });
