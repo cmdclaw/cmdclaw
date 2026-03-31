@@ -78,12 +78,6 @@ export function AppShellRouteWrapper({ children, initialHasSession }: AppShellRo
     return children;
   }
 
-  // For "authenticated" routes (landing, templates): skip AppShell entirely
-  // when the user has no session so the page scrolls naturally.
-  if (sidebarVisibility === "authenticated" && !initialHasSession) {
-    return children;
-  }
-
   // "always" visibility means the user is on an authenticated route —
   // enforce onboarding completion before rendering
   if (sidebarVisibility === "always") {

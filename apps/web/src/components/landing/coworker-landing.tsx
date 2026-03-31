@@ -3,7 +3,17 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import { ArrowUp, MessageSquareText, Zap, ShieldCheck, Clock, Workflow, Code2, Users, Lock, GitBranch, Building2 } from "lucide-react";
+import {
+  ArrowUp,
+  MessageSquareText,
+  ShieldCheck,
+  Clock,
+  Workflow,
+  Users,
+  Lock,
+  GitBranch,
+  Building2,
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,12 +32,15 @@ import {
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { normalizeGenerationError } from "@/lib/generation-errors";
-import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import {
+  INTEGRATION_LOGOS,
+  INTEGRATION_DISPLAY_NAMES,
+  COWORKER_AVAILABLE_INTEGRATION_TYPES,
+} from "@/lib/integration-icons";
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { client } from "@/orpc/client";
 import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
@@ -684,16 +697,16 @@ export function CoworkerLanding({
           {/* ── Problem ── */}
           <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
             <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
                 The problem
               </p>
               <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
                 AI agents work for you. But not for your team.
               </h2>
               <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-                You can build an agent with Claude or GPT in minutes. But when you need it to
-                run securely, connect to your company&apos;s tools, and work for your whole
-                team — you&apos;re on your own.
+                You can build an agent with Claude or GPT in minutes. But when you need it to run
+                securely, connect to your company&apos;s tools, and work for your whole team —
+                you&apos;re on your own.
               </p>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 {[
@@ -730,15 +743,15 @@ export function CoworkerLanding({
           {/* ── Solution ── */}
           <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
             <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
                 The platform
               </p>
               <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
                 Build, secure, and deploy AI agents for your company
               </h2>
               <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-                CmdClaw is the open infrastructure to go from &quot;it works on my
-                laptop&quot; to &quot;the whole team runs it in production.&quot;
+                CmdClaw is the open infrastructure to go from &quot;it works on my laptop&quot; to
+                &quot;the whole team runs it in production.&quot;
               </p>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {[
@@ -786,7 +799,9 @@ export function CoworkerLanding({
                     <div className="bg-brand/10 text-brand mb-4 flex size-10 items-center justify-center rounded-lg">
                       <feature.icon className="size-5" />
                     </div>
-                    <h3 className="text-foreground mb-1.5 text-sm font-semibold">{feature.title}</h3>
+                    <h3 className="text-foreground mb-1.5 text-sm font-semibold">
+                      {feature.title}
+                    </h3>
                     <p className="text-muted-foreground text-sm leading-relaxed">
                       {feature.description}
                     </p>
@@ -799,7 +814,7 @@ export function CoworkerLanding({
           {/* ── How it works ── */}
           <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
             <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
                 How it works
               </p>
               <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
@@ -849,7 +864,7 @@ export function CoworkerLanding({
           {/* ── Integrations ── */}
           <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
             <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
                 Integrations
               </p>
               <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
@@ -906,8 +921,7 @@ export function CoworkerLanding({
                 Stop building agents you can&apos;t deploy
               </h2>
               <p className="mb-8 text-base text-slate-400">
-                Start free. Build your first AI coworker in minutes.
-                Deploy it to your team today.
+                Start free. Build your first AI coworker in minutes. Deploy it to your team today.
               </p>
               <div className="flex items-center justify-center">
                 <Button size="lg" asChild className="bg-white text-slate-950 hover:bg-slate-100">
