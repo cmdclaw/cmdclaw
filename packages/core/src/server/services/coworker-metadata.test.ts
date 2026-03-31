@@ -5,13 +5,17 @@ const { generateContentMock, getGenerativeModelMock } = vi.hoisted(() => ({
   getGenerativeModelMock: vi.fn(),
 }));
 
-vi.mock("@google/generative-ai", () => ({
-  GoogleGenerativeAI: function MockGoogleGenerativeAI() {
-    return {
-      getGenerativeModel: getGenerativeModelMock,
-    };
-  },
-}));
+vi.mock("@google/generative-ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@google/generative-ai")>();
+  return {
+    ...actual,
+    GoogleGenerativeAI: function MockGoogleGenerativeAI() {
+      return {
+        getGenerativeModel: getGenerativeModelMock,
+      };
+    },
+  };
+});
 
 vi.mock("../../env", () => ({
   env: {
@@ -56,7 +60,7 @@ describe("coworker-metadata", () => {
           JSON.stringify({
             name: "Sales Follow Up",
             description: "Follows up with leads after calls.",
-            username: "sales-follow-up",
+            username: "sam-the-sales-closer",
           }),
       },
     });
@@ -93,7 +97,7 @@ describe("coworker-metadata", () => {
     expect(result).toEqual({
       name: "Sales Follow Up",
       description: "Follows up with leads after calls.",
-      username: "sales-follow-up-cwabcd12",
+      username: "sam-the-sales-closer-cwabcd12",
     });
   });
 

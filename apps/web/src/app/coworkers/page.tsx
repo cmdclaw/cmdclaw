@@ -28,6 +28,7 @@ import type { IntegrationType } from "@/lib/integration-icons";
 import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/app/coworkers/layout";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { CoworkerAvatar } from "@/components/coworker-avatar";
 // Commented out — prompt bar removed from coworkers page
 // import { VoiceIndicator } from "@/components/chat/voice-indicator";
 // import { PromptBar } from "@/components/prompt-bar";
@@ -369,15 +370,18 @@ function CoworkerCard({
       className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group flex h-full min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="space-y-1">
-          <p className="text-sm leading-tight font-medium">
-            {getCoworkerDisplayName(coworker.name)}
-          </p>
-          {coworker.username ? (
-            <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
-              @{coworker.username}
+        <div className="flex items-start gap-3">
+          <CoworkerAvatar username={coworker.username} size={36} className="rounded-full" />
+          <div className="space-y-1">
+            <p className="text-sm leading-tight font-medium">
+              {getCoworkerDisplayName(coworker.name)}
             </p>
-          ) : null}
+            {coworker.username ? (
+              <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
+                @{coworker.username}
+              </p>
+            ) : null}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <DropdownMenu>
@@ -607,11 +611,16 @@ function SharedCoworkerCard({
 
   return (
     <div className="border-border bg-card flex h-full min-h-[160px] flex-col gap-3 rounded-xl border p-5">
-      <div className="space-y-1">
-        <p className="text-sm leading-tight font-medium">{getCoworkerDisplayName(coworker.name)}</p>
-        <p className="text-muted-foreground text-xs">
-          Shared by {coworker.owner.name?.trim() || coworker.owner.email || "A teammate"}
-        </p>
+      <div className="flex items-start gap-3">
+        <CoworkerAvatar username={coworker.name} size={36} className="rounded-full" />
+        <div className="space-y-1">
+          <p className="text-sm leading-tight font-medium">
+            {getCoworkerDisplayName(coworker.name)}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            Shared by {coworker.owner.name?.trim() || coworker.owner.email || "A teammate"}
+          </p>
+        </div>
       </div>
       {coworker.description ? (
         <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
