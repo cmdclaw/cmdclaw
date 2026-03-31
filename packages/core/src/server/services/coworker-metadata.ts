@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { and, eq, ne } from "drizzle-orm";
 import { coworker } from "@cmdclaw/db/schema";
 import { env } from "../../env";
@@ -111,12 +111,6 @@ export function normalizeCoworkerUsername(value: string): string {
     .slice(0, COWORKER_USERNAME_MAX_LENGTH);
 }
 
-function stripMarkdownCodeFence(value: string): string {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match?.[1]?.trim() ?? trimmed;
-}
-
 async function findCoworkerByUsername(params: {
   database: DatabaseLike;
   username: string;
@@ -183,16 +177,38 @@ async function generateCoworkerMetadataWithGemini(params: {
     }
 
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash-lite",
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            name: {
+              type: SchemaType.STRING,
+              description: "3-7 words, concise, no quotes.",
+              nullable: true,
+            },
+            description: {
+              type: SchemaType.STRING,
+              description: `One sentence, max ${COWORKER_DESCRIPTION_MAX_LENGTH} chars.`,
+              nullable: true,
+            },
+            username: {
+              type: SchemaType.STRING,
+              description:
+                'A personified handle — pick a first name and describe the role/specialty, e.g. "sam-from-hr", "lucie-the-linkedin-geek", "max-the-data-cruncher". Lowercase, letters/numbers/hyphens only, no leading @.',
+              nullable: true,
+            },
+          },
+        },
+      },
+    });
 
     const prompt = [
       "Generate missing metadata for a coworker.",
-      "Return ONLY valid JSON with keys name, description, username.",
       "Use null for any field you cannot infer.",
-      "Constraints:",
-      '- "name": 3-7 words, concise, no quotes.',
-      `- "description": one sentence, max ${COWORKER_DESCRIPTION_MAX_LENGTH} chars.`,
-      '- "username": lowercase slug, letters/numbers/hyphens only, no leading @.',
+      "IMPORTANT: The username MUST be a personified handle with a human first name followed by the role or specialty. Examples: sam-from-hr, lucie-the-linkedin-geek, max-the-data-cruncher, emma-the-sales-whisperer. NEVER use a generic slug like friendly-greeter or sales-follow-up.",
       "",
       `Missing fields: ${params.missingFields.join(", ")}`,
       "",
@@ -238,7 +254,7 @@ async function generateCoworkerMetadataWithGemini(params: {
       return null;
     }
 
-    const parsed = JSON.parse(stripMarkdownCodeFence(text)) as Partial<GeneratedCoworkerMetadata>;
+    const parsed = JSON.parse(text) as Partial<GeneratedCoworkerMetadata>;
     return {
       name: normalizeCoworkerName(parsed.name ?? null),
       description: normalizeCoworkerDescription(parsed.description ?? null),
