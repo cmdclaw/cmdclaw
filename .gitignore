@@ -20,3 +20,4 @@ node_modules
 .linear.toml
 
 .next*
+.gstack/
