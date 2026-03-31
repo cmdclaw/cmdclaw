@@ -20,6 +20,7 @@ type Props = {
   onReply: (item: InboxItemType, message: string) => void;
   onOpenTarget: (item: InboxItemType) => void;
   onOpenBuilder: (item: InboxCoworkerItem) => void;
+  onMarkAsRead: (item: InboxItemType) => void;
 };
 
 export function InboxList({
@@ -38,6 +39,7 @@ export function InboxList({
   onReply,
   onOpenTarget,
   onOpenBuilder,
+  onMarkAsRead,
 }: Props) {
   if (items.length === 0) {
     return (
@@ -72,6 +74,7 @@ export function InboxList({
           onReply={onReply}
           onOpenTarget={onOpenTarget}
           onOpenBuilder={onOpenBuilder}
+          onMarkAsRead={onMarkAsRead}
         />
       ))}
     </div>
@@ -94,6 +97,7 @@ function InboxListRow({
   onReply,
   onOpenTarget,
   onOpenBuilder,
+  onMarkAsRead,
 }: {
   item: InboxItemType;
   isExpanded: boolean;
@@ -110,6 +114,7 @@ function InboxListRow({
   onReply: (item: InboxItemType, message: string) => void;
   onOpenTarget: (item: InboxItemType) => void;
   onOpenBuilder: (item: InboxCoworkerItem) => void;
+  onMarkAsRead: (item: InboxItemType) => void;
 }) {
   const handleToggle = useCallback(() => {
     onToggleExpanded(item.id);
@@ -159,6 +164,9 @@ function InboxListRow({
     }
     onOpenBuilder(item);
   }, [item, onOpenBuilder]);
+  const handleMarkAsRead = useCallback(() => {
+    onMarkAsRead(item);
+  }, [item, onMarkAsRead]);
 
   return (
     <InboxItem
@@ -177,6 +185,7 @@ function InboxListRow({
       onReply={handleReply}
       onOpenTarget={handleOpenTarget}
       onOpenBuilder={item.kind === "coworker" ? handleOpenBuilder : undefined}
+      onMarkAsRead={handleMarkAsRead}
     />
   );
 }
