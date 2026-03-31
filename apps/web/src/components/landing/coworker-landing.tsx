@@ -3,7 +3,7 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, MessageSquareText, Zap, ShieldCheck, Clock, Workflow, Code2, Users, Lock, GitBranch, Building2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,11 +22,12 @@ import {
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { normalizeGenerationError } from "@/lib/generation-errors";
-import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
+import { INTEGRATION_LOGOS, INTEGRATION_DISPLAY_NAMES, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { client } from "@/orpc/client";
 import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
@@ -647,7 +648,7 @@ export function CoworkerLanding({
           </section>
 
           {/* ── Templates ── */}
-          <section className="mt-6 md:mt-8 lg:mt-10">
+          <section className="mt-6 pb-10 md:mt-8 md:pb-16 lg:mt-10">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-white">Templates</h2>
@@ -676,6 +677,266 @@ export function CoworkerLanding({
           />
         ) : null}
       </div>
+
+      {/* ── Landing sections (anonymous only) ── */}
+      {isAnonymous ? (
+        <>
+          {/* ── Problem ── */}
+          <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
+            <div className="mx-auto max-w-[1500px]">
+              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+                The problem
+              </p>
+              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
+                AI agents work for you. But not for your team.
+              </h2>
+              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
+                You can build an agent with Claude or GPT in minutes. But when you need it to
+                run securely, connect to your company&apos;s tools, and work for your whole
+                team — you&apos;re on your own.
+              </p>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                {[
+                  {
+                    problem: "No security or approvals",
+                    description:
+                      "AI agents running with your credentials, no audit trail, no way to review actions before they execute. One bad prompt away from disaster.",
+                  },
+                  {
+                    problem: "Missing integrations",
+                    description:
+                      "Generic AI can search the web. But it can't read your HubSpot pipeline, send Slack messages as you, or update your Salesforce records.",
+                  },
+                  {
+                    problem: "Can't deploy to the team",
+                    description:
+                      "You built something that works for you. Now try sharing it with 10 people who don't know what a prompt is. Good luck.",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.problem}
+                    className="border-border/60 rounded-xl border border-dashed p-6"
+                  >
+                    <h3 className="text-foreground mb-2 text-sm font-semibold">{item.problem}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── Solution ── */}
+          <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
+            <div className="mx-auto max-w-[1500px]">
+              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+                The platform
+              </p>
+              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
+                Build, secure, and deploy AI agents for your company
+              </h2>
+              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
+                CmdClaw is the open infrastructure to go from &quot;it works on my
+                laptop&quot; to &quot;the whole team runs it in production.&quot;
+              </p>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  {
+                    icon: ShieldCheck,
+                    title: "Approval workflows",
+                    description:
+                      "Every sensitive action goes through human review. Your AI agent asks permission before sending emails, updating CRM records, or posting messages.",
+                  },
+                  {
+                    icon: Lock,
+                    title: "Secure by default",
+                    description:
+                      "OAuth-based integrations. Sandboxed code execution. Scoped permissions per agent. No credentials in prompts, ever.",
+                  },
+                  {
+                    icon: Users,
+                    title: "Built for teams",
+                    description:
+                      "Shared workspace with shared integrations. Deploy an agent once, your whole team uses it. No one needs to know how prompts work.",
+                  },
+                  {
+                    icon: Workflow,
+                    title: "16+ native integrations",
+                    description:
+                      "Gmail, Slack, HubSpot, Salesforce, Notion, Linear, GitHub, and more. One-click OAuth — not API keys duct-taped together.",
+                  },
+                  {
+                    icon: Clock,
+                    title: "Runs without you",
+                    description:
+                      "Schedule agents on cron, trigger on webhooks, or fire on incoming emails. They run 24/7, not just when you have a browser open.",
+                  },
+                  {
+                    icon: GitBranch,
+                    title: "Open source",
+                    description:
+                      "MIT-licensed. Self-host on your own infrastructure. Audit every line of code. No vendor lock-in, no black boxes.",
+                  },
+                ].map((feature) => (
+                  <div
+                    key={feature.title}
+                    className="bg-background border-border/60 rounded-xl border p-6 shadow-sm"
+                  >
+                    <div className="bg-brand/10 text-brand mb-4 flex size-10 items-center justify-center rounded-lg">
+                      <feature.icon className="size-5" />
+                    </div>
+                    <h3 className="text-foreground mb-1.5 text-sm font-semibold">{feature.title}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── How it works ── */}
+          <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
+            <div className="mx-auto max-w-[1500px]">
+              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+                How it works
+              </p>
+              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
+                From prompt to production in minutes
+              </h2>
+              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
+                Describe what you need. CmdClaw builds it, secures it, and deploys it.
+              </p>
+              <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-12">
+                {[
+                  {
+                    step: "1",
+                    title: "Describe the agent",
+                    description:
+                      "Tell CmdClaw what you want in plain English. It picks the right integrations, designs the workflow, and sets up triggers.",
+                    icon: MessageSquareText,
+                  },
+                  {
+                    step: "2",
+                    title: "Review and approve",
+                    description:
+                      "Test the agent in your workspace. Every action goes through approval. Fine-tune until it works exactly how you need.",
+                    icon: ShieldCheck,
+                  },
+                  {
+                    step: "3",
+                    title: "Deploy to your team",
+                    description:
+                      "Turn it on for everyone. The agent runs on schedule or on trigger — secured, audited, and ready for production.",
+                    icon: Building2,
+                  },
+                ].map((item) => (
+                  <div key={item.step} className="flex flex-col items-center text-center">
+                    <div className="bg-brand/10 text-brand mb-5 flex size-14 items-center justify-center rounded-2xl">
+                      <item.icon className="size-7" />
+                    </div>
+                    <h3 className="text-foreground mb-2 text-lg font-semibold">{item.title}</h3>
+                    <p className="text-muted-foreground max-w-xs text-sm leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── Integrations ── */}
+          <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
+            <div className="mx-auto max-w-[1500px]">
+              <p className="text-brand mb-2 text-center text-sm font-semibold uppercase tracking-wider">
+                Integrations
+              </p>
+              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
+                Your agents speak to every tool your team uses
+              </h2>
+              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
+                One-click OAuth. Shared across your workspace. No API keys to manage.
+              </p>
+              <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-4 md:gap-6">
+                {(
+                  [
+                    "google_gmail",
+                    "google_calendar",
+                    "google_sheets",
+                    "google_docs",
+                    "google_drive",
+                    "slack",
+                    "notion",
+                    "linear",
+                    "github",
+                    "airtable",
+                    "hubspot",
+                    "salesforce",
+                    "linkedin",
+                    "outlook",
+                    "outlook_calendar",
+                    "dynamics",
+                  ] as const
+                ).map((key) => (
+                  <div
+                    key={key}
+                    className="border-border/60 bg-background flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-sm"
+                  >
+                    <Image
+                      src={INTEGRATION_LOGOS[key]}
+                      alt={INTEGRATION_DISPLAY_NAMES[key]}
+                      width={20}
+                      height={20}
+                      className="size-5 shrink-0"
+                    />
+                    <span className="text-foreground text-sm font-medium">
+                      {INTEGRATION_DISPLAY_NAMES[key]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── CTA ── */}
+          <section className="border-border/60 border-t bg-slate-950 px-6 py-20 md:py-28">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="mb-4 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                Stop building agents you can&apos;t deploy
+              </h2>
+              <p className="mb-8 text-base text-slate-400">
+                Start free. Build your first AI coworker in minutes.
+                Deploy it to your team today.
+              </p>
+              <div className="flex items-center justify-center">
+                <Button size="lg" asChild className="bg-white text-slate-950 hover:bg-slate-100">
+                  <a
+                    href="https://cal.com/hyperstack/try-cmdclaw"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Book a Demo
+                  </a>
+                </Button>
+              </div>
+              <div className="mt-4 flex items-center justify-center">
+                <a
+                  href="https://github.com/baptistecolle/cmdclaw"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
+                >
+                  <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                  </svg>
+                  Star us on GitHub
+                </a>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       {/* ── Footer ── */}
       {isAnonymous ? (
