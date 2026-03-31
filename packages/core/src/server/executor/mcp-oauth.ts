@@ -2,11 +2,11 @@ import {
   auth,
   type OAuthClientProvider,
   type OAuthDiscoveryState,
-} from "@modelcontextprotocol/sdk/client/auth";
+} from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
   OAuthClientInformationMixed,
   OAuthTokens,
-} from "@modelcontextprotocol/sdk/shared/auth";
+} from "@modelcontextprotocol/sdk/shared/auth.js";
 
 type JsonValue =
   | string
