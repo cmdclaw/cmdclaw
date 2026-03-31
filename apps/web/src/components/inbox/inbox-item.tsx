@@ -16,6 +16,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { AuthRequestCard } from "@/components/chat/auth-request-card";
 import { ToolApprovalCard } from "@/components/chat/tool-approval-card";
+import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { InboxItem as InboxItemType, ToolApprovalData } from "./types";
@@ -163,6 +164,10 @@ export function InboxItem({
         className="hover:bg-accent/30 flex w-full items-center gap-3.5 px-5 py-4 text-left transition-colors"
       >
         <StatusDot status={item.status} />
+
+        {item.kind === "coworker" ? (
+          <CoworkerAvatar username={item.coworkerName} size={24} className="rounded-full" />
+        ) : null}
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
