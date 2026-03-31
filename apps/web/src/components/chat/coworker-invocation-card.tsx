@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Loader2, Users } from "lucide-react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
+import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { cn } from "@/lib/utils";
 import { client } from "@/orpc/client";
 
@@ -84,9 +85,7 @@ export function CoworkerInvocationCard(props: CoworkerInvocationCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-              <Users className="h-4 w-4" />
-            </div>
+            <CoworkerAvatar username={props.username} size={32} />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{props.name}</p>
               <p className="text-muted-foreground text-xs">@{props.username}</p>
