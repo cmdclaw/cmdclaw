@@ -5,6 +5,7 @@ import {
   coworkerRunEvent,
   generation,
   generationInterrupt,
+  inboxReadState,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -430,9 +431,35 @@ const list = protectedProcedure
         });
       }
 
+      const readStates =
+        items.length === 0
+          ? []
+          : await context.db.query.inboxReadState.findMany({
+              where: and(
+                eq(inboxReadState.userId, context.user.id),
+                eq(inboxReadState.workspaceId, workspaceId),
+                inArray(
+                  inboxReadState.itemId,
+                  items.map((item) => item.id),
+                ),
+              ),
+              columns: {
+                itemKind: true,
+                itemId: true,
+                readAt: true,
+              },
+            });
+      const readStateByItemKey = new Map(
+        readStates.map((state) => [`${state.itemKind}:${state.itemId}`, state]),
+      );
+      const unreadItems = items.filter((item) => {
+        const state = readStateByItemKey.get(`${item.kind}:${item.id}`);
+        return !state || state.readAt.getTime() < item.updatedAt.getTime();
+      });
+
       const normalizedQuery = input.query.trim().toLowerCase();
       const filteredItems = normalizedQuery
-        ? items.filter((item) => {
+        ? unreadItems.filter((item) => {
             const haystack = [
               item.title,
               item.kind === "coworker" ? item.coworkerName : item.conversationTitle,
@@ -442,7 +469,7 @@ const list = protectedProcedure
               .toLowerCase();
             return haystack.includes(normalizedQuery);
           })
-        : items;
+        : unreadItems;
 
       filteredItems.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
 
@@ -452,6 +479,77 @@ const list = protectedProcedure
       };
     },
   );
+
+const markAsRead = protectedProcedure
+  .input(
+    z.object({
+      kind: z.enum(["coworker", "chat"]),
+      id: z.string(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+
+    if (input.kind === "chat") {
+      const conv = await context.db.query.conversation.findFirst({
+        where: and(
+          eq(conversation.id, input.id),
+          eq(conversation.userId, context.user.id),
+          eq(conversation.workspaceId, workspaceId),
+          eq(conversation.type, "chat"),
+        ),
+        columns: {
+          id: true,
+        },
+      });
+
+      if (!conv) {
+        throw new ORPCError("NOT_FOUND", { message: "Conversation not found" });
+      }
+    } else {
+      const run = await context.db.query.coworkerRun.findFirst({
+        where: and(
+          eq(coworkerRun.id, input.id),
+          eq(coworkerRun.ownerId, context.user.id),
+          eq(coworkerRun.workspaceId, workspaceId),
+        ),
+        columns: {
+          id: true,
+        },
+      });
+
+      if (!run) {
+        throw new ORPCError("NOT_FOUND", { message: "Coworker run not found" });
+      }
+    }
+
+    const now = new Date();
+    await context.db
+      .insert(inboxReadState)
+      .values({
+        userId: context.user.id,
+        workspaceId,
+        itemKind: input.kind,
+        itemId: input.id,
+        readAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          inboxReadState.userId,
+          inboxReadState.workspaceId,
+          inboxReadState.itemKind,
+          inboxReadState.itemId,
+        ],
+        set: {
+          readAt: now,
+          updatedAt: now,
+        },
+      });
+
+    return { success: true };
+  });
 
 const editApprovalAndResend = protectedProcedure
   .input(
@@ -577,5 +675,6 @@ const editApprovalAndResend = protectedProcedure
 
 export const inboxRouter = {
   list,
+  markAsRead,
   editApprovalAndResend,
 };

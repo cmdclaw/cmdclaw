@@ -20,8 +20,10 @@ const {
   generationFindFirstMock,
   generationInterruptFindManyMock,
   generationInterruptFindFirstMock,
+  inboxReadStateFindManyMock,
   insertMock,
   insertValuesMock,
+  insertOnConflictDoUpdateMock,
   dbMock,
   generationManagerMock,
 } = vi.hoisted(() => {
@@ -33,7 +35,11 @@ const {
   const generationFindFirstMock = vi.fn();
   const generationInterruptFindManyMock = vi.fn();
   const generationInterruptFindFirstMock = vi.fn();
-  const insertValuesMock = vi.fn();
+  const inboxReadStateFindManyMock = vi.fn();
+  const insertOnConflictDoUpdateMock = vi.fn();
+  const insertValuesMock = vi.fn(() => ({
+    onConflictDoUpdate: insertOnConflictDoUpdateMock,
+  }));
   const insertMock = vi.fn(() => ({
     values: insertValuesMock,
   }));
@@ -56,6 +62,9 @@ const {
         findMany: generationInterruptFindManyMock,
         findFirst: generationInterruptFindFirstMock,
       },
+      inboxReadState: {
+        findMany: inboxReadStateFindManyMock,
+      },
     },
     insert: insertMock,
   };
@@ -74,8 +83,10 @@ const {
     generationFindFirstMock,
     generationInterruptFindManyMock,
     generationInterruptFindFirstMock,
+    inboxReadStateFindManyMock,
     insertMock,
     insertValuesMock,
+    insertOnConflictDoUpdateMock,
     dbMock,
     generationManagerMock,
   };
@@ -111,9 +122,10 @@ const inboxRouterAny = inboxRouter as unknown as Record<
 describe("inboxRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    insertValuesMock.mockResolvedValue(undefined);
+    insertOnConflictDoUpdateMock.mockResolvedValue(undefined);
     generationManagerMock.submitApproval.mockResolvedValue(true);
     generationManagerMock.enqueueConversationMessage.mockResolvedValue({ queuedMessageId: "qm-1" });
+    inboxReadStateFindManyMock.mockResolvedValue([]);
   });
 
   it("returns mixed actionable coworker and chat inbox rows sorted by updatedAt desc", async () => {
@@ -283,6 +295,107 @@ describe("inboxRouter", () => {
         },
       }),
     ]);
+  });
+
+  it("hides rows marked read until the row is updated again", async () => {
+    coworkerRunFindManyMock.mockResolvedValue([
+      {
+        id: "run-1",
+        coworkerId: "cw-1",
+        generationId: "gen-1",
+        status: "awaiting_approval",
+        startedAt: new Date("2026-03-30T14:32:00.000Z"),
+        finishedAt: null,
+        errorMessage: null,
+        coworker: { id: "cw-1", name: "Inbox Triage" },
+        generation: { id: "gen-1", conversationId: "conv-cw-1" },
+        events: [{ createdAt: new Date("2026-03-30T14:40:00.000Z") }],
+      },
+    ]);
+    conversationFindManyMock.mockResolvedValue([
+      {
+        id: "conv-1",
+        title: "Follow up with prospect",
+        createdAt: new Date("2026-03-30T13:00:00.000Z"),
+        updatedAt: new Date("2026-03-30T13:35:00.000Z"),
+        currentGenerationId: "gen-2",
+        generationStatus: "error",
+      },
+    ]);
+    generationInterruptFindManyMock.mockResolvedValue([
+      {
+        generationId: "gen-1",
+        kind: "runtime_permission",
+        providerToolUseId: "tool-1",
+        display: {
+          title: "Slack send",
+          integration: "slack",
+          operation: "send",
+          command: 'slack send --channel "#sales"',
+          toolInput: { channel: "#sales", text: "hello" },
+        },
+        responsePayload: null,
+      },
+    ]);
+    generationFindManyMock.mockResolvedValue([
+      { id: "gen-1", errorMessage: null },
+      { id: "gen-2", errorMessage: "Chat failed" },
+    ]);
+    inboxReadStateFindManyMock.mockResolvedValue([
+      {
+        itemKind: "coworker",
+        itemId: "run-1",
+        readAt: new Date("2026-03-30T14:45:00.000Z"),
+      },
+      {
+        itemKind: "chat",
+        itemId: "conv-1",
+        readAt: new Date("2026-03-30T13:20:00.000Z"),
+      },
+    ]);
+
+    const result = (await inboxRouterAny.list({
+      input: {
+        limit: 20,
+        type: "all",
+        statuses: [],
+        query: "",
+      },
+      context,
+    })) as { items: Array<Record<string, unknown>> };
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        kind: "chat",
+        conversationId: "conv-1",
+      }),
+    ]);
+  });
+
+  it("marks an inbox row as read with an upsert", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-1",
+    });
+
+    const result = await inboxRouterAny.markAsRead({
+      input: {
+        kind: "chat",
+        id: "conv-1",
+      },
+      context,
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        workspaceId: "ws-1",
+        itemKind: "chat",
+        itemId: "conv-1",
+      }),
+    );
+    expect(insertOnConflictDoUpdateMock).toHaveBeenCalledTimes(1);
   });
 
   it("denies the approval, enqueues the edited request, and records a coworker user_interrupt", async () => {

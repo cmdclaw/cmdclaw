@@ -20,6 +20,7 @@ import {
   useGetAuthUrl,
   useGetOrCreateBuilderConversation,
   useInboxEditApprovalAndResend,
+  useInboxMarkAsRead,
   useInboxItems,
   useSubmitApproval,
   useSubmitAuthResult,
@@ -107,6 +108,7 @@ export default function InboxPage() {
   const getAuthUrl = useGetAuthUrl();
   const getOrCreateBuilderConversation = useGetOrCreateBuilderConversation();
   const editApprovalAndResend = useInboxEditApprovalAndResend();
+  const markInboxItemAsRead = useInboxMarkAsRead();
 
   useEffect(() => {
     const authComplete = searchParams.get("auth_complete");
@@ -381,6 +383,28 @@ export default function InboxPage() {
     },
     [getOrCreateBuilderConversation, router, runItemAction],
   );
+  const handleMarkAsRead = useCallback(
+    async (item: InboxItem) => {
+      await runItemAction(item.id, async () => {
+        await markInboxItemAsRead.mutateAsync({
+          kind: item.kind,
+          id: item.id,
+        });
+      });
+
+      setExpandedIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+      setEditingIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    },
+    [markInboxItemAsRead, runItemAction],
+  );
 
   const handleManualTrigger = useCallback(
     async (input: {
@@ -467,6 +491,14 @@ export default function InboxPage() {
     },
     [handleOpenBuilder],
   );
+  const handleMarkAsReadWithToast = useCallback(
+    (item: InboxItem) => {
+      void handleMarkAsRead(item).catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to update inbox item.");
+      });
+    },
+    [handleMarkAsRead],
+  );
 
   return (
     <div className="bg-background min-h-screen">
@@ -517,6 +549,7 @@ export default function InboxPage() {
           onReply={handleReplyWithToast}
           onOpenTarget={handleOpenTarget}
           onOpenBuilder={handleOpenBuilderWithToast}
+          onMarkAsRead={handleMarkAsReadWithToast}
         />
       </main>
     </div>

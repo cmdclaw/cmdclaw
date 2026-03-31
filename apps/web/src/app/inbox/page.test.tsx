@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InboxPage from "./page";
 
 const {
@@ -17,6 +17,7 @@ const {
   mockGetAuthUrlMutateAsync,
   mockGetOrCreateBuilderConversationMutateAsync,
   mockEditApprovalAndResendMutateAsync,
+  mockMarkAsReadMutateAsync,
   toastErrorMock,
   toastSuccessMock,
 } = vi.hoisted(() => {
@@ -33,6 +34,7 @@ const {
     mockGetAuthUrlMutateAsync: vi.fn(),
     mockGetOrCreateBuilderConversationMutateAsync: vi.fn(),
     mockEditApprovalAndResendMutateAsync: vi.fn(),
+    mockMarkAsReadMutateAsync: vi.fn(),
     toastErrorMock: vi.fn(),
     toastSuccessMock: vi.fn(),
   };
@@ -71,9 +73,14 @@ vi.mock("@/orpc/hooks", () => ({
     mutateAsync: mockGetOrCreateBuilderConversationMutateAsync,
   }),
   useInboxEditApprovalAndResend: () => ({ mutateAsync: mockEditApprovalAndResendMutateAsync }),
+  useInboxMarkAsRead: () => ({ mutateAsync: mockMarkAsReadMutateAsync }),
 }));
 
 describe("InboxPage", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseInboxItems.mockReturnValue({
@@ -132,6 +139,7 @@ describe("InboxPage", () => {
       conversationId: "builder-1",
     });
     mockEditApprovalAndResendMutateAsync.mockResolvedValue({ success: true });
+    mockMarkAsReadMutateAsync.mockResolvedValue({ success: true });
   });
 
   it("renders real inbox rows and updates the inbox query when type filter changes", async () => {
@@ -181,6 +189,21 @@ describe("InboxPage", () => {
         },
         conversationId: "conv-1",
         runId: "run-1",
+      });
+    });
+  });
+
+  it("wires mark-as-read to the inbox mutation", async () => {
+    render(<InboxPage />);
+
+    const rowButtons = screen.getAllByRole("button", { name: /Inbox Triage · Mar 30, 14:32/i });
+    fireEvent.click(rowButtons[rowButtons.length - 1]!);
+    fireEvent.click(await screen.findByRole("button", { name: /Mark as read/i }));
+
+    await waitFor(() => {
+      expect(mockMarkAsReadMutateAsync).toHaveBeenCalledWith({
+        kind: "coworker",
+        id: "run-1",
       });
     });
   });
