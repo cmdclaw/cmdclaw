@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Check,
   ChevronRight,
   ExternalLink,
   KeyRound,
@@ -123,6 +124,7 @@ type Props = {
   onReply: (message: string) => void;
   onOpenTarget: () => void;
   onOpenBuilder?: () => void;
+  onMarkAsRead: () => void;
 };
 
 export function InboxItem({
@@ -141,6 +143,7 @@ export function InboxItem({
   onReply,
   onOpenTarget,
   onOpenBuilder,
+  onMarkAsRead,
 }: Props) {
   const statusConfig = STATUS_CONFIG[item.status];
   const StatusIcon = statusConfig.icon;
@@ -214,6 +217,10 @@ export function InboxItem({
             <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onOpenTarget}>
               <ExternalLink className="mr-1 h-3.5 w-3.5" />
               Open
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onMarkAsRead}>
+              <Check className="mr-1 h-3.5 w-3.5" />
+              Mark as read
             </Button>
             {showBuilder && onOpenBuilder ? (
               <Button
