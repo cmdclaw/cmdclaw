@@ -24,6 +24,7 @@
     "@cmdclaw/db": "workspace:*",
     "@daytonaio/sdk": "^0.144.0",
     "@google/generative-ai": "^0.24.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/plugin": "^1.2.10",
     "@opencode-ai/sdk": "^1.1.34",
     "@orpc/server": "^1.13.2",
