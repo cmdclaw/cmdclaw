@@ -15,7 +15,6 @@ type ProviderAuthCapability = {
   authProviderID: AuthProviderID;
   defaultAuthSource: ProviderAuthSource | null;
   displayName: string;
-  implicitSharedAvailability?: boolean;
   supportedAuthSources: readonly ProviderAuthSource[];
 };
 
@@ -35,7 +34,6 @@ const PROVIDER_AUTH_CAPABILITIES: Record<ModelProviderID, ProviderAuthCapability
     authProviderID: null,
     defaultAuthSource: "shared",
     displayName: "Claude",
-    implicitSharedAvailability: true,
     supportedAuthSources: ["shared"],
   },
   openai: {
@@ -115,8 +113,9 @@ export function resolveProviderAuthAvailability(params: {
       connectedProviderIds.has(authProviderID),
     shared:
       capability.supportedAuthSources.includes("shared") &&
-      (capability.implicitSharedAvailability === true ||
-        (authProviderID !== null && sharedConnectedProviderIds.has(authProviderID))),
+      (authProviderID === null
+        ? sharedConnectedProviderIds.has(params.providerID)
+        : sharedConnectedProviderIds.has(authProviderID)),
   };
 }
 

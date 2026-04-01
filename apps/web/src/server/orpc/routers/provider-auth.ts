@@ -1,3 +1,4 @@
+import { env } from "@cmdclaw/core/env";
 import { listOpencodeFreeModels } from "@cmdclaw/core/server/ai/opencode-models";
 import {
   SUBSCRIPTION_PROVIDERS,
@@ -332,11 +333,20 @@ const status = protectedProcedure.handler(async ({ context }) => {
         connectedAt: new Date(),
       };
     }
+    const shared: Record<string, { connectedAt: Date }> = {};
+    if (env.ANTHROPIC_API_KEY) {
+      shared.anthropic = {
+        connectedAt: new Date(),
+      };
+    }
     return {
       connected,
-      shared: {},
+      shared,
       available: Object.fromEntries(
-        Object.keys(connected).map((provider) => [provider, { user: true, shared: false }]),
+        [...new Set([...Object.keys(connected), ...Object.keys(shared)])].map((provider) => [
+          provider,
+          { user: provider in connected, shared: provider in shared },
+        ]),
       ),
     };
   }
@@ -359,6 +369,11 @@ const status = protectedProcedure.handler(async ({ context }) => {
   for (const auth of sharedAuths) {
     shared[auth.provider] = {
       connectedAt: auth.createdAt,
+    };
+  }
+  if (env.ANTHROPIC_API_KEY) {
+    shared.anthropic = {
+      connectedAt: new Date(),
     };
   }
 

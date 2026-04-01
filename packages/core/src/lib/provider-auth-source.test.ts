@@ -30,12 +30,25 @@ describe("provider-auth-source", () => {
     ).toBe("user");
   });
 
-  it("resolves anthropic shared availability without connected provider auth records", () => {
+  it("requires explicit shared availability for anthropic models", () => {
     expect(
       resolveProviderAuthAvailability({
         providerID: "anthropic",
         connectedProviderIds: [],
         sharedConnectedProviderIds: [],
+      }),
+    ).toEqual({
+      user: false,
+      shared: false,
+    });
+  });
+
+  it("resolves anthropic shared availability when the shared source is advertised", () => {
+    expect(
+      resolveProviderAuthAvailability({
+        providerID: "anthropic",
+        connectedProviderIds: [],
+        sharedConnectedProviderIds: ["anthropic"],
       }),
     ).toEqual({
       user: false,
