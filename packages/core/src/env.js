@@ -25,7 +25,7 @@ export const env = createEnv({
     POSTHOG_API_KEY: z.string().optional(),
     POSTHOG_HOST: z.string().optional(),
     // Anthropic
-    ANTHROPIC_API_KEY: z.string(),
+    ANTHROPIC_API_KEY: z.string().optional(),
     // E2B Sandbox
     E2B_API_KEY: z.string().optional(),
     E2B_DAYTONA_SANDBOX_NAME: z.string().optional(),
