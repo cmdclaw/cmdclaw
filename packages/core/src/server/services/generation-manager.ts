@@ -4853,7 +4853,7 @@ class GenerationManager {
         return;
       }
 
-      if (!env.ANTHROPIC_API_KEY) {
+      if (parseModelReference(ctx.model).providerID === "anthropic" && !env.ANTHROPIC_API_KEY) {
         throw new Error("ANTHROPIC_API_KEY is not configured");
       }
 
