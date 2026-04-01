@@ -1968,6 +1968,7 @@ class GenerationManager {
         authProviderID === null
           ? resolveProviderAuthAvailability({
               providerID,
+              sharedConnectedProviderIds: env.ANTHROPIC_API_KEY ? ["anthropic"] : [],
             })
           : {
               user: await hasConnectedProviderAuthForUser(params.userId, authProviderID, "user"),
@@ -4983,7 +4984,7 @@ class GenerationManager {
               userId: ctx.userId,
               model: ctx.model,
               openAIAuthSource: ctx.authSource,
-              anthropicApiKey: env.ANTHROPIC_API_KEY,
+              anthropicApiKey: env.ANTHROPIC_API_KEY || "",
               integrationEnvs: filteredCliEnv,
             },
             {

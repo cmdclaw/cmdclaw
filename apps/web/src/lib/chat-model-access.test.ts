@@ -3,7 +3,7 @@ import { isModelAccessibleForNewChat } from "./chat-model-access";
 
 describe("isModelAccessibleForNewChat", () => {
   const noProviderAvailability = {
-    anthropic: { user: false, shared: true },
+    anthropic: { user: false, shared: false },
     openai: { user: false, shared: false },
   } as const;
 
@@ -21,9 +21,21 @@ describe("isModelAccessibleForNewChat", () => {
       isModelAccessibleForNewChat({
         model: "anthropic/claude-sonnet-4-6",
         isAdmin: true,
-        providerAvailabilityByProvider: noProviderAvailability,
+        providerAvailabilityByProvider: {
+          anthropic: { user: false, shared: true },
+        },
       }),
     ).toBe(true);
+  });
+
+  it("returns false for Claude models when the shared Claude source is unavailable", () => {
+    expect(
+      isModelAccessibleForNewChat({
+        model: "anthropic/claude-sonnet-4-6",
+        isAdmin: true,
+        providerAvailabilityByProvider: noProviderAvailability,
+      }),
+    ).toBe(false);
   });
 
   it("returns false for openai models when ChatGPT is disconnected", () => {
