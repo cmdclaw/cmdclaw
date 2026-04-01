@@ -98,7 +98,7 @@ export async function getConversationUsageFromOpenCodeSession(input: {
       conversationId: input.conversationId,
       userId: input.userId,
       model,
-      anthropicApiKey: env.ANTHROPIC_API_KEY,
+      anthropicApiKey: env.ANTHROPIC_API_KEY || "",
       openAIAuthSource: normalizeModelAuthSource({
         model,
         authSource: input.authSource,

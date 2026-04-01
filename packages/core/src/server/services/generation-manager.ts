@@ -4984,7 +4984,7 @@ class GenerationManager {
               userId: ctx.userId,
               model: ctx.model,
               openAIAuthSource: ctx.authSource,
-              anthropicApiKey: env.ANTHROPIC_API_KEY,
+              anthropicApiKey: env.ANTHROPIC_API_KEY || "",
               integrationEnvs: filteredCliEnv,
             },
             {
