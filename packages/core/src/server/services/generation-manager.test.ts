@@ -3249,6 +3249,83 @@ describe("generationManager transitions", () => {
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
   });
 
+  it("does not require an anthropic api key for non-anthropic runs", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({
+      type: "none",
+    });
+
+    const ctx = createCtx({
+      id: "gen-openai-no-anthropic-key",
+      conversationId: "conv-openai-no-anthropic-key",
+      backendType: "opencode",
+      model: "openai/gpt-5.4",
+      userMessageContent: "Inspect the repo",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "openai/gpt-5.4",
+        anthropicApiKey: "",
+      }),
+      expect.anything(),
+    );
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
+  it("still requires an anthropic api key for anthropic runs", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "", configurable: true });
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "resolveRuntimeFailure").mockResolvedValue("terminal_failed");
+    const ctx = createCtx({
+      id: "gen-anthropic-missing-key",
+      conversationId: "conv-anthropic-missing-key",
+      backendType: "opencode",
+      model: "anthropic/claude-sonnet-4-6",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(ctx.errorMessage).toBe("ANTHROPIC_API_KEY is not configured");
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+  });
+
   it("disables snapshot restore for active reattach attempts once a run has already started", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
