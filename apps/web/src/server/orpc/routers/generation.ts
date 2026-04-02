@@ -493,6 +493,38 @@ const removeConversationQueuedMessage = protectedProcedure
     return { success };
   });
 
+const updateConversationQueuedMessage = protectedProcedure
+  .input(
+    z.object({
+      queuedMessageId: z.string(),
+      conversationId: z.string(),
+      content: z.string().min(1).max(100000),
+      selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
+      fileAttachments: z
+        .array(
+          z.object({
+            name: z.string(),
+            mimeType: z.string(),
+            dataUrl: z.string(),
+          }),
+        )
+        .optional(),
+    }),
+  )
+  .output(z.object({ success: z.boolean() }))
+  .handler(async ({ input, context }) => {
+    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+    const success = await generationManager.updateConversationQueuedMessage({
+      queuedMessageId: input.queuedMessageId,
+      conversationId: input.conversationId,
+      userId: context.user.id,
+      content: input.content,
+      fileAttachments: input.fileAttachments,
+      selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
+    });
+    return { success };
+  });
+
 const listPlatformSkills = protectedProcedure
   .output(
     z.array(
@@ -763,6 +795,7 @@ export const generationRouter = {
   enqueueConversationMessage,
   listConversationQueuedMessages,
   removeConversationQueuedMessage,
+  updateConversationQueuedMessage,
   subscribeGeneration,
   cancelGeneration,
   resumeGeneration,

@@ -7,14 +7,36 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 void jestDomVitest;
 
-const { mockStartGeneration, mockAbort, mockPosthogCapture, mockInvalidateQueries } = vi.hoisted(
-  () => ({
-    mockStartGeneration: vi.fn(),
-    mockAbort: vi.fn(),
-    mockPosthogCapture: vi.fn(),
-    mockInvalidateQueries: vi.fn(),
-  }),
-);
+const {
+  mockStartGeneration,
+  mockAbort,
+  mockPosthogCapture,
+  mockInvalidateQueries,
+  mockUseHotkeys,
+  mockEnqueueConversationMessageMutateAsync,
+  mockUpdateConversationQueuedMessageMutateAsync,
+  mockConversationQueuedMessagesState,
+} = vi.hoisted(() => ({
+  mockStartGeneration: vi.fn(),
+  mockAbort: vi.fn(),
+  mockPosthogCapture: vi.fn(),
+  mockInvalidateQueries: vi.fn(),
+  mockUseHotkeys: vi.fn(),
+  mockEnqueueConversationMessageMutateAsync: vi.fn(),
+  mockUpdateConversationQueuedMessageMutateAsync: vi.fn(),
+  mockConversationQueuedMessagesState: {
+    data: undefined as
+      | Array<{
+          id: string;
+          content: string;
+          status: "queued" | "processing";
+          fileAttachments?: Array<{ name: string; mimeType: string; dataUrl: string }>;
+          selectedPlatformSkillSlugs?: string[];
+          createdAt: string;
+        }>
+      | undefined,
+  },
+}));
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-query")>();
@@ -33,7 +55,7 @@ vi.mock("posthog-js/react", () => ({
 }));
 
 vi.mock("react-hotkeys-hook", () => ({
-  useHotkeys: vi.fn(),
+  useHotkeys: mockUseHotkeys,
 }));
 
 vi.mock("motion/react", () => ({
@@ -133,9 +155,12 @@ vi.mock("@/orpc/hooks", () => ({
   useActiveGeneration: () => ({ data: null }),
   useCancelGeneration: () => ({ mutateAsync: vi.fn() }),
   useDetectUserMessageLanguage: () => ({ mutateAsync: vi.fn() }),
-  useConversationQueuedMessages: () => ({ data: undefined }),
-  useEnqueueConversationMessage: () => ({ mutateAsync: vi.fn() }),
+  useConversationQueuedMessages: () => ({ data: mockConversationQueuedMessagesState.data }),
+  useEnqueueConversationMessage: () => ({ mutateAsync: mockEnqueueConversationMessageMutateAsync }),
   useRemoveConversationQueuedMessage: () => ({ mutateAsync: vi.fn() }),
+  useUpdateConversationQueuedMessage: () => ({
+    mutateAsync: mockUpdateConversationQueuedMessageMutateAsync,
+  }),
   usePlatformSkillList: () => ({ data: [], isLoading: false }),
   useSkillList: () => ({ data: [], isLoading: false }),
   useUpdateAutoApprove: () => ({ mutateAsync: vi.fn() }),
@@ -226,16 +251,8 @@ vi.mock("./voice-indicator", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: React.ReactNode;
-    onClick?: React.MouseEventHandler<HTMLButtonElement>;
-    disabled?: boolean;
-  }) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
       {children}
     </button>
   ),
@@ -291,6 +308,10 @@ describe("ChatArea generation errors", () => {
     mockAbort.mockReset();
     mockInvalidateQueries.mockReset();
     mockPosthogCapture.mockReset();
+    mockUseHotkeys.mockReset();
+    mockEnqueueConversationMessageMutateAsync.mockReset();
+    mockUpdateConversationQueuedMessageMutateAsync.mockReset();
+    mockConversationQueuedMessagesState.data = undefined;
     Object.defineProperty(Element.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
@@ -387,5 +408,98 @@ describe("ChatArea generation errors", () => {
       prompt: undefined,
       updatedAt: undefined,
     });
+  });
+
+  it("queues additional messages without replacing the existing queue entry", async () => {
+    mockStartGeneration.mockImplementation(() => new Promise(() => {}));
+    mockEnqueueConversationMessageMutateAsync.mockResolvedValue({ queuedMessageId: "queue-2" });
+
+    render(<ChatArea conversationId="conv-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(mockStartGeneration).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "hello", conversationId: "conv-1" }),
+        expect.any(Object),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(mockEnqueueConversationMessageMutateAsync).toHaveBeenCalledWith({
+        conversationId: "conv-1",
+        content: "hello",
+        selectedPlatformSkillSlugs: [],
+        fileAttachments: undefined,
+        replaceExisting: false,
+      });
+    });
+  });
+
+  it("renders all queued messages instead of only the first one", () => {
+    mockConversationQueuedMessagesState.data = [
+      {
+        id: "queue-1",
+        content: "First queued follow-up",
+        status: "queued",
+        createdAt: "2026-04-02T03:55:02.000Z",
+      },
+      {
+        id: "queue-2",
+        content: "Second queued follow-up",
+        status: "queued",
+        createdAt: "2026-04-02T03:56:02.000Z",
+      },
+    ];
+
+    render(<ChatArea conversationId="conv-1" />);
+
+    expect(screen.getByText("2 queued messages")).toBeInTheDocument();
+    expect(screen.getByText("1. First queued follow-up")).toBeInTheDocument();
+    expect(screen.getByText("2. Second queued follow-up")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Steer" })).toHaveLength(1);
+  });
+
+  it("edits a queued message in place instead of enqueueing a new one", async () => {
+    mockConversationQueuedMessagesState.data = [
+      {
+        id: "queue-1",
+        content: "Queued follow-up",
+        status: "queued",
+        selectedPlatformSkillSlugs: ["slack"],
+        createdAt: "2026-04-02T03:55:02.000Z",
+      },
+    ];
+    mockUpdateConversationQueuedMessageMutateAsync.mockResolvedValue({ success: true });
+
+    render(<ChatArea conversationId="conv-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit queued message 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(mockUpdateConversationQueuedMessageMutateAsync).toHaveBeenCalledWith({
+        queuedMessageId: "queue-1",
+        conversationId: "conv-1",
+        content: "hello",
+        selectedPlatformSkillSlugs: ["slack"],
+        fileAttachments: undefined,
+      });
+    });
+    expect(mockEnqueueConversationMessageMutateAsync).not.toHaveBeenCalled();
+    expect(mockStartGeneration).not.toHaveBeenCalled();
+  });
+
+  it("keeps the queued-send hotkey out of form fields", () => {
+    render(<ChatArea conversationId="conv-1" />);
+
+    expect(mockUseHotkeys).toHaveBeenCalledWith(
+      "mod+enter",
+      expect.any(Function),
+      expect.objectContaining({ enableOnFormTags: false }),
+      expect.any(Array),
+    );
   });
 });

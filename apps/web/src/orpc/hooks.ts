@@ -2231,6 +2231,37 @@ export function useRemoveConversationQueuedMessage() {
   });
 }
 
+export function useUpdateConversationQueuedMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      queuedMessageId,
+      conversationId,
+      content,
+      selectedPlatformSkillSlugs,
+      fileAttachments,
+    }: {
+      queuedMessageId: string;
+      conversationId: string;
+      content: string;
+      selectedPlatformSkillSlugs?: string[];
+      fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
+    }) =>
+      client.generation.updateConversationQueuedMessage({
+        queuedMessageId,
+        conversationId,
+        content,
+        selectedPlatformSkillSlugs,
+        fileAttachments,
+      }),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["generation", "queuedMessages", variables.conversationId],
+      });
+    },
+  });
+}
+
 // Hook for canceling a generation
 export function useCancelGeneration() {
   const queryClient = useQueryClient();
