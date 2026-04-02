@@ -41,17 +41,27 @@ describe("prepareExecutorInSandbox", () => {
     });
   });
 
-  it("starts executor via executor up and validates reachable status", async () => {
+  it("starts executor via executor server start and validates the local server", async () => {
     const sandbox = makeSandboxHandle();
     vi.mocked(sandbox.exec)
       .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: "Executor is ready.\n",
+        exitCode: 1,
+        stdout: "",
         stderr: "",
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: JSON.stringify({ reachable: true }),
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '"ok"\n',
         stderr: "",
       });
 
@@ -64,8 +74,23 @@ describe("prepareExecutorInSandbox", () => {
 
     expect(result?.sourceCount).toBe(1);
     expect(sandbox.ensureDir).toHaveBeenCalledWith("/app/.executor/state");
-    expect(vi.mocked(sandbox.exec).mock.calls[0]?.[0]).toContain("executor up --base-url");
-    expect(vi.mocked(sandbox.exec).mock.calls[0]?.[1]).toEqual(
+    expect(vi.mocked(sandbox.exec).mock.calls[0]?.[0]).toBe(
+      "curl -fsS 'http://127.0.0.1:8788/' >/dev/null",
+    );
+    expect(vi.mocked(sandbox.exec).mock.calls[1]?.[0]).toContain(
+      "executor server start --port 8788",
+    );
+    expect(vi.mocked(sandbox.exec).mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        background: true,
+        env: {
+          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+        },
+      }),
+    );
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("executor server did not become ready"),
       expect.objectContaining({
         env: {
           EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
@@ -73,8 +98,8 @@ describe("prepareExecutorInSandbox", () => {
       }),
     );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      2,
-      "executor status --base-url 'http://127.0.0.1:8788' --json",
+      4,
+      `executor call --base-url 'http://127.0.0.1:8788' --no-open 'return "ok"'`,
       expect.objectContaining({
         env: {
           EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
@@ -88,13 +113,18 @@ describe("prepareExecutorInSandbox", () => {
     vi.mocked(sandbox.exec)
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: "Executor is ready.\n",
+        stdout: "",
         stderr: "",
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: JSON.stringify({ reachable: false }),
+        stdout: "",
         stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "server unreachable",
       });
 
     await expect(
