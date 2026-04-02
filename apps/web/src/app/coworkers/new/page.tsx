@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   clearPendingCoworkerPrompt,
+  getPendingCoworkerGenerationContent,
   readPendingCoworkerPrompt,
 } from "@/components/landing/pending-coworker-prompt";
 import { normalizeGenerationError } from "@/lib/generation-errors";
@@ -27,7 +28,10 @@ export default function NewCoworkerPage() {
     }
 
     const pendingPrompt = readPendingCoworkerPrompt();
-    if (!pendingPrompt) {
+    const initialMessage = pendingPrompt
+      ? getPendingCoworkerGenerationContent(pendingPrompt)
+      : null;
+    if (!pendingPrompt || !initialMessage) {
       router.replace("/");
       return;
     }
@@ -51,10 +55,11 @@ export default function NewCoworkerPage() {
           });
           await client.generation.startGeneration({
             conversationId,
-            content: pendingPrompt,
+            content: initialMessage,
             model: DEFAULT_COWORKER_BUILDER_MODEL,
             authSource: "shared",
             autoApprove: true,
+            fileAttachments: pendingPrompt.attachments,
           });
         } catch (error) {
           console.error("Failed to start coworker builder generation:", error);
