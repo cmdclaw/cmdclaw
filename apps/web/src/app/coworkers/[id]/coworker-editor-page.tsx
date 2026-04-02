@@ -44,6 +44,7 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { CHAT_EXTERNAL_SEND_EVENT, ChatArea } from "@/components/chat/chat-area";
+import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { useChatSkillStore } from "@/components/chat/chat-skill-store";
 import { ModelSelector } from "@/components/chat/model-selector";
 import {
@@ -411,13 +412,20 @@ function CoworkerChatPanel({
     );
   }
   return (
-    <ChatArea
-      conversationId={conversationId}
-      forceCoworkerQuerySync
-      coworkerIdForSync={coworkerId}
-      onCoworkerSync={onCoworkerSync}
-      skillSelectionScopeKey={skillSelectionScopeKey}
-    />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex items-center justify-end px-4 py-2">
+        <ChatCopyButton conversationId={conversationId} />
+      </div>
+      <div className="min-h-0 flex-1">
+        <ChatArea
+          conversationId={conversationId}
+          forceCoworkerQuerySync
+          coworkerIdForSync={coworkerId}
+          onCoworkerSync={onCoworkerSync}
+          skillSelectionScopeKey={skillSelectionScopeKey}
+        />
+      </div>
+    </div>
   );
 }
 
