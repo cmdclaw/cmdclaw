@@ -190,6 +190,12 @@ vi.mock("@/components/chat/chat-area", () => ({
   },
 }));
 
+vi.mock("@/components/chat/chat-copy-button", () => ({
+  ChatCopyButton: ({ conversationId }: { conversationId?: string }) => (
+    <button type="button">Copy {conversationId}</button>
+  ),
+}));
+
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: ({
     selectedModel,
@@ -620,6 +626,14 @@ describe("CoworkerEditorPage", () => {
     );
   });
 
+  it("shows a copy button for the builder conversation", async () => {
+    render(<CoworkerEditorPage />);
+
+    await flushMicrotasks();
+
+    expect(screen.getByRole("button", { name: "Copy conv-1" })).toBeInTheDocument();
+  });
+
   it("refreshes the instruction panel when the coworker is patched externally", async () => {
     const { rerender } = render(<CoworkerEditorPage />);
 
@@ -823,6 +837,7 @@ describe("CoworkerEditorPage", () => {
 
     expect(screen.getByText("Failed to load builder chat")).toBeInTheDocument();
     expect(screen.getByText("Conversation fetch failed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy conv-1" })).not.toBeInTheDocument();
 
     shouldFail = false;
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -832,5 +847,6 @@ describe("CoworkerEditorPage", () => {
     });
 
     expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy conv-1" })).toBeInTheDocument();
   });
 });
