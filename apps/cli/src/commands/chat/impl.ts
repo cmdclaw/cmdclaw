@@ -26,6 +26,7 @@ import {
 } from "../../lib/chat-model-source";
 import { resolveCliToolMetadata } from "../../lib/tool-metadata";
 import { createAuthenticatedClient, resolveServerUrl } from "../../lib/client";
+import { exportChromeTraceForCompletedRun } from "./chrome-trace";
 
 type ChatFlags = {
   server?: string;
@@ -39,6 +40,7 @@ type ChatFlags = {
   validate: boolean;
   questionAnswer?: readonly string[];
   file?: readonly string[];
+  chromeTrace?: string;
   token?: string;
 };
 
@@ -46,6 +48,8 @@ type ChatState = {
   authSource?: ProviderAuthSource | null;
   connectedProviderIds?: string[];
   conversationId?: string;
+  chromeTrace?: string;
+  chromeTraceExportCount: number;
   file: readonly string[];
   message?: string;
   model?: string;
@@ -480,6 +484,21 @@ async function runOneGeneration(
           parts: result.assistant.parts.map((part) => ({ type: part.type })),
         });
       }
+      if (state.chromeTrace) {
+        const traceResult = exportChromeTraceForCompletedRun({
+          basePath: state.chromeTrace,
+          exportIndex: state.chromeTraceExportCount + 1,
+          conversationId: result.conversationId,
+          generationId: result.generationId,
+          artifacts: result.artifacts,
+        });
+        if (traceResult.status === "written") {
+          state.chromeTraceExportCount += 1;
+          stdout.write(`[chrome_trace] ${traceResult.path}\n`);
+        } else {
+          stdout.write("[warning] Chrome trace export skipped: phase timestamps unavailable.\n");
+        }
+      }
       stdout.write(`[conversation] ${result.conversationId}\n`);
       return result.conversationId;
     case "needs_auth":
@@ -627,6 +646,8 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     autoApprove: flags.autoApprove,
     validate: flags.validate,
     file: flags.file ?? [],
+    chromeTrace: flags.chromeTrace,
+    chromeTraceExportCount: 0,
     questionAnswer: flags.questionAnswer ?? [],
   };
 
