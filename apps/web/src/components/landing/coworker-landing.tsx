@@ -20,12 +20,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { AttachmentData } from "@/components/prompt-bar";
 import type { IntegrationType } from "@/lib/integration-icons";
 import type { PromptSegment } from "@/lib/prompt-segments";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
 import {
   clearPendingCoworkerPrompt,
+  getPendingCoworkerGenerationContent,
   readPendingCoworkerPrompt,
   writePendingCoworkerPrompt,
 } from "@/components/landing/pending-coworker-prompt";
@@ -389,7 +391,12 @@ export function CoworkerLanding({
   );
 
   const doCreate = useCallback(
-    async (opts: { prompt: string; triggerType?: string; initialMessage?: string }) => {
+    async (opts: {
+      prompt: string;
+      triggerType?: string;
+      initialMessage?: string;
+      initialAttachments?: AttachmentData[];
+    }) => {
       try {
         const result = await createCoworker.mutateAsync({
           name: "",
@@ -401,7 +408,10 @@ export function CoworkerLanding({
           allowedIntegrations: COWORKER_AVAILABLE_INTEGRATION_TYPES,
         });
 
-        const initialMessage = opts.initialMessage?.trim();
+        const initialMessage = getPendingCoworkerGenerationContent({
+          initialMessage: opts.initialMessage ?? "",
+          attachments: opts.initialAttachments,
+        });
         if (initialMessage) {
           try {
             const { conversationId } = await client.coworker.getOrCreateBuilderConversation({
@@ -413,6 +423,7 @@ export function CoworkerLanding({
               model,
               authSource: modelAuthSource,
               autoApprove: true,
+              fileAttachments: opts.initialAttachments,
             });
           } catch (error) {
             console.error("Failed to start coworker builder generation:", error);
@@ -435,13 +446,16 @@ export function CoworkerLanding({
   }, []);
 
   const handlePromptComposerSubmit = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: AttachmentData[]) => {
       if (isCreating) {
         return;
       }
 
       setIsCreating(true);
-      writePendingCoworkerPrompt(text);
+      writePendingCoworkerPrompt({
+        initialMessage: text,
+        attachments,
+      });
       let shouldClearPendingPrompt = true;
 
       try {
@@ -454,7 +468,11 @@ export function CoworkerLanding({
           return;
         }
 
-        const created = await doCreate({ prompt: "", initialMessage: text });
+        const created = await doCreate({
+          prompt: "",
+          initialMessage: text,
+          initialAttachments: attachments,
+        });
         if (created) {
           clearPendingCoworkerPrompt();
           return;

@@ -2,9 +2,21 @@
 
 const PENDING_COWORKER_PROMPT_KEY = "cmdclaw.pendingCoworkerPrompt";
 const MAX_PENDING_PROMPT_AGE_MS = 10 * 60 * 1000;
+const ATTACHMENT_ONLY_INITIAL_MESSAGE =
+  "Use the attached files as context while building this coworker.";
 
-type PendingCoworkerPrompt = {
+export type PendingCoworkerAttachment = {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
+export type PendingCoworkerPrompt = {
   initialMessage: string;
+  attachments?: PendingCoworkerAttachment[];
+};
+
+type StoredPendingCoworkerPrompt = PendingCoworkerPrompt & {
   createdAt: number;
 };
 
@@ -20,26 +32,71 @@ export function clearPendingCoworkerPrompt() {
   window.localStorage.removeItem(PENDING_COWORKER_PROMPT_KEY);
 }
 
-export function writePendingCoworkerPrompt(initialMessage: string) {
+function normalizeAttachments(
+  attachments: PendingCoworkerAttachment[] | undefined,
+): PendingCoworkerAttachment[] {
+  if (!attachments || attachments.length === 0) {
+    return [];
+  }
+
+  return attachments.filter(
+    (attachment) =>
+      attachment.name.trim().length > 0 &&
+      attachment.mimeType.trim().length > 0 &&
+      attachment.dataUrl.trim().length > 0,
+  );
+}
+
+function isValidAttachment(value: unknown): value is PendingCoworkerAttachment {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const attachment = value as Partial<PendingCoworkerAttachment>;
+  return (
+    typeof attachment.name === "string" &&
+    typeof attachment.mimeType === "string" &&
+    typeof attachment.dataUrl === "string"
+  );
+}
+
+export function getPendingCoworkerGenerationContent(
+  pendingPrompt: PendingCoworkerPrompt,
+): string | null {
+  const trimmedMessage = pendingPrompt.initialMessage.trim();
+  if (trimmedMessage) {
+    return trimmedMessage;
+  }
+
+  if ((pendingPrompt.attachments?.length ?? 0) > 0) {
+    return ATTACHMENT_ONLY_INITIAL_MESSAGE;
+  }
+
+  return null;
+}
+
+export function writePendingCoworkerPrompt(pendingPrompt: PendingCoworkerPrompt) {
   if (!canUseStorage()) {
     return;
   }
 
-  const trimmedMessage = initialMessage.trim();
-  if (!trimmedMessage) {
+  const trimmedMessage = pendingPrompt.initialMessage.trim();
+  const attachments = normalizeAttachments(pendingPrompt.attachments);
+  if (!trimmedMessage && attachments.length === 0) {
     clearPendingCoworkerPrompt();
     return;
   }
 
-  const payload: PendingCoworkerPrompt = {
+  const payload: StoredPendingCoworkerPrompt = {
     initialMessage: trimmedMessage,
+    attachments,
     createdAt: Date.now(),
   };
 
   window.localStorage.setItem(PENDING_COWORKER_PROMPT_KEY, JSON.stringify(payload));
 }
 
-export function readPendingCoworkerPrompt(): string | null {
+export function readPendingCoworkerPrompt(): PendingCoworkerPrompt | null {
   if (!canUseStorage()) {
     return null;
   }
@@ -50,7 +107,7 @@ export function readPendingCoworkerPrompt(): string | null {
   }
 
   try {
-    const parsed = JSON.parse(rawValue) as Partial<PendingCoworkerPrompt>;
+    const parsed = JSON.parse(rawValue) as Partial<StoredPendingCoworkerPrompt>;
     if (typeof parsed.initialMessage !== "string" || typeof parsed.createdAt !== "number") {
       clearPendingCoworkerPrompt();
       return null;
@@ -61,13 +118,27 @@ export function readPendingCoworkerPrompt(): string | null {
       return null;
     }
 
-    const trimmedMessage = parsed.initialMessage.trim();
-    if (!trimmedMessage) {
+    const attachments =
+      parsed.attachments === undefined
+        ? []
+        : Array.isArray(parsed.attachments) && parsed.attachments.every(isValidAttachment)
+          ? normalizeAttachments(parsed.attachments)
+          : null;
+    if (attachments === null) {
       clearPendingCoworkerPrompt();
       return null;
     }
 
-    return trimmedMessage;
+    const trimmedMessage = parsed.initialMessage.trim();
+    if (!trimmedMessage && attachments.length === 0) {
+      clearPendingCoworkerPrompt();
+      return null;
+    }
+
+    return {
+      initialMessage: trimmedMessage,
+      attachments,
+    };
   } catch {
     clearPendingCoworkerPrompt();
     return null;

@@ -1007,7 +1007,7 @@ class GenerationManager {
       throw new Error("Conversation not found");
     }
 
-    if (params.replaceExisting ?? true) {
+    if (params.replaceExisting ?? false) {
       await db
         .delete(conversationQueuedMessage)
         .where(
@@ -1106,6 +1106,33 @@ class GenerationManager {
       )
       .returning({ id: conversationQueuedMessage.id });
     return deleted.length > 0;
+  }
+
+  async updateConversationQueuedMessage(params: {
+    queuedMessageId: string;
+    conversationId: string;
+    userId: string;
+    content: string;
+    fileAttachments?: UserFileAttachment[];
+    selectedPlatformSkillSlugs?: string[];
+  }): Promise<boolean> {
+    const updated = await db
+      .update(conversationQueuedMessage)
+      .set({
+        content: params.content,
+        fileAttachments: params.fileAttachments ?? null,
+        selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs ?? null,
+      })
+      .where(
+        and(
+          eq(conversationQueuedMessage.id, params.queuedMessageId),
+          eq(conversationQueuedMessage.conversationId, params.conversationId),
+          eq(conversationQueuedMessage.userId, params.userId),
+          eq(conversationQueuedMessage.status, "queued"),
+        ),
+      )
+      .returning({ id: conversationQueuedMessage.id });
+    return updated.length > 0;
   }
 
   async processConversationQueuedMessages(conversationId: string): Promise<void> {
@@ -5431,17 +5458,6 @@ class GenerationManager {
       if (ctx.attachments && ctx.attachments.length > 0) {
         await Promise.all(
           ctx.attachments.map(async (a) => {
-            if (a.mimeType.startsWith("image/")) {
-              promptParts.push({
-                type: "file",
-                mime: a.mimeType,
-                url: a.dataUrl,
-                filename: a.name,
-              });
-              return;
-            }
-
-            // Write non-image file to sandbox and tell the LLM where it is
             const sandboxPath = `/home/user/uploads/${a.name}`;
             try {
               const base64Data = a.dataUrl.split(",")[1] || "";
@@ -5459,6 +5475,14 @@ class GenerationManager {
                 text: `The user uploaded a file: ${sandboxPath} (${a.mimeType}). You can read and process it using the sandbox tools.`,
               });
               stagedUploadCount += 1;
+              if (a.mimeType.startsWith("image/")) {
+                promptParts.push({
+                  type: "file",
+                  mime: a.mimeType,
+                  url: a.dataUrl,
+                  filename: a.name,
+                });
+              }
             } catch (err) {
               stagedUploadFailureCount += 1;
               console.error(

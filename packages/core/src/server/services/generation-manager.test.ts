@@ -1864,6 +1864,7 @@ describe("generationManager transitions", () => {
   });
 
   it("enqueues queued messages for coworker conversations", async () => {
+    dbMock.delete.mockClear();
     conversationFindFirstMock.mockResolvedValueOnce({
       id: "conv-coworker-builder",
       userId: "user-1",
@@ -1878,6 +1879,7 @@ describe("generationManager transitions", () => {
     });
 
     expect(result).toEqual({ queuedMessageId: "queue-coworker-1" });
+    expect(dbMock.delete).not.toHaveBeenCalled();
     expect(queueAddMock).toHaveBeenCalledWith(
       "conversation:queued-message-process",
       { conversationId: "conv-coworker-builder" },
@@ -1918,6 +1920,25 @@ describe("generationManager transitions", () => {
         createdAt,
       },
     ]);
+  });
+
+  it("updates queued messages without changing their queue position", async () => {
+    updateReturningMock.mockResolvedValueOnce([{ id: "queue-coworker-1" }]);
+
+    const result = await generationManager.updateConversationQueuedMessage({
+      queuedMessageId: "queue-coworker-1",
+      conversationId: "conv-coworker-run",
+      userId: "user-1",
+      content: "Steer the runner toward the latest customer reply.",
+      selectedPlatformSkillSlugs: ["gmail"],
+    });
+
+    expect(result).toBe(true);
+    expect(updateSetMock).toHaveBeenCalledWith({
+      content: "Steer the runner toward the latest customer reply.",
+      fileAttachments: null,
+      selectedPlatformSkillSlugs: ["gmail"],
+    });
   });
 
   it("processes queued messages for coworker conversations once idle", async () => {
@@ -3232,13 +3253,34 @@ describe("generationManager transitions", () => {
       }),
     );
     expect(promptMock).toHaveBeenCalledTimes(1);
-    const promptArg = promptMock.mock.calls[0]?.[0] as { agent?: string; system?: string };
+    const promptArg = promptMock.mock.calls[0]?.[0] as {
+      agent?: string;
+      system?: string;
+      parts?: Array<{ type: string; text?: string; mime?: string; filename?: string }>;
+    };
     expect(promptArg.agent).toBe(CMDCLAW_CHAT_AGENT_ID);
     expect(promptArg.system).toBe("mock system prompt for chat");
+    expect(promptArg.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining("/home/user/uploads/image.png"),
+        }),
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining("/home/user/uploads/notes.txt"),
+        }),
+        expect.objectContaining({
+          type: "file",
+          mime: "image/png",
+          filename: "image.png",
+        }),
+      ]),
+    );
     expect(vi.mocked(collectNewSandboxFiles)).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(Number),
-      expect.arrayContaining(["/home/user/uploads/notes.txt"]),
+      expect.arrayContaining(["/home/user/uploads/image.png", "/home/user/uploads/notes.txt"]),
     );
     expect(vi.mocked(uploadSandboxFile)).toHaveBeenCalled();
     expect(ctx.usage).toMatchObject({
