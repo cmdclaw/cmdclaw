@@ -3,6 +3,8 @@ import type { SandboxHandle } from "../core/types";
 
 const EXECUTOR_BASE_URL = "http://127.0.0.1:8788";
 const EXECUTOR_WORKSPACE_ROOT = "/app";
+const EXECUTOR_SERVER_PORT = 8788;
+const EXECUTOR_SERVER_LOG_PATH = "/tmp/cmdclaw-executor-server.log";
 
 function escapeShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -14,10 +16,6 @@ export type ExecutorSandboxBootstrap = {
   baseUrl: string;
   homeDirectory: string;
   instructions: string;
-};
-
-type ExecutorStatus = {
-  reachable?: boolean;
 };
 
 function isCommandExitErrorLike(
@@ -32,6 +30,8 @@ async function execNoThrow(
   opts?: {
     timeoutMs?: number;
     env?: Record<string, string>;
+    background?: boolean;
+    onStderr?: (chunk: string) => void;
   },
 ) {
   try {
@@ -46,14 +46,6 @@ async function execNoThrow(
       stdout: error.result.stdout ?? "",
       stderr: error.result.stderr ?? "",
     };
-  }
-}
-
-function parseExecutorStatus(raw: string): ExecutorStatus | null {
-  try {
-    return JSON.parse(raw) as ExecutorStatus;
-  } catch {
-    return null;
   }
 }
 
@@ -91,13 +83,52 @@ export async function prepareExecutorInSandbox(input: {
     bootstrap.workspaceStateJson,
   );
 
-  const startCommand = [
-    "set -euo pipefail",
-    `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)}`,
-    `executor up --base-url ${escapeShell(EXECUTOR_BASE_URL)}`,
-  ].join("\n");
+  const serverReadyResult = await execNoThrow(
+    input.sandbox,
+    `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null`,
+    {
+      timeoutMs: 5_000,
+      env: {
+        EXECUTOR_HOME: homeDirectory,
+      },
+    },
+  );
 
-  const startResult = await execNoThrow(input.sandbox, `bash -lc ${escapeShell(startCommand)}`, {
+  if (serverReadyResult.exitCode !== 0) {
+    const startResult = await execNoThrow(
+      input.sandbox,
+      `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)} && executor server start --port ${EXECUTOR_SERVER_PORT} >${escapeShell(
+        EXECUTOR_SERVER_LOG_PATH,
+      )} 2>&1`,
+      {
+        timeoutMs: 0,
+        background: true,
+        env: {
+          EXECUTOR_HOME: homeDirectory,
+        },
+      },
+    );
+
+    if (startResult.exitCode !== 0) {
+      throw new Error(
+        `Executor bootstrap failed (exit=${startResult.exitCode}): ${
+          startResult.stderr || startResult.stdout || "unknown error"
+        }`,
+      );
+    }
+  }
+
+  const waitCommand = [
+    "for _ in $(seq 1 30); do",
+    `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null 2>&1 && exit 0;`,
+    "sleep 1;",
+    "done;",
+    `echo ${escapeShell(`executor server did not become ready; see ${EXECUTOR_SERVER_LOG_PATH}`)} >&2;`,
+    `tail -n 40 ${escapeShell(EXECUTOR_SERVER_LOG_PATH)} >&2 || true;`,
+    "exit 1",
+  ].join(" ");
+
+  const startResult = await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
     timeoutMs: 45_000,
     env: {
       EXECUTOR_HOME: homeDirectory,
@@ -114,7 +145,9 @@ export async function prepareExecutorInSandbox(input: {
 
   const statusResult = await execNoThrow(
     input.sandbox,
-    `executor status --base-url ${escapeShell(EXECUTOR_BASE_URL)} --json`,
+    `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(
+      'return "ok"',
+    )}`,
     {
       timeoutMs: 15_000,
       env: {
@@ -123,8 +156,7 @@ export async function prepareExecutorInSandbox(input: {
     },
   );
 
-  const parsedStatus = parseExecutorStatus(statusResult.stdout);
-  if (statusResult.exitCode !== 0 || !parsedStatus?.reachable) {
+  if (statusResult.exitCode !== 0) {
     throw new Error(
       `Executor status check failed (exit=${statusResult.exitCode}): ${
         statusResult.stderr || statusResult.stdout || "unknown error"
@@ -138,9 +170,9 @@ export async function prepareExecutorInSandbox(input: {
     `Executor workspace root: \`${EXECUTOR_WORKSPACE_ROOT}\``,
     `Executor base URL: \`${EXECUTOR_BASE_URL}\``,
     `Executor home: \`${homeDirectory}\``,
-    "Use executor through the local daemon instead of editing `.executor` files manually.",
+    "Use executor through the local server instead of editing `.executor` files manually.",
     "Useful commands:",
-    `- \`EXECUTOR_HOME=${homeDirectory} executor status --base-url ${EXECUTOR_BASE_URL} --json\``,
+    `- \`curl -fsS ${EXECUTOR_BASE_URL}/ >/dev/null && echo 'executor ready'\``,
     `- \`EXECUTOR_HOME=${homeDirectory} executor call --base-url ${EXECUTOR_BASE_URL} --no-open 'const tools = await catalog.tools(); return tools;'\``,
     "Inside executor code, use the discovery workflow and call `tools.*` APIs rather than raw fetch.",
     "Connected workspace sources in this sandbox:",
