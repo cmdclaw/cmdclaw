@@ -12,7 +12,6 @@ import {
   Activity,
   Check,
   CircleCheck,
-  Ellipsis,
   ListTree,
   PenLine,
   Search,
@@ -71,6 +70,7 @@ import {
   useConversationQueuedMessages,
   useEnqueueConversationMessage,
   useRemoveConversationQueuedMessage,
+  useUpdateConversationQueuedMessage,
   usePlatformSkillList,
   useSkillList,
   useUpdateAutoApprove,
@@ -115,6 +115,90 @@ type QueuedMessage = {
   attachments?: AttachmentData[];
   selectedPlatformSkillSlugs?: string[];
 };
+
+function getQueuedMessageSummary(queuedMessage: QueuedMessage): string {
+  if (queuedMessage.content) {
+    return queuedMessage.content;
+  }
+
+  const attachmentCount = queuedMessage.attachments?.length ?? 0;
+  return `${attachmentCount} queued attachment${attachmentCount === 1 ? "" : "s"}`;
+}
+
+type QueuedMessageRowProps = {
+  queuedMessage: QueuedMessage;
+  index: number;
+  onSend: (queuedMessage: QueuedMessage) => void;
+  onClear: (queuedMessage: QueuedMessage) => void;
+  onEdit: (queuedMessage: QueuedMessage) => void;
+};
+
+function QueuedMessageRow({
+  queuedMessage,
+  index,
+  onSend,
+  onClear,
+  onEdit,
+}: QueuedMessageRowProps) {
+  const isQueued = queuedMessage.status === "queued";
+  const handleSend = useCallback(() => {
+    onSend(queuedMessage);
+  }, [onSend, queuedMessage]);
+  const handleClear = useCallback(() => {
+    onClear(queuedMessage);
+  }, [onClear, queuedMessage]);
+  const handleEdit = useCallback(() => {
+    onEdit(queuedMessage);
+  }, [onEdit, queuedMessage]);
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {index + 1}. {getQueuedMessageSummary(queuedMessage)}
+        </p>
+        <p className="text-muted-foreground mt-1 text-xs">
+          {queuedMessage.status === "processing"
+            ? "Starting now."
+            : "Queued and waiting for its turn."}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {index === 0 ? (
+          <Button
+            size="sm"
+            className="h-8 rounded-full px-3"
+            variant="secondary"
+            onClick={handleSend}
+            disabled={!isQueued}
+          >
+            Steer
+          </Button>
+        ) : null}
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          onClick={handleEdit}
+          aria-label={`Edit queued message ${index + 1}`}
+          className="rounded-full"
+          disabled={!isQueued}
+        >
+          <PenLine className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          onClick={handleClear}
+          aria-label={`Delete queued message ${index + 1}`}
+          className="rounded-full"
+          disabled={!isQueued}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 type InputPrefillRequest = {
   id: string;
@@ -593,6 +677,7 @@ export function ChatArea({
   const { mutateAsync: detectUserMessageLanguage } = useDetectUserMessageLanguage();
   const { mutateAsync: enqueueConversationMessage } = useEnqueueConversationMessage();
   const { mutateAsync: removeConversationQueuedMessage } = useRemoveConversationQueuedMessage();
+  const { mutateAsync: updateConversationQueuedMessage } = useUpdateConversationQueuedMessage();
   const { data: activeGeneration } = useActiveGeneration(conversationId);
   const { data: providerAuthStatus } = useProviderAuthStatus();
   const { data: opencodeFreeModelsData } = useOpencodeFreeModels();
@@ -624,10 +709,11 @@ export function ChatArea({
     () => normalizedSelectedSelection.model || normalizeChatModelReference(selectedModel),
     [normalizedSelectedSelection.model, selectedModel],
   );
-  const [queueingEnabled, setQueueingEnabled] = useState(true);
+  const queueingEnabled = true;
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
   const [skillSearchQuery, setSkillSearchQuery] = useState("");
   const [inputPrefillRequest, setInputPrefillRequest] = useState<InputPrefillRequest | null>(null);
+  const [editingQueuedMessageId, setEditingQueuedMessageId] = useState<string | null>(null);
   const [isDiscoverOpen, setIsDiscoverOpen] = useState(false);
   const initialPrefillAppliedRef = useRef(false);
   const [draftConversationId, setDraftConversationId] = useState<string | undefined>(
@@ -661,20 +747,18 @@ export function ChatArea({
   const streamScopeRef = useRef(0);
   const queueConversationId = draftConversationId ?? conversationId;
   const { data: queuedMessages } = useConversationQueuedMessages(queueConversationId);
-  const queuedMessage = useMemo<QueuedMessage | null>(() => {
-    const first = queuedMessages?.[0];
-    if (!first) {
-      return null;
-    }
-    return {
-      id: first.id,
-      content: first.content,
-      status: first.status,
-      attachments: first.fileAttachments,
-      selectedPlatformSkillSlugs: first.selectedPlatformSkillSlugs,
-    };
-  }, [queuedMessages]);
-  const queuedMessageRef = useRef<QueuedMessage | null>(null);
+  const normalizedQueuedMessages = useMemo<QueuedMessage[]>(
+    () =>
+      (queuedMessages ?? []).map((queuedMessage) => ({
+        id: queuedMessage.id,
+        content: queuedMessage.content,
+        status: queuedMessage.status,
+        attachments: queuedMessage.fileAttachments,
+        selectedPlatformSkillSlugs: queuedMessage.selectedPlatformSkillSlugs,
+      })),
+    [queuedMessages],
+  );
+  const queuedMessagesRef = useRef<QueuedMessage[]>([]);
   const autoApproveEnabled = useMemo(() => localAutoApprove, [localAutoApprove]);
   const isUserOpenAIConnected = Boolean(connectedProviders?.openai);
   const isSharedOpenAIConnected = Boolean(sharedConnectedProviders?.openai);
@@ -932,8 +1016,17 @@ export function ChatArea({
   );
 
   useEffect(() => {
-    queuedMessageRef.current = queuedMessage;
-  }, [queuedMessage]);
+    queuedMessagesRef.current = normalizedQueuedMessages;
+  }, [normalizedQueuedMessages]);
+
+  useEffect(() => {
+    if (
+      editingQueuedMessageId &&
+      !normalizedQueuedMessages.some((queuedMessage) => queuedMessage.id === editingQueuedMessageId)
+    ) {
+      setEditingQueuedMessageId(null);
+    }
+  }, [editingQueuedMessageId, normalizedQueuedMessages]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -2328,6 +2421,29 @@ export function ChatArea({
           key.startsWith(CUSTOM_SKILL_PREFIX) ? key.slice(CUSTOM_SKILL_PREFIX.length) : key,
         );
         const outgoingContent = await buildOutgoingContent(content, selectedSkillNamesSnapshot);
+        const editingQueuedMessage = editingQueuedMessageId
+          ? queuedMessagesRef.current.find(
+              (queuedMessage) => queuedMessage.id === editingQueuedMessageId,
+            )
+          : null;
+
+        if (editingQueuedMessage) {
+          const targetConversationId = currentConversationIdRef.current ?? queueConversationId;
+          if (!targetConversationId) {
+            setStreamError("Queue is not ready yet for this chat. Please retry in a second.");
+            return false;
+          }
+          await updateConversationQueuedMessage({
+            queuedMessageId: editingQueuedMessage.id,
+            conversationId: targetConversationId,
+            content: outgoingContent,
+            selectedPlatformSkillSlugs: editingQueuedMessage.selectedPlatformSkillSlugs,
+            fileAttachments: editingQueuedMessage.attachments,
+          });
+          setEditingQueuedMessageId(null);
+          clearSelectedSkillSlugs(skillSelectionScopeKey);
+          return true;
+        }
 
         if (isStreaming) {
           if (!queueingEnabled) {
@@ -2344,7 +2460,7 @@ export function ChatArea({
             content: outgoingContent,
             selectedPlatformSkillSlugs,
             fileAttachments: attachments,
-            replaceExisting: true,
+            replaceExisting: false,
           });
           clearSelectedSkillSlugs(skillSelectionScopeKey);
           return true;
@@ -2366,6 +2482,7 @@ export function ChatArea({
     [
       buildOutgoingContent,
       clearSelectedSkillSlugs,
+      editingQueuedMessageId,
       enqueueConversationMessage,
       isStreaming,
       queueConversationId,
@@ -2373,6 +2490,7 @@ export function ChatArea({
       runGeneration,
       selectedSkillKeys,
       skillSelectionScopeKey,
+      updateConversationQueuedMessage,
     ],
   );
 
@@ -2402,59 +2520,57 @@ export function ChatArea({
     };
   }, [conversationId, handleSend]);
 
-  const handleSendQueuedNow = useCallback(() => {
-    const send = async () => {
-      const queued = queuedMessageRef.current;
-      if (!queued || !queueConversationId) {
-        return;
-      }
-      if (isStreaming) {
-        setStreamError("Queued message will run automatically when this response is finished.");
-        return;
-      }
-      await removeConversationQueuedMessage({
-        queuedMessageId: queued.id,
-        conversationId: queueConversationId,
-      });
-      await runGeneration(queued.content, queued.attachments, queued.selectedPlatformSkillSlugs);
-    };
-    void send();
-  }, [isStreaming, queueConversationId, removeConversationQueuedMessage, runGeneration]);
+  const handleSendQueuedNow = useCallback(
+    (queued: QueuedMessage) => {
+      const send = async () => {
+        if (!queueConversationId) {
+          return;
+        }
+        if (isStreaming) {
+          setStreamError("Queued message will run automatically when this response is finished.");
+          return;
+        }
+        await removeConversationQueuedMessage({
+          queuedMessageId: queued.id,
+          conversationId: queueConversationId,
+        });
+        await runGeneration(queued.content, queued.attachments, queued.selectedPlatformSkillSlugs);
+      };
+      void send();
+    },
+    [isStreaming, queueConversationId, removeConversationQueuedMessage, runGeneration],
+  );
 
-  const handleClearQueued = useCallback(() => {
-    const clear = async () => {
-      const queued = queuedMessageRef.current;
-      if (!queued || !queueConversationId) {
-        return;
-      }
-      await removeConversationQueuedMessage({
-        queuedMessageId: queued.id,
-        conversationId: queueConversationId,
-      });
-    };
-    void clear();
-  }, [queueConversationId, removeConversationQueuedMessage]);
+  const handleSendFirstQueuedNow = useCallback(() => {
+    const queued = queuedMessagesRef.current[0];
+    if (!queued) {
+      return;
+    }
+    handleSendQueuedNow(queued);
+  }, [handleSendQueuedNow]);
 
-  const handleEditQueuedMessage = useCallback(() => {
-    const edit = async () => {
-      const queued = queuedMessageRef.current;
-      if (!queued || !queueConversationId) {
-        return;
-      }
-      await removeConversationQueuedMessage({
-        queuedMessageId: queued.id,
-        conversationId: queueConversationId,
-      });
-      setInputPrefillRequest({
-        id: `prefill-${Date.now()}`,
-        text: queued.content,
-      });
-    };
-    void edit();
-  }, [queueConversationId, removeConversationQueuedMessage]);
+  const handleClearQueued = useCallback(
+    (queued: QueuedMessage) => {
+      const clear = async () => {
+        if (!queueConversationId) {
+          return;
+        }
+        await removeConversationQueuedMessage({
+          queuedMessageId: queued.id,
+          conversationId: queueConversationId,
+        });
+      };
+      void clear();
+    },
+    [queueConversationId, removeConversationQueuedMessage],
+  );
 
-  const handleToggleQueueingEnabled = useCallback(() => {
-    setQueueingEnabled((prev) => !prev);
+  const handleEditQueuedMessage = useCallback((queued: QueuedMessage) => {
+    setEditingQueuedMessageId(queued.id);
+    setInputPrefillRequest({
+      id: `prefill-${Date.now()}`,
+      text: queued.content,
+    });
   }, []);
 
   // Handle approval/denial of tool use
@@ -2919,17 +3035,15 @@ export function ChatArea({
   useHotkeys(
     "mod+enter",
     () => {
-      if (queuedMessageRef.current) {
-        handleSendQueuedNow();
-      }
+      handleSendFirstQueuedNow();
     },
     {
       keydown: true,
       keyup: false,
       preventDefault: true,
-      enableOnFormTags: true,
+      enableOnFormTags: false,
     },
-    [handleSendQueuedNow],
+    [handleSendFirstQueuedNow],
   );
 
   // Push-to-talk: stop recording when any part of the hotkey combo is released
@@ -3251,56 +3365,38 @@ export function ChatArea({
               error={voiceError}
             />
           )}
-          {queuedMessage && (
+          {normalizedQueuedMessages.length > 0 && (
             <div className="from-muted/75 to-background rounded-3xl border bg-gradient-to-b px-4 py-3 shadow-[0_1px_0_0_hsl(var(--background))_inset,0_12px_24px_-22px_hsl(var(--foreground)/0.5)]">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span className="bg-background/80 border-border/70 inline-flex size-7 items-center justify-center rounded-full border">
                     <ListTree className="text-muted-foreground h-3.5 w-3.5" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm leading-none font-medium">
-                      {queuedMessage.content ||
-                        `${queuedMessage.attachments?.length ?? 0} queued attachment${(queuedMessage.attachments?.length ?? 0) === 1 ? "" : "s"}`}
+                    <p className="text-sm leading-none font-medium">
+                      {normalizedQueuedMessages.length} queued message
+                      {normalizedQueuedMessages.length === 1 ? "" : "s"}
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {queueingEnabled
+                        ? "They run in order as soon as the current response finishes."
+                        : "Queueing is off for new messages."}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    size="sm"
-                    className="h-8 rounded-full px-3"
-                    variant="secondary"
-                    onClick={handleSendQueuedNow}
-                  >
-                    Steer
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={handleClearQueued}
-                    aria-label="Delete queued message"
-                    className="rounded-full"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon-sm" variant="ghost" className="rounded-full">
-                        <Ellipsis className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-56 rounded-2xl p-1.5">
-                      <DropdownMenuItem onClick={handleEditQueuedMessage}>
-                        <PenLine className="h-4 w-4" />
-                        Edit message
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleToggleQueueingEnabled}>
-                        <ListTree className="h-4 w-4" />
-                        {queueingEnabled ? "Turn off queueing" : "Turn on queueing"}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+              </div>
+
+              <div className="mt-3 space-y-1">
+                {normalizedQueuedMessages.map((queuedMessage, index) => (
+                  <QueuedMessageRow
+                    key={queuedMessage.id}
+                    queuedMessage={queuedMessage}
+                    index={index}
+                    onSend={handleSendQueuedNow}
+                    onClear={handleClearQueued}
+                    onEdit={handleEditQueuedMessage}
+                  />
+                ))}
               </div>
             </div>
           )}

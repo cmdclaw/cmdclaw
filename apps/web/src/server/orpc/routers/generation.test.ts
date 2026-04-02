@@ -37,6 +37,7 @@ const { generationFindFirstMock, conversationFindFirstMock, dbMock, generationMa
       enqueueConversationMessage: vi.fn(),
       listConversationQueuedMessages: vi.fn(),
       removeConversationQueuedMessage: vi.fn(),
+      updateConversationQueuedMessage: vi.fn(),
       subscribeToGeneration: vi.fn(),
       cancelGeneration: vi.fn(),
       submitApproval: vi.fn(),
@@ -118,6 +119,7 @@ describe("generationRouter", () => {
       },
     ]);
     generationManagerMock.removeConversationQueuedMessage.mockResolvedValue(true);
+    generationManagerMock.updateConversationQueuedMessage.mockResolvedValue(true);
     generationManagerMock.getGenerationStatus.mockResolvedValue({
       status: "running",
       contentParts: [],
@@ -378,5 +380,40 @@ describe("generationRouter", () => {
       "conv-1",
       "user-1",
     );
+  });
+
+  it("updates queued messages through generation manager", async () => {
+    const result = await generationRouterAny.updateConversationQueuedMessage({
+      input: {
+        queuedMessageId: "queue-1",
+        conversationId: "conv-1",
+        content: "edited follow up",
+        selectedPlatformSkillSlugs: ["slack"],
+        fileAttachments: [
+          {
+            name: "brief.txt",
+            mimeType: "text/plain",
+            dataUrl: "data:text/plain;base64,Zm9v",
+          },
+        ],
+      },
+      context,
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(generationManagerMock.updateConversationQueuedMessage).toHaveBeenCalledWith({
+      queuedMessageId: "queue-1",
+      conversationId: "conv-1",
+      userId: "user-1",
+      content: "edited follow up",
+      selectedPlatformSkillSlugs: ["slack"],
+      fileAttachments: [
+        {
+          name: "brief.txt",
+          mimeType: "text/plain",
+          dataUrl: "data:text/plain;base64,Zm9v",
+        },
+      ],
+    });
   });
 });
