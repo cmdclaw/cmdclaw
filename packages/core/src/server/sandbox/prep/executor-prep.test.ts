@@ -24,6 +24,11 @@ function makeSandboxHandle(): SandboxHandle {
 describe("prepareExecutorInSandbox", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.EXECUTOR_TRACE_ENABLED;
+    delete process.env.EXECUTOR_TRACE_SERVICE_NAME;
+    delete process.env.EXECUTOR_TRACE_OTLP_ENDPOINT;
+    delete process.env.EXECUTOR_TRACE_OTLP_HTTP_ENDPOINT;
+    delete process.env.EXECUTOR_TRACE_QUERY_BASE_URL;
     getWorkspaceExecutorBootstrapMock.mockResolvedValue({
       revisionHash: "rev-1",
       configJson: "{\n  \"sources\": {}\n}\n",
@@ -135,5 +140,57 @@ describe("prepareExecutorInSandbox", () => {
         userId: "user-1",
       }),
     ).rejects.toThrow("Executor status check failed");
+  });
+
+  it("passes tracing env through to the sandboxed executor when enabled", async () => {
+    process.env.EXECUTOR_TRACE_ENABLED = "1";
+    process.env.EXECUTOR_TRACE_SERVICE_NAME = "executor-e2b";
+    process.env.EXECUTOR_TRACE_OTLP_ENDPOINT = "http://trace.example:4317";
+    process.env.EXECUTOR_TRACE_QUERY_BASE_URL = "http://trace.example:16686";
+
+    const sandbox = makeSandboxHandle();
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '"ok"\n',
+        stderr: "",
+      });
+
+    await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("executor server start --port 8788"),
+      expect.objectContaining({
+        background: true,
+        env: {
+          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+          EXECUTOR_TRACE_ENABLED: "1",
+          EXECUTOR_TRACE_SERVICE_NAME: "executor-e2b",
+          EXECUTOR_TRACE_OTLP_ENDPOINT: "http://trace.example:4317",
+          EXECUTOR_TRACE_QUERY_BASE_URL: "http://trace.example:16686",
+        },
+      }),
+    );
   });
 });

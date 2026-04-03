@@ -5,9 +5,51 @@ const EXECUTOR_BASE_URL = "http://127.0.0.1:8788";
 const EXECUTOR_WORKSPACE_ROOT = "/app";
 const EXECUTOR_SERVER_PORT = 8788;
 const EXECUTOR_SERVER_LOG_PATH = "/tmp/cmdclaw-executor-server.log";
+const DEFAULT_EXECUTOR_TRACE_SERVICE_NAME = "cmdclaw-sandbox-executor";
 
 function escapeShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function trimEnv(value: string | undefined): string | undefined {
+  const candidate = value?.trim();
+  return candidate && candidate.length > 0 ? candidate : undefined;
+}
+
+function envFlag(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function buildExecutorCommandEnv(homeDirectory: string): Record<string, string> {
+  const commandEnv: Record<string, string> = {
+    EXECUTOR_HOME: homeDirectory,
+  };
+
+  if (!envFlag(process.env.EXECUTOR_TRACE_ENABLED)) {
+    return commandEnv;
+  }
+
+  commandEnv.EXECUTOR_TRACE_ENABLED = "1";
+  commandEnv.EXECUTOR_TRACE_SERVICE_NAME =
+    trimEnv(process.env.EXECUTOR_TRACE_SERVICE_NAME) ?? DEFAULT_EXECUTOR_TRACE_SERVICE_NAME;
+
+  const otlpEndpoint = trimEnv(process.env.EXECUTOR_TRACE_OTLP_ENDPOINT);
+  if (otlpEndpoint) {
+    commandEnv.EXECUTOR_TRACE_OTLP_ENDPOINT = otlpEndpoint;
+  }
+
+  const otlpHttpEndpoint = trimEnv(process.env.EXECUTOR_TRACE_OTLP_HTTP_ENDPOINT);
+  if (otlpHttpEndpoint) {
+    commandEnv.EXECUTOR_TRACE_OTLP_HTTP_ENDPOINT = otlpHttpEndpoint;
+  }
+
+  const queryBaseUrl = trimEnv(process.env.EXECUTOR_TRACE_QUERY_BASE_URL);
+  if (queryBaseUrl) {
+    commandEnv.EXECUTOR_TRACE_QUERY_BASE_URL = queryBaseUrl;
+  }
+
+  return commandEnv;
 }
 
 export type ExecutorSandboxBootstrap = {
@@ -75,6 +117,7 @@ export async function prepareExecutorInSandbox(input: {
   const homeDirectory = input.runtimeId
     ? `/tmp/cmdclaw-executor/${input.runtimeId}`
     : "/tmp/cmdclaw-executor/default";
+  const executorCommandEnv = buildExecutorCommandEnv(homeDirectory);
 
   await input.sandbox.ensureDir("/app/.executor/state");
   await input.sandbox.writeFile("/app/.executor/executor.jsonc", bootstrap.configJson);
@@ -88,9 +131,7 @@ export async function prepareExecutorInSandbox(input: {
     `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null`,
     {
       timeoutMs: 5_000,
-      env: {
-        EXECUTOR_HOME: homeDirectory,
-      },
+      env: executorCommandEnv,
     },
   );
 
@@ -103,9 +144,7 @@ export async function prepareExecutorInSandbox(input: {
       {
         timeoutMs: 0,
         background: true,
-        env: {
-          EXECUTOR_HOME: homeDirectory,
-        },
+        env: executorCommandEnv,
       },
     );
 
@@ -130,9 +169,7 @@ export async function prepareExecutorInSandbox(input: {
 
   const startResult = await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
     timeoutMs: 45_000,
-    env: {
-      EXECUTOR_HOME: homeDirectory,
-    },
+    env: executorCommandEnv,
   });
 
   if (startResult.exitCode !== 0) {
@@ -150,9 +187,7 @@ export async function prepareExecutorInSandbox(input: {
     )}`,
     {
       timeoutMs: 15_000,
-      env: {
-        EXECUTOR_HOME: homeDirectory,
-      },
+      env: executorCommandEnv,
     },
   );
 
