@@ -201,4 +201,32 @@ describe("executorSourceRouter", () => {
       message: "This source is not configured for MCP OAuth.",
     });
   });
+
+  it("marks new MCP OAuth sources for native bootstrap reconciliation", async () => {
+    const context = createContext();
+    context.db.query.workspaceExecutorSource.findFirst.mockResolvedValue(null);
+    const returningMock = vi.fn().mockResolvedValue([{ id: "src-1" }]);
+    const valuesMock = vi.fn(() => ({ returning: returningMock }));
+    context.db.insert.mockReturnValue({ values: valuesMock });
+
+    const result = await executorSourceRouterAny.create({
+      input: {
+        kind: "mcp",
+        name: "Linear MCP",
+        namespace: "linear-mcp",
+        endpoint: "https://mcp.linear.app/mcp",
+        transport: "streamable-http",
+        authType: "oauth2",
+        enabled: true,
+      },
+      context,
+    });
+
+    expect(result).toEqual({ id: "src-1" });
+    expect(valuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authType: "oauth2",
+      }),
+    );
+  });
 });

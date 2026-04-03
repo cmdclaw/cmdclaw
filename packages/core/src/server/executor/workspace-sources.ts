@@ -57,6 +57,7 @@ type LocalWorkspaceState = {
 };
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+const WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION = 2;
 const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
   /re-authorization is required/i,
   /reauthorization is required/i,
@@ -212,12 +213,44 @@ function decryptExecutorSourceToken(value: string | null | undefined): string | 
   return decrypted.trim().length > 0 ? decrypted : null;
 }
 
-type StoredExecutorSourceOauthCredential = {
+export type StoredExecutorSourceOauthCredential = {
   accessToken: string;
   refreshToken: string | null;
   expiresAt: Date | null;
   metadata: McpOAuthMetadata;
 };
+
+export type WorkspaceExecutorNativeMcpOauthBootstrapSource = {
+  sourceId: string;
+  name: string;
+  endpoint: string;
+  transport: string | null;
+  queryParams: Record<string, string> | null;
+  credential: StoredExecutorSourceOauthCredential | null;
+};
+
+function computeWorkspaceExecutorPackageRevision(
+  sources: Array<{
+    id: string;
+    revisionHash: string;
+    enabled: boolean;
+    updatedAt: Date | null | undefined;
+  }>,
+): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        formatVersion: WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION,
+        sources: sources.map((source) => ({
+          id: source.id,
+          revisionHash: source.revisionHash,
+          enabled: source.enabled,
+          updatedAt: source.updatedAt?.toISOString() ?? null,
+        })),
+      }),
+    )
+    .digest("hex");
+}
 
 function readStoredExecutorSourceOauthCredential(
   source: WorkspaceExecutorSourceRecord,
@@ -385,24 +418,7 @@ function mergeAuthIntoSourceConfig(input: {
   }
 
   if (input.source.authType === "oauth2") {
-    return getHydratedExecutorSourceOauthCredential({
-      database: input.database,
-      source: input.source,
-      credential: input.credential,
-    }).then((oauthCredential) => {
-      if (!oauthCredential) {
-        return next;
-      }
-
-      const binding = (next.binding ?? {}) as Record<string, unknown>;
-      const headers = {
-        ...((binding.headers as Record<string, string> | null | undefined) ?? {}),
-      };
-      headers.Authorization = `${oauthCredential.metadata.tokenType} ${oauthCredential.accessToken}`;
-      binding.headers = headers;
-      next.binding = binding;
-      return next;
-    });
+    return Promise.resolve(next);
   }
 
   const secret = input.credential?.secret ? decrypt(input.credential.secret) : null;
@@ -486,6 +502,55 @@ export async function listWorkspaceExecutorSources(input: {
   });
 }
 
+export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: {
+  database?: DatabaseLike;
+  workspaceId: string;
+  userId: string;
+  allowedSourceIds?: string[] | null;
+}): Promise<WorkspaceExecutorNativeMcpOauthBootstrapSource[]> {
+  const database = input.database ?? db;
+  const [sources, credentials] = await Promise.all([
+    database.query.workspaceExecutorSource.findMany({
+      where:
+        input.allowedSourceIds && input.allowedSourceIds.length > 0
+          ? and(
+              eq(workspaceExecutorSource.workspaceId, input.workspaceId),
+              inArray(workspaceExecutorSource.id, input.allowedSourceIds),
+            )
+          : eq(workspaceExecutorSource.workspaceId, input.workspaceId),
+      orderBy: (source, { asc }) => [asc(source.namespace), asc(source.createdAt)],
+    }),
+    database.query.workspaceExecutorSourceCredential.findMany({
+      where: eq(workspaceExecutorSourceCredential.userId, input.userId),
+    }),
+  ]);
+
+  const credentialBySourceId = new Map(
+    credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
+  );
+
+  return sources
+    .filter(
+      (source) =>
+        source.kind === "mcp" &&
+        source.authType === "oauth2",
+    )
+    .map((source) => {
+      const credential = credentialBySourceId.get(source.id);
+      return {
+        sourceId: source.id,
+        name: source.name,
+        endpoint: source.endpoint,
+        transport: source.transport ?? null,
+        queryParams: source.queryParams ?? null,
+        credential:
+          credential?.enabled === false
+            ? null
+            : readStoredExecutorSourceOauthCredential(source, credential),
+      };
+    });
+}
+
 export async function rebuildWorkspaceExecutorPackage(input: {
   database?: DatabaseLike;
   workspaceId: string;
@@ -497,18 +562,7 @@ export async function rebuildWorkspaceExecutorPackage(input: {
     orderBy: (source, { asc }) => [asc(source.namespace), asc(source.createdAt)],
   });
 
-  const revisionHash = createHash("sha256")
-    .update(
-      JSON.stringify(
-        sources.map((source) => ({
-          id: source.id,
-          revisionHash: source.revisionHash,
-          enabled: source.enabled,
-          updatedAt: source.updatedAt?.toISOString() ?? null,
-        })),
-      ),
-    )
-    .digest("hex");
+  const revisionHash = computeWorkspaceExecutorPackageRevision(sources);
 
   const config: LocalExecutorConfig = {
     workspace: input.workspaceName?.trim() ? { name: input.workspaceName.trim() } : undefined,
@@ -567,18 +621,7 @@ export async function ensureWorkspaceExecutorPackage(input: {
         updatedAt: true,
       },
     });
-    const nextRevisionHash = createHash("sha256")
-      .update(
-        JSON.stringify(
-          sources.map((source) => ({
-            id: source.id,
-            revisionHash: source.revisionHash,
-            enabled: source.enabled,
-            updatedAt: source.updatedAt?.toISOString() ?? null,
-          })),
-        ),
-      )
-      .digest("hex");
+    const nextRevisionHash = computeWorkspaceExecutorPackageRevision(sources);
 
     if (nextRevisionHash === existing.revisionHash) {
       return existing;
