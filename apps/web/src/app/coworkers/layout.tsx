@@ -12,12 +12,14 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
   const isRunsRoute = pathname?.startsWith("/coworkers/runs");
   const isGridRoute = pathname === "/coworkers/grid";
   const isDeployRoute = pathname?.startsWith("/coworkers/deploy/");
+  const isOverviewRoute = pathname === "/coworkers/overview";
   const isCoworkerEditorRoute =
     pathname?.startsWith("/coworkers/") &&
     pathname !== "/coworkers" &&
     !isDeployRoute &&
     !isRunsRoute &&
-    !isGridRoute;
+    !isGridRoute &&
+    !isOverviewRoute;
 
   useEffect(() => {
     const handleOpenDrawer = () => setRecentDrawerOpen(true);
