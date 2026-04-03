@@ -2,12 +2,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../core/types";
 import { prepareExecutorInSandbox } from "./executor-prep";
 
-const { getWorkspaceExecutorBootstrapMock } = vi.hoisted(() => ({
+process.env.BETTER_AUTH_SECRET ??= "test-secret";
+process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/cmdclaw_test";
+process.env.REDIS_URL ??= "redis://localhost:6379";
+process.env.OPENAI_API_KEY ??= "test-openai-key";
+process.env.ANTHROPIC_API_KEY ??= "test-anthropic-key";
+process.env.SANDBOX_DEFAULT ??= "docker";
+process.env.ENCRYPTION_KEY ??= "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.CMDCLAW_SERVER_SECRET ??= "test-server-secret";
+process.env.AWS_ENDPOINT_URL ??= "http://localhost:9000";
+process.env.AWS_ACCESS_KEY_ID ??= "test-access-key";
+process.env.AWS_SECRET_ACCESS_KEY ??= "test-secret-key";
+
+const {
+  getWorkspaceExecutorBootstrapMock,
+  getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock,
+} = vi.hoisted(() => ({
   getWorkspaceExecutorBootstrapMock: vi.fn(),
+  getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock: vi.fn(),
 }));
 
 vi.mock("../../executor/workspace-sources", () => ({
   getWorkspaceExecutorBootstrap: getWorkspaceExecutorBootstrapMock,
+  getWorkspaceExecutorNativeMcpOAuthBootstrapSources:
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock,
 }));
 
 function makeSandboxHandle(): SandboxHandle {
@@ -44,6 +62,7 @@ describe("prepareExecutorInSandbox", () => {
         },
       ],
     });
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([]);
   });
 
   it("starts executor via executor server start and validates the local server", async () => {
@@ -192,5 +211,153 @@ describe("prepareExecutorInSandbox", () => {
         },
       }),
     );
+  });
+
+  it("reconciles native MCP OAuth sources by creating secrets, updating config, and refreshing", async () => {
+    const sandbox = makeSandboxHandle();
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      {
+        sourceId: "source-1",
+        name: "Linear",
+        endpoint: "https://mcp.linear.app/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "oauth-access",
+          refreshToken: "oauth-refresh",
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "read write",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://mcp.linear.app",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+    ]);
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '"ok"\n',
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '{"id":"sec-access"}',
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '{"id":"sec-refresh"}',
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '{"id":"source-1"}',
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '{"id":"source-1","status":"connected"}',
+        stderr: "",
+      });
+
+    await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      5,
+      expect.stringContaining("/v1/local/secrets"),
+      expect.objectContaining({
+        env: {
+          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+        },
+      }),
+    );
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      7,
+      expect.stringContaining("tools.executor.mcp.updateSource"),
+      expect.objectContaining({
+        env: {
+          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+        },
+      }),
+    );
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      8,
+      expect.stringContaining("tools.executor.sources.refresh"),
+      expect.objectContaining({
+        env: {
+          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+        },
+      }),
+    );
+  });
+
+  it("skips native MCP OAuth reconciliation when no credential is available", async () => {
+    const sandbox = makeSandboxHandle();
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      {
+        sourceId: "source-1",
+        name: "Linear",
+        endpoint: "https://mcp.linear.app/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: null,
+      },
+    ]);
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '"ok"\n',
+        stderr: "",
+      });
+
+    await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    expect(sandbox.exec).toHaveBeenCalledTimes(4);
   });
 });

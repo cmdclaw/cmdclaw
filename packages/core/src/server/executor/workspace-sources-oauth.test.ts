@@ -169,7 +169,7 @@ describe("workspace executor OAuth bootstrap", () => {
     });
   });
 
-  it("injects the OAuth bearer token into the executor config", async () => {
+  it("leaves OAuth MCP auth out of the package config for native sandbox reconciliation", async () => {
     const source = createSource();
     const packageRow = createPackageRow(source);
     const database = createDatabase({
@@ -216,9 +216,9 @@ describe("workspace executor OAuth bootstrap", () => {
       }),
     ]);
     const config = JSON.parse(result.configJson) as {
-      sources: Record<string, { binding: { headers: Record<string, string> } }>;
+      sources: Record<string, { binding: { headers: Record<string, string> | null } }>;
     };
-    expect(config.sources["src-1"]?.binding.headers.Authorization).toBe("Bearer oauth-access");
+    expect(config.sources["src-1"]?.binding.headers).toBeNull();
   });
 
   it("marks disconnected OAuth sources as auth_required", async () => {

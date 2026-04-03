@@ -1,5 +1,8 @@
 import { exchangeMcpOAuthAuthorizationCode } from "@cmdclaw/core/server/executor/mcp-oauth";
-import { setWorkspaceExecutorSourceOAuthCredential } from "@cmdclaw/core/server/executor/workspace-sources";
+import {
+  computeWorkspaceExecutorSourceRevisionHash,
+  setWorkspaceExecutorSourceOAuthCredential,
+} from "@cmdclaw/core/server/executor/workspace-sources";
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { db } from "@cmdclaw/db/client";
@@ -109,6 +112,28 @@ export async function GET(request: NextRequest) {
         displayName: existingCredential?.displayName ?? null,
         enabled: existingCredential?.enabled ?? true,
       });
+      await db
+        .update(workspaceExecutorSource)
+        .set({
+          revisionHash: computeWorkspaceExecutorSourceRevisionHash({
+            kind: source.kind,
+            name: source.name,
+            namespace: source.namespace,
+            endpoint: source.endpoint,
+            specUrl: source.specUrl,
+            transport: source.transport,
+            headers: source.headers,
+            queryParams: source.queryParams,
+            defaultHeaders: source.defaultHeaders,
+            authType: source.authType,
+            authHeaderName: source.authHeaderName,
+            authQueryParam: source.authQueryParam,
+            authPrefix: source.authPrefix,
+            enabled: source.enabled,
+          }),
+          updatedAt: new Date(),
+        })
+        .where(eq(workspaceExecutorSource.id, source.id));
 
       appendExecutorSourceRedirectParam(redirectUrl, "oauth", "success");
       return NextResponse.redirect(redirectUrl);

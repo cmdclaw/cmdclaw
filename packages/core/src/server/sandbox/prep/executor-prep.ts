@@ -1,4 +1,8 @@
-import { getWorkspaceExecutorBootstrap } from "../../executor/workspace-sources";
+import {
+  getWorkspaceExecutorBootstrap,
+  getWorkspaceExecutorNativeMcpOAuthBootstrapSources,
+  type WorkspaceExecutorNativeMcpOauthBootstrapSource,
+} from "../../executor/workspace-sources";
 import type { SandboxHandle } from "../core/types";
 
 const EXECUTOR_BASE_URL = "http://127.0.0.1:8788";
@@ -91,6 +95,161 @@ async function execNoThrow(
   }
 }
 
+function parseJsonResult<T>(value: string, label: string): T {
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    throw new Error(
+      `${label} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function createExecutorLocalSecret(input: {
+  sandbox: SandboxHandle;
+  env: Record<string, string>;
+  name: string;
+  value: string;
+}): Promise<string> {
+  const payload = JSON.stringify({
+    name: input.name,
+    value: input.value,
+  });
+  const result = await execNoThrow(
+    input.sandbox,
+    [
+      "curl -fsS -X POST",
+      `${escapeShell(`${EXECUTOR_BASE_URL}/v1/local/secrets`)}`,
+      "-H 'content-type: application/json'",
+      `--data ${escapeShell(payload)}`,
+    ].join(" "),
+    {
+      timeoutMs: 15_000,
+      env: input.env,
+    },
+  );
+
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Executor secret creation failed (exit=${result.exitCode}): ${
+        result.stderr || result.stdout || "unknown error"
+      }`,
+    );
+  }
+
+  const secret = parseJsonResult<{ id?: string }>(result.stdout, "Executor secret creation");
+  if (!secret.id) {
+    throw new Error("Executor secret creation did not return a secret id.");
+  }
+
+  return secret.id;
+}
+
+function buildNativeMcpOauthSourceConfig(
+  source: WorkspaceExecutorNativeMcpOauthBootstrapSource,
+  accessTokenSecretId: string,
+  refreshTokenSecretId: string | null,
+) {
+  if (!source.credential) {
+    throw new Error(`Missing OAuth credential for source ${source.sourceId}`);
+  }
+
+  return {
+    name: source.name,
+    endpoint: source.endpoint,
+    transport: source.transport,
+    queryParams: source.queryParams,
+    headers: null,
+    command: null,
+    args: null,
+    env: null,
+    cwd: null,
+    auth: {
+      kind: "oauth2" as const,
+      redirectUri: source.credential.metadata.redirectUri,
+      accessTokenRef: {
+        secretId: accessTokenSecretId,
+      },
+      refreshTokenRef: refreshTokenSecretId ? { secretId: refreshTokenSecretId } : null,
+      tokenType: source.credential.metadata.tokenType.toLowerCase(),
+      expiresAt: source.credential.expiresAt?.getTime() ?? null,
+      scope: source.credential.metadata.scope,
+      resourceMetadataUrl: source.credential.metadata.resourceMetadataUrl,
+      authorizationServerUrl: source.credential.metadata.authorizationServerUrl,
+      resourceMetadata: source.credential.metadata.resourceMetadata,
+      authorizationServerMetadata: source.credential.metadata.authorizationServerMetadata,
+      clientInformation: source.credential.metadata.clientInformation,
+    },
+  };
+}
+
+async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
+  sandbox: SandboxHandle;
+  env: Record<string, string>;
+  sources: WorkspaceExecutorNativeMcpOauthBootstrapSource[];
+}) {
+  for (const source of input.sources) {
+    if (!source.credential) {
+      continue;
+    }
+
+    const accessTokenSecretId = await createExecutorLocalSecret({
+      sandbox: input.sandbox,
+      env: input.env,
+      name: `${source.name} access token`,
+      value: source.credential.accessToken,
+    });
+    const refreshTokenSecretId = source.credential.refreshToken
+      ? await createExecutorLocalSecret({
+          sandbox: input.sandbox,
+          env: input.env,
+          name: `${source.name} refresh token`,
+          value: source.credential.refreshToken,
+        })
+      : null;
+    const updateCode = `return await tools.executor.mcp.updateSource(${JSON.stringify({
+      sourceId: source.sourceId,
+      config: buildNativeMcpOauthSourceConfig(source, accessTokenSecretId, refreshTokenSecretId),
+    })})`;
+    const updateResult = await execNoThrow(
+      input.sandbox,
+      `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(updateCode)}`,
+      {
+        timeoutMs: 30_000,
+        env: input.env,
+      },
+    );
+
+    if (updateResult.exitCode !== 0) {
+      throw new Error(
+        `Executor MCP native update failed for ${source.sourceId} (exit=${updateResult.exitCode}): ${
+          updateResult.stderr || updateResult.stdout || "unknown error"
+        }`,
+      );
+    }
+
+    const refreshCode = `return await tools.executor.sources.refresh(${JSON.stringify({
+      sourceId: source.sourceId,
+    })})`;
+    const refreshResult = await execNoThrow(
+      input.sandbox,
+      `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(refreshCode)}`,
+      {
+        timeoutMs: 30_000,
+        env: input.env,
+      },
+    );
+
+    if (refreshResult.exitCode !== 0) {
+      throw new Error(
+        `Executor source refresh failed for ${source.sourceId} (exit=${refreshResult.exitCode}): ${
+          refreshResult.stderr || refreshResult.stdout || "unknown error"
+        }`,
+      );
+    }
+  }
+}
+
 export async function prepareExecutorInSandbox(input: {
   sandbox: SandboxHandle;
   workspaceId: string | null | undefined;
@@ -103,12 +262,19 @@ export async function prepareExecutorInSandbox(input: {
     return null;
   }
 
-  const bootstrap = await getWorkspaceExecutorBootstrap({
-    workspaceId: input.workspaceId,
-    workspaceName: input.workspaceName,
-    userId: input.userId,
-    allowedSourceIds: input.allowedSourceIds,
-  });
+  const [bootstrap, nativeMcpOauthSources] = await Promise.all([
+    getWorkspaceExecutorBootstrap({
+      workspaceId: input.workspaceId,
+      workspaceName: input.workspaceName,
+      userId: input.userId,
+      allowedSourceIds: input.allowedSourceIds,
+    }),
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSources({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      allowedSourceIds: input.allowedSourceIds,
+    }),
+  ]);
 
   if (bootstrap.sources.length === 0) {
     return null;
@@ -198,6 +364,12 @@ export async function prepareExecutorInSandbox(input: {
       }`,
     );
   }
+
+  await reconcileNativeMcpOAuthSourcesInSandbox({
+    sandbox: input.sandbox,
+    env: executorCommandEnv,
+    sources: nativeMcpOauthSources,
+  });
 
   const lines = [
     "## Executor Runtime",
