@@ -147,6 +147,11 @@ describe("InboxPage", () => {
 
     expect(screen.getByText("Inbox Triage · Mar 30, 14:32")).toBeTruthy();
     expect(screen.getByText("Follow up with prospect")).toBeTruthy();
+    expect(mockUseInboxItems).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statuses: ["awaiting_approval", "awaiting_auth"],
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Chats" }));
 
@@ -154,6 +159,7 @@ describe("InboxPage", () => {
       expect(mockUseInboxItems).toHaveBeenLastCalledWith(
         expect.objectContaining({
           type: "chats",
+          statuses: ["awaiting_approval", "awaiting_auth"],
         }),
       );
     });
