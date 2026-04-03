@@ -17,6 +17,18 @@ import {
 import { client } from "./client";
 
 type CoworkerToolAccessMode = "all" | "selected";
+type ConversationListQueryData = {
+  conversations: Array<{
+    id: string;
+  }>;
+};
+type DeleteConversationMutationContext = {
+  previousConversationLists: Array<
+    [queryKey: readonly unknown[], data: ConversationListQueryData | undefined]
+  >;
+  previousConversation: unknown;
+  previousConversationUsage: unknown;
+};
 
 const STREAM_NOT_READY_ERROR =
   "Generation is still processing but cannot be streamed from this server yet. Please refresh shortly.";
@@ -160,7 +172,67 @@ export function useDeleteConversation() {
   return useMutation({
     // eslint-disable-next-line drizzle/enforce-delete-with-where -- ORPC client delete, not a Drizzle query
     mutationFn: (id: string) => client.conversation.delete({ id }),
-    onSuccess: () => {
+    onMutate: async (id): Promise<DeleteConversationMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: ["conversation"] });
+
+      const previousConversationLists = queryClient.getQueriesData<ConversationListQueryData>({
+        queryKey: ["conversation", "list"],
+      });
+      const previousConversation = queryClient.getQueryData(["conversation", "get", id]);
+      const previousConversationUsage = queryClient.getQueryData(["conversation", "usage", id]);
+
+      queryClient.setQueriesData<ConversationListQueryData>(
+        { queryKey: ["conversation", "list"] },
+        (current) => {
+          if (!current) {
+            return current;
+          }
+
+          const nextConversations = current.conversations.filter(
+            (conversation) => conversation.id !== id,
+          );
+          if (nextConversations.length === current.conversations.length) {
+            return current;
+          }
+
+          return {
+            ...current,
+            conversations: nextConversations,
+          };
+        },
+      );
+      queryClient.removeQueries({
+        queryKey: ["conversation", "get", id],
+        exact: true,
+      });
+      queryClient.removeQueries({
+        queryKey: ["conversation", "usage", id],
+        exact: true,
+      });
+
+      return {
+        previousConversationLists,
+        previousConversation,
+        previousConversationUsage,
+      };
+    },
+    onError: (_error, id, context) => {
+      if (!context) {
+        return;
+      }
+
+      for (const [queryKey, data] of context.previousConversationLists) {
+        queryClient.setQueryData(queryKey, data);
+      }
+
+      if (context.previousConversation !== undefined) {
+        queryClient.setQueryData(["conversation", "get", id], context.previousConversation);
+      }
+      if (context.previousConversationUsage !== undefined) {
+        queryClient.setQueryData(["conversation", "usage", id], context.previousConversationUsage);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["conversation"] });
     },
   });
