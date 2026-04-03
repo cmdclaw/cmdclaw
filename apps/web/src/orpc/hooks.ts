@@ -1041,6 +1041,14 @@ export function useCoworkerList() {
   });
 }
 
+export function useCoworkerOverview() {
+  return useQuery({
+    queryKey: ["coworker", "overview"],
+    queryFn: () => client.coworker.getOverview(),
+    refetchInterval: 60_000,
+  });
+}
+
 export function useCoworker(id: string | undefined) {
   return useQuery({
     queryKey: ["coworker", "get", id],

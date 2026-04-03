@@ -4,6 +4,7 @@ import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source"
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
 import {
+  BarChart3,
   Circle,
   Download,
   Ellipsis,
@@ -1185,6 +1186,13 @@ export default function CoworkersPage() {
                   {coworkerList.length}
                 </span>
               </h2>
+              <Link
+                href="/coworkers/overview"
+                className="text-muted-foreground hover:text-foreground ml-1 flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
+              >
+                <BarChart3 className="size-3.5" />
+                <span className="hidden sm:inline">Overview</span>
+              </Link>
             </div>
             <div className="relative w-full sm:w-64">
               <Search className="text-muted-foreground/60 pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />

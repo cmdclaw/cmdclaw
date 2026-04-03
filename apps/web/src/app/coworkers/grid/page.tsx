@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { BarChart3, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
@@ -112,11 +112,20 @@ export default function CoworkersGridPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">All Coworkers</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {coworkerList.length} coworker{coworkerList.length === 1 ? "" : "s"} in grid view
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">All Coworkers</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {coworkerList.length} coworker{coworkerList.length === 1 ? "" : "s"} in grid view
+          </p>
+        </div>
+        <Link
+          href="/coworkers/overview"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+        >
+          <BarChart3 className="size-3.5" />
+          Overview
+        </Link>
       </div>
 
       {isLoading ? (
