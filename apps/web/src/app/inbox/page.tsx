@@ -28,6 +28,7 @@ import {
 } from "@/orpc/hooks";
 
 const ALL_STATUSES: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth", "error"];
+const DEFAULT_STATUS_FILTERS: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth"];
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
@@ -82,7 +83,7 @@ export default function InboxPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "coworkers" | "chats">("all");
-  const [statusFilters, setStatusFilters] = useState<InboxItemStatus[]>(ALL_STATUSES);
+  const [statusFilters, setStatusFilters] = useState<InboxItemStatus[]>(DEFAULT_STATUS_FILTERS);
   const [sourceCoworkerId, setSourceCoworkerId] = useState<string | undefined>(undefined);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
