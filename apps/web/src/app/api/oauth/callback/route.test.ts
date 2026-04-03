@@ -10,6 +10,7 @@ const {
   submitAuthResultMock,
   consumeExecutorSourceOAuthPendingMock,
   exchangeMcpOAuthAuthorizationCodeMock,
+  computeWorkspaceExecutorSourceRevisionHashMock,
   setWorkspaceExecutorSourceOAuthCredentialMock,
   integrationFindFirstMock,
   workspaceExecutorSourceFindFirstMock,
@@ -26,6 +27,7 @@ const {
   const submitAuthResultMock = vi.fn();
   const consumeExecutorSourceOAuthPendingMock = vi.fn();
   const exchangeMcpOAuthAuthorizationCodeMock = vi.fn();
+  const computeWorkspaceExecutorSourceRevisionHashMock = vi.fn(() => "native-hash");
   const setWorkspaceExecutorSourceOAuthCredentialMock = vi.fn();
 
   const integrationFindFirstMock = vi.fn();
@@ -67,6 +69,7 @@ const {
     submitAuthResultMock,
     consumeExecutorSourceOAuthPendingMock,
     exchangeMcpOAuthAuthorizationCodeMock,
+    computeWorkspaceExecutorSourceRevisionHashMock,
     setWorkspaceExecutorSourceOAuthCredentialMock,
     integrationFindFirstMock,
     workspaceExecutorSourceFindFirstMock,
@@ -100,6 +103,7 @@ vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
+  computeWorkspaceExecutorSourceRevisionHash: computeWorkspaceExecutorSourceRevisionHashMock,
   setWorkspaceExecutorSourceOAuthCredential: setWorkspaceExecutorSourceOAuthCredentialMock,
 }));
 
@@ -286,8 +290,20 @@ describe("GET /api/oauth/callback", () => {
     });
     workspaceExecutorSourceFindFirstMock.mockResolvedValue({
       id: "src-1",
+      name: "Linear",
+      namespace: "linear",
+      endpoint: "https://mcp.linear.app/mcp",
+      specUrl: null,
+      transport: "streamable-http",
+      headers: null,
+      queryParams: null,
+      defaultHeaders: null,
       kind: "mcp",
       authType: "oauth2",
+      authHeaderName: null,
+      authQueryParam: null,
+      authPrefix: null,
+      enabled: true,
     });
     workspaceExecutorSourceCredentialFindFirstMock.mockResolvedValue({
       displayName: "Linear",
@@ -316,6 +332,10 @@ describe("GET /api/oauth/callback", () => {
         enabled: false,
       }),
     );
+    expect(computeWorkspaceExecutorSourceRevisionHashMock).toHaveBeenCalledWith(
+      expect.objectContaining({ authType: "oauth2" }),
+    );
+    expect(updateWhereMock).toHaveBeenCalled();
     expect(getLocation(response)).toBe(
       "https://app.example.com/toolbox/sources/src-1?oauth=success",
     );
