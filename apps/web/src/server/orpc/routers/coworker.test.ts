@@ -14,6 +14,8 @@ function createProcedureStub() {
 
 const {
   triggerCoworkerRunMock,
+  reconcileStaleCoworkerRunsForCoworkerMock,
+  reconcileStaleCoworkerRunsForCoworkersMock,
   syncCoworkerScheduleJobMock,
   removeCoworkerScheduleJobMock,
   generateCoworkerMetadataOnFirstPromptFillMock,
@@ -26,6 +28,8 @@ const {
   searchRemoteIntegrationUsersMock,
 } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn(),
+  reconcileStaleCoworkerRunsForCoworkerMock: vi.fn(),
+  reconcileStaleCoworkerRunsForCoworkersMock: vi.fn(),
   syncCoworkerScheduleJobMock: vi.fn(),
   removeCoworkerScheduleJobMock: vi.fn(),
   generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
@@ -43,6 +47,8 @@ vi.mock("../middleware", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
+  reconcileStaleCoworkerRunsForCoworker: reconcileStaleCoworkerRunsForCoworkerMock,
+  reconcileStaleCoworkerRunsForCoworkers: reconcileStaleCoworkerRunsForCoworkersMock,
   triggerCoworkerRun: triggerCoworkerRunMock,
 }));
 
@@ -212,6 +218,8 @@ describe("coworkerRouter", () => {
     );
     syncCoworkerScheduleJobMock.mockResolvedValue(undefined);
     removeCoworkerScheduleJobMock.mockResolvedValue(undefined);
+    reconcileStaleCoworkerRunsForCoworkerMock.mockResolvedValue(undefined);
+    reconcileStaleCoworkerRunsForCoworkersMock.mockResolvedValue(undefined);
     triggerCoworkerRunMock.mockResolvedValue({
       coworkerId: "wf-1",
       runId: "run-1",
@@ -404,6 +412,7 @@ describe("coworkerRouter", () => {
         recentRuns: [],
       },
     ]);
+    expect(reconcileStaleCoworkerRunsForCoworkersMock).toHaveBeenCalledWith(["wf-1", "wf-2"]);
   });
 
   it("gets a coworker with mapped runs", async () => {
@@ -478,6 +487,7 @@ describe("coworkerRouter", () => {
         },
       ],
     });
+    expect(reconcileStaleCoworkerRunsForCoworkerMock).toHaveBeenCalledWith("wf-1");
     expect(getRunsOrderBy).toEqual(["d:started-col"]);
   });
 
@@ -677,7 +687,11 @@ describe("coworkerRouter", () => {
         allowedCustomIntegrations: [],
       },
       context,
-    })) as { name: string; description: string | null; username: string | null };
+    })) as {
+      name: string;
+      description: string | null;
+      username: string | null;
+    };
 
     expect(result).toEqual({
       id: "wf-3",
@@ -1759,6 +1773,7 @@ describe("coworkerRouter", () => {
         },
       ],
     });
+    expect(reconcileStaleCoworkerRunsForCoworkerMock).toHaveBeenCalledWith("wf-1");
     expect(eventsOrderBy).toEqual(["a:created-col"]);
   });
 
@@ -1843,6 +1858,7 @@ describe("coworkerRouter", () => {
         errorMessage: null,
       },
     ]);
+    expect(reconcileStaleCoworkerRunsForCoworkerMock).toHaveBeenCalledWith("wf-1");
     expect(listRunsOrderBy).toEqual(["d:started-col"]);
   });
 });
