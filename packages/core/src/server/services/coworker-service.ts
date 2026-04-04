@@ -36,10 +36,16 @@ const ACTIVE_COWORKER_RUN_STATUSES = [
   "awaiting_auth",
   "paused",
 ] as const;
-const TERMINAL_GENERATION_STATUSES = ["completed", "cancelled", "error"] as const;
+const TERMINAL_GENERATION_STATUSES = [
+  "completed",
+  "cancelled",
+  "error",
+] as const;
 const ORPHAN_RUN_GRACE_MS = 2 * 60 * 1000;
 const COWORKER_PREPARING_TIMEOUT_MS = (() => {
-  const seconds = Number(process.env.COWORKER_PREPARING_TIMEOUT_SECONDS ?? "300");
+  const seconds = Number(
+    process.env.COWORKER_PREPARING_TIMEOUT_SECONDS ?? "300",
+  );
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return 5 * 60 * 1000;
   }
@@ -58,7 +64,9 @@ function mapGenerationStatusToCoworkerRunStatus(
   return "error";
 }
 
-async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promise<void> {
+export async function reconcileStaleCoworkerRunsForCoworker(
+  coworkerId: string,
+): Promise<void> {
   const candidateRuns = await db.query.coworkerRun.findMany({
     where: and(
       eq(coworkerRun.coworkerId, coworkerId),
@@ -84,7 +92,8 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
     const gen = run.generation;
     if (!gen) {
       const isLikelyOrphan =
-        run.status === "running" && Date.now() - run.startedAt.getTime() > ORPHAN_RUN_GRACE_MS;
+        run.status === "running" &&
+        Date.now() - run.startedAt.getTime() > ORPHAN_RUN_GRACE_MS;
       if (!isLikelyOrphan) {
         return;
       }
@@ -94,7 +103,9 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
         .set({
           status: "error",
           finishedAt: run.finishedAt ?? new Date(),
-          errorMessage: run.errorMessage ?? "Coworker run failed before generation could start.",
+          errorMessage:
+            run.errorMessage ??
+            "Coworker run failed before generation could start.",
         })
         .where(eq(coworkerRun.id, run.id));
 
@@ -106,9 +117,10 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
         gen.status as (typeof TERMINAL_GENERATION_STATUSES)[number],
       )
     ) {
-      const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
-        gen.id,
-      );
+      const pendingInterrupt =
+        await generationInterruptService.getPendingInterruptForGeneration(
+          gen.id,
+        );
       const isPreparingTimeout =
         run.status === "running" &&
         gen.status === "running" &&
@@ -165,6 +177,19 @@ async function reconcileStaleCoworkerRunsForCoworker(coworkerId: string): Promis
   await Promise.all(updates);
 }
 
+export async function reconcileStaleCoworkerRunsForCoworkers(
+  coworkerIds: string[],
+): Promise<void> {
+  const uniqueCoworkerIds = [
+    ...new Set(coworkerIds.filter((id) => id.length > 0)),
+  ];
+  await Promise.all(
+    uniqueCoworkerIds.map((coworkerId) =>
+      reconcileStaleCoworkerRunsForCoworker(coworkerId),
+    ),
+  );
+}
+
 export async function triggerCoworkerRun(params: {
   coworkerId: string;
   triggerPayload: unknown;
@@ -180,7 +205,10 @@ export async function triggerCoworkerRun(params: {
 }> {
   const wf = await db.query.coworker.findFirst({
     where: params.userId
-      ? and(eq(coworker.id, params.coworkerId), eq(coworker.ownerId, params.userId))
+      ? and(
+          eq(coworker.id, params.coworkerId),
+          eq(coworker.ownerId, params.userId),
+        )
       : eq(coworker.id, params.coworkerId),
   });
 
@@ -236,7 +264,10 @@ export async function triggerCoworkerRun(params: {
   ].filter(Boolean);
   const userContent = coworkerSections.join("\n\n");
 
-  const toolAccessMode = normalizeCoworkerToolAccessMode(wf.toolAccessMode, wf.allowedIntegrations);
+  const toolAccessMode = normalizeCoworkerToolAccessMode(
+    wf.toolAccessMode,
+    wf.allowedIntegrations,
+  );
   let allowedIntegrations =
     toolAccessMode === "all"
       ? await getEnabledIntegrationTypes(wf.ownerId)
@@ -261,7 +292,9 @@ export async function triggerCoworkerRun(params: {
           })
         ).map((entry) => entry.customIntegration.slug)
       : Array.isArray(wf.allowedCustomIntegrations)
-        ? wf.allowedCustomIntegrations.filter((value): value is string => typeof value === "string")
+        ? wf.allowedCustomIntegrations.filter(
+            (value): value is string => typeof value === "string",
+          )
         : [];
   const allowedExecutorSourceIds =
     toolAccessMode === "all"
@@ -277,10 +310,14 @@ export async function triggerCoworkerRun(params: {
           })
         ).map((entry) => entry.id)
       : Array.isArray(wf.allowedExecutorSourceIds)
-        ? wf.allowedExecutorSourceIds.filter((value): value is string => typeof value === "string")
+        ? wf.allowedExecutorSourceIds.filter(
+            (value): value is string => typeof value === "string",
+          )
         : [];
   const allowedSkillSlugs =
-    toolAccessMode === "all" ? undefined : normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs);
+    toolAccessMode === "all"
+      ? undefined
+      : normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs);
   let resolvedRemoteIntegrationSource: RemoteIntegrationSource | undefined;
 
   if (params.remoteIntegrationSource) {
@@ -309,11 +346,15 @@ export async function triggerCoworkerRun(params: {
         coworkerRunId: run.id,
         targetEnv: resolvedRemoteIntegrationSource.targetEnv,
         remoteUserId: resolvedRemoteIntegrationSource.remoteUserId,
-        remoteUserEmail: resolvedRemoteIntegrationSource.remoteUserEmail ?? null,
+        remoteUserEmail:
+          resolvedRemoteIntegrationSource.remoteUserEmail ?? null,
         allowedIntegrations: [...allowedIntegrations].toSorted(),
-        attachedTokenEnvVarNames: Object.keys(remoteCredentials.tokens).toSorted(),
+        attachedTokenEnvVarNames: Object.keys(
+          remoteCredentials.tokens,
+        ).toSorted(),
         actorUserId: resolvedRemoteIntegrationSource.requestedByUserId ?? null,
-        actorUserEmail: resolvedRemoteIntegrationSource.requestedByEmail ?? null,
+        actorUserEmail:
+          resolvedRemoteIntegrationSource.requestedByEmail ?? null,
       },
       {
         source: "coworker-service",
@@ -327,11 +368,15 @@ export async function triggerCoworkerRun(params: {
       payload: {
         targetEnv: resolvedRemoteIntegrationSource.targetEnv,
         remoteUserId: resolvedRemoteIntegrationSource.remoteUserId,
-        remoteUserEmail: resolvedRemoteIntegrationSource.remoteUserEmail ?? null,
+        remoteUserEmail:
+          resolvedRemoteIntegrationSource.remoteUserEmail ?? null,
         allowedIntegrations: [...allowedIntegrations].toSorted(),
-        attachedTokenEnvVarNames: Object.keys(remoteCredentials.tokens).toSorted(),
+        attachedTokenEnvVarNames: Object.keys(
+          remoteCredentials.tokens,
+        ).toSorted(),
         actorUserId: resolvedRemoteIntegrationSource.requestedByUserId ?? null,
-        actorUserEmail: resolvedRemoteIntegrationSource.requestedByEmail ?? null,
+        actorUserEmail:
+          resolvedRemoteIntegrationSource.requestedByEmail ?? null,
       },
     });
   }
@@ -359,10 +404,15 @@ export async function triggerCoworkerRun(params: {
     generationId = startResult.generationId;
     conversationId = startResult.conversationId;
 
-    await db.update(coworkerRun).set({ generationId }).where(eq(coworkerRun.id, run.id));
+    await db
+      .update(coworkerRun)
+      .set({ generationId })
+      .where(eq(coworkerRun.id, run.id));
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : "Failed to start coworker generation";
+      error instanceof Error
+        ? error.message
+        : "Failed to start coworker generation";
 
     await db
       .update(coworkerRun)
