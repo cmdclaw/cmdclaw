@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
@@ -138,11 +144,139 @@ function TooltipEntry({ name, value, color }: { name: string; value: number; col
 const tooltipElement = <ChartTooltip />;
 
 // ---------------------------------------------------------------------------
+// TanStack Table columns
+// ---------------------------------------------------------------------------
+
+type CoworkerRow = {
+  id: string;
+  name: string;
+  username: string | null;
+  status: string;
+  triggerType: string;
+  totalRuns: number;
+  errorRuns: number;
+  errorRate: number;
+  consecutiveErrors: number;
+  latestRunStatus: string | null;
+  latestRunAt: Date | string | null;
+  latestErrorMessage: string | null;
+};
+
+const columns: ColumnDef<CoworkerRow>[] = [
+  {
+    accessorKey: "name",
+    header: "Name",
+    cell: ({ row }) => (
+      <Link
+        href={`/coworkers/${row.original.id}`}
+        className="font-medium underline-offset-2 hover:underline"
+      >
+        {row.original.name}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => {
+      const isOn = row.original.status === "on";
+      return (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
+            isOn
+              ? "bg-green-500/10 text-green-600 dark:text-green-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              isOn ? "bg-green-500" : "bg-muted-foreground/50",
+            )}
+          />
+          {isOn ? "On" : "Off"}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "triggerType",
+    header: "Trigger",
+    cell: ({ row }) => (
+      <span className="text-muted-foreground">{getTriggerLabel(row.original.triggerType)}</span>
+    ),
+  },
+  {
+    accessorKey: "totalRuns",
+    header: "Runs",
+    meta: { align: "right" },
+    cell: ({ row }) => <span className="tabular-nums">{row.original.totalRuns}</span>,
+  },
+  {
+    accessorKey: "errorRuns",
+    header: "Errors",
+    meta: { align: "right" },
+    cell: ({ row }) => <span className="tabular-nums">{row.original.errorRuns}</span>,
+  },
+  {
+    accessorKey: "errorRate",
+    header: "Error Rate",
+    meta: { align: "right" },
+    cell: ({ row }) => (
+      <span className={cn("tabular-nums", row.original.errorRate > 20 && "font-medium text-red-500")}>
+        {row.original.errorRate}%
+      </span>
+    ),
+  },
+  {
+    accessorKey: "latestRunAt",
+    header: "Last Run",
+    cell: ({ row }) => (
+      <div className="text-muted-foreground flex items-center gap-2">
+        <StatusDot status={row.original.latestRunStatus} />
+        <span>{formatRelativeTime(row.original.latestRunAt)}</span>
+      </div>
+    ),
+  },
+  {
+    accessorKey: "consecutiveErrors",
+    header: "Health",
+    cell: ({ row }) => {
+      const c = row.original;
+      if (c.consecutiveErrors >= 3) {
+        return <span className="text-xs font-medium text-red-500">{c.consecutiveErrors}x failing</span>;
+      }
+      if (c.consecutiveErrors >= 1) {
+        return (
+          <span className="text-xs font-medium text-amber-500">{c.consecutiveErrors}x error</span>
+        );
+      }
+      if (c.latestRunStatus === "completed") {
+        return <span className="text-xs font-medium text-green-500">healthy</span>;
+      }
+      if (c.latestRunStatus === null) {
+        return <span className="text-muted-foreground text-xs">no runs</span>;
+      }
+      return (
+        <span className="text-muted-foreground text-xs capitalize">{c.latestRunStatus}</span>
+      );
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function CoworkerOverviewPage() {
   const { data, isLoading } = useCoworkerOverview();
+
+  const table = useReactTable({
+    data: data?.coworkers ?? [],
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   if (isLoading) {
     return (
@@ -276,86 +410,42 @@ export default function CoworkerOverviewPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Trigger</th>
-                <th className="px-4 py-3 text-right font-medium">Runs</th>
-                <th className="px-4 py-3 text-right font-medium">Errors</th>
-                <th className="px-4 py-3 text-right font-medium">Error Rate</th>
-                <th className="px-4 py-3 font-medium">Last Run</th>
-                <th className="px-4 py-3 font-medium">Health</th>
-              </tr>
-            </thead>
-            <tbody>
-              {coworkers.map((c) => (
-                <tr key={c.id} className="border-b last:border-b-0 hover:bg-muted/30">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/coworkers/${c.id}`}
-                      className="font-medium underline-offset-2 hover:underline"
-                    >
-                      {c.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                        c.status === "on"
-                          ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          c.status === "on" ? "bg-green-500" : "bg-muted-foreground/50",
-                        )}
-                      />
-                      {c.status === "on" ? "On" : "Off"}
-                    </span>
-                  </td>
-                  <td className="text-muted-foreground px-4 py-3">
-                    {getTriggerLabel(c.triggerType)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{c.totalRuns}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{c.errorRuns}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    <span className={cn(c.errorRate > 20 && "text-red-500 font-medium")}>
-                      {c.errorRate}%
-                    </span>
-                  </td>
-                  <td className="text-muted-foreground px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <StatusDot status={c.latestRunStatus} />
-                      <span>{formatRelativeTime(c.latestRunAt)}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {c.consecutiveErrors >= 3 ? (
-                      <span className="text-xs font-medium text-red-500">
-                        {c.consecutiveErrors}x failing
-                      </span>
-                    ) : c.consecutiveErrors >= 1 ? (
-                      <span className="text-xs font-medium text-amber-500">
-                        {c.consecutiveErrors}x error
-                      </span>
-                    ) : c.latestRunStatus === "completed" ? (
-                      <span className="text-xs font-medium text-green-500">healthy</span>
-                    ) : c.latestRunStatus === null ? (
-                      <span className="text-muted-foreground text-xs">no runs</span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs capitalize">
-                        {c.latestRunStatus}
-                      </span>
-                    )}
-                  </td>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="border-b text-left">
+                  {headerGroup.headers.map((header) => {
+                    const align = (header.column.columnDef.meta as { align?: string })?.align;
+                    return (
+                      <th
+                        key={header.id}
+                        className={cn("px-4 py-3 font-medium", align === "right" && "text-right")}
+                      >
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    );
+                  })}
                 </tr>
               ))}
-              {coworkers.length === 0 && (
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.length > 0 ? (
+                table.getRowModel().rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-muted/30 border-b last:border-b-0">
+                    {row.getVisibleCells().map((cell) => {
+                      const align = (cell.column.columnDef.meta as { align?: string })?.align;
+                      return (
+                        <td
+                          key={cell.id}
+                          className={cn("px-4 py-3", align === "right" && "text-right")}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              ) : (
                 <tr>
-                  <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
+                  <td colSpan={columns.length} className="text-muted-foreground px-4 py-8 text-center">
                     No coworkers yet
                   </td>
                 </tr>
