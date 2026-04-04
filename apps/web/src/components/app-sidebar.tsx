@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Activity,
   ArrowLeft,
   BarChart3,
   Bug,
@@ -359,7 +360,7 @@ export function AppSidebar() {
   ];
 
   const coworkerNavItems: NavItem[] = [
-    { icon: Inbox, label: "Inbox", href: "/inbox" },
+    ...(isAdmin ? [{ icon: Inbox, label: "Inbox", href: "/inbox" }] : []),
     { icon: MessageSquare, label: "Chat", href: "/chat" },
     { icon: Cuboid, label: "Coworkers", href: "/coworkers" },
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
@@ -373,6 +374,7 @@ export function AppSidebar() {
         { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
         { icon: Coins, label: "Credits", href: "/admin/credits" },
         { icon: BarChart3, label: "Usage", href: "/admin/usage" },
+        { icon: Activity, label: "Chat Health", href: "/admin/chat-overview" },
         { icon: UserCog, label: "Impersonation", href: "/admin/impersonation" },
         { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
       ]

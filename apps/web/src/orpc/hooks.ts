@@ -2464,3 +2464,11 @@ export function useSandboxFiles(conversationId: string | undefined) {
     enabled: !!conversationId,
   });
 }
+
+export function useChatOverview() {
+  return useQuery({
+    queryKey: ["admin", "chatOverview"],
+    queryFn: () => client.admin.getChatOverview(),
+    refetchInterval: 60_000,
+  });
+}
