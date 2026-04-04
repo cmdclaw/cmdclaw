@@ -36,7 +36,11 @@ import {
   removeCoworkerScheduleJob,
   syncCoworkerScheduleJob,
 } from "@cmdclaw/core/server/services/coworker-scheduler";
-import { triggerCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
+import {
+  reconcileStaleCoworkerRunsForCoworker,
+  reconcileStaleCoworkerRunsForCoworkers,
+  triggerCoworkerRun,
+} from "@cmdclaw/core/server/services/coworker-service";
 import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
 import {
   conversation,
@@ -332,7 +336,9 @@ async function ensureBuilderCoworkerMetadata(params: {
 }): Promise<typeof coworker.$inferSelect> {
   const { context, wf } = params;
   const database = context.db as {
-    query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    query: {
+      coworker: { findFirst: (...args: unknown[]) => Promise<unknown> };
+    };
     update: (table: typeof coworker) => {
       set: (
         values: Partial<Pick<typeof coworker.$inferInsert, "name" | "description" | "username">>,
@@ -357,7 +363,9 @@ async function ensureBuilderCoworkerMetadata(params: {
   }
 
   const coworkerQueryDatabase = database as {
-    query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+    query: {
+      coworker: { findFirst: (...args: unknown[]) => Promise<unknown> };
+    };
   };
   const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
     database: coworkerQueryDatabase,
@@ -421,9 +429,14 @@ const list = protectedProcedure.handler(async ({ context }) => {
     orderBy: (wf, { desc }) => [desc(wf.updatedAt)],
   });
 
+  await reconcileStaleCoworkerRunsForCoworkers(coworkers.map((row) => row.id));
+
   const items = await Promise.all(
     coworkers.map(async (coworkerRow) => {
-      const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
+      const wf = await ensureBuilderCoworkerMetadata({
+        context,
+        wf: coworkerRow,
+      });
       const runs = await context.db.query.coworkerRun.findMany({
         where: eq(coworkerRun.coworkerId, wf.id),
         orderBy: (run, { desc }) => [desc(run.startedAt)],
@@ -490,7 +503,12 @@ const get = protectedProcedure
       input.id,
     );
 
-    const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
+    await reconcileStaleCoworkerRunsForCoworker(coworkerRow.id);
+
+    const wf = await ensureBuilderCoworkerMetadata({
+      context,
+      wf: coworkerRow,
+    });
 
     const runs = await context.db.query.coworkerRun.findMany({
       where: eq(coworkerRun.coworkerId, wf.id),
@@ -576,7 +594,9 @@ const create = protectedProcedure
     assertModelAllowedForRole(input.model, dbUser?.role);
     const resolvedAuthSource = resolveCoworkerAuthSource(input.model, input.authSource);
     const coworkerQueryDatabase = context.db as unknown as {
-      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+      query: {
+        coworker: { findFirst: (...args: unknown[]) => Promise<unknown> };
+      };
     };
     const providedName = input.name?.trim();
     const nameToSave = providedName && providedName.length > 0 ? providedName : "";
@@ -678,7 +698,9 @@ const update = protectedProcedure
         ? normalizeDescriptionInput(input.description)
         : existing.description;
     const coworkerQueryDatabase = context.db as unknown as {
-      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+      query: {
+        coworker: { findFirst: (...args: unknown[]) => Promise<unknown> };
+      };
     };
     const nextUsername =
       input.username !== undefined
@@ -1004,12 +1026,24 @@ const getRun = protectedProcedure
     const {
       workspace: { id: workspaceId },
     } = await requireActiveWorkspaceAccess(context.user.id);
+    const runFilter = and(
+      eq(coworkerRun.id, input.id),
+      eq(coworkerRun.ownerId, context.user.id),
+      eq(coworkerRun.workspaceId, workspaceId),
+    );
+
+    const initialRun = await context.db.query.coworkerRun.findFirst({
+      where: runFilter,
+    });
+
+    if (!initialRun) {
+      throw new ORPCError("NOT_FOUND", { message: "Run not found" });
+    }
+
+    await reconcileStaleCoworkerRunsForCoworker(initialRun.coworkerId);
+
     const run = await context.db.query.coworkerRun.findFirst({
-      where: and(
-        eq(coworkerRun.id, input.id),
-        eq(coworkerRun.ownerId, context.user.id),
-        eq(coworkerRun.workspaceId, workspaceId),
-      ),
+      where: runFilter,
     });
 
     if (!run) {
@@ -1081,6 +1115,8 @@ const listRuns = protectedProcedure
       context,
       input.coworkerId,
     );
+
+    await reconcileStaleCoworkerRunsForCoworker(wf.id);
 
     const runs = await context.db.query.coworkerRun.findMany({
       where: and(
@@ -1474,7 +1510,10 @@ const exportDefinition = protectedProcedure
       context,
       input.id,
     );
-    const wf = await ensureBuilderCoworkerMetadata({ context, wf: coworkerRow });
+    const wf = await ensureBuilderCoworkerMetadata({
+      context,
+      wf: coworkerRow,
+    });
     const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
     const documents = await context.db.query.coworkerDocument.findMany({
       where: eq(coworkerDocument.coworkerId, wf.id),
@@ -1534,14 +1573,18 @@ const importShared = protectedProcedure
     });
 
     if (!source || !source.sharedAt) {
-      throw new ORPCError("NOT_FOUND", { message: "Shared coworker not found" });
+      throw new ORPCError("NOT_FOUND", {
+        message: "Shared coworker not found",
+      });
     }
 
     assertModelAllowedForRole(source.model, dbUser?.role);
 
     const coworkerId = crypto.randomUUID();
     const coworkerQueryDatabase = context.db as unknown as {
-      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+      query: {
+        coworker: { findFirst: (...args: unknown[]) => Promise<unknown> };
+      };
     };
     const username = await resolveCoworkerUsername({
       database: coworkerQueryDatabase,
@@ -1622,7 +1665,9 @@ const importDefinition = protectedProcedure
 
     const coworkerId = crypto.randomUUID();
     const coworkerQueryDatabase = context.db as unknown as {
-      query: { coworker: { findFirst: (...args: unknown[]) => Promise<unknown> } };
+      query: {
+        coworker: { findFirst: (...args: unknown[]) => Promise<unknown> };
+      };
     };
     const username = await resolveCoworkerUsername({
       database: coworkerQueryDatabase,
@@ -1804,7 +1849,13 @@ const getOrCreateBuilderConversation = protectedProcedure
     if (wf.builderConversationId) {
       const existing = await context.db.query.conversation.findFirst({
         where: eq(conversation.id, wf.builderConversationId),
-        columns: { id: true, autoApprove: true, workspaceId: true, userId: true, type: true },
+        columns: {
+          id: true,
+          autoApprove: true,
+          workspaceId: true,
+          userId: true,
+          type: true,
+        },
       });
       if (existing) {
         if (existing.autoApprove) {
@@ -1845,7 +1896,9 @@ const getOrCreateBuilderConversation = protectedProcedure
       .returning({ id: conversation.id });
 
     if (!created) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Failed to create conversation" });
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to create conversation",
+      });
     }
 
     await context.db
@@ -1877,7 +1930,13 @@ const getOverview = protectedProcedure.handler(async ({ context }) => {
   // Fetch all coworkers for this user/workspace
   const coworkers = await context.db.query.coworker.findMany({
     where: and(eq(coworker.ownerId, context.user.id), eq(coworker.workspaceId, workspaceId)),
-    columns: { id: true, name: true, status: true, triggerType: true, username: true },
+    columns: {
+      id: true,
+      name: true,
+      status: true,
+      triggerType: true,
+      username: true,
+    },
   });
 
   if (coworkers.length === 0) {
@@ -2002,7 +2061,10 @@ const getOverview = protectedProcedure.handler(async ({ context }) => {
     where rn <= 20
     order by coworker_id, started_at desc
   `);
-  const streakRows = (streakResult.rows ?? []) as Array<{ coworkerId: string; status: string }>;
+  const streakRows = (streakResult.rows ?? []) as Array<{
+    coworkerId: string;
+    status: string;
+  }>;
   const consecutiveErrorMap = new Map<string, number>();
   {
     let currentId = "";

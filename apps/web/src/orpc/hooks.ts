@@ -1106,10 +1106,29 @@ export function useUpdateSkillFile() {
 
 // ========== COWORKER HOOKS ==========
 
+const ACTIVE_COWORKER_RUN_STATUSES = new Set([
+  "running",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+]);
+
+function isActiveCoworkerRunStatus(status: string | null | undefined): boolean {
+  return typeof status === "string" && ACTIVE_COWORKER_RUN_STATUSES.has(status);
+}
+
 export function useCoworkerList() {
   return useQuery({
     queryKey: ["coworker", "list"],
     queryFn: () => client.coworker.list(),
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some(
+        (coworker) =>
+          isActiveCoworkerRunStatus(coworker.lastRunStatus) ||
+          (coworker.recentRuns ?? []).some((run) => isActiveCoworkerRunStatus(run.status)),
+      )
+        ? 5_000
+        : false,
   });
 }
 
@@ -1441,7 +1460,9 @@ export function useCoworkerRun(
     queryKey: ["coworker", "run", id],
     queryFn: () => client.coworker.getRun({ id: id! }),
     enabled: (options?.enabled ?? true) && !!id,
-    refetchInterval: options?.refetchInterval,
+    refetchInterval:
+      options?.refetchInterval ??
+      ((query) => (isActiveCoworkerRunStatus(query.state.data?.status) ? 5_000 : false)),
   });
 }
 
@@ -1450,6 +1471,8 @@ export function useCoworkerRuns(coworkerId: string | undefined, limit = 20) {
     queryKey: ["coworker", "runs", coworkerId, limit],
     queryFn: () => client.coworker.listRuns({ coworkerId: coworkerId!, limit }),
     enabled: !!coworkerId,
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((run) => isActiveCoworkerRunStatus(run.status)) ? 5_000 : false,
   });
 }
 
@@ -2470,5 +2493,13 @@ export function useChatOverview() {
     queryKey: ["admin", "chatOverview"],
     queryFn: () => client.admin.getChatOverview(),
     refetchInterval: 60_000,
+  });
+}
+
+export function usePerformanceDashboard(days: "1" | "7" | "30" = "7") {
+  return useQuery({
+    queryKey: ["admin", "performanceDashboard", days],
+    queryFn: () => client.admin.getPerformanceDashboard({ days }),
+    refetchInterval: 120_000,
   });
 }
