@@ -775,6 +775,7 @@ type GenerationDebugInfo = {
   originalErrorMessage?: string | null;
   originalErrorName?: string | null;
   originalErrorPhase?: string | null;
+  originalErrorAt?: string | null;
   runtimeFailure?: RuntimeFailureClassification | null;
   remoteRun?: {
     targetEnv?: RemoteIntegrationSource["targetEnv"];
@@ -1494,12 +1495,14 @@ class GenerationManager {
   ): void {
     const phase = options?.phase ?? this.getCurrentPhase(ctx);
     const formatted = formatErrorMessage(error);
+    const capturedAt = new Date().toISOString();
 
     if (!ctx.debugInfo?.originalErrorMessage) {
       this.updateDebugInfo(ctx, {
         originalErrorMessage: formatted,
         originalErrorName: error instanceof Error ? error.name : null,
         originalErrorPhase: phase,
+        originalErrorAt: capturedAt,
       });
     }
     if (options?.runtimeFailure !== undefined) {
@@ -1514,6 +1517,7 @@ class GenerationManager {
       "GENERATION_CAUGHT_ERROR",
       {
         phase,
+        originalErrorAt: capturedAt,
         runtimeFailure: options?.runtimeFailure ?? null,
         originalErrorMessage: formatted,
         originalErrorName: error instanceof Error ? error.name : null,
