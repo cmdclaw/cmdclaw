@@ -6,11 +6,12 @@ import {
   generation,
   generationInterrupt,
   inboxReadState,
+  user,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { protectedProcedure } from "../middleware";
+import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 import { requireActiveWorkspaceAccess } from "../workspace-access";
 
 const inboxStatusSchema = z.enum(["awaiting_approval", "awaiting_auth", "error"]);
@@ -165,6 +166,19 @@ function buildEditedApprovalMessage(args: {
   ].join("\n");
 }
 
+async function ensureAdmin(context: AuthenticatedContext) {
+  const dbUser = await context.db.query.user.findFirst({
+    where: eq(user.id, context.user.id),
+    columns: { role: true },
+  });
+
+  if (dbUser?.role !== "admin") {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Inbox is currently in beta and limited to admin users.",
+    });
+  }
+}
+
 async function requireConversationAccessInActiveWorkspace(args: {
   context: {
     user: { id: string };
@@ -242,6 +256,7 @@ const list = protectedProcedure
       input,
       context,
     }): Promise<{ items: InboxListItem[]; sourceOptions: InboxSourceOption[] }> => {
+      await ensureAdmin(context);
       const {
         workspace: { id: workspaceId },
       } = await requireActiveWorkspaceAccess(context.user.id);
@@ -488,6 +503,7 @@ const markAsRead = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
+    await ensureAdmin(context);
     const {
       workspace: { id: workspaceId },
     } = await requireActiveWorkspaceAccess(context.user.id);
@@ -572,6 +588,7 @@ const editApprovalAndResend = protectedProcedure
     ]),
   )
   .handler(async ({ input, context }) => {
+    await ensureAdmin(context);
     const {
       workspace: { id: workspaceId },
     } = await requireActiveWorkspaceAccess(context.user.id);
