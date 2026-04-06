@@ -320,6 +320,12 @@ export default function AdminOpsPage() {
                       {row.username ? (
                         <div className="text-muted-foreground text-xs">@{row.username}</div>
                       ) : null}
+                      <Link
+                        href={`/coworkers/${row.id}`}
+                        className="inline-flex text-xs underline underline-offset-2"
+                      >
+                        Open builder
+                      </Link>
                     </td>
                     <td className="space-y-1 px-3 py-3">
                       <div>{row.status}</div>
