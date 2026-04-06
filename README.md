@@ -118,6 +118,9 @@ bun check           # Run workspace checks
 bun test            # Run workspace tests
 ```
 
+Chat and coworker generations are executed by the BullMQ worker. `bun dev:web` is not enough for
+end-to-end local runs; use `bun dev` or start `bun start:worker` alongside the web app.
+
 ## Native Apps
 
 The `apple/` directory contains SwiftUI applications for macOS and iOS. Open `apple/cmdclaw.xcodeproj` in Xcode to build and run.

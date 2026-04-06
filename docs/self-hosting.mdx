@@ -117,7 +117,8 @@ that should trust it.
 
 ## Background worker
 
-CmdClaw uses BullMQ for background jobs (e.g., processing integrations). Start the worker in a separate terminal:
+CmdClaw uses BullMQ for generation execution and background jobs. Chat and coworker runs are
+executed by the worker, so start it in a separate terminal:
 
 ```bash
 bun start:worker
