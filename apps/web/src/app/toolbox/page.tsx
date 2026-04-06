@@ -33,6 +33,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { IntegrationBadges } from "@/components/chat/integration-badges";
+import { ExecutorSourceLogo } from "@/components/executor-source-logo";
 import { ToolboxPreviewModal } from "@/components/toolbox-preview-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -704,13 +705,11 @@ function ExecutorSourceToolCard({
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="bg-muted/60 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-              {source.kind === "mcp" ? (
-                <Puzzle className="text-foreground h-5 w-5" />
-              ) : (
-                <FileCode className="text-foreground h-5 w-5" />
-              )}
-            </div>
+            <ExecutorSourceLogo
+              kind={source.kind}
+              endpoint={source.endpoint}
+              className="h-10 w-10 shrink-0"
+            />
             <div className="min-w-0">
               <p className="text-[13px] leading-tight font-medium">{source.name}</p>
               <div className="mt-1 flex items-center gap-1.5">

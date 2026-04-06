@@ -13,6 +13,7 @@ import {
   buildMutationInputFromForm,
   getSourceFormState,
 } from "@/components/executor-source-form";
+import { ExecutorSourceLogo } from "@/components/executor-source-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -262,12 +263,19 @@ function SourceDetailContent() {
         </Link>
 
         <div className="mt-4 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold">{source.name}</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {source.namespace} · {source.kind === "openapi" ? "OpenAPI" : "MCP"} ·{" "}
-              {source.endpoint}
-            </p>
+          <div className="flex items-start gap-3">
+            <ExecutorSourceLogo
+              kind={source.kind}
+              endpoint={source.endpoint}
+              className="h-12 w-12 shrink-0"
+            />
+            <div>
+              <h1 className="text-xl font-semibold">{source.name}</h1>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {source.namespace} · {source.kind === "openapi" ? "OpenAPI" : "MCP"} ·{" "}
+                {source.endpoint}
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

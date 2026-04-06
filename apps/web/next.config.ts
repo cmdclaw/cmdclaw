@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
     tsconfigPath: "./tsconfig.build.json",
   },
   images: {
-    remotePatterns: [{ hostname: "lh3.googleusercontent.com" }],
+    remotePatterns: [{ hostname: "lh3.googleusercontent.com" }, { hostname: "cdn.brandfetch.io" }],
   },
   serverExternalPackages: ["@whiskeysockets/baileys", "dockerode", "docker-modem", "ssh2"],
 };

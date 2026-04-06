@@ -73,13 +73,43 @@ function expiresInSeconds(expiresAt: Date | null): number | undefined {
   return Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 1000));
 }
 
-function buildClientMetadata(redirectUrl: string) {
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function resolveCmdClawLogoUrl(redirectUrl: string): string {
+  const baseUrlCandidates = [
+    process.env.APP_URL?.trim(),
+    process.env.NEXT_PUBLIC_APP_URL?.trim(),
+    redirectUrl,
+  ];
+
+  for (const candidate of baseUrlCandidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      const parsedCandidate = new URL(candidate);
+      if (!isLoopbackHostname(parsedCandidate.hostname)) {
+        return new URL("/logo.png", parsedCandidate).toString();
+      }
+    } catch {
+      // Ignore invalid URLs and continue to the public fallback.
+    }
+  }
+
+  return "https://cmdclaw.ai/logo.png";
+}
+
+export function buildMcpOAuthClientMetadata(redirectUrl: string) {
   return {
     redirect_uris: [redirectUrl],
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: "none",
-    client_name: "CmdClaw Executor",
+    client_name: "CmdClaw",
+    logo_uri: resolveCmdClawLogoUrl(redirectUrl),
   };
 }
 
@@ -114,7 +144,7 @@ export async function startMcpOAuthAuthorization(input: {
       return input.redirectUrl;
     },
     get clientMetadata() {
-      return buildClientMetadata(input.redirectUrl);
+      return buildMcpOAuthClientMetadata(input.redirectUrl);
     },
     state: () => input.state,
     clientInformation: () => captured.clientInformation,
@@ -194,7 +224,7 @@ export async function exchangeMcpOAuthAuthorizationCode(input: {
       return input.session.redirectUrl;
     },
     get clientMetadata() {
-      return buildClientMetadata(input.session.redirectUrl);
+      return buildMcpOAuthClientMetadata(input.session.redirectUrl);
     },
     clientInformation: () => captured.clientInformation,
     saveClientInformation: (clientInformation) => {
@@ -270,7 +300,7 @@ export async function ensureValidMcpOAuthCredential(input: {
       return currentCredential.metadata.redirectUri;
     },
     get clientMetadata() {
-      return buildClientMetadata(currentCredential.metadata.redirectUri);
+      return buildMcpOAuthClientMetadata(currentCredential.metadata.redirectUri);
     },
     state: () => `cmdclaw-executor-source-${crypto.randomUUID()}`,
     clientInformation: () =>
