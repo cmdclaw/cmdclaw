@@ -2,13 +2,15 @@
 
 import {
   type ColumnDef,
+  type SortingState,
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -162,10 +164,34 @@ type CoworkerRow = {
   latestErrorMessage: string | null;
 };
 
+function SortableHeader({
+  column,
+  label,
+}: {
+  column: { getIsSorted: () => false | "asc" | "desc"; toggleSorting: () => void };
+  label: string;
+}) {
+  const sorted = column.getIsSorted();
+  const handleClick = useMemo(() => () => column.toggleSorting(), [column]);
+  return (
+    <button type="button" className="inline-flex items-center gap-1" onClick={handleClick}>
+      {label}
+      {sorted === "asc" ? (
+        <ArrowUp className="size-3.5" />
+      ) : sorted === "desc" ? (
+        <ArrowDown className="size-3.5" />
+      ) : (
+        <ArrowUpDown className="text-muted-foreground/50 size-3.5" />
+      )}
+    </button>
+  );
+}
+
 const columns: ColumnDef<CoworkerRow>[] = [
   {
     accessorKey: "name",
     header: "Name",
+    enableSorting: false,
     cell: ({ row }) => (
       <Link
         href={`/coworkers/${row.original.id}`}
@@ -178,6 +204,7 @@ const columns: ColumnDef<CoworkerRow>[] = [
   {
     accessorKey: "status",
     header: "Status",
+    enableSorting: false,
     cell: ({ row }) => {
       const isOn = row.original.status === "on";
       return (
@@ -203,28 +230,31 @@ const columns: ColumnDef<CoworkerRow>[] = [
   {
     accessorKey: "triggerType",
     header: "Trigger",
+    enableSorting: false,
     cell: ({ row }) => (
       <span className="text-muted-foreground">{getTriggerLabel(row.original.triggerType)}</span>
     ),
   },
   {
     accessorKey: "totalRuns",
-    header: "Runs",
+    header: ({ column }) => <SortableHeader column={column} label="Runs" />,
     meta: { align: "right" },
     cell: ({ row }) => <span className="tabular-nums">{row.original.totalRuns}</span>,
   },
   {
     accessorKey: "errorRuns",
-    header: "Errors",
+    header: ({ column }) => <SortableHeader column={column} label="Errors" />,
     meta: { align: "right" },
     cell: ({ row }) => <span className="tabular-nums">{row.original.errorRuns}</span>,
   },
   {
     accessorKey: "errorRate",
-    header: "Error Rate",
+    header: ({ column }) => <SortableHeader column={column} label="Error Rate" />,
     meta: { align: "right" },
     cell: ({ row }) => (
-      <span className={cn("tabular-nums", row.original.errorRate > 20 && "font-medium text-red-500")}>
+      <span
+        className={cn("tabular-nums", row.original.errorRate > 20 && "font-medium text-red-500")}
+      >
         {row.original.errorRate}%
       </span>
     ),
@@ -232,6 +262,7 @@ const columns: ColumnDef<CoworkerRow>[] = [
   {
     accessorKey: "latestRunAt",
     header: "Last Run",
+    enableSorting: false,
     cell: ({ row }) => (
       <div className="text-muted-foreground flex items-center gap-2">
         <StatusDot status={row.original.latestRunStatus} />
@@ -241,11 +272,13 @@ const columns: ColumnDef<CoworkerRow>[] = [
   },
   {
     accessorKey: "consecutiveErrors",
-    header: "Health",
+    header: ({ column }) => <SortableHeader column={column} label="Health" />,
     cell: ({ row }) => {
       const c = row.original;
       if (c.consecutiveErrors >= 3) {
-        return <span className="text-xs font-medium text-red-500">{c.consecutiveErrors}x failing</span>;
+        return (
+          <span className="text-xs font-medium text-red-500">{c.consecutiveErrors}x failing</span>
+        );
       }
       if (c.consecutiveErrors >= 1) {
         return (
@@ -258,9 +291,7 @@ const columns: ColumnDef<CoworkerRow>[] = [
       if (c.latestRunStatus === null) {
         return <span className="text-muted-foreground text-xs">no runs</span>;
       }
-      return (
-        <span className="text-muted-foreground text-xs capitalize">{c.latestRunStatus}</span>
-      );
+      return <span className="text-muted-foreground text-xs capitalize">{c.latestRunStatus}</span>;
     },
   },
 ];
@@ -271,11 +302,15 @@ const columns: ColumnDef<CoworkerRow>[] = [
 
 export default function CoworkerOverviewPage() {
   const { data, isLoading } = useCoworkerOverview();
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const table = useReactTable({
     data: data?.coworkers ?? [],
     columns,
+    state: { sorting },
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   if (isLoading) {
@@ -417,7 +452,11 @@ export default function CoworkerOverviewPage() {
                     return (
                       <th
                         key={header.id}
-                        className={cn("px-4 py-3 font-medium", align === "right" && "text-right")}
+                        className={cn(
+                          "px-4 py-3 font-medium",
+                          align === "right" && "text-right",
+                          header.column.getCanSort() && "cursor-pointer select-none",
+                        )}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
                       </th>
@@ -445,7 +484,10 @@ export default function CoworkerOverviewPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={columns.length} className="text-muted-foreground px-4 py-8 text-center">
+                  <td
+                    colSpan={columns.length}
+                    className="text-muted-foreground px-4 py-8 text-center"
+                  >
                     No coworkers yet
                   </td>
                 </tr>
