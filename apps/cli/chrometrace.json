@@ -1,0 +1,157 @@
+{
+  "traceEvents": [
+    {
+      "name": "process_name",
+      "cat": "__metadata",
+      "ph": "M",
+      "pid": 1,
+      "tid": 1,
+      "ts": 0,
+      "args": {
+        "name": "cmdclaw chat"
+      }
+    },
+    {
+      "name": "thread_name",
+      "cat": "__metadata",
+      "ph": "M",
+      "pid": 1,
+      "tid": 1,
+      "ts": 0,
+      "args": {
+        "name": "conversation b0cbb5a6-8c8c-4c57-98db-cde334d6aa1e generation 9d8f5a34-c903-4336-b5cb-bd8b595c6262"
+      }
+    },
+    {
+      "name": "generation_to_first_token",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 0,
+      "dur": 29627000,
+      "args": {}
+    },
+    {
+      "name": "generation_to_first_visible_output",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 0,
+      "dur": 24453000,
+      "args": {}
+    },
+    {
+      "name": "agent_init",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 46000,
+      "dur": 7247000,
+      "args": {}
+    },
+    {
+      "name": "sandbox_connect_or_create",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 47000,
+      "dur": 872000,
+      "args": {}
+    },
+    {
+      "name": "opencode_ready",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 1322000,
+      "dur": 5604000,
+      "args": {}
+    },
+    {
+      "name": "session_ready",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 6929000,
+      "dur": 353000,
+      "args": {}
+    },
+    {
+      "name": "agent_ready_to_prompt",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 7293000,
+      "dur": 10083000,
+      "args": {}
+    },
+    {
+      "name": "pre_prompt_setup",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 7300000,
+      "dur": 10076000,
+      "args": {}
+    },
+    {
+      "name": "prompt_to_first_token",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 17376000,
+      "dur": 12251000,
+      "args": {}
+    },
+    {
+      "name": "prompt_to_first_visible_output",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 17376000,
+      "dur": 7077000,
+      "args": {}
+    },
+    {
+      "name": "wait_for_first_event",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 17376000,
+      "dur": 201000,
+      "args": {}
+    },
+    {
+      "name": "model_stream",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 17577000,
+      "dur": 12133000,
+      "args": {}
+    },
+    {
+      "name": "post_processing",
+      "cat": "cmdclaw",
+      "ph": "X",
+      "pid": 1,
+      "tid": 1,
+      "ts": 29714000,
+      "dur": 1228000,
+      "args": {}
+    }
+  ],
+  "displayTimeUnit": "ms"
+}
