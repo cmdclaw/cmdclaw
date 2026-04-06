@@ -2503,3 +2503,25 @@ export function usePerformanceDashboard(days: "1" | "7" | "30" = "7") {
     refetchInterval: 120_000,
   });
 }
+
+export function useAdminOpsScheduledCoworkers() {
+  return useQuery({
+    queryKey: ["admin", "ops", "scheduledCoworkers"],
+    queryFn: () => client.admin.getOpsScheduledCoworkers(),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useEnqueueAdminScheduledCoworkersNow() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { ids: string[] }) => client.admin.enqueueScheduledCoworkersNow(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "ops", "scheduledCoworkers"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["coworker"] });
+    },
+  });
+}
