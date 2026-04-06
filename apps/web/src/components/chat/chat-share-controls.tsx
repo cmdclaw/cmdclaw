@@ -73,14 +73,17 @@ export function ChatShareControls({ conversationId }: Props) {
   }
 
   return (
-    <div className="ml-2">
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
-          <Button type="button" variant="outline" size="sm">
-            <Share2 className="h-4 w-4" />
-            Share
-          </Button>
-        </PopoverTrigger>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+          title="Share"
+          aria-label="Share conversation"
+        >
+          <Share2 className="h-4 w-4" />
+        </button>
+      </PopoverTrigger>
         <PopoverContent align="end" className="w-[360px] rounded-2xl p-0">
           <div className="space-y-4 p-4">
             <div className="flex items-center justify-between">
@@ -152,7 +155,6 @@ export function ChatShareControls({ conversationId }: Props) {
             </div>
           </div>
         </PopoverContent>
-      </Popover>
-    </div>
+    </Popover>
   );
 }

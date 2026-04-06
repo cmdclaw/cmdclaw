@@ -1,6 +1,7 @@
 "use client";
 
-import { BarChart3, MoreHorizontal } from "lucide-react";
+import { BarChart3, MoreHorizontal, Pencil } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
@@ -65,6 +66,15 @@ export default function CoworkerRunLayout({ children }: { children: React.ReactN
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {run?.coworkerId && (
+            <Link
+              href={`/coworkers/${run.coworkerId}`}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+              title="Open in Builder"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+          )}
           <ChatCopyButton conversationId={conversationId} />
           <ChatShareControls conversationId={conversationId} />
         </div>
