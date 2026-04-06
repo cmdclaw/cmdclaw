@@ -24,6 +24,7 @@ import {
   Shield,
   Toolbox,
   Trash2,
+  Gauge,
   UserCog,
   WandSparkles,
   LayoutTemplate,
@@ -370,11 +371,17 @@ export function AppSidebar() {
     ? [
         { icon: Settings, label: "Settings", href: "/admin" },
         { icon: LayoutTemplate, label: "Templates", href: "/admin/templates" },
-        { icon: CreditCard, label: "AI Subscriptions", href: "/admin/subscriptions" },
+        {
+          icon: CreditCard,
+          label: "AI Subscriptions",
+          href: "/admin/subscriptions",
+        },
         { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
         { icon: Coins, label: "Credits", href: "/admin/credits" },
         { icon: BarChart3, label: "Usage", href: "/admin/usage" },
         { icon: Activity, label: "Chat Health", href: "/admin/chat-overview" },
+        { icon: Gauge, label: "Performance", href: "/admin/performance" },
+        { icon: Bug, label: "Ops", href: "/admin/ops" },
         { icon: UserCog, label: "Impersonation", href: "/admin/impersonation" },
         { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
       ]
