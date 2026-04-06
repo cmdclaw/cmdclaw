@@ -7,6 +7,7 @@ import InboxPage from "./page";
 const {
   mockRouterPush,
   mockRouterReplace,
+  mockUseIsAdmin,
   mockUseInboxItems,
   mockCoworkerList,
   mockSubmitApprovalMutateAsync,
@@ -24,6 +25,7 @@ const {
   return {
     mockRouterPush: vi.fn(),
     mockRouterReplace: vi.fn(),
+    mockUseIsAdmin: vi.fn(),
     mockUseInboxItems: vi.fn(),
     mockCoworkerList: vi.fn(),
     mockSubmitApprovalMutateAsync: vi.fn(),
@@ -51,6 +53,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/image", () => ({
   // eslint-disable-next-line @next/next/no-img-element
   default: (props: Record<string, unknown>) => <img {...props} alt={String(props.alt ?? "")} />,
+}));
+
+vi.mock("@/hooks/use-is-admin", () => ({
+  useIsAdmin: () => mockUseIsAdmin(),
 }));
 
 vi.mock("sonner", () => ({
@@ -83,6 +89,7 @@ describe("InboxPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseIsAdmin.mockReturnValue({ isAdmin: true, isLoading: false });
     mockUseInboxItems.mockReturnValue({
       data: {
         items: [
@@ -140,6 +147,15 @@ describe("InboxPage", () => {
     });
     mockEditApprovalAndResendMutateAsync.mockResolvedValue({ success: true });
     mockMarkAsReadMutateAsync.mockResolvedValue({ success: true });
+  });
+
+  it("shows a beta access message to non-admin users", () => {
+    mockUseIsAdmin.mockReturnValue({ isAdmin: false, isLoading: false });
+
+    render(<InboxPage />);
+
+    expect(screen.getByText("Inbox is currently in beta and limited to admin users.")).toBeTruthy();
+    expect(mockUseInboxItems).not.toHaveBeenCalled();
   });
 
   it("renders real inbox rows and updates the inbox query when type filter changes", async () => {
