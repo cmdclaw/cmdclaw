@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import type {
 import { InboxAgentFilter } from "@/components/inbox/inbox-agent-filter";
 import { InboxCreateInput } from "@/components/inbox/inbox-create-input";
 import { InboxList } from "@/components/inbox/inbox-list";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import {
   useCancelGeneration,
   useCoworkerList,
@@ -76,7 +77,7 @@ function normalizeInboxItems(items: InboxItem[] | undefined): InboxItem[] {
   return normalized;
 }
 
-export default function InboxPage() {
+function InboxPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const authCallbackHandledRef = useRef<string | null>(null);
@@ -555,4 +556,28 @@ export default function InboxPage() {
       </main>
     </div>
   );
+}
+
+export default function InboxPage() {
+  const { isAdmin, isLoading } = useIsAdmin();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-950">
+          Inbox is currently in beta and limited to admin users.
+        </div>
+      </div>
+    );
+  }
+
+  return <InboxPageContent />;
 }

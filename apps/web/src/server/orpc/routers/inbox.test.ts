@@ -16,6 +16,7 @@ const {
   coworkerRunFindFirstMock,
   conversationFindManyMock,
   conversationFindFirstMock,
+  userFindFirstMock,
   generationFindManyMock,
   generationFindFirstMock,
   generationInterruptFindManyMock,
@@ -31,6 +32,7 @@ const {
   const coworkerRunFindFirstMock = vi.fn();
   const conversationFindManyMock = vi.fn();
   const conversationFindFirstMock = vi.fn();
+  const userFindFirstMock = vi.fn();
   const generationFindManyMock = vi.fn();
   const generationFindFirstMock = vi.fn();
   const generationInterruptFindManyMock = vi.fn();
@@ -53,6 +55,9 @@ const {
       conversation: {
         findMany: conversationFindManyMock,
         findFirst: conversationFindFirstMock,
+      },
+      user: {
+        findFirst: userFindFirstMock,
       },
       generation: {
         findMany: generationFindManyMock,
@@ -79,6 +84,7 @@ const {
     coworkerRunFindFirstMock,
     conversationFindManyMock,
     conversationFindFirstMock,
+    userFindFirstMock,
     generationFindManyMock,
     generationFindFirstMock,
     generationInterruptFindManyMock,
@@ -122,10 +128,30 @@ const inboxRouterAny = inboxRouter as unknown as Record<
 describe("inboxRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    userFindFirstMock.mockResolvedValue({ role: "admin" });
     insertOnConflictDoUpdateMock.mockResolvedValue(undefined);
     generationManagerMock.submitApproval.mockResolvedValue(true);
     generationManagerMock.enqueueConversationMessage.mockResolvedValue({ queuedMessageId: "qm-1" });
     inboxReadStateFindManyMock.mockResolvedValue([]);
+  });
+
+  it("forbids non-admin users from listing inbox items", async () => {
+    userFindFirstMock.mockResolvedValue({ role: "user" });
+
+    await expect(
+      inboxRouterAny.list({
+        input: {
+          limit: 20,
+          type: "all",
+          statuses: [],
+          query: "",
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Inbox is currently in beta and limited to admin users.",
+    });
   });
 
   it("returns mixed actionable coworker and chat inbox rows sorted by updatedAt desc", async () => {
