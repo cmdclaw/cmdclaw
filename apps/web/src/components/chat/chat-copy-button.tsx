@@ -2,7 +2,6 @@
 
 import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { useConversation } from "@/orpc/hooks";
 import type { MessageTiming } from "./chat-performance-metrics";
 import { useChatAdvancedSettingsStore } from "./chat-advanced-settings-store";
@@ -112,18 +111,16 @@ export function ChatCopyButton({ conversationId, className }: Props) {
   }
 
   return (
-    <Button
+    <button
       type="button"
-      variant="outline"
-      size="sm"
-      className={className}
+      className={`text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50 ${className ?? ""}`}
       data-testid="chat-copy-transcript-button"
       disabled={!hasTranscript}
       onClick={handleCopy}
       title="Copy chat as text"
+      aria-label={isCopied ? "Copied" : "Copy chat as text"}
     >
-      {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      {isCopied ? "Copied" : "Copy"}
-    </Button>
+      {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </button>
   );
 }
