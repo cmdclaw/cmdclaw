@@ -84,77 +84,77 @@ export function ChatShareControls({ conversationId }: Props) {
           <Share2 className="h-4 w-4" />
         </button>
       </PopoverTrigger>
-        <PopoverContent align="end" className="w-[360px] rounded-2xl p-0">
-          <div className="space-y-4 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">Share conversation</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Anyone with the link can view this chat.
-                </p>
-              </div>
-              <div
-                className={
-                  isShared
-                    ? "inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700"
-                    : "text-muted-foreground inline-flex items-center gap-1.5 rounded-full bg-neutral-500/10 px-2 py-1 text-xs font-medium"
-                }
-              >
-                {isShared ? <Globe2 className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                {isShared ? "Public" : "Private"}
-              </div>
+      <PopoverContent align="end" className="w-[360px] rounded-2xl p-0">
+        <div className="space-y-4 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Share conversation</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Anyone with the link can view this chat.
+              </p>
             </div>
-
-            {isShared && shareUrl ? (
-              <div className="space-y-2">
-                <label className="text-muted-foreground text-xs">Shared link</label>
-                <div className="bg-muted/40 border-border/70 flex items-center gap-2 rounded-xl border p-1.5 pl-3">
-                  <div className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
-                    {shareUrl}
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="rounded-lg"
-                    onClick={handleCopyLink}
-                    disabled={unshareConversation.isPending}
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
-                    {copied ? "Copied" : "Copy"}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="flex items-center gap-2">
-              {isShared ? (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleUnshare}
-                  disabled={unshareConversation.isPending}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {unshareConversation.isPending ? "Unsharing..." : "Unshare"}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleShare}
-                  disabled={shareConversation.isPending}
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                  {shareConversation.isPending ? "Creating link..." : "Create public link"}
-                </Button>
-              )}
+            <div
+              className={
+                isShared
+                  ? "inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700"
+                  : "text-muted-foreground inline-flex items-center gap-1.5 rounded-full bg-neutral-500/10 px-2 py-1 text-xs font-medium"
+              }
+            >
+              {isShared ? <Globe2 className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+              {isShared ? "Public" : "Private"}
             </div>
           </div>
-        </PopoverContent>
+
+          {isShared && shareUrl ? (
+            <div className="space-y-2">
+              <label className="text-muted-foreground text-xs">Shared link</label>
+              <div className="bg-muted/40 border-border/70 flex items-center gap-2 rounded-xl border p-1.5 pl-3">
+                <div className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+                  {shareUrl}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="rounded-lg"
+                  onClick={handleCopyLink}
+                  disabled={unshareConversation.isPending}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex items-center gap-2">
+            {isShared ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="w-full"
+                onClick={handleUnshare}
+                disabled={unshareConversation.isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {unshareConversation.isPending ? "Unsharing..." : "Unshare"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                className="w-full"
+                onClick={handleShare}
+                disabled={shareConversation.isPending}
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                {shareConversation.isPending ? "Creating link..." : "Create public link"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
     </Popover>
   );
 }
