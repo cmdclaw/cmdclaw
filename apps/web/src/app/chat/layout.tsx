@@ -6,13 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
-import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks";
 
 const CHAT_CONVERSATION_ID_SYNC_EVENT = "chat:conversation-id-sync";
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
-  const { isAdmin } = useIsAdmin();
   const params = useParams();
   const routeConversationId = params?.conversationId as string | undefined;
   const [liveConversationId, setLiveConversationId] = useState<string | undefined>(
@@ -76,9 +74,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         >
           <Menu className="h-5 w-5" />
         </button>
-        {isAdmin && liveConversationId && (
-          <span className="text-muted-foreground font-mono text-xs">ID: {liveConversationId}</span>
-        )}
         <ChatCopyButton conversationId={liveConversationId} className="ml-auto" />
         <ChatShareControls conversationId={liveConversationId} />
       </header>
