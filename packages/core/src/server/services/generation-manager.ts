@@ -107,7 +107,6 @@ import {
 } from "../sandbox/prep/skills-prep";
 import { generateConversationTitle } from "../utils/generate-title";
 import { createTraceId, logServerEvent } from "../utils/observability";
-import { isStatelessServerlessRuntime } from "../utils/runtime-platform";
 import {
   resolveCoworkerBuilderContextByConversation,
   type CoworkerBuilderContext,
@@ -929,10 +928,6 @@ class GenerationManager {
     deduped: 0,
   };
 
-  private shouldDeferGenerationToWorker(): boolean {
-    return isStatelessServerlessRuntime();
-  }
-
   private getSubscriptionKey(generationId: string, userId: string): string {
     return `${generationId}:${userId}`;
   }
@@ -1719,28 +1714,16 @@ class GenerationManager {
 
   private scheduleRecoveryReattach(ctx: GenerationContext): void {
     const delayMs = generationLifecyclePolicy.recoveryObserveWindowMs;
-    if (this.shouldDeferGenerationToWorker()) {
-      void this.enqueueGenerationRun(ctx.id, this.getGenerationRunType(ctx), {
-        delayMs,
-        dedupeKey: `recovery-${ctx.recoveryAttempts}`,
-        runMode: "recovery_reattach",
-      }).catch((error) => {
-        console.error(
-          `[GenerationManager] Failed to enqueue recovery attempt for generation ${ctx.id}:`,
-          error,
-        );
-      });
-      return;
-    }
-
-    setTimeout(() => {
-      void this.runQueuedGeneration(ctx.id, "recovery_reattach").catch((error) => {
-        console.error(
-          `[GenerationManager] Failed to run recovery attempt for generation ${ctx.id}:`,
-          error,
-        );
-      });
-    }, delayMs);
+    void this.enqueueGenerationRun(ctx.id, this.getGenerationRunType(ctx), {
+      delayMs,
+      dedupeKey: `recovery-${ctx.recoveryAttempts}`,
+      runMode: "recovery_reattach",
+    }).catch((error) => {
+      console.error(
+        `[GenerationManager] Failed to enqueue recovery attempt for generation ${ctx.id}:`,
+        error,
+      );
+    });
   }
 
   private async releaseSandboxSlotLease(ctx: GenerationContext): Promise<void> {
@@ -1787,7 +1770,7 @@ class GenerationManager {
       return "acquired";
     }
 
-    if ((options?.allowWorkerRequeue ?? false) && this.shouldDeferGenerationToWorker()) {
+    if (options?.allowWorkerRequeue ?? false) {
       await this.enqueueGenerationRun(ctx.id, this.getGenerationRunType(ctx), {
         delayMs: SANDBOX_SLOT_RETRY_DELAY_MS,
         dedupeKey: `slot-${Date.now()}`,
@@ -2552,99 +2535,22 @@ class GenerationManager {
     );
 
     const backendType: BackendType = "opencode";
-
-    if (this.shouldDeferGenerationToWorker()) {
-      await this.enqueueGenerationRun(genRecord.id, "chat");
-      logServerEvent(
-        "info",
-        "GENERATION_ENQUEUED",
-        {
-          backendType,
-          delivery: "queue",
-          enqueuedAttachmentsCount: fileAttachments?.length ?? 0,
-        },
-        {
-          source: "generation-manager",
-          traceId,
-          generationId: genRecord.id,
-          conversationId: conv.id,
-          userId,
-        },
-      );
-      return {
-        generationId: genRecord.id,
-        conversationId: conv.id,
-      };
-    }
-
-    // Create generation context
-    const ctx: GenerationContext = {
-      id: genRecord.id,
-      traceId,
-      conversationId: conv.id,
-      userId,
-      workspaceId: conv.workspaceId ?? null,
-      status: "running",
-      executionPolicy,
-      deadlineAt: lifecycle.deadlineAt,
-      lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
-      recoveryAttempts: lifecycle.recoveryAttempts,
-      completionReason: lifecycle.completionReason,
-      debugInfo: buildInitialDebugInfo(params.remoteIntegrationSource, params.allowedIntegrations),
-      contentParts: [],
-      assistantContent: "",
-      abortController: new AbortController(),
-      pendingApproval: null,
-      pendingAuth: null,
-      usage: { inputTokens: 0, outputTokens: 0, totalCostUsd: 0 },
-      startedAt: new Date(),
-      lastSaveAt: new Date(),
-      isNewConversation,
-      model: requestedModel ?? conv.model ?? DEFAULT_MODEL_REFERENCE,
-      authSource: resolveModelAuthSource({
-        model: requestedModel ?? conv.model ?? DEFAULT_MODEL_REFERENCE,
-        authSource: requestedAuthSource ?? conv.authSource,
-      }),
-      userMessageContent: content,
-      assistantMessageIds: new Set(),
-      messageRoles: new Map(),
-      pendingMessageParts: new Map(),
-      backendType,
-      sandboxProviderOverride: params.sandboxProvider,
-      allowedIntegrations: params.allowedIntegrations,
-      remoteIntegrationSource: params.remoteIntegrationSource,
-      autoApprove: autoApprove ?? conv.autoApprove,
-      attachments: fileAttachments,
-      builderCoworkerContext,
-      selectedPlatformSkillSlugs,
-      userStagedFilePaths: new Set(),
-      uploadedSandboxFileIds: new Set(),
-      runtimeCallbackToken: runtimeBinding.callbackToken,
-      runtimeId: runtimeBinding.runtimeId,
-      runtimeTurnSeq: runtimeBinding.turnSeq,
-      agentInitStartedAt: undefined,
-      agentInitReadyAt: undefined,
-      agentInitFailedAt: undefined,
-      phaseMarks: {},
-      phaseTimeline: [],
-      streamSequence: 0,
-      streamPublishedCount: 0,
-      streamDeliveredCount: 0,
-    };
-
-    this.activeGenerations.set(genRecord.id, ctx);
-    this.markPhase(ctx, "generation_started");
+    await this.enqueueGenerationRun(genRecord.id, "chat");
 
     logServerEvent(
       "info",
       "GENERATION_ENQUEUED",
-      { backendType, delivery: "in_process" },
+      {
+        backendType,
+        delivery: "queue",
+        enqueuedAttachmentsCount: fileAttachments?.length ?? 0,
+      },
       {
         source: "generation-manager",
-        traceId: ctx.traceId,
-        generationId: ctx.id,
-        conversationId: ctx.conversationId,
-        userId: ctx.userId,
+        traceId,
+        generationId: genRecord.id,
+        conversationId: conv.id,
+        userId,
       },
     );
     logServerEvent(
@@ -2652,21 +2558,16 @@ class GenerationManager {
       "START_GENERATION_RETURNING",
       {
         elapsedMs: Date.now() - startGenerationStartedAt,
-        generationId: ctx.id,
+        generationId: genRecord.id,
       },
       {
         source: "generation-manager",
-        traceId: ctx.traceId,
-        generationId: ctx.id,
-        conversationId: ctx.conversationId,
-        userId: ctx.userId,
+        traceId,
+        generationId: genRecord.id,
+        conversationId: conv.id,
+        userId,
       },
     );
-
-    // Start the generation in the background
-    this.runGeneration(ctx).catch((err) => {
-      console.error("[GenerationManager] runGeneration error:", err);
-    });
 
     return {
       generationId: genRecord.id,
@@ -2791,105 +2692,21 @@ class GenerationManager {
       })
       .where(eq(conversation.id, newConv.id));
 
-    if (this.shouldDeferGenerationToWorker()) {
-      await this.enqueueGenerationRun(genRecord.id, "coworker");
-      logServerEvent(
-        "info",
-        "COWORKER_GENERATION_ENQUEUED",
-        { delivery: "queue" },
-        {
-          source: "generation-manager",
-          traceId: createTraceId(),
-          generationId: genRecord.id,
-          conversationId: newConv.id,
-          userId,
-        },
-      );
-      return {
-        generationId: genRecord.id,
-        conversationId: newConv.id,
-      };
-    }
-
-    const ctx: GenerationContext = {
-      id: genRecord.id,
-      traceId: createTraceId(),
-      conversationId: newConv.id,
-      userId,
-      workspaceId: params.workspaceId ?? null,
-      status: "running",
-      executionPolicy,
-      deadlineAt: lifecycle.deadlineAt,
-      lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
-      recoveryAttempts: lifecycle.recoveryAttempts,
-      completionReason: lifecycle.completionReason,
-      debugInfo: buildInitialDebugInfo(params.remoteIntegrationSource, params.allowedIntegrations),
-      contentParts: [],
-      assistantContent: "",
-      abortController: new AbortController(),
-      pendingApproval: null,
-      pendingAuth: null,
-      usage: { inputTokens: 0, outputTokens: 0, totalCostUsd: 0 },
-      startedAt: new Date(),
-      lastSaveAt: new Date(),
-      isNewConversation: true,
-      model: resolvedModel,
-      authSource: resolvedAuthSource,
-      userMessageContent: content,
-      attachments: params.fileAttachments,
-      assistantMessageIds: new Set(),
-      messageRoles: new Map(),
-      pendingMessageParts: new Map(),
-      backendType: "opencode",
-      sandboxProviderOverride: params.sandboxProvider,
-      coworkerId: params.coworkerId,
-      coworkerRunId: params.coworkerRunId,
-      allowedIntegrations: params.allowedIntegrations,
-      autoApprove: params.autoApprove,
-      allowedCustomIntegrations: params.allowedCustomIntegrations,
-      allowedExecutorSourceIds: params.allowedExecutorSourceIds,
-      allowedSkillSlugs: normalizedAllowedSkillSlugs,
-      remoteIntegrationSource: params.remoteIntegrationSource,
-      coworkerPrompt: undefined,
-      coworkerPromptDo: undefined,
-      coworkerPromptDont: undefined,
-      triggerPayload: undefined,
-      builderCoworkerContext: null,
-      selectedPlatformSkillSlugs,
-      userStagedFilePaths: new Set(),
-      uploadedSandboxFileIds: new Set(),
-      runtimeCallbackToken: runtimeBinding.callbackToken,
-      runtimeId: runtimeBinding.runtimeId,
-      runtimeTurnSeq: runtimeBinding.turnSeq,
-      agentInitStartedAt: undefined,
-      agentInitReadyAt: undefined,
-      agentInitFailedAt: undefined,
-      phaseMarks: {},
-      phaseTimeline: [],
-      streamSequence: 0,
-      streamPublishedCount: 0,
-      streamDeliveredCount: 0,
-    };
-
-    this.activeGenerations.set(genRecord.id, ctx);
-    this.markPhase(ctx, "generation_started");
+    const traceId = createTraceId();
+    await this.enqueueGenerationRun(genRecord.id, "coworker");
 
     logServerEvent(
       "info",
       "COWORKER_GENERATION_ENQUEUED",
-      {},
+      { delivery: "queue" },
       {
         source: "generation-manager",
-        traceId: ctx.traceId,
-        generationId: ctx.id,
-        conversationId: ctx.conversationId,
-        userId: ctx.userId,
+        traceId,
+        generationId: genRecord.id,
+        conversationId: newConv.id,
+        userId,
       },
     );
-
-    this.runGeneration(ctx).catch((err) => {
-      console.error("[GenerationManager] runGeneration error:", err);
-    });
 
     return {
       generationId: genRecord.id,
@@ -3630,16 +3447,7 @@ class GenerationManager {
         pendingInterrupt.expiresAt.toISOString(),
       );
     }
-    if (this.shouldDeferGenerationToWorker()) {
-      await this.enqueueGenerationRun(generationId, runType);
-      return true;
-    }
-
-    if (!this.activeGenerations.has(generationId)) {
-      this.runQueuedGeneration(generationId).catch((err) => {
-        console.error("[GenerationManager] runQueuedGeneration error:", err);
-      });
-    }
+    await this.enqueueGenerationRun(generationId, runType);
     return true;
   }
 

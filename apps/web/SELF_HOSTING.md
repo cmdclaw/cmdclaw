@@ -3,7 +3,7 @@
 This setup is the recommended first self-hosted deployment shape for CmdClaw:
 
 - `app` for the Next.js UI and API
-- `worker` for BullMQ background jobs
+- `worker` for BullMQ generation execution and background jobs
 - `database` for PostgreSQL
 - `redis` for queues and transient coordination
 - `minio` for S3-compatible object storage
@@ -134,4 +134,4 @@ If you do not want local Docker sandbox execution:
 - browser-side PostHog config is baked into the published `app` image at build time; build `apps/web/Dockerfile.app` yourself if you need custom `NEXT_PUBLIC_POSTHOG_*` values
 - `database`, `redis`, and `minio` are not published externally by default
 - MinIO stores uploaded files and generated artifacts
-- `worker` is required in production; the web app alone is not enough
+- `worker` is required in production; chat and coworker generations execute there, so the web app alone is not enough

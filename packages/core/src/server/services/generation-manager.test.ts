@@ -1669,6 +1669,33 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("resumeGeneration re-enqueues chat work instead of running inline", async () => {
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-resume",
+      status: "paused",
+      conversationId: "conv-resume",
+      conversation: {
+        id: "conv-resume",
+        userId: "user-1",
+        autoApprove: false,
+      },
+      executionPolicy: {
+        autoApprove: false,
+      },
+    });
+    coworkerRunFindFirstMock.mockResolvedValueOnce(null);
+
+    const resumed = await generationManager.resumeGeneration("gen-resume", "user-1");
+
+    expect(resumed).toBe(true);
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-resume", runMode: "normal_run" },
+      expect.any(Object),
+    );
+    expect(asTestManager().activeGenerations.has("gen-resume")).toBe(false);
+  });
+
   it("fails on auth timeout", async () => {
     const ctx = createCtx();
     const mgr = asTestManager();
@@ -1708,9 +1735,6 @@ describe("generationManager transitions", () => {
   });
 
   it("starts a new generation and enqueues background run", async () => {
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
-
     insertReturningMock
       .mockResolvedValueOnce([
         {
@@ -1733,19 +1757,24 @@ describe("generationManager transitions", () => {
       generationId: "gen-new",
       conversationId: "conv-new",
     });
-    expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(mgr.activeGenerations.get("gen-new")).toMatchObject({
-      id: "gen-new",
-      conversationId: "conv-new",
-      backendType: "opencode",
-      userId: "user-1",
-    });
+    expect(queueAddMock).toHaveBeenNthCalledWith(
+      1,
+      "generation:preparing-stuck-check",
+      { generationId: "gen-new" },
+      expect.objectContaining({
+        delay: 45_000,
+      }),
+    );
+    expect(queueAddMock).toHaveBeenNthCalledWith(
+      2,
+      "generation:chat-run",
+      { generationId: "gen-new", runMode: "normal_run" },
+      expect.any(Object),
+    );
+    expect(asTestManager().activeGenerations.has("gen-new")).toBe(false);
   });
 
   it("does not persist per-run autoApprove onto an existing conversation", async () => {
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
-
     generationFindFirstMock.mockResolvedValueOnce(null);
     conversationFindFirstMock.mockResolvedValueOnce({
       id: "conv-existing",
@@ -1769,7 +1798,11 @@ describe("generationManager transitions", () => {
       generationId: "gen-existing",
       conversationId: "conv-existing",
     });
-    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-existing", runMode: "normal_run" },
+      expect.any(Object),
+    );
     expect(updateSetMock).not.toHaveBeenCalledWith(
       expect.objectContaining({
         autoApprove: false,
@@ -1778,8 +1811,6 @@ describe("generationManager transitions", () => {
   });
 
   it("fills coworker metadata from the first builder user message before the prompt patch lands", async () => {
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
     const updatedAt = new Date("2026-03-12T10:00:00.000Z");
     const refreshedUpdatedAt = new Date("2026-03-12T10:00:01.000Z");
 
@@ -1837,7 +1868,11 @@ describe("generationManager transitions", () => {
       userId: "user-1",
     });
 
-    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-coworker-builder", runMode: "normal_run" },
+      expect.any(Object),
+    );
     const metadataUpdateCall = updateSetMock.mock.calls.find(
       ([values]) => typeof values?.name === "string" && typeof values?.description === "string",
     )?.[0] as { name: string; description: string; username?: string } | undefined;
@@ -1849,9 +1884,6 @@ describe("generationManager transitions", () => {
     expect(metadataUpdateCall?.username).toMatch(
       /^follow-up-with-new-inbound-leads-after-every-sales-call/,
     );
-    expect(
-      mgr.activeGenerations.get("gen-coworker-builder")?.builderCoworkerContext?.updatedAt,
-    ).toBe(refreshedUpdatedAt.toISOString());
   });
 
   it("returns an empty queued-message list when conversation no longer exists", async () => {
@@ -1976,8 +2008,6 @@ describe("generationManager transitions", () => {
 
   it("forces opencode backend for OpenAI subscription models even when Daytona is preferred", async () => {
     vi.mocked(getPreferredCloudSandboxProvider).mockReturnValue("daytona");
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
 
     insertReturningMock
       .mockResolvedValueOnce([
@@ -2000,18 +2030,15 @@ describe("generationManager transitions", () => {
       model: "openai/gpt-5.2-codex",
     });
 
-    expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(mgr.activeGenerations.get("gen-openai")).toMatchObject({
-      id: "gen-openai",
-      backendType: "opencode",
-      model: "openai/gpt-5.2-codex",
-    });
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-openai", runMode: "normal_run" },
+      expect.any(Object),
+    );
+    expect(asTestManager().activeGenerations.has("gen-openai")).toBe(false);
   });
 
-  it("enqueues run and preparing-stuck check jobs when deferred to worker", async () => {
-    isStatelessServerlessRuntimeMock.mockReturnValue(true);
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
+  it("enqueues run and preparing-stuck check jobs for every new chat generation", async () => {
     const pdfAttachment = {
       name: "questionnaire.pdf",
       mimeType: "application/pdf",
@@ -2037,7 +2064,6 @@ describe("generationManager transitions", () => {
       fileAttachments: [pdfAttachment],
     });
 
-    expect(runSpy).not.toHaveBeenCalled();
     expect(queueAddMock).toHaveBeenCalledTimes(2);
     expect(queueAddMock).toHaveBeenNthCalledWith(
       1,
@@ -2339,8 +2365,6 @@ describe("generationManager transitions", () => {
   });
 
   it("uses shared auth when explicitly requested for a dual-source provider", async () => {
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
     sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-openai" });
 
     insertReturningMock
@@ -2364,11 +2388,11 @@ describe("generationManager transitions", () => {
       authSource: "shared",
     });
 
-    expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(mgr.activeGenerations.get("gen-openai-shared")).toMatchObject({
-      authSource: "shared",
-      model: "openai/gpt-5.2-codex",
-    });
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-openai-shared", runMode: "normal_run" },
+      expect.any(Object),
+    );
   });
 
   it("rejects unsupported auth sources for shared-only providers", async () => {
@@ -2383,8 +2407,6 @@ describe("generationManager transitions", () => {
   });
 
   it("starts coworker generation and keeps coworker context fields", async () => {
-    const mgr = asTestManager();
-    const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
     providerAuthFindFirstMock.mockResolvedValue({ id: "auth-openai" });
 
     insertReturningMock
@@ -2415,17 +2437,12 @@ describe("generationManager transitions", () => {
       generationId: "gen-coworker",
       conversationId: "conv-coworker",
     });
-    expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(mgr.activeGenerations.get("gen-coworker")).toMatchObject({
-      coworkerId: "wf-1",
-      coworkerRunId: "wf-run-1",
-      allowedIntegrations: ["github"],
-      allowedCustomIntegrations: ["custom-slug"],
-      coworkerPrompt: undefined,
-      coworkerPromptDo: undefined,
-      coworkerPromptDont: undefined,
-      triggerPayload: undefined,
-    });
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:coworker-run",
+      { generationId: "gen-coworker", runMode: "normal_run" },
+      expect.any(Object),
+    );
+    expect(asTestManager().activeGenerations.has("gen-coworker")).toBe(false);
   });
 
   it("rejects inaccessible saved coworker models before generation starts", async () => {
@@ -3505,6 +3522,32 @@ describe("generationManager transitions", () => {
     expect(resolveRuntimeFailureSpy).toHaveBeenCalled();
     expect(scheduleRecoverySpy).toHaveBeenCalled();
     expect(finishSpy).not.toHaveBeenCalledWith(expect.anything(), "error");
+  });
+
+  it("recovery reattach always re-enqueues instead of using a local timer", async () => {
+    const mgr = asTestManager();
+    const enqueueSpy = vi
+      .spyOn(mgr as never, "enqueueGenerationRun")
+      .mockResolvedValue(undefined);
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+
+    (mgr as never).scheduleRecoveryReattach(
+      createCtx({
+        id: "gen-requeue",
+        conversationId: "conv-requeue",
+        recoveryAttempts: 2,
+      }),
+    );
+
+    expect(enqueueSpy).toHaveBeenCalledWith(
+      "gen-requeue",
+      "chat",
+      expect.objectContaining({
+        dedupeKey: "recovery-2",
+        runMode: "recovery_reattach",
+      }),
+    );
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
   });
 
   it("waits for the in-flight prompt rejection after a session.error before finalizing", async () => {
