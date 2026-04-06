@@ -11,6 +11,7 @@
     "cat": "bun scripts/cat.ts",
     "cmdclaw": "bun run --cwd apps/cli start --",
     "dev": "turbo dev --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=tui",
+    "dev:timed": "bash -lc 'set -o pipefail; FORCE_COLOR=1 CLICOLOR_FORCE=1 turbo run dev --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=stream --log-prefix=task --log-order=stream --color 2>&1 | perl -ne '\\''BEGIN { $| = 1 } chomp; @t = localtime; printf(\"[%04d-%02d-%02d %02d:%02d:%02d] %s\\n\", $t[5] + 1900, $t[4] + 1, $t[3], $t[2], $t[1], $t[0], $_);'\\'''",
     "dev:selfhost": "bun --env-file=apps/web/.env.selfhost turbo dev:selfhost --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=tui",
     "dev:selfhost:web": "bun --env-file=apps/web/.env.selfhost turbo dev:selfhost --filter=@cmdclaw/web",
     "build": "turbo build",
