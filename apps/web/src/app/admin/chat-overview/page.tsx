@@ -262,7 +262,7 @@ const errorColumns: ColumnDef<ErrorRow, unknown>[] = [
     accessorKey: "userEmail",
     header: "User",
     cell: ({ getValue }) => (
-      <span className="text-muted-foreground whitespace-nowrap text-xs">
+      <span className="text-muted-foreground text-xs whitespace-nowrap">
         {getValue<string | null>() ?? "—"}
       </span>
     ),

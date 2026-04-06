@@ -121,7 +121,7 @@ function DataTableRow<TData>({
         ))}
       </tr>
       {row.getIsExpanded() && renderSubRow && (
-        <tr className="border-b bg-muted/20">
+        <tr className="bg-muted/20 border-b">
           <td colSpan={colSpan} className="px-4 py-4">
             {renderSubRow(row)}
           </td>
