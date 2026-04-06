@@ -45,7 +45,13 @@ const CURSOR_STYLE = { fill: "var(--color-muted)", opacity: 0.4 };
 const LEGEND_STYLE = { fontSize: 12, paddingTop: 12 };
 const BAR_RADIUS_RIGHT: [number, number, number, number] = [0, 4, 4, 0];
 const BAR_RADIUS_TOP: [number, number, number, number] = [2, 2, 0, 0];
-const EMPTY_LATENCY: Array<{ p50EndToEndMs: number; p95EndToEndMs: number; p50TtfvoMs: number; messageCount: number; date: string }> = [];
+const EMPTY_LATENCY: Array<{
+  p50EndToEndMs: number;
+  p95EndToEndMs: number;
+  p50TtfvoMs: number;
+  messageCount: number;
+  date: string;
+}> = [];
 function formatDurationTick(v: number) {
   return formatDurationDisplay(v);
 }
@@ -125,18 +131,90 @@ const FLAME_PHASES: Array<{
   depth: number;
   durationKey: string;
 }> = [
-  { name: "generation_to_first_token", label: "generation_to_first_token", color: "#854d0e", depth: 0, durationKey: "generationToFirstTokenMs" },
-  { name: "generation_to_first_visible_output", label: "generation_to_first_visible_output", color: "#65a30d", depth: 0, durationKey: "generationToFirstVisibleOutputMs" },
-  { name: "agent_init", label: "agent_init", color: "#c084fc", depth: 1, durationKey: "agentInitMs" },
-  { name: "agent_ready_to_prompt", label: "agent_ready_to_prompt", color: "#f59e0b", depth: 1, durationKey: "agentReadyToPromptMs" },
-  { name: "prompt_to_first_visible_output", label: "prompt_to_first_visible_output", color: "#22c55e", depth: 1, durationKey: "promptToFirstVisibleOutputMs" },
-  { name: "sandbox_connect_or_create", label: "sandbox_connect_or_create", color: "#64748b", depth: 2, durationKey: "sandboxConnectOrCreateMs" },
-  { name: "opencode_ready", label: "opencode_ready", color: "#3b82f6", depth: 2, durationKey: "opencodeReadyMs" },
-  { name: "session_ready", label: "session_ready", color: "#06b6d4", depth: 2, durationKey: "sessionReadyMs" },
-  { name: "pre_prompt_setup", label: "pre_prompt_setup", color: "#8b5cf6", depth: 2, durationKey: "prePromptSetupMs" },
-  { name: "wait_for_first_event", label: "wait_for_first_event", color: "#f59e0b", depth: 2, durationKey: "waitForFirstEventMs" },
-  { name: "model_stream", label: "model_stream", color: "#22c55e", depth: 2, durationKey: "modelStreamMs" },
-  { name: "post_processing", label: "post_processing", color: "#a1a1aa", depth: 2, durationKey: "postProcessingMs" },
+  {
+    name: "generation_to_first_token",
+    label: "generation_to_first_token",
+    color: "#854d0e",
+    depth: 0,
+    durationKey: "generationToFirstTokenMs",
+  },
+  {
+    name: "generation_to_first_visible_output",
+    label: "generation_to_first_visible_output",
+    color: "#65a30d",
+    depth: 0,
+    durationKey: "generationToFirstVisibleOutputMs",
+  },
+  {
+    name: "agent_init",
+    label: "agent_init",
+    color: "#c084fc",
+    depth: 1,
+    durationKey: "agentInitMs",
+  },
+  {
+    name: "agent_ready_to_prompt",
+    label: "agent_ready_to_prompt",
+    color: "#f59e0b",
+    depth: 1,
+    durationKey: "agentReadyToPromptMs",
+  },
+  {
+    name: "prompt_to_first_visible_output",
+    label: "prompt_to_first_visible_output",
+    color: "#22c55e",
+    depth: 1,
+    durationKey: "promptToFirstVisibleOutputMs",
+  },
+  {
+    name: "sandbox_connect_or_create",
+    label: "sandbox_connect_or_create",
+    color: "#64748b",
+    depth: 2,
+    durationKey: "sandboxConnectOrCreateMs",
+  },
+  {
+    name: "opencode_ready",
+    label: "opencode_ready",
+    color: "#3b82f6",
+    depth: 2,
+    durationKey: "opencodeReadyMs",
+  },
+  {
+    name: "session_ready",
+    label: "session_ready",
+    color: "#06b6d4",
+    depth: 2,
+    durationKey: "sessionReadyMs",
+  },
+  {
+    name: "pre_prompt_setup",
+    label: "pre_prompt_setup",
+    color: "#8b5cf6",
+    depth: 2,
+    durationKey: "prePromptSetupMs",
+  },
+  {
+    name: "wait_for_first_event",
+    label: "wait_for_first_event",
+    color: "#f59e0b",
+    depth: 2,
+    durationKey: "waitForFirstEventMs",
+  },
+  {
+    name: "model_stream",
+    label: "model_stream",
+    color: "#22c55e",
+    depth: 2,
+    durationKey: "modelStreamMs",
+  },
+  {
+    name: "post_processing",
+    label: "post_processing",
+    color: "#a1a1aa",
+    depth: 2,
+    durationKey: "postProcessingMs",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -415,24 +493,17 @@ function HealthBanner({ status }: { status: HealthStatus }) {
     <div
       className={cn(
         "flex items-start gap-2 rounded-lg border px-4 py-2",
-        isCritical
-          ? "border-red-500/30 bg-red-500/5"
-          : "border-amber-500/30 bg-amber-500/5",
+        isCritical ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5",
       )}
     >
       <AlertTriangle
-        className={cn(
-          "mt-0.5 size-4 shrink-0",
-          isCritical ? "text-red-500" : "text-amber-500",
-        )}
+        className={cn("mt-0.5 size-4 shrink-0", isCritical ? "text-red-500" : "text-amber-500")}
       />
       <div className="space-y-0.5">
         <span
           className={cn(
             "text-sm font-medium",
-            isCritical
-              ? "text-red-700 dark:text-red-400"
-              : "text-amber-700 dark:text-amber-400",
+            isCritical ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400",
           )}
         >
           {isCritical ? "Performance Critical" : "Performance Degraded"}
@@ -788,18 +859,78 @@ function buildFlameSpans(timing: TimingData): FlameSpan[] {
       endPhases: string[];
       durationKey?: string;
     }> = [
-      { name: "generation_to_first_token", startPhases: ["generation_started"], endPhases: ["first_token_emitted"], durationKey: "generationToFirstTokenMs" },
-      { name: "generation_to_first_visible_output", startPhases: ["generation_started"], endPhases: ["first_visible_output_emitted", "first_token_emitted"], durationKey: "generationToFirstVisibleOutputMs" },
-      { name: "agent_init", startPhases: ["agent_init_started"], endPhases: ["agent_init_ready"], durationKey: "agentInitMs" },
-      { name: "agent_ready_to_prompt", startPhases: ["agent_init_ready"], endPhases: ["prompt_sent"], durationKey: "agentReadyToPromptMs" },
-      { name: "prompt_to_first_visible_output", startPhases: ["prompt_sent"], endPhases: ["first_visible_output_emitted", "first_token_emitted"], durationKey: "promptToFirstVisibleOutputMs" },
-      { name: "sandbox_connect_or_create", startPhases: ["agent_init_sandbox_checking_cache", "agent_init_started"], endPhases: ["agent_init_sandbox_reused", "agent_init_sandbox_created"], durationKey: "sandboxConnectOrCreateMs" },
-      { name: "opencode_ready", startPhases: ["agent_init_opencode_starting"], endPhases: ["agent_init_opencode_ready"], durationKey: "opencodeReadyMs" },
-      { name: "session_ready", startPhases: ["agent_init_session_creating", "agent_init_sandbox_reused"], endPhases: ["agent_init_session_init_completed", "agent_init_session_reused"], durationKey: "sessionReadyMs" },
-      { name: "pre_prompt_setup", startPhases: ["pre_prompt_setup_started"], endPhases: ["prompt_sent"], durationKey: "prePromptSetupMs" },
-      { name: "wait_for_first_event", startPhases: ["prompt_sent"], endPhases: ["first_event_received"], durationKey: "waitForFirstEventMs" },
-      { name: "model_stream", startPhases: ["first_event_received"], endPhases: ["session_idle", "prompt_completed"], durationKey: "modelStreamMs" },
-      { name: "post_processing", startPhases: ["post_processing_started"], endPhases: ["post_processing_completed"], durationKey: "postProcessingMs" },
+      {
+        name: "generation_to_first_token",
+        startPhases: ["generation_started"],
+        endPhases: ["first_token_emitted"],
+        durationKey: "generationToFirstTokenMs",
+      },
+      {
+        name: "generation_to_first_visible_output",
+        startPhases: ["generation_started"],
+        endPhases: ["first_visible_output_emitted", "first_token_emitted"],
+        durationKey: "generationToFirstVisibleOutputMs",
+      },
+      {
+        name: "agent_init",
+        startPhases: ["agent_init_started"],
+        endPhases: ["agent_init_ready"],
+        durationKey: "agentInitMs",
+      },
+      {
+        name: "agent_ready_to_prompt",
+        startPhases: ["agent_init_ready"],
+        endPhases: ["prompt_sent"],
+        durationKey: "agentReadyToPromptMs",
+      },
+      {
+        name: "prompt_to_first_visible_output",
+        startPhases: ["prompt_sent"],
+        endPhases: ["first_visible_output_emitted", "first_token_emitted"],
+        durationKey: "promptToFirstVisibleOutputMs",
+      },
+      {
+        name: "sandbox_connect_or_create",
+        startPhases: ["agent_init_sandbox_checking_cache", "agent_init_started"],
+        endPhases: ["agent_init_sandbox_reused", "agent_init_sandbox_created"],
+        durationKey: "sandboxConnectOrCreateMs",
+      },
+      {
+        name: "opencode_ready",
+        startPhases: ["agent_init_opencode_starting"],
+        endPhases: ["agent_init_opencode_ready"],
+        durationKey: "opencodeReadyMs",
+      },
+      {
+        name: "session_ready",
+        startPhases: ["agent_init_session_creating", "agent_init_sandbox_reused"],
+        endPhases: ["agent_init_session_init_completed", "agent_init_session_reused"],
+        durationKey: "sessionReadyMs",
+      },
+      {
+        name: "pre_prompt_setup",
+        startPhases: ["pre_prompt_setup_started"],
+        endPhases: ["prompt_sent"],
+        durationKey: "prePromptSetupMs",
+      },
+      {
+        name: "wait_for_first_event",
+        startPhases: ["prompt_sent"],
+        endPhases: ["first_event_received"],
+        durationKey: "waitForFirstEventMs",
+      },
+      {
+        name: "model_stream",
+        startPhases: ["first_event_received"],
+        endPhases: ["session_idle", "prompt_completed"],
+        durationKey: "modelStreamMs",
+      },
+      {
+        name: "post_processing",
+        startPhases: ["post_processing_started"],
+        endPhases: ["post_processing_completed"],
+        durationKey: "postProcessingMs",
+      },
     ];
 
     const spans: FlameSpan[] = [];
@@ -871,7 +1002,8 @@ const ROW_GAP = 2;
 function FlameChart({ timing }: { timing: TimingData }) {
   const spans = useMemo(() => buildFlameSpans(timing), [timing]);
   const maxDepth = spans.length > 0 ? Math.max(...spans.map((s) => s.depth)) : 0;
-  const totalDuration = spans.length > 0 ? Math.max(...spans.map((s) => s.startMs + s.durationMs)) : 0;
+  const totalDuration =
+    spans.length > 0 ? Math.max(...spans.map((s) => s.startMs + s.durationMs)) : 0;
   const chartHeight = (maxDepth + 1) * (ROW_HEIGHT + ROW_GAP) + ROW_GAP;
   const containerStyle = useMemo(() => ({ height: chartHeight }), [chartHeight]);
 
@@ -887,15 +1019,7 @@ function FlameChart({ timing }: { timing: TimingData }) {
           const width = totalDuration > 0 ? (span.durationMs / totalDuration) * 100 : 0;
           const top = span.depth * (ROW_HEIGHT + ROW_GAP) + ROW_GAP;
 
-          return (
-            <FlameBar
-              key={span.name}
-              span={span}
-              left={left}
-              width={width}
-              top={top}
-            />
-          );
+          return <FlameBar key={span.name} span={span} left={left} width={width} top={top} />;
         })}
       </div>
       <div className="text-muted-foreground flex justify-between text-[10px] tabular-nums">
@@ -970,12 +1094,7 @@ function PhaseSmallMultiple({
   const labelStyle = useMemo(() => ({ color }), [color]);
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border p-3",
-        hasAnomaly && "border-red-500/40 bg-red-500/5",
-      )}
-    >
+    <div className={cn("rounded-lg border p-3", hasAnomaly && "border-red-500/40 bg-red-500/5")}>
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs font-medium" style={labelStyle}>
           {label}
@@ -986,9 +1105,7 @@ function PhaseSmallMultiple({
           </span>
         )}
       </div>
-      <p className="mb-1 text-sm font-semibold tabular-nums">
-        {formatDurationDisplay(currentP50)}
-      </p>
+      <p className="mb-1 text-sm font-semibold tabular-nums">{formatDurationDisplay(currentP50)}</p>
       {chartData.length > 1 && (
         <ResponsiveContainer width="100%" height={48}>
           <AreaChart data={chartData} margin={SMALL_CHART_MARGIN}>
@@ -1122,14 +1239,38 @@ export default function PerformanceDashboardPage() {
     }
     const pb = data.phaseBreakdown;
     const items = [
-      { phase: "Sandbox Connect", avgMs: pb.avgSandboxConnectMs, color: PHASE_COLORS["Sandbox Connect"] },
-      { phase: "OpenCode Ready", avgMs: pb.avgOpencodeReadyMs, color: PHASE_COLORS["OpenCode Ready"] },
+      {
+        phase: "Sandbox Connect",
+        avgMs: pb.avgSandboxConnectMs,
+        color: PHASE_COLORS["Sandbox Connect"],
+      },
+      {
+        phase: "OpenCode Ready",
+        avgMs: pb.avgOpencodeReadyMs,
+        color: PHASE_COLORS["OpenCode Ready"],
+      },
       { phase: "Session Ready", avgMs: pb.avgSessionReadyMs, color: PHASE_COLORS["Session Ready"] },
-      { phase: "Pre-prompt Setup", avgMs: pb.avgPrePromptSetupMs, color: PHASE_COLORS["Pre-prompt Setup"] },
-      { phase: "Wait for First Event", avgMs: pb.avgWaitForFirstEventMs, color: PHASE_COLORS["Wait for First Event"] },
-      { phase: "Prompt to First Token", avgMs: pb.avgPromptToFirstTokenMs, color: PHASE_COLORS["Prompt to First Token"] },
+      {
+        phase: "Pre-prompt Setup",
+        avgMs: pb.avgPrePromptSetupMs,
+        color: PHASE_COLORS["Pre-prompt Setup"],
+      },
+      {
+        phase: "Wait for First Event",
+        avgMs: pb.avgWaitForFirstEventMs,
+        color: PHASE_COLORS["Wait for First Event"],
+      },
+      {
+        phase: "Prompt to First Token",
+        avgMs: pb.avgPromptToFirstTokenMs,
+        color: PHASE_COLORS["Prompt to First Token"],
+      },
       { phase: "Model Stream", avgMs: pb.avgModelStreamMs, color: PHASE_COLORS["Model Stream"] },
-      { phase: "Post-processing", avgMs: pb.avgPostProcessingMs, color: PHASE_COLORS["Post-processing"] },
+      {
+        phase: "Post-processing",
+        avgMs: pb.avgPostProcessingMs,
+        color: PHASE_COLORS["Post-processing"],
+      },
     ].filter((d) => d.avgMs > 0);
     const total = items.reduce((s, d) => s + d.avgMs, 0);
     for (const d of items) {
@@ -1288,7 +1429,10 @@ export default function PerformanceDashboardPage() {
   const sparkP95E2E = useMemo(() => latencyOverTime.map((d) => d.p95EndToEndMs), [latencyOverTime]);
   const sparkP50Ttfvo = useMemo(() => latencyOverTime.map((d) => d.p50TtfvoMs), [latencyOverTime]);
   const sparkVolume = useMemo(() => latencyOverTime.map((d) => d.messageCount), [latencyOverTime]);
-  const sparkSandboxReuse = useMemo(() => sandboxChartData.map((d) => d.reuseRate), [sandboxChartData]);
+  const sparkSandboxReuse = useMemo(
+    () => sandboxChartData.map((d) => d.reuseRate),
+    [sandboxChartData],
+  );
 
   if (isLoading) {
     return (
@@ -1463,9 +1607,7 @@ export default function PerformanceDashboardPage() {
       {/* Stacked Phase Bar Chart (replaces unreadable 16-line area chart) */}
       {stackedPhaseData.length > 1 && (
         <div className="rounded-xl border p-4">
-          <h2 className="mb-4 text-sm font-medium">
-            Phase Composition Over Time ({daysLabel})
-          </h2>
+          <h2 className="mb-4 text-sm font-medium">Phase Composition Over Time ({daysLabel})</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={stackedPhaseData} margin={CHART_MARGIN}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -1568,10 +1710,7 @@ export default function PerformanceDashboardPage() {
                     tick={TICK_STYLE}
                     stroke="var(--color-muted-foreground)"
                   />
-                  <YAxis
-                    tick={TICK_STYLE}
-                    stroke="var(--color-muted-foreground)"
-                  />
+                  <YAxis tick={TICK_STYLE} stroke="var(--color-muted-foreground)" />
                   <Tooltip content={sandboxTooltipElement} cursor={CURSOR_STYLE} />
                   <Area
                     type="monotone"
@@ -1629,7 +1768,8 @@ export default function PerformanceDashboardPage() {
             {sandboxSavings && (
               <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2">
                 <p className="text-xs font-medium text-green-700 dark:text-green-400">
-                  Reusing saves ~{formatDurationDisplay(sandboxSavings.savedMs)} ({sandboxSavings.savedPct}%) per generation
+                  Reusing saves ~{formatDurationDisplay(sandboxSavings.savedMs)} (
+                  {sandboxSavings.savedPct}%) per generation
                 </p>
               </div>
             )}
@@ -1764,10 +1904,7 @@ function StatCard({
   sparkData?: number[];
   sparkColor?: string;
 }) {
-  const sparkChartData = useMemo(
-    () => sparkData?.map((v) => ({ v })) ?? [],
-    [sparkData],
-  );
+  const sparkChartData = useMemo(() => sparkData?.map((v) => ({ v })) ?? [], [sparkData]);
 
   // For latency metrics: positive delta = regression = red
   // For sandbox reuse (invertDelta): positive delta = improvement = green
