@@ -5,6 +5,7 @@ import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-de
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
 import {
   BarChart3,
+  History,
   Circle,
   Download,
   Ellipsis,
@@ -1192,6 +1193,13 @@ export default function CoworkersPage() {
               >
                 <BarChart3 className="size-3.5" />
                 <span className="hidden sm:inline">Overview</span>
+              </Link>
+              <Link
+                href="/coworkers/history"
+                className="text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
+              >
+                <History className="size-3.5" />
+                <span className="hidden sm:inline">History</span>
               </Link>
             </div>
             <div className="relative w-full sm:w-64">
