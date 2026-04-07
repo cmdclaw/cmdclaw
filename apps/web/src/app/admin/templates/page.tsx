@@ -2,7 +2,7 @@
 
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import type { ChangeEvent } from "react";
-import { Download, FileJson, Loader2, Star, Trash2, Upload } from "lucide-react";
+import { Download, Loader2, Star, Trash2, Upload } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -72,59 +72,59 @@ function TemplateRow({
   }, [onDelete, template.id]);
 
   return (
-    <div className="border-border/60 bg-muted/20 grid gap-4 rounded-xl border p-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold">{template.title}</h3>
-          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            {getTriggerLabel(template.triggerType)}
+    <div className="border-border/60 bg-muted/20 flex h-full flex-col rounded-xl border p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold">{template.title}</h3>
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {getTriggerLabel(template.triggerType)}
+        </span>
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {template.industry}
+        </span>
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {template.useCase}
+        </span>
+      </div>
+      <p className="text-muted-foreground mt-2 line-clamp-2 text-sm leading-relaxed">
+        {template.description}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {template.integrations.map((integration) => (
+          <span
+            key={integration}
+            className="border-border/50 bg-background inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
+          >
+            <Image
+              src={INTEGRATION_LOGOS[integration]}
+              alt={INTEGRATION_DISPLAY_NAMES[integration] ?? integration}
+              width={14}
+              height={14}
+              className="size-3.5"
+            />
+            {INTEGRATION_DISPLAY_NAMES[integration] ?? integration}
           </span>
-          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            {template.industry}
-          </span>
-          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            {template.useCase}
-          </span>
-        </div>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{template.description}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {template.integrations.map((integration) => (
-            <span
-              key={integration}
-              className="border-border/50 bg-background inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
-            >
-              <Image
-                src={INTEGRATION_LOGOS[integration]}
-                alt={INTEGRATION_DISPLAY_NAMES[integration] ?? integration}
-                width={14}
-                height={14}
-                className="size-3.5"
-              />
-              {INTEGRATION_DISPLAY_NAMES[integration] ?? integration}
-            </span>
-          ))}
-        </div>
+        ))}
       </div>
 
-      <div className="flex items-center gap-3 md:justify-self-end">
-        <div className="flex items-center gap-2">
-          <Star
-            className={cn(
-              "size-4",
-              template.featured ? "fill-amber-400 text-amber-400" : "text-muted-foreground",
-            )}
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Star
+              className={cn(
+                "size-4",
+                template.featured ? "fill-amber-400 text-amber-400" : "text-muted-foreground",
+              )}
+            />
+            <span className="text-sm">Featured</span>
+          </div>
+          <Switch
+            checked={template.featured}
+            onCheckedChange={handleFeaturedChange}
+            disabled={isUpdatingFeatured || isDeleting}
+            aria-label={`Toggle featured for ${template.title}`}
           />
-          <span className="text-sm">Featured</span>
         </div>
-        <Switch
-          checked={template.featured}
-          onCheckedChange={handleFeaturedChange}
-          disabled={isUpdatingFeatured || isDeleting}
-          aria-label={`Toggle featured for ${template.title}`}
-        />
-      </div>
 
-      <div className="md:justify-self-end">
         <Button
           type="button"
           variant="outline"
@@ -308,24 +308,13 @@ export default function AdminTemplatesPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="border-border/60 bg-muted/20 rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs tracking-[0.18em] uppercase">Templates</p>
-          <p className="mt-2 text-2xl font-semibold">{templates.length}</p>
-        </div>
-        <div className="border-border/60 bg-muted/20 rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs tracking-[0.18em] uppercase">Featured</p>
-          <p className="mt-2 text-2xl font-semibold">{featuredCount}</p>
-        </div>
-        <div className="border-border/60 bg-muted/20 rounded-xl border p-4">
-          <div className="flex items-center gap-2">
-            <FileJson className="text-muted-foreground size-4" />
-            <p className="text-muted-foreground text-xs tracking-[0.18em] uppercase">Source</p>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed">
-            Versioned JSON import/export only. No inline editor.
-          </p>
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+          {templates.length} templates
+        </span>
+        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+          {featuredCount} featured
+        </span>
       </div>
 
       {isLoading ? (
@@ -344,7 +333,7 @@ export default function AdminTemplatesPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => (
             <TemplateRow
               key={template.id}

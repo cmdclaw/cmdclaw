@@ -19,7 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!clientEditionCapabilities.hasSupportAdmin) {
     return (
       <div className="bg-background min-h-full">
-        <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
+        <main className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
           </div>
@@ -30,7 +30,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="bg-background min-h-full">
-      <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
+      <main className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />

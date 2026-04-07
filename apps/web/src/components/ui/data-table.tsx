@@ -7,6 +7,7 @@ import {
   flexRender,
   getCoreRowModel,
   getExpandedRowModel,
+  getFilteredRowModel,
   useReactTable,
 } from "@tanstack/react-table";
 import { type ReactNode, useState } from "react";
@@ -22,6 +23,10 @@ type DataTableProps<TData> = {
   renderSubRow?: (row: Row<TData>) => ReactNode;
   /** Enable row expansion on click */
   expandable?: boolean;
+  /** Global filter value for client-side filtering */
+  globalFilter?: string;
+  /** Callback when global filter changes */
+  onGlobalFilterChange?: (value: string) => void;
 };
 
 export function DataTable<TData>({
@@ -29,16 +34,20 @@ export function DataTable<TData>({
   data,
   renderSubRow,
   expandable,
+  globalFilter,
+  onGlobalFilterChange,
 }: DataTableProps<TData>) {
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
   const table = useReactTable({
     data,
     columns,
-    state: { expanded },
+    state: { expanded, globalFilter },
     onExpandedChange: expandable ? setExpanded : undefined,
+    onGlobalFilterChange,
     getCoreRowModel: getCoreRowModel(),
     getExpandedRowModel: expandable ? getExpandedRowModel() : undefined,
+    getFilteredRowModel: globalFilter !== undefined ? getFilteredRowModel() : undefined,
     enableSorting: false,
   });
 

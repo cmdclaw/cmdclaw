@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, RefreshCw, Play, CheckSquare, Square } from "lucide-react";
+import { Loader2, RefreshCw, Play } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -155,13 +155,12 @@ export default function AdminOpsPage() {
     [handleToggleSelected],
   );
 
-  const handleSelectVisible = useCallback(() => {
-    setSelectedIds(visibleIds);
-  }, [visibleIds]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
-  const handleClearSelection = useCallback(() => {
-    setSelectedIds([]);
-  }, []);
+  const handleToggleAll = useCallback(() => {
+    setSelectedIds(allVisibleSelected ? [] : visibleIds);
+  }, [allVisibleSelected, visibleIds]);
 
   const runEnqueue = useCallback(
     async (ids: string[]) => {
@@ -195,13 +194,9 @@ export default function AdminOpsPage() {
     [enqueueScheduled, refetch],
   );
 
-  const handleEnqueueSelected = useCallback(() => {
-    void runEnqueue(selectedIds);
-  }, [runEnqueue, selectedIds]);
-
-  const handleEnqueueVisible = useCallback(() => {
-    void runEnqueue(visibleIds);
-  }, [runEnqueue, visibleIds]);
+  const handleEnqueue = useCallback(() => {
+    void runEnqueue(selectedIds.length > 0 ? selectedIds : visibleIds);
+  }, [runEnqueue, selectedIds, visibleIds]);
 
   const handleResetOnboarding = useCallback(async () => {
     setActionMessage(null);
@@ -219,9 +214,7 @@ export default function AdminOpsPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Ops</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Admin-only operational tools. This section uses the real queue/runtime path for debugging.
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">Admin-only operational tools.</p>
       </div>
 
       <section className="bg-card space-y-4 rounded-lg border p-6">
@@ -245,37 +238,29 @@ export default function AdminOpsPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Input
             value={search}
             onChange={handleSearchChange}
             placeholder="Search by name, username, or id"
-            className="md:max-w-sm"
+            className="sm:max-w-xs"
           />
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm whitespace-nowrap">
             <input type="checkbox" checked={hourlyOnly} onChange={handleHourlyOnlyChange} />
             Hourly only
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm whitespace-nowrap">
             <input type="checkbox" checked={onOnly} onChange={handleOnOnlyChange} />
             Status on only
           </label>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={handleRefresh}>
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <Button type="button" variant="ghost" size="icon" onClick={handleRefresh}>
               <RefreshCw className="h-4 w-4" />
-              Refresh
-            </Button>
-            <Button type="button" variant="outline" onClick={handleSelectVisible}>
-              <CheckSquare className="h-4 w-4" />
-              Select visible
-            </Button>
-            <Button type="button" variant="outline" onClick={handleClearSelection}>
-              <Square className="h-4 w-4" />
-              Clear
             </Button>
             <Button
               type="button"
-              onClick={handleEnqueueVisible}
+              size="sm"
+              onClick={handleEnqueue}
               disabled={enqueueScheduled.isPending || visibleIds.length === 0}
             >
               {enqueueScheduled.isPending ? (
@@ -283,15 +268,9 @@ export default function AdminOpsPage() {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              Enqueue visible now
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleEnqueueSelected}
-              disabled={enqueueScheduled.isPending || selectedIds.length === 0}
-            >
-              Enqueue selected
+              {selectedIds.length > 0
+                ? `Enqueue ${selectedIds.length} selected`
+                : "Enqueue all visible"}
             </Button>
           </div>
         </div>
@@ -313,7 +292,14 @@ export default function AdminOpsPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium">Select</th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={handleToggleAll}
+                      aria-label="Select all visible"
+                    />
+                  </th>
                   <th className="px-3 py-2 text-left font-medium">Coworker</th>
                   <th className="px-3 py-2 text-left font-medium">State</th>
                   <th className="px-3 py-2 text-left font-medium">Schedule</th>

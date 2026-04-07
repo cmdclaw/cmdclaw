@@ -1,9 +1,15 @@
 "use client";
 
-import { Loader2, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Loader2, Search, UserRoundCog } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 import {
   useAddApprovedLoginEmailAllowlistEntry,
   useAddGoogleAccessAllowlistEntry,
@@ -13,140 +19,442 @@ import {
   useRemoveGoogleAccessAllowlistEntry,
 } from "@/orpc/hooks";
 
-function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
+type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
+
+type AdminListUser = {
+  id: string;
+  email: string;
+  name: string;
+  role?: string | null;
+};
+
+type UnifiedUserRow = {
+  email: string;
+  userId: string | null;
+  userName: string | null;
+  userRole: string | null;
+  hasAccount: boolean;
+  approvedLoginId: string | null;
+  isLoginApproved: boolean;
+  isBuiltInApproved: boolean;
+  googleAccessId: string | null;
+  hasGoogleAccess: boolean;
+};
+
+function readImpersonatedBy(sessionData: SessionData | null): string | null {
+  if (!sessionData) {
+    return null;
   }
-  return fallback;
+  const maybeSession = (sessionData as { session?: { impersonatedBy?: unknown } }).session;
+  if (!maybeSession) {
+    return null;
+  }
+  return typeof maybeSession.impersonatedBy === "string" && maybeSession.impersonatedBy.length > 0
+    ? maybeSession.impersonatedBy
+    : null;
 }
 
-export default function AdminPage() {
-  const {
-    data: approvedLoginData,
-    isLoading: isApprovedLoginLoading,
-    error: approvedLoginError,
-  } = useApprovedLoginEmailAllowlist();
-  const { data, isLoading, error } = useGoogleAccessAllowlist();
-  const addApprovedLoginEntry = useAddApprovedLoginEmailAllowlistEntry();
-  const addEntry = useAddGoogleAccessAllowlistEntry();
-  const removeApprovedLoginEntry = useRemoveApprovedLoginEmailAllowlistEntry();
-  const removeEntry = useRemoveGoogleAccessAllowlistEntry();
+function makeEmptyRow(email: string): UnifiedUserRow {
+  return {
+    email,
+    userId: null,
+    userName: null,
+    userRole: null,
+    hasAccount: false,
+    approvedLoginId: null,
+    isLoginApproved: false,
+    isBuiltInApproved: false,
+    googleAccessId: null,
+    hasGoogleAccess: false,
+  };
+}
 
-  const [approvedLoginEmail, setApprovedLoginEmail] = useState("");
-  const [email, setEmail] = useState("");
+// ---------------------------------------------------------------------------
+// Switch cell for login approved
+// ---------------------------------------------------------------------------
+function LoginApprovedCell({
+  email,
+  approvedLoginId,
+  isLoginApproved,
+  isBuiltInApproved,
+  addMutation,
+  removeMutation,
+}: {
+  email: string;
+  approvedLoginId: string | null;
+  isLoginApproved: boolean;
+  isBuiltInApproved: boolean;
+  addMutation: { mutateAsync: (input: { email: string }) => Promise<unknown> };
+  removeMutation: { mutateAsync: (input: { id: string }) => Promise<unknown> };
+}) {
+  const [pending, setPending] = useState(false);
+
+  const handleChange = useCallback(async () => {
+    setPending(true);
+    try {
+      if (isLoginApproved && approvedLoginId) {
+        await removeMutation.mutateAsync({ id: approvedLoginId });
+      } else {
+        await addMutation.mutateAsync({ email });
+      }
+    } finally {
+      setPending(false);
+    }
+  }, [email, approvedLoginId, isLoginApproved, addMutation, removeMutation]);
+
+  return (
+    <Switch
+      checked={isLoginApproved}
+      disabled={isBuiltInApproved || pending}
+      onCheckedChange={handleChange}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Switch cell for Google access
+// ---------------------------------------------------------------------------
+function GoogleAccessCell({
+  email,
+  googleAccessId,
+  hasGoogleAccess,
+  addMutation,
+  removeMutation,
+}: {
+  email: string;
+  googleAccessId: string | null;
+  hasGoogleAccess: boolean;
+  addMutation: { mutateAsync: (input: { email: string }) => Promise<unknown> };
+  removeMutation: { mutateAsync: (input: { id: string }) => Promise<unknown> };
+}) {
+  const [pending, setPending] = useState(false);
+
+  const handleChange = useCallback(async () => {
+    setPending(true);
+    try {
+      if (hasGoogleAccess && googleAccessId) {
+        await removeMutation.mutateAsync({ id: googleAccessId });
+      } else {
+        await addMutation.mutateAsync({ email });
+      }
+    } finally {
+      setPending(false);
+    }
+  }, [email, googleAccessId, hasGoogleAccess, addMutation, removeMutation]);
+
+  return <Switch checked={hasGoogleAccess} disabled={pending} onCheckedChange={handleChange} />;
+}
+
+// ---------------------------------------------------------------------------
+// Impersonate button cell
+// ---------------------------------------------------------------------------
+function ImpersonateButton({
+  userId,
+  disabled,
+  isWorking,
+  onImpersonate,
+}: {
+  userId: string;
+  disabled: boolean;
+  isWorking: boolean;
+  onImpersonate: (userId: string) => void;
+}) {
+  const handleClick = useCallback(() => onImpersonate(userId), [onImpersonate, userId]);
+  return (
+    <Button variant="ghost" size="sm" disabled={disabled || isWorking} onClick={handleClick}>
+      {isWorking ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <UserRoundCog className="h-4 w-4" />
+      )}
+    </Button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+export default function AdminPage() {
+  // -- Data sources --
+  const { data: approvedLoginData, isLoading: isApprovedLoginLoading } =
+    useApprovedLoginEmailAllowlist();
+  const { data: googleAccessData, isLoading: isGoogleAccessLoading } = useGoogleAccessAllowlist();
+
+  const addApprovedLoginEntry = useAddApprovedLoginEmailAllowlistEntry();
+  const removeApprovedLoginEntry = useRemoveApprovedLoginEmailAllowlistEntry();
+  const addGoogleAccessEntry = useAddGoogleAccessAllowlistEntry();
+  const removeGoogleAccessEntry = useRemoveGoogleAccessAllowlistEntry();
+
+  const [users, setUsers] = useState<AdminListUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  // -- Session / impersonation --
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null);
+  const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
+
+  const impersonatedBy = useMemo(() => readImpersonatedBy(sessionData), [sessionData]);
+  const isCurrentlyImpersonating = Boolean(impersonatedBy);
+  const currentUserId = sessionData?.user?.id ?? "";
+
+  // -- Add form state --
+  const [newEmail, setNewEmail] = useState("");
+  const [addLoginApproved, setAddLoginApproved] = useState(true);
+  const [addGoogleAccess, setAddGoogleAccess] = useState(false);
+  const [addPending, setAddPending] = useState(false);
+
+  // -- Filter --
+  const [globalFilter, setGlobalFilter] = useState("");
+
+  // -- Feedback --
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // -- Load session + users --
+  useEffect(() => {
+    void authClient.getSession().then((r) => setSessionData(r?.data ?? null));
+    void (async () => {
+      setLoadingUsers(true);
+      try {
+        const result = await authClient.admin.listUsers({
+          query: { sortBy: "createdAt", sortDirection: "desc", limit: 200 },
+        });
+        setUsers((result.data?.users ?? []) as AdminListUser[]);
+      } catch {
+        // non-critical — table still shows allowlist-only emails
+      } finally {
+        setLoadingUsers(false);
+      }
+    })();
+  }, []);
+
+  // -- Merge data sources --
   const approvedLoginEntries = useMemo(
     () => (Array.isArray(approvedLoginData) ? approvedLoginData : []),
     [approvedLoginData],
   );
-  const entries = useMemo(() => (Array.isArray(data) ? data : []), [data]);
-  const handleApprovedLoginEmailChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setApprovedLoginEmail(event.target.value);
-    },
-    [],
+  const googleAccessEntries = useMemo(
+    () => (Array.isArray(googleAccessData) ? googleAccessData : []),
+    [googleAccessData],
   );
 
-  const handleEmailChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setEmail(event.target.value);
+  const rows = useMemo<UnifiedUserRow[]>(() => {
+    const map = new Map<string, UnifiedUserRow>();
+
+    for (const user of users) {
+      const key = user.email.toLowerCase();
+      const row = map.get(key) ?? makeEmptyRow(key);
+      row.userId = user.id;
+      row.userName = user.name;
+      row.userRole = user.role ?? null;
+      row.hasAccount = true;
+      map.set(key, row);
+    }
+
+    for (const entry of approvedLoginEntries) {
+      const key = entry.email.toLowerCase();
+      const row = map.get(key) ?? makeEmptyRow(key);
+      row.approvedLoginId = entry.id;
+      row.isLoginApproved = true;
+      row.isBuiltInApproved = Boolean(entry.isBuiltIn);
+      map.set(key, row);
+    }
+
+    for (const entry of googleAccessEntries) {
+      const key = entry.email.toLowerCase();
+      const row = map.get(key) ?? makeEmptyRow(key);
+      row.googleAccessId = entry.id;
+      row.hasGoogleAccess = true;
+      map.set(key, row);
+    }
+
+    return Array.from(map.values()).toSorted((a, b) => a.email.localeCompare(b.email));
+  }, [users, approvedLoginEntries, googleAccessEntries]);
+
+  const handleImpersonate = useCallback(async (targetUserId: string) => {
+    setImpersonatingUserId(targetUserId);
+    setActionError(null);
+    try {
+      const result = await authClient.admin.impersonateUser({ userId: targetUserId });
+      if (result.error) {
+        setActionError(result.error.message ?? "Unable to impersonate.");
+        return;
+      }
+      window.location.assign("/chat");
+    } catch {
+      setActionError("Unable to impersonate.");
+    } finally {
+      setImpersonatingUserId(null);
+    }
   }, []);
 
-  const handleAddApprovedLogin = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setActionMessage(null);
-      setActionError(null);
+  // -- Column defs --
+  const columns = useMemo<ColumnDef<UnifiedUserRow, unknown>[]>(
+    () => [
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => <span className="font-medium">{row.original.email}</span>,
+      },
+      {
+        accessorKey: "userName",
+        header: "Name",
+        cell: ({ row }) =>
+          row.original.userName ? (
+            row.original.userName
+          ) : (
+            <span className="text-muted-foreground">--</span>
+          ),
+      },
+      {
+        accessorKey: "hasAccount",
+        header: "Account",
+        cell: ({ row }) => (
+          <span
+            className={cn(
+              "inline-block h-2 w-2 rounded-full",
+              row.original.hasAccount ? "bg-green-500" : "bg-muted-foreground/30",
+            )}
+            title={row.original.hasAccount ? "Has account" : "No account"}
+          />
+        ),
+      },
+      {
+        accessorKey: "isLoginApproved",
+        header: "Login Approved",
+        cell: ({ row }) => {
+          const r = row.original;
+          return (
+            <LoginApprovedCell
+              email={r.email}
+              approvedLoginId={r.approvedLoginId}
+              isLoginApproved={r.isLoginApproved}
+              isBuiltInApproved={r.isBuiltInApproved}
+              addMutation={addApprovedLoginEntry}
+              removeMutation={removeApprovedLoginEntry}
+            />
+          );
+        },
+      },
+      {
+        accessorKey: "hasGoogleAccess",
+        header: "Google Access",
+        cell: ({ row }) => {
+          const r = row.original;
+          return (
+            <GoogleAccessCell
+              email={r.email}
+              googleAccessId={r.googleAccessId}
+              hasGoogleAccess={r.hasGoogleAccess}
+              addMutation={addGoogleAccessEntry}
+              removeMutation={removeGoogleAccessEntry}
+            />
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: "Impersonate",
+        meta: { align: "right" as const },
+        cell: ({ row }) => {
+          const r = row.original;
+          if (!r.hasAccount || !r.userId) {
+            return null;
+          }
+          const isSelf = r.userId === currentUserId;
+          const isWorking = impersonatingUserId === r.userId;
+          return (
+            <ImpersonateButton
+              userId={r.userId}
+              disabled={isSelf || isCurrentlyImpersonating}
+              isWorking={isWorking}
+              onImpersonate={handleImpersonate}
+            />
+          );
+        },
+      },
+    ],
+    [
+      currentUserId,
+      impersonatingUserId,
+      isCurrentlyImpersonating,
+      handleImpersonate,
+      addApprovedLoginEntry,
+      removeApprovedLoginEntry,
+      addGoogleAccessEntry,
+      removeGoogleAccessEntry,
+    ],
+  );
 
-      const normalizedEmail = approvedLoginEmail.trim().toLowerCase();
-      if (!normalizedEmail) {
-        setActionError("Approved email is required.");
+  // -- Add email handler --
+  const handleAddEmail = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const normalized = newEmail.trim().toLowerCase();
+      if (!normalized) {
         return;
       }
-
-      try {
-        await addApprovedLoginEntry.mutateAsync({ email: normalizedEmail });
-        setActionMessage("Approved login email added.");
-        setApprovedLoginEmail("");
-      } catch (err) {
-        setActionError(toErrorMessage(err, "Failed to add approved login email."));
-      }
-    },
-    [addApprovedLoginEntry, approvedLoginEmail],
-  );
-
-  const handleAdd = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setActionMessage(null);
-      setActionError(null);
-
-      const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) {
-        setActionError("Email is required.");
+      if (!addLoginApproved && !addGoogleAccess) {
+        setActionError("Select at least one access type.");
         return;
       }
-
-      try {
-        await addEntry.mutateAsync({ email: normalizedEmail });
-        setActionMessage("Google access granted.");
-        setEmail("");
-      } catch (err) {
-        setActionError(toErrorMessage(err, "Failed to grant Google access."));
-      }
-    },
-    [addEntry, email],
-  );
-
-  const handleRemove = useCallback(
-    async (id: string) => {
-      setActionMessage(null);
       setActionError(null);
+      setActionMessage(null);
+      setAddPending(true);
       try {
-        await removeEntry.mutateAsync({ id });
-        setActionMessage("Google access removed.");
+        const promises: Promise<unknown>[] = [];
+        if (addLoginApproved) {
+          promises.push(addApprovedLoginEntry.mutateAsync({ email: normalized }));
+        }
+        if (addGoogleAccess) {
+          promises.push(addGoogleAccessEntry.mutateAsync({ email: normalized }));
+        }
+        await Promise.all(promises);
+        setActionMessage(`Added ${normalized}.`);
+        setNewEmail("");
       } catch (err) {
-        setActionError(toErrorMessage(err, "Failed to remove Google access."));
+        setActionError(err instanceof Error ? err.message : "Failed to add email.");
+      } finally {
+        setAddPending(false);
       }
     },
-    [removeEntry],
+    [newEmail, addLoginApproved, addGoogleAccess, addApprovedLoginEntry, addGoogleAccessEntry],
   );
 
-  const handleRemoveClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      const id = event.currentTarget.dataset.allowlistId;
-      if (!id) {
+  // -- Stop impersonation --
+  const handleStopImpersonating = useCallback(async () => {
+    setStoppingImpersonation(true);
+    try {
+      const result = await authClient.admin.stopImpersonating();
+      if (result.error) {
+        setActionError(result.error.message ?? "Failed to stop impersonation.");
         return;
       }
-      void handleRemove(id);
-    },
-    [handleRemove],
-  );
+      window.location.assign("/admin");
+    } catch {
+      setActionError("Failed to stop impersonation.");
+    } finally {
+      setStoppingImpersonation(false);
+    }
+  }, []);
 
-  const handleRemoveApprovedLogin = useCallback(
-    async (id: string) => {
-      setActionMessage(null);
-      setActionError(null);
-      try {
-        await removeApprovedLoginEntry.mutateAsync({ id });
-        setActionMessage("Approved login email removed.");
-      } catch (err) {
-        setActionError(toErrorMessage(err, "Failed to remove approved login email."));
-      }
-    },
-    [removeApprovedLoginEntry],
-  );
+  const isLoading = isApprovedLoginLoading || isGoogleAccessLoading || loadingUsers;
 
-  const handleRemoveApprovedLoginClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      const id = event.currentTarget.dataset.approvedLoginId;
-      if (!id) {
-        return;
-      }
-      void handleRemoveApprovedLogin(id);
-    },
-    [handleRemoveApprovedLogin],
+  const handleNewEmailChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => setNewEmail(e.target.value),
+    [],
+  );
+  const handleLoginApprovedChange = useCallback(
+    (v: boolean | "indeterminate") => setAddLoginApproved(v === true),
+    [],
+  );
+  const handleGoogleAccessChange = useCallback(
+    (v: boolean | "indeterminate") => setAddGoogleAccess(v === true),
+    [],
+  );
+  const handleFilterChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => setGlobalFilter(e.target.value),
+    [],
   );
 
   return (
@@ -154,163 +462,99 @@ export default function AdminPage() {
       <div className="mb-6">
         <h2 className="text-xl font-semibold">User Management</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Manage approved logins and Google integration access.
+          Manage login access, Google integration access, and impersonate users.
         </p>
       </div>
 
+      {/* Feedback banner */}
       {(actionError || actionMessage) && (
         <div
-          className={`mb-4 rounded-lg border p-3 text-sm ${
+          className={cn(
+            "mb-4 rounded-lg border p-3 text-sm",
             actionError
               ? "border-destructive/30 bg-destructive/10 text-destructive"
-              : "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
-          }`}
+              : "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300",
+          )}
         >
           {actionError ?? actionMessage}
         </div>
       )}
 
-      <div className="bg-card rounded-lg border p-6">
-        <h3 className="text-base font-semibold">Approved Login Emails</h3>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Only these emails can log in. Add people here to approve access for this invite-only app.
-        </p>
+      {/* Impersonation banner */}
+      {isCurrentlyImpersonating && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-amber-900 dark:text-amber-200">
+              You are currently impersonating another account.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStopImpersonating}
+              disabled={stoppingImpersonation}
+            >
+              {stoppingImpersonation ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Stopping...
+                </>
+              ) : (
+                "Stop impersonating"
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
 
-        <form onSubmit={handleAddApprovedLogin} className="mt-4 flex flex-col gap-2 sm:flex-row">
+      {/* Add email form */}
+      <div className="bg-card mb-4 rounded-lg border p-4">
+        <form onSubmit={handleAddEmail} className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Input
             type="email"
             placeholder="user@company.com"
-            value={approvedLoginEmail}
-            onChange={handleApprovedLoginEmailChange}
-            className="sm:max-w-sm"
+            value={newEmail}
+            onChange={handleNewEmailChange}
+            className="sm:max-w-xs"
           />
-          <Button type="submit" disabled={addApprovedLoginEntry.isPending}>
-            {addApprovedLoginEntry.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Adding...
-              </>
-            ) : (
-              "Add approved email"
-            )}
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={addLoginApproved} onCheckedChange={handleLoginApprovedChange} />
+            Login
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={addGoogleAccess} onCheckedChange={handleGoogleAccessChange} />
+            Google
+          </label>
+          <Button type="submit" size="sm" disabled={addPending}>
+            {addPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
           </Button>
         </form>
-
-        {isApprovedLoginLoading ? (
-          <div className="mt-6 flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
-        ) : approvedLoginError ? (
-          <p className="text-destructive mt-4 text-sm">Failed to load approved login emails.</p>
-        ) : approvedLoginEntries.length === 0 ? (
-          <p className="text-muted-foreground mt-4 text-sm">No approved login emails configured.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Email</th>
-                  <th className="px-3 py-2 text-left font-medium">Source</th>
-                  <th className="px-3 py-2 text-left font-medium">Added At</th>
-                  <th className="px-3 py-2 text-right font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvedLoginEntries.map((entry) => (
-                  <tr key={entry.id} className="border-t">
-                    <td className="px-3 py-2">{entry.email}</td>
-                    <td className="text-muted-foreground px-3 py-2">
-                      {entry.isBuiltIn ? "Built-in admin" : "Admin added"}
-                    </td>
-                    <td className="text-muted-foreground px-3 py-2">
-                      {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "Always"}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        data-approved-login-id={entry.id}
-                        onClick={handleRemoveApprovedLoginClick}
-                        disabled={entry.isBuiltIn || removeApprovedLoginEntry.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
-      <div className="bg-card mt-6 rounded-lg border p-6">
-        <h3 className="text-base font-semibold">Google Access Allowlist</h3>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Users not on this list cannot connect Gmail, Google Calendar, Docs, Sheets, or Drive.
-        </p>
-
-        <form onSubmit={handleAdd} className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Input
-            type="email"
-            placeholder="user@company.com"
-            value={email}
-            onChange={handleEmailChange}
-            className="sm:max-w-sm"
-          />
-          <Button type="submit" disabled={addEntry.isPending}>
-            {addEntry.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Adding...
-              </>
-            ) : (
-              "Add user"
-            )}
-          </Button>
-        </form>
+      {/* Filter + table */}
+      <div className="bg-card rounded-lg border">
+        <div className="border-b p-3">
+          <div className="relative max-w-xs">
+            <Search className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
+            <Input
+              placeholder="Filter by email or name..."
+              value={globalFilter}
+              onChange={handleFilterChange}
+              className="pl-9"
+            />
+          </div>
+        </div>
 
         {isLoading ? (
-          <div className="mt-6 flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-12">
             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
           </div>
-        ) : error ? (
-          <p className="text-destructive mt-4 text-sm">Failed to load allowlist.</p>
-        ) : entries.length === 0 ? (
-          <p className="text-muted-foreground mt-4 text-sm">No users have Google access yet.</p>
         ) : (
-          <div className="mt-4 overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Email</th>
-                  <th className="px-3 py-2 text-left font-medium">Added At</th>
-                  <th className="px-3 py-2 text-right font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr key={entry.id} className="border-t">
-                    <td className="px-3 py-2">{entry.email}</td>
-                    <td className="text-muted-foreground px-3 py-2">
-                      {new Date(entry.createdAt).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        data-allowlist-id={entry.id}
-                        onClick={handleRemoveClick}
-                        disabled={removeEntry.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={columns}
+            data={rows}
+            globalFilter={globalFilter}
+            onGlobalFilterChange={setGlobalFilter}
+          />
         )}
       </div>
     </div>

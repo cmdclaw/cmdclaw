@@ -528,9 +528,15 @@ export default function AdminWorkspacesPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">{stats.total} workspaces</span>
-        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">{stats.members} members</span>
-        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">{stats.joined} joined</span>
+        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+          {stats.total} workspaces
+        </span>
+        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+          {stats.members} members
+        </span>
+        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+          {stats.joined} joined
+        </span>
       </div>
 
       {isLoading ? (
