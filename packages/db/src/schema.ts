@@ -569,6 +569,48 @@ export type MessageTiming = {
     agentInitMs?: number;
     // Time spent in pre-prompt setup before prompt dispatch (skills/memory/instructions prep).
     prePromptSetupMs?: number;
+    // Time spent syncing memory files into the sandbox before prompt dispatch.
+    prePromptMemorySyncMs?: number;
+    // Time spent writing runtime callback/context metadata into the sandbox.
+    prePromptRuntimeContextWriteMs?: number;
+    // Time spent preparing the sandbox-local executor and its source configuration.
+    prePromptExecutorPrepareMs?: number;
+    // Time spent loading executor bootstrap config and OAuth bootstrap sources.
+    prePromptExecutorBootstrapLoadMs?: number;
+    // Time spent writing executor config/state files into the sandbox.
+    prePromptExecutorConfigWriteMs?: number;
+    // Time spent probing whether the sandbox-local executor server is already reachable.
+    prePromptExecutorServerProbeMs?: number;
+    // Time spent launching the sandbox-local executor server when it is not already running.
+    prePromptExecutorServerStartMs?: number;
+    // Time spent waiting for the sandbox-local executor server to become ready.
+    prePromptExecutorServerWaitReadyMs?: number;
+    // Time spent validating the executor server with a live status call.
+    prePromptExecutorStatusCheckMs?: number;
+    // Time spent reconciling native MCP OAuth sources inside the sandbox-local executor.
+    prePromptExecutorOauthReconcileMs?: number;
+    // Time spent loading enabled skill metadata and custom integration credentials.
+    prePromptSkillsAndCredsLoadMs?: number;
+    // Time spent reading the reusable sandbox pre-prompt cache.
+    prePromptCacheReadMs?: number;
+    // Time spent writing custom skills into the sandbox.
+    prePromptSkillsWriteMs?: number;
+    // Time spent writing generated custom integration CLI files into the sandbox.
+    prePromptCustomIntegrationCliWriteMs?: number;
+    // Time spent configuring custom integration permissions inside the sandbox.
+    prePromptCustomIntegrationPermissionsWriteMs?: number;
+    // Time spent writing integration skills into the sandbox.
+    prePromptIntegrationSkillsWriteMs?: number;
+    // Time spent writing the reusable sandbox pre-prompt cache.
+    prePromptCacheWriteMs?: number;
+    // Time spent composing the final prompt spec after sandbox preparation.
+    prePromptPromptSpecComposeMs?: number;
+    // Time spent subscribing to runtime events before prompt dispatch.
+    prePromptEventStreamSubscribeMs?: number;
+    // Time spent staging coworker documents into the sandbox.
+    prePromptCoworkerDocsStageMs?: number;
+    // Time spent staging user attachments into the sandbox and prompt parts.
+    prePromptAttachmentsStageMs?: number;
     // Time from agent ready to prompt dispatch (subset focused on prompt preparation path).
     agentReadyToPromptMs?: number;
     // Time from prompt dispatch to first received generation stream event.

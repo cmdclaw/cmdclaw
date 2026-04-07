@@ -360,4 +360,57 @@ describe("prepareExecutorInSandbox", () => {
 
     expect(sandbox.exec).toHaveBeenCalledTimes(4);
   });
+
+  it("emits detailed executor bootstrap phases", async () => {
+    const sandbox = makeSandboxHandle();
+    const phases: string[] = [];
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '"ok"\n',
+        stderr: "",
+      });
+
+    await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+      onPhase: (phase, status) => {
+        phases.push(`${phase}:${status}`);
+      },
+    });
+
+    expect(phases).toEqual([
+      "bootstrap_load:started",
+      "bootstrap_load:completed",
+      "config_write:started",
+      "config_write:completed",
+      "server_probe:started",
+      "server_probe:completed",
+      "server_start:started",
+      "server_start:completed",
+      "server_wait_ready:started",
+      "server_wait_ready:completed",
+      "status_check:started",
+      "status_check:completed",
+      "oauth_reconcile:started",
+      "oauth_reconcile:completed",
+    ]);
+  });
 });

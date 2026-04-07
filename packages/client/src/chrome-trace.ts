@@ -35,6 +35,27 @@ type TracePhaseSpec = {
     | "session_ready"
     | "agent_init"
     | "pre_prompt_setup"
+    | "pre_prompt_memory_sync"
+    | "pre_prompt_runtime_context_write"
+    | "pre_prompt_executor_prepare"
+    | "pre_prompt_executor_bootstrap_load"
+    | "pre_prompt_executor_config_write"
+    | "pre_prompt_executor_server_probe"
+    | "pre_prompt_executor_server_start"
+    | "pre_prompt_executor_server_wait_ready"
+    | "pre_prompt_executor_status_check"
+    | "pre_prompt_executor_oauth_reconcile"
+    | "pre_prompt_skills_and_creds_load"
+    | "pre_prompt_cache_read"
+    | "pre_prompt_skills_write"
+    | "pre_prompt_custom_integration_cli_write"
+    | "pre_prompt_custom_integration_permissions_write"
+    | "pre_prompt_integration_skills_write"
+    | "pre_prompt_cache_write"
+    | "pre_prompt_prompt_spec_compose"
+    | "pre_prompt_event_stream_subscribe"
+    | "pre_prompt_coworker_docs_stage"
+    | "pre_prompt_attachments_stage"
     | "agent_ready_to_prompt"
     | "wait_for_first_event"
     | "prompt_to_first_token"
@@ -78,6 +99,132 @@ const TRACE_PHASE_SPECS: TracePhaseSpec[] = [
     durationKey: "prePromptSetupMs",
     startPhases: ["pre_prompt_setup_started"],
     endPhases: ["prompt_sent"],
+  },
+  {
+    name: "pre_prompt_memory_sync",
+    durationKey: "prePromptMemorySyncMs",
+    startPhases: ["pre_prompt_memory_sync_started"],
+    endPhases: ["pre_prompt_memory_sync_completed"],
+  },
+  {
+    name: "pre_prompt_runtime_context_write",
+    durationKey: "prePromptRuntimeContextWriteMs",
+    startPhases: ["pre_prompt_runtime_context_write_started"],
+    endPhases: ["pre_prompt_runtime_context_write_completed"],
+  },
+  {
+    name: "pre_prompt_executor_prepare",
+    durationKey: "prePromptExecutorPrepareMs",
+    startPhases: ["pre_prompt_executor_prepare_started"],
+    endPhases: ["pre_prompt_executor_prepare_completed"],
+  },
+  {
+    name: "pre_prompt_executor_bootstrap_load",
+    durationKey: "prePromptExecutorBootstrapLoadMs",
+    startPhases: ["pre_prompt_executor_bootstrap_load_started"],
+    endPhases: ["pre_prompt_executor_bootstrap_load_completed"],
+  },
+  {
+    name: "pre_prompt_executor_config_write",
+    durationKey: "prePromptExecutorConfigWriteMs",
+    startPhases: ["pre_prompt_executor_config_write_started"],
+    endPhases: ["pre_prompt_executor_config_write_completed"],
+  },
+  {
+    name: "pre_prompt_executor_server_probe",
+    durationKey: "prePromptExecutorServerProbeMs",
+    startPhases: ["pre_prompt_executor_server_probe_started"],
+    endPhases: ["pre_prompt_executor_server_probe_completed"],
+  },
+  {
+    name: "pre_prompt_executor_server_start",
+    durationKey: "prePromptExecutorServerStartMs",
+    startPhases: ["pre_prompt_executor_server_start_started"],
+    endPhases: ["pre_prompt_executor_server_start_completed"],
+  },
+  {
+    name: "pre_prompt_executor_server_wait_ready",
+    durationKey: "prePromptExecutorServerWaitReadyMs",
+    startPhases: ["pre_prompt_executor_server_wait_ready_started"],
+    endPhases: ["pre_prompt_executor_server_wait_ready_completed"],
+  },
+  {
+    name: "pre_prompt_executor_status_check",
+    durationKey: "prePromptExecutorStatusCheckMs",
+    startPhases: ["pre_prompt_executor_status_check_started"],
+    endPhases: ["pre_prompt_executor_status_check_completed"],
+  },
+  {
+    name: "pre_prompt_executor_oauth_reconcile",
+    durationKey: "prePromptExecutorOauthReconcileMs",
+    startPhases: ["pre_prompt_executor_oauth_reconcile_started"],
+    endPhases: ["pre_prompt_executor_oauth_reconcile_completed"],
+  },
+  {
+    name: "pre_prompt_skills_and_creds_load",
+    durationKey: "prePromptSkillsAndCredsLoadMs",
+    startPhases: ["pre_prompt_skills_and_creds_load_started"],
+    endPhases: ["pre_prompt_skills_and_creds_load_completed"],
+  },
+  {
+    name: "pre_prompt_cache_read",
+    durationKey: "prePromptCacheReadMs",
+    startPhases: ["pre_prompt_cache_read_started"],
+    endPhases: ["pre_prompt_cache_read_completed"],
+  },
+  {
+    name: "pre_prompt_skills_write",
+    durationKey: "prePromptSkillsWriteMs",
+    startPhases: ["pre_prompt_skills_write_started"],
+    endPhases: ["pre_prompt_skills_write_completed"],
+  },
+  {
+    name: "pre_prompt_custom_integration_cli_write",
+    durationKey: "prePromptCustomIntegrationCliWriteMs",
+    startPhases: ["pre_prompt_custom_integration_cli_write_started"],
+    endPhases: ["pre_prompt_custom_integration_cli_write_completed"],
+  },
+  {
+    name: "pre_prompt_custom_integration_permissions_write",
+    durationKey: "prePromptCustomIntegrationPermissionsWriteMs",
+    startPhases: ["pre_prompt_custom_integration_permissions_write_started"],
+    endPhases: ["pre_prompt_custom_integration_permissions_write_completed"],
+  },
+  {
+    name: "pre_prompt_integration_skills_write",
+    durationKey: "prePromptIntegrationSkillsWriteMs",
+    startPhases: ["pre_prompt_integration_skills_write_started"],
+    endPhases: ["pre_prompt_integration_skills_write_completed"],
+  },
+  {
+    name: "pre_prompt_cache_write",
+    durationKey: "prePromptCacheWriteMs",
+    startPhases: ["pre_prompt_cache_write_started"],
+    endPhases: ["pre_prompt_cache_write_completed"],
+  },
+  {
+    name: "pre_prompt_prompt_spec_compose",
+    durationKey: "prePromptPromptSpecComposeMs",
+    startPhases: ["pre_prompt_prompt_spec_compose_started"],
+    endPhases: ["pre_prompt_prompt_spec_compose_completed"],
+  },
+  {
+    name: "pre_prompt_event_stream_subscribe",
+    durationKey: "prePromptEventStreamSubscribeMs",
+    startPhases: ["pre_prompt_event_stream_subscribe_started"],
+    endPhases: ["pre_prompt_event_stream_subscribe_completed"],
+  },
+  {
+    name: "pre_prompt_coworker_docs_stage",
+    durationKey: "prePromptCoworkerDocsStageMs",
+    startPhases: ["pre_prompt_coworker_docs_stage_started"],
+    endPhases: ["pre_prompt_coworker_docs_stage_completed"],
+  },
+  {
+    name: "pre_prompt_attachments_stage",
+    durationKey: "prePromptAttachmentsStageMs",
+    startPhases: ["pre_prompt_attachments_stage_started"],
+    endPhases: ["pre_prompt_attachments_stage_completed"],
   },
   {
     name: "agent_ready_to_prompt",

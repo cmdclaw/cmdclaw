@@ -764,6 +764,19 @@ function isMissingSandboxError(error: unknown): boolean {
   );
 }
 
+function phaseDurationMs(
+  phaseMarks: Record<string, number>,
+  startPhase: string,
+  endPhase: string,
+): number | undefined {
+  const start = phaseMarks[startPhase];
+  const end = phaseMarks[endPhase];
+  if (start === undefined || end === undefined) {
+    return undefined;
+  }
+  return Math.max(0, end - start);
+}
+
 type RemoteRunDebugPhase =
   | "remote_credentials_fetched"
   | "sandbox_created"
@@ -2082,6 +2095,111 @@ class GenerationManager {
       phaseMarks.pre_prompt_setup_started !== undefined && phaseMarks.prompt_sent !== undefined
         ? Math.max(0, phaseMarks.prompt_sent - phaseMarks.pre_prompt_setup_started)
         : undefined;
+    const prePromptMemorySyncMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_memory_sync_started",
+      "pre_prompt_memory_sync_completed",
+    );
+    const prePromptRuntimeContextWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_runtime_context_write_started",
+      "pre_prompt_runtime_context_write_completed",
+    );
+    const prePromptExecutorPrepareMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_prepare_started",
+      "pre_prompt_executor_prepare_completed",
+    );
+    const prePromptExecutorBootstrapLoadMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_bootstrap_load_started",
+      "pre_prompt_executor_bootstrap_load_completed",
+    );
+    const prePromptExecutorConfigWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_config_write_started",
+      "pre_prompt_executor_config_write_completed",
+    );
+    const prePromptExecutorServerProbeMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_server_probe_started",
+      "pre_prompt_executor_server_probe_completed",
+    );
+    const prePromptExecutorServerStartMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_server_start_started",
+      "pre_prompt_executor_server_start_completed",
+    );
+    const prePromptExecutorServerWaitReadyMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_server_wait_ready_started",
+      "pre_prompt_executor_server_wait_ready_completed",
+    );
+    const prePromptExecutorStatusCheckMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_status_check_started",
+      "pre_prompt_executor_status_check_completed",
+    );
+    const prePromptExecutorOauthReconcileMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_executor_oauth_reconcile_started",
+      "pre_prompt_executor_oauth_reconcile_completed",
+    );
+    const prePromptSkillsAndCredsLoadMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_skills_and_creds_load_started",
+      "pre_prompt_skills_and_creds_load_completed",
+    );
+    const prePromptCacheReadMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_cache_read_started",
+      "pre_prompt_cache_read_completed",
+    );
+    const prePromptSkillsWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_skills_write_started",
+      "pre_prompt_skills_write_completed",
+    );
+    const prePromptCustomIntegrationCliWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_custom_integration_cli_write_started",
+      "pre_prompt_custom_integration_cli_write_completed",
+    );
+    const prePromptCustomIntegrationPermissionsWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_custom_integration_permissions_write_started",
+      "pre_prompt_custom_integration_permissions_write_completed",
+    );
+    const prePromptIntegrationSkillsWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_integration_skills_write_started",
+      "pre_prompt_integration_skills_write_completed",
+    );
+    const prePromptCacheWriteMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_cache_write_started",
+      "pre_prompt_cache_write_completed",
+    );
+    const prePromptPromptSpecComposeMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_prompt_spec_compose_started",
+      "pre_prompt_prompt_spec_compose_completed",
+    );
+    const prePromptEventStreamSubscribeMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_event_stream_subscribe_started",
+      "pre_prompt_event_stream_subscribe_completed",
+    );
+    const prePromptCoworkerDocsStageMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_coworker_docs_stage_started",
+      "pre_prompt_coworker_docs_stage_completed",
+    );
+    const prePromptAttachmentsStageMs = phaseDurationMs(
+      phaseMarks,
+      "pre_prompt_attachments_stage_started",
+      "pre_prompt_attachments_stage_completed",
+    );
     const agentReadyToPromptMs =
       phaseMarks.agent_init_ready !== undefined && phaseMarks.prompt_sent !== undefined
         ? Math.max(0, phaseMarks.prompt_sent - phaseMarks.agent_init_ready)
@@ -2126,6 +2244,27 @@ class GenerationManager {
       sessionReadyMs,
       agentInitMs,
       prePromptSetupMs,
+      prePromptMemorySyncMs,
+      prePromptRuntimeContextWriteMs,
+      prePromptExecutorPrepareMs,
+      prePromptExecutorBootstrapLoadMs,
+      prePromptExecutorConfigWriteMs,
+      prePromptExecutorServerProbeMs,
+      prePromptExecutorServerStartMs,
+      prePromptExecutorServerWaitReadyMs,
+      prePromptExecutorStatusCheckMs,
+      prePromptExecutorOauthReconcileMs,
+      prePromptSkillsAndCredsLoadMs,
+      prePromptCacheReadMs,
+      prePromptSkillsWriteMs,
+      prePromptCustomIntegrationCliWriteMs,
+      prePromptCustomIntegrationPermissionsWriteMs,
+      prePromptIntegrationSkillsWriteMs,
+      prePromptCacheWriteMs,
+      prePromptPromptSpecComposeMs,
+      prePromptEventStreamSubscribeMs,
+      prePromptCoworkerDocsStageMs,
+      prePromptAttachmentsStageMs,
       agentReadyToPromptMs,
       waitForFirstEventMs,
       promptToFirstTokenMs,
@@ -4950,6 +5089,23 @@ class GenerationManager {
       const markPrePromptStep = (step: string, startedAt: number) => {
         prePromptBreakdown[step] = Date.now() - startedAt;
       };
+      const markPrePromptPhase = (step: string, status: "started" | "completed") => {
+        this.markPhase(ctx, `pre_prompt_${step}_${status}`);
+      };
+      const runPrePromptStep = async <T>(
+        step: string,
+        metricKey: string,
+        action: () => Promise<T>,
+      ): Promise<T> => {
+        markPrePromptPhase(step, "started");
+        const startedAt = Date.now();
+        try {
+          return await action();
+        } finally {
+          markPrePromptStep(metricKey, startedAt);
+          markPrePromptPhase(step, "completed");
+        }
+      };
 
       // Write memory files to sandbox
       let memoryInstructions = buildMemorySystemPrompt();
@@ -4959,9 +5115,9 @@ class GenerationManager {
       let writtenIntegrationSkills: string[] = [];
       let prePromptCacheHit = false;
       try {
-        const memorySyncStartedAt = Date.now();
-        await syncMemoryFilesToSandbox(ctx.userId, runtimeSandbox);
-        markPrePromptStep("syncMemoryFilesToSandboxMs", memorySyncStartedAt);
+        await runPrePromptStep("memory_sync", "syncMemoryFilesToSandboxMs", async () => {
+          await syncMemoryFilesToSandbox(ctx.userId, runtimeSandbox);
+        });
       } catch (err) {
         console.error("[GenerationManager] Failed to sync memory to sandbox:", err);
         memoryInstructions = buildMemorySystemPrompt();
@@ -4969,48 +5125,64 @@ class GenerationManager {
 
       if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
         try {
-          const writeRuntimeContextStartedAt = Date.now();
-          const runtimeContext: RuntimeContextFile = {
-            runtimeId: ctx.runtimeId,
-            turnSeq: ctx.runtimeTurnSeq,
-            callbackToken: ctx.runtimeCallbackToken,
-            updatedAt: new Date().toISOString(),
-          };
-          await writeRuntimeContextToSandbox(runtimeSandbox, runtimeContext);
-          markPrePromptStep("writeRuntimeContextMs", writeRuntimeContextStartedAt);
+          const runtimeId = ctx.runtimeId;
+          const callbackToken = ctx.runtimeCallbackToken;
+          const turnSeq = ctx.runtimeTurnSeq;
+          await runPrePromptStep(
+            "runtime_context_write",
+            "writeRuntimeContextMs",
+            async () => {
+              const runtimeContext: RuntimeContextFile = {
+                runtimeId,
+                turnSeq,
+                callbackToken,
+                updatedAt: new Date().toISOString(),
+              };
+              await writeRuntimeContextToSandbox(runtimeSandbox, runtimeContext);
+            },
+          );
         } catch (error) {
           console.error("[GenerationManager] Failed to write runtime context to sandbox:", error);
         }
       }
 
       try {
-        const executorPrepStartedAt = Date.now();
-        const executorBootstrap = await prepareExecutorInSandbox({
-          sandbox: runtimeSandbox,
-          workspaceId: ctx.workspaceId,
-          userId: ctx.userId,
-          allowedSourceIds: ctx.allowedExecutorSourceIds,
-          runtimeId: ctx.runtimeId,
-        });
+        const executorBootstrap = await runPrePromptStep(
+          "executor_prepare",
+          "prepareExecutorInSandboxMs",
+          async () =>
+            await prepareExecutorInSandbox({
+              sandbox: runtimeSandbox,
+              workspaceId: ctx.workspaceId,
+              userId: ctx.userId,
+              allowedSourceIds: ctx.allowedExecutorSourceIds,
+              runtimeId: ctx.runtimeId,
+              onPhase: (phase, status) => {
+                this.markPhase(ctx, `pre_prompt_executor_${phase}_${status}`);
+              },
+            }),
+        );
         executorInstructions = executorBootstrap?.instructions ?? null;
-        markPrePromptStep("prepareExecutorInSandboxMs", executorPrepStartedAt);
       } catch (error) {
         console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
       }
 
-      const metadataQueryStartedAt = Date.now();
-      const [loadedSkillRows, customCreds] = await Promise.all([
-        listAccessibleEnabledSkillMetadataForUser(ctx.userId),
-        db.query.customIntegrationCredential.findMany({
-          where: and(
-            eq(customIntegrationCredential.userId, ctx.userId),
-            eq(customIntegrationCredential.enabled, true),
-          ),
-          with: { customIntegration: true },
-        }),
-      ]);
+      const [loadedSkillRows, customCreds] = await runPrePromptStep(
+        "skills_and_creds_load",
+        "loadSkillsAndCredsMs",
+        async () =>
+          await Promise.all([
+            listAccessibleEnabledSkillMetadataForUser(ctx.userId),
+            db.query.customIntegrationCredential.findMany({
+              where: and(
+                eq(customIntegrationCredential.userId, ctx.userId),
+                eq(customIntegrationCredential.enabled, true),
+              ),
+              with: { customIntegration: true },
+            }),
+          ]),
+      );
       enabledSkillRows = loadedSkillRows;
-      markPrePromptStep("loadSkillsAndCredsMs", metadataQueryStartedAt);
 
       const eligibleCustomCreds = customCreds.filter((cred) => {
         if (!ctx.allowedCustomIntegrations) {
@@ -5034,14 +5206,14 @@ class GenerationManager {
               `${cred.customIntegration.slug}:${cred.updatedAt.toISOString()}:${cred.customIntegration.updatedAt.toISOString()}`,
           )
           .toSorted(),
-      });
+        });
 
       if (ctx.agentSandboxMode === "reused") {
         try {
-          const cacheReadStartedAt = Date.now();
-          const rawCache = await runtimeSandbox.readFile(PRE_PROMPT_CACHE_PATH);
-          const parsed = JSON.parse(String(rawCache)) as Partial<PrePromptCacheRecord>;
-          markPrePromptStep("readPrePromptCacheMs", cacheReadStartedAt);
+          const parsed = await runPrePromptStep("cache_read", "readPrePromptCacheMs", async () => {
+            const rawCache = await runtimeSandbox.readFile(PRE_PROMPT_CACHE_PATH);
+            return JSON.parse(String(rawCache)) as Partial<PrePromptCacheRecord>;
+          });
           if (parsed.cacheKey === prePromptCacheKey) {
             prePromptCacheHit = true;
             if (Array.isArray(parsed.writtenSkills)) {
@@ -5080,23 +5252,27 @@ class GenerationManager {
       // Write custom skills/integration assets only when cache is stale.
       try {
         if (!prePromptCacheHit) {
-          const writeSkillsStartedAt = Date.now();
-          writtenSkills = await writeSkillsToSandbox(
-            runtimeSandbox,
-            ctx.userId,
-            customSkillNames.length > 0 ? customSkillNames : undefined,
+          writtenSkills = await runPrePromptStep("skills_write", "writeSkillsToSandboxMs", async () =>
+            await writeSkillsToSandbox(
+              runtimeSandbox,
+              ctx.userId,
+              customSkillNames.length > 0 ? customSkillNames : undefined,
+            ),
           );
-          markPrePromptStep("writeSkillsToSandboxMs", writeSkillsStartedAt);
 
-          const writeCustomCliStartedAt = Date.now();
-          await Promise.all(
-            eligibleCustomCreds.map(async (cred) => {
-              const integ = cred.customIntegration;
-              const cliPath = `/app/cli/custom-${integ.slug}.ts`;
-              await runtimeSandbox.writeFile(cliPath, integ.cliCode);
-            }),
+          await runPrePromptStep(
+            "custom_integration_cli_write",
+            "writeCustomIntegrationCliMs",
+            async () => {
+              await Promise.all(
+                eligibleCustomCreds.map(async (cred) => {
+                  const integ = cred.customIntegration;
+                  const cliPath = `/app/cli/custom-${integ.slug}.ts`;
+                  await runtimeSandbox.writeFile(cliPath, integ.cliCode);
+                }),
+              );
+            },
           );
-          markPrePromptStep("writeCustomIntegrationCliMs", writeCustomCliStartedAt);
 
           const customPerms: Record<string, { read: string[]; write: string[] }> = {};
           for (const cred of eligibleCustomCreds) {
@@ -5109,11 +5285,15 @@ class GenerationManager {
 
           if (Object.keys(customPerms).length > 0) {
             // Set the permissions env var on the sandbox
-            const writePermsStartedAt = Date.now();
-            await runtimeSandbox.exec(
-              `echo 'export CUSTOM_INTEGRATION_PERMISSIONS=${JSON.stringify(JSON.stringify(customPerms)).slice(1, -1)}' >> ~/.bashrc`,
+            await runPrePromptStep(
+              "custom_integration_permissions_write",
+              "writeCustomIntegrationPermissionsMs",
+              async () => {
+                await runtimeSandbox.exec(
+                  `echo 'export CUSTOM_INTEGRATION_PERMISSIONS=${JSON.stringify(JSON.stringify(customPerms)).slice(1, -1)}' >> ~/.bashrc`,
+                );
+              },
             );
-            markPrePromptStep("writeCustomIntegrationPermissionsMs", writePermsStartedAt);
           }
 
           const allowedSkillSlugs = new Set<string>(allowedIntegrations);
@@ -5121,52 +5301,35 @@ class GenerationManager {
             allowedSkillSlugs.add(cred.customIntegration.slug);
           }
 
-          const writeIntegrationSkillsStartedAt = Date.now();
-          writtenIntegrationSkills = await writeResolvedIntegrationSkillsToSandbox(
-            runtimeSandbox,
-            ctx.userId,
-            Array.from(allowedSkillSlugs),
+          writtenIntegrationSkills = await runPrePromptStep(
+            "integration_skills_write",
+            "writeIntegrationSkillsMs",
+            async () =>
+              await writeResolvedIntegrationSkillsToSandbox(
+                runtimeSandbox,
+                ctx.userId,
+                Array.from(allowedSkillSlugs),
+              ),
           );
-          markPrePromptStep("writeIntegrationSkillsMs", writeIntegrationSkillsStartedAt);
 
-          const writePrePromptCacheStartedAt = Date.now();
-          await runtimeSandbox.ensureDir(path.dirname(PRE_PROMPT_CACHE_PATH));
-          const nextCacheRecord: PrePromptCacheRecord = {
-            version: 1,
-            cacheKey: prePromptCacheKey,
-            writtenSkills,
-            writtenIntegrationSkills,
-            updatedAt: new Date().toISOString(),
-          };
-          await runtimeSandbox.writeFile(
-            PRE_PROMPT_CACHE_PATH,
-            JSON.stringify(nextCacheRecord, null, 2),
-          );
-          markPrePromptStep("writePrePromptCacheMs", writePrePromptCacheStartedAt);
+          await runPrePromptStep("cache_write", "writePrePromptCacheMs", async () => {
+            await runtimeSandbox.ensureDir(path.dirname(PRE_PROMPT_CACHE_PATH));
+            const nextCacheRecord: PrePromptCacheRecord = {
+              version: 1,
+              cacheKey: prePromptCacheKey,
+              writtenSkills,
+              writtenIntegrationSkills,
+              updatedAt: new Date().toISOString(),
+            };
+            await runtimeSandbox.writeFile(
+              PRE_PROMPT_CACHE_PATH,
+              JSON.stringify(nextCacheRecord, null, 2),
+            );
+          });
         }
       } catch (e) {
         console.error("[Generation] Failed to write custom integration CLI code:", e);
       }
-      markPrePromptStep("prePromptSetupTotalMs", prePromptStartedAt);
-      logServerEvent(
-        "info",
-        "PRE_PROMPT_BREAKDOWN",
-        {
-          cacheHit: prePromptCacheHit,
-          sandboxMode: ctx.agentSandboxMode ?? "unknown",
-          ...prePromptBreakdown,
-        },
-        {
-          source: "generation-manager",
-          traceId: ctx.traceId,
-          generationId: ctx.id,
-          conversationId: ctx.conversationId,
-          userId: ctx.userId,
-          sandboxId: runtimeSandbox.sandboxId,
-          sessionId: ctx.sessionId,
-        },
-      );
-
       if (writtenSkills.length === 0) {
         writtenSkills = enabledSkillRows.map((entry) => entry.name);
       }
@@ -5211,7 +5374,11 @@ class GenerationManager {
               selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
               userTimezone: dbUser?.timezone ?? null,
             };
-      const promptSpec = composeOpencodePromptSpec(promptSpecInput);
+      const promptSpec = await runPrePromptStep(
+        "prompt_spec_compose",
+        "composePromptSpecMs",
+        async () => composeOpencodePromptSpec(promptSpecInput),
+      );
       const runtimeClient = client;
       if (!runtimeClient) {
         throw new Error("Runtime harness client is unavailable.");
@@ -5230,11 +5397,16 @@ class GenerationManager {
 
       // Subscribe to SSE events BEFORE sending the prompt
       const promptTimeoutController = new AbortController();
-      const eventResult = await runtimeClient.subscribe(
-        {},
-        {
-          signal: promptTimeoutController.signal,
-        },
+      const eventResult = await runPrePromptStep(
+        "event_stream_subscribe",
+        "subscribeEventStreamMs",
+        async () =>
+          await runtimeClient.subscribe(
+            {},
+            {
+              signal: promptTimeoutController.signal,
+            },
+          ),
       );
       const eventStream = eventResult.stream;
 
@@ -5250,10 +5422,12 @@ class GenerationManager {
       // For non-image files, write them to the sandbox so the LLM can process them
       // via sandbox tools, rather than passing unsupported media types directly.
       const promptParts: RuntimePromptPart[] = [{ type: "text", text: ctx.userMessageContent }];
-      if (ctx.coworkerId) {
-        const coworkerDocumentPaths = await writeCoworkerDocumentsToSandbox(
-          runtimeSandbox,
-          ctx.coworkerId,
+      const coworkerId = ctx.coworkerId;
+      if (coworkerId) {
+        const coworkerDocumentPaths = await runPrePromptStep(
+          "coworker_docs_stage",
+          "stageCoworkerDocsMs",
+          async () => await writeCoworkerDocumentsToSandbox(runtimeSandbox, coworkerId),
         );
         if (coworkerDocumentPaths.length > 0) {
           stagedCoworkerDocumentCount = coworkerDocumentPaths.length;
@@ -5267,47 +5441,50 @@ class GenerationManager {
           });
         }
       }
-      if (ctx.attachments && ctx.attachments.length > 0) {
-        await Promise.all(
-          ctx.attachments.map(async (a) => {
-            const sandboxPath = `/home/user/uploads/${a.name}`;
-            try {
-              const base64Data = a.dataUrl.split(",")[1] || "";
-              const buffer = Buffer.from(base64Data, "base64");
-              await runtimeSandbox.writeFile(
-                sandboxPath,
-                buffer.buffer.slice(
-                  buffer.byteOffset,
-                  buffer.byteOffset + buffer.byteLength,
-                ) as ArrayBuffer,
-              );
-              ctx.userStagedFilePaths?.add(sandboxPath);
-              promptParts.push({
-                type: "text",
-                text: `The user uploaded a file: ${sandboxPath} (${a.mimeType}). You can read and process it using the sandbox tools.`,
-              });
-              stagedUploadCount += 1;
-              if (a.mimeType.startsWith("image/")) {
+      const attachments = ctx.attachments;
+      if (attachments && attachments.length > 0) {
+        await runPrePromptStep("attachments_stage", "stageAttachmentsMs", async () => {
+          await Promise.all(
+            attachments.map(async (a) => {
+              const sandboxPath = `/home/user/uploads/${a.name}`;
+              try {
+                const base64Data = a.dataUrl.split(",")[1] || "";
+                const buffer = Buffer.from(base64Data, "base64");
+                await runtimeSandbox.writeFile(
+                  sandboxPath,
+                  buffer.buffer.slice(
+                    buffer.byteOffset,
+                    buffer.byteOffset + buffer.byteLength,
+                  ) as ArrayBuffer,
+                );
+                ctx.userStagedFilePaths?.add(sandboxPath);
                 promptParts.push({
-                  type: "file",
-                  mime: a.mimeType,
-                  url: a.dataUrl,
-                  filename: a.name,
+                  type: "text",
+                  text: `The user uploaded a file: ${sandboxPath} (${a.mimeType}). You can read and process it using the sandbox tools.`,
+                });
+                stagedUploadCount += 1;
+                if (a.mimeType.startsWith("image/")) {
+                  promptParts.push({
+                    type: "file",
+                    mime: a.mimeType,
+                    url: a.dataUrl,
+                    filename: a.name,
+                  });
+                }
+              } catch (err) {
+                stagedUploadFailureCount += 1;
+                console.error(
+                  `[GenerationManager] Failed to write file to sandbox: ${sandboxPath}`,
+                  err,
+                );
+                promptParts.push({
+                  type: "text",
+                  text: `The user tried to upload a file "${a.name}" but it could not be written to the sandbox.`,
                 });
               }
-            } catch (err) {
-              stagedUploadFailureCount += 1;
-              console.error(
-                `[GenerationManager] Failed to write file to sandbox: ${sandboxPath}`,
-                err,
-              );
-              promptParts.push({
-                type: "text",
-                text: `The user tried to upload a file "${a.name}" but it could not be written to the sandbox.`,
-              });
-            }
-          }),
-        );
+            }),
+          );
+        });
       }
       if (
         stagedCoworkerDocumentCount > 0 ||
@@ -5332,6 +5509,26 @@ class GenerationManager {
           },
         );
       }
+
+      markPrePromptStep("prePromptSetupTotalMs", prePromptStartedAt);
+      logServerEvent(
+        "info",
+        "PRE_PROMPT_BREAKDOWN",
+        {
+          cacheHit: prePromptCacheHit,
+          sandboxMode: ctx.agentSandboxMode ?? "unknown",
+          ...prePromptBreakdown,
+        },
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+          sandboxId: runtimeSandbox.sandboxId,
+          sessionId: ctx.sessionId,
+        },
+      );
 
       // Send the prompt to OpenCode
       logServerEvent(

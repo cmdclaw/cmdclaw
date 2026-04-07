@@ -64,6 +64,15 @@ export type ExecutorSandboxBootstrap = {
   instructions: string;
 };
 
+export type ExecutorPreparePhase =
+  | "bootstrap_load"
+  | "config_write"
+  | "server_probe"
+  | "server_start"
+  | "server_wait_ready"
+  | "status_check"
+  | "oauth_reconcile";
+
 function isCommandExitErrorLike(
   error: unknown,
 ): error is { result: { exitCode?: number; stdout?: string; stderr?: string } } {
@@ -257,24 +266,37 @@ export async function prepareExecutorInSandbox(input: {
   userId: string;
   allowedSourceIds?: string[] | null;
   runtimeId?: string | null;
+  onPhase?: (phase: ExecutorPreparePhase, status: "started" | "completed") => void;
 }): Promise<ExecutorSandboxBootstrap | null> {
+  const runPhase = async <T>(phase: ExecutorPreparePhase, action: () => Promise<T>): Promise<T> => {
+    input.onPhase?.(phase, "started");
+    try {
+      return await action();
+    } finally {
+      input.onPhase?.(phase, "completed");
+    }
+  };
+
   if (!input.workspaceId) {
     return null;
   }
+  const workspaceId = input.workspaceId;
 
-  const [bootstrap, nativeMcpOauthSources] = await Promise.all([
-    getWorkspaceExecutorBootstrap({
-      workspaceId: input.workspaceId,
-      workspaceName: input.workspaceName,
-      userId: input.userId,
-      allowedSourceIds: input.allowedSourceIds,
-    }),
-    getWorkspaceExecutorNativeMcpOAuthBootstrapSources({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      allowedSourceIds: input.allowedSourceIds,
-    }),
-  ]);
+  const [bootstrap, nativeMcpOauthSources] = await runPhase("bootstrap_load", async () =>
+    await Promise.all([
+      getWorkspaceExecutorBootstrap({
+        workspaceId,
+        workspaceName: input.workspaceName,
+        userId: input.userId,
+        allowedSourceIds: input.allowedSourceIds,
+      }),
+      getWorkspaceExecutorNativeMcpOAuthBootstrapSources({
+        workspaceId,
+        userId: input.userId,
+        allowedSourceIds: input.allowedSourceIds,
+      }),
+    ]),
+  );
 
   if (bootstrap.sources.length === 0) {
     return null;
@@ -285,33 +307,39 @@ export async function prepareExecutorInSandbox(input: {
     : "/tmp/cmdclaw-executor/default";
   const executorCommandEnv = buildExecutorCommandEnv(homeDirectory);
 
-  await input.sandbox.ensureDir("/app/.executor/state");
-  await input.sandbox.writeFile("/app/.executor/executor.jsonc", bootstrap.configJson);
-  await input.sandbox.writeFile(
-    "/app/.executor/state/workspace-state.json",
-    bootstrap.workspaceStateJson,
-  );
+  await runPhase("config_write", async () => {
+    await input.sandbox.ensureDir("/app/.executor/state");
+    await input.sandbox.writeFile("/app/.executor/executor.jsonc", bootstrap.configJson);
+    await input.sandbox.writeFile(
+      "/app/.executor/state/workspace-state.json",
+      bootstrap.workspaceStateJson,
+    );
+  });
 
-  const serverReadyResult = await execNoThrow(
-    input.sandbox,
-    `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null`,
-    {
-      timeoutMs: 5_000,
-      env: executorCommandEnv,
-    },
+  const serverReadyResult = await runPhase("server_probe", async () =>
+    await execNoThrow(
+      input.sandbox,
+      `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null`,
+      {
+        timeoutMs: 5_000,
+        env: executorCommandEnv,
+      },
+    ),
   );
 
   if (serverReadyResult.exitCode !== 0) {
-    const startResult = await execNoThrow(
-      input.sandbox,
-      `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)} && executor server start --port ${EXECUTOR_SERVER_PORT} >${escapeShell(
-        EXECUTOR_SERVER_LOG_PATH,
-      )} 2>&1`,
-      {
-        timeoutMs: 0,
-        background: true,
-        env: executorCommandEnv,
-      },
+    const startResult = await runPhase("server_start", async () =>
+      await execNoThrow(
+        input.sandbox,
+        `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)} && executor server start --port ${EXECUTOR_SERVER_PORT} >${escapeShell(
+          EXECUTOR_SERVER_LOG_PATH,
+        )} 2>&1`,
+        {
+          timeoutMs: 0,
+          background: true,
+          env: executorCommandEnv,
+        },
+      ),
     );
 
     if (startResult.exitCode !== 0) {
@@ -333,10 +361,12 @@ export async function prepareExecutorInSandbox(input: {
     "exit 1",
   ].join(" ");
 
-  const startResult = await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
-    timeoutMs: 45_000,
-    env: executorCommandEnv,
-  });
+  const startResult = await runPhase("server_wait_ready", async () =>
+    await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
+      timeoutMs: 45_000,
+      env: executorCommandEnv,
+    }),
+  );
 
   if (startResult.exitCode !== 0) {
     throw new Error(
@@ -346,15 +376,17 @@ export async function prepareExecutorInSandbox(input: {
     );
   }
 
-  const statusResult = await execNoThrow(
-    input.sandbox,
-    `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(
-      'return "ok"',
-    )}`,
-    {
-      timeoutMs: 15_000,
-      env: executorCommandEnv,
-    },
+  const statusResult = await runPhase("status_check", async () =>
+    await execNoThrow(
+      input.sandbox,
+      `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(
+        'return "ok"',
+      )}`,
+      {
+        timeoutMs: 15_000,
+        env: executorCommandEnv,
+      },
+    ),
   );
 
   if (statusResult.exitCode !== 0) {
@@ -365,10 +397,12 @@ export async function prepareExecutorInSandbox(input: {
     );
   }
 
-  await reconcileNativeMcpOAuthSourcesInSandbox({
-    sandbox: input.sandbox,
-    env: executorCommandEnv,
-    sources: nativeMcpOauthSources,
+  await runPhase("oauth_reconcile", async () => {
+    await reconcileNativeMcpOAuthSourcesInSandbox({
+      sandbox: input.sandbox,
+      env: executorCommandEnv,
+      sources: nativeMcpOauthSources,
+    });
   });
 
   const lines = [
