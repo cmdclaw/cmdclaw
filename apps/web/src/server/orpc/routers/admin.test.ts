@@ -50,6 +50,23 @@ function createContext() {
   };
 }
 
+function collectSqlText(node: unknown): string {
+  if (typeof node === "string") {
+    return node;
+  }
+
+  if (Array.isArray(node)) {
+    return node.map((item) => collectSqlText(item)).join(" ");
+  }
+
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+
+  const record = node as { value?: unknown; queryChunks?: unknown[] };
+  return `${collectSqlText(record.value)} ${collectSqlText(record.queryChunks)}`.trim();
+}
+
 describe("adminRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,6 +140,69 @@ describe("adminRouter", () => {
         latestRun: null,
       },
     ]);
+  });
+
+  it("reads performance metrics from generationDurationMs with legacy fallback", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
+    context.db.execute
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            totalMessages: 479,
+            p50EndToEndMs: 47455,
+            p95EndToEndMs: 1352436,
+            p50TtfvoMs: 6963,
+            sandboxReusedCount: 24,
+            sandboxTotalCount: 479,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            avgSandboxConnectMs: 1000,
+            avgOpencodeReadyMs: 5000,
+            avgSessionReadyMs: 700,
+            avgPrePromptSetupMs: 9000,
+            avgWaitForFirstEventMs: 400,
+            avgPromptToFirstTokenMs: 8000,
+            avgModelStreamMs: 15000,
+            avgPostProcessingMs: 1200,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = (await adminRouterAny.getPerformanceDashboard({
+      input: { days: "7" },
+      context,
+    })) as {
+      summary: {
+        totalMessages: number;
+        p50EndToEndMs: number;
+        p95EndToEndMs: number;
+        p50TtfvoMs: number;
+        sandboxReuseRate: number;
+      };
+    };
+
+    expect(result.summary).toEqual({
+      totalMessages: 479,
+      p50EndToEndMs: 47455,
+      p95EndToEndMs: 1352436,
+      p50TtfvoMs: 6963,
+      sandboxReuseRate: 5,
+    });
+
+    const firstQuery = collectSqlText(context.db.execute.mock.calls[0]?.[0]);
+    expect(firstQuery).toContain("generationDurationMs");
+    expect(firstQuery).toContain("endToEndDurationMs");
   });
 
   it("enqueues selected scheduled coworkers now and skips invalid targets", async () => {

@@ -89,6 +89,13 @@ function parseCoworkerSchedule(value: unknown): CoworkerSchedule | null {
   return null;
 }
 
+const generationDurationMsSql = sql<number>`
+  coalesce(
+    (m.timing->>'generationDurationMs')::numeric,
+    (m.timing->>'endToEndDurationMs')::numeric
+  )
+`;
+
 const getOpsScheduledCoworkers = protectedProcedure.handler(async ({ context }) => {
   await requireAdmin(context);
 
@@ -463,10 +470,10 @@ const getPerformanceDashboard = protectedProcedure
       select
         count(*)::int as "totalMessages",
         percentile_cont(0.5) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p50EndToEndMs",
         percentile_cont(0.95) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p95EndToEndMs",
         percentile_cont(0.5) within group (
           order by (m.timing->'phaseDurationsMs'->>'promptToFirstVisibleOutputMs')::numeric
@@ -480,7 +487,7 @@ const getPerformanceDashboard = protectedProcedure
       from ${message} m
       where m.role = 'assistant'
         and m.timing is not null
-        and m.timing->>'endToEndDurationMs' is not null
+        and ${generationDurationMsSql} is not null
         and m.created_at >= ${cutoffDate}
     `);
     const summaryRow = (summaryResult.rows?.[0] ?? {}) as {
@@ -502,10 +509,10 @@ const getPerformanceDashboard = protectedProcedure
         to_char(m.created_at, 'YYYY-MM-DD') as "date",
         count(*)::int as "messageCount",
         percentile_cont(0.5) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p50EndToEndMs",
         percentile_cont(0.95) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p95EndToEndMs",
         percentile_cont(0.5) within group (
           order by (m.timing->'phaseDurationsMs'->>'promptToFirstVisibleOutputMs')::numeric
@@ -513,7 +520,7 @@ const getPerformanceDashboard = protectedProcedure
       from ${message} m
       where m.role = 'assistant'
         and m.timing is not null
-        and m.timing->>'endToEndDurationMs' is not null
+        and ${generationDurationMsSql} is not null
         and m.created_at >= ${cutoffDate}
       group by to_char(m.created_at, 'YYYY-MM-DD')
       order by "date" asc
@@ -560,10 +567,10 @@ const getPerformanceDashboard = protectedProcedure
         bl.model,
         count(*)::int as "generationCount",
         percentile_cont(0.5) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p50EndToEndMs",
         percentile_cont(0.95) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p95EndToEndMs",
         percentile_cont(0.5) within group (
           order by (m.timing->'phaseDurationsMs'->>'promptToFirstVisibleOutputMs')::numeric
@@ -574,7 +581,7 @@ const getPerformanceDashboard = protectedProcedure
       join ${message} m on m.id = g.message_id
       where m.role = 'assistant'
         and m.timing is not null
-        and m.timing->>'endToEndDurationMs' is not null
+        and ${generationDurationMsSql} is not null
         and m.created_at >= ${cutoffDate}
       group by bl.model
       order by count(*) desc
@@ -619,7 +626,7 @@ const getPerformanceDashboard = protectedProcedure
           order by (m.timing->'phaseDurationsMs'->>'sandboxConnectOrCreateMs')::numeric
         )::int as "p50SandboxMs",
         percentile_cont(0.5) within group (
-          order by (m.timing->>'endToEndDurationMs')::numeric
+          order by ${generationDurationMsSql}
         )::int as "p50EndToEndMs"
       from ${message} m
       where m.role = 'assistant'
@@ -644,7 +651,7 @@ const getPerformanceDashboard = protectedProcedure
         c.user_id as "userId",
         u.email as "userEmail",
         bl.model,
-        (m.timing->>'endToEndDurationMs')::int as "endToEndMs",
+        ${generationDurationMsSql}::int as "endToEndMs",
         (m.timing->'phaseDurationsMs'->>'sandboxConnectOrCreateMs')::int as "sandboxMs",
         (m.timing->'phaseDurationsMs'->>'modelStreamMs')::int as "modelStreamMs",
         (m.timing->'phaseDurationsMs'->>'promptToFirstVisibleOutputMs')::int as "ttfvoMs",
@@ -660,9 +667,9 @@ const getPerformanceDashboard = protectedProcedure
       left join ${billingLedger} bl on bl.generation_id = g.id
       where m.role = 'assistant'
         and m.timing is not null
-        and m.timing->>'endToEndDurationMs' is not null
+        and ${generationDurationMsSql} is not null
         and m.created_at >= ${cutoffDate}
-      order by (m.timing->>'endToEndDurationMs')::numeric desc
+      order by ${generationDurationMsSql} desc
       limit 20
     `);
     const slowestGenerations = (slowestResult.rows ?? []) as Array<{
