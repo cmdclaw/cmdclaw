@@ -1,13 +1,9 @@
 "use client";
 
-import { CircleHelp, Loader2, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Loader2, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useChatAdvancedSettingsStore } from "@/components/chat/chat-advanced-settings-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   useAddApprovedLoginEmailAllowlistEntry,
   useAddGoogleAccessAllowlistEntry,
@@ -15,7 +11,6 @@ import {
   useGoogleAccessAllowlist,
   useRemoveApprovedLoginEmailAllowlistEntry,
   useRemoveGoogleAccessAllowlistEntry,
-  useResetOnboarding,
 } from "@/orpc/hooks";
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -26,7 +21,6 @@ function toErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function AdminPage() {
-  const router = useRouter();
   const {
     data: approvedLoginData,
     isLoading: isApprovedLoginLoading,
@@ -37,13 +31,6 @@ export default function AdminPage() {
   const addEntry = useAddGoogleAccessAllowlistEntry();
   const removeApprovedLoginEntry = useRemoveApprovedLoginEmailAllowlistEntry();
   const removeEntry = useRemoveGoogleAccessAllowlistEntry();
-  const resetOnboarding = useResetOnboarding();
-  const displayAdvancedMetrics = useChatAdvancedSettingsStore(
-    (state) => state.displayAdvancedMetrics,
-  );
-  const setDisplayAdvancedMetrics = useChatAdvancedSettingsStore(
-    (state) => state.setDisplayAdvancedMetrics,
-  );
 
   const [approvedLoginEmail, setApprovedLoginEmail] = useState("");
   const [email, setEmail] = useState("");
@@ -162,24 +149,12 @@ export default function AdminPage() {
     [handleRemoveApprovedLogin],
   );
 
-  const handleResetOnboarding = useCallback(async () => {
-    setActionMessage(null);
-    setActionError(null);
-
-    try {
-      await resetOnboarding.mutateAsync();
-      router.push("/onboarding/subscriptions");
-    } catch (err) {
-      setActionError(toErrorMessage(err, "Failed to reset onboarding."));
-    }
-  }, [resetOnboarding, router]);
-
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Admin Settings</h2>
+        <h2 className="text-xl font-semibold">User Management</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Manage which users can connect Google integrations.
+          Manage approved logins and Google integration access.
         </p>
       </div>
 
@@ -337,76 +312,6 @@ export default function AdminPage() {
             </table>
           </div>
         )}
-      </div>
-
-      <div className="bg-card mt-6 rounded-lg border p-6">
-        <h3 className="text-base font-semibold">Onboarding</h3>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Clear your onboarding status and jump back into the onboarding flow from the start.
-        </p>
-
-        <div className="mt-4 rounded-lg border p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Reset current user onboarding</p>
-              <p className="text-muted-foreground text-sm">
-                Use this to re-run the onboarding experience on your current account.
-              </p>
-            </div>
-            <Button onClick={handleResetOnboarding} disabled={resetOnboarding.isPending}>
-              {resetOnboarding.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Resetting...
-                </>
-              ) : (
-                "Reset my onboarding"
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-card mt-6 rounded-lg border p-6">
-        <h3 className="text-base font-semibold">Advanced Settings</h3>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Configure optional diagnostics and power-user controls.
-        </p>
-
-        <div className="mt-4 rounded-lg border p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <label htmlFor="display-advanced-metrics" className="text-sm font-medium">
-                  Nerd mode
-                </label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="What advanced metrics show"
-                      className="text-muted-foreground hover:text-foreground inline-flex"
-                    >
-                      <CircleHelp className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    Shows generation timing chips in chat and includes those metrics when you copy a
-                    chat transcript.
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <p className="text-muted-foreground text-sm">
-                Enable to show performance timings like generation and first-event wait.
-              </p>
-            </div>
-            <Switch
-              id="display-advanced-metrics"
-              checked={displayAdvancedMetrics}
-              onCheckedChange={setDisplayAdvancedMetrics}
-            />
-          </div>
-        </div>
       </div>
     </div>
   );

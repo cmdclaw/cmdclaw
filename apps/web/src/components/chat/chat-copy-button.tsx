@@ -4,7 +4,6 @@ import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversation } from "@/orpc/hooks";
 import type { MessageTiming } from "./chat-performance-metrics";
-import { useChatAdvancedSettingsStore } from "./chat-advanced-settings-store";
 import { formatPersistedChatTranscript } from "./chat-transcript";
 
 type ConversationShape = {
@@ -58,9 +57,6 @@ type Props = {
 
 export function ChatCopyButton({ conversationId, className }: Props) {
   const { data: conversation } = useConversation(conversationId);
-  const displayAdvancedMetrics = useChatAdvancedSettingsStore(
-    (state) => state.displayAdvancedMetrics,
-  );
   const [isCopied, setIsCopied] = useState(false);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -69,10 +65,8 @@ export function ChatCopyButton({ conversationId, className }: Props) {
     if (!conv?.messages || conv.messages.length === 0) {
       return "";
     }
-    return formatPersistedChatTranscript(conv.messages, {
-      includeTimingMetrics: displayAdvancedMetrics,
-    });
-  }, [conversation, displayAdvancedMetrics]);
+    return formatPersistedChatTranscript(conv.messages);
+  }, [conversation]);
 
   const hasTranscript = transcript.length > 0;
 

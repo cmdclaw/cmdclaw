@@ -2,11 +2,16 @@
 
 import { Loader2, RefreshCw, Play, CheckSquare, Square } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
-import { useAdminOpsScheduledCoworkers, useEnqueueAdminScheduledCoworkersNow } from "@/orpc/hooks";
+import {
+  useAdminOpsScheduledCoworkers,
+  useEnqueueAdminScheduledCoworkersNow,
+  useResetOnboarding,
+} from "@/orpc/hooks";
 
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
@@ -75,8 +80,10 @@ function formatSchedule(schedule: unknown): string {
 }
 
 export default function AdminOpsPage() {
+  const router = useRouter();
   const { data: scheduledCoworkers, isLoading, error, refetch } = useAdminOpsScheduledCoworkers();
   const enqueueScheduled = useEnqueueAdminScheduledCoworkersNow();
+  const resetOnboarding = useResetOnboarding();
 
   const [search, setSearch] = useState("");
   const [hourlyOnly, setHourlyOnly] = useState(true);
@@ -195,6 +202,18 @@ export default function AdminOpsPage() {
   const handleEnqueueVisible = useCallback(() => {
     void runEnqueue(visibleIds);
   }, [runEnqueue, visibleIds]);
+
+  const handleResetOnboarding = useCallback(async () => {
+    setActionMessage(null);
+    setActionError(null);
+
+    try {
+      await resetOnboarding.mutateAsync();
+      router.push("/onboarding/subscriptions");
+    } catch (err) {
+      setActionError(toErrorMessage(err, "Failed to reset onboarding."));
+    }
+  }, [resetOnboarding, router]);
 
   return (
     <div className="space-y-6">
@@ -368,6 +387,36 @@ export default function AdminOpsPage() {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="bg-card space-y-4 rounded-lg border p-6">
+        <div className="space-y-2">
+          <h3 className="text-base font-semibold">Onboarding</h3>
+          <p className="text-muted-foreground text-sm">
+            Clear your onboarding status and jump back into the onboarding flow from the start.
+          </p>
+        </div>
+
+        <div className="rounded-lg border p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Reset current user onboarding</p>
+              <p className="text-muted-foreground text-sm">
+                Use this to re-run the onboarding experience on your current account.
+              </p>
+            </div>
+            <Button onClick={handleResetOnboarding} disabled={resetOnboarding.isPending}>
+              {resetOnboarding.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                "Reset my onboarding"
+              )}
+            </Button>
+          </div>
+        </div>
       </section>
     </div>
   );

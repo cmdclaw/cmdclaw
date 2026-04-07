@@ -7,8 +7,7 @@ import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { useDownloadAttachment, useDownloadSandboxFile } from "@/orpc/hooks";
 import type { ActivityItemData } from "./activity-item";
 import type { MessagePart, AttachmentData, SandboxFileData } from "./message-list";
-import { useChatAdvancedSettingsStore } from "./chat-advanced-settings-store";
-import { getTimingMetrics, type MessageTiming } from "./chat-performance-metrics";
+import type { MessageTiming } from "./chat-performance-metrics";
 import { CollapsedTrace } from "./collapsed-trace";
 import { CoworkerInvocationCard } from "./coworker-invocation-card";
 import { MessageBubble } from "./message-bubble";
@@ -78,9 +77,6 @@ export function MessageItem({
   const [expandedSegments, setExpandedSegments] = useState<Set<string>>(new Set());
   const { mutateAsync: downloadAttachment } = useDownloadAttachment();
   const { mutateAsync: downloadSandboxFile } = useDownloadSandboxFile();
-  const displayAdvancedMetrics = useChatAdvancedSettingsStore(
-    (state) => state.displayAdvancedMetrics,
-  );
 
   const getAttachmentUrl = useCallback(
     async (attachment: AttachmentData): Promise<string | null> => {
@@ -411,7 +407,6 @@ export function MessageItem({
 
   // Check if we have segments with approvals (need segmented display)
   const hasApprovals = segments.some((seg) => seg.approval !== null);
-  const timingMetrics = useMemo(() => getTimingMetrics(timing), [timing]);
 
   // For user messages, show simple bubble + attachments
   if (role === "user") {
@@ -643,21 +638,6 @@ export function MessageItem({
           sandboxFiles={sandboxFiles}
           onFileClick={handleDownloadSandboxFile}
         />
-      )}
-
-      {displayAdvancedMetrics && timingMetrics.length > 0 && (
-        <div className="text-muted-foreground flex flex-wrap gap-2 text-xs">
-          {timingMetrics.map((metric) => (
-            <div
-              key={metric.key}
-              className="bg-muted/50 inline-flex items-center gap-1.5 rounded-full px-2 py-1"
-            >
-              <span>
-                {metric.label}: {metric.value}
-              </span>
-            </div>
-          ))}
-        </div>
       )}
 
       {/* Show sandbox files as downloadable attachments */}
