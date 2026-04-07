@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -18,113 +19,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
-const WORKSPACES = [
-  { id: "ws-1", name: "Acme Corp" },
-  { id: "ws-2", name: "Startup Labs" },
-  { id: "ws-3", name: "Personal" },
-];
+import { useAdminUsageDashboard, useAdminWorkspaces } from "@/orpc/hooks";
 
 type UsageType = "chat" | "coworker_builder" | "coworker_runner";
+type GroupBy = "model" | "type";
 
-type MockEntry = {
+type DailyByModelEntry = {
   date: string;
   model: string;
+  totalTokens: number;
+};
+
+type DailyByTypeEntry = {
+  date: string;
+  type: UsageType;
+  totalTokens: number;
+};
+
+type CoworkerBreakdownEntry = {
+  name: string;
   type: UsageType;
   inputTokens: number;
   outputTokens: number;
-  coworkerUsername?: string;
-  workspaceId: string;
+  totalTokens: number;
 };
-
-const MODELS = ["claude-sonnet-4-6", "claude-haiku-4-5", "gpt-4o"];
-const COWORKERS: Array<{ username: string; type: UsageType }> = [
-  { username: "@email-handler", type: "coworker_runner" },
-  { username: "@slack-bot", type: "coworker_runner" },
-  { username: "@daily-reporter", type: "coworker_runner" },
-  { username: "@code-reviewer", type: "coworker_runner" },
-];
-
-function seededRandom(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 16807 + 0) % 2147483647;
-    return s / 2147483647;
-  };
-}
-
-function generateMockData(): MockEntry[] {
-  const entries: MockEntry[] = [];
-  const rand = seededRandom(42);
-
-  for (let d = 0; d < 30; d++) {
-    const date = `2026-03-${String(d + 1).padStart(2, "0")}`;
-
-    for (const ws of WORKSPACES) {
-      const wsMultiplier = ws.id === "ws-1" ? 1 : ws.id === "ws-2" ? 0.6 : 0.25;
-
-      // Chat entries — spread across models
-      for (const model of MODELS) {
-        const modelWeight =
-          model === "claude-sonnet-4-6" ? 1 : model === "claude-haiku-4-5" ? 0.7 : 0.3;
-        const input = Math.floor(rand() * 80_000 * wsMultiplier * modelWeight + 5_000);
-        const output = Math.floor(input * (0.15 + rand() * 0.2));
-        entries.push({
-          date,
-          model,
-          type: "chat",
-          inputTokens: input,
-          outputTokens: output,
-          workspaceId: ws.id,
-        });
-      }
-
-      // Coworker builder entries (less frequent, mostly sonnet)
-      if (rand() > 0.4) {
-        const input = Math.floor(rand() * 40_000 * wsMultiplier + 2_000);
-        const output = Math.floor(input * (0.25 + rand() * 0.15));
-        entries.push({
-          date,
-          model: "claude-sonnet-4-6",
-          type: "coworker_builder",
-          inputTokens: input,
-          outputTokens: output,
-          workspaceId: ws.id,
-        });
-      }
-
-      // Coworker runner entries
-      for (const cw of COWORKERS) {
-        if (rand() > 0.3) {
-          const model = MODELS[Math.floor(rand() * MODELS.length)]!;
-          const input = Math.floor(rand() * 60_000 * wsMultiplier + 3_000);
-          const output = Math.floor(input * (0.1 + rand() * 0.25));
-          entries.push({
-            date,
-            model,
-            type: "coworker_runner",
-            inputTokens: input,
-            outputTokens: output,
-            coworkerUsername: cw.username,
-            workspaceId: ws.id,
-          });
-        }
-      }
-    }
-  }
-
-  return entries;
-}
-
-const MOCK_DATA = generateMockData();
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const TYPE_LABELS: Record<UsageType, string> = {
   chat: "Chat",
@@ -149,10 +67,7 @@ const CHART_MARGIN = { top: 4, right: 4, left: 0, bottom: 0 };
 const TICK_STYLE = { fontSize: 11 };
 const CURSOR_STYLE = { fill: "var(--color-muted)", opacity: 0.4 };
 const LEGEND_STYLE = { fontSize: 12, paddingTop: 12 };
-
-// ---------------------------------------------------------------------------
-// Formatters
-// ---------------------------------------------------------------------------
+const ZERO_SUMMARY = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 const compactFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
@@ -169,16 +84,18 @@ function formatFull(n: number): string {
 }
 
 function formatChartDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
+  const d = new Date(`${dateStr}T00:00:00`);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
 const yAxisTickFormatter = (v: number) => formatCompact(v);
-
-// ---------------------------------------------------------------------------
-// Chart tooltip
-// ---------------------------------------------------------------------------
-
 const tooltipElement = <CustomTooltip />;
 
 function CustomTooltip({
@@ -210,9 +127,8 @@ function CustomTooltip({
   );
 }
 
-// Cache for color styles to avoid creating new objects on every render
-const colorStyleCache = new Map<string, React.CSSProperties>();
-function colorStyle(color: string): React.CSSProperties {
+const colorStyleCache = new Map<string, CSSProperties>();
+function colorStyle(color: string): CSSProperties {
   let cached = colorStyleCache.get(color);
   if (!cached) {
     cached = { backgroundColor: color };
@@ -221,112 +137,105 @@ function colorStyle(color: string): React.CSSProperties {
   return cached;
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
-type GroupBy = "model" | "type";
-
 export default function AdminUsagePage() {
-  const [workspaceId, setWorkspaceId] = useState(WORKSPACES[0]!.id);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>("model");
 
-  const handleGroupByChange = useCallback((v: string) => {
-    setGroupBy(v as GroupBy);
+  const workspacesQuery = useAdminWorkspaces();
+  const workspaces = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
+
+  useEffect(() => {
+    setWorkspaceId((current) => {
+      if (current && workspaces.some((workspace) => workspace.id === current)) {
+        return current;
+      }
+      return workspaces[0]?.id ?? null;
+    });
+  }, [workspaces]);
+
+  const usageQuery = useAdminUsageDashboard(workspaceId);
+
+  const handleGroupByChange = useCallback((value: string) => {
+    setGroupBy(value as GroupBy);
   }, []);
 
-  // Filter entries for selected workspace
-  const wsEntries = useMemo(
-    () => MOCK_DATA.filter((e) => e.workspaceId === workspaceId),
-    [workspaceId],
-  );
+  const summary = usageQuery.data?.summary ?? ZERO_SUMMARY;
 
-  // Summary totals
-  const totals = useMemo(() => {
-    let input = 0;
-    let output = 0;
-    for (const e of wsEntries) {
-      input += e.inputTokens;
-      output += e.outputTokens;
-    }
-    return { input, output, total: input + output };
-  }, [wsEntries]);
-
-  // Chart data — aggregate per date, grouped by model or type
   const { chartData, chartKeys, chartColors } = useMemo(() => {
     const byDate = new Map<string, Record<string, number>>();
     const keys = new Set<string>();
+    const source =
+      groupBy === "model" ? usageQuery.data?.dailyByModel : usageQuery.data?.dailyByType;
 
-    for (const e of wsEntries) {
-      const key = groupBy === "model" ? e.model : TYPE_LABELS[e.type];
+    for (const entry of source ?? []) {
+      const typedEntry = entry as DailyByModelEntry | DailyByTypeEntry;
+      const key =
+        groupBy === "model"
+          ? (typedEntry as DailyByModelEntry).model
+          : TYPE_LABELS[(typedEntry as DailyByTypeEntry).type];
       keys.add(key);
-      const existing = byDate.get(e.date) ?? {};
-      existing[key] = (existing[key] ?? 0) + e.inputTokens + e.outputTokens;
-      byDate.set(e.date, existing);
+      const existing = byDate.get(typedEntry.date) ?? {};
+      existing[key] = (existing[key] ?? 0) + typedEntry.totalTokens;
+      byDate.set(typedEntry.date, existing);
     }
 
-    const sortedDates = [...byDate.keys()].toSorted();
-    const data = sortedDates.map((date) =>
-      Object.assign({ date: formatChartDate(date) }, byDate.get(date)),
+    const data = [...byDate.entries()].toSorted(([dateA], [dateB]) => dateA.localeCompare(dateB));
+    const mappedData = data.map(([date, values]) =>
+      Object.assign({ date: formatChartDate(date) }, values),
     );
 
-    const sortedKeys = [...keys].toSorted();
-    const colors: Record<string, string> =
+    const colors =
       groupBy === "model"
         ? MODEL_COLORS
         : Object.fromEntries(
-            Object.entries(TYPE_COLORS).map(([k, v]) => [TYPE_LABELS[k as UsageType], v]),
+            Object.entries(TYPE_COLORS).map(([key, value]) => [
+              TYPE_LABELS[key as UsageType],
+              value,
+            ]),
           );
 
-    return { chartData: data, chartKeys: sortedKeys, chartColors: colors };
-  }, [wsEntries, groupBy]);
+    return {
+      chartData: mappedData,
+      chartKeys: [...keys].toSorted(),
+      chartColors: colors,
+    };
+  }, [groupBy, usageQuery.data]);
 
-  // Per-coworker breakdown
   const coworkerBreakdown = useMemo(() => {
-    const map = new Map<string, { type: string; input: number; output: number }>();
+    const rows = (usageQuery.data?.coworkerBreakdown ?? []) as CoworkerBreakdownEntry[];
+    const grandTotal = rows.reduce((sum, row) => sum + row.totalTokens, 0);
+    return rows.map((row) => ({
+      name: row.name,
+      type: TYPE_LABELS[row.type],
+      input: row.inputTokens,
+      output: row.outputTokens,
+      total: row.totalTokens,
+      pct: grandTotal > 0 ? (row.totalTokens / grandTotal) * 100 : 0,
+    }));
+  }, [usageQuery.data]);
 
-    for (const e of wsEntries) {
-      const label =
-        e.type === "coworker_runner" && e.coworkerUsername
-          ? e.coworkerUsername
-          : e.type === "coworker_builder"
-            ? "Coworker Builder"
-            : "Chat (direct)";
-      const typeLabel = TYPE_LABELS[e.type];
-      const existing = map.get(label) ?? { type: typeLabel, input: 0, output: 0 };
-      existing.input += e.inputTokens;
-      existing.output += e.outputTokens;
-      map.set(label, existing);
-    }
+  const maxTotal = Math.max(...coworkerBreakdown.map((row) => row.total), 1);
+  const isLoading =
+    workspacesQuery.isLoading ||
+    (workspaces.length > 0 && !workspaceId) ||
+    (Boolean(workspaceId) && usageQuery.isLoading && !usageQuery.data);
+  const errorMessage = workspacesQuery.error
+    ? getErrorMessage(workspacesQuery.error, "Failed to load workspaces.")
+    : usageQuery.error
+      ? getErrorMessage(usageQuery.error, "Failed to load usage data.")
+      : null;
 
-    const rows = [...map.entries()]
-      .map(([name, data]) => ({
-        name,
-        type: data.type,
-        input: data.input,
-        output: data.output,
-        total: data.input + data.output,
-      }))
-      .toSorted((a, b) => b.total - a.total);
-
-    const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
-    return rows.map((r) => {
-      return {
-        name: r.name,
-        type: r.type,
-        input: r.input,
-        output: r.output,
-        total: r.total,
-        pct: grandTotal > 0 ? (r.total / grandTotal) * 100 : 0,
-      };
-    });
-  }, [wsEntries]);
-
-  const maxTotal = Math.max(...coworkerBreakdown.map((r) => r.total), 1);
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="text-muted-foreground size-6 animate-spin" />
+        <span className="sr-only">Loading usage dashboard</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold">Token Usage</h2>
@@ -334,43 +243,60 @@ export default function AdminUsagePage() {
             Token consumption across chat, coworker builder, and coworker runners.
           </p>
         </div>
-        <Select value={workspaceId} onValueChange={setWorkspaceId}>
-          <SelectTrigger size="sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {WORKSPACES.map((ws) => (
-              <SelectItem key={ws.id} value={ws.id}>
-                {ws.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        {workspaces.length > 0 ? (
+          <Select value={workspaceId ?? undefined} onValueChange={setWorkspaceId}>
+            <SelectTrigger size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {workspaces.map((workspace) => (
+                <SelectItem key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="text-muted-foreground rounded-md border px-3 py-2 text-sm">
+            No workspaces
+          </div>
+        )}
       </div>
 
-      {/* Summary cards */}
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+          {errorMessage}
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="bg-muted/40 rounded-lg border px-4 py-3">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
             Total tokens in
           </p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{formatFull(totals.input)}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {formatFull(summary.inputTokens)}
+          </p>
         </div>
         <div className="bg-muted/40 rounded-lg border px-4 py-3">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
             Total tokens out
           </p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{formatFull(totals.output)}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {formatFull(summary.outputTokens)}
+          </p>
         </div>
         <div className="bg-muted/40 rounded-lg border px-4 py-3">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
             Total tokens
           </p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{formatFull(totals.total)}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {formatFull(summary.totalTokens)}
+          </p>
         </div>
       </div>
 
-      {/* Bar chart */}
       <section className="bg-card rounded-lg border p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -391,44 +317,49 @@ export default function AdminUsagePage() {
           </Select>
         </div>
 
-        <div className="h-[380px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={CHART_MARGIN}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tick={TICK_STYLE}
-                tickLine={false}
-                axisLine={false}
-                className="fill-muted-foreground"
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tickFormatter={yAxisTickFormatter}
-                tick={TICK_STYLE}
-                tickLine={false}
-                axisLine={false}
-                className="fill-muted-foreground"
-                width={48}
-              />
-              <Tooltip content={tooltipElement} cursor={CURSOR_STYLE} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
-              {chartKeys.map((key) => (
-                <Bar
-                  key={key}
-                  dataKey={key}
-                  stackId="a"
-                  fill={chartColors[key] ?? "#94a3b8"}
-                  radius={BAR_RADIUS}
-                  maxBarSize={32}
+        {chartData.length === 0 ? (
+          <div className="text-muted-foreground flex h-[380px] items-center justify-center text-sm">
+            No usage data for this workspace in the last 30 days.
+          </div>
+        ) : (
+          <div className="h-[380px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={CHART_MARGIN}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={TICK_STYLE}
+                  tickLine={false}
+                  axisLine={false}
+                  className="fill-muted-foreground"
+                  interval="preserveStartEnd"
                 />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+                <YAxis
+                  tickFormatter={yAxisTickFormatter}
+                  tick={TICK_STYLE}
+                  tickLine={false}
+                  axisLine={false}
+                  className="fill-muted-foreground"
+                  width={48}
+                />
+                <Tooltip content={tooltipElement} cursor={CURSOR_STYLE} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
+                {chartKeys.map((key) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    stackId="a"
+                    fill={chartColors[key] ?? "#94a3b8"}
+                    radius={BAR_RADIUS}
+                    maxBarSize={32}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </section>
 
-      {/* Per-coworker breakdown */}
       <section className="bg-card rounded-lg border p-5">
         <div className="mb-4">
           <h3 className="text-base font-semibold">Usage by Coworker</h3>
@@ -451,9 +382,17 @@ export default function AdminUsagePage() {
               </tr>
             </thead>
             <tbody>
-              {coworkerBreakdown.map((row) => (
-                <CoworkerRow key={row.name} row={row} maxTotal={maxTotal} />
-              ))}
+              {coworkerBreakdown.length === 0 ? (
+                <tr className="border-t">
+                  <td colSpan={7} className="text-muted-foreground px-3 py-8 text-center">
+                    No usage data for this workspace in the last 30 days.
+                  </td>
+                </tr>
+              ) : (
+                coworkerBreakdown.map((row) => (
+                  <CoworkerRow key={row.name} row={row} maxTotal={maxTotal} />
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -461,10 +400,6 @@ export default function AdminUsagePage() {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Table row component (extracted to avoid inline style objects)
-// ---------------------------------------------------------------------------
 
 type BreakdownRow = {
   name: string;
@@ -478,7 +413,7 @@ type BreakdownRow = {
 function CoworkerRow({ row, maxTotal }: { row: BreakdownRow; maxTotal: number }) {
   const barWidth = useMemo(
     () => ({ width: `${(row.total / maxTotal) * 100}%` }),
-    [row.total, maxTotal],
+    [maxTotal, row.total],
   );
 
   return (

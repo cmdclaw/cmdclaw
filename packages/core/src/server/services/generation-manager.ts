@@ -5107,23 +5107,31 @@ class GenerationManager {
         }
       };
 
-      // Write memory files to sandbox
       let memoryInstructions = buildMemorySystemPrompt();
       let executorInstructions: string | null = null;
       let enabledSkillRows: Array<{ name: string; updatedAt: Date }> = [];
       let writtenSkills: string[] = [];
       let writtenIntegrationSkills: string[] = [];
       let prePromptCacheHit = false;
-      try {
-        await runPrePromptStep("memory_sync", "syncMemoryFilesToSandboxMs", async () => {
-          await syncMemoryFilesToSandbox(ctx.userId, runtimeSandbox);
-        });
-      } catch (err) {
-        console.error("[GenerationManager] Failed to sync memory to sandbox:", err);
-        memoryInstructions = buildMemorySystemPrompt();
-      }
+      let executorOauthCacheHits = 0;
+      let startPostPromptCacheWrite: (() => Promise<void>) | null = null;
 
-      if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
+      const memorySyncPromise = (async () => {
+        try {
+          await runPrePromptStep("memory_sync", "syncMemoryFilesToSandboxMs", async () => {
+            await syncMemoryFilesToSandbox(ctx.userId, runtimeSandbox);
+          });
+        } catch (err) {
+          console.error("[GenerationManager] Failed to sync memory to sandbox:", err);
+          memoryInstructions = buildMemorySystemPrompt();
+        }
+      })();
+
+      const runtimeContextWritePromise = (async () => {
+        if (!ctx.runtimeId || !ctx.runtimeCallbackToken || !ctx.runtimeTurnSeq) {
+          return;
+        }
+
         try {
           const runtimeId = ctx.runtimeId;
           const callbackToken = ctx.runtimeCallbackToken;
@@ -5144,30 +5152,34 @@ class GenerationManager {
         } catch (error) {
           console.error("[GenerationManager] Failed to write runtime context to sandbox:", error);
         }
-      }
+      })();
 
-      try {
-        const executorBootstrap = await runPrePromptStep(
-          "executor_prepare",
-          "prepareExecutorInSandboxMs",
-          async () =>
-            await prepareExecutorInSandbox({
-              sandbox: runtimeSandbox,
-              workspaceId: ctx.workspaceId,
-              userId: ctx.userId,
-              allowedSourceIds: ctx.allowedExecutorSourceIds,
-              runtimeId: ctx.runtimeId,
-              onPhase: (phase, status) => {
-                this.markPhase(ctx, `pre_prompt_executor_${phase}_${status}`);
-              },
-            }),
-        );
-        executorInstructions = executorBootstrap?.instructions ?? null;
-      } catch (error) {
-        console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
-      }
+      const executorPreparePromise = (async () => {
+        try {
+          const executorBootstrap = await runPrePromptStep(
+            "executor_prepare",
+            "prepareExecutorInSandboxMs",
+            async () =>
+              await prepareExecutorInSandbox({
+                sandbox: runtimeSandbox,
+                workspaceId: ctx.workspaceId,
+                userId: ctx.userId,
+                allowedSourceIds: ctx.allowedExecutorSourceIds,
+                runtimeId: ctx.runtimeId,
+                reuseExistingState: ctx.agentSandboxMode === "reused",
+                onPhase: (phase, status) => {
+                  this.markPhase(ctx, `pre_prompt_executor_${phase}_${status}`);
+                },
+              }),
+          );
+          executorInstructions = executorBootstrap?.instructions ?? null;
+          executorOauthCacheHits = executorBootstrap?.oauthCacheHits ?? 0;
+        } catch (error) {
+          console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
+        }
+      })();
 
-      const [loadedSkillRows, customCreds] = await runPrePromptStep(
+      const skillsAndCredsLoadPromise = runPrePromptStep(
         "skills_and_creds_load",
         "loadSkillsAndCredsMs",
         async () =>
@@ -5182,154 +5194,218 @@ class GenerationManager {
             }),
           ]),
       );
-      enabledSkillRows = loadedSkillRows;
 
-      const eligibleCustomCreds = customCreds.filter((cred) => {
-        if (!ctx.allowedCustomIntegrations) {
-          return true;
-        }
-        return ctx.allowedCustomIntegrations.includes(cred.customIntegration.slug);
-      });
+      const skillAssetPreparePromise = (async () => {
+        const [loadedSkillRows, customCreds] = await skillsAndCredsLoadPromise;
+        enabledSkillRows = loadedSkillRows;
 
-      const prePromptCacheKey = JSON.stringify({
-        userId: ctx.userId,
-        allowedIntegrations: [...allowedIntegrations].toSorted(),
-        allowedCustomIntegrations: [...(ctx.allowedCustomIntegrations ?? [])].toSorted(),
-        allowedSkillSlugs: [...(ctx.allowedSkillSlugs ?? [])].toSorted(),
-        selectedPlatformSkillSlugs: [...(ctx.selectedPlatformSkillSlugs ?? [])].toSorted(),
-        skills: enabledSkillRows
-          .map((entry) => `${entry.name}:${entry.updatedAt.toISOString()}`)
-          .toSorted(),
-        customIntegrations: eligibleCustomCreds
-          .map(
-            (cred) =>
-              `${cred.customIntegration.slug}:${cred.updatedAt.toISOString()}:${cred.customIntegration.updatedAt.toISOString()}`,
-          )
-          .toSorted(),
+        const eligibleCustomCreds = customCreds.filter((cred) => {
+          if (!ctx.allowedCustomIntegrations) {
+            return true;
+          }
+          return ctx.allowedCustomIntegrations.includes(cred.customIntegration.slug);
         });
 
-      if (ctx.agentSandboxMode === "reused") {
-        try {
-          const parsed = await runPrePromptStep("cache_read", "readPrePromptCacheMs", async () => {
-            const rawCache = await runtimeSandbox.readFile(PRE_PROMPT_CACHE_PATH);
-            return JSON.parse(String(rawCache)) as Partial<PrePromptCacheRecord>;
-          });
-          if (parsed.cacheKey === prePromptCacheKey) {
-            prePromptCacheHit = true;
-            if (Array.isArray(parsed.writtenSkills)) {
-              writtenSkills = parsed.writtenSkills.filter(
-                (value): value is string => typeof value === "string",
+        const prePromptCacheKey = await runPrePromptStep(
+          "cache_key_build",
+          "buildPrePromptCacheKeyMs",
+          async () =>
+            JSON.stringify({
+              userId: ctx.userId,
+              allowedIntegrations: [...allowedIntegrations].toSorted(),
+              allowedCustomIntegrations: [...(ctx.allowedCustomIntegrations ?? [])].toSorted(),
+              allowedSkillSlugs: [...(ctx.allowedSkillSlugs ?? [])].toSorted(),
+              selectedPlatformSkillSlugs: [...(ctx.selectedPlatformSkillSlugs ?? [])].toSorted(),
+              skills: enabledSkillRows
+                .map((entry) => `${entry.name}:${entry.updatedAt.toISOString()}`)
+                .toSorted(),
+              customIntegrations: eligibleCustomCreds
+                .map(
+                  (cred) =>
+                    `${cred.customIntegration.slug}:${cred.updatedAt.toISOString()}:${cred.customIntegration.updatedAt.toISOString()}`,
+                )
+                .toSorted(),
+            }),
+        );
+
+        if (ctx.agentSandboxMode === "reused") {
+          try {
+            const parsed = await runPrePromptStep("cache_read", "readPrePromptCacheMs", async () => {
+              const rawCache = await runtimeSandbox.readFile(PRE_PROMPT_CACHE_PATH);
+              return JSON.parse(String(rawCache)) as Partial<PrePromptCacheRecord>;
+            });
+            if (parsed.cacheKey === prePromptCacheKey) {
+              prePromptCacheHit = true;
+              if (Array.isArray(parsed.writtenSkills)) {
+                writtenSkills = parsed.writtenSkills.filter(
+                  (value): value is string => typeof value === "string",
+                );
+              }
+              if (Array.isArray(parsed.writtenIntegrationSkills)) {
+                writtenIntegrationSkills = parsed.writtenIntegrationSkills.filter(
+                  (value): value is string => typeof value === "string",
+                );
+              }
+              logServerEvent(
+                "info",
+                "PRE_PROMPT_CACHE_HIT",
+                {
+                  skillsCount: writtenSkills.length,
+                  integrationSkillCount: writtenIntegrationSkills.length,
+                },
+                {
+                  source: "generation-manager",
+                  traceId: ctx.traceId,
+                  generationId: ctx.id,
+                  conversationId: ctx.conversationId,
+                  userId: ctx.userId,
+                  sandboxId: runtimeSandbox.sandboxId,
+                  sessionId: ctx.sessionId,
+                },
               );
             }
-            if (Array.isArray(parsed.writtenIntegrationSkills)) {
-              writtenIntegrationSkills = parsed.writtenIntegrationSkills.filter(
-                (value): value is string => typeof value === "string",
-              );
-            }
-            logServerEvent(
-              "info",
-              "PRE_PROMPT_CACHE_HIT",
-              {
-                skillsCount: writtenSkills.length,
-                integrationSkillCount: writtenIntegrationSkills.length,
-              },
-              {
-                source: "generation-manager",
-                traceId: ctx.traceId,
-                generationId: ctx.id,
-                conversationId: ctx.conversationId,
-                userId: ctx.userId,
-                sandboxId: runtimeSandbox.sandboxId,
-                sessionId: ctx.sessionId,
-              },
-            );
+          } catch {
+            // Cache file absent or invalid; fall back to full prep.
           }
-        } catch {
-          // Cache file absent or invalid; fall back to full prep.
         }
-      }
 
-      // Write custom skills/integration assets only when cache is stale.
-      try {
-        if (!prePromptCacheHit) {
-          writtenSkills = await runPrePromptStep("skills_write", "writeSkillsToSandboxMs", async () =>
-            await writeSkillsToSandbox(
-              runtimeSandbox,
-              ctx.userId,
-              customSkillNames.length > 0 ? customSkillNames : undefined,
-            ),
-          );
+        if (prePromptCacheHit) {
+          return;
+        }
 
+        try {
           await runPrePromptStep(
-            "custom_integration_cli_write",
-            "writeCustomIntegrationCliMs",
+            "skill_asset_prepare",
+            "prepareSkillAssetsMs",
             async () => {
-              await Promise.all(
-                eligibleCustomCreds.map(async (cred) => {
-                  const integ = cred.customIntegration;
-                  const cliPath = `/app/cli/custom-${integ.slug}.ts`;
-                  await runtimeSandbox.writeFile(cliPath, integ.cliCode);
-                }),
+              const skillsWritePromise = runPrePromptStep(
+                "skills_write",
+                "writeSkillsToSandboxMs",
+                async () =>
+                  await writeSkillsToSandbox(
+                    runtimeSandbox,
+                    ctx.userId,
+                    customSkillNames.length > 0 ? customSkillNames : undefined,
+                  ),
               );
+
+              const customIntegrationCliWritePromise = runPrePromptStep(
+                "custom_integration_cli_write",
+                "writeCustomIntegrationCliMs",
+                async () => {
+                  await Promise.all(
+                    eligibleCustomCreds.map(async (cred) => {
+                      const integ = cred.customIntegration;
+                      const cliPath = `/app/cli/custom-${integ.slug}.ts`;
+                      await runtimeSandbox.writeFile(cliPath, integ.cliCode);
+                    }),
+                  );
+                },
+              );
+
+              const customPerms: Record<string, { read: string[]; write: string[] }> = {};
+              for (const cred of eligibleCustomCreds) {
+                const integ = cred.customIntegration;
+                customPerms[`custom-${integ.slug}`] = {
+                  read: integ.permissions.readOps,
+                  write: integ.permissions.writeOps,
+                };
+              }
+
+              const customIntegrationPermissionsWritePromise =
+                Object.keys(customPerms).length > 0
+                  ? runPrePromptStep(
+                      "custom_integration_permissions_write",
+                      "writeCustomIntegrationPermissionsMs",
+                      async () => {
+                        await runtimeSandbox.exec(
+                          `echo 'export CUSTOM_INTEGRATION_PERMISSIONS=${JSON.stringify(JSON.stringify(customPerms)).slice(1, -1)}' >> ~/.bashrc`,
+                        );
+                      },
+                    )
+                  : Promise.resolve();
+
+              const allowedSkillSlugs = new Set<string>(allowedIntegrations);
+              for (const cred of eligibleCustomCreds) {
+                allowedSkillSlugs.add(cred.customIntegration.slug);
+              }
+
+              const integrationSkillsWritePromise = runPrePromptStep(
+                "integration_skills_write",
+                "writeIntegrationSkillsMs",
+                async () =>
+                  await writeResolvedIntegrationSkillsToSandbox(
+                    runtimeSandbox,
+                    ctx.userId,
+                    Array.from(allowedSkillSlugs),
+                  ),
+              );
+
+              const [
+                resolvedWrittenSkills,
+                _customIntegrationCliWrite,
+                _customIntegrationPermissionsWrite,
+                resolvedWrittenIntegrationSkills,
+              ] = await Promise.all([
+                skillsWritePromise,
+                customIntegrationCliWritePromise,
+                customIntegrationPermissionsWritePromise,
+                integrationSkillsWritePromise,
+              ]);
+
+              writtenSkills = resolvedWrittenSkills;
+              writtenIntegrationSkills = resolvedWrittenIntegrationSkills;
+              startPostPromptCacheWrite = async () => {
+                this.markPhase(ctx, "post_prompt_cache_write_started");
+                const startedAt = Date.now();
+                try {
+                  await runtimeSandbox.ensureDir(path.dirname(PRE_PROMPT_CACHE_PATH));
+                  const nextCacheRecord: PrePromptCacheRecord = {
+                    version: 1,
+                    cacheKey: prePromptCacheKey,
+                    writtenSkills,
+                    writtenIntegrationSkills,
+                    updatedAt: new Date().toISOString(),
+                  };
+                  await runtimeSandbox.writeFile(
+                    PRE_PROMPT_CACHE_PATH,
+                    JSON.stringify(nextCacheRecord, null, 2),
+                  );
+                  logServerEvent(
+                    "info",
+                    "POST_PROMPT_CACHE_WRITE_COMPLETED",
+                    {},
+                    {
+                      source: "generation-manager",
+                      traceId: ctx.traceId,
+                      generationId: ctx.id,
+                      conversationId: ctx.conversationId,
+                      userId: ctx.userId,
+                      sandboxId: runtimeSandbox.sandboxId,
+                      sessionId: ctx.sessionId,
+                    },
+                  );
+                } catch (error) {
+                  console.error("[GenerationManager] Failed to write pre-prompt cache:", error);
+                } finally {
+                  prePromptBreakdown.writePrePromptCacheMs = Date.now() - startedAt;
+                  this.markPhase(ctx, "post_prompt_cache_write_completed");
+                }
+              };
             },
           );
-
-          const customPerms: Record<string, { read: string[]; write: string[] }> = {};
-          for (const cred of eligibleCustomCreds) {
-            const integ = cred.customIntegration;
-            customPerms[`custom-${integ.slug}`] = {
-              read: integ.permissions.readOps,
-              write: integ.permissions.writeOps,
-            };
-          }
-
-          if (Object.keys(customPerms).length > 0) {
-            // Set the permissions env var on the sandbox
-            await runPrePromptStep(
-              "custom_integration_permissions_write",
-              "writeCustomIntegrationPermissionsMs",
-              async () => {
-                await runtimeSandbox.exec(
-                  `echo 'export CUSTOM_INTEGRATION_PERMISSIONS=${JSON.stringify(JSON.stringify(customPerms)).slice(1, -1)}' >> ~/.bashrc`,
-                );
-              },
-            );
-          }
-
-          const allowedSkillSlugs = new Set<string>(allowedIntegrations);
-          for (const cred of eligibleCustomCreds) {
-            allowedSkillSlugs.add(cred.customIntegration.slug);
-          }
-
-          writtenIntegrationSkills = await runPrePromptStep(
-            "integration_skills_write",
-            "writeIntegrationSkillsMs",
-            async () =>
-              await writeResolvedIntegrationSkillsToSandbox(
-                runtimeSandbox,
-                ctx.userId,
-                Array.from(allowedSkillSlugs),
-              ),
-          );
-
-          await runPrePromptStep("cache_write", "writePrePromptCacheMs", async () => {
-            await runtimeSandbox.ensureDir(path.dirname(PRE_PROMPT_CACHE_PATH));
-            const nextCacheRecord: PrePromptCacheRecord = {
-              version: 1,
-              cacheKey: prePromptCacheKey,
-              writtenSkills,
-              writtenIntegrationSkills,
-              updatedAt: new Date().toISOString(),
-            };
-            await runtimeSandbox.writeFile(
-              PRE_PROMPT_CACHE_PATH,
-              JSON.stringify(nextCacheRecord, null, 2),
-            );
-          });
+        } catch (error) {
+          console.error("[Generation] Failed to write custom integration CLI code:", error);
         }
-      } catch (e) {
-        console.error("[Generation] Failed to write custom integration CLI code:", e);
-      }
+      })();
+
+      await Promise.all([
+        memorySyncPromise,
+        runtimeContextWritePromise,
+        executorPreparePromise,
+        skillAssetPreparePromise,
+      ]);
+
       if (writtenSkills.length === 0) {
         writtenSkills = enabledSkillRows.map((entry) => entry.name);
       }
@@ -5516,6 +5592,7 @@ class GenerationManager {
         "PRE_PROMPT_BREAKDOWN",
         {
           cacheHit: prePromptCacheHit,
+          executorOauthCacheHits,
           sandboxMode: ctx.agentSandboxMode ?? "unknown",
           ...prePromptBreakdown,
         },
@@ -5548,6 +5625,9 @@ class GenerationManager {
         this.recordRemoteRunPhase(ctx, "prompt_sent");
       }
       this.markPhase(ctx, "prompt_sent");
+      if (startPostPromptCacheWrite !== null) {
+        void (startPostPromptCacheWrite as () => Promise<void>)();
+      }
       const promptSentAtMs = Date.now();
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
       if (remainingRunTimeMs <= 0) {

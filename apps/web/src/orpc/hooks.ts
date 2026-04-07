@@ -1140,6 +1140,17 @@ export function useCoworkerOverview() {
   });
 }
 
+export type CoworkerHistoryEntry = Awaited<ReturnType<typeof client.coworker.getHistory>>[number];
+
+export function useCoworkerHistory() {
+  return useQuery({
+    queryKey: ["coworker", "history"],
+    queryFn: () => client.coworker.getHistory(),
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((entry) => entry.status === "pending") ? 5_000 : false,
+  });
+}
+
 export function useCoworker(id: string | undefined) {
   return useQuery({
     queryKey: ["coworker", "get", id],
@@ -2493,6 +2504,15 @@ export function useChatOverview() {
     queryKey: ["admin", "chatOverview"],
     queryFn: () => client.admin.getChatOverview(),
     refetchInterval: 60_000,
+  });
+}
+
+export function useAdminUsageDashboard(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "usageDashboard", workspaceId],
+    queryFn: () => client.admin.getUsageDashboard({ workspaceId: workspaceId! }),
+    enabled: Boolean(workspaceId),
+    refetchInterval: 120_000,
   });
 }
 
