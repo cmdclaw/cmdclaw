@@ -1,5 +1,6 @@
 "use client";
 
+import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -18,12 +19,11 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
-import type { DateRange } from "react-day-picker";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -105,7 +105,7 @@ function StatPill({
           : "bg-muted/50 text-muted-foreground",
       )}
     >
-      <span className="tabular-nums font-semibold">{value}</span>
+      <span className="font-semibold tabular-nums">{value}</span>
       {label}
     </span>
   );
@@ -117,9 +117,7 @@ function PayloadPreview({ preview }: { preview: Record<string, unknown> }) {
   const json = JSON.stringify(preview, null, 2);
   const lines = json.split("\n");
   const remainingLines = lines.slice(4);
-  const isLong =
-    remainingLines.length > 0 &&
-    remainingLines.some((line) => line.trim().length > 1);
+  const isLong = remainingLines.some((line) => line.trim().length > 1);
   const displayText = expanded || !isLong ? json : lines.slice(0, 4).join("\n") + "\n...";
 
   return (
@@ -246,8 +244,10 @@ export default function CoworkerHistoryPage() {
     endOfDay.setHours(23, 59, 59, 999);
     return { from: dateRange.from, to: endOfDay };
   }, [dateRange]);
-  const { data, isLoading, error } = useCoworkerHistory(queryRange);
-  const entries = useMemo(() => data ?? [], [data]);
+  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useCoworkerHistory(queryRange);
+  const entries = useMemo(() => data?.pages.flatMap((page) => page.entries) ?? [], [data]);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [coworkerFilter, setCoworkerFilter] = useState("all");
   const [integrationFilter, setIntegrationFilter] = useState("all");
@@ -322,6 +322,35 @@ export default function CoworkerHistoryPage() {
       activeCoworkers: new Set(entries.map((entry) => entry.coworker.id)).size,
     };
   }, [entries]);
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const node = loadMoreRef.current;
+    if (!node || !hasNextPage) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (observerEntries) => {
+        if (observerEntries[0]?.isIntersecting && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "320px 0px" },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  useEffect(() => {
+    if (!isLoading && !error && entries.length === 0 && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [entries.length, error, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading]);
 
   return (
     <div className="space-y-8">
@@ -449,19 +478,33 @@ export default function CoworkerHistoryPage() {
           <p className="text-muted-foreground text-sm font-medium">Failed to load history</p>
           <p className="text-muted-foreground/60 mt-1 text-xs">Refresh the page and try again.</p>
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Search className="text-muted-foreground/30 mb-3 size-10" />
-          <p className="text-muted-foreground text-sm font-medium">No matching actions found</p>
-          <p className="text-muted-foreground/60 mt-1 text-xs">
-            Try adjusting your search or filters.
-          </p>
-        </div>
       ) : (
         <div className="pt-2">
-          {filtered.map((entry, index) => (
-            <HistoryCard key={entry.id} entry={entry} isLast={index === filtered.length - 1} />
-          ))}
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <Search className="text-muted-foreground/30 mb-3 size-10" />
+              <p className="text-muted-foreground text-sm font-medium">No matching actions found</p>
+              <p className="text-muted-foreground/60 mt-1 text-xs">
+                {hasNextPage || isFetchingNextPage
+                  ? "Loading older actions..."
+                  : "Try adjusting your search or filters."}
+              </p>
+            </div>
+          ) : (
+            filtered.map((entry, index) => (
+              <HistoryCard key={entry.id} entry={entry} isLast={index === filtered.length - 1} />
+            ))
+          )}
+
+          {(hasNextPage || isFetchingNextPage) && (
+            <div ref={loadMoreRef} className="flex items-center justify-center py-6">
+              {isFetchingNextPage ? (
+                <Loader2 className="text-muted-foreground size-5 animate-spin" />
+              ) : (
+                <span className="text-muted-foreground text-xs">Scroll to load older actions</span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

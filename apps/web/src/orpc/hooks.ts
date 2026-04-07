@@ -2,7 +2,7 @@
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
@@ -1140,14 +1140,25 @@ export function useCoworkerOverview() {
   });
 }
 
-export type CoworkerHistoryEntry = Awaited<ReturnType<typeof client.coworker.getHistory>>[number];
+type CoworkerHistoryPage = Awaited<ReturnType<typeof client.coworker.getHistory>>;
+export type CoworkerHistoryEntry = CoworkerHistoryPage["entries"][number];
 
 export function useCoworkerHistory(dateRange?: { from?: Date; to?: Date }) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["coworker", "history", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
-    queryFn: () => client.coworker.getHistory(dateRange),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      client.coworker.getHistory({
+        ...dateRange,
+        cursor: pageParam,
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((entry) => entry.status === "pending") ? 5_000 : false,
+      query.state.data?.pages.some((page) =>
+        page.entries.some((entry) => entry.status === "pending"),
+      )
+        ? 5_000
+        : false,
   });
 }
 
@@ -2511,9 +2522,7 @@ export function useAdminUsageDashboard(workspaceId: string | null) {
   return useQuery({
     queryKey: ["admin", "usageDashboard", workspaceId],
     queryFn: () =>
-      client.admin.getUsageDashboard(
-        workspaceId === "all" ? {} : { workspaceId: workspaceId! },
-      ),
+      client.admin.getUsageDashboard(workspaceId === "all" ? {} : { workspaceId: workspaceId! }),
     enabled: Boolean(workspaceId),
     refetchInterval: 120_000,
   });

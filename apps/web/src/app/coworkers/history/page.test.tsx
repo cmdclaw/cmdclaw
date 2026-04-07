@@ -154,12 +154,25 @@ function makeEntry(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function makeHistoryData(entries: ReturnType<typeof makeEntry>[]) {
+  return {
+    pages: entries.map((entry) => ({
+      entries: [entry],
+      nextCursor: undefined,
+    })),
+    pageParams: entries.map(() => undefined),
+  };
+}
+
 describe("CoworkerHistoryPage", () => {
   it("shows a loading state while history is fetching", () => {
     mockUseCoworkerHistory.mockReturnValue({
       data: undefined,
       isLoading: true,
       error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
     });
 
     const { container } = render(<CoworkerHistoryPage />);
@@ -169,7 +182,7 @@ describe("CoworkerHistoryPage", () => {
 
   it("derives real filter options and filters pending entries", () => {
     mockUseCoworkerHistory.mockReturnValue({
-      data: [
+      data: makeHistoryData([
         makeEntry(),
         makeEntry({
           id: "entry-2",
@@ -187,9 +200,12 @@ describe("CoworkerHistoryPage", () => {
           target: "acme/api",
           preview: { repo: "acme/api", title: "Bug" },
         }),
-      ],
+      ]),
       isLoading: false,
       error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
     });
 
     render(<CoworkerHistoryPage />);
@@ -207,9 +223,15 @@ describe("CoworkerHistoryPage", () => {
 
   it("shows an empty state when there are no audit entries", () => {
     mockUseCoworkerHistory.mockReturnValue({
-      data: [],
+      data: {
+        pages: [{ entries: [], nextCursor: undefined }],
+        pageParams: [undefined],
+      },
       isLoading: false,
       error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
     });
 
     render(<CoworkerHistoryPage />);

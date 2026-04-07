@@ -53,7 +53,7 @@ import {
   coworkerRunEvent,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getOperationLabel } from "@/lib/integration-icons";
 import { parseCliCommand } from "@/lib/parse-cli-command";
@@ -101,7 +101,7 @@ const modelReferenceSchema = z
 
 const triggerTypeSchema = z.string().min(1).max(128);
 const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
-const COWORKER_HISTORY_LIMIT = 100;
+const COWORKER_HISTORY_PAGE_SIZE = 100;
 const HISTORY_TARGET_KEYS = [
   "channel",
   "to",
@@ -185,6 +185,34 @@ type HistoryEventRow = {
   payload: unknown;
   createdAt: Date;
 };
+
+const historyCursorSchema = z.object({
+  startedAt: z.coerce.date(),
+  runId: z.string().min(1),
+});
+
+function encodeHistoryCursor(cursor: { startedAt: Date; runId: string }): string {
+  return JSON.stringify({
+    startedAt: cursor.startedAt.toISOString(),
+    runId: cursor.runId,
+  });
+}
+
+function decodeHistoryCursor(
+  cursor: string | undefined,
+): z.infer<typeof historyCursorSchema> | null {
+  if (!cursor) {
+    return null;
+  }
+
+  try {
+    return historyCursorSchema.parse(JSON.parse(cursor));
+  } catch {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Invalid history cursor",
+    });
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
@@ -1442,145 +1470,173 @@ const listRuns = protectedProcedure
 
 const getHistory = protectedProcedure
   .input(
-    z.object({
-      from: z.coerce.date().optional(),
-      to: z.coerce.date().optional(),
-    }).optional(),
+    z
+      .object({
+        from: z.coerce.date().optional(),
+        to: z.coerce.date().optional(),
+        cursor: z.string().optional(),
+        limit: z.number().min(1).max(200).default(COWORKER_HISTORY_PAGE_SIZE),
+      })
+      .optional(),
   )
   .handler(async ({ input, context }) => {
-  const {
-    workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(context.user.id);
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+    const cursor = decodeHistoryCursor(input?.cursor);
 
-  const dateFilters = [
-    eq(coworkerRun.ownerId, context.user.id),
-    eq(coworkerRun.workspaceId, workspaceId),
-    ...(input?.from ? [gte(coworkerRun.startedAt, input.from)] : []),
-    ...(input?.to ? [lte(coworkerRun.startedAt, input.to)] : []),
-  ];
+    const dateFilters = [
+      eq(coworkerRun.ownerId, context.user.id),
+      eq(coworkerRun.workspaceId, workspaceId),
+      ...(input?.from ? [gte(coworkerRun.startedAt, input.from)] : []),
+      ...(input?.to ? [lte(coworkerRun.startedAt, input.to)] : []),
+      ...(cursor
+        ? [
+            or(
+              lt(coworkerRun.startedAt, cursor.startedAt),
+              and(eq(coworkerRun.startedAt, cursor.startedAt), lt(coworkerRun.id, cursor.runId)),
+            ),
+          ]
+        : []),
+    ];
 
-  const runs = (await context.db.query.coworkerRun.findMany({
-    where: and(...dateFilters),
-    orderBy: (run, { desc }) => [desc(run.startedAt)],
-    limit: COWORKER_HISTORY_LIMIT,
-    with: {
-      coworker: {
-        columns: {
-          id: true,
-          name: true,
-          username: true,
+    const pageSize = input?.limit ?? COWORKER_HISTORY_PAGE_SIZE;
+    const runs = (await context.db.query.coworkerRun.findMany({
+      where: and(...dateFilters),
+      orderBy: [desc(coworkerRun.startedAt), desc(coworkerRun.id)],
+      limit: pageSize + 1,
+      with: {
+        coworker: {
+          columns: {
+            id: true,
+            name: true,
+            username: true,
+          },
         },
       },
-    },
-  })) as HistoryRunRow[];
+    })) as HistoryRunRow[];
 
-  if (runs.length === 0) {
-    return [] as HistoryEntry[];
-  }
-
-  await reconcileStaleCoworkerRunsForCoworkers(
-    Array.from(
-      new Set(runs.map((run) => run.coworker?.id).filter((id): id is string => Boolean(id))),
-    ),
-  );
-
-  const runIds = runs.map((run) => run.id);
-  const events = (await context.db.query.coworkerRunEvent.findMany({
-    where: inArray(coworkerRunEvent.coworkerRunId, runIds),
-    orderBy: (event, { asc }) => [asc(event.createdAt)],
-  })) as HistoryEventRow[];
-
-  const eventsByRunId = new Map<string, HistoryEventRow[]>();
-  for (const event of events) {
-    const current = eventsByRunId.get(event.coworkerRunId);
-    if (current) {
-      current.push(event);
-    } else {
-      eventsByRunId.set(event.coworkerRunId, [event]);
-    }
-  }
-
-  const historyEntries = new Map<string, HistoryEntry>();
-
-  for (const run of runs) {
-    if (!run.coworker) {
-      continue;
+    if (runs.length === 0) {
+      return {
+        entries: [] as HistoryEntry[],
+        nextCursor: undefined,
+      };
     }
 
-    const runEvents = eventsByRunId.get(run.id) ?? [];
-    const toolResultsById = new Map<string, HistoryEventRow>();
-    const pendingInterruptsById = new Map<string, HistoryEventRow>();
-    const resolvedInterruptsById = new Map<string, HistoryEventRow>();
-    const userInterruptsById = new Map<string, HistoryEventRow>();
+    const hasMore = runs.length > pageSize;
+    const pageRuns = hasMore ? runs.slice(0, -1) : runs;
 
-    for (const event of runEvents) {
-      const payload = asRecord(event.payload);
-      if (!payload) {
-        continue;
-      }
+    await reconcileStaleCoworkerRunsForCoworkers(
+      Array.from(
+        new Set(pageRuns.map((run) => run.coworker?.id).filter((id): id is string => Boolean(id))),
+      ),
+    );
 
-      if (event.type === "tool_result" && payload.type === "tool_result") {
-        const toolUseId = asString(payload.toolUseId);
-        if (toolUseId) {
-          toolResultsById.set(toolUseId, event);
-        }
-        continue;
-      }
+    const runIds = pageRuns.map((run) => run.id);
+    const events = (await context.db.query.coworkerRunEvent.findMany({
+      where: inArray(coworkerRunEvent.coworkerRunId, runIds),
+      orderBy: (event, { asc }) => [asc(event.createdAt)],
+    })) as HistoryEventRow[];
 
-      if (event.type === "interrupt_pending" && payload.type === "interrupt_pending") {
-        const toolUseId = asString(payload.providerToolUseId);
-        if (toolUseId) {
-          pendingInterruptsById.set(toolUseId, event);
-        }
-        continue;
-      }
-
-      if (event.type === "interrupt_resolved" && payload.type === "interrupt_resolved") {
-        const toolUseId = asString(payload.providerToolUseId);
-        if (toolUseId) {
-          resolvedInterruptsById.set(toolUseId, event);
-        }
-        continue;
-      }
-
-      if (event.type === "user_interrupt") {
-        const toolUseId = asString(payload.toolUseId);
-        if (toolUseId) {
-          userInterruptsById.set(toolUseId, event);
-        }
+    const eventsByRunId = new Map<string, HistoryEventRow[]>();
+    for (const event of events) {
+      const current = eventsByRunId.get(event.coworkerRunId);
+      if (current) {
+        current.push(event);
+      } else {
+        eventsByRunId.set(event.coworkerRunId, [event]);
       }
     }
 
-    for (const event of runEvents) {
-      if (event.type !== "tool_use") {
+    const historyEntries = new Map<string, HistoryEntry>();
+
+    for (const run of pageRuns) {
+      if (!run.coworker) {
         continue;
       }
 
-      const payload = asRecord(event.payload);
-      if (!payload) {
-        continue;
+      const runEvents = eventsByRunId.get(run.id) ?? [];
+      const toolResultsById = new Map<string, HistoryEventRow>();
+      const pendingInterruptsById = new Map<string, HistoryEventRow>();
+      const resolvedInterruptsById = new Map<string, HistoryEventRow>();
+      const userInterruptsById = new Map<string, HistoryEventRow>();
+
+      for (const event of runEvents) {
+        const payload = asRecord(event.payload);
+        if (!payload) {
+          continue;
+        }
+
+        if (event.type === "tool_result" && payload.type === "tool_result") {
+          const toolUseId = asString(payload.toolUseId);
+          if (toolUseId) {
+            toolResultsById.set(toolUseId, event);
+          }
+          continue;
+        }
+
+        if (event.type === "interrupt_pending" && payload.type === "interrupt_pending") {
+          const toolUseId = asString(payload.providerToolUseId);
+          if (toolUseId) {
+            pendingInterruptsById.set(toolUseId, event);
+          }
+          continue;
+        }
+
+        if (event.type === "interrupt_resolved" && payload.type === "interrupt_resolved") {
+          const toolUseId = asString(payload.providerToolUseId);
+          if (toolUseId) {
+            resolvedInterruptsById.set(toolUseId, event);
+          }
+          continue;
+        }
+
+        if (event.type === "user_interrupt") {
+          const toolUseId = asString(payload.toolUseId);
+          if (toolUseId) {
+            userInterruptsById.set(toolUseId, event);
+          }
+        }
       }
 
-      const toolUseId = getToolUseIdFromPayload(payload, event.id);
-      const entry = normalizeHistoryEntry({
-        run,
-        toolUseEvent: event,
-        toolResultEvent: toolResultsById.get(toolUseId),
-        pendingInterruptEvent: pendingInterruptsById.get(toolUseId),
-        resolvedInterruptEvent: resolvedInterruptsById.get(toolUseId),
-        userInterruptEvent: userInterruptsById.get(toolUseId),
-      });
+      for (const event of runEvents) {
+        if (event.type !== "tool_use") {
+          continue;
+        }
 
-      if (entry) {
-        historyEntries.set(entry.id, entry);
+        const payload = asRecord(event.payload);
+        if (!payload) {
+          continue;
+        }
+
+        const toolUseId = getToolUseIdFromPayload(payload, event.id);
+        const entry = normalizeHistoryEntry({
+          run,
+          toolUseEvent: event,
+          toolResultEvent: toolResultsById.get(toolUseId),
+          pendingInterruptEvent: pendingInterruptsById.get(toolUseId),
+          resolvedInterruptEvent: resolvedInterruptsById.get(toolUseId),
+          userInterruptEvent: userInterruptsById.get(toolUseId),
+        });
+
+        if (entry) {
+          historyEntries.set(entry.id, entry);
+        }
       }
     }
-  }
 
-  return Array.from(historyEntries.values())
-    .toSorted((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-    .slice(0, COWORKER_HISTORY_LIMIT);
-});
+    return {
+      entries: Array.from(historyEntries.values()).toSorted(
+        (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+      ),
+      nextCursor: hasMore
+        ? encodeHistoryCursor({
+            startedAt: pageRuns[pageRuns.length - 1]!.startedAt,
+            runId: pageRuns[pageRuns.length - 1]!.id,
+          })
+        : undefined,
+    };
+  });
 
 const getForwardingAlias = protectedProcedure
   .input(z.object({ id: z.string() }))

@@ -546,27 +546,30 @@ describe("coworkerRouter", () => {
 
     const result = await coworkerRouterAny.getHistory({ context });
 
-    expect(result).toEqual([
-      {
-        id: "run-1:tool-1",
-        runId: "run-1",
-        toolUseId: "tool-1",
-        timestamp: actionAt,
-        coworker: {
-          id: "wf-1",
-          name: "Slack Notifier",
-          username: "slack-notifier",
+    expect(result).toEqual({
+      entries: [
+        {
+          id: "run-1:tool-1",
+          runId: "run-1",
+          toolUseId: "tool-1",
+          timestamp: actionAt,
+          coworker: {
+            id: "wf-1",
+            name: "Slack Notifier",
+            username: "slack-notifier",
+          },
+          integration: "slack",
+          operation: "send",
+          operationLabel: "Sending message",
+          status: "success",
+          target: "#eng",
+          preview: {
+            command: 'slack send -c "#eng" -t "hello"',
+          },
         },
-        integration: "slack",
-        operation: "send",
-        operationLabel: "Sending message",
-        status: "success",
-        target: "#eng",
-        preview: {
-          command: 'slack send -c "#eng" -t "hello"',
-        },
-      },
-    ]);
+      ],
+      nextCursor: undefined,
+    });
     expect(reconcileStaleCoworkerRunsForCoworkersMock).toHaveBeenCalledWith(["wf-1"]);
   });
 
@@ -627,14 +630,17 @@ describe("coworkerRouter", () => {
 
     const result = await coworkerRouterAny.getHistory({ context });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        id: "run-2:tool-2",
-        integration: "github",
-        status: "denied",
-        target: "acme/api",
-      }),
-    ]);
+    expect(result).toEqual({
+      entries: [
+        expect.objectContaining({
+          id: "run-2:tool-2",
+          integration: "github",
+          status: "denied",
+          target: "acme/api",
+        }),
+      ],
+      nextCursor: undefined,
+    });
   });
 
   it("marks pending writes and prefers edited approval payloads", async () => {
@@ -710,16 +716,19 @@ describe("coworkerRouter", () => {
 
     const result = await coworkerRouterAny.getHistory({ context });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        id: "run-3:tool-3",
-        status: "pending",
-        target: "Edited Spec",
-        preview: {
-          title: "Edited Spec",
-        },
-      }),
-    ]);
+    expect(result).toEqual({
+      entries: [
+        expect.objectContaining({
+          id: "run-3:tool-3",
+          status: "pending",
+          target: "Edited Spec",
+          preview: {
+            title: "Edited Spec",
+          },
+        }),
+      ],
+      nextCursor: undefined,
+    });
   });
 
   it("marks failed writes as errors when the run ends before a tool result", async () => {
@@ -759,16 +768,19 @@ describe("coworkerRouter", () => {
 
     const result = await coworkerRouterAny.getHistory({ context });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        id: "run-4:tool-4",
-        status: "error",
-        preview: {
-          command: 'slack send -c "#alerts" -t "Outage"',
-          error: "channel archived",
-        },
-      }),
-    ]);
+    expect(result).toEqual({
+      entries: [
+        expect.objectContaining({
+          id: "run-4:tool-4",
+          status: "error",
+          preview: {
+            command: 'slack send -c "#alerts" -t "Outage"',
+            error: "channel archived",
+          },
+        }),
+      ],
+      nextCursor: undefined,
+    });
   });
 
   it("returns multiple write actions from the same run", async () => {
@@ -847,10 +859,12 @@ describe("coworkerRouter", () => {
       },
     ]);
 
-    const result = (await coworkerRouterAny.getHistory({ context })) as Array<{ id: string }>;
+    const result = (await coworkerRouterAny.getHistory({ context })) as {
+      entries: Array<{ id: string }>;
+    };
 
-    expect(result).toHaveLength(2);
-    expect(result.map((entry) => entry.id)).toEqual(["run-5:tool-5b", "run-5:tool-5a"]);
+    expect(result.entries).toHaveLength(2);
+    expect(result.entries.map((entry) => entry.id)).toEqual(["run-5:tool-5b", "run-5:tool-5a"]);
   });
 
   it("excludes read-only tool events from history", async () => {
@@ -902,7 +916,84 @@ describe("coworkerRouter", () => {
 
     const result = await coworkerRouterAny.getHistory({ context });
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({
+      entries: [],
+      nextCursor: undefined,
+    });
+  });
+
+  it("returns a cursor when older runs are available", async () => {
+    const context = createContext();
+    const newestRunAt = new Date("2026-04-07T15:00:00.000Z");
+    const olderRunAt = new Date("2026-04-07T14:00:00.000Z");
+    context.db.query.coworkerRun.findMany.mockResolvedValue([
+      {
+        id: "run-7",
+        status: "completed",
+        errorMessage: null,
+        startedAt: newestRunAt,
+        coworker: {
+          id: "wf-7",
+          name: "Pager Bot",
+          username: "pager-bot",
+        },
+      },
+      {
+        id: "run-8",
+        status: "completed",
+        errorMessage: null,
+        startedAt: olderRunAt,
+        coworker: {
+          id: "wf-8",
+          name: "Older Bot",
+          username: "older-bot",
+        },
+      },
+    ]);
+    context.db.query.coworkerRunEvent.findMany.mockResolvedValue([
+      {
+        id: "evt-15",
+        coworkerRunId: "run-7",
+        type: "tool_use",
+        createdAt: new Date("2026-04-07T15:00:05.000Z"),
+        payload: {
+          type: "tool_use",
+          toolUseId: "tool-7",
+          toolName: "bash",
+          toolInput: {
+            command: 'slack send -c "#pager" -t "Heads up"',
+          },
+          integration: "slack",
+          operation: "send",
+          isWrite: true,
+        },
+      },
+      {
+        id: "evt-16",
+        coworkerRunId: "run-7",
+        type: "tool_result",
+        createdAt: new Date("2026-04-07T15:00:06.000Z"),
+        payload: {
+          type: "tool_result",
+          toolUseId: "tool-7",
+          toolName: "bash",
+          result: { ok: true },
+        },
+      },
+    ]);
+
+    const result = (await coworkerRouterAny.getHistory({
+      input: { limit: 1 },
+      context,
+    })) as {
+      entries: Array<{ id: string }>;
+      nextCursor?: string;
+    };
+
+    expect(result.entries.map((entry) => entry.id)).toEqual(["run-7:tool-7"]);
+    expect(result.nextCursor).toBe(
+      JSON.stringify({ startedAt: newestRunAt.toISOString(), runId: "run-7" }),
+    );
   });
 
   it("backfills missing builder metadata on get when prompt already exists", async () => {
