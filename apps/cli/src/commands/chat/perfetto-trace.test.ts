@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
-  buildChromeTraceOutputPath,
-  exportChromeTraceForCompletedRun,
-} from "./chrome-trace";
+  buildPerfettoTraceDirectoryPath,
+  buildPerfettoTraceFilename,
+  buildPerfettoTraceOutputPath,
+  exportPerfettoTraceForCompletedRun,
+} from "./perfetto-trace";
 
 function buildArtifacts() {
   return {
@@ -32,23 +34,30 @@ function buildArtifacts() {
   };
 }
 
-describe("chat chrome trace export", () => {
-  it("uses the requested path for the first export and numbers follow-ups", () => {
-    expect(buildChromeTraceOutputPath("/tmp/trace.json", 1)).toBe("/tmp/trace.json");
-    expect(buildChromeTraceOutputPath("/tmp/trace.json", 2)).toBe("/tmp/trace.2.json");
-    expect(buildChromeTraceOutputPath("/tmp/trace", 3)).toBe("/tmp/trace.3");
+describe("chat perfetto trace export", () => {
+  it("builds output paths under the current working directory", () => {
+    const now = new Date("2026-04-07T12:34:56.789Z");
+    expect(buildPerfettoTraceDirectoryPath("/tmp/cmdclaw")).toBe("/tmp/cmdclaw/perfetto-traces");
+    expect(buildPerfettoTraceFilename(now)).toBe("2026-04-07T12-34-56.789Z.json");
+    expect(
+      buildPerfettoTraceOutputPath({
+        cwd: "/tmp/cmdclaw",
+        now,
+      }),
+    ).toBe("/tmp/cmdclaw/perfetto-traces/2026-04-07T12-34-56.789Z.json");
   });
 
-  it("writes a one-shot Chrome trace file", () => {
+  it("writes a one-shot Perfetto trace file", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-chat-trace-"));
-    const targetPath = join(rootDir, "trace.json");
+    const now = new Date("2026-04-07T12:34:56.789Z");
+    const targetPath = join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.json");
 
-    const result = exportChromeTraceForCompletedRun({
-      basePath: targetPath,
-      exportIndex: 1,
+    const result = exportPerfettoTraceForCompletedRun({
+      cwd: rootDir,
       conversationId: "conv-1",
       generationId: "gen-1",
       artifacts: buildArtifacts(),
+      now,
     });
 
     expect(result).toEqual({
@@ -65,44 +74,47 @@ describe("chat chrome trace export", () => {
     );
   });
 
-  it("writes numbered sibling files for follow-up exports", () => {
+  it("writes numbered sibling files when the timestamp path is already taken", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-chat-trace-"));
-    const targetPath = join(rootDir, "trace.json");
+    const now = new Date("2026-04-07T12:34:56.789Z");
 
-    const first = exportChromeTraceForCompletedRun({
-      basePath: targetPath,
-      exportIndex: 1,
+    const first = exportPerfettoTraceForCompletedRun({
+      cwd: rootDir,
       conversationId: "conv-1",
       generationId: "gen-1",
       artifacts: buildArtifacts(),
+      now,
     });
-    const second = exportChromeTraceForCompletedRun({
-      basePath: targetPath,
-      exportIndex: 2,
+    const second = exportPerfettoTraceForCompletedRun({
+      cwd: rootDir,
       conversationId: "conv-1",
       generationId: "gen-2",
       artifacts: buildArtifacts(),
+      now,
     });
 
     expect(first).toEqual({
       status: "written",
-      path: targetPath,
+      path: join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.json"),
     });
     expect(second).toEqual({
       status: "written",
-      path: join(rootDir, "trace.2.json"),
+      path: join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.2.json"),
     });
-    expect(existsSync(join(rootDir, "trace.json"))).toBe(true);
-    expect(existsSync(join(rootDir, "trace.2.json"))).toBe(true);
+    expect(existsSync(join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.json"))).toBe(
+      true,
+    );
+    expect(
+      existsSync(join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.2.json")),
+    ).toBe(true);
   });
 
   it("skips export when timing timestamps are unavailable", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-chat-trace-"));
-    const targetPath = join(rootDir, "trace.json");
+    const targetPath = join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.json");
 
-    const result = exportChromeTraceForCompletedRun({
-      basePath: targetPath,
-      exportIndex: 1,
+    const result = exportPerfettoTraceForCompletedRun({
+      cwd: rootDir,
       conversationId: "conv-1",
       generationId: "gen-1",
       artifacts: {
@@ -114,6 +126,7 @@ describe("chat chrome trace export", () => {
         attachments: [],
         sandboxFiles: [],
       },
+      now: new Date("2026-04-07T12:34:56.789Z"),
     });
 
     expect(result).toEqual({

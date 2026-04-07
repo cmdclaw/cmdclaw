@@ -69,11 +69,10 @@ export const chatCommand = buildCommand({
         variadic: true,
         brief: "Attach a file to the message",
       },
-      chromeTrace: {
-        kind: "parsed",
-        parse: (input: string) => input,
+      perfettoTrace: {
+        kind: "boolean",
         optional: true,
-        brief: "Write Chrome trace JSON to path",
+        brief: "Write Perfetto trace JSON to perfetto-traces/",
       },
       token: {
         kind: "parsed",
