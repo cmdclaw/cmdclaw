@@ -13,20 +13,29 @@ function buildArtifacts() {
   return {
     timing: {
       phaseDurationsMs: {
+        sandboxInitMs: 820,
         sandboxConnectOrCreateMs: 800,
+        sandboxCreateMs: 790,
       },
       phaseTimestamps: [
         { phase: "generation_started", at: "2026-04-02T10:00:00.000Z", elapsedMs: 0 },
+        { phase: "sandbox_init_started", at: "2026-04-02T10:00:00.080Z", elapsedMs: 80 },
         {
           phase: "sandbox_init_checking_cache",
           at: "2026-04-02T10:00:00.100Z",
           elapsedMs: 100,
         },
         {
+          phase: "sandbox_init_creating",
+          at: "2026-04-02T10:00:00.110Z",
+          elapsedMs: 110,
+        },
+        {
           phase: "sandbox_init_created",
           at: "2026-04-02T10:00:00.900Z",
           elapsedMs: 900,
         },
+        { phase: "agent_init_started", at: "2026-04-02T10:00:00.900Z", elapsedMs: 900 },
       ],
     },
     attachments: [],
@@ -67,11 +76,27 @@ describe("chat perfetto trace export", () => {
     expect(existsSync(targetPath)).toBe(true);
 
     const contents = JSON.parse(readFileSync(targetPath, "utf-8")) as {
-      traceEvents: Array<{ name: string }>;
+      traceEvents: Array<{ name: string; tid: number; args: { name?: string } }>;
     };
     expect(contents.traceEvents.some((event) => event.name === "sandbox_connect_or_create")).toBe(
       true,
     );
+    expect(contents.traceEvents.some((event) => event.name === "sandbox_init")).toBe(true);
+    expect(contents.traceEvents.some((event) => event.name === "sandbox_create")).toBe(true);
+    expect(
+      contents.traceEvents
+        .filter((event) => event.name === "thread_name")
+        .map((event) => event.args.name),
+    ).toEqual([
+      "summary",
+      "sandbox_init",
+      "agent_init",
+      "pre_prompt_memory",
+      "pre_prompt_skills",
+      "pre_prompt_integration",
+      "pre_prompt_runtime",
+      "executor_prepare",
+    ]);
   });
 
   it("writes numbered sibling files when the timestamp path is already taken", () => {

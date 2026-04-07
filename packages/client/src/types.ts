@@ -96,7 +96,9 @@ export type DoneArtifactsData = {
     sandboxStartupMode?: "created" | "reused" | "unknown";
     generationDurationMs?: number;
     phaseDurationsMs?: {
+      sandboxInitMs?: number;
       sandboxConnectOrCreateMs?: number;
+      sandboxCreateMs?: number;
       opencodeReadyMs?: number;
       sessionReadyMs?: number;
       agentInitMs?: number;

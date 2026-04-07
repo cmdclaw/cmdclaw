@@ -28,9 +28,32 @@ export type PerfettoTraceBuildResult =
       status: "missing_phase_timestamps";
     };
 
+type TraceTrackName =
+  | "summary"
+  | "sandbox_init"
+  | "agent_init"
+  | "pre_prompt_memory"
+  | "pre_prompt_skills"
+  | "pre_prompt_integration"
+  | "pre_prompt_runtime"
+  | "executor_prepare";
+
+const TRACE_TRACKS: TraceTrackName[] = [
+  "summary",
+  "sandbox_init",
+  "agent_init",
+  "pre_prompt_memory",
+  "pre_prompt_skills",
+  "pre_prompt_integration",
+  "pre_prompt_runtime",
+  "executor_prepare",
+];
+
 type TracePhaseSpec = {
   name:
+    | "sandbox_init"
     | "sandbox_connect_or_create"
+    | "sandbox_create"
     | "opencode_ready"
     | "session_ready"
     | "agent_init"
@@ -63,6 +86,7 @@ type TracePhaseSpec = {
     | "generation_to_first_visible_output"
     | "model_stream"
     | "post_processing";
+  track: TraceTrackName;
   durationKey?: keyof PhaseDurations;
   startPhases?: string[];
   endPhases?: string[];
@@ -70,199 +94,246 @@ type TracePhaseSpec = {
 
 const TRACE_PHASE_SPECS: TracePhaseSpec[] = [
   {
+    name: "sandbox_init",
+    track: "sandbox_init",
+    durationKey: "sandboxInitMs",
+    startPhases: ["sandbox_init_started"],
+    endPhases: ["agent_init_started"],
+  },
+  {
     name: "sandbox_connect_or_create",
+    track: "sandbox_init",
     durationKey: "sandboxConnectOrCreateMs",
     startPhases: ["sandbox_init_checking_cache", "sandbox_init_started"],
     endPhases: ["sandbox_init_reused", "sandbox_init_created"],
   },
   {
+    name: "sandbox_create",
+    track: "sandbox_init",
+    durationKey: "sandboxCreateMs",
+    startPhases: ["sandbox_init_creating"],
+    endPhases: ["sandbox_init_created"],
+  },
+  {
     name: "opencode_ready",
+    track: "agent_init",
     durationKey: "opencodeReadyMs",
     startPhases: ["agent_init_opencode_starting", "agent_init_started"],
     endPhases: ["agent_init_opencode_ready"],
   },
   {
     name: "session_ready",
+    track: "agent_init",
     durationKey: "sessionReadyMs",
     startPhases: ["agent_init_session_creating", "agent_init_started"],
     endPhases: ["agent_init_session_init_completed", "agent_init_session_reused"],
   },
   {
     name: "agent_init",
+    track: "agent_init",
     durationKey: "agentInitMs",
     startPhases: ["agent_init_started"],
     endPhases: ["agent_init_ready"],
   },
   {
     name: "pre_prompt_setup",
+    track: "summary",
     durationKey: "prePromptSetupMs",
     startPhases: ["pre_prompt_setup_started"],
     endPhases: ["prompt_sent"],
   },
   {
     name: "pre_prompt_memory_sync",
+    track: "pre_prompt_memory",
     durationKey: "prePromptMemorySyncMs",
     startPhases: ["pre_prompt_memory_sync_started"],
     endPhases: ["pre_prompt_memory_sync_completed"],
   },
   {
     name: "pre_prompt_runtime_context_write",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptRuntimeContextWriteMs",
     startPhases: ["pre_prompt_runtime_context_write_started"],
     endPhases: ["pre_prompt_runtime_context_write_completed"],
   },
   {
     name: "pre_prompt_executor_prepare",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorPrepareMs",
     startPhases: ["pre_prompt_executor_prepare_started"],
     endPhases: ["pre_prompt_executor_prepare_completed"],
   },
   {
     name: "pre_prompt_executor_bootstrap_load",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorBootstrapLoadMs",
     startPhases: ["pre_prompt_executor_bootstrap_load_started"],
     endPhases: ["pre_prompt_executor_bootstrap_load_completed"],
   },
   {
     name: "pre_prompt_executor_config_write",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorConfigWriteMs",
     startPhases: ["pre_prompt_executor_config_write_started"],
     endPhases: ["pre_prompt_executor_config_write_completed"],
   },
   {
     name: "pre_prompt_executor_server_probe",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorServerProbeMs",
     startPhases: ["pre_prompt_executor_server_probe_started"],
     endPhases: ["pre_prompt_executor_server_probe_completed"],
   },
   {
     name: "pre_prompt_executor_server_start",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorServerStartMs",
     startPhases: ["pre_prompt_executor_server_start_started"],
     endPhases: ["pre_prompt_executor_server_start_completed"],
   },
   {
     name: "pre_prompt_executor_server_wait_ready",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorServerWaitReadyMs",
     startPhases: ["pre_prompt_executor_server_wait_ready_started"],
     endPhases: ["pre_prompt_executor_server_wait_ready_completed"],
   },
   {
     name: "pre_prompt_executor_status_check",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorStatusCheckMs",
     startPhases: ["pre_prompt_executor_status_check_started"],
     endPhases: ["pre_prompt_executor_status_check_completed"],
   },
   {
     name: "pre_prompt_executor_oauth_reconcile",
+    track: "executor_prepare",
     durationKey: "prePromptExecutorOauthReconcileMs",
     startPhases: ["pre_prompt_executor_oauth_reconcile_started"],
     endPhases: ["pre_prompt_executor_oauth_reconcile_completed"],
   },
   {
     name: "pre_prompt_skills_and_creds_load",
+    track: "pre_prompt_skills",
     durationKey: "prePromptSkillsAndCredsLoadMs",
     startPhases: ["pre_prompt_skills_and_creds_load_started"],
     endPhases: ["pre_prompt_skills_and_creds_load_completed"],
   },
   {
     name: "pre_prompt_cache_read",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptCacheReadMs",
     startPhases: ["pre_prompt_cache_read_started"],
     endPhases: ["pre_prompt_cache_read_completed"],
   },
   {
     name: "pre_prompt_skills_write",
+    track: "pre_prompt_skills",
     durationKey: "prePromptSkillsWriteMs",
     startPhases: ["pre_prompt_skills_write_started"],
     endPhases: ["pre_prompt_skills_write_completed"],
   },
   {
     name: "pre_prompt_custom_integration_cli_write",
+    track: "pre_prompt_integration",
     durationKey: "prePromptCustomIntegrationCliWriteMs",
     startPhases: ["pre_prompt_custom_integration_cli_write_started"],
     endPhases: ["pre_prompt_custom_integration_cli_write_completed"],
   },
   {
     name: "pre_prompt_custom_integration_permissions_write",
+    track: "pre_prompt_integration",
     durationKey: "prePromptCustomIntegrationPermissionsWriteMs",
     startPhases: ["pre_prompt_custom_integration_permissions_write_started"],
     endPhases: ["pre_prompt_custom_integration_permissions_write_completed"],
   },
   {
     name: "pre_prompt_integration_skills_write",
+    track: "pre_prompt_integration",
     durationKey: "prePromptIntegrationSkillsWriteMs",
     startPhases: ["pre_prompt_integration_skills_write_started"],
     endPhases: ["pre_prompt_integration_skills_write_completed"],
   },
   {
     name: "pre_prompt_cache_write",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptCacheWriteMs",
     startPhases: ["pre_prompt_cache_write_started"],
     endPhases: ["pre_prompt_cache_write_completed"],
   },
   {
     name: "pre_prompt_prompt_spec_compose",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptPromptSpecComposeMs",
     startPhases: ["pre_prompt_prompt_spec_compose_started"],
     endPhases: ["pre_prompt_prompt_spec_compose_completed"],
   },
   {
     name: "pre_prompt_event_stream_subscribe",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptEventStreamSubscribeMs",
     startPhases: ["pre_prompt_event_stream_subscribe_started"],
     endPhases: ["pre_prompt_event_stream_subscribe_completed"],
   },
   {
     name: "pre_prompt_coworker_docs_stage",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptCoworkerDocsStageMs",
     startPhases: ["pre_prompt_coworker_docs_stage_started"],
     endPhases: ["pre_prompt_coworker_docs_stage_completed"],
   },
   {
     name: "pre_prompt_attachments_stage",
+    track: "pre_prompt_runtime",
     durationKey: "prePromptAttachmentsStageMs",
     startPhases: ["pre_prompt_attachments_stage_started"],
     endPhases: ["pre_prompt_attachments_stage_completed"],
   },
   {
     name: "wait_for_first_event",
+    track: "summary",
     durationKey: "waitForFirstEventMs",
     startPhases: ["prompt_sent"],
     endPhases: ["first_event_received"],
   },
   {
     name: "prompt_to_first_token",
+    track: "summary",
     durationKey: "promptToFirstTokenMs",
     startPhases: ["prompt_sent"],
     endPhases: ["first_token_emitted"],
   },
   {
     name: "generation_to_first_token",
+    track: "summary",
     durationKey: "generationToFirstTokenMs",
     startPhases: ["generation_started"],
     endPhases: ["first_token_emitted"],
   },
   {
     name: "prompt_to_first_visible_output",
+    track: "summary",
     durationKey: "promptToFirstVisibleOutputMs",
     startPhases: ["prompt_sent"],
     endPhases: ["first_visible_output_emitted", "first_token_emitted"],
   },
   {
     name: "generation_to_first_visible_output",
+    track: "summary",
     durationKey: "generationToFirstVisibleOutputMs",
     startPhases: ["generation_started"],
     endPhases: ["first_visible_output_emitted", "first_token_emitted"],
   },
   {
     name: "model_stream",
+    track: "summary",
     durationKey: "modelStreamMs",
     startPhases: ["first_event_received"],
     endPhases: ["session_idle", "prompt_completed"],
   },
   {
     name: "post_processing",
+    track: "summary",
     durationKey: "postProcessingMs",
     startPhases: ["post_processing_started"],
     endPhases: ["post_processing_completed"],
@@ -331,6 +402,10 @@ function getOriginMs(phaseTimes: Map<string, number>): number | null {
   return Math.min(...allTimes);
 }
 
+function buildTrackTidMap(baseTid: number): Map<TraceTrackName, number> {
+  return new Map(TRACE_TRACKS.map((trackName, index) => [trackName, baseTid + index]));
+}
+
 export function buildPerfettoTraceFromTiming(args: {
   timing?: TimingData;
   processName?: string;
@@ -360,29 +435,35 @@ export function buildPerfettoTraceFromTiming(args: {
   }
 
   const pid = args.pid ?? 1;
-  const tid = args.tid ?? 1;
+  const baseTid = args.tid ?? 1;
   const processName = args.processName ?? "cmdclaw";
-  const threadName = args.threadName ?? "chat";
   const traceEvents: PerfettoTraceEvent[] = [
     {
       name: "process_name",
       cat: "__metadata",
       ph: "M",
       pid,
-      tid,
+      tid: baseTid,
       ts: 0,
       args: { name: processName },
     },
-    {
+  ];
+  const trackTidMap = buildTrackTidMap(baseTid);
+  for (const trackName of TRACE_TRACKS) {
+    const tid = trackTidMap.get(trackName);
+    if (tid === undefined) {
+      continue;
+    }
+    traceEvents.push({
       name: "thread_name",
       cat: "__metadata",
       ph: "M",
       pid,
       tid,
       ts: 0,
-      args: { name: threadName },
-    },
-  ];
+      args: { name: trackName },
+    });
+  }
 
   const phaseDurations = args.timing?.phaseDurationsMs;
   for (const spec of TRACE_PHASE_SPECS) {
@@ -398,7 +479,7 @@ export function buildPerfettoTraceFromTiming(args: {
       cat: "cmdclaw",
       ph: "X",
       pid,
-      tid,
+      tid: trackTidMap.get(spec.track) ?? baseTid,
       ts: toMicroseconds(relativeStartMs),
       dur: toMicroseconds(durationMs),
       args: {},

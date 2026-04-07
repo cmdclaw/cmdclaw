@@ -2054,6 +2054,10 @@ class GenerationManager {
     const messageTiming: MessageTiming = {
       generationDurationMs: Math.max(0, generationCompletedAt - generationStartedAt),
     };
+    const sandboxInitMs =
+      phaseMarks.sandbox_init_started !== undefined && phaseMarks.agent_init_started !== undefined
+        ? Math.max(0, phaseMarks.agent_init_started - phaseMarks.sandbox_init_started)
+        : undefined;
     const sandboxConnectStartMs =
       phaseMarks.sandbox_init_checking_cache ?? phaseMarks.sandbox_init_started;
     const sandboxConnectEndMs = phaseMarks.sandbox_init_reused ?? phaseMarks.sandbox_init_created;
@@ -2061,6 +2065,11 @@ class GenerationManager {
       sandboxConnectStartMs !== undefined && sandboxConnectEndMs !== undefined
         ? Math.max(0, sandboxConnectEndMs - sandboxConnectStartMs)
         : undefined;
+    const sandboxCreateMs = phaseDurationMs(
+      phaseMarks,
+      "sandbox_init_creating",
+      "sandbox_init_created",
+    );
     const opencodeReadyStartMs =
       phaseMarks.agent_init_opencode_starting ?? phaseMarks.agent_init_started;
     const opencodeReadyMs =
@@ -2236,7 +2245,9 @@ class GenerationManager {
         : undefined;
 
     const phaseDurationsMs = {
+      sandboxInitMs,
       sandboxConnectOrCreateMs,
+      sandboxCreateMs,
       opencodeReadyMs,
       sessionReadyMs,
       agentInitMs,
@@ -4988,8 +4999,9 @@ class GenerationManager {
                 userId: ctx.userId,
               },
               onLifecycle: (stage, details) => {
-                const isSandboxStage = stage.startsWith("sandbox_");
-                const status = `${isSandboxStage ? "sandbox_init" : "agent_init"}_${stage}`;
+                const status = stage.startsWith("sandbox_")
+                  ? `sandbox_init_${stage.slice("sandbox_".length)}`
+                  : `agent_init_${stage}`;
                 this.markPhase(ctx, status);
                 if (stage === "sandbox_created") {
                   ctx.agentSandboxReadyAt = Date.now();

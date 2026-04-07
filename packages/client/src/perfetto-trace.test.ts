@@ -8,7 +8,9 @@ describe("buildPerfettoTraceFromTiming", () => {
       threadName: "conversation conv-1",
       timing: {
         phaseDurationsMs: {
+          sandboxInitMs: 820,
           sandboxConnectOrCreateMs: 800,
+          sandboxCreateMs: 790,
           opencodeReadyMs: 100,
           sessionReadyMs: 200,
           agentInitMs: 1300,
@@ -49,6 +51,11 @@ describe("buildPerfettoTraceFromTiming", () => {
             phase: "sandbox_init_checking_cache",
             at: "2026-04-02T10:00:00.110Z",
             elapsedMs: 110,
+          },
+          {
+            phase: "sandbox_init_creating",
+            at: "2026-04-02T10:00:00.120Z",
+            elapsedMs: 120,
           },
           {
             phase: "sandbox_init_created",
@@ -333,9 +340,31 @@ describe("buildPerfettoTraceFromTiming", () => {
     }
 
     expect(result.trace.displayTimeUnit).toBe("ms");
-    expect(result.trace.traceEvents.slice(0, 2).map((event) => event.name)).toEqual([
+    const metadataEvents = result.trace.traceEvents.filter((event) => event.ph === "M");
+    expect(metadataEvents.map((event) => event.name)).toEqual([
       "process_name",
       "thread_name",
+      "thread_name",
+      "thread_name",
+      "thread_name",
+      "thread_name",
+      "thread_name",
+      "thread_name",
+      "thread_name",
+    ]);
+    expect(
+      metadataEvents
+        .filter((event) => event.name === "thread_name")
+        .map((event) => event.args.name),
+    ).toEqual([
+      "summary",
+      "sandbox_init",
+      "agent_init",
+      "pre_prompt_memory",
+      "pre_prompt_skills",
+      "pre_prompt_integration",
+      "pre_prompt_runtime",
+      "executor_prepare",
     ]);
 
     const spanNames = result.trace.traceEvents
@@ -344,7 +373,9 @@ describe("buildPerfettoTraceFromTiming", () => {
     expect(spanNames).toEqual([
       "generation_to_first_token",
       "generation_to_first_visible_output",
+      "sandbox_init",
       "sandbox_connect_or_create",
+      "sandbox_create",
       "agent_init",
       "opencode_ready",
       "session_ready",
@@ -379,12 +410,83 @@ describe("buildPerfettoTraceFromTiming", () => {
 
     const sandbox = result.trace.traceEvents.find((event) => event.name === "sandbox_connect_or_create");
     expect(sandbox).toMatchObject({
+      tid: 2,
       ts: 110_000,
       dur: 800_000,
     });
 
+    const sandboxInit = result.trace.traceEvents.find((event) => event.name === "sandbox_init");
+    expect(sandboxInit).toMatchObject({
+      tid: 2,
+      ts: 100_000,
+      dur: 820_000,
+    });
+
+    const sandboxCreate = result.trace.traceEvents.find((event) => event.name === "sandbox_create");
+    expect(sandboxCreate).toMatchObject({
+      tid: 2,
+      ts: 120_000,
+      dur: 790_000,
+    });
+
+    const opencodeReady = result.trace.traceEvents.find((event) => event.name === "opencode_ready");
+    expect(opencodeReady).toMatchObject({
+      tid: 3,
+      ts: 930_000,
+      dur: 100_000,
+    });
+
+    const prePromptSetup = result.trace.traceEvents.find((event) => event.name === "pre_prompt_setup");
+    expect(prePromptSetup).toMatchObject({
+      tid: 1,
+      ts: 1_500_000,
+      dur: 600_000,
+    });
+
+    const memorySync = result.trace.traceEvents.find((event) => event.name === "pre_prompt_memory_sync");
+    expect(memorySync).toMatchObject({
+      tid: 4,
+      ts: 1_510_000,
+      dur: 40_000,
+    });
+
+    const skillsWrite = result.trace.traceEvents.find((event) => event.name === "pre_prompt_skills_write");
+    expect(skillsWrite).toMatchObject({
+      tid: 5,
+      ts: 1_805_000,
+      dur: 70_000,
+    });
+
+    const integrationSkillsWrite = result.trace.traceEvents.find(
+      (event) => event.name === "pre_prompt_integration_skills_write",
+    );
+    expect(integrationSkillsWrite).toMatchObject({
+      tid: 6,
+      ts: 1_920_000,
+      dur: 40_000,
+    });
+
+    const runtimeContextWrite = result.trace.traceEvents.find(
+      (event) => event.name === "pre_prompt_runtime_context_write",
+    );
+    expect(runtimeContextWrite).toMatchObject({
+      tid: 7,
+      ts: 1_555_000,
+      dur: 20_000,
+    });
+
+    const executorPrepare = result.trace.traceEvents.find(
+      (event) => event.name === "pre_prompt_executor_prepare",
+    );
+    expect(executorPrepare).toMatchObject({
+      tid: 8,
+      ts: 1_580_000,
+      dur: 120_000,
+    });
+
     const modelStream = result.trace.traceEvents.find((event) => event.name === "model_stream");
     expect(modelStream).toMatchObject({
+      tid: 1,
       ts: 2_300_000,
       dur: 1_800_000,
     });
