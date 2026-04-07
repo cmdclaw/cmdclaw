@@ -3,7 +3,7 @@ import type { DoneArtifactsData } from "./types";
 type TimingData = DoneArtifactsData["timing"];
 type PhaseDurations = NonNullable<NonNullable<TimingData>["phaseDurationsMs"]>;
 
-export type ChromeTraceEvent = {
+export type PerfettoTraceEvent = {
   name: string;
   cat: string;
   ph: "M" | "X";
@@ -14,15 +14,15 @@ export type ChromeTraceEvent = {
   args: Record<string, unknown>;
 };
 
-export type ChromeTrace = {
-  traceEvents: ChromeTraceEvent[];
+export type PerfettoTrace = {
+  traceEvents: PerfettoTraceEvent[];
   displayTimeUnit: "ms";
 };
 
-export type ChromeTraceBuildResult =
+export type PerfettoTraceBuildResult =
   | {
       status: "ok";
-      trace: ChromeTrace;
+      trace: PerfettoTrace;
     }
   | {
       status: "missing_phase_timestamps";
@@ -56,7 +56,6 @@ type TracePhaseSpec = {
     | "pre_prompt_event_stream_subscribe"
     | "pre_prompt_coworker_docs_stage"
     | "pre_prompt_attachments_stage"
-    | "agent_ready_to_prompt"
     | "wait_for_first_event"
     | "prompt_to_first_token"
     | "generation_to_first_token"
@@ -73,19 +72,19 @@ const TRACE_PHASE_SPECS: TracePhaseSpec[] = [
   {
     name: "sandbox_connect_or_create",
     durationKey: "sandboxConnectOrCreateMs",
-    startPhases: ["agent_init_sandbox_checking_cache", "agent_init_started"],
-    endPhases: ["agent_init_sandbox_reused", "agent_init_sandbox_created"],
+    startPhases: ["sandbox_init_checking_cache", "sandbox_init_started"],
+    endPhases: ["sandbox_init_reused", "sandbox_init_created"],
   },
   {
     name: "opencode_ready",
     durationKey: "opencodeReadyMs",
-    startPhases: ["agent_init_opencode_starting"],
+    startPhases: ["agent_init_opencode_starting", "agent_init_started"],
     endPhases: ["agent_init_opencode_ready"],
   },
   {
     name: "session_ready",
     durationKey: "sessionReadyMs",
-    startPhases: ["agent_init_session_creating", "agent_init_sandbox_reused"],
+    startPhases: ["agent_init_session_creating", "agent_init_started"],
     endPhases: ["agent_init_session_init_completed", "agent_init_session_reused"],
   },
   {
@@ -227,12 +226,6 @@ const TRACE_PHASE_SPECS: TracePhaseSpec[] = [
     endPhases: ["pre_prompt_attachments_stage_completed"],
   },
   {
-    name: "agent_ready_to_prompt",
-    durationKey: "agentReadyToPromptMs",
-    startPhases: ["agent_init_ready"],
-    endPhases: ["prompt_sent"],
-  },
-  {
     name: "wait_for_first_event",
     durationKey: "waitForFirstEventMs",
     startPhases: ["prompt_sent"],
@@ -338,13 +331,13 @@ function getOriginMs(phaseTimes: Map<string, number>): number | null {
   return Math.min(...allTimes);
 }
 
-export function buildChromeTraceFromTiming(args: {
+export function buildPerfettoTraceFromTiming(args: {
   timing?: TimingData;
   processName?: string;
   threadName?: string;
   pid?: number;
   tid?: number;
-}): ChromeTraceBuildResult {
+}): PerfettoTraceBuildResult {
   const phaseTimestamps = args.timing?.phaseTimestamps;
   if (!phaseTimestamps?.length) {
     return { status: "missing_phase_timestamps" };
@@ -370,7 +363,7 @@ export function buildChromeTraceFromTiming(args: {
   const tid = args.tid ?? 1;
   const processName = args.processName ?? "cmdclaw";
   const threadName = args.threadName ?? "chat";
-  const traceEvents: ChromeTraceEvent[] = [
+  const traceEvents: PerfettoTraceEvent[] = [
     {
       name: "process_name",
       cat: "__metadata",

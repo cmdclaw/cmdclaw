@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildChromeTraceFromTiming } from "./chrome-trace";
+import { buildPerfettoTraceFromTiming } from "./perfetto-trace";
 
-describe("buildChromeTraceFromTiming", () => {
-  it("builds Chrome trace events from timing phases", () => {
-    const result = buildChromeTraceFromTiming({
+describe("buildPerfettoTraceFromTiming", () => {
+  it("builds Perfetto trace events from timing phases", () => {
+    const result = buildPerfettoTraceFromTiming({
       processName: "cmdclaw chat",
       threadName: "conversation conv-1",
       timing: {
@@ -34,7 +34,6 @@ describe("buildChromeTraceFromTiming", () => {
           prePromptEventStreamSubscribeMs: 20,
           prePromptCoworkerDocsStageMs: 20,
           prePromptAttachmentsStageMs: 40,
-          agentReadyToPromptMs: 700,
           waitForFirstEventMs: 200,
           promptToFirstTokenMs: 500,
           generationToFirstTokenMs: 2600,
@@ -45,36 +44,37 @@ describe("buildChromeTraceFromTiming", () => {
         },
         phaseTimestamps: [
           { phase: "generation_started", at: "2026-04-02T10:00:00.000Z", elapsedMs: 0 },
-          { phase: "agent_init_started", at: "2026-04-02T10:00:00.100Z", elapsedMs: 100 },
+          { phase: "sandbox_init_started", at: "2026-04-02T10:00:00.100Z", elapsedMs: 100 },
           {
-            phase: "agent_init_sandbox_checking_cache",
+            phase: "sandbox_init_checking_cache",
             at: "2026-04-02T10:00:00.110Z",
             elapsedMs: 110,
           },
           {
-            phase: "agent_init_sandbox_created",
+            phase: "sandbox_init_created",
             at: "2026-04-02T10:00:00.910Z",
             elapsedMs: 910,
           },
+          { phase: "agent_init_started", at: "2026-04-02T10:00:00.920Z", elapsedMs: 920 },
           {
             phase: "agent_init_opencode_starting",
-            at: "2026-04-02T10:00:00.920Z",
-            elapsedMs: 920,
+            at: "2026-04-02T10:00:00.930Z",
+            elapsedMs: 930,
           },
           {
             phase: "agent_init_opencode_ready",
-            at: "2026-04-02T10:00:01.020Z",
-            elapsedMs: 1020,
-          },
-          {
-            phase: "agent_init_session_creating",
             at: "2026-04-02T10:00:01.030Z",
             elapsedMs: 1030,
           },
           {
+            phase: "agent_init_session_creating",
+            at: "2026-04-02T10:00:01.040Z",
+            elapsedMs: 1040,
+          },
+          {
             phase: "agent_init_session_init_completed",
-            at: "2026-04-02T10:00:01.230Z",
-            elapsedMs: 1230,
+            at: "2026-04-02T10:00:01.240Z",
+            elapsedMs: 1240,
           },
           { phase: "agent_init_ready", at: "2026-04-02T10:00:01.400Z", elapsedMs: 1400 },
           {
@@ -344,11 +344,10 @@ describe("buildChromeTraceFromTiming", () => {
     expect(spanNames).toEqual([
       "generation_to_first_token",
       "generation_to_first_visible_output",
-      "agent_init",
       "sandbox_connect_or_create",
+      "agent_init",
       "opencode_ready",
       "session_ready",
-      "agent_ready_to_prompt",
       "pre_prompt_setup",
       "pre_prompt_memory_sync",
       "pre_prompt_runtime_context_write",
@@ -392,7 +391,7 @@ describe("buildChromeTraceFromTiming", () => {
   });
 
   it("falls back to derived durations when a direct end timestamp is missing", () => {
-    const result = buildChromeTraceFromTiming({
+    const result = buildPerfettoTraceFromTiming({
       timing: {
         phaseDurationsMs: {
           promptToFirstVisibleOutputMs: 600,
@@ -420,7 +419,7 @@ describe("buildChromeTraceFromTiming", () => {
 
   it("skips export when phase timestamps are missing", () => {
     expect(
-      buildChromeTraceFromTiming({
+      buildPerfettoTraceFromTiming({
         timing: {
           phaseDurationsMs: {
             sandboxConnectOrCreateMs: 500,

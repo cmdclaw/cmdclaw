@@ -1,6 +1,6 @@
 export * from "./api";
 export * from "./chat";
-export * from "./chrome-trace";
+export * from "./perfetto-trace";
 export * from "./coworker";
 export * from "./generation-errors";
 export * from "./generation-runtime";
