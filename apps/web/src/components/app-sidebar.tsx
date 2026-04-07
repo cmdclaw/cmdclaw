@@ -367,27 +367,32 @@ export function AppSidebar() {
     { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
   ];
 
-  const adminModeNavItems: NavItem[] = clientEditionCapabilities.hasSupportAdmin
-    ? [
-        { icon: UserCog, label: "User", href: "/admin" },
-        { icon: LayoutTemplate, label: "Templates", href: "/admin/templates" },
-        {
-          icon: CreditCard,
-          label: "AI Subscriptions",
-          href: "/admin/subscriptions",
-        },
-        { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
-        { icon: Coins, label: "Credits", href: "/admin/credits" },
-        { icon: BarChart3, label: "Usage", href: "/admin/usage" },
-        { icon: Activity, label: "Chat Health", href: "/admin/chat-overview" },
-        { icon: Gauge, label: "Performance", href: "/admin/performance" },
-        { icon: Bug, label: "Ops", href: "/admin/ops" },
-        { icon: UserCog, label: "Impersonation", href: "/admin/impersonation" },
-        { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
-      ]
-    : clientEditionCapabilities.hasInstanceAdmin
-      ? [{ icon: Shield, label: "Instance", href: "/instance" }]
-      : [];
+  const adminUsersItems: NavItem[] = [
+    { icon: UserCog, label: "User", href: "/admin" },
+    { icon: UserCog, label: "Impersonation", href: "/admin/impersonation" },
+    { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
+  ];
+
+  const adminConfigItems: NavItem[] = [
+    { icon: LayoutTemplate, label: "Templates", href: "/admin/templates" },
+    { icon: CreditCard, label: "AI Subscriptions", href: "/admin/subscriptions" },
+    { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
+  ];
+
+  const adminBillingItems: NavItem[] = [
+    { icon: Coins, label: "Credits", href: "/admin/credits" },
+    { icon: BarChart3, label: "Usage", href: "/admin/usage" },
+  ];
+
+  const adminMonitoringItems: NavItem[] = [
+    { icon: Activity, label: "Chat Health", href: "/admin/chat-overview" },
+    { icon: Gauge, label: "Performance", href: "/admin/performance" },
+    { icon: Bug, label: "Ops", href: "/admin/ops" },
+  ];
+
+  const adminInstanceItems: NavItem[] = clientEditionCapabilities.hasInstanceAdmin
+    ? [{ icon: Shield, label: "Instance", href: "/instance" }]
+    : [];
 
   const recentCoworkerRuns = useMemo(
     () => flattenCoworkerRecentRuns(coworkers).slice(0, 5),
@@ -956,14 +961,53 @@ export function AppSidebar() {
               )}
               style={adminPanelStyle}
             >
-              <div className="flex flex-col gap-1.5">
-                <SectionLabel>Admin</SectionLabel>
-                <div className="flex flex-col gap-0.5">
-                  {adminModeNavItems.map((item) => (
-                    <NavLink key={item.href} item={item} active={isActive(item.href)} />
-                  ))}
-                </div>
-              </div>
+              {clientEditionCapabilities.hasSupportAdmin ? (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Users & Access</SectionLabel>
+                    <div className="flex flex-col gap-0.5">
+                      {adminUsersItems.map((item) => (
+                        <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Configuration</SectionLabel>
+                    <div className="flex flex-col gap-0.5">
+                      {adminConfigItems.map((item) => (
+                        <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Billing & Usage</SectionLabel>
+                    <div className="flex flex-col gap-0.5">
+                      {adminBillingItems.map((item) => (
+                        <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Monitoring & Ops</SectionLabel>
+                    <div className="flex flex-col gap-0.5">
+                      {adminMonitoringItems.map((item) => (
+                        <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                adminInstanceItems.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Admin</SectionLabel>
+                    <div className="flex flex-col gap-0.5">
+                      {adminInstanceItems.map((item) => (
+                        <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              )}
               <div className="flex flex-col gap-0.5">
                 <NavButton icon={ArrowLeft} label="Exit Admin" onClick={exitAdminMode} />
               </div>
