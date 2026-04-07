@@ -191,6 +191,131 @@ async function waitForServer(url: string, model: string, maxWait = 30000): Promi
 }
 
 /**
+ * Get or create a sandbox without waiting for the OpenCode runtime to be ready.
+ */
+export async function getOrCreateBareSandbox(
+  config: SandboxConfig,
+  onLifecycle?: SessionInitLifecycleCallback,
+  telemetry?: ObservabilityContext,
+): Promise<{
+  sandbox: Sandbox;
+  reused: boolean;
+}> {
+  const telemetryContext: ObservabilityContext = {
+    ...telemetry,
+    source: "e2b",
+    conversationId: config.conversationId,
+    userId: config.userId,
+  };
+  onLifecycle?.("sandbox_checking_cache", {
+    conversationId: config.conversationId,
+  });
+
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
+
+  if (runtimeState?.sandboxId) {
+    const connected = await connectSandboxById(runtimeState.sandboxId);
+    if (connected) {
+      onLifecycle?.("sandbox_reused", {
+        conversationId: config.conversationId,
+        sandboxId: connected.sandboxId,
+      });
+      return {
+        sandbox: connected,
+        reused: true,
+      };
+    }
+
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
+  }
+
+  const hasApiKey = !!config.anthropicApiKey;
+  const vmCreateStart = Date.now();
+  onLifecycle?.("sandbox_creating", {
+    conversationId: config.conversationId,
+    template: TEMPLATE_NAME,
+  });
+  logLifecycle(
+    "VM_START_REQUESTED",
+    {
+      conversationId: config.conversationId,
+      template: TEMPLATE_NAME,
+      hasAnthropicApiKey: hasApiKey,
+      timeoutMs: SANDBOX_TIMEOUT_MS,
+    },
+    telemetryContext,
+  );
+
+  let sandbox: Sandbox;
+  try {
+    sandbox = await Sandbox.create(TEMPLATE_NAME, {
+      envs: {
+        ANTHROPIC_API_KEY: config.anthropicApiKey,
+        ANVIL_API_KEY: env.ANVIL_API_KEY || "",
+        APP_URL: resolveSandboxAppUrl(),
+        CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+        CONVERSATION_ID: config.conversationId,
+        ...config.integrationEnvs,
+      },
+      timeoutMs: SANDBOX_TIMEOUT_MS,
+      lifecycle: {
+        onTimeout: "kill",
+        autoResume: false,
+      },
+    });
+    await applySandboxTimeout(sandbox);
+  } catch (error) {
+    logServerEvent(
+      "error",
+      "VM_START_FAILED",
+      {
+        conversationId: config.conversationId,
+        template: TEMPLATE_NAME,
+        durationMs: Date.now() - vmCreateStart,
+        error: formatErrorMessage(error),
+        hasAnthropicApiKey: hasApiKey,
+        hasE2BApiKey: Boolean(env.E2B_API_KEY),
+        integrationEnvCount: Object.keys(config.integrationEnvs || {}).length,
+      },
+      telemetryContext,
+    );
+    throw error;
+  }
+  logLifecycle(
+    "VM_STARTED",
+    {
+      conversationId: config.conversationId,
+      sandboxId: sandbox.sandboxId,
+      template: TEMPLATE_NAME,
+      durationMs: Date.now() - vmCreateStart,
+    },
+    { ...telemetryContext, sandboxId: sandbox.sandboxId },
+  );
+  onLifecycle?.("sandbox_created", {
+    conversationId: config.conversationId,
+    sandboxId: sandbox.sandboxId,
+    durationMs: Date.now() - vmCreateStart,
+  });
+
+  try {
+    await sandbox.commands.run(`echo "export SANDBOX_ID=${sandbox.sandboxId}" >> ~/.bashrc`);
+  } catch (error) {
+    logServerEvent(
+      "warn",
+      "VM_SET_SANDBOX_ID_FAILED",
+      {
+        conversationId: config.conversationId,
+        sandboxId: sandbox.sandboxId,
+        error: formatErrorMessage(error),
+      },
+      { ...telemetryContext, sandboxId: sandbox.sandboxId },
+    );
+  }
+
+  return { sandbox, reused: false };
+}
+
+/**
  * Get or create a sandbox with OpenCode server running inside
  */
 export async function getOrCreateSandbox(

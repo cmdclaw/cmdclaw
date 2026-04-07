@@ -333,7 +333,6 @@ type PersistedConversationMessage = {
       sessionReadyMs?: number;
       agentInitMs?: number;
       prePromptSetupMs?: number;
-      agentReadyToPromptMs?: number;
       waitForFirstEventMs?: number;
       modelStreamMs?: number;
       postProcessingMs?: number;
@@ -500,16 +499,20 @@ function buildSkillInstructionBlock(skillSlugs: string[], isFrench: boolean): st
 
 function getAgentInitLabel(status: string | null): string {
   switch (status) {
+    case "sandbox_init_started":
+      return "Preparing sandbox...";
+    case "sandbox_init_checking_cache":
+      return "Checking sandbox...";
+    case "sandbox_init_reused":
+      return "Reusing sandbox...";
+    case "sandbox_init_creating":
+      return "Creating sandbox...";
+    case "sandbox_init_created":
+      return "Sandbox created...";
+    case "sandbox_init_failed":
+      return "Sandbox initialization failed...";
     case "agent_init_started":
       return "Preparing agent...";
-    case "agent_init_sandbox_checking_cache":
-      return "Checking sandbox...";
-    case "agent_init_sandbox_reused":
-      return "Reusing sandbox...";
-    case "agent_init_sandbox_creating":
-      return "Creating sandbox...";
-    case "agent_init_sandbox_created":
-      return "Sandbox created...";
     case "agent_init_opencode_starting":
       return "Starting agent server...";
     case "agent_init_opencode_waiting_ready":
@@ -1056,7 +1059,7 @@ export function ChatArea({
       const startedAt = startedAtMs ?? Date.now();
       resetInitTracking();
       initTrackingStartedAtRef.current = startedAt;
-      setAgentInitStatus("agent_init_started");
+      setAgentInitStatus("sandbox_init_started");
       console.info(
         `[AgentInit][Client] started source=${source} conversationId=${currentConversationIdRef.current ?? "new"}`,
       );
@@ -1232,7 +1235,7 @@ export function ChatArea({
       console.info(
         `[AgentInit][Client] status_change status=${status} generationId=${currentGenerationIdRef.current ?? "unknown"}`,
       );
-      if (!status.startsWith("agent_init_")) {
+      if (!status.startsWith("sandbox_init_") && !status.startsWith("agent_init_")) {
         return;
       }
 
@@ -1246,6 +1249,17 @@ export function ChatArea({
 
       if (status === "agent_init_ready") {
         markInitSignal("agent_init_ready");
+      } else if (status === "sandbox_init_failed") {
+        markInitMissingAtEnd("sandbox_init_failed");
+        setStreamingParts([]);
+        setStreamingSandboxFiles([]);
+        setIsStreaming(false);
+        setTraceStatus("complete");
+        setStreamError("Sandbox initialization failed. Please retry.");
+        currentGenerationIdRef.current = undefined;
+        runtimeRef.current = null;
+        clearTrackedCoworkerEditToolUses();
+        resetInitTracking();
       } else if (status === "agent_init_failed") {
         markInitMissingAtEnd("agent_init_failed");
         setStreamingParts([]);

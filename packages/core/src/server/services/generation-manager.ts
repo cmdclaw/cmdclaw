@@ -95,7 +95,10 @@ import {
   readGenerationStreamAfter,
   type GenerationStreamEnvelope,
 } from "../redis/generation-event-bus";
-import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
+import {
+  getOrCreateConversationSandbox,
+  getOrCreateConversationRuntime,
+} from "../sandbox/core/orchestrator";
 import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-documents-prep";
 import { buildMemorySystemPrompt, syncMemoryFilesToSandbox } from "../sandbox/prep/memory-prep";
 import { prepareExecutorInSandbox } from "../sandbox/prep/executor-prep";
@@ -2052,24 +2055,22 @@ class GenerationManager {
       generationDurationMs: Math.max(0, generationCompletedAt - generationStartedAt),
     };
     const sandboxConnectStartMs =
-      phaseMarks.agent_init_sandbox_checking_cache ?? phaseMarks.agent_init_started;
-    const sandboxConnectEndMs =
-      phaseMarks.agent_init_sandbox_reused ?? phaseMarks.agent_init_sandbox_created;
+      phaseMarks.sandbox_init_checking_cache ?? phaseMarks.sandbox_init_started;
+    const sandboxConnectEndMs = phaseMarks.sandbox_init_reused ?? phaseMarks.sandbox_init_created;
     const sandboxConnectOrCreateMs =
       sandboxConnectStartMs !== undefined && sandboxConnectEndMs !== undefined
         ? Math.max(0, sandboxConnectEndMs - sandboxConnectStartMs)
         : undefined;
+    const opencodeReadyStartMs =
+      phaseMarks.agent_init_opencode_starting ?? phaseMarks.agent_init_started;
     const opencodeReadyMs =
-      phaseMarks.agent_init_opencode_starting !== undefined &&
-      phaseMarks.agent_init_opencode_ready !== undefined
-        ? Math.max(
-            0,
-            phaseMarks.agent_init_opencode_ready - phaseMarks.agent_init_opencode_starting,
-          )
+      opencodeReadyStartMs !== undefined && phaseMarks.agent_init_opencode_ready !== undefined
+        ? Math.max(0, phaseMarks.agent_init_opencode_ready - opencodeReadyStartMs)
         : undefined;
     const sessionReadyMs =
-      phaseMarks.agent_init_session_reused !== undefined && sandboxConnectEndMs !== undefined
-        ? Math.max(0, phaseMarks.agent_init_session_reused - sandboxConnectEndMs)
+      phaseMarks.agent_init_session_reused !== undefined &&
+      phaseMarks.agent_init_started !== undefined
+        ? Math.max(0, phaseMarks.agent_init_session_reused - phaseMarks.agent_init_started)
         : phaseMarks.agent_init_session_creating !== undefined &&
             phaseMarks.agent_init_session_init_completed !== undefined
           ? Math.max(
@@ -2200,10 +2201,6 @@ class GenerationManager {
       "pre_prompt_attachments_stage_started",
       "pre_prompt_attachments_stage_completed",
     );
-    const agentReadyToPromptMs =
-      phaseMarks.agent_init_ready !== undefined && phaseMarks.prompt_sent !== undefined
-        ? Math.max(0, phaseMarks.prompt_sent - phaseMarks.agent_init_ready)
-        : undefined;
     const waitForFirstEventMs =
       phaseMarks.prompt_sent !== undefined && phaseMarks.first_event_received !== undefined
         ? Math.max(0, phaseMarks.first_event_received - phaseMarks.prompt_sent)
@@ -2265,7 +2262,6 @@ class GenerationManager {
       prePromptEventStreamSubscribeMs,
       prePromptCoworkerDocsStageMs,
       prePromptAttachmentsStageMs,
-      agentReadyToPromptMs,
       waitForFirstEventMs,
       promptToFirstTokenMs,
       generationToFirstTokenMs,
@@ -4515,15 +4511,13 @@ class GenerationManager {
     };
   }
 
-  private async bindRuntimeSessionToContext(
+  private async bindRuntimeSandboxToContext(
     ctx: GenerationContext,
     params: {
       runtimeSandbox: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["sandbox"];
       runtimeMetadata?: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["metadata"];
-      sessionId: string;
     },
   ): Promise<void> {
-    ctx.sessionId = params.sessionId;
     ctx.sandboxId = params.runtimeSandbox.sandboxId;
 
     await db
@@ -4544,6 +4538,18 @@ class GenerationManager {
     }
 
     ctx.sandbox = this.createSandboxBackend(params.runtimeSandbox);
+  }
+
+  private async bindRuntimeSessionToContext(
+    ctx: GenerationContext,
+    params: {
+      runtimeSandbox: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["sandbox"];
+      runtimeMetadata?: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["metadata"];
+      sessionId: string;
+    },
+  ): Promise<void> {
+    ctx.sessionId = params.sessionId;
+    await this.bindRuntimeSandboxToContext(ctx, params);
   }
 
   /**
@@ -4909,9 +4915,140 @@ class GenerationManager {
       // Determine if we need to replay history (existing conversation)
       const hasExistingMessages = !ctx.isNewConversation;
 
-      // Get or create sandbox with OpenCode session
+      const initDeadlineAt = Date.now() + AGENT_PREPARING_TIMEOUT_MS;
+      const buildPreparingTimeoutMessage = () =>
+        `Agent preparation timed out after ${Math.round(AGENT_PREPARING_TIMEOUT_MS / 1000)} seconds.`;
+      const remainingPreparingTimeoutMs = () => Math.max(1, initDeadlineAt - Date.now());
+      const initWarnAfterMs = 15_000;
+
+      let sessionId: string | undefined;
+      let runtimeSandbox: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["sandbox"];
+      let runtimeMetadata:
+        | Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["metadata"]
+        | undefined;
+      let runtimeInit: Awaited<ReturnType<typeof getOrCreateConversationSandbox>>;
+
+      ctx.agentSandboxReadyAt = undefined;
+      ctx.agentSandboxMode = undefined;
+      this.markPhase(ctx, "sandbox_init_started");
+      this.broadcast(ctx, {
+        type: "status_change",
+        status: "sandbox_init_started",
+      });
+      logServerEvent(
+        "info",
+        "SANDBOX_INIT_STARTED",
+        {},
+        {
+          source: "generation-manager",
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+        },
+      );
+      const sandboxInitWarnTimer = setTimeout(() => {
+        const elapsedMs = AGENT_PREPARING_TIMEOUT_MS - remainingPreparingTimeoutMs();
+        logServerEvent(
+          "warn",
+          "SANDBOX_INIT_SLOW",
+          { elapsedMs },
+          {
+            source: "generation-manager",
+            traceId: ctx.traceId,
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+          },
+        );
+      }, initWarnAfterMs);
+
+      try {
+        runtimeInit = await withTimeout(
+          getOrCreateConversationSandbox(
+            {
+              conversationId: ctx.conversationId,
+              generationId: ctx.id,
+              userId: ctx.userId,
+              model: ctx.model,
+              openAIAuthSource: ctx.authSource,
+              anthropicApiKey: env.ANTHROPIC_API_KEY || "",
+              integrationEnvs: filteredCliEnv,
+            },
+            {
+              sandboxProviderOverride: ctx.sandboxProviderOverride,
+              title: conv?.title || "Conversation",
+              replayHistory: hasExistingMessages,
+              allowSnapshotRestore: ctx.executionPolicy.allowSnapshotRestoreOnRun !== false,
+              telemetry: {
+                source: "generation-manager",
+                traceId: ctx.traceId,
+                generationId: ctx.id,
+                conversationId: ctx.conversationId,
+                userId: ctx.userId,
+              },
+              onLifecycle: (stage, details) => {
+                const isSandboxStage = stage.startsWith("sandbox_");
+                const status = `${isSandboxStage ? "sandbox_init" : "agent_init"}_${stage}`;
+                this.markPhase(ctx, status);
+                if (stage === "sandbox_created") {
+                  ctx.agentSandboxReadyAt = Date.now();
+                  ctx.agentSandboxMode = "created";
+                } else if (stage === "sandbox_reused") {
+                  ctx.agentSandboxReadyAt = Date.now();
+                  ctx.agentSandboxMode = "reused";
+                }
+                this.broadcast(ctx, { type: "status_change", status });
+                logServerEvent("info", status.toUpperCase(), details ?? {}, {
+                  source: "generation-manager",
+                  traceId: ctx.traceId,
+                  generationId: ctx.id,
+                  conversationId: ctx.conversationId,
+                  userId: ctx.userId,
+                });
+              },
+            },
+          ),
+          remainingPreparingTimeoutMs(),
+          buildPreparingTimeoutMessage(),
+        );
+        runtimeSandbox = runtimeInit.sandbox;
+        runtimeMetadata = runtimeInit.metadata;
+      } catch (error) {
+        this.markPhase(ctx, "sandbox_init_failed");
+        this.broadcast(ctx, {
+          type: "status_change",
+          status: "sandbox_init_failed",
+        });
+        logServerEvent(
+          "error",
+          "SANDBOX_INIT_FAILED",
+          {
+            error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          },
+          {
+            source: "generation-manager",
+            traceId: ctx.traceId,
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+          },
+        );
+        throw error;
+      } finally {
+        clearTimeout(sandboxInitWarnTimer);
+      }
+
+      await this.bindRuntimeSandboxToContext(ctx, {
+        runtimeSandbox,
+        runtimeMetadata,
+      });
+      if (ctx.remoteIntegrationSource) {
+        this.recordRemoteRunPhase(ctx, "sandbox_created");
+      }
+      await this.setSnapshotRestoreAllowance(ctx, false);
+
       const agentInitStartedAt = Date.now();
-      const agentInitWarnAfterMs = 15_000;
       ctx.agentInitStartedAt = agentInitStartedAt;
       ctx.agentInitReadyAt = undefined;
       ctx.agentInitFailedAt = undefined;
@@ -4946,138 +5083,76 @@ class GenerationManager {
             userId: ctx.userId,
           },
         );
-      }, agentInitWarnAfterMs);
+      }, initWarnAfterMs);
 
-      let sessionId: string;
-      let runtimeSandbox: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["sandbox"];
-      let runtimeMetadata:
-        | Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["metadata"]
-        | undefined;
-      try {
-        const session = await withTimeout(
-          getOrCreateConversationRuntime(
+      const runtimeSessionPromise = (async () => {
+        try {
+          const session = await withTimeout(
+            runtimeInit.completeAgentInit(),
+            remainingPreparingTimeoutMs(),
+            buildPreparingTimeoutMessage(),
+          );
+          client = session.harnessClient;
+          sessionId = session.session.id;
+          ctx.agentInitReadyAt = Date.now();
+          this.markPhase(ctx, "agent_init_ready");
+          this.broadcast(ctx, {
+            type: "status_change",
+            status: "agent_init_ready",
+            metadata: {
+              sandboxProvider: runtimeMetadata?.sandboxProvider,
+              runtimeHarness: runtimeMetadata?.runtimeHarness,
+              runtimeProtocolVersion: runtimeMetadata?.runtimeProtocolVersion,
+              sandboxId: runtimeSandbox.sandboxId,
+              sessionId,
+            },
+          });
+          logServerEvent(
+            "info",
+            "AGENT_INIT_READY",
             {
-              conversationId: ctx.conversationId,
+              durationMs: ctx.agentInitReadyAt - agentInitStartedAt,
+              sandboxProvider: runtimeMetadata?.sandboxProvider,
+              runtimeHarness: runtimeMetadata?.runtimeHarness,
+              runtimeProtocolVersion: runtimeMetadata?.runtimeProtocolVersion,
+            },
+            {
+              source: "generation-manager",
+              traceId: ctx.traceId,
               generationId: ctx.id,
+              conversationId: ctx.conversationId,
               userId: ctx.userId,
-              model: ctx.model,
-              openAIAuthSource: ctx.authSource,
-              anthropicApiKey: env.ANTHROPIC_API_KEY || "",
-              integrationEnvs: filteredCliEnv,
+              sessionId,
+              sandboxId: runtimeSandbox.sandboxId,
+            },
+          );
+        } catch (error) {
+          ctx.agentInitFailedAt = Date.now();
+          this.markPhase(ctx, "agent_init_failed");
+          this.broadcast(ctx, {
+            type: "status_change",
+            status: "agent_init_failed",
+          });
+          logServerEvent(
+            "error",
+            "AGENT_INIT_FAILED",
+            {
+              durationMs: ctx.agentInitFailedAt - agentInitStartedAt,
+              error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
             },
             {
-              sandboxProviderOverride: ctx.sandboxProviderOverride,
-              title: conv?.title || "Conversation",
-              replayHistory: hasExistingMessages,
-              allowSnapshotRestore: ctx.executionPolicy.allowSnapshotRestoreOnRun !== false,
-              telemetry: {
-                source: "generation-manager",
-                traceId: ctx.traceId,
-                generationId: ctx.id,
-                conversationId: ctx.conversationId,
-                userId: ctx.userId,
-              },
-              onLifecycle: (stage, details) => {
-                const status = `agent_init_${stage}`;
-                this.markPhase(ctx, status);
-                if (ctx.agentInitStartedAt) {
-                  if (stage === "sandbox_created") {
-                    ctx.agentSandboxReadyAt = Date.now();
-                    ctx.agentSandboxMode = "created";
-                  } else if (stage === "sandbox_reused") {
-                    ctx.agentSandboxReadyAt = Date.now();
-                    ctx.agentSandboxMode = "reused";
-                  }
-                }
-                this.broadcast(ctx, { type: "status_change", status });
-                const lifecycleEvent = status.toUpperCase();
-                logServerEvent("info", lifecycleEvent, details ?? {}, {
-                  source: "generation-manager",
-                  traceId: ctx.traceId,
-                  generationId: ctx.id,
-                  conversationId: ctx.conversationId,
-                  userId: ctx.userId,
-                });
-              },
+              source: "generation-manager",
+              traceId: ctx.traceId,
+              generationId: ctx.id,
+              conversationId: ctx.conversationId,
+              userId: ctx.userId,
             },
-          ),
-          AGENT_PREPARING_TIMEOUT_MS,
-          `Agent preparation timed out after ${Math.round(AGENT_PREPARING_TIMEOUT_MS / 1000)} seconds.`,
-        );
-        client = session.harnessClient;
-        sessionId = session.session.id;
-        runtimeSandbox = session.sandbox;
-        runtimeMetadata = session.metadata;
-        ctx.agentInitReadyAt = Date.now();
-        this.markPhase(ctx, "agent_init_ready");
-        this.broadcast(ctx, {
-          type: "status_change",
-          status: "agent_init_ready",
-          metadata: {
-            sandboxProvider: session.metadata.sandboxProvider,
-            runtimeHarness: session.metadata.runtimeHarness,
-            runtimeProtocolVersion: session.metadata.runtimeProtocolVersion,
-            sandboxId: runtimeSandbox.sandboxId,
-            sessionId,
-          },
-        });
-        const durationMs = ctx.agentInitReadyAt - agentInitStartedAt;
-        logServerEvent(
-          "info",
-          "AGENT_INIT_READY",
-          {
-            durationMs,
-            sandboxProvider: session.metadata.sandboxProvider,
-            runtimeHarness: session.metadata.runtimeHarness,
-            runtimeProtocolVersion: session.metadata.runtimeProtocolVersion,
-          },
-          {
-            source: "generation-manager",
-            traceId: ctx.traceId,
-            generationId: ctx.id,
-            conversationId: ctx.conversationId,
-            userId: ctx.userId,
-            sessionId,
-            sandboxId: runtimeSandbox.sandboxId,
-          },
-        );
-      } catch (error) {
-        ctx.agentInitFailedAt = Date.now();
-        this.markPhase(ctx, "agent_init_failed");
-        this.broadcast(ctx, {
-          type: "status_change",
-          status: "agent_init_failed",
-        });
-        const durationMs = ctx.agentInitFailedAt - agentInitStartedAt;
-        logServerEvent(
-          "error",
-          "AGENT_INIT_FAILED",
-          {
-            durationMs,
-            error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-          },
-          {
-            source: "generation-manager",
-            traceId: ctx.traceId,
-            generationId: ctx.id,
-            conversationId: ctx.conversationId,
-            userId: ctx.userId,
-          },
-        );
-        throw error;
-      } finally {
-        clearTimeout(agentInitWarnTimer);
-      }
-
-      await this.bindRuntimeSessionToContext(ctx, {
-        runtimeSandbox,
-        runtimeMetadata,
-        sessionId,
-      });
-      if (ctx.remoteIntegrationSource) {
-        this.recordRemoteRunPhase(ctx, "sandbox_created");
-      }
-      await this.setSnapshotRestoreAllowance(ctx, false);
+          );
+          throw error;
+        } finally {
+          clearTimeout(agentInitWarnTimer);
+        }
+      })();
 
       // Record marker time for file collection and store sandbox reference
       ctx.generationMarkerTime = Date.now();
@@ -5404,7 +5479,22 @@ class GenerationManager {
         runtimeContextWritePromise,
         executorPreparePromise,
         skillAssetPreparePromise,
+        runtimeSessionPromise,
       ]);
+
+      if (!sessionId) {
+        throw new Error("Runtime session ID is unavailable.");
+      }
+      if (!client) {
+        throw new Error("Runtime harness client is unavailable.");
+      }
+
+      await this.bindRuntimeSessionToContext(ctx, {
+        runtimeSandbox,
+        runtimeMetadata,
+        sessionId,
+      });
+      const activeSessionId = sessionId;
 
       if (writtenSkills.length === 0) {
         writtenSkills = enabledSkillRows.map((entry) => entry.name);
@@ -5456,9 +5546,6 @@ class GenerationManager {
         async () => composeOpencodePromptSpec(promptSpecInput),
       );
       const runtimeClient = client;
-      if (!runtimeClient) {
-        throw new Error("Runtime harness client is unavailable.");
-      }
 
       let currentTextPart: { type: "text"; text: string } | null = null;
       let currentTextPartId: string | null = null;
@@ -5581,7 +5668,7 @@ class GenerationManager {
             generationId: ctx.id,
             conversationId: ctx.conversationId,
             userId: ctx.userId,
-            sessionId,
+            sessionId: activeSessionId,
           },
         );
       }
@@ -5618,7 +5705,7 @@ class GenerationManager {
           generationId: ctx.id,
           conversationId: ctx.conversationId,
           userId: ctx.userId,
-          sessionId,
+          sessionId: activeSessionId,
         },
       );
       if (ctx.remoteIntegrationSource) {
@@ -5647,10 +5734,10 @@ class GenerationManager {
             generationId: ctx.id,
             conversationId: ctx.conversationId,
             userId: ctx.userId,
-            sessionId,
+            sessionId: activeSessionId,
           },
         );
-        void runtimeClient.abort({ sessionID: sessionId }).catch((err) => {
+        void runtimeClient.abort({ sessionID: activeSessionId }).catch((err) => {
           console.error("[GenerationManager] Failed to abort timed out OpenCode session:", err);
         });
       }, remainingRunTimeMs);
@@ -5661,7 +5748,7 @@ class GenerationManager {
       // Guard the in-flight prompt so runtime rejections stay scoped to this generation.
       const promptResultPromise = runtimeClient
         .prompt({
-          sessionID: sessionId,
+          sessionID: activeSessionId,
           parts: promptParts,
           agent: promptSpec.agentId,
           system: promptSpec.systemPrompt,
@@ -5721,7 +5808,11 @@ class GenerationManager {
         }
 
         if (isOpenCodeActionableEvent(event)) {
-          const actionableResult = await this.handleOpenCodeActionableEvent(ctx, client, event);
+          const actionableResult = await this.handleOpenCodeActionableEvent(
+            ctx,
+            runtimeClient,
+            event,
+          );
           if (actionableResult.type === "permission") {
             opencodePermissionCount += 1;
           } else if (actionableResult.type === "question") {
@@ -5769,7 +5860,7 @@ class GenerationManager {
               generationId: ctx.id,
               conversationId: ctx.conversationId,
               userId: ctx.userId,
-              sessionId,
+              sessionId: activeSessionId,
             },
           );
           if (!sessionErrorMessage) {
@@ -5802,7 +5893,7 @@ class GenerationManager {
       if (!ctx.assistantContent.trim()) {
         try {
           const messagesResult = await runtimeClient.messages({
-            sessionID: sessionId,
+            sessionID: activeSessionId,
             limit: 20,
           });
           if (!messagesResult.error) {
@@ -5830,7 +5921,7 @@ class GenerationManager {
                   generationId: ctx.id,
                   conversationId: ctx.conversationId,
                   userId: ctx.userId,
-                  sessionId,
+                  sessionId: activeSessionId,
                 },
               );
             }
@@ -5904,7 +5995,7 @@ class GenerationManager {
         }
       }
       this.markPhase(ctx, "post_processing_completed");
-      await this.captureUsageFromRuntimeSession(ctx, runtimeClient, sessionId);
+      await this.captureUsageFromRuntimeSession(ctx, runtimeClient, activeSessionId);
 
       // Check if aborted
       if (ctx.abortController.signal.aborted) {

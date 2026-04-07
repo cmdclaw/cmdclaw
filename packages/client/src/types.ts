@@ -122,7 +122,6 @@ export type DoneArtifactsData = {
       prePromptEventStreamSubscribeMs?: number;
       prePromptCoworkerDocsStageMs?: number;
       prePromptAttachmentsStageMs?: number;
-      agentReadyToPromptMs?: number;
       waitForFirstEventMs?: number;
       promptToFirstTokenMs?: number;
       generationToFirstTokenMs?: number;

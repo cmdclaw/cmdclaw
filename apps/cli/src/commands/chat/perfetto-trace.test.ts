@@ -18,12 +18,12 @@ function buildArtifacts() {
       phaseTimestamps: [
         { phase: "generation_started", at: "2026-04-02T10:00:00.000Z", elapsedMs: 0 },
         {
-          phase: "agent_init_sandbox_checking_cache",
+          phase: "sandbox_init_checking_cache",
           at: "2026-04-02T10:00:00.100Z",
           elapsedMs: 100,
         },
         {
-          phase: "agent_init_sandbox_created",
+          phase: "sandbox_init_created",
           at: "2026-04-02T10:00:00.900Z",
           elapsedMs: 900,
         },

@@ -167,7 +167,6 @@ const generationEventPayloadSchema = z.discriminatedUnion("type", [
                 sessionReadyMs: z.number().optional(),
                 agentInitMs: z.number().optional(),
                 prePromptSetupMs: z.number().optional(),
-                agentReadyToPromptMs: z.number().optional(),
                 waitForFirstEventMs: z.number().optional(),
                 promptToFirstTokenMs: z.number().optional(),
                 generationToFirstTokenMs: z.number().optional(),

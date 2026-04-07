@@ -1,13 +1,16 @@
 import type {
+  ConversationRuntimeAgentInitResult,
   ConversationRuntimeContext,
   ConversationRuntimeOptions,
   ConversationRuntimeResult,
+  ConversationRuntimeSandboxInitResult,
   RuntimeSelection,
   SandboxHandle,
 } from "./types";
 import { createRuntimeHarnessClientFromOpencodeClient } from "../compat/opencode-client-shim";
 import {
-  getOrCreateSessionForCloudProvider,
+  completeSessionInitForCloudProvider,
+  getOrCreateSandboxForCloudProvider,
   type OpenCodeSandbox,
   type OpenCodeSessionConfig,
 } from "../opencode-session";
@@ -36,6 +39,23 @@ export async function runConversationSessionPipeline(input: {
   selection: RuntimeSelection;
   options?: ConversationRuntimeOptions;
 }): Promise<ConversationRuntimeResult> {
+  const sandboxInit = await runConversationSandboxPipeline(input);
+  const agentInit = await sandboxInit.completeAgentInit();
+
+  return {
+    sandbox: sandboxInit.sandbox,
+    metadata: sandboxInit.metadata,
+    harnessClient: agentInit.harnessClient,
+    session: agentInit.session,
+    sessionSource: agentInit.sessionSource,
+  };
+}
+
+export async function runConversationSandboxPipeline(input: {
+  context: ConversationRuntimeContext;
+  selection: RuntimeSelection;
+  options?: ConversationRuntimeOptions;
+}): Promise<ConversationRuntimeSandboxInitResult> {
   const config: OpenCodeSessionConfig = {
     conversationId: input.context.conversationId,
     generationId: input.context.generationId,
@@ -46,7 +66,7 @@ export async function runConversationSessionPipeline(input: {
     openAIAuthSource: input.context.openAIAuthSource,
   };
 
-  const result = await getOrCreateSessionForCloudProvider(
+  const result = await getOrCreateSandboxForCloudProvider(
     input.selection.sandboxProvider,
     config,
     {
@@ -60,13 +80,30 @@ export async function runConversationSessionPipeline(input: {
 
   return {
     sandbox: toSandboxHandle(result.sandbox),
-    harnessClient: createRuntimeHarnessClientFromOpencodeClient(result.client),
-    session: { id: result.sessionId },
     metadata: {
       sandboxProvider: result.sandbox.provider,
       runtimeHarness: input.selection.runtimeHarness,
       runtimeProtocolVersion: input.selection.runtimeProtocolVersion,
     },
-    sessionSource: result.sessionSource,
+    completeAgentInit: async (): Promise<ConversationRuntimeAgentInitResult> => {
+      const agentResult = await completeSessionInitForCloudProvider(
+        input.selection.sandboxProvider,
+        result,
+        config,
+        {
+          title: input.options?.title,
+          replayHistory: input.options?.replayHistory,
+          allowSnapshotRestore: input.options?.allowSnapshotRestore,
+          onLifecycle: input.options?.onLifecycle,
+          telemetry: input.options?.telemetry,
+        },
+      );
+
+      return {
+        harnessClient: createRuntimeHarnessClientFromOpencodeClient(agentResult.client),
+        session: { id: agentResult.sessionId },
+        sessionSource: agentResult.sessionSource,
+      };
+    },
   };
 }

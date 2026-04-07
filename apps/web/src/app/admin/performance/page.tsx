@@ -153,13 +153,6 @@ const FLAME_PHASES: Array<{
     durationKey: "agentInitMs",
   },
   {
-    name: "agent_ready_to_prompt",
-    label: "agent_ready_to_prompt",
-    color: "#f59e0b",
-    depth: 1,
-    durationKey: "agentReadyToPromptMs",
-  },
-  {
     name: "prompt_to_first_visible_output",
     label: "prompt_to_first_visible_output",
     color: "#22c55e",
@@ -878,12 +871,6 @@ function buildFlameSpans(timing: TimingData): FlameSpan[] {
         durationKey: "agentInitMs",
       },
       {
-        name: "agent_ready_to_prompt",
-        startPhases: ["agent_init_ready"],
-        endPhases: ["prompt_sent"],
-        durationKey: "agentReadyToPromptMs",
-      },
-      {
         name: "prompt_to_first_visible_output",
         startPhases: ["prompt_sent"],
         endPhases: ["first_visible_output_emitted", "first_token_emitted"],
@@ -891,19 +878,19 @@ function buildFlameSpans(timing: TimingData): FlameSpan[] {
       },
       {
         name: "sandbox_connect_or_create",
-        startPhases: ["agent_init_sandbox_checking_cache", "agent_init_started"],
-        endPhases: ["agent_init_sandbox_reused", "agent_init_sandbox_created"],
+        startPhases: ["sandbox_init_checking_cache", "sandbox_init_started"],
+        endPhases: ["sandbox_init_reused", "sandbox_init_created"],
         durationKey: "sandboxConnectOrCreateMs",
       },
       {
         name: "opencode_ready",
-        startPhases: ["agent_init_opencode_starting"],
+        startPhases: ["agent_init_opencode_starting", "agent_init_started"],
         endPhases: ["agent_init_opencode_ready"],
         durationKey: "opencodeReadyMs",
       },
       {
         name: "session_ready",
-        startPhases: ["agent_init_session_creating", "agent_init_sandbox_reused"],
+        startPhases: ["agent_init_session_creating", "agent_init_started"],
         endPhases: ["agent_init_session_init_completed", "agent_init_session_reused"],
         durationKey: "sessionReadyMs",
       },

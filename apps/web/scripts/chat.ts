@@ -858,7 +858,6 @@ async function runGeneration(
                 ["session_ready", phaseDurations.sessionReadyMs],
                 ["agent_init", phaseDurations.agentInitMs],
                 ["pre_prompt_setup", phaseDurations.prePromptSetupMs],
-                ["agent_ready_to_prompt", phaseDurations.agentReadyToPromptMs],
                 ["wait_for_first_event", phaseDurations.waitForFirstEventMs],
                 ["prompt_to_first_token", phaseDurations.promptToFirstTokenMs],
                 ["generation_to_first_token", phaseDurations.generationToFirstTokenMs],

@@ -9,7 +9,6 @@ export type MessageTiming = {
     sessionReadyMs?: number;
     agentInitMs?: number;
     prePromptSetupMs?: number;
-    agentReadyToPromptMs?: number;
     waitForFirstEventMs?: number;
     promptToFirstTokenMs?: number;
     generationToFirstTokenMs?: number;

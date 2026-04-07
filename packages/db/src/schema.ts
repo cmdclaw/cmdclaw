@@ -611,8 +611,6 @@ export type MessageTiming = {
     prePromptCoworkerDocsStageMs?: number;
     // Time spent staging user attachments into the sandbox and prompt parts.
     prePromptAttachmentsStageMs?: number;
-    // Time from agent ready to prompt dispatch (subset focused on prompt preparation path).
-    agentReadyToPromptMs?: number;
     // Time from prompt dispatch to first received generation stream event.
     waitForFirstEventMs?: number;
     // Time from prompt dispatch to first emitted assistant text token.

@@ -302,6 +302,28 @@ const {
   markRuntimeDeadMock: vi.fn(),
 }));
 
+const {
+  getOrCreateConversationRuntimeMock,
+  getOrCreateConversationSandboxMock,
+} = vi.hoisted(() => {
+  const runtimeMock = vi.fn();
+  return {
+    getOrCreateConversationRuntimeMock: runtimeMock,
+    getOrCreateConversationSandboxMock: vi.fn(async (...args: unknown[]) => {
+      const runtime = await runtimeMock(...args);
+      return {
+        sandbox: runtime.sandbox,
+        metadata: runtime.metadata,
+        completeAgentInit: async () => ({
+          harnessClient: runtime.harnessClient,
+          session: runtime.session,
+          sessionSource: runtime.sessionSource,
+        }),
+      };
+    }),
+  };
+});
+
 vi.mock("../../env", () => ({
   env: {},
 }));
@@ -319,7 +341,8 @@ vi.mock("../prompts/opencode-runtime-prompt", () => ({
 }));
 
 vi.mock("../sandbox/core/orchestrator", () => ({
-  getOrCreateConversationRuntime: vi.fn(),
+  getOrCreateConversationRuntime: getOrCreateConversationRuntimeMock,
+  getOrCreateConversationSandbox: getOrCreateConversationSandboxMock,
 }));
 
 vi.mock("../sandbox/prep/skills-prep", () => ({

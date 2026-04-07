@@ -24,7 +24,6 @@ type RunRecord = {
   sessionReadyMs?: number;
   agentInitMs?: number;
   prePromptSetupMs?: number;
-  agentReadyToPromptMs?: number;
   waitForFirstEventMs?: number;
   promptToFirstTokenMs?: number;
   generationToFirstTokenMs?: number;
@@ -252,12 +251,6 @@ function summarize(records: RunRecord[]): void {
         .filter((value): value is number => value !== undefined),
     ],
     [
-      "agent_ready_to_prompt",
-      records
-        .map((record) => record.agentReadyToPromptMs)
-        .filter((value): value is number => value !== undefined),
-    ],
-    [
       "wait_for_first_event",
       records
         .map((record) => record.waitForFirstEventMs)
@@ -386,7 +379,6 @@ async function runSingle(args: {
     sessionReadyMs: phase?.sessionReadyMs,
     agentInitMs: phase?.agentInitMs,
     prePromptSetupMs: phase?.prePromptSetupMs,
-    agentReadyToPromptMs: phase?.agentReadyToPromptMs,
     waitForFirstEventMs: phase?.waitForFirstEventMs,
     promptToFirstTokenMs: phase?.promptToFirstTokenMs,
     generationToFirstTokenMs: phase?.generationToFirstTokenMs,

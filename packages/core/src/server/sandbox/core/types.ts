@@ -200,6 +200,18 @@ export type ConversationRuntimeSessionSource =
   | "restored_snapshot"
   | "created_session";
 
+export interface ConversationRuntimeAgentInitResult {
+  harnessClient: RuntimeHarnessClient;
+  session: ConversationRuntimeSession;
+  sessionSource?: ConversationRuntimeSessionSource;
+}
+
+export interface ConversationRuntimeSandboxInitResult {
+  sandbox: SandboxHandle;
+  metadata: RuntimeSelection;
+  completeAgentInit: () => Promise<ConversationRuntimeAgentInitResult>;
+}
+
 export interface ConversationRuntimeResult {
   sandbox: SandboxHandle;
   harnessClient: RuntimeHarnessClient;

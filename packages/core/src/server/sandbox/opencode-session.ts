@@ -17,7 +17,11 @@ import {
   resolveMappedRuntimeUrl,
   writeFileInContainer,
 } from "./docker-runtime";
-import { getOrCreateSession as getOrCreateE2BSession, injectProviderAuth } from "./e2b";
+import {
+  getOrCreateBareSandbox as getOrCreateBareE2BSandbox,
+  getOrCreateSession as getOrCreateE2BSession,
+  injectProviderAuth,
+} from "./e2b";
 import { getPreferredCloudSandboxProvider } from "./factory";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import { listAccessibleEnabledSkillsForUser } from "../services/workspace-skill-service";
@@ -29,6 +33,7 @@ import {
   getSandboxReadinessUrl,
   getSandboxServerPort,
   getSandboxServerBackgroundStartCommand,
+  getSandboxServerStartCommand,
 } from "./opencode-runtime";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
 
@@ -103,6 +108,12 @@ type OpenCodeSessionResult = {
   sessionId: string;
   sandbox: OpenCodeSandbox;
   sessionSource: "live_session" | "restored_snapshot" | "created_session";
+};
+
+export type OpenCodeSandboxInitResult = {
+  sandbox: OpenCodeSandbox;
+  reused: boolean;
+  connectAgent: (options?: OpenCodeSessionOptions) => Promise<OpencodeClient>;
 };
 
 interface OpenCodeSessionProvider {
@@ -563,6 +574,225 @@ async function getOrCreateDaytonaSandbox(
   };
 }
 
+async function ensureDockerAgentReady(
+  container: Dockerode.Container,
+  config: OpenCodeSessionConfig,
+  onLifecycle?: SessionInitLifecycleCallback,
+): Promise<OpencodeClient> {
+  const runtimePort = getSandboxServerPort(config.model);
+  const baseUrl = await resolveMappedRuntimeUrl(container, runtimePort);
+  const health = await fetch(getSandboxReadinessUrl(baseUrl, config.model), {
+    method: "GET",
+  }).catch(() => null);
+
+  if (!health?.ok) {
+    onLifecycle?.("opencode_starting", {
+      conversationId: config.conversationId,
+      sandboxId: container.id,
+      port: runtimePort,
+    });
+    await execInContainer({
+      container,
+      command: getSandboxServerBackgroundStartCommand({
+        sandboxId: container.id,
+        model: config.model,
+      }),
+      cwd: "/app",
+      timeoutMs: 10_000,
+    });
+    onLifecycle?.("opencode_waiting_ready", {
+      conversationId: config.conversationId,
+      sandboxId: container.id,
+      serverUrl: baseUrl,
+    });
+    await waitForServer(baseUrl, config.model);
+  }
+
+  onLifecycle?.("opencode_ready", {
+    conversationId: config.conversationId,
+    sandboxId: container.id,
+    serverUrl: baseUrl,
+  });
+
+  return await createSandboxRuntimeClient({ serverUrl: baseUrl, model: config.model });
+}
+
+async function getOrCreateDockerSandboxInit(
+  config: OpenCodeSessionConfig,
+  onLifecycle?: SessionInitLifecycleCallback,
+): Promise<OpenCodeSandboxInitResult> {
+  const docker = createDockerClient();
+  if (!(await canConnectDockerDaemon(docker))) {
+    throw new Error("Docker daemon is not reachable");
+  }
+
+  onLifecycle?.("sandbox_checking_cache", { conversationId: config.conversationId });
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
+  const fromConversation = runtimeState?.sandboxId
+    ? await connectDockerSandboxById(docker, runtimeState.sandboxId)
+    : null;
+
+  if (fromConversation) {
+    onLifecycle?.("sandbox_reused", {
+      conversationId: config.conversationId,
+      sandboxId: fromConversation.id,
+    });
+    return {
+      sandbox: wrapDockerSandbox(fromConversation),
+      reused: true,
+      connectAgent: async (options) =>
+        await ensureDockerAgentReady(fromConversation, config, options?.onLifecycle),
+    };
+  }
+
+  if (runtimeState?.sandboxId) {
+    if (fromConversation) {
+      await removeContainerBestEffort(fromConversation);
+    }
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
+  }
+
+  onLifecycle?.("sandbox_creating", {
+    conversationId: config.conversationId,
+    template: "cmdclaw-agent-runtime",
+  });
+
+  const imageTag = await ensureDockerRuntimeImage(docker);
+  const runtimePort = getSandboxServerPort(config.model);
+  const created = await createRuntimeContainer({
+    docker,
+    imageTag,
+    runtimePort,
+    env: {
+      ANTHROPIC_API_KEY: config.anthropicApiKey,
+      ANVIL_API_KEY: env.ANVIL_API_KEY || "",
+      APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
+      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+      CONVERSATION_ID: config.conversationId,
+      ...config.integrationEnvs,
+    },
+  });
+
+  onLifecycle?.("sandbox_created", {
+    conversationId: config.conversationId,
+    sandboxId: created.id,
+  });
+
+  return {
+    sandbox: wrapDockerSandbox(created),
+    reused: false,
+    connectAgent: async (options) =>
+      await ensureDockerAgentReady(created, config, options?.onLifecycle),
+  };
+}
+
+async function ensureDaytonaAgentReady(
+  sandbox: DaytonaSandboxLike,
+  config: OpenCodeSessionConfig,
+  onLifecycle?: SessionInitLifecycleCallback,
+): Promise<OpencodeClient> {
+  const preview = await sandbox.getPreviewLink(getSandboxServerPort(config.model));
+  const baseUrl = preview.url;
+  const health = await fetch(
+    appendDaytonaAuth(getSandboxReadinessUrl(baseUrl, config.model), preview.token),
+    {
+      method: "GET",
+    },
+  ).catch(() => null);
+
+  if (!health?.ok) {
+    onLifecycle?.("opencode_starting", {
+      conversationId: config.conversationId,
+      sandboxId: sandbox.id,
+      port: getSandboxServerPort(config.model),
+    });
+    await sandbox.process.executeCommand(
+      `sh -lc ${escapeShell(
+        getSandboxServerBackgroundStartCommand({
+          sandboxId: sandbox.id,
+          model: config.model,
+        }),
+      )}`,
+      "/app",
+      undefined,
+      10,
+    );
+    onLifecycle?.("opencode_waiting_ready", {
+      conversationId: config.conversationId,
+      sandboxId: sandbox.id,
+      serverUrl: preview.url,
+    });
+    await waitForServer(baseUrl, config.model, preview.token);
+  }
+
+  onLifecycle?.("opencode_ready", {
+    conversationId: config.conversationId,
+    sandboxId: sandbox.id,
+    serverUrl: preview.url,
+  });
+
+  return await createDaytonaOpencodeClient(baseUrl, config.model, preview.token);
+}
+
+async function getOrCreateDaytonaSandboxInit(
+  config: OpenCodeSessionConfig,
+  onLifecycle?: SessionInitLifecycleCallback,
+): Promise<OpenCodeSandboxInitResult> {
+  onLifecycle?.("sandbox_checking_cache", { conversationId: config.conversationId });
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
+
+  const fromConversation = runtimeState?.sandboxId
+    ? await connectDaytonaSandboxById(runtimeState.sandboxId)
+    : null;
+
+  if (fromConversation) {
+    onLifecycle?.("sandbox_reused", {
+      conversationId: config.conversationId,
+      sandboxId: fromConversation.id,
+    });
+    return {
+      sandbox: wrapDaytonaSandbox(fromConversation),
+      reused: true,
+      connectAgent: async (options) =>
+        await ensureDaytonaAgentReady(fromConversation, config, options?.onLifecycle),
+    };
+  }
+
+  if (runtimeState?.sandboxId) {
+    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
+  }
+
+  onLifecycle?.("sandbox_creating", {
+    conversationId: config.conversationId,
+    template: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
+  });
+
+  const daytona = await createDaytonaClient();
+  const created = (await daytona.create({
+    snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
+    envVars: {
+      ANTHROPIC_API_KEY: config.anthropicApiKey,
+      ANVIL_API_KEY: env.ANVIL_API_KEY || "",
+      APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
+      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+      CONVERSATION_ID: config.conversationId,
+      ...config.integrationEnvs,
+    },
+  })) as DaytonaSandboxLike;
+
+  onLifecycle?.("sandbox_created", {
+    conversationId: config.conversationId,
+    sandboxId: created.id,
+  });
+
+  return {
+    sandbox: wrapDaytonaSandbox(created),
+    reused: false,
+    connectAgent: async (options) =>
+      await ensureDaytonaAgentReady(created, config, options?.onLifecycle),
+  };
+}
+
 async function getOrCreateCloudSession(
   config: OpenCodeSessionConfig,
   options: OpenCodeSessionOptions | undefined,
@@ -722,6 +952,228 @@ async function getOrCreateDockerSession(
   options?: OpenCodeSessionOptions,
 ): Promise<OpenCodeSessionResult> {
   return getOrCreateCloudSession(config, options, getOrCreateDockerSandbox);
+}
+
+export async function getOrCreateSandboxForCloudProvider(
+  provider: "e2b" | "daytona" | "docker",
+  config: OpenCodeSessionConfig,
+  options?: OpenCodeSessionOptions,
+): Promise<OpenCodeSandboxInitResult> {
+  if (provider === "daytona") {
+    return await getOrCreateDaytonaSandboxInit(config, options?.onLifecycle);
+  }
+  if (provider === "docker") {
+    return await getOrCreateDockerSandboxInit(config, options?.onLifecycle);
+  }
+
+  const state = await getOrCreateBareE2BSandbox(config, options?.onLifecycle, options?.telemetry);
+  return {
+    sandbox: {
+      provider: "e2b",
+      sandboxId: state.sandbox.sandboxId,
+      commands: {
+        run: async (command, opts) => {
+          const result = await state.sandbox.commands.run(command, {
+            timeoutMs: opts?.timeoutMs,
+            envs: opts?.envs,
+            background: opts?.background,
+            onStderr: opts?.onStderr,
+          });
+          return {
+            exitCode: result.exitCode ?? 0,
+            stdout: result.stdout ?? "",
+            stderr: result.stderr ?? "",
+          };
+        },
+      },
+      files: {
+        write: async (path, content) => {
+          await state.sandbox.files.write(path, content);
+        },
+        read: async (path) => state.sandbox.files.read(path),
+      },
+    },
+    reused: state.reused,
+    connectAgent: async (agentOptions) => {
+      const serverPort = getSandboxServerPort(config.model);
+      const serverUrl = `https://${state.sandbox.getHost(serverPort)}`;
+      const health = await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
+        method: "GET",
+      }).catch(() => null);
+
+      if (!health?.ok) {
+        agentOptions?.onLifecycle?.("opencode_starting", {
+          conversationId: config.conversationId,
+          sandboxId: state.sandbox.sandboxId,
+          port: serverPort,
+        });
+        await state.sandbox.commands.run(
+          getSandboxServerStartCommand({
+            sandboxId: state.sandbox.sandboxId,
+            model: config.model,
+          }),
+          {
+            background: true,
+          },
+        );
+        agentOptions?.onLifecycle?.("opencode_waiting_ready", {
+          conversationId: config.conversationId,
+          sandboxId: state.sandbox.sandboxId,
+          serverUrl,
+        });
+        await waitForServer(serverUrl, config.model);
+      }
+
+      agentOptions?.onLifecycle?.("opencode_ready", {
+        conversationId: config.conversationId,
+        sandboxId: state.sandbox.sandboxId,
+        serverUrl,
+      });
+
+      return await createSandboxRuntimeClient({ serverUrl, model: config.model });
+    },
+  };
+}
+
+export async function completeSessionInitForCloudProvider(
+  _provider: "e2b" | "daytona" | "docker",
+  sandboxInit: OpenCodeSandboxInitResult,
+  config: OpenCodeSessionConfig,
+  options?: OpenCodeSessionOptions,
+): Promise<OpenCodeSessionResult> {
+  const client = await sandboxInit.connectAgent(options);
+  const runtimeState = await getConversationRuntimeState(config.conversationId);
+  const runtimeId = runtimeState?.runtimeId ?? null;
+  const existingSessionId = runtimeState?.sessionId ?? null;
+
+  if (existingSessionId && sandboxInit.reused) {
+    const existingSession = await client.session.get({ sessionID: existingSessionId });
+    if (!existingSession.error && existingSession.data) {
+      options?.onLifecycle?.("session_reused", {
+        conversationId: config.conversationId,
+        sessionId: existingSessionId,
+        sandboxId: sandboxInit.sandbox.sandboxId,
+      });
+      return {
+        client,
+        sessionId: existingSessionId,
+        sandbox: sandboxInit.sandbox,
+        sessionSource: "live_session",
+      };
+    }
+
+    if (runtimeId) {
+      await db
+        .update(conversationRuntime)
+        .set({ sessionId: null })
+        .where(eq(conversationRuntime.id, runtimeId));
+    }
+  } else if (existingSessionId && !sandboxInit.reused) {
+    if (runtimeId) {
+      await db
+        .update(conversationRuntime)
+        .set({ sessionId: null })
+        .where(eq(conversationRuntime.id, runtimeId));
+    }
+  }
+
+  if (!sandboxInit.reused && options?.allowSnapshotRestore !== false) {
+    try {
+      const restoredSnapshot = await restoreConversationSessionSnapshot({
+        conversationId: config.conversationId,
+        sandbox: {
+          exec: (command, opts) =>
+            sandboxInit.sandbox.commands.run(command, {
+              timeoutMs: opts?.timeoutMs,
+              envs: opts?.env,
+              background: opts?.background,
+              onStderr: opts?.onStderr,
+            }),
+          writeFile: (path, content) => sandboxInit.sandbox.files.write(path, content),
+        },
+        client,
+      });
+      if (restoredSnapshot) {
+        if (config.userId) {
+          await injectProviderAuth(client, config.userId, {
+            openAIAuthSource: config.openAIAuthSource,
+          });
+        }
+
+        options?.onLifecycle?.("session_reused", {
+          conversationId: config.conversationId,
+          sessionId: restoredSnapshot.sessionId,
+          sandboxId: sandboxInit.sandbox.sandboxId,
+          restoredFromSnapshot: true,
+        });
+        options?.onLifecycle?.("session_init_completed", {
+          conversationId: config.conversationId,
+          sessionId: restoredSnapshot.sessionId,
+          restoredFromSnapshot: true,
+        });
+        return {
+          client,
+          sessionId: restoredSnapshot.sessionId,
+          sandbox: sandboxInit.sandbox,
+          sessionSource: "restored_snapshot",
+        };
+      }
+    } catch (error) {
+      console.warn(
+        `[OpenCodeSession] Failed to restore snapshot for conversation ${config.conversationId}:`,
+        error,
+      );
+    }
+  }
+
+  options?.onLifecycle?.("session_creating", {
+    conversationId: config.conversationId,
+    sandboxId: sandboxInit.sandbox.sandboxId,
+  });
+
+  const sessionResult = await client.session.create({
+    title: options?.title || "Conversation",
+  });
+  if (sessionResult.error || !sessionResult.data) {
+    const details = sessionResult.error ? JSON.stringify(sessionResult.error) : "missing_data";
+    throw new Error(`Failed to create OpenCode session: ${details}`);
+  }
+  const sessionId = sessionResult.data.id;
+  options?.onLifecycle?.("session_created", {
+    conversationId: config.conversationId,
+    sessionId,
+    sandboxId: sandboxInit.sandbox.sandboxId,
+  });
+
+  if (config.userId) {
+    await injectProviderAuth(client, config.userId, {
+      openAIAuthSource: config.openAIAuthSource,
+    });
+  }
+
+  if (options?.replayHistory) {
+    options.onLifecycle?.("session_replay_started", {
+      conversationId: config.conversationId,
+      sessionId,
+    });
+    await replayConversationHistory(client, sessionId, config.conversationId);
+    options.onLifecycle?.("session_replay_completed", {
+      conversationId: config.conversationId,
+      sessionId,
+    });
+  }
+
+  options?.onLifecycle?.("session_init_completed", {
+    conversationId: config.conversationId,
+    sessionId,
+  });
+
+  return {
+    client,
+    sessionId,
+    sandbox: sandboxInit.sandbox,
+    sessionSource: "created_session",
+  };
 }
 
 async function replayConversationHistory(
