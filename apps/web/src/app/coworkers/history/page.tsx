@@ -1,22 +1,31 @@
 "use client";
 
+import { format } from "date-fns";
 import {
   ArrowLeft,
+  ArrowUpRight,
+  CalendarIcon,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock3,
   Loader2,
+  Pencil,
   Search,
   ShieldAlert,
+  X,
   XCircle,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import type { DateRange } from "react-day-picker";
 import type { IntegrationType } from "@/lib/integration-icons";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -78,7 +87,7 @@ function StatusBadge({ status }: { status: HistoryEntryStatus }) {
   );
 }
 
-function StatCard({
+function StatPill({
   label,
   value,
   accent,
@@ -88,17 +97,17 @@ function StatCard({
   accent?: "red" | "default";
 }) {
   return (
-    <div className="bg-card flex flex-col gap-1 rounded-xl border px-4 py-3">
-      <span className="text-muted-foreground text-xs font-medium">{label}</span>
-      <span
-        className={cn(
-          "text-2xl font-semibold tabular-nums tracking-tight",
-          accent === "red" && value > 0 && "text-red-500",
-        )}
-      >
-        {value}
-      </span>
-    </div>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
+        accent === "red" && value > 0
+          ? "border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400"
+          : "bg-muted/50 text-muted-foreground",
+      )}
+    >
+      <span className="tabular-nums font-semibold">{value}</span>
+      {label}
+    </span>
   );
 }
 
@@ -107,8 +116,11 @@ function PayloadPreview({ preview }: { preview: Record<string, unknown> }) {
   const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
   const json = JSON.stringify(preview, null, 2);
   const lines = json.split("\n");
-  const isLong = lines.length > 4;
-  const displayText = expanded ? json : lines.slice(0, 4).join("\n") + (isLong ? "\n..." : "");
+  const remainingLines = lines.slice(4);
+  const isLong =
+    remainingLines.length > 0 &&
+    remainingLines.some((line) => line.trim().length > 1);
+  const displayText = expanded || !isLong ? json : lines.slice(0, 4).join("\n") + "\n...";
 
   return (
     <div className="mt-2">
@@ -179,11 +191,31 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
       <div className="bg-card mb-3 min-w-0 flex-1 rounded-xl border p-4">
         <div className="flex flex-wrap items-center gap-2">
           <CoworkerAvatar username={entry.coworker.username} size={24} className="rounded-md" />
-          <span className="text-sm font-medium">{entry.coworker.name}</span>
+          <Link
+            href={`/coworkers/${entry.coworker.id}`}
+            className="group/name flex items-center gap-1 text-sm font-medium hover:underline"
+          >
+            {entry.coworker.name}
+            <Pencil className="text-muted-foreground size-3 opacity-0 transition-opacity group-hover/name:opacity-100" />
+          </Link>
           <span className="text-muted-foreground text-xs">
             {formatRelativeTime(entry.timestamp)}
           </span>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href={`/coworkers/${entry.coworker.id}`}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[11px] font-medium transition-colors"
+            >
+              View in editor
+              <ArrowUpRight className="size-3" />
+            </Link>
+            <Link
+              href={`/coworkers/runs/${entry.runId}`}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[11px] font-medium transition-colors"
+            >
+              View run
+              <ArrowUpRight className="size-3" />
+            </Link>
             <StatusBadge status={entry.status} />
           </div>
         </div>
@@ -204,7 +236,17 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
 }
 
 export default function CoworkerHistoryPage() {
-  const { data, isLoading, error } = useCoworkerHistory();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const queryRange = useMemo(() => {
+    if (!dateRange?.from) {
+      return undefined;
+    }
+    const to = dateRange.to ?? dateRange.from;
+    const endOfDay = new Date(to);
+    endOfDay.setHours(23, 59, 59, 999);
+    return { from: dateRange.from, to: endOfDay };
+  }, [dateRange]);
+  const { data, isLoading, error } = useCoworkerHistory(queryRange);
   const entries = useMemo(() => data ?? [], [data]);
   const [search, setSearch] = useState("");
   const [coworkerFilter, setCoworkerFilter] = useState("all");
@@ -215,6 +257,9 @@ export default function CoworkerHistoryPage() {
     (event: React.ChangeEvent<HTMLInputElement>) => setSearch(event.target.value),
     [],
   );
+
+  const handleClearDateRange = useCallback(() => setDateRange(undefined), []);
+  const calendarDisabled = useMemo(() => ({ after: new Date() }), []);
 
   const coworkerOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
@@ -279,19 +324,22 @@ export default function CoworkerHistoryPage() {
   }, [entries]);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center gap-3">
         <Link
           href="/coworkers"
-          className="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1.5 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="size-3.5" />
-          Coworkers
+          <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="text-xl font-semibold tracking-tight">History</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Audit trail of all write actions across your coworker fleet.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">Coworker History</h1>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <StatPill label="actions today" value={stats.actionsToday} />
+          <StatPill label="integrations" value={stats.integrations} />
+          <StatPill label="denied" value={stats.denied} accent="red" />
+          <StatPill label="active coworkers" value={stats.activeCoworkers} />
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -304,7 +352,52 @@ export default function CoworkerHistoryPage() {
             className="h-9 pl-9 text-sm"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "w-[220px] justify-start text-left font-normal",
+                  !dateRange?.from && "text-muted-foreground",
+                )}
+              >
+                <CalendarIcon className="mr-1 size-3.5" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "MMM d")} – {format(dateRange.to, "MMM d, yyyy")}
+                    </>
+                  ) : (
+                    format(dateRange.from, "MMM d, yyyy")
+                  )
+                ) : (
+                  "Date range"
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                defaultMonth={dateRange?.from}
+                selected={dateRange}
+                onSelect={setDateRange}
+                numberOfMonths={2}
+                disabled={calendarDisabled}
+              />
+            </PopoverContent>
+          </Popover>
+          {dateRange?.from && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleClearDateRange}
+              className="text-muted-foreground"
+            >
+              <X className="size-3.5" />
+            </Button>
+          )}
           <Select value={coworkerFilter} onValueChange={setCoworkerFilter}>
             <SelectTrigger size="sm" className="w-[160px]">
               <SelectValue placeholder="All coworkers" />
@@ -344,13 +437,6 @@ export default function CoworkerHistoryPage() {
             </SelectContent>
           </Select>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Actions today" value={stats.actionsToday} />
-        <StatCard label="Integrations used" value={stats.integrations} />
-        <StatCard label="Denied" value={stats.denied} accent="red" />
-        <StatCard label="Active coworkers" value={stats.activeCoworkers} />
       </div>
 
       {isLoading ? (

@@ -1142,10 +1142,10 @@ export function useCoworkerOverview() {
 
 export type CoworkerHistoryEntry = Awaited<ReturnType<typeof client.coworker.getHistory>>[number];
 
-export function useCoworkerHistory() {
+export function useCoworkerHistory(dateRange?: { from?: Date; to?: Date }) {
   return useQuery({
-    queryKey: ["coworker", "history"],
-    queryFn: () => client.coworker.getHistory(),
+    queryKey: ["coworker", "history", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
+    queryFn: () => client.coworker.getHistory(dateRange),
     refetchInterval: (query) =>
       (query.state.data ?? []).some((entry) => entry.status === "pending") ? 5_000 : false,
   });
@@ -2510,7 +2510,10 @@ export function useChatOverview() {
 export function useAdminUsageDashboard(workspaceId: string | null) {
   return useQuery({
     queryKey: ["admin", "usageDashboard", workspaceId],
-    queryFn: () => client.admin.getUsageDashboard({ workspaceId: workspaceId! }),
+    queryFn: () =>
+      client.admin.getUsageDashboard(
+        workspaceId === "all" ? {} : { workspaceId: workspaceId! },
+      ),
     enabled: Boolean(workspaceId),
     refetchInterval: 120_000,
   });

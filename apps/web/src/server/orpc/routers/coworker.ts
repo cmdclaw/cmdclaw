@@ -53,7 +53,7 @@ import {
   coworkerRunEvent,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getOperationLabel } from "@/lib/integration-icons";
 import { parseCliCommand } from "@/lib/parse-cli-command";
@@ -1440,13 +1440,27 @@ const listRuns = protectedProcedure
     }));
   });
 
-const getHistory = protectedProcedure.handler(async ({ context }) => {
+const getHistory = protectedProcedure
+  .input(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+    }).optional(),
+  )
+  .handler(async ({ input, context }) => {
   const {
     workspace: { id: workspaceId },
   } = await requireActiveWorkspaceAccess(context.user.id);
 
+  const dateFilters = [
+    eq(coworkerRun.ownerId, context.user.id),
+    eq(coworkerRun.workspaceId, workspaceId),
+    ...(input?.from ? [gte(coworkerRun.startedAt, input.from)] : []),
+    ...(input?.to ? [lte(coworkerRun.startedAt, input.to)] : []),
+  ];
+
   const runs = (await context.db.query.coworkerRun.findMany({
-    where: and(eq(coworkerRun.ownerId, context.user.id), eq(coworkerRun.workspaceId, workspaceId)),
+    where: and(...dateFilters),
     orderBy: (run, { desc }) => [desc(run.startedAt)],
     limit: COWORKER_HISTORY_LIMIT,
     with: {
