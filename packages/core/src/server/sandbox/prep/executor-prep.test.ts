@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import type { SandboxHandle } from "../core/types";
 import { prepareExecutorInSandbox } from "./executor-prep";
 
@@ -37,6 +38,44 @@ function makeSandboxHandle(): SandboxHandle {
     readFile: vi.fn(),
     ensureDir: vi.fn(),
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function fingerprintSource(source: {
+  sourceId: string;
+  endpoint: string;
+  transport: string;
+  queryParams: unknown;
+  credential: {
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: Date | null;
+    metadata: unknown;
+  } | null;
+}) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        sourceId: source.sourceId,
+        endpoint: source.endpoint,
+        transport: source.transport,
+        queryParams: source.queryParams,
+        accessToken: source.credential?.accessToken,
+        refreshToken: source.credential?.refreshToken ?? null,
+        expiresAt: source.credential?.expiresAt?.toISOString() ?? null,
+        metadata: source.credential?.metadata ?? null,
+      }),
+    )
+    .digest("hex");
 }
 
 describe("prepareExecutorInSandbox", () => {
@@ -315,6 +354,242 @@ describe("prepareExecutorInSandbox", () => {
         },
       }),
     );
+  });
+
+  it("starts access and refresh secret creation in parallel for the same source", async () => {
+    const sandbox = makeSandboxHandle();
+    const accessSecretDeferred = createDeferred<{ exitCode: number; stdout: string; stderr: string }>();
+    const refreshSecretDeferred = createDeferred<{ exitCode: number; stdout: string; stderr: string }>();
+    let secretRequestCount = 0;
+
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      {
+        sourceId: "source-1",
+        name: "Linear",
+        endpoint: "https://mcp.linear.app/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "oauth-access",
+          refreshToken: "oauth-refresh",
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "read write",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://mcp.linear.app",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+    ]);
+
+    vi.mocked(sandbox.exec).mockImplementation((command) => {
+      if (command.includes("/v1/local/secrets")) {
+        secretRequestCount += 1;
+        return secretRequestCount === 1
+          ? accessSecretDeferred.promise
+          : refreshSecretDeferred.promise;
+      }
+      if (command.includes("tools.executor.mcp.updateSource")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"id":"source-1"}', stderr: "" });
+      }
+      if (command.includes("tools.executor.sources.refresh")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"id":"source-1","status":"connected"}',
+          stderr: "",
+        });
+      }
+      if (command.includes('return "ok"')) {
+        return Promise.resolve({ exitCode: 0, stdout: '"ok"\n', stderr: "" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    });
+
+    const preparePromise = prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    await vi.waitFor(() => {
+      expect(secretRequestCount).toBe(2);
+    });
+
+    accessSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-access"}', stderr: "" });
+    refreshSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-refresh"}', stderr: "" });
+
+    await preparePromise;
+  });
+
+  it("skips oauth reconciliation for unchanged credentials on reused runtimes", async () => {
+    const sandbox = makeSandboxHandle();
+    const unchangedSource = {
+      sourceId: "source-1",
+      name: "Linear",
+      endpoint: "https://mcp.linear.app/mcp",
+      transport: "streamable-http",
+      queryParams: null,
+      credential: {
+        accessToken: "oauth-access",
+        refreshToken: null,
+        expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        metadata: {
+          tokenType: "Bearer",
+          scope: "read",
+          redirectUri: "https://app.example.com/api/oauth/callback",
+          resourceMetadataUrl: null,
+          authorizationServerUrl: "https://mcp.linear.app",
+          resourceMetadata: null,
+          authorizationServerMetadata: null,
+          clientInformation: null,
+        },
+      },
+    };
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([unchangedSource]);
+
+    const cacheContents = JSON.stringify({
+      version: 1,
+      sources: {
+        "source-1": fingerprintSource(unchangedSource),
+      },
+    });
+
+    vi.mocked(sandbox.readFile).mockResolvedValue(cacheContents);
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '"ok"\n', stderr: "" });
+
+    const result = await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+      reuseExistingState: true,
+    });
+
+    expect(result?.oauthCacheHits).toBe(1);
+    expect(vi.mocked(sandbox.readFile)).toHaveBeenCalledWith(
+      "/tmp/cmdclaw-executor/default/oauth-reconcile-cache.json",
+    );
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) => command.includes("/v1/local/secrets")),
+    ).toBe(false);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes("tools.executor.mcp.updateSource"),
+      ),
+    ).toBe(false);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes("tools.executor.sources.refresh"),
+      ),
+    ).toBe(false);
+  });
+
+  it("reconciles only changed oauth sources on reused runtimes", async () => {
+    const sandbox = makeSandboxHandle();
+    const unchangedSource = {
+      sourceId: "source-1",
+      name: "Linear",
+      endpoint: "https://mcp.linear.app/mcp",
+      transport: "streamable-http",
+      queryParams: null,
+      credential: {
+        accessToken: "oauth-access",
+        refreshToken: null,
+        expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        metadata: {
+          tokenType: "Bearer",
+          scope: "read",
+          redirectUri: "https://app.example.com/api/oauth/callback",
+          resourceMetadataUrl: null,
+          authorizationServerUrl: "https://mcp.linear.app",
+          resourceMetadata: null,
+          authorizationServerMetadata: null,
+          clientInformation: null,
+        },
+      },
+    };
+    const changedSource = {
+      sourceId: "source-2",
+      name: "GitHub",
+      endpoint: "https://api.githubcopilot.com/mcp",
+      transport: "streamable-http",
+      queryParams: null,
+      credential: {
+        accessToken: "oauth-access-updated",
+        refreshToken: null,
+        expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        metadata: {
+          tokenType: "Bearer",
+          scope: "repo",
+          redirectUri: "https://app.example.com/api/oauth/callback",
+          resourceMetadataUrl: null,
+          authorizationServerUrl: "https://github.com",
+          resourceMetadata: null,
+          authorizationServerMetadata: null,
+          clientInformation: null,
+        },
+      },
+    };
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      unchangedSource,
+      changedSource,
+    ]);
+
+    vi.mocked(sandbox.readFile).mockResolvedValue(
+      JSON.stringify({
+        version: 1,
+        sources: {
+          "source-1": fingerprintSource(unchangedSource),
+          "source-2": "stale-fingerprint",
+        },
+      }),
+    );
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '"ok"\n', stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '{"id":"sec-source-2"}', stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '{"id":"source-2"}', stderr: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '{"id":"source-2","status":"connected"}',
+        stderr: "",
+      });
+
+    const result = await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+      reuseExistingState: true,
+    });
+
+    expect(result?.oauthCacheHits).toBe(1);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/v1/local/secrets"))
+        .length,
+    ).toBe(1);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) =>
+        command.includes("tools.executor.mcp.updateSource"),
+      ).length,
+    ).toBe(1);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) =>
+        command.includes("tools.executor.sources.refresh"),
+      ).length,
+    ).toBe(1);
   });
 
   it("skips native MCP OAuth reconciliation when no credential is available", async () => {

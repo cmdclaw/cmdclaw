@@ -478,6 +478,7 @@ import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
 import { getPreferredCloudSandboxProvider } from "../sandbox/factory";
 import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-documents-prep";
 import { syncMemoryFilesToSandbox, buildMemorySystemPrompt } from "../sandbox/prep/memory-prep";
+import { prepareExecutorInSandbox } from "../sandbox/prep/executor-prep";
 import {
   writeSkillsToSandbox,
   getSkillsSystemPrompt,
@@ -486,6 +487,7 @@ import {
 } from "../sandbox/prep/skills-prep";
 import { logServerEvent } from "../utils/observability";
 import { classifyRuntimeFailure } from "./lifecycle-policy";
+import { listAccessibleEnabledSkillMetadataForUser } from "./workspace-skill-service";
 import {
   buildDefaultQuestionAnswers,
   buildQuestionCommand,
@@ -663,6 +665,9 @@ function createConversationRuntimeMock(params: {
   subscribeMock: ReturnType<typeof vi.fn>;
   messagesMock?: ReturnType<typeof vi.fn>;
   readFile?: ReturnType<typeof vi.fn>;
+  writeFile?: ReturnType<typeof vi.fn>;
+  ensureDir?: ReturnType<typeof vi.fn>;
+  exec?: ReturnType<typeof vi.fn>;
   sessionSource?: "live_session" | "restored_snapshot" | "created_session";
 }) {
   return {
@@ -682,10 +687,10 @@ function createConversationRuntimeMock(params: {
     sandbox: {
       provider: "e2b" as const,
       sandboxId: "sandbox-1",
-      writeFile: vi.fn().mockResolvedValue(undefined),
+      writeFile: params.writeFile ?? vi.fn().mockResolvedValue(undefined),
       readFile: params.readFile ?? vi.fn().mockRejectedValue(new Error("no cache")),
-      ensureDir: vi.fn().mockResolvedValue(undefined),
-      exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
+      ensureDir: params.ensureDir ?? vi.fn().mockResolvedValue(undefined),
+      exec: params.exec ?? vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
     },
     metadata: {
       sandboxProvider: "e2b" as const,
@@ -736,6 +741,16 @@ async function* asAsyncIterable<T>(items: T[]) {
   for (const item of items) {
     yield item;
   }
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 describe("generationManager transitions", () => {
@@ -3306,6 +3321,272 @@ describe("generationManager transitions", () => {
     });
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
+  });
+
+  it("starts executor prepare and skills loading in parallel before awaiting either", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    const loadedSkillsDeferred = createDeferred<Array<{ name: string; updatedAt: Date }>>();
+    const customCredsDeferred = createDeferred<any[]>();
+    const executorDeferred = createDeferred<{ instructions: string; oauthCacheHits: number } | null>();
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockReturnValue(
+      loadedSkillsDeferred.promise as Promise<Array<{ name: string; updatedAt: Date }>>,
+    );
+    dbMock.query.customIntegrationCredential.findMany.mockReturnValue(customCredsDeferred.promise);
+    vi.mocked(prepareExecutorInSandbox).mockReturnValue(executorDeferred.promise as Promise<null>);
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({ promptMock, subscribeMock }) as Awaited<
+        ReturnType<typeof getOrCreateConversationRuntime>
+      >,
+    );
+
+    const mgr = asTestManager();
+    vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const runPromise = mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-opencode-parallel-prep",
+        conversationId: "conv-opencode-parallel-prep",
+        model: "anthropic/claude-sonnet-4-6",
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(prepareExecutorInSandbox)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(listAccessibleEnabledSkillMetadataForUser)).toHaveBeenCalledTimes(1);
+      expect(dbMock.query.customIntegrationCredential.findMany).toHaveBeenCalledTimes(1);
+    });
+    expect(promptMock).not.toHaveBeenCalled();
+
+    loadedSkillsDeferred.resolve([]);
+    customCredsDeferred.resolve([]);
+    executorDeferred.resolve({ instructions: "executor prompt", oauthCacheHits: 0 });
+
+    await runPromise;
+    expect(promptMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts writing skills before executor prep finishes on a cache miss", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    const executorDeferred = createDeferred<{ instructions: string; oauthCacheHits: number } | null>();
+    const writeSkillsStarted = createDeferred<void>();
+    const writeIntegrationSkillsStarted = createDeferred<void>();
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue(["github"]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockReturnValue(executorDeferred.promise as Promise<null>);
+    vi.mocked(writeSkillsToSandbox).mockImplementation(async () => {
+      writeSkillsStarted.resolve();
+      return [];
+    });
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockImplementation(async () => {
+      writeIntegrationSkillsStarted.resolve();
+      return [];
+    });
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({ promptMock, subscribeMock }) as Awaited<
+        ReturnType<typeof getOrCreateConversationRuntime>
+      >,
+    );
+
+    const mgr = asTestManager();
+    vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const runPromise = mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-opencode-skill-write-overlap",
+        conversationId: "conv-opencode-skill-write-overlap",
+        model: "anthropic/claude-sonnet-4-6",
+        allowedIntegrations: ["github"],
+      }),
+    );
+
+    await writeSkillsStarted.promise;
+    await writeIntegrationSkillsStarted.promise;
+
+    expect(promptMock).not.toHaveBeenCalled();
+    executorDeferred.resolve({ instructions: "executor prompt", oauthCacheHits: 0 });
+
+    await runPromise;
+    expect(promptMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not block prompt send on post-prompt cache writes", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    const cacheWriteDeferred = createDeferred<void>();
+    let cacheWriteStarted = false;
+    let cacheWriteSettled = false;
+    const promptCalled = createDeferred<void>();
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue(["github"]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([
+      { name: "base-skill", updatedAt: new Date("2026-03-01T00:00:00.000Z") },
+    ]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(null);
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue(["base-skill"]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("skills prompt");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue(["github"]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("integration skills prompt");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const writeFileMock = vi.fn().mockImplementation((targetPath: string) => {
+      if (targetPath === "/app/.opencode/pre-prompt-cache.json") {
+        cacheWriteStarted = true;
+        return cacheWriteDeferred.promise.finally(() => {
+          cacheWriteSettled = true;
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    const promptMock = vi.fn().mockImplementation(async () => {
+      promptCalled.resolve();
+      return undefined;
+    });
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+        writeFile: writeFileMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const runPromise = mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-opencode-post-prompt-cache",
+        conversationId: "conv-opencode-post-prompt-cache",
+        model: "anthropic/claude-sonnet-4-6",
+        allowedIntegrations: ["github"],
+      }),
+    );
+
+    await promptCalled.promise;
+    expect(cacheWriteStarted).toBe(true);
+
+    await runPromise;
+    expect(cacheWriteSettled).toBe(false);
+    expect(finishSpy).toHaveBeenCalledWith(expect.anything(), "completed");
+
+    cacheWriteDeferred.resolve();
+    await Promise.resolve();
+  });
+
+  it("treats post-prompt cache write failures as non-fatal", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue(["github"]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([
+      { name: "base-skill", updatedAt: new Date("2026-03-01T00:00:00.000Z") },
+    ]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(null);
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue(["base-skill"]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("skills prompt");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue(["github"]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("integration skills prompt");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const writeFileMock = vi.fn().mockImplementation((targetPath: string) => {
+      if (targetPath === "/app/.opencode/pre-prompt-cache.json") {
+        return Promise.reject(new Error("cache write failed"));
+      }
+      return Promise.resolve(undefined);
+    });
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+        writeFile: writeFileMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    await mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-opencode-post-prompt-cache-failure",
+        conversationId: "conv-opencode-post-prompt-cache-failure",
+        model: "anthropic/claude-sonnet-4-6",
+        allowedIntegrations: ["github"],
+      }),
+    );
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(finishSpy).toHaveBeenCalledWith(expect.anything(), "completed");
   });
 
   it("does not require an anthropic api key for non-anthropic runs", async () => {

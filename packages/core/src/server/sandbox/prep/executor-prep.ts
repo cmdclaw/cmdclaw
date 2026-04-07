@@ -3,6 +3,7 @@ import {
   getWorkspaceExecutorNativeMcpOAuthBootstrapSources,
   type WorkspaceExecutorNativeMcpOauthBootstrapSource,
 } from "../../executor/workspace-sources";
+import { createHash } from "node:crypto";
 import type { SandboxHandle } from "../core/types";
 
 const EXECUTOR_BASE_URL = "http://127.0.0.1:8788";
@@ -10,6 +11,8 @@ const EXECUTOR_WORKSPACE_ROOT = "/app";
 const EXECUTOR_SERVER_PORT = 8788;
 const EXECUTOR_SERVER_LOG_PATH = "/tmp/cmdclaw-executor-server.log";
 const DEFAULT_EXECUTOR_TRACE_SERVICE_NAME = "cmdclaw-sandbox-executor";
+const EXECUTOR_OAUTH_CACHE_PATH = "oauth-reconcile-cache.json";
+const EXECUTOR_OAUTH_CONCURRENCY = 3;
 
 function escapeShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -73,6 +76,11 @@ export type ExecutorPreparePhase =
   | "status_check"
   | "oauth_reconcile";
 
+type ExecutorOauthCacheRecord = {
+  version: 1;
+  sources: Record<string, string>;
+};
+
 function isCommandExitErrorLike(
   error: unknown,
 ): error is { result: { exitCode?: number; stdout?: string; stderr?: string } } {
@@ -112,6 +120,88 @@ function parseJsonResult<T>(value: string, label: string): T {
       `${label} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+function executorOauthCacheFilePath(homeDirectory: string): string {
+  return `${homeDirectory}/${EXECUTOR_OAUTH_CACHE_PATH}`;
+}
+
+function fingerprintOauthSource(source: WorkspaceExecutorNativeMcpOauthBootstrapSource): string | null {
+  if (!source.credential) {
+    return null;
+  }
+
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        sourceId: source.sourceId,
+        endpoint: source.endpoint,
+        transport: source.transport,
+        queryParams: source.queryParams,
+        accessToken: source.credential.accessToken,
+        refreshToken: source.credential.refreshToken ?? null,
+        expiresAt: source.credential.expiresAt?.toISOString() ?? null,
+        metadata: source.credential.metadata,
+      }),
+    )
+    .digest("hex");
+}
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const current = nextIndex;
+      nextIndex += 1;
+      await worker(items[current] as T, current);
+    }
+  });
+
+  await Promise.all(runners);
+}
+
+async function readExecutorOauthCache(
+  sandbox: SandboxHandle,
+  homeDirectory: string,
+): Promise<ExecutorOauthCacheRecord | null> {
+  try {
+    const raw = await sandbox.readFile(executorOauthCacheFilePath(homeDirectory));
+    const parsed = JSON.parse(String(raw)) as Partial<ExecutorOauthCacheRecord>;
+    if (!parsed || parsed.version !== 1 || typeof parsed.sources !== "object" || !parsed.sources) {
+      return null;
+    }
+
+    return {
+      version: 1,
+      sources: Object.fromEntries(
+        Object.entries(parsed.sources).filter(
+          (entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string",
+        ),
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeExecutorOauthCache(input: {
+  sandbox: SandboxHandle;
+  homeDirectory: string;
+  cache: ExecutorOauthCacheRecord;
+}): Promise<void> {
+  await input.sandbox.ensureDir(input.homeDirectory);
+  await input.sandbox.writeFile(
+    executorOauthCacheFilePath(input.homeDirectory),
+    JSON.stringify(input.cache, null, 2),
+  );
 }
 
 async function createExecutorLocalSecret(input: {
@@ -196,29 +286,84 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
   sandbox: SandboxHandle;
   env: Record<string, string>;
   sources: WorkspaceExecutorNativeMcpOauthBootstrapSource[];
-}) {
-  for (const source of input.sources) {
-    if (!source.credential) {
-      continue;
-    }
+  homeDirectory: string;
+  reuseExistingState?: boolean;
+}): Promise<{ cacheHits: number }> {
+  const existingCache = input.reuseExistingState
+    ? await readExecutorOauthCache(input.sandbox, input.homeDirectory)
+    : null;
+  const nextCache: ExecutorOauthCacheRecord = {
+    version: 1,
+    sources: { ...(existingCache?.sources ?? {}) },
+  };
 
-    const accessTokenSecretId = await createExecutorLocalSecret({
+  const pendingSources = input.sources
+    .map((source) => ({
+      source,
+      fingerprint: fingerprintOauthSource(source),
+    }))
+    .filter(
+      (entry): entry is {
+        source: WorkspaceExecutorNativeMcpOauthBootstrapSource;
+        fingerprint: string;
+      } => Boolean(entry.source.credential && entry.fingerprint),
+    );
+
+  let cacheHits = 0;
+  const sourcesToReconcile = pendingSources.filter((entry) => {
+    const cachedFingerprint = existingCache?.sources[entry.source.sourceId];
+    if (input.reuseExistingState && cachedFingerprint === entry.fingerprint) {
+      cacheHits += 1;
+      return false;
+    }
+    return true;
+  });
+
+  type PreparedSource = {
+    source: WorkspaceExecutorNativeMcpOauthBootstrapSource;
+    fingerprint: string;
+    accessTokenSecretId: string;
+    refreshTokenSecretId: string | null;
+  };
+  const preparedSources: PreparedSource[] = new Array(sourcesToReconcile.length);
+
+  await mapWithConcurrency(sourcesToReconcile, EXECUTOR_OAUTH_CONCURRENCY, async (entry, index) => {
+    const accessSecretPromise = createExecutorLocalSecret({
       sandbox: input.sandbox,
       env: input.env,
-      name: `${source.name} access token`,
-      value: source.credential.accessToken,
+      name: `${entry.source.name} access token`,
+      value: entry.source.credential!.accessToken,
     });
-    const refreshTokenSecretId = source.credential.refreshToken
-      ? await createExecutorLocalSecret({
+    const refreshSecretPromise = entry.source.credential!.refreshToken
+      ? createExecutorLocalSecret({
           sandbox: input.sandbox,
           env: input.env,
-          name: `${source.name} refresh token`,
-          value: source.credential.refreshToken,
+          name: `${entry.source.name} refresh token`,
+          value: entry.source.credential!.refreshToken,
         })
-      : null;
+      : Promise.resolve(null);
+
+    const [accessTokenSecretId, refreshTokenSecretId] = await Promise.all([
+      accessSecretPromise,
+      refreshSecretPromise,
+    ]);
+
+    preparedSources[index] = {
+      source: entry.source,
+      fingerprint: entry.fingerprint,
+      accessTokenSecretId,
+      refreshTokenSecretId,
+    };
+  });
+
+  await mapWithConcurrency(preparedSources, EXECUTOR_OAUTH_CONCURRENCY, async (entry) => {
     const updateCode = `return await tools.executor.mcp.updateSource(${JSON.stringify({
-      sourceId: source.sourceId,
-      config: buildNativeMcpOauthSourceConfig(source, accessTokenSecretId, refreshTokenSecretId),
+      sourceId: entry.source.sourceId,
+      config: buildNativeMcpOauthSourceConfig(
+        entry.source,
+        entry.accessTokenSecretId,
+        entry.refreshTokenSecretId,
+      ),
     })})`;
     const updateResult = await execNoThrow(
       input.sandbox,
@@ -231,14 +376,16 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
 
     if (updateResult.exitCode !== 0) {
       throw new Error(
-        `Executor MCP native update failed for ${source.sourceId} (exit=${updateResult.exitCode}): ${
+        `Executor MCP native update failed for ${entry.source.sourceId} (exit=${updateResult.exitCode}): ${
           updateResult.stderr || updateResult.stdout || "unknown error"
         }`,
       );
     }
+  });
 
+  await mapWithConcurrency(preparedSources, EXECUTOR_OAUTH_CONCURRENCY, async (entry) => {
     const refreshCode = `return await tools.executor.sources.refresh(${JSON.stringify({
-      sourceId: source.sourceId,
+      sourceId: entry.source.sourceId,
     })})`;
     const refreshResult = await execNoThrow(
       input.sandbox,
@@ -251,84 +398,75 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
 
     if (refreshResult.exitCode !== 0) {
       throw new Error(
-        `Executor source refresh failed for ${source.sourceId} (exit=${refreshResult.exitCode}): ${
+        `Executor source refresh failed for ${entry.source.sourceId} (exit=${refreshResult.exitCode}): ${
           refreshResult.stderr || refreshResult.stdout || "unknown error"
         }`,
       );
     }
+    nextCache.sources[entry.source.sourceId] = entry.fingerprint;
+  });
+
+  if (Object.keys(nextCache.sources).length > 0) {
+    await writeExecutorOauthCache({
+      sandbox: input.sandbox,
+      homeDirectory: input.homeDirectory,
+      cache: nextCache,
+    });
   }
+
+  return { cacheHits };
 }
 
-export async function prepareExecutorInSandbox(input: {
-  sandbox: SandboxHandle;
-  workspaceId: string | null | undefined;
+async function loadExecutorBootstrap(input: {
+  workspaceId: string;
   workspaceName?: string | null;
   userId: string;
   allowedSourceIds?: string[] | null;
-  runtimeId?: string | null;
-  onPhase?: (phase: ExecutorPreparePhase, status: "started" | "completed") => void;
-}): Promise<ExecutorSandboxBootstrap | null> {
-  const runPhase = async <T>(phase: ExecutorPreparePhase, action: () => Promise<T>): Promise<T> => {
-    input.onPhase?.(phase, "started");
-    try {
-      return await action();
-    } finally {
-      input.onPhase?.(phase, "completed");
-    }
-  };
-
-  if (!input.workspaceId) {
-    return null;
-  }
-  const workspaceId = input.workspaceId;
-
-  const [bootstrap, nativeMcpOauthSources] = await runPhase("bootstrap_load", async () =>
+  runPhase: <T>(phase: ExecutorPreparePhase, action: () => Promise<T>) => Promise<T>;
+}) {
+  return input.runPhase("bootstrap_load", async () =>
     await Promise.all([
       getWorkspaceExecutorBootstrap({
-        workspaceId,
+        workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         userId: input.userId,
         allowedSourceIds: input.allowedSourceIds,
       }),
       getWorkspaceExecutorNativeMcpOAuthBootstrapSources({
-        workspaceId,
+        workspaceId: input.workspaceId,
         userId: input.userId,
         allowedSourceIds: input.allowedSourceIds,
       }),
     ]),
   );
+}
 
-  if (bootstrap.sources.length === 0) {
-    return null;
-  }
-
-  const homeDirectory = input.runtimeId
-    ? `/tmp/cmdclaw-executor/${input.runtimeId}`
-    : "/tmp/cmdclaw-executor/default";
-  const executorCommandEnv = buildExecutorCommandEnv(homeDirectory);
-
-  await runPhase("config_write", async () => {
+async function ensureExecutorServerReady(input: {
+  sandbox: SandboxHandle;
+  configJson: string;
+  workspaceStateJson: string;
+  env: Record<string, string>;
+  runPhase: <T>(phase: ExecutorPreparePhase, action: () => Promise<T>) => Promise<T>;
+}) {
+  await input.runPhase("config_write", async () => {
     await input.sandbox.ensureDir("/app/.executor/state");
-    await input.sandbox.writeFile("/app/.executor/executor.jsonc", bootstrap.configJson);
-    await input.sandbox.writeFile(
-      "/app/.executor/state/workspace-state.json",
-      bootstrap.workspaceStateJson,
-    );
+    await input.sandbox.writeFile("/app/.executor/executor.jsonc", input.configJson);
+    await input.sandbox.writeFile("/app/.executor/state/workspace-state.json", input.workspaceStateJson);
   });
 
-  const serverReadyResult = await runPhase("server_probe", async () =>
+  const serverReadyResult = await input.runPhase("server_probe", async () =>
     await execNoThrow(
       input.sandbox,
       `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null`,
       {
         timeoutMs: 5_000,
-        env: executorCommandEnv,
+        env: input.env,
       },
     ),
   );
 
   if (serverReadyResult.exitCode !== 0) {
-    const startResult = await runPhase("server_start", async () =>
+    const startResult = await input.runPhase("server_start", async () =>
       await execNoThrow(
         input.sandbox,
         `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)} && executor server start --port ${EXECUTOR_SERVER_PORT} >${escapeShell(
@@ -337,7 +475,7 @@ export async function prepareExecutorInSandbox(input: {
         {
           timeoutMs: 0,
           background: true,
-          env: executorCommandEnv,
+          env: input.env,
         },
       ),
     );
@@ -361,22 +499,22 @@ export async function prepareExecutorInSandbox(input: {
     "exit 1",
   ].join(" ");
 
-  const startResult = await runPhase("server_wait_ready", async () =>
+  const waitResult = await input.runPhase("server_wait_ready", async () =>
     await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
       timeoutMs: 45_000,
-      env: executorCommandEnv,
+      env: input.env,
     }),
   );
 
-  if (startResult.exitCode !== 0) {
+  if (waitResult.exitCode !== 0) {
     throw new Error(
-      `Executor bootstrap failed (exit=${startResult.exitCode}): ${
-        startResult.stderr || startResult.stdout || "unknown error"
+      `Executor bootstrap failed (exit=${waitResult.exitCode}): ${
+        waitResult.stderr || waitResult.stdout || "unknown error"
       }`,
     );
   }
 
-  const statusResult = await runPhase("status_check", async () =>
+  const statusResult = await input.runPhase("status_check", async () =>
     await execNoThrow(
       input.sandbox,
       `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(
@@ -384,7 +522,7 @@ export async function prepareExecutorInSandbox(input: {
       )}`,
       {
         timeoutMs: 15_000,
-        env: executorCommandEnv,
+        env: input.env,
       },
     ),
   );
@@ -396,12 +534,64 @@ export async function prepareExecutorInSandbox(input: {
       }`,
     );
   }
+}
 
-  await runPhase("oauth_reconcile", async () => {
-    await reconcileNativeMcpOAuthSourcesInSandbox({
+export async function prepareExecutorInSandbox(input: {
+  sandbox: SandboxHandle;
+  workspaceId: string | null | undefined;
+  workspaceName?: string | null;
+  userId: string;
+  allowedSourceIds?: string[] | null;
+  runtimeId?: string | null;
+  reuseExistingState?: boolean;
+  onPhase?: (phase: ExecutorPreparePhase, status: "started" | "completed") => void;
+}): Promise<(ExecutorSandboxBootstrap & { oauthCacheHits?: number }) | null> {
+  const runPhase = async <T>(phase: ExecutorPreparePhase, action: () => Promise<T>): Promise<T> => {
+    input.onPhase?.(phase, "started");
+    try {
+      return await action();
+    } finally {
+      input.onPhase?.(phase, "completed");
+    }
+  };
+
+  if (!input.workspaceId) {
+    return null;
+  }
+  const workspaceId = input.workspaceId;
+
+  const [bootstrap, nativeMcpOauthSources] = await loadExecutorBootstrap({
+    workspaceId,
+    workspaceName: input.workspaceName,
+    userId: input.userId,
+    allowedSourceIds: input.allowedSourceIds,
+    runPhase,
+  });
+
+  if (bootstrap.sources.length === 0) {
+    return null;
+  }
+
+  const homeDirectory = input.runtimeId
+    ? `/tmp/cmdclaw-executor/${input.runtimeId}`
+    : "/tmp/cmdclaw-executor/default";
+  const executorCommandEnv = buildExecutorCommandEnv(homeDirectory);
+
+  await ensureExecutorServerReady({
+    sandbox: input.sandbox,
+    configJson: bootstrap.configJson,
+    workspaceStateJson: bootstrap.workspaceStateJson,
+    env: executorCommandEnv,
+    runPhase,
+  });
+
+  const oauthReconcile = await runPhase("oauth_reconcile", async () => {
+    return await reconcileNativeMcpOAuthSourcesInSandbox({
       sandbox: input.sandbox,
       env: executorCommandEnv,
       sources: nativeMcpOauthSources,
+      homeDirectory,
+      reuseExistingState: input.reuseExistingState,
     });
   });
 
@@ -429,5 +619,6 @@ export async function prepareExecutorInSandbox(input: {
     baseUrl: EXECUTOR_BASE_URL,
     homeDirectory,
     instructions: lines.join("\n"),
+    oauthCacheHits: oauthReconcile.cacheHits,
   };
 }
