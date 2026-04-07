@@ -3,8 +3,8 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo } from "react";
 import { DayPicker } from "react-day-picker";
-import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function ChevronIcon({ orientation }: { orientation?: string }) {
   return orientation === "left" ? (
@@ -57,8 +57,7 @@ function Calendar({
       outside:
         "day-outside text-muted-foreground aria-selected:text-muted-foreground opacity-50 aria-selected:opacity-30",
       disabled: "text-muted-foreground opacity-50",
-      range_middle:
-        "aria-selected:bg-accent aria-selected:text-accent-foreground",
+      range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
       hidden: "invisible",
       ...classNames,
     }),
