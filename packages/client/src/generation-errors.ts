@@ -11,6 +11,17 @@ export type NormalizedGenerationError = {
   transportCode?: string;
 };
 
+function rewriteConnectionHint(message: string): string {
+  const normalized = message.trim().toLowerCase();
+  if (
+    normalized.includes("unable to connect") &&
+    normalized.includes("access the url")
+  ) {
+    return "Unable to connect. Maybe you forgot to start the server with `bun run dev`?";
+  }
+  return message;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
@@ -27,18 +38,18 @@ export function normalizeGenerationError(
   if (typeof error === "string") {
     const trimmed = error.trim();
     if (trimmed) {
-      message = trimmed;
+      message = rewriteConnectionHint(trimmed);
     }
   } else if (error instanceof Error) {
     const trimmed = error.message.trim();
     if (trimmed) {
-      message = trimmed;
+      message = rewriteConnectionHint(trimmed);
     }
   }
 
   if (isRecord(error)) {
     if (typeof error.message === "string" && error.message.trim()) {
-      message = error.message.trim();
+      message = rewriteConnectionHint(error.message.trim());
     }
     if (typeof error.code === "string" && error.code.trim()) {
       transportCode = error.code.trim();
