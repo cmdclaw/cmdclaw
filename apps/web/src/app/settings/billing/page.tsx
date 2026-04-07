@@ -47,6 +47,10 @@ export default function BillingPage() {
         included_usage?: number;
         next_reset_at?: number | null;
         rollovers?: { balance: number; expires_at: number };
+        breakdown?: Array<{
+          interval: string;
+          balance?: number;
+        }>;
       }
     | null
     | undefined;
@@ -152,7 +156,12 @@ export default function BillingPage() {
   }, []);
 
   const topUpCredits = Math.max(0, Math.floor(Number(topUpUsd || 0) * TOP_UP_CREDITS_PER_USD));
-  const balance = Math.max(0, Number(feature?.balance ?? 0));
+  const topUpBalance = Math.max(
+    0,
+    Number(feature?.breakdown?.find((item) => item.interval === "one_off")?.balance ?? 0),
+  );
+  const hasRecentTopUps = (overview?.recentTopUps?.length ?? 0) > 0;
+  const showConsumedTopUpHint = topUpBalance === 0 && hasRecentTopUps;
 
   useEffect(() => {
     if (!clientEditionCapabilities.hasBilling) {
@@ -315,12 +324,18 @@ export default function BillingPage() {
           Your workspace credit pool is used for all AI interactions. Plan credits refresh monthly,
           top-ups expire after 12 months.
         </p>
+        {showConsumedTopUpHint ? (
+          <p className="text-muted-foreground mt-2 text-xs">
+            Granted top-up credits are already being applied against your workspace usage, so the
+            available top-up balance is currently 0.
+          </p>
+        ) : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-neutral-50 p-4 dark:bg-neutral-900">
             <div className="text-muted-foreground text-xs">Top-up balance</div>
             <div className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">
-              {formatCredits(balance)}
+              {formatCredits(topUpBalance)}
             </div>
           </div>
           <div className="rounded-lg bg-neutral-50 p-4 dark:bg-neutral-900">

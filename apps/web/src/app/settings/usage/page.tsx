@@ -58,6 +58,8 @@ export default function UsagePage() {
     0,
     Number(breakdown.find((item) => item.interval === "one_off")?.balance ?? 0),
   );
+  const hasRecentTopUps = (data?.recentTopUps?.length ?? 0) > 0;
+  const showConsumedTopUpHint = topUpBalance === 0 && hasRecentTopUps;
 
   const handleTopUpUsdChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setTopUpUsd(event.target.value);
@@ -148,6 +150,12 @@ export default function UsagePage() {
         <p className="text-muted-foreground mt-1 text-sm">
           Top-ups are valid for 12 months. $1 = {TOP_UP_CREDITS_PER_USD} credits.
         </p>
+        {showConsumedTopUpHint ? (
+          <p className="text-muted-foreground mt-2 text-xs">
+            Granted top-up credits are already being applied against your workspace usage, so the
+            available top-up balance is currently 0.
+          </p>
+        ) : null}
 
         <div className="mt-4 flex items-center gap-2">
           <div className="relative max-w-[140px]">

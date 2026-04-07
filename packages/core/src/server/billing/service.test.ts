@@ -23,6 +23,9 @@ var workspaceMemberInsertValuesMock: ReturnType<typeof vi.fn>;
 var billingTopUpInsertValuesMock: ReturnType<typeof vi.fn>;
 var userUpdateWhereMock: ReturnType<typeof vi.fn>;
 var userUpdateSetMock: ReturnType<typeof vi.fn>;
+var selectMock: ReturnType<typeof vi.fn>;
+var selectFromMock: ReturnType<typeof vi.fn>;
+var selectWhereMock: ReturnType<typeof vi.fn>;
 var balancesCreateMock: ReturnType<typeof vi.fn>;
 var autumnCheckMock: ReturnType<typeof vi.fn>;
 var insertMock: ReturnType<typeof vi.fn>;
@@ -43,6 +46,13 @@ vi.mock("@cmdclaw/db/client", () => ({
       returning: billingTopUpInsertReturningMock,
     }));
     userUpdateWhereMock = vi.fn();
+    selectWhereMock = vi.fn();
+    selectFromMock = vi.fn(() => ({
+      where: selectWhereMock,
+    }));
+    selectMock = vi.fn(() => ({
+      from: selectFromMock,
+    }));
     userUpdateSetMock = vi.fn(() => ({
       where: userUpdateWhereMock,
     }));
@@ -56,6 +66,7 @@ vi.mock("@cmdclaw/db/client", () => ({
         workspace: { findFirst: workspaceFindFirstMock },
       },
       insert: insertMock,
+      select: selectMock,
       update: vi.fn(() => ({
         set: userUpdateSetMock,
       })),
@@ -107,6 +118,7 @@ describe("billing service", () => {
         expiresAt: new Date("2027-03-10T10:00:00.000Z"),
       },
     ]);
+    selectWhereMock.mockResolvedValue([{ creditsCharged: 0 }]);
     workspaceInsertReturningMock.mockResolvedValue([
       {
         id: "ws-created",
@@ -248,6 +260,62 @@ describe("billing service", () => {
     expect(result.recentTopUps).toHaveLength(1);
     expect(workspaceInsertValuesMock).not.toHaveBeenCalled();
     expect(workspaceMemberInsertValuesMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to stored top-up balance when Autumn omits numeric balances", async () => {
+    autumnCheckMock.mockResolvedValueOnce({
+      data: {
+        allowed: false,
+        code: "feature_found",
+        customer_id: "cus-ws-1",
+        feature_id: "llm_credits",
+        required_balance: 0,
+      },
+      error: null,
+    });
+    userFindFirstMock.mockResolvedValue({
+      id: "user-1",
+      name: "Alice",
+      email: "alice@example.com",
+      activeWorkspaceId: "ws-1",
+    });
+    workspaceMemberFindFirstMock.mockResolvedValue({
+      workspace: {
+        id: "ws-1",
+        name: "Alpha",
+        slug: "alpha",
+        billingPlanId: "free",
+        autumnCustomerId: "cus-ws-1",
+      },
+    });
+    billingTopUpFindManyMock
+      .mockResolvedValueOnce([
+        {
+          id: "topup-1",
+          usdAmount: 25,
+          creditsGranted: 2500,
+          createdAt: new Date("2026-03-10T10:00:00.000Z"),
+          expiresAt: new Date("2027-03-10T10:00:00.000Z"),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          creditsGranted: 2500,
+        },
+      ]);
+    selectWhereMock.mockResolvedValueOnce([{ creditsCharged: 1200 }]);
+
+    const result = await getAdminBillingOverviewForUser("user-1");
+
+    expect(result.feature).toEqual({
+      allowed: false,
+      code: "feature_found",
+      customer_id: "cus-ws-1",
+      feature_id: "llm_credits",
+      required_balance: 0,
+      balance: 1300,
+      breakdown: [{ interval: "one_off", balance: 1300 }],
+    });
   });
 
   it("creates new workspaces on the free plan", async () => {
