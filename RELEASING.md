@@ -65,8 +65,8 @@ Set these repository secrets for the production release workflow:
 The workflow hardcodes:
 
 - Railway environment: `production`
-- web service: `web`
-- worker service: `worker`
+- web service: `cmdclaw web`
+- worker service: `cmdclaw worker`
 
 ## Required Railway setup
 
