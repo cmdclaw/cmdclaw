@@ -61,11 +61,12 @@ Set these repository secrets for the production release workflow:
 
 - `RAILWAY_TOKEN`
 - `RAILWAY_PROJECT_ID`
-- `RAILWAY_PRODUCTION_ENVIRONMENT`
-- `RAILWAY_WEB_SERVICE`
-- `RAILWAY_WORKER_SERVICE`
 
-Values may be Railway IDs or names where Railway accepts either.
+The workflow hardcodes:
+
+- Railway environment: `production`
+- web service: `web`
+- worker service: `worker`
 
 ## Required Railway setup
 

@@ -25,9 +25,6 @@ jobs:
       RELEASE_TAG_REGEX: '^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(-[0-9]+)?$'
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-      RAILWAY_PRODUCTION_ENVIRONMENT: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT }}
-      RAILWAY_WEB_SERVICE: ${{ secrets.RAILWAY_WEB_SERVICE }}
-      RAILWAY_WORKER_SERVICE: ${{ secrets.RAILWAY_WORKER_SERVICE }}
 
     steps:
       - name: Resolve release tag
@@ -80,9 +77,6 @@ jobs:
           required_vars=(
             RAILWAY_TOKEN
             RAILWAY_PROJECT_ID
-            RAILWAY_PRODUCTION_ENVIRONMENT
-            RAILWAY_WEB_SERVICE
-            RAILWAY_WORKER_SERVICE
           )
 
           for var_name in "${required_vars[@]}"; do
@@ -111,7 +105,7 @@ jobs:
           set -euo pipefail
           trap 'rm -f railway.toml' EXIT
           cp apps/web/railway.web.toml railway.toml
-          railway up --ci --service "$RAILWAY_WEB_SERVICE" --environment "$RAILWAY_PRODUCTION_ENVIRONMENT" --project "$RAILWAY_PROJECT_ID"
+          railway up --ci --service web --environment production --project "$RAILWAY_PROJECT_ID"
 
       - name: Deploy production worker
         shell: bash
@@ -119,4 +113,4 @@ jobs:
           set -euo pipefail
           trap 'rm -f railway.toml' EXIT
           cp apps/worker/railway.worker.toml railway.toml
-          railway up --ci --service "$RAILWAY_WORKER_SERVICE" --environment "$RAILWAY_PRODUCTION_ENVIRONMENT" --project "$RAILWAY_PROJECT_ID"
+          railway up --ci --service worker --environment production --project "$RAILWAY_PROJECT_ID"
