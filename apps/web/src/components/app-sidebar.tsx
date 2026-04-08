@@ -6,15 +6,14 @@ import {
   BarChart3,
   Bug,
   Building2,
+  CircleDollarSign,
   CheckCheck,
   Check,
-  Coins,
   CreditCard,
   Cuboid,
   Inbox,
   LoaderCircle,
   LogOut,
-  MessageCircle,
   MessageSquare,
   MoreHorizontal,
   Pencil,
@@ -369,18 +368,17 @@ export function AppSidebar() {
 
   const adminUsersItems: NavItem[] = [
     { icon: UserCog, label: "User", href: "/admin" },
-    { icon: UserCog, label: "Impersonation", href: "/admin/impersonation" },
     { icon: Building2, label: "Workspaces", href: "/admin/workspaces" },
   ];
 
   const adminConfigItems: NavItem[] = [
     { icon: LayoutTemplate, label: "Templates", href: "/admin/templates" },
     { icon: CreditCard, label: "AI Subscriptions", href: "/admin/subscriptions" },
-    { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
+    // { icon: MessageCircle, label: "WhatsApp", href: "/admin/whatsapp" },
   ];
 
   const adminBillingItems: NavItem[] = [
-    { icon: Coins, label: "Credits", href: "/admin/credits" },
+    { icon: CircleDollarSign, label: "Credits", href: "/admin/credits" },
     { icon: BarChart3, label: "Usage", href: "/admin/usage" },
   ];
 
