@@ -5,10 +5,6 @@
 .env*.local
 *.tsbuildinfo
 
-experiments/
-!apps/web/experiments/
-!apps/web/experiments/**
-
 .agents
 
 .turbo*
@@ -23,3 +19,8 @@ node_modules
 .gstack/
 
 perfetto-traces/
+
+experiments/**/*.pdf
+experiments/**/*.json
+experiments/**/*.txt
+experiments/**/__pycache__/
