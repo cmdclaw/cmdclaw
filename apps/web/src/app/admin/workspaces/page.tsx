@@ -1,11 +1,23 @@
 "use client";
 
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
-import { Building2, Check, Loader2, Pencil, Plus, Search, UserPlus, X } from "lucide-react";
+import {
+  Building2,
+  Check,
+  Cuboid,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   useAdminAddWorkspaceMembers,
   useAdminCreateWorkspace,
@@ -28,6 +40,7 @@ type WorkspaceData = {
   slug: string | null;
   billingPlanId: string;
   createdAt: string | Date | null;
+  coworkerCount: number;
   members: WorkspaceMember[];
 };
 
@@ -318,6 +331,28 @@ function WorkspaceCard({
             <span className="text-muted-foreground bg-muted/60 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase">
               {workspace.billingPlanId}
             </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-muted-foreground bg-muted/60 flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+                  <Users className="h-2.5 w-2.5" />
+                  {workspace.members.length}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {workspace.members.length} user{workspace.members.length === 1 ? "" : "s"}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-muted-foreground bg-muted/60 flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+                  <Cuboid className="h-2.5 w-2.5" />
+                  {workspace.coworkerCount}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {workspace.coworkerCount} coworker{workspace.coworkerCount === 1 ? "" : "s"}
+              </TooltipContent>
+            </Tooltip>
           </div>
           <p className="text-muted-foreground mt-1 truncate text-xs">
             {workspace.slug ?? workspace.id}
@@ -411,11 +446,12 @@ export default function AdminWorkspacesPage() {
 
   const stats = useMemo(() => {
     if (!workspacesData) {
-      return { total: 0, members: 0, joined: 0 };
+      return { total: 0, members: 0, coworkers: 0, joined: 0 };
     }
     return {
       total: workspacesData.length,
       members: workspacesData.reduce((sum, ws) => sum + ws.members.length, 0),
+      coworkers: workspacesData.reduce((sum, ws) => sum + ws.coworkerCount, 0),
       joined: workspacesData.filter((ws) => myWorkspaceIds.has(ws.id)).length,
     };
   }, [workspacesData, myWorkspaceIds]);
@@ -533,6 +569,9 @@ export default function AdminWorkspacesPage() {
         </span>
         <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
           {stats.members} members
+        </span>
+        <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+          {stats.coworkers} coworkers
         </span>
         <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
           {stats.joined} joined

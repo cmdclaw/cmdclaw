@@ -883,26 +883,41 @@ export async function addWorkspaceMembers(
 }
 
 export async function adminListAllWorkspaces() {
-  const workspaces = await db.query.workspace.findMany({
-    orderBy: [desc(workspace.createdAt)],
-    columns: {
-      id: true,
-      name: true,
-      slug: true,
-      billingPlanId: true,
-      createdAt: true,
-    },
-    with: {
-      members: {
-        columns: { role: true },
-        with: {
-          user: {
-            columns: { email: true, name: true },
+  const [workspaces, coworkerCounts] = await Promise.all([
+    db.query.workspace.findMany({
+      orderBy: [desc(workspace.createdAt)],
+      columns: {
+        id: true,
+        name: true,
+        slug: true,
+        billingPlanId: true,
+        createdAt: true,
+      },
+      with: {
+        members: {
+          columns: { role: true },
+          with: {
+            user: {
+              columns: { email: true, name: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    db
+      .select({
+        workspaceId: coworker.workspaceId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(coworker)
+      .groupBy(coworker.workspaceId),
+  ]);
+
+  const countMap = new Map(
+    coworkerCounts
+      .filter((c) => c.workspaceId !== null)
+      .map((c) => [c.workspaceId!, c.count]),
+  );
 
   return workspaces.map((ws) => ({
     id: ws.id,
@@ -910,6 +925,7 @@ export async function adminListAllWorkspaces() {
     slug: ws.slug,
     billingPlanId: ws.billingPlanId,
     createdAt: ws.createdAt,
+    coworkerCount: countMap.get(ws.id) ?? 0,
     members: ws.members.map((m) => ({
       email: m.user.email,
       name: m.user.name,
