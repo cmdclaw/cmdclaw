@@ -8,8 +8,6 @@
 
 import { loadRuntimeEnv } from "../lib/runtime-env";
 
-loadRuntimeEnv();
-
 type MemoryToolInput = Record<string, unknown>;
 
 const MEMORY_TOOLS = [
@@ -59,6 +57,8 @@ const MEMORY_TOOLS = [
 ];
 
 async function callMemoryApi(operation: string, payload: MemoryToolInput) {
+  loadRuntimeEnv();
+
   const serverUrl = process.env.APP_URL;
   const serverSecret = process.env.CMDCLAW_SERVER_SECRET;
   const conversationId = process.env.CONVERSATION_ID;

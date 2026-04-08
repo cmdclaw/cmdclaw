@@ -3361,6 +3361,65 @@ describe("generationManager transitions", () => {
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-1")).toBe(true);
   });
 
+  it("syncs curated runtime env into the sandbox before prompting", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({
+      GMAIL_ACCESS_TOKEN: "gmail-token",
+    });
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue(["google_gmail"]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+    userFindFirstMock.mockResolvedValue({
+      timezone: "Europe/Dublin",
+    });
+
+    const execMock = vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+        exec: execMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    await mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-opencode-runtime-env-sync",
+        conversationId: "conv-opencode-runtime-env-sync",
+        model: "anthropic/claude-sonnet-4-6",
+        allowedIntegrations: ["google_gmail"],
+      }),
+    );
+
+    const runtimeEnvWrite = execMock.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("/app/.cmdclaw/runtime-env.json"),
+    )?.[0] as string | undefined;
+    expect(runtimeEnvWrite).toBeTruthy();
+    expect(runtimeEnvWrite).toContain("/app/.cmdclaw/runtime-env.sh");
+    expect(runtimeEnvWrite).toContain("chmod 600");
+  });
+
   it("starts executor prepare and skills loading in parallel before awaiting either", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 

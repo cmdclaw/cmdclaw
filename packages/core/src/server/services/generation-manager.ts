@@ -103,6 +103,10 @@ import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-docume
 import { buildMemorySystemPrompt, syncMemoryFilesToSandbox } from "../sandbox/prep/memory-prep";
 import { prepareExecutorInSandbox } from "../sandbox/prep/executor-prep";
 import {
+  resolveSandboxRuntimeAppUrl,
+  syncRuntimeEnvToSandbox,
+} from "../sandbox/prep/runtime-env-prep";
+import {
   getIntegrationSkillsSystemPrompt,
   getSkillsSystemPrompt,
   writeResolvedIntegrationSkillsToSandbox,
@@ -184,6 +188,21 @@ async function writeRuntimeContextToSandbox(
       `Runtime context write failed (exit=${result.exitCode}): ${result.stderr || result.stdout || "unknown error"}`,
     );
   }
+}
+
+async function writeRuntimeEnvToSandbox(
+  runtimeSandbox: {
+    exec: (
+      command: string,
+      opts?: { timeoutMs?: number; env?: Record<string, string> },
+    ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  },
+  runtimeEnv: Record<string, string | null | undefined>,
+): Promise<void> {
+  await syncRuntimeEnvToSandbox({
+    sandbox: runtimeSandbox,
+    runtimeEnv,
+  });
 }
 
 let cachedDefaultCoworkerModelPromise: Promise<string> | undefined;
@@ -4921,6 +4940,12 @@ class GenerationManager {
       if (dbUser?.timezone) {
         filteredCliEnv.CMDCLAW_USER_TIMEZONE = dbUser.timezone;
       }
+      const sandboxRuntimeEnv: Record<string, string | null | undefined> = {
+        ...filteredCliEnv,
+        APP_URL: resolveSandboxRuntimeAppUrl(),
+        CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+        CONVERSATION_ID: ctx.conversationId,
+      };
 
       // Get conversation for existing session info
       const conv = await db.query.conversation.findFirst({
@@ -5219,29 +5244,25 @@ class GenerationManager {
       })();
 
       const runtimeContextWritePromise = (async () => {
-        if (!ctx.runtimeId || !ctx.runtimeCallbackToken || !ctx.runtimeTurnSeq) {
-          return;
-        }
-
         try {
-          const runtimeId = ctx.runtimeId;
-          const callbackToken = ctx.runtimeCallbackToken;
-          const turnSeq = ctx.runtimeTurnSeq;
           await runPrePromptStep(
             "runtime_context_write",
             "writeRuntimeContextMs",
             async () => {
-              const runtimeContext: RuntimeContextFile = {
-                runtimeId,
-                turnSeq,
-                callbackToken,
-                updatedAt: new Date().toISOString(),
-              };
-              await writeRuntimeContextToSandbox(runtimeSandbox, runtimeContext);
+              if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
+                const runtimeContext: RuntimeContextFile = {
+                  runtimeId: ctx.runtimeId,
+                  turnSeq: ctx.runtimeTurnSeq,
+                  callbackToken: ctx.runtimeCallbackToken,
+                  updatedAt: new Date().toISOString(),
+                };
+                await writeRuntimeContextToSandbox(runtimeSandbox, runtimeContext);
+              }
+              await writeRuntimeEnvToSandbox(runtimeSandbox, sandboxRuntimeEnv);
             },
           );
         } catch (error) {
-          console.error("[GenerationManager] Failed to write runtime context to sandbox:", error);
+          console.error("[GenerationManager] Failed to write runtime metadata to sandbox:", error);
         }
       })();
 

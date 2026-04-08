@@ -9,8 +9,6 @@
 
 import { loadRuntimeEnv } from "../lib/runtime-env";
 
-loadRuntimeEnv();
-
 // Integration CLI names to internal type mapping
 const CLI_TO_INTEGRATION: Record<string, string> = {
   slack: "slack",
@@ -713,6 +711,8 @@ export const IntegrationPermissionsPlugin = async () => {
       input: { tool: string },
       output: { args: Record<string, unknown> },
     ) => {
+      loadRuntimeEnv();
+
       // Only process Bash commands
       if (input.tool !== "bash" && input.tool !== "Bash") {
         return;
