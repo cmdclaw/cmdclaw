@@ -1,5 +1,5 @@
+import { getCallbackBaseUrls } from "@cmdclaw/sandbox/plugins/integration-permissions";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCallbackBaseUrls } from "@/sandbox-templates/common/plugins/integration-permissions";
 
 describe("getCallbackBaseUrls", () => {
   afterEach(() => {

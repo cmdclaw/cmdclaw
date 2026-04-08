@@ -1,3 +1,8 @@
+import {
+  SANDBOX_COMMON_ROOT as COMMON_TEMPLATE_ROOT,
+  SANDBOX_DOCKER_RUNTIME_DOCKERFILE as DOCKERFILE_RUNTIME_ABSOLUTE,
+  SANDBOX_TEMPLATE_ROOT as TEMPLATE_ROOT,
+} from "@cmdclaw/sandbox/paths";
 import type { Headers as TarHeader } from "tar-stream";
 import Dockerode from "dockerode";
 import { spawn } from "node:child_process";
@@ -10,10 +15,7 @@ import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import tar from "tar-stream";
 
-const TEMPLATE_ROOT = path.join(process.cwd(), "src", "sandbox-templates");
-const COMMON_TEMPLATE_ROOT = path.join(TEMPLATE_ROOT, "common");
 const DOCKERFILE_RUNTIME_RELATIVE = "docker/Dockerfile.runtime";
-const DOCKERFILE_RUNTIME_ABSOLUTE = path.join(TEMPLATE_ROOT, DOCKERFILE_RUNTIME_RELATIVE);
 const DOCKER_BUILD_TIMEOUT_MS = 15 * 60 * 1000;
 const DOCKER_BUILD_TRANSCRIPT_LIMIT = 200;
 

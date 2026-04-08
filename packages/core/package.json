@@ -22,6 +22,7 @@
     "@aws-sdk/client-s3": "^3.968.0",
     "@aws-sdk/s3-request-presigner": "^3.968.0",
     "@cmdclaw/db": "workspace:*",
+    "@cmdclaw/sandbox": "workspace:*",
     "@daytonaio/sdk": "^0.144.0",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.29.0",

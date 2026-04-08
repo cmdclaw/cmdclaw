@@ -71,7 +71,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     logoUrl: "/tools/browser.svg",
     kind: "tool-integration",
     githubUrl:
-      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/agent-browser/SKILL.md",
+      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/sandbox/src/common/skills/agent-browser/SKILL.md",
     summaryBlocks: [
       {
         title: "Navigate and interact",
@@ -118,7 +118,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     iconName: "file-input",
     kind: "skill",
     githubUrl:
-      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/fill-pdf/SKILL.md",
+      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/sandbox/src/common/skills/fill-pdf/SKILL.md",
     summaryBlocks: [
       {
         title: "Parse PDF structure",
@@ -164,7 +164,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     iconName: "file-output",
     kind: "skill",
     githubUrl:
-      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/docx/SKILL.md",
+      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/sandbox/src/common/skills/docx/SKILL.md",
     summaryBlocks: [
       {
         title: "Template-based generation",
@@ -211,7 +211,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     iconName: "table",
     kind: "skill",
     githubUrl:
-      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/xlsx/SKILL.md",
+      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/sandbox/src/common/skills/xlsx/SKILL.md",
     summaryBlocks: [
       {
         title: "Multi-sheet workbooks",
@@ -258,7 +258,7 @@ export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
     iconName: "wand",
     kind: "skill",
     githubUrl:
-      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/web/src/sandbox-templates/common/skills/skill-creator/SKILL.md",
+      "https://github.com/baptistecolle/cmdclaw/blob/main/apps/sandbox/src/common/skills/skill-creator/SKILL.md",
     summaryBlocks: [
       {
         title: "Natural language input",

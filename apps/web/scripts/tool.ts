@@ -1,7 +1,7 @@
 import { getCliEnvForUser } from "@cmdclaw/core/server/integrations/cli-env";
+import { SANDBOX_SKILLS_ROOT } from "@cmdclaw/sandbox/paths";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { DEFAULT_SERVER_URL, createRpcClient, loadConfig } from "./lib/cli-shared";
 
 type ToolSpec = {
@@ -15,10 +15,7 @@ type ParsedArgs = {
   toolArgs: string[];
 };
 
-const SKILLS_ROOT = resolve(
-  fileURLToPath(new URL(".", import.meta.url)),
-  "../src/sandbox-templates/common/skills",
-);
+const SKILLS_ROOT = SANDBOX_SKILLS_ROOT;
 
 const TOOL_ENV_REQUIREMENTS: Record<string, string[]> = {
   airtable: ["AIRTABLE_ACCESS_TOKEN"],

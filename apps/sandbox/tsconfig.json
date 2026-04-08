@@ -1,0 +1,20 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "include": [
+    "src/index.ts",
+    "src/paths.ts",
+    "src/common/lib/runtime-context.ts",
+    "src/common/plugins/integration-permissions.ts",
+    "src/common/versions.ts",
+    "src/e2b/**/*.ts",
+    "src/daytona/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.live.test.ts",
+    "src/**/*.live.test.tsx"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "@cmdclaw/sandbox",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./paths": "./src/paths.ts",
+    "./plugins/*": "./src/common/plugins/*.ts",
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bunx tsc --noEmit -p tsconfig.json",
+    "check": "bunx tsc --noEmit -p tsconfig.json",
+    "daytona:build:dev": "bun --env-file=../web/.env src/daytona/build.dev.ts",
+    "daytona:build:prod": "bun --env-file=../web/.env src/daytona/build.prod.ts",
+    "daytona:cleanup": "bun --env-file=../web/.env scripts/daytona-cleanup.ts",
+    "daytona:sandbox": "bun --env-file=../web/.env scripts/test-daytona-sandbox.ts",
+    "e2b:build:dev": "bun --env-file=../web/.env src/e2b/build.dev.ts",
+    "e2b:build:prod": "bun --env-file=../web/.env src/e2b/build.prod.ts",
+    "e2b:build:staging": "bun --env-file=../web/.env src/e2b/build.staging.ts",
+    "e2b:sandbox": "bun --env-file=../web/.env scripts/test-sandbox.ts",
+    "e2b:sandbox:kill-all": "bun --env-file=../web/.env scripts/e2b-sandboxes.ts kill-all",
+    "e2b:sandbox:list": "bun --env-file=../web/.env scripts/e2b-sandboxes.ts list",
+    "test:unit": "vitest run --config vitest.config.ts scripts/test-sandbox.test.ts",
+    "test:live": "bun --env-file=../web/.env vitest run src/common/opencode-agents.live.test.ts"
+  },
+  "dependencies": {
+    "@cmdclaw/db": "workspace:*",
+    "@daytonaio/sdk": "^0.144.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "e2b": "^2.12.1",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.6",
+    "@types/node": "^20",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

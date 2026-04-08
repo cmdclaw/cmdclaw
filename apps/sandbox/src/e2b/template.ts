@@ -1,0 +1,65 @@
+import { Template } from "e2b";
+import { OPENCODE_VERSION, EXECUTOR_VERSION } from "../common/versions";
+
+const COMMON_ROOT = "common";
+
+export const template = Template({
+  fileContextPath: "src",
+})
+  .fromUbuntuImage("24.04")
+  // Install base dependencies
+  .aptInstall(["curl", "git", "ripgrep", "ca-certificates", "gnupg", "unzip"])
+  // Install Python 3 (Ubuntu 24.04 has Python 3.12)
+  .aptInstall(["python3", "python3-venv", "python3-pip", "python-is-python3"])
+  // Install Node.js 22.x LTS (needed for packages with node shebang)
+  .runCmd(
+    "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs",
+  )
+  // Install agent-browser and preload Chromium
+  .npmInstall(["agent-browser"], { g: true })
+  .runCmd("agent-browser install --with-deps")
+  // Install bun and create symlinks in /usr/local/bin for PATH availability
+  .runCmd("curl -fsSL https://bun.sh/install | bash")
+  .runCmd("sudo ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
+  // Install OpenCode runtime + tsx for TypeScript CLI tools
+  .runCmd(
+    `$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx executor@${EXECUTOR_VERSION}`,
+  )
+  .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
+  .runCmd("sudo ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
+  .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
+  // Install Agent Sandbox SDK runtime (OpenCode compatibility at /opencode)
+  .runCmd("sudo npm install -g @sandbox-agent/cli@0.2.x")
+  .runCmd("sandbox-agent install-agent opencode")
+  .setWorkdir("/app")
+  // Copy OpenCode config, plugins, and custom tools
+  .copy(`${COMMON_ROOT}/opencode.json`, "/app/opencode.json")
+  .runCmd(
+    "mkdir -p /app/.opencode/agents /app/.opencode/plugins /app/.opencode/tools /app/.opencode/lib",
+  )
+  .copy(`${COMMON_ROOT}/agents`, "/app/.opencode/agents")
+  .copy(`${COMMON_ROOT}/plugins`, "/app/.opencode/plugins")
+  .copy(`${COMMON_ROOT}/tools`, "/app/.opencode/tools")
+  .copy(`${COMMON_ROOT}/lib`, "/app/.opencode/lib")
+  // Prewarm both runtimes to avoid first-request overhead
+  .runCmd("mkdir -p $HOME/.config/opencode /app/.opencode $HOME/.cache/opencode")
+  .runCmd("cp /app/opencode.json /app/.opencode/opencode.json")
+  .runCmd(
+    'bash -lc \'set -euo pipefail; opencode serve --hostname 127.0.0.1 --port 4096 > /tmp/opencode-prewarm.log 2>&1 & pid=$!; ok=0; for i in $(seq 1 120); do if curl -fsS http://127.0.0.1:4096/health >/dev/null 2>&1; then ok=1; break; fi; sleep 0.25; done; kill $pid || true; wait $pid || true; test "$ok" = "1"\'',
+  )
+  .runCmd(
+    'bash -lc \'set -euo pipefail; sandbox-agent server --no-token --host 127.0.0.1 --port 2468 > /tmp/sandbox-agent-prewarm.log 2>&1 & pid=$!; ok=0; for i in $(seq 1 120); do if curl -fsS http://127.0.0.1:2468/v1/health >/dev/null 2>&1; then ok=1; break; fi; sleep 0.25; done; kill $pid || true; wait $pid || true; test "$ok" = "1"\'',
+  )
+  // Copy skills into .claude/skills
+  .runCmd("mkdir -p /app/.agents /app/.claude")
+  .copy(`${COMMON_ROOT}/skills`, "/app/.agents/skills")
+  .copy(`${COMMON_ROOT}/lib`, "/app/.agents/lib")
+  // symlink for claude
+  .runCmd("ln -sfn /app/.agents/skills /app/.claude/skills")
+  // Copy setup script
+  .copy(`${COMMON_ROOT}/setup.sh`, "/app/setup.sh")
+  // allow to install packages from pip
+  .runCmd(
+    'mkdir -p $HOME/.config/pip && echo -e "[global]\nbreak-system-packages = true" > $HOME/.config/pip/pip.conf',
+  )
+  .runCmd("/app/setup.sh");
