@@ -18,6 +18,7 @@ import {
   useRemoveApprovedLoginEmailAllowlistEntry,
   useRemoveGoogleAccessAllowlistEntry,
 } from "@/orpc/hooks";
+import { getImpersonationErrorMessage } from "./impersonation-errors";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 
@@ -277,7 +278,7 @@ export default function AdminPage() {
     try {
       const result = await authClient.admin.impersonateUser({ userId: targetUserId });
       if (result.error) {
-        setActionError(result.error.message ?? "Unable to impersonate.");
+        setActionError(getImpersonationErrorMessage(result.error));
         return;
       }
       window.location.assign("/chat");
