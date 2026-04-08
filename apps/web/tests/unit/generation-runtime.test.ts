@@ -98,8 +98,24 @@ describe("GenerationRuntime", () => {
 
     const snapshot = runtime.snapshot;
     expect(snapshot.traceStatus).toBe("streaming");
-    expect(snapshot.segments[0]?.auth?.connectedIntegrations).toEqual(["github", "slack"]);
-    expect(snapshot.segments[0]?.auth?.status).toBe("completed");
+    expect(snapshot.segments[0]?.auth).toBeUndefined();
+  });
+
+  test("resolves pending auth immediately after a successful callback returns", () => {
+    const runtime = createGenerationRuntime();
+
+    runtime.handleAuthNeeded({
+      generationId: "gen-auth",
+      conversationId: "conv-auth",
+      integrations: ["notion"],
+      reason: "Notion authentication required",
+    });
+
+    runtime.resolveAuthSuccess("notion");
+
+    const snapshot = runtime.snapshot;
+    expect(snapshot.traceStatus).toBe("streaming");
+    expect(snapshot.segments[0]?.auth).toBeUndefined();
   });
 
   test("marks running activities interrupted on cancellation and appends system message once", () => {

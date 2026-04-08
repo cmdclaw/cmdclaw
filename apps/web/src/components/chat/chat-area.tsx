@@ -106,6 +106,7 @@ type Props = {
   onCoworkerSync?: (payload: { coworkerId: string; prompt?: string; updatedAt?: string }) => void;
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
+  authCompletion?: { integration: string; generationId: string } | null;
 };
 
 type QueuedMessage = {
@@ -666,6 +667,7 @@ export function ChatArea({
   onCoworkerSync,
   skillSelectionScopeKey: skillSelectionScopeKeyOverride,
   initialPrefillText,
+  authCompletion,
 }: Props) {
   const queryClient = useQueryClient();
   const posthog = usePostHog();
@@ -690,6 +692,7 @@ export function ChatArea({
   const currentGenerationIdRef = useRef<string | undefined>(undefined);
   const runtimeRef = useRef<GenerationRuntime | null>(null);
   const coworkerEditToolUseIdsRef = useRef(new Set<string>());
+  const authCompletionRef = useRef<{ integration: string; generationId: string } | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingParts, setStreamingParts] = useState<MessagePart[]>([]);
@@ -1300,6 +1303,27 @@ export function ChatArea({
     setTraceStatus(snapshot.traceStatus);
   }, []);
 
+  useEffect(() => {
+    if (!authCompletion) {
+      return;
+    }
+
+    authCompletionRef.current = authCompletion;
+
+    const runtime = runtimeRef.current;
+    if (!runtime) {
+      return;
+    }
+
+    const { generationId } = runtime.getCurrentIds();
+    if (generationId !== authCompletion.generationId) {
+      return;
+    }
+
+    runtime.resolveAuthSuccess(authCompletion.integration);
+    syncFromRuntime(runtime);
+  }, [authCompletion, syncFromRuntime]);
+
   const clearActiveGenerationUi = useCallback(() => {
     setStreamingParts([]);
     setStreamingSandboxFiles([]);
@@ -1753,6 +1777,13 @@ export function ChatArea({
             syncConversationForNewChat(data.conversationId);
           }
           runtime.handleAuthNeeded(data);
+          if (
+            authCompletionRef.current &&
+            authCompletionRef.current.generationId === data.generationId &&
+            data.integrations.includes(authCompletionRef.current.integration)
+          ) {
+            runtime.resolveAuthSuccess(authCompletionRef.current.integration);
+          }
           syncFromRuntime(runtime);
         },
         onAuthProgress: (connected, remaining) => {
@@ -2231,6 +2262,13 @@ export function ChatArea({
               syncConversationForNewChat(data.conversationId);
             }
             runtime.handleAuthNeeded(data);
+            if (
+              authCompletionRef.current &&
+              authCompletionRef.current.generationId === data.generationId &&
+              data.integrations.includes(authCompletionRef.current.integration)
+            ) {
+              runtime.resolveAuthSuccess(authCompletionRef.current.integration);
+            }
             syncFromRuntime(runtime);
           },
           onAuthProgress: (connected, remaining) => {

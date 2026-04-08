@@ -548,6 +548,30 @@ export class GenerationRuntime {
     }
   }
 
+  resolveAuthSuccess(integration: string): void {
+    for (const seg of this.segments) {
+      if (!seg.auth || (seg.auth.status !== "pending" && seg.auth.status !== "connecting")) {
+        continue;
+      }
+      if (!seg.auth.integrations.includes(integration)) {
+        continue;
+      }
+      if (!seg.auth.connectedIntegrations.includes(integration)) {
+        seg.auth.connectedIntegrations.push(integration);
+      }
+      const remaining = seg.auth.integrations.filter(
+        (candidate) => !seg.auth?.connectedIntegrations.includes(candidate),
+      );
+      if (remaining.length === 0) {
+        delete seg.auth;
+        this.traceStatus = "streaming";
+      } else {
+        seg.auth.status = "pending";
+      }
+      break;
+    }
+  }
+
   handleAuthProgress(connected: string, remaining: string[]): void {
     for (const seg of this.segments) {
       if (seg.auth && (seg.auth.status === "pending" || seg.auth.status === "connecting")) {
@@ -555,7 +579,10 @@ export class GenerationRuntime {
           seg.auth.connectedIntegrations.push(connected);
         }
         if (remaining.length === 0) {
-          seg.auth.status = "completed";
+          delete seg.auth;
+          this.traceStatus = "streaming";
+        } else {
+          seg.auth.status = "pending";
         }
         break;
       }
@@ -564,8 +591,12 @@ export class GenerationRuntime {
 
   handleAuthResult(success: boolean): void {
     for (const seg of this.segments) {
-      if (seg.auth) {
-        seg.auth.status = success ? "completed" : "cancelled";
+      if (seg.auth && (seg.auth.status === "pending" || seg.auth.status === "connecting")) {
+        if (success) {
+          delete seg.auth;
+        } else {
+          seg.auth.status = "cancelled";
+        }
         break;
       }
     }

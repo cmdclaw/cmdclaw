@@ -118,6 +118,7 @@ vi.mock("@/lib/generation-runtime", () => ({
     setAuthConnecting: vi.fn(),
     setAuthPending: vi.fn(),
     setAuthCancelled: vi.fn(),
+    resolveAuthSuccess: vi.fn(),
     buildAssistantMessage: () => ({
       content: "",
       parts: [],
