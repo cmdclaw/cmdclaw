@@ -54,11 +54,6 @@ async function main() {
     const baseUrl = `https://${host}`;
     console.log("baseUrl:", baseUrl);
 
-    console.log("starting sandbox-agent server...");
-    await sandbox.commands.run(
-      `cd /app && sandbox-agent server --no-token --host 0.0.0.0 --port ${PORT}`,
-      { timeoutMs: 0, background: true },
-    );
     console.log("waiting for server health...");
     await waitForServer(baseUrl);
 

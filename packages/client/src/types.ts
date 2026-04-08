@@ -109,7 +109,6 @@ export type DoneArtifactsData = {
       prePromptExecutorBootstrapLoadMs?: number;
       prePromptExecutorConfigWriteMs?: number;
       prePromptExecutorServerProbeMs?: number;
-      prePromptExecutorServerStartMs?: number;
       prePromptExecutorServerWaitReadyMs?: number;
       prePromptExecutorStatusCheckMs?: number;
       prePromptExecutorOauthReconcileMs?: number;

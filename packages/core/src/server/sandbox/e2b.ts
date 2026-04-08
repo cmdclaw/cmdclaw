@@ -19,8 +19,6 @@ import {
   createSandboxRuntimeClient,
   getSandboxReadinessUrl,
   getSandboxServerPort,
-  getSandboxServerStartCommand,
-  resolveSandboxAgentRuntimeForModel,
 } from "./opencode-runtime";
 
 // Use custom template with OpenCode pre-installed
@@ -30,6 +28,9 @@ const SANDBOX_TIMEOUT_MS = generationLifecyclePolicy.activeSandboxTimeoutMs;
 function resolveSandboxAppUrl(): string {
   const configuredUrl = env.E2B_CALLBACK_BASE_URL ?? env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
   if (!configuredUrl) {
+    if (process.env.NODE_ENV !== "production") {
+      return "https://localcan.baptistecolle.com";
+    }
     return "";
   }
   const parsed = new URL(configuredUrl);
@@ -156,38 +157,6 @@ function formatErrorMessage(error: unknown): string {
     return `${error.name}: ${error.message}`;
   }
   return String(error);
-}
-
-/**
- * Wait for OpenCode server to be ready
- */
-async function waitForServer(url: string, model: string, maxWait = 30000): Promise<void> {
-  const readinessUrl = getSandboxReadinessUrl(url, model);
-  const start = Date.now();
-  let attempts = 0;
-  let lastError: string | null = null;
-  while (true) {
-    if (Date.now() - start >= maxWait) {
-      throw new Error(
-        `OpenCode server in sandbox failed to start (url=${readinessUrl}, attempts=${attempts}, waitedMs=${Date.now() - start}, lastError=${lastError || "unknown"})`,
-      );
-    }
-
-    attempts += 1;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- readiness polling is intentional
-      const res = await fetch(readinessUrl, { method: "GET" });
-      if (res.ok) {
-        return;
-      }
-      lastError = `status_${res.status}`;
-    } catch {
-      // Server not ready yet
-      lastError = "network_error";
-    }
-    // eslint-disable-next-line no-await-in-loop -- readiness polling is intentional
-    await new Promise((r) => setTimeout(r, 500));
-  }
 }
 
 /**
@@ -446,113 +415,15 @@ export async function getOrCreateSandbox(
     );
   }
 
-  // Start OpenCode server in background
-  logLifecycle(
-    "OPENCODE_SERVER_START_REQUESTED",
-    {
-      conversationId: config.conversationId,
-      sandboxId: sandbox.sandboxId,
-      port: getSandboxServerPort(config.model),
-      runtime: resolveSandboxAgentRuntimeForModel(config.model),
-    },
-    { ...telemetryContext, sandboxId: sandbox.sandboxId },
-  );
-  onLifecycle?.("opencode_starting", {
-    conversationId: config.conversationId,
-    sandboxId: sandbox.sandboxId,
-    port: getSandboxServerPort(config.model),
-  });
-  const stderrBuffer: string[] = [];
-  try {
-    await sandbox.commands.run(
-      getSandboxServerStartCommand({
-        sandboxId: sandbox.sandboxId,
-        model: config.model,
-      }),
-      {
-        background: true,
-        onStderr: (data) => {
-          const line = data.trim();
-          if (!line) {
-            return;
-          }
-          if (stderrBuffer.length >= 20) {
-            stderrBuffer.shift();
-          }
-          stderrBuffer.push(line);
-          logServerEvent(
-            "warn",
-            "OPENCODE_SERVER_STDERR",
-            {
-              conversationId: config.conversationId,
-              sandboxId: sandbox.sandboxId,
-              stderr: line,
-            },
-            { ...telemetryContext, sandboxId: sandbox.sandboxId },
-          );
-        },
-      },
-    );
-  } catch (error) {
-    logServerEvent(
-      "error",
-      "OPENCODE_SERVER_START_FAILED",
-      {
-        conversationId: config.conversationId,
-        sandboxId: sandbox.sandboxId,
-        error: formatErrorMessage(error),
-      },
-      { ...telemetryContext, sandboxId: sandbox.sandboxId },
-    );
-    throw error;
-  }
-
-  // Get the public URL for the sandbox port
   const serverPort = getSandboxServerPort(config.model);
   const serverUrl = `https://${sandbox.getHost(serverPort)}`;
-  const serverReadyStart = Date.now();
-  onLifecycle?.("opencode_waiting_ready", {
-    conversationId: config.conversationId,
-    sandboxId: sandbox.sandboxId,
-    serverUrl,
-  });
-  try {
-    await waitForServer(serverUrl, config.model);
-  } catch (error) {
-    logServerEvent(
-      "error",
-      "OPENCODE_SERVER_READY_TIMEOUT",
-      {
-        conversationId: config.conversationId,
-        sandboxId: sandbox.sandboxId,
-        serverUrl,
-        durationMs: Date.now() - serverReadyStart,
-        error: formatErrorMessage(error),
-        recentStderr: stderrBuffer.join(" | ").slice(0, 4000),
-      },
-      { ...telemetryContext, sandboxId: sandbox.sandboxId },
-    );
-    throw error;
-  }
 
   // Create SDK client pointing to sandbox's OpenCode server
   const client = await createSandboxRuntimeClient({ serverUrl, model: config.model });
-
-  logLifecycle(
-    "OPENCODE_SERVER_READY",
-    {
-      conversationId: config.conversationId,
-      sandboxId: sandbox.sandboxId,
-      serverUrl,
-      durationMs: Date.now() - serverReadyStart,
-    },
-    { ...telemetryContext, sandboxId: sandbox.sandboxId },
-  );
   onLifecycle?.("opencode_ready", {
     conversationId: config.conversationId,
     sandboxId: sandbox.sandboxId,
     serverUrl,
-    durationMs: Date.now() - serverReadyStart,
   });
   return { sandbox, client, serverUrl, reused: false };
 }

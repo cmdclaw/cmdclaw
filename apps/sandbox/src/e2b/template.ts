@@ -2,6 +2,77 @@ import { Template } from "e2b";
 import { OPENCODE_VERSION, EXECUTOR_VERSION } from "../common/versions";
 
 const COMMON_ROOT = "common";
+const OPENCODE_PORT = 4096;
+const SANDBOX_AGENT_PORT = 2468;
+const EXECUTOR_PORT = 8788;
+const EXECUTOR_HOME = "/tmp/cmdclaw-executor/default";
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+const templateStartScript = [
+  "set -euo pipefail",
+  "cd /app",
+  `mkdir -p /app/.executor/state ${EXECUTOR_HOME} /app/.cmdclaw`,
+  "python3 - <<'PY'",
+  "import json",
+  "import os",
+  "import re",
+  "import shlex",
+  "",
+  "env = {",
+  "  key: value",
+  "  for key, value in os.environ.items()",
+  "  if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', key)",
+  "}",
+  "with open('/app/.cmdclaw/runtime-env.json', 'w', encoding='utf-8') as runtime_env_json:",
+  "  json.dump(env, runtime_env_json)",
+  "with open('/app/.cmdclaw/runtime-env.sh', 'w', encoding='utf-8') as runtime_env_sh:",
+  "  for key, value in sorted(env.items()):",
+  "    runtime_env_sh.write(f'export {key}={shlex.quote(value)}\\n')",
+  "PY",
+  "chmod 600 /app/.cmdclaw/runtime-env.json /app/.cmdclaw/runtime-env.sh",
+  "export OPENCODE_CONFIG=/app/opencode.json",
+  `export EXECUTOR_HOME=${EXECUTOR_HOME}`,
+  `opencode serve --hostname 0.0.0.0 --port ${OPENCODE_PORT} >/tmp/opencode.log 2>&1 &`,
+  "opencode_pid=$!",
+  `sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT} >/tmp/sandbox-agent.log 2>&1 &`,
+  "sandbox_agent_pid=$!",
+  `executor server start --port ${EXECUTOR_PORT} >/tmp/cmdclaw-executor-server.log 2>&1 &`,
+  "executor_pid=$!",
+  'cleanup() { kill "$opencode_pid" "$sandbox_agent_pid" "$executor_pid" 2>/dev/null || true; }',
+  "trap cleanup EXIT INT TERM",
+  'wait -n "$opencode_pid" "$sandbox_agent_pid" "$executor_pid"',
+  "status=$?",
+  "cleanup",
+  'wait "$opencode_pid" "$sandbox_agent_pid" "$executor_pid" 2>/dev/null || true',
+  "exit $status",
+].join("\n");
+
+const templateReadyScript = [
+  "set -uo pipefail",
+  "for _ in $(seq 1 120); do",
+  "if " +
+    [
+      `curl -fsS http://127.0.0.1:${OPENCODE_PORT}/health >/dev/null 2>&1`,
+      `curl -fsS http://127.0.0.1:${SANDBOX_AGENT_PORT}/v1/health >/dev/null 2>&1`,
+      `curl -fsS http://127.0.0.1:${EXECUTOR_PORT}/ >/dev/null 2>&1`,
+    ].join(" && ") +
+    "; then exit 0; fi",
+  "sleep 0.25",
+  "done",
+  "echo 'OpenCode log:' >&2",
+  "tail -n 50 /tmp/opencode.log >&2 || true",
+  "echo 'Sandbox Agent log:' >&2",
+  "tail -n 50 /tmp/sandbox-agent.log >&2 || true",
+  "echo 'Executor log:' >&2",
+  "tail -n 50 /tmp/cmdclaw-executor-server.log >&2 || true",
+  "exit 1",
+].join("\n");
+
+const templateStartCommand = `bash -lc ${shellQuote(templateStartScript)}`;
+const templateReadyCommand = `bash -lc ${shellQuote(templateReadyScript)}`;
 
 export const template = Template({
   fileContextPath: "src",
@@ -62,4 +133,5 @@ export const template = Template({
   .runCmd(
     'mkdir -p $HOME/.config/pip && echo -e "[global]\nbreak-system-packages = true" > $HOME/.config/pip/pip.conf',
   )
-  .runCmd("/app/setup.sh");
+  .runCmd("/app/setup.sh")
+  .setStartCmd(templateStartCommand, templateReadyCommand);

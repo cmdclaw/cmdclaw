@@ -76,11 +76,16 @@ function createPackageRow(source: ReturnType<typeof createSource>) {
             name: source.name,
             namespace: source.namespace,
             enabled: source.enabled,
-            connection: { endpoint: source.endpoint },
-            binding: {
+            config: {
+              endpoint: source.endpoint,
               transport: source.transport,
               queryParams: source.queryParams,
               headers: source.headers,
+              command: null,
+              args: null,
+              env: null,
+              cwd: null,
+              auth: { kind: "none" },
             },
           },
         },
@@ -216,9 +221,9 @@ describe("workspace executor OAuth bootstrap", () => {
       }),
     ]);
     const config = JSON.parse(result.configJson) as {
-      sources: Record<string, { binding: { headers: Record<string, string> | null } }>;
+      sources: Record<string, { config: { headers: Record<string, string> | null } }>;
     };
-    expect(config.sources["src-1"]?.binding.headers).toBeNull();
+    expect(config.sources["src-1"]?.config.headers).toBeNull();
   });
 
   it("marks disconnected OAuth sources as auth_required", async () => {

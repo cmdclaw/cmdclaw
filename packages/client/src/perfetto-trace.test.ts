@@ -21,7 +21,6 @@ describe("buildPerfettoTraceFromTiming", () => {
           prePromptExecutorBootstrapLoadMs: 30,
           prePromptExecutorConfigWriteMs: 10,
           prePromptExecutorServerProbeMs: 10,
-          prePromptExecutorServerStartMs: 15,
           prePromptExecutorServerWaitReadyMs: 35,
           prePromptExecutorStatusCheckMs: 10,
           prePromptExecutorOauthReconcileMs: 10,
@@ -145,159 +144,149 @@ describe("buildPerfettoTraceFromTiming", () => {
             elapsedMs: 1630,
           },
           {
-            phase: "pre_prompt_executor_server_start_started",
+            phase: "pre_prompt_executor_server_wait_ready_started",
             at: "2026-04-02T10:00:01.630Z",
             elapsedMs: 1630,
           },
           {
-            phase: "pre_prompt_executor_server_start_completed",
-            at: "2026-04-02T10:00:01.645Z",
-            elapsedMs: 1645,
-          },
-          {
-            phase: "pre_prompt_executor_server_wait_ready_started",
-            at: "2026-04-02T10:00:01.645Z",
-            elapsedMs: 1645,
-          },
-          {
             phase: "pre_prompt_executor_server_wait_ready_completed",
-            at: "2026-04-02T10:00:01.680Z",
-            elapsedMs: 1680,
+            at: "2026-04-02T10:00:01.665Z",
+            elapsedMs: 1665,
           },
           {
             phase: "pre_prompt_executor_status_check_started",
-            at: "2026-04-02T10:00:01.680Z",
-            elapsedMs: 1680,
+            at: "2026-04-02T10:00:01.665Z",
+            elapsedMs: 1665,
           },
           {
             phase: "pre_prompt_executor_status_check_completed",
-            at: "2026-04-02T10:00:01.690Z",
-            elapsedMs: 1690,
+            at: "2026-04-02T10:00:01.675Z",
+            elapsedMs: 1675,
           },
           {
             phase: "pre_prompt_executor_oauth_reconcile_started",
+            at: "2026-04-02T10:00:01.675Z",
+            elapsedMs: 1675,
+          },
+          {
+            phase: "pre_prompt_executor_oauth_reconcile_completed",
+            at: "2026-04-02T10:00:01.685Z",
+            elapsedMs: 1685,
+          },
+          {
+            phase: "pre_prompt_executor_prepare_completed",
+            at: "2026-04-02T10:00:01.685Z",
+            elapsedMs: 1685,
+          },
+          {
+            phase: "pre_prompt_skills_and_creds_load_started",
             at: "2026-04-02T10:00:01.690Z",
             elapsedMs: 1690,
           },
           {
-            phase: "pre_prompt_executor_oauth_reconcile_completed",
-            at: "2026-04-02T10:00:01.700Z",
-            elapsedMs: 1700,
-          },
-          {
-            phase: "pre_prompt_executor_prepare_completed",
-            at: "2026-04-02T10:00:01.700Z",
-            elapsedMs: 1700,
-          },
-          {
-            phase: "pre_prompt_skills_and_creds_load_started",
-            at: "2026-04-02T10:00:01.705Z",
-            elapsedMs: 1705,
-          },
-          {
             phase: "pre_prompt_skills_and_creds_load_completed",
-            at: "2026-04-02T10:00:01.765Z",
-            elapsedMs: 1765,
+            at: "2026-04-02T10:00:01.750Z",
+            elapsedMs: 1750,
           },
           {
             phase: "pre_prompt_cache_read_started",
-            at: "2026-04-02T10:00:01.770Z",
-            elapsedMs: 1770,
+            at: "2026-04-02T10:00:01.755Z",
+            elapsedMs: 1755,
           },
           {
             phase: "pre_prompt_cache_read_completed",
-            at: "2026-04-02T10:00:01.800Z",
-            elapsedMs: 1800,
+            at: "2026-04-02T10:00:01.785Z",
+            elapsedMs: 1785,
           },
           {
             phase: "pre_prompt_skills_write_started",
-            at: "2026-04-02T10:00:01.805Z",
-            elapsedMs: 1805,
+            at: "2026-04-02T10:00:01.790Z",
+            elapsedMs: 1790,
           },
           {
             phase: "pre_prompt_skills_write_completed",
-            at: "2026-04-02T10:00:01.875Z",
-            elapsedMs: 1875,
+            at: "2026-04-02T10:00:01.860Z",
+            elapsedMs: 1860,
           },
           {
             phase: "pre_prompt_custom_integration_cli_write_started",
-            at: "2026-04-02T10:00:01.880Z",
-            elapsedMs: 1880,
+            at: "2026-04-02T10:00:01.865Z",
+            elapsedMs: 1865,
           },
           {
             phase: "pre_prompt_custom_integration_cli_write_completed",
+            at: "2026-04-02T10:00:01.885Z",
+            elapsedMs: 1885,
+          },
+          {
+            phase: "pre_prompt_custom_integration_permissions_write_started",
+            at: "2026-04-02T10:00:01.890Z",
+            elapsedMs: 1890,
+          },
+          {
+            phase: "pre_prompt_custom_integration_permissions_write_completed",
             at: "2026-04-02T10:00:01.900Z",
             elapsedMs: 1900,
           },
           {
-            phase: "pre_prompt_custom_integration_permissions_write_started",
+            phase: "pre_prompt_integration_skills_write_started",
             at: "2026-04-02T10:00:01.905Z",
             elapsedMs: 1905,
           },
           {
-            phase: "pre_prompt_custom_integration_permissions_write_completed",
-            at: "2026-04-02T10:00:01.915Z",
-            elapsedMs: 1915,
-          },
-          {
-            phase: "pre_prompt_integration_skills_write_started",
-            at: "2026-04-02T10:00:01.920Z",
-            elapsedMs: 1920,
-          },
-          {
             phase: "pre_prompt_integration_skills_write_completed",
-            at: "2026-04-02T10:00:01.960Z",
-            elapsedMs: 1960,
+            at: "2026-04-02T10:00:01.945Z",
+            elapsedMs: 1945,
           },
           {
             phase: "pre_prompt_cache_write_started",
-            at: "2026-04-02T10:00:01.965Z",
-            elapsedMs: 1965,
+            at: "2026-04-02T10:00:01.950Z",
+            elapsedMs: 1950,
           },
           {
             phase: "pre_prompt_cache_write_completed",
-            at: "2026-04-02T10:00:01.985Z",
-            elapsedMs: 1985,
+            at: "2026-04-02T10:00:01.970Z",
+            elapsedMs: 1970,
           },
           {
             phase: "pre_prompt_prompt_spec_compose_started",
-            at: "2026-04-02T10:00:01.986Z",
-            elapsedMs: 1986,
+            at: "2026-04-02T10:00:01.971Z",
+            elapsedMs: 1971,
           },
           {
             phase: "pre_prompt_prompt_spec_compose_completed",
-            at: "2026-04-02T10:00:01.996Z",
-            elapsedMs: 1996,
+            at: "2026-04-02T10:00:01.981Z",
+            elapsedMs: 1981,
           },
           {
             phase: "pre_prompt_event_stream_subscribe_started",
-            at: "2026-04-02T10:00:01.997Z",
-            elapsedMs: 1997,
+            at: "2026-04-02T10:00:01.982Z",
+            elapsedMs: 1982,
           },
           {
             phase: "pre_prompt_event_stream_subscribe_completed",
-            at: "2026-04-02T10:00:02.017Z",
-            elapsedMs: 2017,
+            at: "2026-04-02T10:00:02.002Z",
+            elapsedMs: 2002,
           },
           {
             phase: "pre_prompt_coworker_docs_stage_started",
-            at: "2026-04-02T10:00:02.018Z",
-            elapsedMs: 2018,
+            at: "2026-04-02T10:00:02.003Z",
+            elapsedMs: 2003,
           },
           {
             phase: "pre_prompt_coworker_docs_stage_completed",
-            at: "2026-04-02T10:00:02.038Z",
-            elapsedMs: 2038,
+            at: "2026-04-02T10:00:02.023Z",
+            elapsedMs: 2023,
           },
           {
             phase: "pre_prompt_attachments_stage_started",
-            at: "2026-04-02T10:00:02.039Z",
-            elapsedMs: 2039,
+            at: "2026-04-02T10:00:02.024Z",
+            elapsedMs: 2024,
           },
           {
             phase: "pre_prompt_attachments_stage_completed",
-            at: "2026-04-02T10:00:02.079Z",
-            elapsedMs: 2079,
+            at: "2026-04-02T10:00:02.064Z",
+            elapsedMs: 2064,
           },
           { phase: "prompt_sent", at: "2026-04-02T10:00:02.100Z", elapsedMs: 2100 },
           {
@@ -386,7 +375,6 @@ describe("buildPerfettoTraceFromTiming", () => {
       "pre_prompt_executor_prepare",
       "pre_prompt_executor_config_write",
       "pre_prompt_executor_server_probe",
-      "pre_prompt_executor_server_start",
       "pre_prompt_executor_server_wait_ready",
       "pre_prompt_executor_status_check",
       "pre_prompt_executor_oauth_reconcile",
@@ -453,7 +441,7 @@ describe("buildPerfettoTraceFromTiming", () => {
     const skillsWrite = result.trace.traceEvents.find((event) => event.name === "pre_prompt_skills_write");
     expect(skillsWrite).toMatchObject({
       tid: 5,
-      ts: 1_805_000,
+      ts: 1_790_000,
       dur: 70_000,
     });
 
@@ -462,7 +450,7 @@ describe("buildPerfettoTraceFromTiming", () => {
     );
     expect(integrationSkillsWrite).toMatchObject({
       tid: 6,
-      ts: 1_920_000,
+      ts: 1_905_000,
       dur: 40_000,
     });
 
@@ -481,7 +469,7 @@ describe("buildPerfettoTraceFromTiming", () => {
     expect(executorPrepare).toMatchObject({
       tid: 8,
       ts: 1_580_000,
-      dur: 120_000,
+      dur: 105_000,
     });
 
     const modelStream = result.trace.traceEvents.find((event) => event.name === "model_stream");

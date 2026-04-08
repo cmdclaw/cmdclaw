@@ -7,6 +7,10 @@
  * - Requests OAuth authentication for missing tokens via HTTP callback
  */
 
+import { loadRuntimeEnv } from "../lib/runtime-env";
+
+loadRuntimeEnv();
+
 // Integration CLI names to internal type mapping
 const CLI_TO_INTEGRATION: Record<string, string> = {
   slack: "slack",
@@ -391,6 +395,10 @@ export function getCallbackBaseUrls(): string[] {
       return [...loopbackUrls, "https://localcan.baptistecolle.com"];
     }
     return loopbackUrls;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return ["https://localcan.baptistecolle.com"];
   }
 
   return [];

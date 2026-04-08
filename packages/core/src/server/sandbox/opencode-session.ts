@@ -33,7 +33,6 @@ import {
   getSandboxReadinessUrl,
   getSandboxServerPort,
   getSandboxServerBackgroundStartCommand,
-  getSandboxServerStartCommand,
 } from "./opencode-runtime";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
 
@@ -1002,26 +1001,7 @@ export async function getOrCreateSandboxForCloudProvider(
       }).catch(() => null);
 
       if (!health?.ok) {
-        agentOptions?.onLifecycle?.("opencode_starting", {
-          conversationId: config.conversationId,
-          sandboxId: state.sandbox.sandboxId,
-          port: serverPort,
-        });
-        await state.sandbox.commands.run(
-          getSandboxServerStartCommand({
-            sandboxId: state.sandbox.sandboxId,
-            model: config.model,
-          }),
-          {
-            background: true,
-          },
-        );
-        agentOptions?.onLifecycle?.("opencode_waiting_ready", {
-          conversationId: config.conversationId,
-          sandboxId: state.sandbox.sandboxId,
-          serverUrl,
-        });
-        await waitForServer(serverUrl, config.model);
+        throw new Error(`Sandbox runtime is not ready at ${serverUrl}`);
       }
 
       agentOptions?.onLifecycle?.("opencode_ready", {

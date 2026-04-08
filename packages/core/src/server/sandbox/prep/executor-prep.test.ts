@@ -104,16 +104,11 @@ describe("prepareExecutorInSandbox", () => {
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([]);
   });
 
-  it("starts executor via executor server start and validates the local server", async () => {
+  it("waits for the template-managed executor server and validates the local server", async () => {
     const sandbox = makeSandboxHandle();
     vi.mocked(sandbox.exec)
       .mockResolvedValueOnce({
         exitCode: 1,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
         stdout: "",
         stderr: "",
       })
@@ -141,19 +136,8 @@ describe("prepareExecutorInSandbox", () => {
     expect(vi.mocked(sandbox.exec).mock.calls[0]?.[0]).toBe(
       "curl -fsS 'http://127.0.0.1:8788/' >/dev/null",
     );
-    expect(vi.mocked(sandbox.exec).mock.calls[1]?.[0]).toContain(
-      "executor server start --port 8788",
-    );
-    expect(vi.mocked(sandbox.exec).mock.calls[1]?.[1]).toEqual(
-      expect.objectContaining({
-        background: true,
-        env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
-        },
-      }),
-    );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      3,
+      2,
       expect.stringContaining("executor server did not become ready"),
       expect.objectContaining({
         env: {
@@ -162,7 +146,7 @@ describe("prepareExecutorInSandbox", () => {
       }),
     );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      4,
+      3,
       `executor call --base-url 'http://127.0.0.1:8788' --no-open 'return "ok"'`,
       expect.objectContaining({
         env: {
@@ -221,11 +205,6 @@ describe("prepareExecutorInSandbox", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
         stdout: '"ok"\n',
         stderr: "",
       });
@@ -240,9 +219,8 @@ describe("prepareExecutorInSandbox", () => {
 
     expect(sandbox.exec).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("executor server start --port 8788"),
+      expect.stringContaining("executor server did not become ready"),
       expect.objectContaining({
-        background: true,
         env: {
           EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
           EXECUTOR_TRACE_ENABLED: "1",
@@ -293,11 +271,6 @@ describe("prepareExecutorInSandbox", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
         stdout: '"ok"\n',
         stderr: "",
       })
@@ -331,7 +304,7 @@ describe("prepareExecutorInSandbox", () => {
     await result?.finalize;
 
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      5,
+      4,
       expect.stringContaining("/v1/local/secrets"),
       expect.objectContaining({
         env: {
@@ -340,7 +313,7 @@ describe("prepareExecutorInSandbox", () => {
       }),
     );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      7,
+      6,
       expect.stringContaining("tools.executor.mcp.updateSource"),
       expect.objectContaining({
         env: {
@@ -349,7 +322,7 @@ describe("prepareExecutorInSandbox", () => {
       }),
     );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      8,
+      7,
       expect.stringContaining("tools.executor.sources.refresh"),
       expect.objectContaining({
         env: {
@@ -637,7 +610,6 @@ describe("prepareExecutorInSandbox", () => {
     vi.mocked(sandbox.exec)
       .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '"ok"\n', stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '{"id":"sec-source-2"}', stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '{"id":"source-2"}', stderr: "" })
@@ -697,11 +669,6 @@ describe("prepareExecutorInSandbox", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
         stdout: '"ok"\n',
         stderr: "",
       });
@@ -714,7 +681,7 @@ describe("prepareExecutorInSandbox", () => {
     });
     await result?.finalize;
 
-    expect(sandbox.exec).toHaveBeenCalledTimes(4);
+    expect(sandbox.exec).toHaveBeenCalledTimes(3);
   });
 
   it("emits detailed executor bootstrap phases", async () => {
@@ -760,8 +727,6 @@ describe("prepareExecutorInSandbox", () => {
       "config_write:completed",
       "server_probe:started",
       "server_probe:completed",
-      "server_start:started",
-      "server_start:completed",
       "server_wait_ready:started",
       "server_wait_ready:completed",
       "status_check:started",

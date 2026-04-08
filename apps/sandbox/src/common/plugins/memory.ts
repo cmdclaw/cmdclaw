@@ -6,6 +6,10 @@
  * into the sandbox.
  */
 
+import { loadRuntimeEnv } from "../lib/runtime-env";
+
+loadRuntimeEnv();
+
 type MemoryToolInput = Record<string, unknown>;
 
 const MEMORY_TOOLS = [

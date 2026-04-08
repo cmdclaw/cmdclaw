@@ -25,15 +25,6 @@ export function resolveSandboxAgentRuntimeForModel(model: string): SandboxAgentR
   return providerID === "anthropic" ? "agentsdk" : "opencode";
 }
 
-export function getSandboxServerStartCommand(input: { sandboxId: string; model: string }): string {
-  const runtime = resolveSandboxAgentRuntimeForModel(input.model);
-  const serverCommand =
-    runtime === "agentsdk"
-      ? `sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT}`
-      : `opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0`;
-  return `export SANDBOX_ID=${input.sandboxId} && cd /app && ${serverCommand}`;
-}
-
 export function getSandboxServerBackgroundStartCommand(input: {
   sandboxId: string;
   model: string;

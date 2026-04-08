@@ -5,8 +5,6 @@ import {
 } from "../../../../packages/core/src/server/prompts/opencode-agent-ids";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { Sandbox } from "e2b";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { beforeAll, describe, expect, test } from "vitest";
 import { liveEnabled } from "../../../web/tests/e2e-cli/live-fixtures";
 
@@ -14,17 +12,6 @@ const templateName = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev"
 const liveSandboxAgentsEnabled = liveEnabled && Boolean(process.env.E2B_API_KEY);
 const sandboxTimeoutMs = 15 * 60 * 1000;
 const opencodePort = 4096;
-
-async function copySandboxAsset(
-  sandbox: Sandbox,
-  input: {
-    localPath: string;
-    remotePath: string;
-  },
-): Promise<void> {
-  const content = await readFile(input.localPath, "utf8");
-  await sandbox.files.write(input.remotePath, content);
-}
 
 async function waitForHealth(url: string): Promise<void> {
   const timeoutMs = 30_000;
@@ -65,30 +52,6 @@ describe.runIf(liveSandboxAgentsEnabled)("@live OpenCode agents", () => {
       });
 
       try {
-        const commonRoot = path.join(process.cwd(), "src", "common");
-        await sandbox.commands.run("mkdir -p /app/.opencode/agents");
-        await copySandboxAsset(sandbox, {
-          localPath: path.join(commonRoot, "opencode.json"),
-          remotePath: "/app/opencode.json",
-        });
-        await copySandboxAsset(sandbox, {
-          localPath: path.join(commonRoot, "agents", `${CMDCLAW_CHAT_AGENT_ID}.md`),
-          remotePath: `/app/.opencode/agents/${CMDCLAW_CHAT_AGENT_ID}.md`,
-        });
-        await copySandboxAsset(sandbox, {
-          localPath: path.join(commonRoot, "agents", `${CMDCLAW_COWORKER_BUILDER_AGENT_ID}.md`),
-          remotePath: `/app/.opencode/agents/${CMDCLAW_COWORKER_BUILDER_AGENT_ID}.md`,
-        });
-        await copySandboxAsset(sandbox, {
-          localPath: path.join(commonRoot, "agents", `${CMDCLAW_COWORKER_RUNNER_AGENT_ID}.md`),
-          remotePath: `/app/.opencode/agents/${CMDCLAW_COWORKER_RUNNER_AGENT_ID}.md`,
-        });
-
-        await sandbox.commands.run(
-          "bash -lc 'cd /app && env OPENCODE_CONFIG=/app/opencode.json opencode serve --hostname 0.0.0.0 --port 4096 >/tmp/opencode-agents-live.log 2>&1'",
-          { background: true },
-        );
-
         const baseUrl = `https://${sandbox.getHost(opencodePort)}`;
         await waitForHealth(baseUrl);
 

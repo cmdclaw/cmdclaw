@@ -2145,11 +2145,6 @@ class GenerationManager {
       "pre_prompt_executor_server_probe_started",
       "pre_prompt_executor_server_probe_completed",
     );
-    const prePromptExecutorServerStartMs = phaseDurationMs(
-      phaseMarks,
-      "pre_prompt_executor_server_start_started",
-      "pre_prompt_executor_server_start_completed",
-    );
     const prePromptExecutorServerWaitReadyMs = phaseDurationMs(
       phaseMarks,
       "pre_prompt_executor_server_wait_ready_started",
@@ -2268,7 +2263,6 @@ class GenerationManager {
       prePromptExecutorBootstrapLoadMs,
       prePromptExecutorConfigWriteMs,
       prePromptExecutorServerProbeMs,
-      prePromptExecutorServerStartMs,
       prePromptExecutorServerWaitReadyMs,
       prePromptExecutorStatusCheckMs,
       prePromptExecutorOauthReconcileMs,

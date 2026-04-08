@@ -27,11 +27,7 @@ type LocalExecutorConfigSource = Record<string, unknown> & {
   name?: string;
   namespace?: string;
   enabled?: boolean;
-  connection: Record<string, unknown> & {
-    endpoint: string;
-    auth?: string;
-  };
-  binding: Record<string, unknown>;
+  config: Record<string, unknown>;
 };
 
 type LocalExecutorConfig = {
@@ -57,7 +53,7 @@ type LocalWorkspaceState = {
 };
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
-const WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION = 2;
+const WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION = 3;
 const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
   /re-authorization is required/i,
   /reauthorization is required/i,
@@ -128,11 +124,10 @@ function buildBaseSourceConfig(source: WorkspaceExecutorSourceRecord): LocalExec
       name: source.name,
       namespace: source.namespace,
       enabled: source.enabled,
-      connection: {
-        endpoint: source.endpoint,
-      },
-      binding: {
+      config: {
         specUrl: source.specUrl,
+        baseUrl: source.endpoint,
+        auth: { kind: "none" },
         defaultHeaders: source.defaultHeaders ?? null,
       },
     };
@@ -143,13 +138,16 @@ function buildBaseSourceConfig(source: WorkspaceExecutorSourceRecord): LocalExec
     name: source.name,
     namespace: source.namespace,
     enabled: source.enabled,
-    connection: {
+    config: {
       endpoint: source.endpoint,
-    },
-    binding: {
       transport: source.transport ?? null,
       queryParams: source.queryParams ?? null,
       headers: source.headers ?? null,
+      command: null,
+      args: null,
+      env: null,
+      cwd: null,
+      auth: { kind: "none" },
     },
   };
 }
@@ -428,9 +426,9 @@ function mergeAuthIntoSourceConfig(input: {
   }
 
   if (input.source.kind === "openapi") {
-    const binding = (next.binding ?? {}) as Record<string, unknown>;
+    const config = (next.config ?? {}) as Record<string, unknown>;
     const defaultHeaders = {
-      ...((binding.defaultHeaders as Record<string, string> | null | undefined) ?? {}),
+      ...((config.defaultHeaders as Record<string, string> | null | undefined) ?? {}),
     };
 
     if (input.source.authType === "bearer") {
@@ -440,17 +438,17 @@ function mergeAuthIntoSourceConfig(input: {
       defaultHeaders[input.source.authHeaderName?.trim() || "X-API-Key"] = secret;
     }
 
-    binding.defaultHeaders = defaultHeaders;
-    next.binding = binding;
+    config.defaultHeaders = defaultHeaders;
+    next.config = config;
     return Promise.resolve(next);
   }
 
-  const binding = (next.binding ?? {}) as Record<string, unknown>;
+  const config = (next.config ?? {}) as Record<string, unknown>;
   const headers = {
-    ...((binding.headers as Record<string, string> | null | undefined) ?? {}),
+    ...((config.headers as Record<string, string> | null | undefined) ?? {}),
   };
   const queryParams = {
-    ...((binding.queryParams as Record<string, string> | null | undefined) ?? {}),
+    ...((config.queryParams as Record<string, string> | null | undefined) ?? {}),
   };
 
   if (input.source.authType === "bearer") {
@@ -462,9 +460,9 @@ function mergeAuthIntoSourceConfig(input: {
     headers[input.source.authHeaderName?.trim() || "X-API-Key"] = secret;
   }
 
-  binding.headers = headers;
-  binding.queryParams = queryParams;
-  next.binding = binding;
+  config.headers = headers;
+  config.queryParams = queryParams;
+  next.config = config;
   return Promise.resolve(next);
 }
 

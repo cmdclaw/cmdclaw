@@ -8,7 +8,6 @@ import type { SandboxHandle } from "../core/types";
 
 const EXECUTOR_BASE_URL = "http://127.0.0.1:8788";
 const EXECUTOR_WORKSPACE_ROOT = "/app";
-const EXECUTOR_SERVER_PORT = 8788;
 const EXECUTOR_SERVER_LOG_PATH = "/tmp/cmdclaw-executor-server.log";
 const DEFAULT_EXECUTOR_TRACE_SERVICE_NAME = "cmdclaw-sandbox-executor";
 const EXECUTOR_OAUTH_CACHE_PATH = "oauth-reconcile-cache.json";
@@ -75,7 +74,6 @@ export type ExecutorPreparePhase =
   | "bootstrap_load"
   | "config_write"
   | "server_probe"
-  | "server_start"
   | "server_wait_ready"
   | "status_check"
   | "oauth_reconcile";
@@ -469,30 +467,6 @@ async function ensureExecutorServerReady(input: {
     ),
   );
 
-  if (serverReadyResult.exitCode !== 0) {
-    const startResult = await input.runPhase("server_start", async () =>
-      await execNoThrow(
-        input.sandbox,
-        `cd ${escapeShell(EXECUTOR_WORKSPACE_ROOT)} && executor server start --port ${EXECUTOR_SERVER_PORT} >${escapeShell(
-          EXECUTOR_SERVER_LOG_PATH,
-        )} 2>&1`,
-        {
-          timeoutMs: 0,
-          background: true,
-          env: input.env,
-        },
-      ),
-    );
-
-    if (startResult.exitCode !== 0) {
-      throw new Error(
-        `Executor bootstrap failed (exit=${startResult.exitCode}): ${
-          startResult.stderr || startResult.stdout || "unknown error"
-        }`,
-      );
-    }
-  }
-
   const waitCommand = [
     "for _ in $(seq 1 30); do",
     `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null 2>&1 && exit 0;`,
@@ -511,10 +485,10 @@ async function ensureExecutorServerReady(input: {
   );
 
   if (waitResult.exitCode !== 0) {
+    const details =
+      serverReadyResult.stderr || serverReadyResult.stdout || waitResult.stderr || waitResult.stdout;
     throw new Error(
-      `Executor bootstrap failed (exit=${waitResult.exitCode}): ${
-        waitResult.stderr || waitResult.stdout || "unknown error"
-      }`,
+      `Executor bootstrap failed (exit=${waitResult.exitCode}): ${details || "unknown error"}`,
     );
   }
 

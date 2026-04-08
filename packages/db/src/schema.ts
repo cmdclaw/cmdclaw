@@ -581,8 +581,6 @@ export type MessageTiming = {
     prePromptExecutorConfigWriteMs?: number;
     // Time spent probing whether the sandbox-local executor server is already reachable.
     prePromptExecutorServerProbeMs?: number;
-    // Time spent launching the sandbox-local executor server when it is not already running.
-    prePromptExecutorServerStartMs?: number;
     // Time spent waiting for the sandbox-local executor server to become ready.
     prePromptExecutorServerWaitReadyMs?: number;
     // Time spent validating the executor server with a live status call.

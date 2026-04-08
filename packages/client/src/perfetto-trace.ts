@@ -64,7 +64,6 @@ type TracePhaseSpec = {
     | "pre_prompt_executor_bootstrap_load"
     | "pre_prompt_executor_config_write"
     | "pre_prompt_executor_server_probe"
-    | "pre_prompt_executor_server_start"
     | "pre_prompt_executor_server_wait_ready"
     | "pre_prompt_executor_status_check"
     | "pre_prompt_executor_oauth_reconcile"
@@ -183,13 +182,6 @@ const TRACE_PHASE_SPECS: TracePhaseSpec[] = [
     durationKey: "prePromptExecutorServerProbeMs",
     startPhases: ["pre_prompt_executor_server_probe_started"],
     endPhases: ["pre_prompt_executor_server_probe_completed"],
-  },
-  {
-    name: "pre_prompt_executor_server_start",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorServerStartMs",
-    startPhases: ["pre_prompt_executor_server_start_started"],
-    endPhases: ["pre_prompt_executor_server_start_completed"],
   },
   {
     name: "pre_prompt_executor_server_wait_ready",
