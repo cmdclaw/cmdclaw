@@ -27,6 +27,10 @@ import {
 import { resolveCliToolMetadata } from "../../lib/tool-metadata";
 import { createAuthenticatedClient, resolveServerUrl } from "../../lib/client";
 import { exportPerfettoTraceForCompletedRun } from "./perfetto-trace";
+import {
+  buildGenerationTimingLines,
+  createGenerationTimingTracker,
+} from "./stream-timing";
 
 type ChatFlags = {
   server?: string;
@@ -41,6 +45,7 @@ type ChatFlags = {
   questionAnswer?: readonly string[];
   file?: readonly string[];
   perfettoTrace?: boolean;
+  timing?: boolean;
   token?: string;
 };
 
@@ -49,6 +54,7 @@ type ChatState = {
   connectedProviderIds?: string[];
   conversationId?: string;
   perfettoTrace: boolean;
+  timing: boolean;
   file: readonly string[];
   message?: string;
   model?: string;
@@ -315,6 +321,7 @@ async function runOneGeneration(
 ): Promise<string | null> {
   const resolvedServerUrl = resolveServerUrl(state.server);
   const normalizedServerUrl = resolvedServerUrl.replace(/\/$/, "");
+  const generationTiming = createGenerationTimingTracker();
 
   const result = await runChatSession({
     client,
@@ -328,12 +335,19 @@ async function runOneGeneration(
       fileAttachments: attachments?.length ? attachments : undefined,
     },
     onText: (text) => {
+      if (text.length > 0) {
+        generationTiming.noteVisibleOutput();
+      }
       stdout.write(text);
     },
     onThinking: (thinking) => {
+      if (thinking.length > 0) {
+        generationTiming.noteVisibleOutput();
+      }
       stdout.write(`\n[thinking] ${thinking}\n`);
     },
     onToolUse: (toolUse) => {
+      generationTiming.noteVisibleOutput();
       const metadata = resolveCliToolMetadata(toolUse);
       stdout.write(`\n[tool_use] ${toolUse.toolName}\n`);
       if (metadata.integration) {
@@ -345,10 +359,12 @@ async function runOneGeneration(
       stdout.write(`[tool_input] ${JSON.stringify(toolUse.toolInput)}\n`);
     },
     onToolResult: (toolName, resultValue) => {
+      generationTiming.noteVisibleOutput();
       stdout.write(`\n[tool_result] ${toolName}\n`);
       stdout.write(`[tool_result_data] ${typeof resultValue === "string" ? resultValue : JSON.stringify(resultValue)}\n`);
     },
     onPendingApproval: async (approval, apiClient) => {
+      generationTiming.noteVisibleOutput();
       stdout.write(`\n[approval_needed] ${approval.toolName}\n`);
       stdout.write(
         `[approval_input] ${JSON.stringify({
@@ -427,6 +443,7 @@ async function runOneGeneration(
       }
     },
     onAuthNeeded: async (auth, apiClient) => {
+      generationTiming.noteVisibleOutput();
       stdout.write(`\n[auth_needed] ${auth.integrations.join(", ")}\n`);
       const authPrompt = createApprovalPrompt(rl);
 
@@ -476,6 +493,7 @@ async function runOneGeneration(
 
   switch (result.status) {
     case "completed":
+      generationTiming.noteCompleted();
       stdout.write("\n");
       if (state.validate) {
         await validatePersistedAssistantMessage(client, result.conversationId, result.messageId, {
@@ -494,6 +512,11 @@ async function runOneGeneration(
           stdout.write(`[perfetto_trace] ${traceResult.path}\n`);
         } else {
           stdout.write("[warning] Perfetto trace export skipped: phase timestamps unavailable.\n");
+        }
+      }
+      if (state.timing) {
+        for (const line of buildGenerationTimingLines(generationTiming.snapshot())) {
+          stdout.write(`${line}\n`);
         }
       }
       stdout.write(`[conversation] ${result.conversationId}\n`);
@@ -644,6 +667,7 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     validate: flags.validate,
     file: flags.file ?? [],
     perfettoTrace: flags.perfettoTrace ?? false,
+    timing: flags.timing ?? false,
     questionAnswer: flags.questionAnswer ?? [],
   };
 

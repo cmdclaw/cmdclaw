@@ -74,6 +74,11 @@ export const chatCommand = buildCommand({
         optional: true,
         brief: "Write Perfetto trace JSON to perfetto-traces/",
       },
+      timing: {
+        kind: "boolean",
+        optional: true,
+        brief: "Show first/last assistant text timestamps",
+      },
       token: {
         kind: "parsed",
         parse: (input: string) => input,
