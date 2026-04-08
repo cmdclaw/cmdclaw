@@ -994,6 +994,8 @@ async function main(): Promise<void> {
     );
   }
 
+  await executorBootstrap.finalize;
+
   console.log(
     `✓ Bootstrapped executor workspace with ${executorBootstrap.sourceCount} source(s) from ${workspace.name}`,
   );

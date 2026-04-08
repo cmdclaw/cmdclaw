@@ -519,6 +519,84 @@ describe("buildPerfettoTraceFromTiming", () => {
     });
   });
 
+  it("keeps executor prepare spans when oauth reconcile completes after prompt send", () => {
+    const result = buildPerfettoTraceFromTiming({
+      timing: {
+        phaseDurationsMs: {
+          prePromptSetupMs: 120,
+          prePromptExecutorPrepareMs: 271,
+          prePromptExecutorStatusCheckMs: 80,
+          prePromptExecutorOauthReconcileMs: 160,
+          promptToFirstTokenMs: 90,
+        },
+        phaseTimestamps: [
+          {
+            phase: "pre_prompt_setup_started",
+            at: "2026-04-02T10:00:01.000Z",
+            elapsedMs: 1000,
+          },
+          {
+            phase: "pre_prompt_executor_prepare_started",
+            at: "2026-04-02T10:00:01.010Z",
+            elapsedMs: 1010,
+          },
+          {
+            phase: "pre_prompt_executor_status_check_started",
+            at: "2026-04-02T10:00:01.040Z",
+            elapsedMs: 1040,
+          },
+          {
+            phase: "pre_prompt_executor_status_check_completed",
+            at: "2026-04-02T10:00:01.120Z",
+            elapsedMs: 1120,
+          },
+          { phase: "prompt_sent", at: "2026-04-02T10:00:01.120Z", elapsedMs: 1120 },
+          {
+            phase: "first_token_emitted",
+            at: "2026-04-02T10:00:01.210Z",
+            elapsedMs: 1210,
+          },
+          {
+            phase: "pre_prompt_executor_oauth_reconcile_started",
+            at: "2026-04-02T10:00:01.121Z",
+            elapsedMs: 1121,
+          },
+          {
+            phase: "pre_prompt_executor_oauth_reconcile_completed",
+            at: "2026-04-02T10:00:01.281Z",
+            elapsedMs: 1281,
+          },
+          {
+            phase: "pre_prompt_executor_prepare_completed",
+            at: "2026-04-02T10:00:01.281Z",
+            elapsedMs: 1281,
+          },
+        ],
+      },
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") {
+      return;
+    }
+
+    const executorPrepare = result.trace.traceEvents.find(
+      (event) => event.name === "pre_prompt_executor_prepare",
+    );
+    expect(executorPrepare).toMatchObject({
+      ts: 10_000,
+      dur: 271_000,
+    });
+
+    const promptToFirstToken = result.trace.traceEvents.find(
+      (event) => event.name === "prompt_to_first_token",
+    );
+    expect(promptToFirstToken).toMatchObject({
+      ts: 120_000,
+      dur: 90_000,
+    });
+  });
+
   it("skips export when phase timestamps are missing", () => {
     expect(
       buildPerfettoTraceFromTiming({

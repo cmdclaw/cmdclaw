@@ -67,6 +67,10 @@ export type ExecutorSandboxBootstrap = {
   instructions: string;
 };
 
+export type ExecutorSandboxPreparation = ExecutorSandboxBootstrap & {
+  finalize: Promise<{ oauthCacheHits: number }>;
+};
+
 export type ExecutorPreparePhase =
   | "bootstrap_load"
   | "config_write"
@@ -545,7 +549,7 @@ export async function prepareExecutorInSandbox(input: {
   runtimeId?: string | null;
   reuseExistingState?: boolean;
   onPhase?: (phase: ExecutorPreparePhase, status: "started" | "completed") => void;
-}): Promise<(ExecutorSandboxBootstrap & { oauthCacheHits?: number }) | null> {
+}): Promise<ExecutorSandboxPreparation | null> {
   const runPhase = async <T>(phase: ExecutorPreparePhase, action: () => Promise<T>): Promise<T> => {
     input.onPhase?.(phase, "started");
     try {
@@ -585,16 +589,6 @@ export async function prepareExecutorInSandbox(input: {
     runPhase,
   });
 
-  const oauthReconcile = await runPhase("oauth_reconcile", async () => {
-    return await reconcileNativeMcpOAuthSourcesInSandbox({
-      sandbox: input.sandbox,
-      env: executorCommandEnv,
-      sources: nativeMcpOauthSources,
-      homeDirectory,
-      reuseExistingState: input.reuseExistingState,
-    });
-  });
-
   const lines = [
     "## Executor Runtime",
     "CmdClaw prepared a sandbox-local executor workspace for shared workspace sources.",
@@ -613,12 +607,26 @@ export async function prepareExecutorInSandbox(input: {
     ),
   ];
 
+  const finalize = runPhase("oauth_reconcile", async () => {
+    const oauthReconcile = await reconcileNativeMcpOAuthSourcesInSandbox({
+      sandbox: input.sandbox,
+      env: executorCommandEnv,
+      sources: nativeMcpOauthSources,
+      homeDirectory,
+      reuseExistingState: input.reuseExistingState,
+    });
+
+    return {
+      oauthCacheHits: oauthReconcile.cacheHits,
+    };
+  });
+
   return {
     revisionHash: bootstrap.revisionHash,
     sourceCount: bootstrap.sources.length,
     baseUrl: EXECUTOR_BASE_URL,
     homeDirectory,
     instructions: lines.join("\n"),
-    oauthCacheHits: oauthReconcile.cacheHits,
+    finalize,
   };
 }

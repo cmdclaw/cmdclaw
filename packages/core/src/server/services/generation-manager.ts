@@ -755,6 +755,16 @@ function isBootstrapTimeoutError(error: unknown): boolean {
   return formatErrorMessage(error).startsWith("Error: Agent preparation timed out after ");
 }
 
+class ExecutorPromptReadyError extends Error {
+  override cause: unknown;
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "ExecutorPromptReadyError";
+    this.cause = cause;
+  }
+}
+
 function isMissingSandboxError(error: unknown): boolean {
   const message = formatErrorMessage(error).toLowerCase();
   return (
@@ -5200,7 +5210,7 @@ class GenerationManager {
       let writtenSkills: string[] = [];
       let writtenIntegrationSkills: string[] = [];
       let prePromptCacheHit = false;
-      let executorOauthCacheHits = 0;
+      let executorPrepareFinalizePromise: Promise<void> = Promise.resolve();
       let startPostPromptCacheWrite: (() => Promise<void>) | null = null;
 
       const memorySyncPromise = (async () => {
@@ -5242,27 +5252,72 @@ class GenerationManager {
       })();
 
       const executorPreparePromise = (async () => {
+        markPrePromptPhase("executor_prepare", "started");
+        const executorPrepareStartedAt = Date.now();
+        let executorPrepareCompleted = false;
+        const completeExecutorPrepare = () => {
+          if (executorPrepareCompleted) {
+            return;
+          }
+          executorPrepareCompleted = true;
+          markPrePromptStep("prepareExecutorInSandboxMs", executorPrepareStartedAt);
+          markPrePromptPhase("executor_prepare", "completed");
+        };
+        const executorLogContext = () => ({
+          source: "generation-manager" as const,
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+          sandboxId: runtimeSandbox.sandboxId,
+          sessionId: sessionId ?? ctx.sessionId,
+        });
+
         try {
-          const executorBootstrap = await runPrePromptStep(
-            "executor_prepare",
-            "prepareExecutorInSandboxMs",
-            async () =>
-              await prepareExecutorInSandbox({
-                sandbox: runtimeSandbox,
-                workspaceId: ctx.workspaceId,
-                userId: ctx.userId,
-                allowedSourceIds: ctx.allowedExecutorSourceIds,
-                runtimeId: ctx.runtimeId,
-                reuseExistingState: ctx.agentSandboxMode === "reused",
-                onPhase: (phase, status) => {
-                  this.markPhase(ctx, `pre_prompt_executor_${phase}_${status}`);
-                },
-              }),
-          );
+          const executorBootstrap = await prepareExecutorInSandbox({
+            sandbox: runtimeSandbox,
+            workspaceId: ctx.workspaceId,
+            userId: ctx.userId,
+            allowedSourceIds: ctx.allowedExecutorSourceIds,
+            runtimeId: ctx.runtimeId,
+            reuseExistingState: ctx.agentSandboxMode === "reused",
+            onPhase: (phase, status) => {
+              this.markPhase(ctx, `pre_prompt_executor_${phase}_${status}`);
+            },
+          });
           executorInstructions = executorBootstrap?.instructions ?? null;
-          executorOauthCacheHits = executorBootstrap?.oauthCacheHits ?? 0;
+          executorPrepareFinalizePromise = (executorBootstrap?.finalize ?? Promise.resolve({ oauthCacheHits: 0 }))
+            .then((result) => {
+              logServerEvent(
+                "info",
+                "EXECUTOR_PREP_COMPLETED",
+                {
+                  oauthCacheHits: result.oauthCacheHits,
+                },
+                executorLogContext(),
+              );
+            })
+            .catch((error) => {
+              console.error(
+                "[GenerationManager] Executor OAuth reconcile failed after prompt-ready bootstrap:",
+                error,
+              );
+              logServerEvent(
+                "error",
+                "EXECUTOR_PREP_FINALIZE_FAILED",
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                executorLogContext(),
+              );
+            })
+            .finally(() => {
+              completeExecutorPrepare();
+            });
         } catch (error) {
           console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
+          completeExecutorPrepare();
+          throw new ExecutorPromptReadyError(error);
         }
       })();
 
@@ -5489,10 +5544,10 @@ class GenerationManager {
       await Promise.all([
         memorySyncPromise,
         runtimeContextWritePromise,
-        executorPreparePromise,
-        skillAssetPreparePromise,
-        runtimeSessionPromise,
-      ]);
+          executorPreparePromise,
+          skillAssetPreparePromise,
+          runtimeSessionPromise,
+        ]);
 
       if (!sessionId) {
         throw new Error("Runtime session ID is unavailable.");
@@ -5685,13 +5740,13 @@ class GenerationManager {
         );
       }
 
+      void executorPrepareFinalizePromise;
       markPrePromptStep("prePromptSetupTotalMs", prePromptStartedAt);
       logServerEvent(
         "info",
         "PRE_PROMPT_BREAKDOWN",
         {
           cacheHit: prePromptCacheHit,
-          executorOauthCacheHits,
           sandboxMode: ctx.agentSandboxMode ?? "unknown",
           ...prePromptBreakdown,
         },
@@ -6032,6 +6087,15 @@ class GenerationManager {
         });
         this.setCompletionReason(ctx, "bootstrap_timeout");
         ctx.errorMessage = error instanceof Error ? error.message : formatErrorMessage(error);
+        await this.finishGeneration(ctx, "error");
+        return;
+      }
+      if (error instanceof ExecutorPromptReadyError) {
+        this.captureOriginalError(ctx, error.cause ?? error, {
+          phase: this.getCurrentPhase(ctx) ?? "pre_prompt_executor_prepare_failed",
+        });
+        this.setCompletionReason(ctx, "runtime_error");
+        ctx.errorMessage = error.message;
         await this.finishGeneration(ctx, "error");
         return;
       }
