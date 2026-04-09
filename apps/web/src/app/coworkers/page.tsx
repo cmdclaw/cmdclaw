@@ -8,18 +8,13 @@ import {
   BarChart3,
   History,
   Network,
-  Circle,
   Download,
-  Ellipsis,
   Eye,
   Loader2,
   Menu,
-  PenLine,
-  Play,
   Plus,
   Search,
   Share2,
-  Trash2,
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -30,13 +25,10 @@ import { type ChangeEvent, useCallback, useMemo, useRef, useState } from "react"
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/app/coworkers/layout";
-import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
-import {
-  CoworkerCardContent,
-  getCoworkerDisplayName,
-} from "@/components/coworkers/coworker-card-content";
+import { getCoworkerDisplayName } from "@/components/coworkers/coworker-card-content";
+import { InteractiveCoworkerCard } from "@/components/coworkers/interactive-coworker-card";
 // Commented out — prompt bar removed from coworkers page
 // import { VoiceIndicator } from "@/components/chat/voice-indicator";
 // import { PromptBar } from "@/components/prompt-bar";
@@ -59,19 +51,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
-import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
   INTEGRATION_LOGOS,
@@ -85,17 +67,12 @@ import {
   useCreateCoworker,
   useCoworkerList,
   useDeleteCoworker,
-  useExportCoworkerDefinition,
   useImportCoworkerDefinition,
   useImportSharedCoworker,
   useIntegrationList,
   useProviderAuthStatus,
-  useShareCoworker,
   useSharedCoworkerList,
   useTranscribe,
-  useTriggerCoworker,
-  useUnshareCoworker,
-  useUpdateCoworker,
 } from "@/orpc/hooks";
 
 type CoworkerItem = {
@@ -182,29 +159,6 @@ function getTriggerLabel(triggerType: string) {
   return map[triggerType] ?? triggerType;
 }
 
-function getCoworkerExportFilename(coworker: Pick<CoworkerItem, "name" | "username">) {
-  const baseLabel = coworker.username?.trim() || coworker.name?.trim() || "coworker";
-  const slug = baseLabel
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return `${slug || "coworker"}.json`;
-}
-
-function downloadCoworkerDefinition(filename: string, json: string) {
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 function buildToolSummary(
   coworker: Pick<CoworkerItem, "toolAccessMode" | "allowedIntegrations" | "allowedSkillSlugs">,
   connectedIntegrationTypes: IntegrationType[],
@@ -231,358 +185,6 @@ function buildToolSummary(
   };
 }
 
-function getRunStatusColor(status: string) {
-  if (status === "completed") {
-    return "text-emerald-500";
-  }
-  if (status === "running" || status === "awaiting_approval" || status === "awaiting_auth") {
-    return "text-blue-500";
-  }
-  if (status === "paused") {
-    return "text-amber-500";
-  }
-  if (status === "error" || status === "cancelled") {
-    return "text-red-500";
-  }
-  return "text-muted-foreground";
-}
-
-function RunsList({ runs }: { runs: NonNullable<CoworkerItem["recentRuns"]> }) {
-  return (
-    <div className="flex flex-col">
-      <div className="px-3 py-2">
-        <p className="text-xs font-bold">Recent runs</p>
-      </div>
-      <div className="max-h-64 overflow-y-auto">
-        {runs.map((run) => (
-          <Link
-            key={run.id}
-            href={`/coworkers/runs/${run.id}`}
-            className="hover:bg-muted/50 flex items-center gap-2.5 px-3 py-2 transition-colors"
-          >
-            <Circle
-              className={cn("h-1.5 w-1.5 shrink-0 fill-current", getRunStatusColor(run.status))}
-            />
-            <span className="text-foreground/70 text-xs">
-              {getCoworkerRunStatusLabel(run.status)}
-            </span>
-            <span className="text-muted-foreground ml-auto text-xs">
-              {formatDate(run.startedAt) ?? "—"}
-            </span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CoworkerCard({
-  coworker,
-  connectedIntegrationTypes,
-  isRunning,
-  isUpdatingStatus,
-  isUpdatingShare,
-  isExporting,
-  isDeleting,
-  onRun,
-  onOpen,
-  onToggleStatus,
-  onToggleShare,
-  onExport,
-  onDelete,
-}: {
-  coworker: CoworkerItem;
-  connectedIntegrationTypes: IntegrationType[];
-  isRunning: boolean;
-  isUpdatingStatus: boolean;
-  isUpdatingShare: boolean;
-  isExporting: boolean;
-  isDeleting: boolean;
-  onRun: (coworker: CoworkerItem) => void;
-  onOpen: (id: string) => void;
-  onToggleStatus: (coworker: CoworkerItem) => void;
-  onToggleShare: (coworker: CoworkerItem) => void;
-  onExport: (coworker: CoworkerItem) => void;
-  onDelete: (coworker: CoworkerItem) => void;
-}) {
-  const isMobile = useIsMobile();
-  const [runsOpen, setRunsOpen] = useState(false);
-  const isOn = coworker.status === "on";
-  const recentRun = Array.isArray(coworker.recentRuns) ? coworker.recentRuns[0] : null;
-  const hasRuns = Array.isArray(coworker.recentRuns) && coworker.recentRuns.length > 0;
-  const toolSummary = useMemo(
-    () => buildToolSummary(coworker, connectedIntegrationTypes),
-    [connectedIntegrationTypes, coworker],
-  );
-
-  const handleRun = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onRun(coworker);
-    },
-    [onRun, coworker],
-  );
-  const handleOpen = useCallback(() => {
-    onOpen(coworker.id);
-  }, [onOpen, coworker.id]);
-  const handleDelete = useCallback(() => {
-    onDelete(coworker);
-  }, [coworker, onDelete]);
-  const handleToggleShare = useCallback(() => {
-    onToggleShare(coworker);
-  }, [coworker, onToggleShare]);
-  const handleExport = useCallback(() => {
-    onExport(coworker);
-  }, [coworker, onExport]);
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key !== "Enter" && e.key !== " ") {
-        return;
-      }
-      e.preventDefault();
-      onOpen(coworker.id);
-    },
-    [onOpen, coworker.id],
-  );
-  const handleToggleStatusClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onToggleStatus(coworker);
-    },
-    [coworker, onToggleStatus],
-  );
-  const handleStopPropagation = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-  }, []);
-  const handleOpenRunsSheet = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setRunsOpen(true);
-  }, []);
-  const handleRunsTriggerClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-  }, []);
-  const handleMenuKeyDown = useCallback((e: React.KeyboardEvent) => {
-    e.stopPropagation();
-  }, []);
-
-  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
-  const statusButton = (
-    <button
-      type="button"
-      onClick={handleToggleStatusClick}
-      disabled={isUpdatingStatus || isDeleting}
-      className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
-        "disabled:pointer-events-none disabled:opacity-50",
-        isOn
-          ? "border-green-500/20 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:text-green-400"
-          : "border-border bg-muted/60 text-muted-foreground hover:bg-muted",
-      )}
-    >
-      {isUpdatingStatus ? (
-        <Loader2 className="size-2.5 animate-spin" />
-      ) : (
-        <span
-          className={cn("size-2 rounded-full", isOn ? "bg-green-500" : "bg-muted-foreground/40")}
-        />
-      )}
-      {isOn ? "On" : "Off"}
-    </button>
-  );
-
-  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
-  const actionsMenu = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={handleStopPropagation}
-          className={cn(
-            "text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors",
-            "opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100",
-            "max-sm:opacity-100",
-          )}
-        >
-          <Ellipsis className="size-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="w-52"
-        onClick={handleStopPropagation}
-        onKeyDown={handleMenuKeyDown}
-      >
-        <DropdownMenuItem
-          onSelect={handleToggleShare}
-          disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
-        >
-          <Share2 className="size-4" />
-          {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={handleExport}
-          disabled={isExporting || isDeleting || isUpdatingStatus}
-        >
-          <Download className="size-4" />
-          Export as JSON
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={handleDelete}
-          disabled={isDeleting || isUpdatingStatus}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="size-4" />
-          Delete coworker
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-
-  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
-  const toolBadges = (
-    <>
-      {toolSummary.visibleIntegrations.length > 0 && (
-        <div className="flex items-center gap-1">
-          {toolSummary.visibleIntegrations.map((key) => {
-            const logo = INTEGRATION_LOGOS[key];
-            if (!logo) {
-              return null;
-            }
-            return (
-              <Image
-                key={key}
-                src={logo}
-                alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
-                width={14}
-                height={14}
-                className="size-3.5 shrink-0"
-                title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
-              />
-            );
-          })}
-        </div>
-      )}
-      {toolSummary.showSkillBadge ? (
-        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-          {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
-        </span>
-      ) : null}
-      {toolSummary.overflowCount > 0 ? (
-        <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
-          +{toolSummary.overflowCount}
-        </span>
-      ) : null}
-    </>
-  );
-
-  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
-  const runsSection = hasRuns ? (
-    isMobile ? (
-      <Sheet open={runsOpen} onOpenChange={setRunsOpen}>
-        <button
-          type="button"
-          onClick={handleOpenRunsSheet}
-          className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
-        >
-          {recentRun ? (
-            <span>
-              Last run:{" "}
-              <span className="text-muted-foreground">
-                {getCoworkerRunStatusLabel(recentRun.status)}
-              </span>{" "}
-              · {formatDate(recentRun.startedAt) ?? "—"}
-            </span>
-          ) : null}
-        </button>
-        <SheetContent
-          side="bottom"
-          showCloseButton={false}
-          title={`${getCoworkerDisplayName(coworker.name)} runs`}
-          className="h-auto max-h-[60vh]"
-        >
-          <RunsList runs={coworker.recentRuns!} />
-        </SheetContent>
-      </Sheet>
-    ) : (
-      <Popover open={runsOpen} onOpenChange={setRunsOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            onClick={handleRunsTriggerClick}
-            className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
-          >
-            {recentRun ? (
-              <span>
-                Last run:{" "}
-                <span className="text-muted-foreground">
-                  {getCoworkerRunStatusLabel(recentRun.status)}
-                </span>{" "}
-                · {formatDate(recentRun.startedAt) ?? "—"}
-              </span>
-            ) : null}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 p-0" onClick={handleStopPropagation}>
-          <RunsList runs={coworker.recentRuns!} />
-        </PopoverContent>
-      </Popover>
-    )
-  ) : undefined;
-
-  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
-  const footer = (
-    <div className="mt-auto flex items-center justify-between pt-3">
-      <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-        Coworker
-      </span>
-      <div className="flex items-center gap-0.5">
-        <Link
-          href={`/coworkers/${coworker.id}`}
-          onClick={handleStopPropagation}
-          className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors"
-          title="Edit coworker"
-        >
-          <PenLine className="size-3.5" />
-        </Link>
-        <button
-          type="button"
-          onClick={handleRun}
-          disabled={isRunning || isDeleting}
-          className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
-          title="Run coworker"
-        >
-          {isRunning ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Play className="size-3.5" />
-          )}
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div
-      tabIndex={0}
-      onClick={handleOpen}
-      onKeyDown={handleKeyDown}
-      className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group flex h-full min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-    >
-      <CoworkerCardContent
-        coworker={coworker}
-        statusSlot={statusButton}
-        actionsSlot={actionsMenu}
-        badgesSlot={toolBadges}
-        runsSlot={runsSection}
-        footerSlot={footer}
-      />
-    </div>
-  );
-}
 
 function SharedCoworkerCard({
   coworker,
@@ -713,12 +315,7 @@ export default function CoworkersPage() {
   const { data: integrations } = useIntegrationList();
   const { data: providerAuthStatus } = useProviderAuthStatus();
   const createCoworker = useCreateCoworker();
-  const triggerCoworker = useTriggerCoworker();
-  const updateCoworker = useUpdateCoworker();
   const deleteCoworker = useDeleteCoworker();
-  const shareCoworker = useShareCoworker();
-  const unshareCoworker = useUnshareCoworker();
-  const exportCoworkerDefinition = useExportCoworkerDefinition();
   const importCoworkerDefinition = useImportCoworkerDefinition();
   const importSharedCoworker = useImportSharedCoworker();
   const { isRecording, error: _voiceError, startRecording, stopRecording } = useVoiceRecording();
@@ -733,10 +330,6 @@ export default function CoworkersPage() {
     text: string;
     mode?: "replace" | "append";
   } | null>(null);
-  const [runningCoworkerId, setRunningCoworkerId] = useState<string | null>(null);
-  const [statusCoworkerId, setStatusCoworkerId] = useState<string | null>(null);
-  const [shareCoworkerId, setShareCoworkerId] = useState<string | null>(null);
-  const [exportingCoworkerId, setExportingCoworkerId] = useState<string | null>(null);
   const [importingSharedCoworkerId, setImportingSharedCoworkerId] = useState<string | null>(null);
   const [deletingCoworkerId, setDeletingCoworkerId] = useState<string | null>(null);
   const [coworkerPendingDelete, setCoworkerPendingDelete] = useState<CoworkerItem | null>(null);
@@ -811,67 +404,6 @@ export default function CoworkersPage() {
     );
   }, [sharedCoworkerList, searchQuery]);
 
-  const handleRunCoworker = useCallback(
-    async (coworker: CoworkerItem) => {
-      setRunningCoworkerId(coworker.id);
-      try {
-        const result = await triggerCoworker.mutateAsync({ id: coworker.id, payload: {} });
-        toast.success("Run started.");
-        router.push(result?.runId ? `/coworkers/runs/${result.runId}` : "/coworkers/runs");
-      } catch (error) {
-        console.error("Failed to trigger coworker:", error);
-        toast.error("Failed to start run.");
-      } finally {
-        setRunningCoworkerId(null);
-      }
-    },
-    [router, triggerCoworker],
-  );
-  const handleOpenCoworker = useCallback(
-    (id: string) => {
-      router.push(`/coworkers/${id}`);
-    },
-    [router],
-  );
-  const handleToggleCoworkerStatus = useCallback(
-    async (coworker: CoworkerItem) => {
-      const nextStatus = coworker.status === "on" ? "off" : "on";
-      setStatusCoworkerId(coworker.id);
-      try {
-        await updateCoworker.mutateAsync({ id: coworker.id, status: nextStatus });
-        toast.success(`Coworker turned ${nextStatus}.`);
-      } catch (error) {
-        console.error("Failed to update coworker status:", error);
-        toast.error("Failed to update coworker.");
-      } finally {
-        setStatusCoworkerId(null);
-      }
-    },
-    [updateCoworker],
-  );
-  const handleDeleteRequest = useCallback((coworker: CoworkerItem) => {
-    setCoworkerPendingDelete(coworker);
-  }, []);
-  const handleToggleShare = useCallback(
-    async (coworker: CoworkerItem) => {
-      setShareCoworkerId(coworker.id);
-      try {
-        if (coworker.sharedAt) {
-          await unshareCoworker.mutateAsync(coworker.id);
-          toast.success("Coworker unshared.");
-        } else {
-          await shareCoworker.mutateAsync(coworker.id);
-          toast.success("Coworker shared with workspace.");
-        }
-      } catch (error) {
-        console.error("Failed to update coworker sharing:", error);
-        toast.error("Failed to update sharing.");
-      } finally {
-        setShareCoworkerId(null);
-      }
-    },
-    [shareCoworker, unshareCoworker],
-  );
   const handleImportSharedCoworker = useCallback(
     async (sourceCoworkerId: string) => {
       setImportingSharedCoworkerId(sourceCoworkerId);
@@ -887,24 +419,6 @@ export default function CoworkersPage() {
       }
     },
     [importSharedCoworker, router],
-  );
-  const handleExportCoworker = useCallback(
-    async (coworker: CoworkerItem) => {
-      setExportingCoworkerId(coworker.id);
-      try {
-        const definition = await exportCoworkerDefinition.mutateAsync(coworker.id);
-        const json = JSON.stringify(definition, null, 2);
-        const filename = getCoworkerExportFilename(coworker);
-        downloadCoworkerDefinition(filename, json);
-        toast.success(`Exported ${filename}.`);
-      } catch (error) {
-        console.error("Failed to export coworker:", error);
-        toast.error("Failed to export coworker.");
-      } finally {
-        setExportingCoworkerId(null);
-      }
-    },
-    [exportCoworkerDefinition],
   );
   const handleImportCoworkerClick = useCallback(() => {
     if (importCoworkerDefinition.isPending) {
@@ -1305,21 +819,7 @@ export default function CoworkersPage() {
                     exit={CARD_MOTION.exit}
                     transition={CARD_MOTION.transition}
                   >
-                    <CoworkerCard
-                      coworker={wf}
-                      connectedIntegrationTypes={connectedIntegrationTypes}
-                      isRunning={runningCoworkerId === wf.id}
-                      isUpdatingStatus={statusCoworkerId === wf.id}
-                      isUpdatingShare={shareCoworkerId === wf.id}
-                      isExporting={exportingCoworkerId === wf.id}
-                      isDeleting={deletingCoworkerId === wf.id}
-                      onRun={handleRunCoworker}
-                      onOpen={handleOpenCoworker}
-                      onToggleStatus={handleToggleCoworkerStatus}
-                      onToggleShare={handleToggleShare}
-                      onExport={handleExportCoworker}
-                      onDelete={handleDeleteRequest}
-                    />
+                    <InteractiveCoworkerCard coworker={wf} />
                   </motion.div>
                 ))}
               </AnimatePresence>

@@ -94,6 +94,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@types/yauzl": "^2.10.3",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@xyflow/react": "^12.10.2",
     "atmn": "^0.0.33",
     "autumn-js": "^0.1.74",
     "better-auth": "1.4.3",
