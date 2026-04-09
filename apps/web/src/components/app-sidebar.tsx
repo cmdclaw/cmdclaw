@@ -384,6 +384,7 @@ export function AppSidebar() {
 
   const adminMonitoringItems: NavItem[] = [
     { icon: Activity, label: "Chat Health", href: "/admin/chat-overview" },
+    { icon: Cuboid, label: "Coworker Overview", href: "/admin/coworker-overview" },
     { icon: Gauge, label: "Performance", href: "/admin/performance" },
     { icon: Bug, label: "Ops", href: "/admin/ops" },
   ];

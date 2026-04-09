@@ -4,8 +4,10 @@ import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source"
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
 import {
+  Activity,
   BarChart3,
   History,
+  Network,
   Circle,
   Download,
   Ellipsis,
@@ -31,6 +33,10 @@ import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/app/coworkers/layout";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
+import {
+  CoworkerCardContent,
+  getCoworkerDisplayName,
+} from "@/components/coworkers/coworker-card-content";
 // Commented out — prompt bar removed from coworkers page
 // import { VoiceIndicator } from "@/components/chat/voice-indicator";
 // import { PromptBar } from "@/components/prompt-bar";
@@ -174,11 +180,6 @@ function getTriggerLabel(triggerType: string) {
     webhook: "Webhook",
   };
   return map[triggerType] ?? triggerType;
-}
-
-function getCoworkerDisplayName(name?: string | null) {
-  const trimmed = name?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : "New Coworker";
 }
 
 function getCoworkerExportFilename(coworker: Pick<CoworkerItem, "name" | "username">) {
@@ -367,6 +368,203 @@ function CoworkerCard({
     e.stopPropagation();
   }, []);
 
+  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
+  const statusButton = (
+    <button
+      type="button"
+      onClick={handleToggleStatusClick}
+      disabled={isUpdatingStatus || isDeleting}
+      className={cn(
+        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+        "disabled:pointer-events-none disabled:opacity-50",
+        isOn
+          ? "border-green-500/20 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:text-green-400"
+          : "border-border bg-muted/60 text-muted-foreground hover:bg-muted",
+      )}
+    >
+      {isUpdatingStatus ? (
+        <Loader2 className="size-2.5 animate-spin" />
+      ) : (
+        <span
+          className={cn("size-2 rounded-full", isOn ? "bg-green-500" : "bg-muted-foreground/40")}
+        />
+      )}
+      {isOn ? "On" : "Off"}
+    </button>
+  );
+
+  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
+  const actionsMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={handleStopPropagation}
+          className={cn(
+            "text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors",
+            "opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100",
+            "max-sm:opacity-100",
+          )}
+        >
+          <Ellipsis className="size-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-52"
+        onClick={handleStopPropagation}
+        onKeyDown={handleMenuKeyDown}
+      >
+        <DropdownMenuItem
+          onSelect={handleToggleShare}
+          disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
+        >
+          <Share2 className="size-4" />
+          {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={handleExport}
+          disabled={isExporting || isDeleting || isUpdatingStatus}
+        >
+          <Download className="size-4" />
+          Export as JSON
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={handleDelete}
+          disabled={isDeleting || isUpdatingStatus}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="size-4" />
+          Delete coworker
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
+  const toolBadges = (
+    <>
+      {toolSummary.visibleIntegrations.length > 0 && (
+        <div className="flex items-center gap-1">
+          {toolSummary.visibleIntegrations.map((key) => {
+            const logo = INTEGRATION_LOGOS[key];
+            if (!logo) {
+              return null;
+            }
+            return (
+              <Image
+                key={key}
+                src={logo}
+                alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+                width={14}
+                height={14}
+                className="size-3.5 shrink-0"
+                title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
+              />
+            );
+          })}
+        </div>
+      )}
+      {toolSummary.showSkillBadge ? (
+        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+          {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
+        </span>
+      ) : null}
+      {toolSummary.overflowCount > 0 ? (
+        <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
+          +{toolSummary.overflowCount}
+        </span>
+      ) : null}
+    </>
+  );
+
+  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
+  const runsSection = hasRuns ? (
+    isMobile ? (
+      <Sheet open={runsOpen} onOpenChange={setRunsOpen}>
+        <button
+          type="button"
+          onClick={handleOpenRunsSheet}
+          className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
+        >
+          {recentRun ? (
+            <span>
+              Last run:{" "}
+              <span className="text-muted-foreground">
+                {getCoworkerRunStatusLabel(recentRun.status)}
+              </span>{" "}
+              · {formatDate(recentRun.startedAt) ?? "—"}
+            </span>
+          ) : null}
+        </button>
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          title={`${getCoworkerDisplayName(coworker.name)} runs`}
+          className="h-auto max-h-[60vh]"
+        >
+          <RunsList runs={coworker.recentRuns!} />
+        </SheetContent>
+      </Sheet>
+    ) : (
+      <Popover open={runsOpen} onOpenChange={setRunsOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            onClick={handleRunsTriggerClick}
+            className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
+          >
+            {recentRun ? (
+              <span>
+                Last run:{" "}
+                <span className="text-muted-foreground">
+                  {getCoworkerRunStatusLabel(recentRun.status)}
+                </span>{" "}
+                · {formatDate(recentRun.startedAt) ?? "—"}
+              </span>
+            ) : null}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 p-0" onClick={handleStopPropagation}>
+          <RunsList runs={coworker.recentRuns!} />
+        </PopoverContent>
+      </Popover>
+    )
+  ) : undefined;
+
+  // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern for shared card
+  const footer = (
+    <div className="mt-auto flex items-center justify-between pt-3">
+      <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+        Coworker
+      </span>
+      <div className="flex items-center gap-0.5">
+        <Link
+          href={`/coworkers/${coworker.id}`}
+          onClick={handleStopPropagation}
+          className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors"
+          title="Edit coworker"
+        >
+          <PenLine className="size-3.5" />
+        </Link>
+        <button
+          type="button"
+          onClick={handleRun}
+          disabled={isRunning || isDeleting}
+          className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
+          title="Run coworker"
+        >
+          {isRunning ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Play className="size-3.5" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div
       tabIndex={0}
@@ -374,227 +572,14 @@ function CoworkerCard({
       onKeyDown={handleKeyDown}
       className="border-border bg-card hover:border-foreground/30 hover:bg-muted/30 group flex h-full min-h-[180px] cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-3">
-          <CoworkerAvatar username={coworker.username} size={36} className="rounded-full" />
-          <div className="space-y-1">
-            <p className="text-sm leading-tight font-medium">
-              {getCoworkerDisplayName(coworker.name)}
-            </p>
-            {coworker.username ? (
-              <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
-                @{coworker.username}
-              </p>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                onClick={handleStopPropagation}
-                className={cn(
-                  "text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors",
-                  "opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100",
-                  "max-sm:opacity-100",
-                )}
-              >
-                <Ellipsis className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-52"
-              onClick={handleStopPropagation}
-              onKeyDown={handleMenuKeyDown}
-            >
-              <DropdownMenuItem
-                onSelect={handleToggleShare}
-                disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
-              >
-                <Share2 className="size-4" />
-                {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={handleExport}
-                disabled={isExporting || isDeleting || isUpdatingStatus}
-              >
-                <Download className="size-4" />
-                Export as JSON
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={handleDelete}
-                disabled={isDeleting || isUpdatingStatus}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="size-4" />
-                Delete coworker
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            type="button"
-            onClick={handleToggleStatusClick}
-            disabled={isUpdatingStatus || isDeleting}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
-              "disabled:pointer-events-none disabled:opacity-50",
-              isOn
-                ? "border-green-500/20 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:text-green-400"
-                : "border-border bg-muted/60 text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {isUpdatingStatus ? (
-              <Loader2 className="size-2.5 animate-spin" />
-            ) : (
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  isOn ? "bg-green-500" : "bg-muted-foreground/40",
-                )}
-              />
-            )}
-            {isOn ? "On" : "Off"}
-          </button>
-        </div>
-      </div>
-
-      {coworker.description && (
-        <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
-          {coworker.description}
-        </p>
-      )}
-
-      <div className="flex items-center gap-2">
-        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-          {getTriggerLabel(coworker.triggerType)}
-        </span>
-        {coworker.sharedAt ? (
-          <span className="text-foreground/70 bg-foreground/[0.06] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
-            <Share2 className="size-2.5 opacity-60" />
-            Shared
-          </span>
-        ) : null}
-        {toolSummary.visibleIntegrations.length > 0 && (
-          <div className="flex items-center gap-1">
-            {toolSummary.visibleIntegrations.map((key) => {
-              const logo = INTEGRATION_LOGOS[key];
-              if (!logo) {
-                return null;
-              }
-              return (
-                <Image
-                  key={key}
-                  src={logo}
-                  alt={INTEGRATION_DISPLAY_NAMES[key] ?? key}
-                  width={14}
-                  height={14}
-                  className="size-3.5 shrink-0"
-                  title={INTEGRATION_DISPLAY_NAMES[key] ?? key}
-                />
-              );
-            })}
-          </div>
-        )}
-        {toolSummary.showSkillBadge ? (
-          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
-          </span>
-        ) : null}
-        {toolSummary.overflowCount > 0 ? (
-          <span className="text-muted-foreground inline-flex items-center text-[10px] font-medium">
-            +{toolSummary.overflowCount}
-          </span>
-        ) : null}
-      </div>
-
-      {hasRuns ? (
-        isMobile ? (
-          <Sheet open={runsOpen} onOpenChange={setRunsOpen}>
-            <button
-              type="button"
-              onClick={handleOpenRunsSheet}
-              className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
-            >
-              {recentRun ? (
-                <span>
-                  Last run:{" "}
-                  <span className="text-muted-foreground">
-                    {getCoworkerRunStatusLabel(recentRun.status)}
-                  </span>{" "}
-                  · {formatDate(recentRun.startedAt) ?? "—"}
-                </span>
-              ) : null}
-            </button>
-            <SheetContent
-              side="bottom"
-              showCloseButton={false}
-              title={`${getCoworkerDisplayName(coworker.name)} runs`}
-              className="h-auto max-h-[60vh]"
-            >
-              <RunsList runs={coworker.recentRuns!} />
-            </SheetContent>
-          </Sheet>
-        ) : (
-          <Popover open={runsOpen} onOpenChange={setRunsOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                onClick={handleRunsTriggerClick}
-                className="text-muted-foreground/70 hover:text-foreground text-left text-xs transition-colors"
-              >
-                {recentRun ? (
-                  <span>
-                    Last run:{" "}
-                    <span className="text-muted-foreground">
-                      {getCoworkerRunStatusLabel(recentRun.status)}
-                    </span>{" "}
-                    · {formatDate(recentRun.startedAt) ?? "—"}
-                  </span>
-                ) : null}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-72 p-0" onClick={handleStopPropagation}>
-              <RunsList runs={coworker.recentRuns!} />
-            </PopoverContent>
-          </Popover>
-        )
-      ) : (
-        <div className="text-muted-foreground/70 text-xs">
-          <span>No runs yet</span>
-        </div>
-      )}
-
-      <div className="mt-auto flex items-center justify-between pt-3">
-        <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-          Coworker
-        </span>
-        <div className="flex items-center gap-0.5">
-          <Link
-            href={`/coworkers/${coworker.id}`}
-            onClick={handleStopPropagation}
-            className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors"
-            title="Edit coworker"
-          >
-            <PenLine className="size-3.5" />
-          </Link>
-          <button
-            type="button"
-            onClick={handleRun}
-            disabled={isRunning || isDeleting}
-            className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Run coworker"
-          >
-            {isRunning ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Play className="size-3.5" />
-            )}
-          </button>
-        </div>
-      </div>
+      <CoworkerCardContent
+        coworker={coworker}
+        statusSlot={statusButton}
+        actionsSlot={actionsMenu}
+        badgesSlot={toolBadges}
+        runsSlot={runsSection}
+        footerSlot={footer}
+      />
     </div>
   );
 }
@@ -1199,7 +1184,7 @@ export default function CoworkersPage() {
                 href="/coworkers/overview"
                 className="text-muted-foreground hover:text-foreground ml-1 flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
               >
-                <BarChart3 className="size-3.5" />
+                <Activity className="size-3.5" />
                 <span className="hidden sm:inline">Overview</span>
               </Link>
               <Link
@@ -1208,6 +1193,20 @@ export default function CoworkersPage() {
               >
                 <History className="size-3.5" />
                 <span className="hidden sm:inline">History</span>
+              </Link>
+              <Link
+                href="/coworkers/usage"
+                className="text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
+              >
+                <BarChart3 className="size-3.5" />
+                <span className="hidden sm:inline">Usage</span>
+              </Link>
+              <Link
+                href="/coworkers/org-chart"
+                className="text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
+              >
+                <Network className="size-3.5" />
+                <span className="hidden sm:inline">Org Chart</span>
               </Link>
             </div>
             <div className="relative w-full sm:w-64">

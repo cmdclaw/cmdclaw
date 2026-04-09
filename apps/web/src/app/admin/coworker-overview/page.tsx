@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { UsageDashboard } from "@/components/usage-dashboard";
-import { useAdminUsageDashboard, useAdminWorkspaces } from "@/orpc/hooks";
+import { CoworkerOverviewDashboard } from "@/components/coworker-overview-dashboard";
+import { useAdminCoworkerOverview, useAdminWorkspaces } from "@/orpc/hooks";
 
-export default function AdminUsagePage() {
+export default function AdminCoworkerOverviewPage() {
   const [workspaceId, setWorkspaceId] = useState<string | null>("all");
 
   const workspacesQuery = useAdminWorkspaces();
@@ -18,27 +18,27 @@ export default function AdminUsagePage() {
       if (current === "all") {
         return current;
       }
-      if (workspaces.some((workspace) => workspace.id === current)) {
+      if (workspaces.some((ws) => ws.id === current)) {
         return current;
       }
       return "all";
     });
   }, [workspaces]);
 
-  const usageQuery = useAdminUsageDashboard(workspaceId);
+  const overviewQuery = useAdminCoworkerOverview(workspaceId);
 
   const handleWorkspaceChange = useCallback((id: string) => {
     setWorkspaceId(id);
   }, []);
 
   return (
-    <UsageDashboard
-      data={usageQuery.data}
-      isLoading={workspacesQuery.isLoading || (usageQuery.isLoading && !usageQuery.data)}
-      error={workspacesQuery.error ?? usageQuery.error}
+    <CoworkerOverviewDashboard
+      data={overviewQuery.data}
+      isLoading={workspacesQuery.isLoading || (overviewQuery.isLoading && !overviewQuery.data)}
       workspaces={workspaces}
       workspaceId={workspaceId}
       onWorkspaceChange={handleWorkspaceChange}
+      coworkerLinkPrefix="/coworkers/"
     />
   );
 }

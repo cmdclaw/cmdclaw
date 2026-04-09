@@ -53,7 +53,7 @@ import {
   coworkerRunEvent,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { and, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { getOperationLabel } from "@/lib/integration-icons";
 import { parseCliCommand } from "@/lib/parse-cli-command";
@@ -62,6 +62,8 @@ import {
   uploadCoworkerDocument,
 } from "@/server/services/coworker-document";
 import { protectedProcedure } from "../middleware";
+import { queryCoworkerOverview } from "../shared/overview-queries";
+import { queryUsageDashboard } from "../shared/usage-queries";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 
 const integrationTypeSchema = z.enum([
@@ -2430,219 +2432,17 @@ const getOverview = protectedProcedure.handler(async ({ context }) => {
   const {
     workspace: { id: workspaceId },
   } = await requireActiveWorkspaceAccess(context.user.id);
-
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  // Fetch all coworkers for this user/workspace
-  const coworkers = await context.db.query.coworker.findMany({
-    where: and(eq(coworker.ownerId, context.user.id), eq(coworker.workspaceId, workspaceId)),
-    columns: {
-      id: true,
-      name: true,
-      status: true,
-      triggerType: true,
-      username: true,
-    },
+  return queryCoworkerOverview(context.db, {
+    workspaceId,
+    ownerId: context.user.id,
   });
+});
 
-  if (coworkers.length === 0) {
-    return {
-      summary: {
-        totalCoworkers: 0,
-        activeCoworkers: 0,
-        totalRuns30d: 0,
-        errorRuns30d: 0,
-        errorRate: 0,
-      },
-      dailyRuns: [] as Array<{
-        date: string;
-        completed: number;
-        error: number;
-        running: number;
-        other: number;
-      }>,
-      coworkers: [] as Array<{
-        id: string;
-        name: string;
-        username: string | null;
-        status: string;
-        triggerType: string;
-        totalRuns: number;
-        errorRuns: number;
-        errorRate: number;
-        consecutiveErrors: number;
-        latestRunStatus: string | null;
-        latestRunAt: Date | null;
-        latestErrorMessage: string | null;
-      }>,
-    };
-  }
-
-  const coworkerIds = coworkers.map((c) => c.id);
-  // Build an IN (...) clause. IDs are UUIDs from our own DB query so sql.raw is safe.
-  const coworkerIdsIn = sql.raw(`(${coworkerIds.map((id) => `'${id}'`).join(",")})`);
-
-  // Daily aggregation across all coworkers
-  const dailyResult = await context.db.execute(sql`
-    select
-      to_char(started_at, 'YYYY-MM-DD') as "date",
-      count(*) filter (where status = 'completed')::int as "completed",
-      count(*) filter (where status = 'error')::int as "error",
-      count(*) filter (where status = 'running')::int as "running",
-      count(*) filter (where status not in ('completed', 'error', 'running'))::int as "other"
-    from ${coworkerRun}
-    where coworker_id in ${coworkerIdsIn}
-      and owner_id = ${context.user.id}
-      and workspace_id = ${workspaceId}
-      and started_at >= ${thirtyDaysAgo}
-    group by to_char(started_at, 'YYYY-MM-DD')
-    order by "date" asc
-  `);
-  const dailyRuns = (dailyResult.rows ?? []) as Array<{
-    date: string;
-    completed: number;
-    error: number;
-    running: number;
-    other: number;
-  }>;
-
-  // Per-coworker stats
-  const perCoworkerResult = await context.db.execute(sql`
-    select
-      coworker_id as "coworkerId",
-      count(*)::int as "totalRuns",
-      count(*) filter (where status = 'error')::int as "errorRuns"
-    from ${coworkerRun}
-    where coworker_id in ${coworkerIdsIn}
-      and owner_id = ${context.user.id}
-      and workspace_id = ${workspaceId}
-      and started_at >= ${thirtyDaysAgo}
-    group by coworker_id
-  `);
-  const perCoworkerStats = new Map(
-    (
-      (perCoworkerResult.rows ?? []) as Array<{
-        coworkerId: string;
-        totalRuns: number;
-        errorRuns: number;
-      }>
-    ).map((r) => [r.coworkerId, r]),
-  );
-
-  // Latest run per coworker
-  const latestResult = await context.db.execute(sql`
-    select distinct on (coworker_id)
-      coworker_id as "coworkerId",
-      status,
-      started_at as "startedAt",
-      error_message as "errorMessage"
-    from ${coworkerRun}
-    where coworker_id in ${coworkerIdsIn}
-      and owner_id = ${context.user.id}
-      and workspace_id = ${workspaceId}
-    order by coworker_id, started_at desc
-  `);
-  const latestRuns = new Map(
-    (
-      (latestResult.rows ?? []) as Array<{
-        coworkerId: string;
-        status: string;
-        startedAt: Date;
-        errorMessage: string | null;
-      }>
-    ).map((r) => [r.coworkerId, r]),
-  );
-
-  // Consecutive error streaks: fetch last 20 runs per coworker
-  const streakResult = await context.db.execute(sql`
-    select coworker_id as "coworkerId", status
-    from (
-      select coworker_id, status, started_at,
-        row_number() over (partition by coworker_id order by started_at desc) as rn
-      from ${coworkerRun}
-      where coworker_id in ${coworkerIdsIn}
-        and owner_id = ${context.user.id}
-        and workspace_id = ${workspaceId}
-    ) t
-    where rn <= 20
-    order by coworker_id, started_at desc
-  `);
-  const streakRows = (streakResult.rows ?? []) as Array<{
-    coworkerId: string;
-    status: string;
-  }>;
-  const consecutiveErrorMap = new Map<string, number>();
-  {
-    let currentId = "";
-    let count = 0;
-    let counting = true;
-    for (const row of streakRows) {
-      if (row.coworkerId !== currentId) {
-        if (currentId) {
-          consecutiveErrorMap.set(currentId, count);
-        }
-        currentId = row.coworkerId;
-        count = 0;
-        counting = true;
-      }
-      if (counting) {
-        if (row.status === "error") {
-          count++;
-        } else {
-          counting = false;
-        }
-      }
-    }
-    if (currentId) {
-      consecutiveErrorMap.set(currentId, count);
-    }
-  }
-
-  // Build per-coworker response
-  const coworkerData = coworkers.map((c) => {
-    const stats = perCoworkerStats.get(c.id);
-    const latest = latestRuns.get(c.id);
-    const totalRuns = stats?.totalRuns ?? 0;
-    const errorRuns = stats?.errorRuns ?? 0;
-    return {
-      id: c.id,
-      name: c.name,
-      username: c.username,
-      status: c.status,
-      triggerType: c.triggerType,
-      totalRuns,
-      errorRuns,
-      errorRate: totalRuns > 0 ? Math.round((errorRuns / totalRuns) * 100) : 0,
-      consecutiveErrors: consecutiveErrorMap.get(c.id) ?? 0,
-      latestRunStatus: latest?.status ?? null,
-      latestRunAt: latest?.startedAt ?? null,
-      latestErrorMessage: latest?.errorMessage ?? null,
-    };
-  });
-
-  // Sort by unhealthiest first
-  coworkerData.sort(
-    (a, b) => b.consecutiveErrors - a.consecutiveErrors || b.errorRate - a.errorRate,
-  );
-
-  const totalRuns30d = dailyRuns.reduce(
-    (s, d) => s + d.completed + d.error + d.running + d.other,
-    0,
-  );
-  const errorRuns30d = dailyRuns.reduce((s, d) => s + d.error, 0);
-
-  return {
-    summary: {
-      totalCoworkers: coworkers.length,
-      activeCoworkers: coworkers.filter((c) => c.status === "on").length,
-      totalRuns30d,
-      errorRuns30d,
-      errorRate: totalRuns30d > 0 ? Math.round((errorRuns30d / totalRuns30d) * 100) : 0,
-    },
-    dailyRuns,
-    coworkers: coworkerData,
-  };
+const getUsageDashboard = protectedProcedure.handler(async ({ context }) => {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(context.user.id);
+  return queryUsageDashboard(context.db, workspaceId);
 });
 
 export const coworkerRouter = {
@@ -2650,6 +2450,7 @@ export const coworkerRouter = {
   get,
   getHistory,
   getOverview,
+  getUsageDashboard,
   create,
   update,
   edit,

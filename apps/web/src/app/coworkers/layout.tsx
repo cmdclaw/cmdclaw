@@ -14,6 +14,8 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
   const isDeployRoute = pathname?.startsWith("/coworkers/deploy/");
   const isOverviewRoute = pathname === "/coworkers/overview";
   const isHistoryRoute = pathname === "/coworkers/history";
+  const isUsageRoute = pathname === "/coworkers/usage";
+  const isOrgChartRoute = pathname === "/coworkers/org-chart";
   const isCoworkerEditorRoute =
     pathname?.startsWith("/coworkers/") &&
     pathname !== "/coworkers" &&
@@ -21,7 +23,9 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
     !isRunsRoute &&
     !isGridRoute &&
     !isOverviewRoute &&
-    !isHistoryRoute;
+    !isHistoryRoute &&
+    !isUsageRoute &&
+    !isOrgChartRoute;
 
   useEffect(() => {
     const handleOpenDrawer = () => setRecentDrawerOpen(true);
@@ -31,7 +35,7 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      {isRunsRoute ? (
+      {isRunsRoute || isOrgChartRoute ? (
         children
       ) : isCoworkerEditorRoute ? (
         <div className="bg-background flex h-full min-h-0 w-full flex-1 overflow-hidden">
