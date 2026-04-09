@@ -219,7 +219,7 @@ export type GenerationStreamEvent =
       usage: GenerationUsage;
       artifacts?: DoneArtifactsData;
     }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; diagnosticMessage?: string }
   | { type: "cancelled"; generationId: string; conversationId: string; messageId?: string }
   | { type: "status_change"; status: string; metadata?: StatusChangeMetadata }
   | {
@@ -497,6 +497,7 @@ export type GenerationFailedResult = {
   error: {
     code: string;
     message: string;
+    diagnosticMessage?: string;
     phase: string;
     transportCode?: string;
   };

@@ -7,6 +7,7 @@ import {
 export type NormalizedGenerationError = {
   code: string;
   message: string;
+  diagnosticMessage?: string;
   phase: GenerationErrorPhase;
   transportCode?: string;
 };

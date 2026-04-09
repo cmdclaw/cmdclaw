@@ -184,9 +184,10 @@ export async function runGenerationStream(
         );
         break;
       case "error":
-        await callbacks.onError?.(
-          normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
-        );
+        await callbacks.onError?.({
+          ...normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
+          diagnosticMessage: event.diagnosticMessage,
+        });
         break;
       case "cancelled":
         await callbacks.onCancelled?.({

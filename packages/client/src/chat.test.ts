@@ -157,4 +157,37 @@ describe("runChatSession", () => {
       expect(result.assistant.content).toContain("attached");
     }
   });
+
+  it("keeps stream error diagnostics on failed chat results", async () => {
+    const client = {
+      generation: {
+        startGeneration: vi.fn().mockResolvedValue({
+          generationId: "gen-error",
+          conversationId: "conv-error",
+        }),
+        subscribeGeneration: vi.fn().mockResolvedValue(
+          (async function* () {
+            yield {
+              type: "error" as const,
+              message: "The sandbox stopped while this run was still active.",
+              diagnosticMessage: "SandboxError: 403: blocked: team is blocked",
+            };
+          })(),
+        ),
+      },
+    };
+
+    const result = await runChatSession({
+      client: client as never,
+      input: { content: "hi" },
+    });
+
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.error.message).toBe("The sandbox stopped while this run was still active.");
+      expect(result.error.diagnosticMessage).toBe(
+        "SandboxError: 403: blocked: team is blocked",
+      );
+    }
+  });
 });

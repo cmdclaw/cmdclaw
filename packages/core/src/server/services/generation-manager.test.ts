@@ -3189,6 +3189,33 @@ describe("generationManager transitions", () => {
     expect(publishGenerationStreamEventMock).toHaveBeenCalled();
   });
 
+  it("publishes the captured original error as an error-stream diagnostic", async () => {
+    insertReturningMock.mockResolvedValueOnce([{ id: "msg-error-1" }]);
+
+    const ctx = createCtx({
+      errorMessage: "The sandbox stopped while this run was still active.",
+      debugInfo: {
+        originalErrorMessage: "SandboxError: 403: blocked: team is blocked",
+      },
+      uploadedSandboxFileIds: new Set(),
+    });
+
+    const mgr = asTestManager();
+    await mgr.finishGeneration(ctx, "error");
+
+    const publishedPayloads = (publishGenerationStreamEventMock.mock.calls as unknown[][])
+      .map(([, envelope]) => (envelope as { payload?: unknown }).payload)
+      .filter(Boolean);
+
+    expect(publishedPayloads).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: "The sandbox stopped while this run was still active.",
+        diagnosticMessage: "SandboxError: 403: blocked: team is blocked",
+      }),
+    );
+  });
+
   it("handles submitApproval guard paths (missing context, access denied, mismatched toolUseId)", async () => {
     const missing = await generationManager.submitApproval(
       "missing",

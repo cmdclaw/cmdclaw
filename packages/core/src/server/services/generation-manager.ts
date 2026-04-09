@@ -283,7 +283,7 @@ export type GenerationEvent =
         }>;
       };
     }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; diagnosticMessage?: string }
   | {
       type: "cancelled";
       generationId: string;
@@ -878,6 +878,13 @@ function buildInitialDebugInfo(
       phases: {},
     },
   };
+}
+
+function getGenerationDiagnosticMessage(
+  debugInfo: GenerationDebugInfo | null | undefined,
+): string | undefined {
+  const message = debugInfo?.originalErrorMessage?.trim();
+  return message && message.length > 0 ? message : undefined;
 }
 
 type ExportedAssistantPart = {
@@ -8297,9 +8304,11 @@ class GenerationManager {
           messageId,
         });
       } else if (status === "error") {
+        const diagnosticMessage = getGenerationDiagnosticMessage(ctx.debugInfo);
         this.broadcast(ctx, {
           type: "error",
           message: ctx.errorMessage || "Unknown error",
+          ...(diagnosticMessage ? { diagnosticMessage } : {}),
         });
       }
 

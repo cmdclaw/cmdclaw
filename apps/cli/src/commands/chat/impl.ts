@@ -566,6 +566,12 @@ async function runOneGeneration(
         stdout.write(`[conversation] ${result.conversationId}\n`);
       }
       stdout.write(`\n[error] ${result.error.message}\n`);
+      if (
+        result.error.diagnosticMessage &&
+        result.error.diagnosticMessage !== result.error.message
+      ) {
+        stdout.write(`[diagnostic] ${result.error.diagnosticMessage}\n`);
+      }
       return null;
   }
 }
