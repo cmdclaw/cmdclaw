@@ -1,20 +1,30 @@
 name: Push DB Schema
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "packages/db/src/schema.ts"
-      - ".github/workflows/db-push.yml"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit SHA to deploy"
+        required: true
+        default: "main"
+      environment:
+        description: "Environment to target"
+        required: true
+        type: choice
+        default: "staging"
+        options:
+          - "staging"
+          - "prod"
 
 jobs:
   db-push:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -26,6 +36,26 @@ jobs:
 
       - name: Push DB changes
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+          DATABASE_URL_STAGING: ${{ secrets.DATABASE_URL_STAGING }}
           SKIP_ENV_VALIDATION: "1"
-        run: bun run db:push --strict
+        run: |
+          case "${{ inputs.environment }}" in
+            staging)
+              export DATABASE_URL="${DATABASE_URL_STAGING}"
+              ;;
+            prod)
+              export DATABASE_URL="${DATABASE_URL_PROD}"
+              ;;
+            *)
+              echo "Unsupported environment: ${{ inputs.environment }}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "Missing DATABASE_URL_${{ inputs.environment == 'prod' && 'PROD' || 'STAGING' }} secret" >&2
+            exit 1
+          fi
+
+          bun run db:push --strict
