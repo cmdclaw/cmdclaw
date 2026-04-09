@@ -5,14 +5,6 @@ import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import {
   ArrowUp,
-  MessageSquareText,
-  ShieldCheck,
-  Clock,
-  Workflow,
-  Users,
-  Lock,
-  GitBranch,
-  Building2,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -31,6 +23,9 @@ import {
   readPendingCoworkerPrompt,
   writePendingCoworkerPrompt,
 } from "@/components/landing/pending-coworker-prompt";
+import { LiveAgentDemoSection } from "@/components/landing/demo-activity-feed";
+import { CoworkerShowcaseSection } from "@/components/landing/demo-coworker-showcase";
+import { AnimatedHowItWorksSection } from "@/components/landing/animated-how-it-works";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -712,173 +707,9 @@ export function CoworkerLanding({
       {/* ── Landing sections (anonymous only) ── */}
       {isAnonymous ? (
         <>
-          {/* ── Problem ── */}
-          <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
-            <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
-                The problem
-              </p>
-              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
-                AI agents work for you. But not for your team.
-              </h2>
-              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-                You can build an agent with Claude or GPT in minutes. But when you need it to run
-                securely, connect to your company&apos;s tools, and work for your whole team —
-                you&apos;re on your own.
-              </p>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                {[
-                  {
-                    problem: "No security or approvals",
-                    description:
-                      "AI agents running with your credentials, no audit trail, no way to review actions before they execute. One bad prompt away from disaster.",
-                  },
-                  {
-                    problem: "Missing integrations",
-                    description:
-                      "Generic AI can search the web. But it can't read your HubSpot pipeline, send Slack messages as you, or update your Salesforce records.",
-                  },
-                  {
-                    problem: "Can't deploy to the team",
-                    description:
-                      "You built something that works for you. Now try sharing it with 10 people who don't know what a prompt is. Good luck.",
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.problem}
-                    className="border-border/60 rounded-xl border border-dashed p-6"
-                  >
-                    <h3 className="text-foreground mb-2 text-sm font-semibold">{item.problem}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ── Solution ── */}
-          <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
-            <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
-                The platform
-              </p>
-              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
-                Build, secure, and deploy AI agents for your company
-              </h2>
-              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-                CmdClaw is the open infrastructure to go from &quot;it works on my laptop&quot; to
-                &quot;the whole team runs it in production.&quot;
-              </p>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {[
-                  {
-                    icon: ShieldCheck,
-                    title: "Approval workflows",
-                    description:
-                      "Every sensitive action goes through human review. Your AI agent asks permission before sending emails, updating CRM records, or posting messages.",
-                  },
-                  {
-                    icon: Lock,
-                    title: "Secure by default",
-                    description:
-                      "OAuth-based integrations. Sandboxed code execution. Scoped permissions per agent. No credentials in prompts, ever.",
-                  },
-                  {
-                    icon: Users,
-                    title: "Built for teams",
-                    description:
-                      "Shared workspace with shared integrations. Deploy an agent once, your whole team uses it. No one needs to know how prompts work.",
-                  },
-                  {
-                    icon: Workflow,
-                    title: "16+ native integrations",
-                    description:
-                      "Gmail, Slack, HubSpot, Salesforce, Notion, Linear, GitHub, and more. One-click OAuth — not API keys duct-taped together.",
-                  },
-                  {
-                    icon: Clock,
-                    title: "Runs without you",
-                    description:
-                      "Schedule agents on cron, trigger on webhooks, or fire on incoming emails. They run 24/7, not just when you have a browser open.",
-                  },
-                  {
-                    icon: GitBranch,
-                    title: "Open source",
-                    description:
-                      "MIT-licensed. Self-host on your own infrastructure. Audit every line of code. No vendor lock-in, no black boxes.",
-                  },
-                ].map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="bg-background border-border/60 rounded-xl border p-6 shadow-sm"
-                  >
-                    <div className="bg-brand/10 text-brand mb-4 flex size-10 items-center justify-center rounded-lg">
-                      <feature.icon className="size-5" />
-                    </div>
-                    <h3 className="text-foreground mb-1.5 text-sm font-semibold">
-                      {feature.title}
-                    </h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      {feature.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ── How it works ── */}
-          <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
-            <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
-                How it works
-              </p>
-              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
-                From prompt to production in minutes
-              </h2>
-              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-                Describe what you need. CmdClaw builds it, secures it, and deploys it.
-              </p>
-              <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-12">
-                {[
-                  {
-                    step: "1",
-                    title: "Describe the agent",
-                    description:
-                      "Tell CmdClaw what you want in plain English. It picks the right integrations, designs the workflow, and sets up triggers.",
-                    icon: MessageSquareText,
-                  },
-                  {
-                    step: "2",
-                    title: "Review and approve",
-                    description:
-                      "Test the agent in your workspace. Every action goes through approval. Fine-tune until it works exactly how you need.",
-                    icon: ShieldCheck,
-                  },
-                  {
-                    step: "3",
-                    title: "Deploy to your team",
-                    description:
-                      "Turn it on for everyone. The agent runs on schedule or on trigger — secured, audited, and ready for production.",
-                    icon: Building2,
-                  },
-                ].map((item) => (
-                  <div key={item.step} className="flex flex-col items-center text-center">
-                    <div className="bg-brand/10 text-brand mb-5 flex size-14 items-center justify-center rounded-2xl">
-                      <item.icon className="size-7" />
-                    </div>
-                    <h3 className="text-foreground mb-2 text-lg font-semibold">{item.title}</h3>
-                    <p className="text-muted-foreground max-w-xs text-sm leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
+          <LiveAgentDemoSection />
+          <CoworkerShowcaseSection />
+          <AnimatedHowItWorksSection />
           {/* ── Integrations ── */}
           <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
             <div className="mx-auto max-w-[1500px]">
