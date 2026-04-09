@@ -1737,9 +1737,32 @@ describe("coworkerRouter", () => {
     );
   });
 
-  it("deletes a coworker on happy path", async () => {
+  it("deletes a manual coworker without touching the scheduler", async () => {
     const context = createContext();
     context.mocks.deleteReturningMock.mockResolvedValue([{ id: "wf-1" }]);
+    // eslint-disable-next-line drizzle/enforce-delete-with-where -- Router procedure call, not a Drizzle query
+    const result = await coworkerRouterAny.delete({
+      input: { id: "wf-1" },
+      context,
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(removeCoworkerScheduleJobMock).not.toHaveBeenCalled();
+  });
+
+  it("removes a scheduled coworker job before deleting the coworker", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      name: "Scheduled coworker",
+      status: "on",
+      triggerType: "schedule",
+      schedule: { type: "daily", time: "09:00", timezone: "UTC" },
+    });
+    context.mocks.deleteReturningMock.mockResolvedValue([{ id: "wf-1" }]);
+
     // eslint-disable-next-line drizzle/enforce-delete-with-where -- Router procedure call, not a Drizzle query
     const result = await coworkerRouterAny.delete({
       input: { id: "wf-1" },
@@ -1963,6 +1986,15 @@ describe("coworkerRouter", () => {
 
   it("returns INTERNAL_SERVER_ERROR when scheduler cleanup fails during delete", async () => {
     const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      name: "Scheduled coworker",
+      status: "on",
+      triggerType: "schedule",
+      schedule: { type: "daily", time: "09:00", timezone: "UTC" },
+    });
     context.mocks.deleteReturningMock.mockResolvedValue([{ id: "wf-1" }]);
     removeCoworkerScheduleJobMock.mockRejectedValueOnce(new Error("queue unavailable"));
 

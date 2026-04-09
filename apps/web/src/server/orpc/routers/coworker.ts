@@ -1173,7 +1173,22 @@ const update = protectedProcedure
 const del = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const { workspaceId } = await requireOwnedCoworkerInActiveWorkspace(context, input.id);
+    const { coworker: existing, workspaceId } = await requireOwnedCoworkerInActiveWorkspace(
+      context,
+      input.id,
+    );
+
+    if (existing.triggerType === "schedule") {
+      try {
+        await removeCoworkerScheduleJob(input.id);
+      } catch (error) {
+        console.error(`[coworker] failed to remove scheduler before delete (${input.id})`, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Failed to remove coworker schedule job",
+        });
+      }
+    }
+
     const result = await context.db
       .delete(coworker)
       .where(
@@ -1187,15 +1202,6 @@ const del = protectedProcedure
 
     if (result.length === 0) {
       throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
-    }
-
-    try {
-      await removeCoworkerScheduleJob(input.id);
-    } catch (error) {
-      console.error(`[coworker] failed to remove scheduler after delete (${input.id})`, error);
-      throw new ORPCError("INTERNAL_SERVER_ERROR", {
-        message: "Coworker deleted but failed to remove schedule job",
-      });
     }
 
     return { success: true };
