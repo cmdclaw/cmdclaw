@@ -116,6 +116,27 @@ describe("runChatSession", () => {
     }
   });
 
+  it("calls onStarted with the generation and conversation ids", async () => {
+    const onStarted = vi.fn();
+    const client = {
+      generation: {
+        startGeneration: vi.fn().mockResolvedValue({
+          generationId: "gen-started",
+          conversationId: "conv-started",
+        }),
+        subscribeGeneration: vi.fn().mockResolvedValue((async function* () {})()),
+      },
+    };
+
+    await runChatSession({
+      client: client as never,
+      input: { content: "hi" },
+      onStarted,
+    });
+
+    expect(onStarted).toHaveBeenCalledWith("gen-started", "conv-started");
+  });
+
   it("attaches to an existing generation without starting a new one", async () => {
     const startGeneration = vi.fn();
     const subscribeGeneration = vi.fn().mockResolvedValue(
@@ -156,6 +177,60 @@ describe("runChatSession", () => {
       expect(result.conversationId).toBe("conv-attached");
       expect(result.assistant.content).toContain("attached");
     }
+  });
+
+  it("forwards status metadata to onStatusChange", async () => {
+    const onStatusChange = vi.fn();
+    const client = {
+      generation: {
+        startGeneration: vi.fn().mockResolvedValue({
+          generationId: "gen-status",
+          conversationId: "conv-status",
+        }),
+        subscribeGeneration: vi.fn().mockResolvedValue(
+          (async function* () {
+            yield {
+              type: "status_change" as const,
+              status: "agent_init_ready",
+              metadata: {
+                runtimeId: "runtime-1",
+                sandboxProvider: "e2b" as const,
+                runtimeHarness: "opencode" as const,
+                runtimeProtocolVersion: "opencode-v2" as const,
+                sandboxId: "sandbox-1",
+                sessionId: "session-1",
+              },
+            };
+            yield {
+              type: "done" as const,
+              generationId: "gen-status",
+              conversationId: "conv-status",
+              messageId: "msg-status",
+              usage: {
+                inputTokens: 1,
+                outputTokens: 1,
+                totalCostUsd: 0,
+              },
+            };
+          })(),
+        ),
+      },
+    };
+
+    await runChatSession({
+      client: client as never,
+      input: { content: "hi" },
+      onStatusChange,
+    });
+
+    expect(onStatusChange).toHaveBeenCalledWith("agent_init_ready", {
+      runtimeId: "runtime-1",
+      sandboxProvider: "e2b",
+      runtimeHarness: "opencode",
+      runtimeProtocolVersion: "opencode-v2",
+      sandboxId: "sandbox-1",
+      sessionId: "session-1",
+    });
   });
 
   it("keeps stream error diagnostics on failed chat results", async () => {

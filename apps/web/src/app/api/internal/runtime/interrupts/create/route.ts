@@ -36,6 +36,17 @@ const interruptCreateSchema = z.discriminatedUnion("kind", [
     operation: z.string().min(1),
     command: z.string().optional(),
     toolInput: z.record(z.string(), z.unknown()).optional(),
+    providerRequestId: z.string().min(1).optional(),
+    runtimeTool: z
+      .object({
+        sessionId: z.string().min(1).optional(),
+        messageId: z.string().min(1),
+        partId: z.string().min(1),
+        callId: z.string().min(1),
+        toolName: z.string().min(1),
+        input: z.record(z.string(), z.unknown()),
+      })
+      .optional(),
   }),
   z.object({
     kind: z.literal("auth"),
@@ -118,6 +129,8 @@ export async function POST(request: Request) {
         operation: input.operation,
         command: input.command ?? "",
         toolInput: input.toolInput ?? {},
+        providerRequestId: input.providerRequestId,
+        runtimeTool: input.runtimeTool,
       });
 
       if (created.decision === "allow") {

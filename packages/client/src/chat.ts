@@ -13,6 +13,7 @@ import type {
   GenerationStartInput,
   GenerationUsage,
   DoneArtifactsData,
+  StatusChangeMetadata,
 } from "./types";
 
 type ChatRunOptions = {
@@ -20,6 +21,7 @@ type ChatRunOptions = {
   input?: GenerationStartInput;
   generationId?: string;
   signal?: AbortSignal;
+  onStarted?: (generationId: string, conversationId: string) => void | Promise<void>;
   onText?: (content: string) => void | Promise<void>;
   onThinking?: (content: string) => void | Promise<void>;
   onToolUse?: (data: {
@@ -39,6 +41,7 @@ type ChatRunOptions = {
     data: AuthNeededData,
     client: CmdclawApiClient,
   ) => Promise<"handled" | "deferred">;
+  onStatusChange?: (status: string, metadata?: StatusChangeMetadata) => void | Promise<void>;
 };
 
 function toAssistantMessage(runtime: ReturnType<typeof createGenerationRuntime>): RuntimeAssistantMessage {
@@ -97,8 +100,9 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
       generationId: options.generationId,
       signal,
       callbacks: {
-        onStarted: (generationId, conversationId) => {
+        onStarted: async (generationId, conversationId) => {
           mutable.resolvedIds = { generationId, conversationId };
+          await options.onStarted?.(generationId, conversationId);
         },
         onText: async (text) => {
           runtime.handleText(text);
@@ -187,8 +191,9 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
           runtime.handleCancelled();
           mutable.cancelled = data;
         },
-        onStatusChange: (_status) => {
+        onStatusChange: async (status, metadata) => {
           runtime.setStatus("streaming");
+          await options.onStatusChange?.(status, metadata);
         },
       },
     });

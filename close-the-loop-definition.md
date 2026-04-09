@@ -27,7 +27,9 @@ In this codebase, an example of"closing the loop" is:
    In a real terminal, `--message` seeds the first turn and then keeps the same chat open at `followup>` so you can continue iterating without restarting the CLI.
    Debug deadline example: `bun run cmdclaw -- chat --chaos-run-deadline 60s --message "<long repro>" --model openai/gpt-5.4-mini`
    Defer approval example: `bun run cmdclaw -- chat --chaos-approval defer --message "<write-tool repro>" --model openai/gpt-5.4-mini`
-   Attach to a run example: `bun run cmdclaw -- chat --attach <generation-id>`
+   Park an ignored real-integration write after 5s: `bun run cmdclaw -- chat --chaos-approval defer --chaos-approval-park-after 5s --message "send a message on slack #experiment-cmdclaw-testing saying hi" --model openai/gpt-5.4-mini`
+   Attach to the active run in a conversation: `bun run cmdclaw -- chat --attach <conversation-id>`
+   Low-level stream attach example: `bun run cmdclaw -- chat --attach-generation <generation-id>`
 5. Read tmux logs to confirm server + worker behavior and catch regressions.
 6. Iterate immediately until the prompt result matches expected behavior.
 

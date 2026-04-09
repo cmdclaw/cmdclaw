@@ -224,10 +224,13 @@ const generationEventPayloadSchema = z.discriminatedUnion("type", [
     metadata: z
       .object({
         sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
+        runtimeId: z.string().optional(),
         runtimeHarness: z.enum(["opencode", "agent-sdk"]).optional(),
         runtimeProtocolVersion: z.enum(["opencode-v2", "sandbox-agent-v1"]).optional(),
         sandboxId: z.string().optional(),
         sessionId: z.string().optional(),
+        parkedInterruptId: z.string().optional(),
+        releasedSandboxId: z.string().optional(),
       })
       .optional(),
   }),
@@ -311,6 +314,12 @@ const startGeneration = protectedProcedure
         .min(1_000)
         .max(generationLifecyclePolicy.runDeadlineMs)
         .optional(),
+      debugApprovalHotWaitMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(generationLifecyclePolicy.runDeadlineMs)
+        .optional(),
       selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
       fileAttachments: z
         .array(
@@ -353,6 +362,7 @@ const startGeneration = protectedProcedure
         autoApprove: input.autoApprove,
         sandboxProvider: input.sandboxProvider,
         debugRunDeadlineMs: input.debugRunDeadlineMs,
+        debugApprovalHotWaitMs: input.debugApprovalHotWaitMs,
         selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
         fileAttachments: input.fileAttachments,
       });

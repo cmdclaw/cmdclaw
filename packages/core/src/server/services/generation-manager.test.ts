@@ -146,6 +146,7 @@ const {
   getPendingInterruptForGenerationMock,
   listPendingInterruptsForGenerationMock,
   findPendingInterruptByToolUseIdMock,
+  findInterruptByProviderRequestIdMock,
   findPendingAuthInterruptByIntegrationMock,
   refreshInterruptExpiryMock,
   resolveInterruptMock,
@@ -212,6 +213,15 @@ const {
         entry.generationId === params.generationId &&
         entry.providerToolUseId === params.providerToolUseId &&
         entry.status === "pending",
+    );
+    return interrupt ?? null;
+  });
+
+  const findInterruptByProviderRequestIdMock = vi.fn(async (params: any) => {
+    const interrupt = [...interruptStore.values()].find(
+      (entry) =>
+        entry.generationId === params.generationId &&
+        entry.providerRequestId === params.providerRequestId,
     );
     return interrupt ?? null;
   });
@@ -285,6 +295,7 @@ const {
     getPendingInterruptForGenerationMock,
     listPendingInterruptsForGenerationMock,
     findPendingInterruptByToolUseIdMock,
+    findInterruptByProviderRequestIdMock,
     findPendingAuthInterruptByIntegrationMock,
     refreshInterruptExpiryMock,
     resolveInterruptMock,
@@ -462,6 +473,7 @@ vi.mock("./generation-interrupt-service", () => ({
     getPendingInterruptForGeneration: getPendingInterruptForGenerationMock,
     listPendingInterruptsForGeneration: listPendingInterruptsForGenerationMock,
     findPendingInterruptByToolUseId: findPendingInterruptByToolUseIdMock,
+    findInterruptByProviderRequestId: findInterruptByProviderRequestIdMock,
     findPendingAuthInterruptByIntegration: findPendingAuthInterruptByIntegrationMock,
     refreshInterruptExpiry: refreshInterruptExpiryMock,
     resolveInterrupt: resolveInterruptMock,
@@ -598,6 +610,7 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
     executionPolicy: { allowSnapshotRestoreOnRun: true },
     deadlineAt: new Date(Date.now() + 15 * 60 * 1000),
     remainingRunMs: 15 * 60 * 1000,
+    approvalHotWaitMs: 60_000,
     suspendedAt: null,
     resumeInterruptId: null,
     lastRuntimeEventAt: new Date(),
@@ -722,6 +735,7 @@ function createConversationRuntimeMock(params: {
       messages: params.messagesMock ?? vi.fn().mockResolvedValue({ data: [], error: null }),
       getSession: vi.fn().mockResolvedValue({ data: null, error: null }),
       createSession: vi.fn().mockResolvedValue({ data: { id: "session-1" }, error: null }),
+      updatePart: vi.fn().mockResolvedValue({ data: null, error: null }),
       replyPermission: vi.fn().mockResolvedValue(undefined),
       replyQuestion: vi.fn().mockResolvedValue(undefined),
       rejectQuestion: vi.fn().mockResolvedValue(undefined),
@@ -933,6 +947,15 @@ describe("generationManager transitions", () => {
       const activeCtx = asTestManager().activeGenerations.get(params.generationId);
       const derived = activeCtx ? deriveInterruptFromCtx(activeCtx) : null;
       return derived?.providerToolUseId === params.providerToolUseId ? derived : null;
+    });
+    findInterruptByProviderRequestIdMock.mockImplementation(async (params: any) => {
+      return (
+        [...interruptStore.values()].find(
+          (entry) =>
+            entry.generationId === params.generationId &&
+            entry.providerRequestId === params.providerRequestId,
+        ) ?? null
+      );
     });
     findPendingAuthInterruptByIntegrationMock.mockImplementation(async (params: any) => {
       const stored = [...interruptStore.values()].find(
@@ -1718,7 +1741,8 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("suspends an OpenCode approval by snapshotting, tearing down, and not enqueueing a timeout", async () => {
+  it("parks an ignored OpenCode approval by snapshotting and tearing down after the hot wait", async () => {
+    vi.useFakeTimers();
     const teardownMock = vi.fn().mockResolvedValue(undefined);
     const ctx = createCtx({
       id: "gen-durable-approval",
@@ -1734,11 +1758,12 @@ describe("generationManager transitions", () => {
       },
       deadlineAt: new Date(Date.now() + 123_456),
       remainingRunMs: 15 * 60 * 1000,
+      approvalHotWaitMs: 1_000,
     });
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
 
-    await expect(
+    const queuedApproval = expect(
       (mgr as any).queueOpenCodeApprovalRequest(
         ctx,
         { replyPermission: vi.fn() },
@@ -1757,9 +1782,12 @@ describe("generationManager transitions", () => {
         },
       ),
     ).rejects.toThrow("Generation suspended for approval interrupt");
+    await vi.advanceTimersByTimeAsync(1_250);
+    await queuedApproval;
+    vi.useRealTimers();
 
     const createdInterrupt = interruptStore.get("interrupt-tool-durable-approval");
-    expect(createdInterrupt?.expiresAt).toBeNull();
+    expect(createdInterrupt?.expiresAt).toEqual(expect.any(Date));
     expect(saveConversationSessionSnapshotMock).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: ctx.conversationId,
@@ -3443,7 +3471,7 @@ describe("generationManager transitions", () => {
 
     expect(result.decision).toBe("pending");
     expect(result.toolUseId).toBeTruthy();
-    expect(result.expiresAt).toBeUndefined();
+    expect(result.expiresAt).toBeTruthy();
     expect(ctx.status).toBe("awaiting_approval");
     expect(ctx.pendingApproval).toEqual(
       expect.objectContaining({
@@ -3485,6 +3513,124 @@ describe("generationManager transitions", () => {
       },
       responsePayload: undefined,
     });
+  });
+
+  it("reuses plugin write approvals by providerRequestId", async () => {
+    generationFindFirstMock.mockResolvedValue({
+      id: "gen-idempotent-plugin",
+      conversationId: "conv-idempotent-plugin",
+      runtimeId: "runtime-1",
+      conversation: {
+        id: "conv-idempotent-plugin",
+        userId: "user-1",
+        autoApprove: false,
+      },
+    });
+
+    const first = await generationManager.requestPluginApproval("gen-idempotent-plugin", {
+      providerRequestId: "provider-request-1",
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+    const duplicatePending = await generationManager.requestPluginApproval("gen-idempotent-plugin", {
+      providerRequestId: "provider-request-1",
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+
+    expect(duplicatePending).toEqual(first);
+
+    await resolveInterruptMock({
+      interruptId: first.interruptId,
+      status: "accepted",
+    });
+
+    const duplicateAccepted = await generationManager.requestPluginApproval("gen-idempotent-plugin", {
+      providerRequestId: "provider-request-1",
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+
+    expect(duplicateAccepted).toEqual({ decision: "allow" });
+    expect(markInterruptAppliedMock).toHaveBeenCalledWith(first.interruptId);
+  });
+
+  it("parks a pending plugin write approval after the approval hot wait", async () => {
+    vi.useFakeTimers();
+    const teardownMock = vi.fn().mockResolvedValue(undefined);
+    const ctx = createCtx({
+      id: "gen-plugin-park",
+      conversationId: "conv-plugin-park",
+      runtimeId: "runtime-plugin-park",
+      runtimeTurnSeq: 3,
+      sessionId: "session-plugin-park",
+      sandboxId: "sandbox-plugin-park",
+      approvalHotWaitMs: 1_000,
+      sandbox: {
+        execute: vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        teardown: teardownMock,
+      },
+    });
+    asTestManager().activeGenerations.set(ctx.id, ctx);
+    generationFindFirstMock.mockResolvedValue({
+      id: ctx.id,
+      conversationId: ctx.conversationId,
+      runtimeId: ctx.runtimeId,
+      conversation: {
+        id: ctx.conversationId,
+        userId: ctx.userId,
+        autoApprove: false,
+      },
+    });
+
+    const result = await generationManager.requestPluginApproval(ctx.id, {
+      providerRequestId: "provider-plugin-park",
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+
+    expect(result.decision).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1_250);
+    vi.useRealTimers();
+
+    expect(saveConversationSessionSnapshotMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: ctx.conversationId,
+        sessionId: "session-plugin-park",
+      }),
+    );
+    expect(teardownMock).toHaveBeenCalledTimes(1);
+    expect(suspendRuntimeMock).toHaveBeenCalledWith("runtime-plugin-park");
+    expect(asTestManager().activeGenerations.has(ctx.id)).toBe(false);
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "awaiting_approval",
+        sandboxId: null,
+      }),
+    );
+
+    const publishedPayloads = (publishGenerationStreamEventMock.mock.calls as unknown[][]).map(
+      (call) => (call[1] as { payload?: unknown } | undefined)?.payload,
+    );
+    expect(publishedPayloads).toContainEqual(
+      expect.objectContaining({
+        type: "status_change",
+        status: "approval_parked",
+        metadata: expect.objectContaining({
+          parkedInterruptId: result.interruptId,
+          releasedSandboxId: "sandbox-plugin-park",
+        }),
+      }),
+    );
   });
 
   it("publishes pending approval to the generation stream without an active in-memory context", async () => {
@@ -5079,6 +5225,136 @@ describe("generationManager transitions", () => {
       }),
     );
     expect(subscribeMock).toHaveBeenCalledTimes(1);
+    expect(promptMock).not.toHaveBeenCalled();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
+  it("restores a parked plugin write by injecting the approved command result instead of replaying the prompt", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-plugin-resume",
+      title: "Conversation",
+    });
+    interruptStore.set("interrupt-plugin-resume", {
+      id: "interrupt-plugin-resume",
+      generationId: "gen-plugin-resume",
+      runtimeId: "runtime-1",
+      conversationId: "conv-plugin-resume",
+      turnSeq: 4,
+      kind: "plugin_write",
+      status: "accepted",
+      display: {
+        title: "Bash",
+        integration: "slack",
+        operation: "send",
+        command: "slack send -c C123 -t hi --as bot",
+        toolInput: {
+          command: "slack send -c C123 -t hi --as bot",
+          workdir: "/app",
+        },
+        runtimeTool: {
+          sessionId: "session-1",
+          messageId: "message-assistant-1",
+          partId: "part-tool-1",
+          callId: "call-tool-1",
+          toolName: "bash",
+          input: {
+            command: "slack send -c C123 -t hi --as bot",
+            workdir: "/app",
+          },
+        },
+      },
+      provider: "plugin",
+      providerRequestId: "plugin-write:runtime-1:4:opencode:call-tool-1",
+      providerToolUseId: "plugin-tool-1",
+      responsePayload: undefined,
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: new Date("2026-03-11T15:01:00.000Z"),
+      requestedByUserId: null,
+      resolvedByUserId: "user-1",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    const execMock = vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    execMock.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+    execMock.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+    execMock.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '[{"ok":true,"ts":"1775739000.000100"}]\n',
+      stderr: "",
+    });
+    const runtime = createConversationRuntimeMock({
+      promptMock,
+      subscribeMock,
+      exec: execMock,
+      sessionSource: "restored_snapshot",
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      runtime as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    const ctx = createCtx({
+      id: "gen-plugin-resume",
+      conversationId: "conv-plugin-resume",
+      resumeInterruptId: "interrupt-plugin-resume",
+      remainingRunMs: 444_000,
+      deadlineAt: new Date(0),
+      suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
+      status: "awaiting_approval",
+      sessionId: "session-1",
+      model: "openai/gpt-5.2-codex",
+      runtimeTurnSeq: 4,
+      runtimeCallbackToken: "runtime-token",
+      contentParts: [
+        {
+          type: "tool_use",
+          id: "call-tool-1",
+          name: "bash",
+          input: {
+            command: "slack send -c C123 -t hi --as bot",
+            workdir: "/app",
+          },
+          integration: "slack",
+          operation: "send",
+        },
+      ],
+    });
+
+    await (mgr as any).runSuspendedInterruptResume(ctx);
+
+    const commands = execMock.mock.calls.map((call) => String(call[0]));
+    expect(commands.join("\n")).toContain("slack send -c C123 -t hi --as bot");
+    expect(runtime.harnessClient.updatePart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "session-1",
+        messageID: "message-assistant-1",
+        partID: "part-tool-1",
+        part: expect.objectContaining({
+          callID: "call-tool-1",
+          state: expect.objectContaining({
+            status: "completed",
+            output: '[{"ok":true,"ts":"1775739000.000100"}]\n',
+          }),
+        }),
+      }),
+    );
+    expect(markInterruptAppliedMock).toHaveBeenCalledWith("interrupt-plugin-resume");
+    expect(ctx.contentParts).toContainEqual(
+      expect.objectContaining({
+        type: "tool_result",
+        tool_use_id: "call-tool-1",
+        content: '[{"ok":true,"ts":"1775739000.000100"}]\n',
+      }),
+    );
+    expect(ctx.contentParts).toContainEqual({ type: "text", text: "Done." });
     expect(promptMock).not.toHaveBeenCalled();
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });

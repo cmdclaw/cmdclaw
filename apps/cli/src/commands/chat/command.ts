@@ -62,7 +62,19 @@ export const chatCommand = buildCommand({
         default: "ask",
         brief: "Debug: choose how CLI handles approval interrupts",
       },
+      chaosApprovalParkAfter: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Debug: park a pending approval after this hot-wait duration (for example 5s)",
+      },
       attach: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Attach to the active run for a conversation",
+      },
+      attachGeneration: {
         kind: "parsed",
         parse: (input: string) => input,
         optional: true,

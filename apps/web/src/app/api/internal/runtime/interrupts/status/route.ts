@@ -57,6 +57,7 @@ export async function POST(request: Request) {
     }
 
     if (interrupt.kind === "auth" && interrupt.status === "accepted") {
+      await generationInterruptService.markInterruptApplied(interrupt.id);
       const generationRecord = await db.query.generation.findFirst({
         where: eq(generation.id, interrupt.generationId),
         with: { conversation: true },
@@ -75,6 +76,10 @@ export async function POST(request: Request) {
           tokens,
         },
       });
+    }
+
+    if (interrupt.kind === "plugin_write" && interrupt.status === "accepted") {
+      await generationInterruptService.markInterruptApplied(interrupt.id);
     }
 
     return Response.json({

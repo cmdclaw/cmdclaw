@@ -20,6 +20,10 @@ describe("normalizeCmdclawArgv", () => {
         "60s",
         "--chaos-approval",
         "defer",
+        "--chaos-approval-park-after",
+        "5s",
+        "--attach-generation",
+        "gen-1",
       ]),
     ).toEqual([
       "chat",
@@ -29,6 +33,10 @@ describe("normalizeCmdclawArgv", () => {
       "60s",
       "--chaosApproval",
       "defer",
+      "--chaosApprovalParkAfter",
+      "5s",
+      "--attachGeneration",
+      "gen-1",
     ]);
   });
 

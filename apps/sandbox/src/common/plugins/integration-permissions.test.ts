@@ -38,4 +38,41 @@ describe("IntegrationPermissionsPlugin", () => {
     expect(process.env.GMAIL_ACCESS_TOKEN).toBe("gmail-token");
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it("sends a stable providerRequestId when requesting write approval", async () => {
+    process.env.SLACK_ACCESS_TOKEN = "slack-token";
+    process.env.APP_URL = "https://app.cmdclaw.ai";
+    vi.doMock("../lib/runtime-context", () => ({
+      readRuntimeContext: vi.fn().mockResolvedValue({
+        runtimeId: "runtime-1",
+        turnSeq: 2,
+        callbackToken: "callback-token",
+      }),
+    }));
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ status: "accepted" }), { status: 200 }),
+    );
+
+    const { IntegrationPermissionsPlugin } = await import("./integration-permissions");
+    const plugin = await IntegrationPermissionsPlugin();
+
+    await expect(
+      plugin["tool.execute.before"](
+        { tool: "bash", toolCallID: "call-123" },
+        { args: { command: "slack send -c C123 -t hi --as user" } },
+      ),
+    ).resolves.toBeUndefined();
+
+    const createBody = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
+    expect(createBody).toEqual(
+      expect.objectContaining({
+        kind: "plugin_write",
+        runtimeId: "runtime-1",
+        turnSeq: 2,
+        integration: "slack",
+        operation: "send",
+        providerRequestId: "plugin-write:runtime-1:2:opencode:call-123",
+      }),
+    );
+  });
 });

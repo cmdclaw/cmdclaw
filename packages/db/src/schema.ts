@@ -703,6 +703,7 @@ export type GenerationExecutionPolicy = {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   allowSnapshotRestoreOnRun?: boolean;
+  debugApprovalHotWaitMs?: number;
   queuedFileAttachments?: Array<{
     name: string;
     mimeType: string;
@@ -722,6 +723,14 @@ export type GenerationInterruptDisplay = {
   operation?: string;
   command?: string;
   toolInput?: Record<string, unknown>;
+  runtimeTool?: {
+    sessionId?: string;
+    messageId: string;
+    partId: string;
+    callId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+  };
   questionSpec?: {
     questions: Array<{
       header: string;

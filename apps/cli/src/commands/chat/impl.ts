@@ -8,6 +8,7 @@ import {
   runChatSession,
   DEFAULT_SERVER_URL,
   type CmdclawApiClient,
+  type StatusChangeMetadata,
 } from "@cmdclaw/client";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
@@ -44,7 +45,9 @@ type ChatFlags = {
   autoApprove?: boolean;
   chaosRunDeadline?: string;
   chaosApproval: "ask" | "defer";
+  chaosApprovalParkAfter?: string;
   attach?: string;
+  attachGeneration?: string;
   validate: boolean;
   questionAnswer?: readonly string[];
   file?: readonly string[];
@@ -68,6 +71,7 @@ type ChatState = {
   autoApprove?: boolean;
   chaosApproval: "ask" | "defer";
   debugRunDeadlineMs?: number;
+  debugApprovalHotWaitMs?: number;
   validate: boolean;
 };
 
@@ -112,6 +116,16 @@ const MIME_MAP: Record<string, string> = {
   ".txt": "text/plain",
   ".json": "application/json",
   ".csv": "text/csv",
+};
+
+type PrintedRuntimeMetadata = {
+  runtime?: string;
+  sandbox?: string;
+};
+
+type PrintedGenerationMarkers = {
+  generationId?: string;
+  conversationId?: string;
 };
 
 function isAuthIntegrationType(integration: string): integration is AuthIntegrationType {
@@ -179,6 +193,116 @@ function fileToAttachment(filePath: string): {
   };
 }
 
+function formatKeyValueMarker(label: string, values: Record<string, string | undefined>): string | null {
+  const entries = Object.entries(values).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0,
+  );
+  if (entries.length === 0) {
+    return null;
+  }
+  return `[${label}] ${entries.map(([key, value]) => `${key}=${value}`).join(" ")}`;
+}
+
+function printRuntimeMetadata(
+  stdout: NodeJS.WriteStream,
+  printed: PrintedRuntimeMetadata,
+  metadata?: StatusChangeMetadata,
+): void {
+  const runtime = formatKeyValueMarker("runtime", {
+    id: metadata?.runtimeId,
+    harness: metadata?.runtimeHarness,
+    protocol: metadata?.runtimeProtocolVersion,
+  });
+  if (runtime && printed.runtime !== runtime) {
+    stdout.write(`${runtime}\n`);
+    printed.runtime = runtime;
+  }
+
+  const sandbox = formatKeyValueMarker("sandbox", {
+    provider: metadata?.sandboxProvider,
+    id: metadata?.sandboxId,
+    session: metadata?.sessionId,
+  });
+  if (sandbox && printed.sandbox !== sandbox) {
+    stdout.write(`${sandbox}\n`);
+    printed.sandbox = sandbox;
+  }
+}
+
+function printApprovalParked(
+  stdout: NodeJS.WriteStream,
+  status: string,
+  metadata?: StatusChangeMetadata,
+): void {
+  if (status !== "approval_parked") {
+    return;
+  }
+  const parked = formatKeyValueMarker("approval_parked", {
+    interrupt: metadata?.parkedInterruptId,
+    sandbox: metadata?.releasedSandboxId ?? metadata?.sandboxId,
+  });
+  stdout.write(`${parked ?? "[approval_parked]"}\n`);
+}
+
+function printApprovalDecisionMarker(
+  stdout: NodeJS.WriteStream,
+  toolUseId: string,
+  decision: "approve" | "deny",
+): void {
+  stdout.write(
+    decision === "approve" ? `[approval_accepted] ${toolUseId}\n` : `[approval_rejected] ${toolUseId}\n`,
+  );
+}
+
+async function waitForApprovalParkedMarker(
+  stdout: NodeJS.WriteStream,
+  client: CmdclawApiClient,
+  generationId: string,
+  timeoutMs: number,
+): Promise<void> {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+  try {
+    const stream = await client.generation.subscribeGeneration(
+      { generationId },
+      { signal: abortController.signal },
+    );
+    for await (const event of stream) {
+      if (event.type !== "status_change" || event.status !== "approval_parked") {
+        continue;
+      }
+      printApprovalParked(stdout, event.status, event.metadata);
+      abortController.abort();
+      break;
+    }
+  } catch (error) {
+    if (!abortController.signal.aborted) {
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function printGenerationMarkers(
+  stdout: NodeJS.WriteStream,
+  printed: PrintedGenerationMarkers,
+  ids: { generationId?: string; conversationId?: string },
+): void {
+  if (ids.generationId && printed.generationId !== ids.generationId) {
+    stdout.write(`[generation] ${ids.generationId}\n`);
+    printed.generationId = ids.generationId;
+  }
+  if (ids.conversationId && printed.conversationId !== ids.conversationId) {
+    stdout.write(`[conversation] ${ids.conversationId}\n`);
+    printed.conversationId = ids.conversationId;
+  }
+}
+
+function isAttachableGenerationStatus(status: string | null): boolean {
+  return status === "generating" || status === "awaiting_approval" || status === "awaiting_auth";
+}
+
 function createApprovalPrompt(rl: readline.Interface | null): {
   rl: readline.Interface;
   close: () => void;
@@ -203,6 +327,7 @@ function createApprovalPrompt(rl: readline.Interface | null): {
       close: () => {
         ttyRl.close();
         input.close();
+        input.destroy();
       },
     };
   } catch {
@@ -335,6 +460,8 @@ async function runOneGeneration(
   const resolvedServerUrl = resolveServerUrl(state.server);
   const normalizedServerUrl = resolvedServerUrl.replace(/\/$/, "");
   const generationTiming = createGenerationTimingTracker();
+  const printedRuntimeMetadata: PrintedRuntimeMetadata = {};
+  const printedGenerationMarkers: PrintedGenerationMarkers = {};
 
   const result = await runChatSession({
     client,
@@ -348,10 +475,29 @@ async function runOneGeneration(
             sandboxProvider: state.sandbox,
             autoApprove: state.autoApprove,
             debugRunDeadlineMs: state.debugRunDeadlineMs,
+            debugApprovalHotWaitMs: state.debugApprovalHotWaitMs,
             fileAttachments: target.attachments?.length ? target.attachments : undefined,
           },
         }
       : { generationId: target.generationId }),
+    onStarted: (generationId, conversationId) => {
+      printGenerationMarkers(stdout, printedGenerationMarkers, { generationId, conversationId });
+    },
+    ...(target.kind === "attach"
+      ? {
+          onStatusChange: (status: string, metadata?: StatusChangeMetadata) => {
+            printGenerationMarkers(stdout, printedGenerationMarkers, {
+              generationId: target.generationId,
+            });
+            printRuntimeMetadata(stdout, printedRuntimeMetadata, metadata);
+          },
+        }
+      : {
+          onStatusChange: (status: string, metadata?: StatusChangeMetadata) => {
+            printRuntimeMetadata(stdout, printedRuntimeMetadata, metadata);
+            printApprovalParked(stdout, status, metadata);
+          },
+        }),
     onText: (text) => {
       if (text.length > 0) {
         generationTiming.noteVisibleOutput();
@@ -382,6 +528,10 @@ async function runOneGeneration(
       stdout.write(`[tool_result_data] ${typeof resultValue === "string" ? resultValue : JSON.stringify(resultValue)}\n`);
     },
     onPendingApproval: async (approval, apiClient) => {
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: approval.generationId,
+        conversationId: approval.conversationId,
+      });
       generationTiming.noteVisibleOutput();
       stdout.write(`\n[approval_needed] ${approval.toolName}\n`);
       stdout.write(
@@ -396,6 +546,14 @@ async function runOneGeneration(
       const questionItems = parseQuestionApprovalInput(approval.toolInput);
       if (state.chaosApproval === "defer") {
         stdout.write(`[approval_deferred] ${approval.toolUseId}\n`);
+        if (state.debugApprovalHotWaitMs !== undefined) {
+          await waitForApprovalParkedMarker(
+            stdout,
+            apiClient,
+            approval.generationId,
+            state.debugApprovalHotWaitMs + 5_000,
+          );
+        }
         return "deferred";
       }
 
@@ -408,6 +566,7 @@ async function runOneGeneration(
             decision: "approve",
             questionAnswers,
           });
+          printApprovalDecisionMarker(stdout, approval.toolUseId, "approve");
           return "handled";
         }
 
@@ -430,6 +589,7 @@ async function runOneGeneration(
             decision: "approve",
             questionAnswers,
           });
+          printApprovalDecisionMarker(stdout, approval.toolUseId, "approve");
           return "handled";
         } finally {
           approvalPrompt.close();
@@ -442,6 +602,7 @@ async function runOneGeneration(
           toolUseId: approval.toolUseId,
           decision: "approve",
         });
+        printApprovalDecisionMarker(stdout, approval.toolUseId, "approve");
         return "handled";
       }
 
@@ -455,11 +616,13 @@ async function runOneGeneration(
 
       try {
         const decision = (await ask(approvalPrompt.rl, "Approve? (y/n) ")).trim().toLowerCase();
+        const normalizedDecision = decision === "y" || decision === "yes" ? "approve" : "deny";
         await apiClient.generation.submitApproval({
           generationId: approval.generationId,
           toolUseId: approval.toolUseId,
-          decision: decision === "y" || decision === "yes" ? "approve" : "deny",
+          decision: normalizedDecision,
         });
+        printApprovalDecisionMarker(stdout, approval.toolUseId, normalizedDecision);
         return "handled";
       } finally {
         approvalPrompt.close();
@@ -518,7 +681,10 @@ async function runOneGeneration(
     case "completed":
       generationTiming.noteCompleted();
       stdout.write("\n");
-      stdout.write(`[generation] ${result.generationId}\n`);
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      });
       if (state.validate) {
         await validatePersistedAssistantMessage(client, result.conversationId, result.messageId, {
           content: result.assistant.content,
@@ -543,28 +709,31 @@ async function runOneGeneration(
           stdout.write(`${line}\n`);
         }
       }
-      stdout.write(`[conversation] ${result.conversationId}\n`);
       return result.conversationId;
     case "needs_auth":
-      stdout.write(`[generation] ${result.generationId}\n`);
-      stdout.write(`[conversation] ${result.conversationId}\n`);
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      });
       return result.conversationId;
     case "needs_approval":
-      stdout.write(`[generation] ${result.generationId}\n`);
-      stdout.write(`[conversation] ${result.conversationId}\n`);
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      });
       return result.conversationId;
     case "cancelled":
       stdout.write("\n[cancelled]\n");
-      stdout.write(`[generation] ${result.generationId}\n`);
-      stdout.write(`[conversation] ${result.conversationId}\n`);
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      });
       return result.conversationId;
     case "failed":
-      if (result.generationId) {
-        stdout.write(`[generation] ${result.generationId}\n`);
-      }
-      if (result.conversationId) {
-        stdout.write(`[conversation] ${result.conversationId}\n`);
-      }
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      });
       stdout.write(`\n[error] ${result.error.message}\n`);
       if (
         result.error.diagnosticMessage &&
@@ -686,11 +855,17 @@ function attachSigintHandler(rl: readline.Interface): void {
 }
 
 export default async function (this: LocalContext, flags: ChatFlags): Promise<void> {
-  if (flags.attach && flags.message) {
-    throw new Error("--attach cannot be used with --message");
+  if ((flags.attach || flags.attachGeneration) && flags.message) {
+    throw new Error("--attach/--attach-generation cannot be used with --message");
+  }
+  if (flags.attach && flags.attachGeneration) {
+    throw new Error("--attach cannot be used with --attach-generation");
   }
   const debugRunDeadlineMs = flags.chaosRunDeadline
     ? parseChaosDurationMs(flags.chaosRunDeadline)
+    : undefined;
+  const debugApprovalHotWaitMs = flags.chaosApprovalParkAfter
+    ? parseChaosDurationMs(flags.chaosApprovalParkAfter)
     : undefined;
 
   const serverUrl = resolveServerUrl(flags.server);
@@ -716,6 +891,7 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     autoApprove: flags.autoApprove,
     chaosApproval: flags.chaosApproval,
     debugRunDeadlineMs,
+    debugApprovalHotWaitMs,
     validate: flags.validate,
     file: flags.file ?? [],
     perfettoTrace: flags.perfettoTrace ?? false,
@@ -734,11 +910,45 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     return;
   }
 
-  if (flags.attach) {
+  if (flags.attachGeneration) {
     await runOneGeneration(this.process.stdout, client, null, state, {
       kind: "attach",
-      generationId: flags.attach,
+      generationId: flags.attachGeneration,
     });
+    return;
+  }
+
+  if (flags.attach) {
+    const active = await client.generation.getActiveGeneration({
+      conversationId: flags.attach,
+    });
+    state.conversationId = flags.attach;
+    if (active.generationId && isAttachableGenerationStatus(active.status)) {
+      this.process.stdout.write(`[attach] conversation=${flags.attach} generation=${active.generationId}\n`);
+      const rl = process.stdin.isTTY && process.stdout.isTTY ? createPrompt() : null;
+      if (rl) {
+        attachSigintHandler(rl);
+      }
+      try {
+        await runOneGeneration(this.process.stdout, client, rl, state, {
+          kind: "attach",
+          generationId: active.generationId,
+        });
+      } finally {
+        rl?.close();
+      }
+      return;
+    }
+
+    this.process.stdout.write(
+      active.status
+        ? `[attach] conversation=${flags.attach} status=${active.status}; no active generation, opening followup prompt\n`
+        : `[attach] conversation=${flags.attach}; no active generation, opening followup prompt\n`,
+    );
+    const rl = createPrompt();
+    attachSigintHandler(rl);
+    await runChatLoop(this.process.stdout, client, rl, state);
+    rl.close();
     return;
   }
 

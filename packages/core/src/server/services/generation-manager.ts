@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,
@@ -157,6 +158,16 @@ function escapeShellArg(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function coerceToolOutputText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === undefined) {
+    return "";
+  }
+  return JSON.stringify(value);
+}
+
 async function writeRuntimeContextToSandbox(
   runtimeSandbox: {
     exec: (
@@ -203,6 +214,21 @@ async function writeRuntimeEnvToSandbox(
     sandbox: runtimeSandbox,
     runtimeEnv,
   });
+}
+
+function buildRuntimeEnvSourcedCommand(params: {
+  command: string;
+  workdir?: string;
+}): string {
+  const workdir = params.workdir?.trim() || "/app";
+  const script = [
+    "set -o allexport",
+    "[ ! -f /app/.cmdclaw/runtime-env.sh ] || . /app/.cmdclaw/runtime-env.sh",
+    "set +o allexport",
+    `cd ${escapeShellArg(workdir)}`,
+    params.command,
+  ].join("\n");
+  return `bash -lc ${escapeShellArg(script)}`;
 }
 
 let cachedDefaultCoworkerModelPromise: Promise<string> | undefined;
@@ -294,11 +320,14 @@ export type GenerationEvent =
       type: "status_change";
       status: string;
       metadata?: {
+        runtimeId?: string;
         sandboxProvider?: "e2b" | "daytona" | "docker";
         runtimeHarness?: "opencode" | "agent-sdk";
         runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
         sandboxId?: string;
         sessionId?: string;
+        parkedInterruptId?: string;
+        releasedSandboxId?: string;
       };
     };
 
@@ -360,6 +389,7 @@ interface GenerationContext {
   executionPolicy: GenerationExecutionPolicy;
   deadlineAt: Date;
   remainingRunMs: number;
+  approvalHotWaitMs: number;
   suspendedAt?: Date | null;
   resumeInterruptId?: string | null;
   lastRuntimeEventAt: Date;
@@ -371,6 +401,8 @@ interface GenerationContext {
   abortController: AbortController;
   pendingApproval: PendingApproval | null;
   approvalTimeoutId?: ReturnType<typeof setTimeout>;
+  approvalParkTimeoutId?: ReturnType<typeof setTimeout>;
+  externalInterruptPollIntervalId?: ReturnType<typeof setInterval>;
   approvalResolver?: (decision: "allow" | "deny") => void;
   pendingAuth: PendingAuth | null;
   authTimeoutId?: ReturnType<typeof setTimeout>;
@@ -401,6 +433,7 @@ interface GenerationContext {
       parts: RuntimePart[];
     }
   >;
+  openCodeRuntimeTools: Map<string, OpenCodeRuntimeToolRef>;
   backendType: BackendType;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";
   // Coworker fields
@@ -460,6 +493,10 @@ type ToolUseMetadata = {
   operation?: string;
   isWrite?: boolean;
 };
+
+type OpenCodeRuntimeToolRef = NonNullable<
+  NonNullable<GenerationInterruptRecord["display"]["runtimeTool"]>
+>;
 
 type PrePromptCacheRecord = {
   version: 1;
@@ -523,6 +560,7 @@ async function getDoneArtifacts(messageId: string): Promise<
 
 const APPROVAL_TIMEOUT_MS = generationLifecyclePolicy.approvalTimeoutMs;
 const AUTH_TIMEOUT_MS = generationLifecyclePolicy.authTimeoutMs;
+const PARKED_INTERRUPT_TIMEOUT_MS = generationLifecyclePolicy.explicitPauseRetentionMs;
 const CANCELLATION_POLL_INTERVAL_MS = 1000;
 const AGENT_PREPARING_TIMEOUT_MS = generationLifecyclePolicy.bootstrapTimeoutMs;
 const OPENCODE_PROMPT_TIMEOUT_MS = generationLifecyclePolicy.runDeadlineMs;
@@ -643,6 +681,7 @@ function buildExecutionPolicy(params: {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   queuedFileAttachments?: UserFileAttachment[];
+  debugApprovalHotWaitMs?: number;
 }): GenerationExecutionPolicy {
   return {
     allowedIntegrations: params.allowedIntegrations,
@@ -655,6 +694,7 @@ function buildExecutionPolicy(params: {
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
     allowSnapshotRestoreOnRun: true,
     queuedFileAttachments: params.queuedFileAttachments,
+    debugApprovalHotWaitMs: params.debugApprovalHotWaitMs,
   };
 }
 
@@ -676,6 +716,83 @@ function resolveGenerationRunDeadlineMs(debugRunDeadlineMs: number | undefined):
     );
   }
   return debugRunDeadlineMs;
+}
+
+function resolveApprovalHotWaitMs(debugApprovalHotWaitMs: number | undefined): number {
+  if (debugApprovalHotWaitMs === undefined) {
+    return generationLifecyclePolicy.approvalHotWaitMs;
+  }
+  if (
+    !Number.isInteger(debugApprovalHotWaitMs) ||
+    debugApprovalHotWaitMs < 1_000 ||
+    debugApprovalHotWaitMs > generationLifecyclePolicy.runDeadlineMs
+  ) {
+    throw new Error(
+      `debugApprovalHotWaitMs must be an integer between 1000 and ${generationLifecyclePolicy.runDeadlineMs}`,
+    );
+  }
+  return debugApprovalHotWaitMs;
+}
+
+function computeParkedInterruptExpiryDate(now = new Date()): Date {
+  return new Date(now.getTime() + PARKED_INTERRUPT_TIMEOUT_MS);
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  const entries = Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`);
+  return `{${entries.join(",")}}`;
+}
+
+function hashStableProviderRequestPayload(payload: unknown): string {
+  return createHash("sha256").update(stableJsonStringify(payload)).digest("hex").slice(0, 24);
+}
+
+function extractOpenCodeCallIdFromProviderRequestId(providerRequestId: string | null | undefined): string | null {
+  const marker = ":opencode:";
+  if (!providerRequestId?.includes(marker)) {
+    return null;
+  }
+  const callId = providerRequestId.slice(providerRequestId.lastIndexOf(marker) + marker.length);
+  return callId.length > 0 ? callId : null;
+}
+
+function getRuntimeToolRefForInterrupt(
+  ctx: Pick<GenerationContext, "contentParts" | "openCodeRuntimeTools" | "sessionId"> | null | undefined,
+  params: {
+    providerRequestId?: string | null;
+    runtimeTool?: OpenCodeRuntimeToolRef;
+    command: string;
+  },
+): OpenCodeRuntimeToolRef | undefined {
+  if (params.runtimeTool) {
+    return params.runtimeTool;
+  }
+  const callId = extractOpenCodeCallIdFromProviderRequestId(params.providerRequestId);
+  if (callId) {
+    const fromMap = ctx?.openCodeRuntimeTools.get(callId);
+    if (fromMap) {
+      return fromMap;
+    }
+  }
+  const matchingToolUse = ctx?.contentParts.find(
+    (part): part is ContentPart & { type: "tool_use" } =>
+      part.type === "tool_use" &&
+      typeof part.input.command === "string" &&
+      part.input.command === params.command,
+  );
+  if (!matchingToolUse) {
+    return undefined;
+  }
+  return ctx?.openCodeRuntimeTools.get(matchingToolUse.id);
 }
 
 function resolveExpiryMs(
@@ -1359,6 +1476,11 @@ class GenerationManager {
     if (ctx.approvalTimeoutId) {
       clearTimeout(ctx.approvalTimeoutId);
     }
+    if (ctx.approvalParkTimeoutId) {
+      clearTimeout(ctx.approvalParkTimeoutId);
+      ctx.approvalParkTimeoutId = undefined;
+    }
+    this.stopExternalInterruptPolling(ctx);
     if (ctx.authTimeoutId) {
       clearTimeout(ctx.authTimeoutId);
     }
@@ -1625,6 +1747,192 @@ class GenerationManager {
         : generationLifecyclePolicy.runDeadlineMs;
     ctx.deadlineAt = new Date(now.getTime() + remainingRunMs);
     return ctx.deadlineAt;
+  }
+
+  private getApprovalHotWaitMs(ctx: Pick<GenerationContext, "approvalHotWaitMs">): number {
+    return Math.max(1_000, ctx.approvalHotWaitMs);
+  }
+
+  private async resolveSandboxRuntimeEnvForContext(
+    ctx: GenerationContext,
+  ): Promise<Record<string, string | null | undefined>> {
+    const userTimezonePromise =
+      typeof db.query.user?.findFirst === "function"
+        ? db.query.user.findFirst({
+            where: eq(user.id, ctx.userId),
+            columns: { timezone: true },
+          })
+        : Promise.resolve(null);
+    const [cliEnv, enabledIntegrations, dbUser] = await Promise.all([
+      getCliEnvForUser(ctx.userId),
+      getEnabledIntegrationTypes(ctx.userId),
+      userTimezonePromise,
+    ]);
+    const allowedIntegrations = ctx.allowedIntegrations ?? enabledIntegrations;
+    let filteredCliEnv = filterCliEnvToAllowedIntegrations(cliEnv, ctx.allowedIntegrations);
+
+    if (ctx.remoteIntegrationSource && allowedIntegrations.length > 0) {
+      const remoteCredentials = await getRemoteIntegrationCredentials({
+        targetEnv: ctx.remoteIntegrationSource.targetEnv,
+        remoteUserId: ctx.remoteIntegrationSource.remoteUserId,
+        integrationTypes: allowedIntegrations,
+        requestedByUserId: ctx.remoteIntegrationSource.requestedByUserId,
+        requestedByEmail: ctx.remoteIntegrationSource.requestedByEmail ?? null,
+      });
+      filteredCliEnv = {
+        ...filteredCliEnv,
+        ...remoteCredentials.tokens,
+      };
+    }
+
+    if (ctx.allowedIntegrations !== undefined) {
+      filteredCliEnv.ALLOWED_INTEGRATIONS = ctx.allowedIntegrations.join(",");
+    }
+    if (dbUser?.timezone) {
+      filteredCliEnv.CMDCLAW_USER_TIMEZONE = dbUser.timezone;
+    }
+
+    return {
+      ...filteredCliEnv,
+      APP_URL: resolveSandboxRuntimeAppUrl(),
+      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+      CONVERSATION_ID: ctx.conversationId,
+    };
+  }
+
+  private broadcastApprovalParked(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+    releasedSandboxId?: string,
+  ): void {
+    this.broadcast(ctx, {
+      type: "status_change",
+      status: "approval_parked",
+      metadata: {
+        runtimeId: ctx.runtimeId,
+        sandboxId: releasedSandboxId,
+        releasedSandboxId,
+        parkedInterruptId: interrupt.id,
+      },
+    });
+  }
+
+  private async refreshInterruptForPark(
+    interrupt: GenerationInterruptRecord,
+  ): Promise<GenerationInterruptRecord> {
+    if (interrupt.status !== "pending") {
+      return interrupt;
+    }
+    return (
+      (await generationInterruptService.refreshInterruptExpiry(
+        interrupt.id,
+        computeParkedInterruptExpiryDate(),
+      )) ?? interrupt
+    );
+  }
+
+  private async enrichPluginWriteInterruptRuntimeTool(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<GenerationInterruptRecord> {
+    if (interrupt.kind !== "plugin_write" || interrupt.display.runtimeTool) {
+      return interrupt;
+    }
+    const command = interrupt.display.command;
+    if (!command) {
+      return interrupt;
+    }
+    const runtimeTool = getRuntimeToolRefForInterrupt(ctx, {
+      providerRequestId: interrupt.providerRequestId,
+      command,
+    });
+    if (!runtimeTool) {
+      return interrupt;
+    }
+    return (
+      (await generationInterruptService.updateInterruptDisplay(interrupt.id, {
+        ...interrupt.display,
+        runtimeTool,
+      })) ?? interrupt
+    );
+  }
+
+  private async parkGenerationForInterrupt(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<never> {
+    const latest = await generationInterruptService.getInterrupt(interrupt.id);
+    if (!latest || latest.status !== "pending") {
+      throw new GenerationSuspendedError(interrupt.id, interrupt.kind === "auth" ? "auth" : "approval");
+    }
+
+    const enrichedInterrupt = await this.enrichPluginWriteInterruptRuntimeTool(ctx, latest);
+    const parkedInterrupt = await this.refreshInterruptForPark(enrichedInterrupt);
+    const releasedSandboxId = ctx.sandboxId;
+    this.broadcastApprovalParked(ctx, parkedInterrupt, releasedSandboxId);
+    return await this.suspendGenerationForInterrupt(ctx, parkedInterrupt);
+  }
+
+  private scheduleApprovalPark(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): void {
+    if (ctx.approvalParkTimeoutId) {
+      clearTimeout(ctx.approvalParkTimeoutId);
+    }
+    ctx.approvalParkTimeoutId = setTimeout(() => {
+      ctx.approvalParkTimeoutId = undefined;
+      void (async () => {
+        const activeCtx = this.activeGenerations.get(ctx.id);
+        if (!activeCtx || activeCtx.currentInterruptId !== interrupt.id) {
+          return;
+        }
+        const latest = await generationInterruptService.getInterrupt(interrupt.id);
+        if (!latest || latest.status !== "pending") {
+          return;
+        }
+        try {
+          await this.parkGenerationForInterrupt(activeCtx, latest);
+        } catch (error) {
+          if (error instanceof GenerationSuspendedError) {
+            activeCtx.abortController.abort();
+            return;
+          }
+          console.error("[GenerationManager] Failed to park approval interrupt:", error);
+        }
+      })();
+    }, this.getApprovalHotWaitMs(ctx));
+    ctx.approvalParkTimeoutId.unref?.();
+  }
+
+  private startExternalInterruptPolling(ctx: GenerationContext): void {
+    if (ctx.externalInterruptPollIntervalId) {
+      return;
+    }
+
+    ctx.externalInterruptPollIntervalId = setInterval(() => {
+      const activeCtx = this.activeGenerations.get(ctx.id);
+      if (!activeCtx) {
+        this.stopExternalInterruptPolling(ctx);
+        return;
+      }
+      void this.pollExternalInterruptAndSuspendIfNeeded(activeCtx).catch((error) => {
+        if (error instanceof GenerationSuspendedError) {
+          activeCtx.abortController.abort();
+          return;
+        }
+        console.error("[GenerationManager] External interrupt poll failed:", error);
+      });
+    }, 1_000);
+    ctx.externalInterruptPollIntervalId.unref?.();
+  }
+
+  private stopExternalInterruptPolling(ctx: GenerationContext): void {
+    if (!ctx.externalInterruptPollIntervalId) {
+      return;
+    }
+    clearInterval(ctx.externalInterruptPollIntervalId);
+    ctx.externalInterruptPollIntervalId = undefined;
   }
 
   private async recordRecoveryAttempt(ctx: GenerationContext): Promise<void> {
@@ -1967,6 +2275,7 @@ class GenerationManager {
     sandboxProvider?: "e2b" | "daytona" | "docker";
     selectedPlatformSkillSlugs?: string[];
     allowSnapshotRestoreOnRun?: boolean;
+    debugApprovalHotWaitMs?: number;
     queuedFileAttachments?: UserFileAttachment[];
   } {
     const policy =
@@ -2000,6 +2309,7 @@ class GenerationManager {
           )
         : undefined,
       allowSnapshotRestoreOnRun: policy?.allowSnapshotRestoreOnRun ?? true,
+      debugApprovalHotWaitMs: policy?.debugApprovalHotWaitMs,
       queuedFileAttachments: Array.isArray(policy?.queuedFileAttachments)
         ? policy.queuedFileAttachments.filter(
             (entry): entry is UserFileAttachment =>
@@ -2384,6 +2694,7 @@ class GenerationManager {
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
     debugRunDeadlineMs?: number;
+    debugApprovalHotWaitMs?: number;
     allowedIntegrations?: IntegrationType[];
     fileAttachments?: UserFileAttachment[];
     selectedPlatformSkillSlugs?: string[];
@@ -2391,6 +2702,9 @@ class GenerationManager {
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model, autoApprove } = params;
     const runDeadlineMs = resolveGenerationRunDeadlineMs(params.debugRunDeadlineMs);
+    const debugApprovalHotWaitMs = params.debugApprovalHotWaitMs === undefined
+      ? undefined
+      : resolveApprovalHotWaitMs(params.debugApprovalHotWaitMs);
     const fileAttachments = params.fileAttachments;
     const requestedModel = model?.trim();
     if (requestedModel) {
@@ -2703,6 +3017,7 @@ class GenerationManager {
       sandboxProvider: params.sandboxProvider,
       selectedPlatformSkillSlugs,
       queuedFileAttachments: fileAttachments,
+      debugApprovalHotWaitMs,
     });
     const lifecycle = createGenerationLifecycle();
     lifecycle.deadlineAt = new Date(lifecycle.lastRuntimeEventAt.getTime() + runDeadlineMs);
@@ -3052,6 +3367,7 @@ class GenerationManager {
         genRecord.remainingRunMs && genRecord.remainingRunMs > 0
           ? genRecord.remainingRunMs
           : generationLifecyclePolicy.runDeadlineMs,
+      approvalHotWaitMs: resolveApprovalHotWaitMs(executionPolicy.debugApprovalHotWaitMs),
       suspendedAt: genRecord.suspendedAt ?? null,
       resumeInterruptId: genRecord.resumeInterruptId ?? null,
       lastRuntimeEventAt: genRecord.lastRuntimeEventAt ?? genRecord.startedAt,
@@ -3081,6 +3397,7 @@ class GenerationManager {
       assistantMessageIds: new Set(),
       messageRoles: new Map(),
       pendingMessageParts: new Map(),
+      openCodeRuntimeTools: new Map(),
       backendType: "opencode",
       sandboxProviderOverride: executionPolicy.sandboxProvider,
       coworkerId: linkedCoworkerRun?.coworkerId,
@@ -4186,8 +4503,13 @@ class GenerationManager {
     const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx) {
       activeCtx.contentParts = nextContentParts;
+      activeCtx.status = "running";
       if (activeCtx.currentInterruptId === interrupt.id) {
         activeCtx.currentInterruptId = undefined;
+      }
+      if (activeCtx.approvalParkTimeoutId) {
+        clearTimeout(activeCtx.approvalParkTimeoutId);
+        activeCtx.approvalParkTimeoutId = undefined;
       }
       if (resolvedInterrupt) {
         this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
@@ -4198,7 +4520,15 @@ class GenerationManager {
       return this.resumeGeneration(generationId, userId);
     }
 
-    if (!activeCtx) {
+    const activeRuntime =
+      !activeCtx && genRecord.runtimeId
+        ? await conversationRuntimeService.getRuntime(genRecord.runtimeId)
+        : null;
+    const hasHotDetachedRuntime =
+      activeRuntime?.status === "active" && Boolean(activeRuntime.sandboxId);
+    const shouldResumeDetachedGeneration =
+      !activeCtx && !hasHotDetachedRuntime && (!genRecord.sandboxId || genRecord.suspendedAt);
+    if (shouldResumeDetachedGeneration) {
       const linkedRun = await db.query.coworkerRun.findFirst({
         where: eq(coworkerRun.generationId, generationId),
         columns: { id: true },
@@ -4478,6 +4808,25 @@ class GenerationManager {
     }, 30_000);
 
     try {
+      const latestGenerationState = await db.query.generation.findFirst({
+        where: eq(generation.id, ctx.id),
+        columns: {
+          status: true,
+          messageId: true,
+          completedAt: true,
+        },
+      });
+      if (latestGenerationState) {
+        if (
+          latestGenerationState.completedAt ||
+          latestGenerationState.messageId ||
+          latestGenerationState.status === "completed" ||
+          latestGenerationState.status === "cancelled" ||
+          latestGenerationState.status === "error"
+        ) {
+          return;
+        }
+      }
       await this.hydrateStreamSequence(ctx);
       if (
         !ctx.resumeInterruptId &&
@@ -4677,24 +5026,260 @@ class GenerationManager {
     await this.bindRuntimeSandboxToContext(ctx, params);
   }
 
+  private appendInjectedToolResult(
+    ctx: GenerationContext,
+    params: {
+      toolUseId: string;
+      toolName: string;
+      result: unknown;
+    },
+  ): void {
+    const existingToolResult = ctx.contentParts.some(
+      (part): part is ContentPart & { type: "tool_result" } =>
+        part.type === "tool_result" && part.tool_use_id === params.toolUseId,
+    );
+    if (existingToolResult) {
+      return;
+    }
+
+    const result = limitToolResultContent(params.result);
+    this.broadcast(ctx, {
+      type: "tool_result",
+      toolName: params.toolName,
+      result,
+      toolUseId: params.toolUseId,
+    });
+    ctx.contentParts.push({
+      type: "tool_result",
+      tool_use_id: params.toolUseId,
+      content: result,
+    });
+  }
+
+  private async updateOpenCodeToolPart(
+    runtimeClient: RuntimeHarnessClient,
+    runtimeTool: OpenCodeRuntimeToolRef,
+    state:
+      | { status: "completed"; input: Record<string, unknown>; output: string }
+      | { status: "error"; input: Record<string, unknown>; error: string },
+  ): Promise<void> {
+    const now = Date.now();
+    if (!runtimeTool.sessionId) {
+      throw new Error("OpenCode tool part update failed: saved session id is missing");
+    }
+    const part = {
+      type: "tool",
+      id: runtimeTool.partId,
+      sessionID: runtimeTool.sessionId,
+      messageID: runtimeTool.messageId,
+      callID: runtimeTool.callId,
+      tool: runtimeTool.toolName,
+      state:
+        state.status === "completed"
+          ? {
+              status: "completed",
+              input: state.input,
+              output: state.output,
+              title: runtimeTool.toolName,
+              metadata: {},
+              time: { start: now, end: now },
+            }
+          : {
+              status: "error",
+              input: state.input,
+              error: state.error,
+              metadata: {},
+              time: { start: now, end: now },
+            },
+    };
+    const result = await runtimeClient.updatePart({
+      sessionID: runtimeTool.sessionId,
+      messageID: runtimeTool.messageId,
+      partID: runtimeTool.partId,
+      part,
+    });
+    if (result.error) {
+      throw new Error(`OpenCode tool part update failed: ${formatErrorMessage(result.error)}`);
+    }
+  }
+
+  private async executeApprovedPluginWriteCommand(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<
+    | { status: "completed"; output: string }
+    | { status: "error"; error: string; outputForStream: unknown }
+  > {
+    if (interrupt.status !== "accepted") {
+      const error = "User denied this integration write.";
+      return { status: "error", error, outputForStream: { error } };
+    }
+    if (!ctx.sandbox) {
+      const error = "Approved integration write could not run because the sandbox was not attached.";
+      return { status: "error", error, outputForStream: { error } };
+    }
+
+    const command = interrupt.display.command;
+    if (!command) {
+      const error = "Approved integration write could not run because the saved command is missing.";
+      return { status: "error", error, outputForStream: { error } };
+    }
+    const toolInput =
+      interrupt.display.toolInput && typeof interrupt.display.toolInput === "object"
+        ? (interrupt.display.toolInput as Record<string, unknown>)
+        : {};
+    const workdir = typeof toolInput.workdir === "string" ? toolInput.workdir : undefined;
+    const result = await ctx.sandbox.execute(
+      buildRuntimeEnvSourcedCommand({ command, workdir }),
+      { timeout: 120_000 },
+    );
+    if (result.exitCode !== 0) {
+      const errorText =
+        result.stderr.trim() ||
+        result.stdout.trim() ||
+        `Approved command exited with status ${result.exitCode}`;
+      return {
+        status: "error",
+        error: errorText,
+        outputForStream: {
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+      };
+    }
+
+    return {
+      status: "completed",
+      output: result.stdout,
+    };
+  }
+
+  private async injectParkedPluginWriteResult(
+    ctx: GenerationContext,
+    params: {
+      runtimeClient: RuntimeHarnessClient;
+      interrupt: GenerationInterruptRecord;
+      runtimeTool: OpenCodeRuntimeToolRef;
+      execution:
+        | { status: "completed"; output: string }
+        | { status: "error"; error: string; outputForStream: unknown };
+    },
+  ): Promise<void> {
+    const toolInput =
+      params.interrupt.display.toolInput && typeof params.interrupt.display.toolInput === "object"
+        ? (params.interrupt.display.toolInput as Record<string, unknown>)
+        : params.runtimeTool.input;
+
+    if (params.execution.status === "completed") {
+      await this.updateOpenCodeToolPart(params.runtimeClient, params.runtimeTool, {
+        status: "completed",
+        input: toolInput,
+        output: params.execution.output,
+      });
+      this.appendInjectedToolResult(ctx, {
+        toolUseId: params.runtimeTool.callId,
+        toolName: params.runtimeTool.toolName,
+        result: params.execution.output,
+      });
+    } else {
+      await this.updateOpenCodeToolPart(params.runtimeClient, params.runtimeTool, {
+        status: "error",
+        input: toolInput,
+        error: params.execution.error,
+      });
+      this.appendInjectedToolResult(ctx, {
+        toolUseId: params.runtimeTool.callId,
+        toolName: params.runtimeTool.toolName,
+        result: params.execution.outputForStream,
+      });
+    }
+
+    await this.saveProgress(ctx);
+    await generationInterruptService.markInterruptApplied(params.interrupt.id);
+  }
+
+  private async runParkedPluginWriteResume(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<void> {
+    const runtimeTool = interrupt.display.runtimeTool;
+    if (!runtimeTool?.messageId || !runtimeTool.partId || !runtimeTool.callId) {
+      this.setCompletionReason(ctx, "broken_runtime_state");
+      ctx.errorMessage =
+        "The approved integration write could not be resumed because its runtime tool identity was not saved.";
+      await this.finishGeneration(ctx, "error");
+      return;
+    }
+
+    let commandExecution:
+      | { status: "completed"; output: string }
+      | { status: "error"; error: string; outputForStream: unknown }
+      | null = null;
+
+    await this.runRecoveryReattach(ctx, {
+      allowSnapshotRestore: true,
+      requireLiveSession: false,
+      modeLabel: "resume_plugin_write",
+      completeAfterRuntimeAttached: true,
+      skipUsageCaptureAfterRuntimeAttached: true,
+      onRuntimeAttached: async (runtimeClient) => {
+        commandExecution = await this.executeApprovedPluginWriteCommand(ctx, interrupt);
+        await this.injectParkedPluginWriteResult(ctx, {
+          runtimeClient,
+          interrupt,
+          runtimeTool,
+          execution: commandExecution,
+        });
+        const completionText =
+          commandExecution.status === "completed"
+            ? "Done."
+            : `The approved command failed: ${commandExecution.error}`;
+        ctx.assistantContent += completionText;
+        ctx.contentParts.push({ type: "text", text: completionText });
+        this.broadcast(ctx, { type: "text", content: completionText });
+        await this.saveProgress(ctx);
+      },
+    });
+  }
+
   private async runSuspendedInterruptResume(ctx: GenerationContext): Promise<void> {
     const interruptId = ctx.resumeInterruptId;
     if (!interruptId) {
       await this.runOpenCodeGeneration(ctx);
       return;
     }
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
 
     this.resumeDeadlineFromRemainingBudget(ctx);
     ctx.status = "running";
     ctx.suspendedAt = null;
+    const shouldResumeOpenCodeInterrupt = interrupt?.provider === "opencode";
+    if (!shouldResumeOpenCodeInterrupt) {
+      ctx.resumeInterruptId = null;
+    }
     await db
       .update(generation)
       .set({
         status: "running",
         deadlineAt: ctx.deadlineAt,
         suspendedAt: null,
+        resumeInterruptId: shouldResumeOpenCodeInterrupt ? ctx.resumeInterruptId : null,
       })
       .where(eq(generation.id, ctx.id));
+
+    if (!shouldResumeOpenCodeInterrupt) {
+      if (interrupt?.kind === "plugin_write") {
+        await this.runParkedPluginWriteResume(ctx, interrupt);
+        return;
+      }
+      await this.runRecoveryReattach(ctx, {
+        allowSnapshotRestore: true,
+        requireLiveSession: false,
+        modeLabel: "resume_interrupt",
+      });
+      return;
+    }
 
     await this.runRecoveryReattach(ctx, {
       allowSnapshotRestore: true,
@@ -4714,6 +5299,9 @@ class GenerationManager {
       requireLiveSession?: boolean;
       resumeInterruptId?: string;
       modeLabel?: string;
+      onRuntimeAttached?: (runtimeClient: RuntimeHarnessClient) => Promise<RuntimePromptPart[] | void>;
+      completeAfterRuntimeAttached?: boolean;
+      skipUsageCaptureAfterRuntimeAttached?: boolean;
     },
   ): Promise<void> {
     const requireLiveSession = options?.requireLiveSession ?? true;
@@ -4802,6 +5390,18 @@ class GenerationManager {
         runtimeMetadata: session.metadata,
         sessionId: session.session.id,
       });
+      this.broadcast(ctx, {
+        type: "status_change",
+        status: `${modeLabel}_attached`,
+        metadata: {
+          runtimeId: ctx.runtimeId,
+          sandboxProvider: session.metadata.sandboxProvider,
+          runtimeHarness: session.metadata.runtimeHarness,
+          runtimeProtocolVersion: session.metadata.runtimeProtocolVersion,
+          sandboxId: session.sandbox.sandboxId,
+          sessionId: session.session.id,
+        },
+      });
       if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
         await writeRuntimeContextToSandbox(session.sandbox, {
           runtimeId: ctx.runtimeId,
@@ -4810,10 +5410,23 @@ class GenerationManager {
           updatedAt: new Date().toISOString(),
         });
       }
+      await writeRuntimeEnvToSandbox(
+        session.sandbox,
+        await this.resolveSandboxRuntimeEnvForContext(ctx),
+      );
       if (options?.resumeInterruptId) {
         await this.applyResolvedInterruptToRuntime(ctx, options.resumeInterruptId, runtimeClient);
       }
+      const continuationPromptParts = await options?.onRuntimeAttached?.(runtimeClient);
       await this.setSnapshotRestoreAllowance(ctx, false);
+
+      if (options?.completeAfterRuntimeAttached) {
+        if (!options.skipUsageCaptureAfterRuntimeAttached) {
+          await this.captureUsageFromRuntimeSession(ctx, runtimeClient, session.session.id);
+        }
+        await this.finishGeneration(ctx, "completed");
+        return;
+      }
 
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
       if (remainingRunTimeMs <= 0) {
@@ -4832,6 +5445,18 @@ class GenerationManager {
         },
       );
       const eventStream = eventResult.stream;
+      const continuationPromptPromise =
+        continuationPromptParts && continuationPromptParts.length > 0 && ctx.sessionId
+          ? runtimeClient
+              .prompt({
+                sessionID: ctx.sessionId,
+                parts: continuationPromptParts,
+              })
+              .then(
+                () => ({ ok: true as const }),
+                (error) => ({ ok: false as const, error }),
+              )
+          : Promise.resolve({ ok: true as const });
       let currentTextPart: { type: "text"; text: string } | null = null;
       let currentTextPartId: string | null = null;
       let opencodeEventCount = 0;
@@ -4930,6 +5555,10 @@ class GenerationManager {
       }
 
       clearReattachTimeout?.();
+      const continuationPromptResult = await continuationPromptPromise;
+      if (!continuationPromptResult.ok) {
+        throw continuationPromptResult.error;
+      }
 
       if (reattachTimeoutTriggered) {
         this.setCompletionReason(ctx, "run_deadline");
@@ -5301,6 +5930,7 @@ class GenerationManager {
             type: "status_change",
             status: "agent_init_ready",
             metadata: {
+              runtimeId: ctx.runtimeId,
               sandboxProvider: runtimeMetadata?.sandboxProvider,
               runtimeHarness: runtimeMetadata?.runtimeHarness,
               runtimeProtocolVersion: runtimeMetadata?.runtimeProtocolVersion,
@@ -6001,6 +6631,7 @@ class GenerationManager {
           () => ({ ok: true as const }),
           (error) => ({ ok: false as const, error }),
         );
+      this.startExternalInterruptPolling(ctx);
       let sessionErrorMessage: string | null = null;
 
       // Process SSE events
@@ -6123,6 +6754,7 @@ class GenerationManager {
       }
 
       const promptResult = await promptResultPromise;
+      this.stopExternalInterruptPolling(ctx);
       clearPromptTimeout?.();
       if (!promptResult.ok) {
         throw promptResult.error;
@@ -6259,6 +6891,7 @@ class GenerationManager {
       );
       await this.finishGeneration(ctx, "completed");
     } catch (error) {
+      this.stopExternalInterruptPolling(ctx);
       clearPromptTimeout?.();
       if (error instanceof GenerationSuspendedError) {
         logServerEvent(
@@ -6578,6 +7211,7 @@ class GenerationManager {
       provider: "opencode",
       providerRequestId: openCodeRequest.request.id,
       providerToolUseId: pendingApproval.toolUseId,
+      expiresAt: computeParkedInterruptExpiryDate(),
     });
 
     ctx.status = "awaiting_approval";
@@ -6590,7 +7224,22 @@ class GenerationManager {
         .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
     this.broadcast(ctx, this.projectInterruptPendingEvent(interrupt));
-    await this.suspendGenerationForInterrupt(ctx, interrupt);
+
+    const resolved = await this.waitForOpenCodeApprovalDecision(
+      interrupt.id,
+      this.getApprovalHotWaitMs(ctx),
+    );
+    if (!resolved) {
+      return await this.parkGenerationForInterrupt(ctx, interrupt);
+    }
+
+    await this.applyOpenCodeApprovalDecision(
+      ctx,
+      interrupt.id,
+      resolved.decision,
+      resolved.questionAnswers,
+      _client,
+    );
   }
 
   private async rejectOpenCodePendingApprovalRequest(
@@ -6657,8 +7306,13 @@ class GenerationManager {
 
   private async waitForOpenCodeApprovalDecision(
     interruptId: string,
+    maxWaitMs: number,
   ): Promise<{ decision: "allow" | "deny"; questionAnswers?: string[][] } | null> {
+    const deadlineMs = Date.now() + maxWaitMs;
     while (true) {
+      if (Date.now() >= deadlineMs) {
+        return null;
+      }
       // eslint-disable-next-line no-await-in-loop -- polling by design
       await new Promise((resolve) => setTimeout(resolve, 400));
       const latest = await generationInterruptService.getInterrupt(interruptId);
@@ -6822,6 +7476,10 @@ class GenerationManager {
     if (resolvedInterrupt) {
       this.broadcast(ctx, this.projectInterruptResolvedEvent(resolvedInterrupt));
     }
+    if (ctx.approvalParkTimeoutId) {
+      clearTimeout(ctx.approvalParkTimeoutId);
+      ctx.approvalParkTimeoutId = undefined;
+    }
   }
 
   private async applyResolvedInterruptToRuntime(
@@ -6845,12 +7503,12 @@ class GenerationManager {
         interrupt.responsePayload?.questionAnswers,
         runtimeClient,
       );
+      await generationInterruptService.markInterruptApplied(interrupt.id);
     } else {
       const resolvedEvent = this.projectInterruptResolvedEvent(interrupt);
       this.broadcast(ctx, resolvedEvent);
     }
 
-    await generationInterruptService.markInterruptApplied(interrupt.id);
     ctx.resumeInterruptId = null;
     ctx.currentInterruptId = undefined;
     await db
@@ -7117,6 +7775,17 @@ class GenerationManager {
       const toolUseId = part.callID;
       const toolName = part.tool;
       const toolInput = "input" in part.state ? (part.state.input as Record<string, unknown>) : {};
+      if (part.messageID) {
+        ctx.openCodeRuntimeTools ??= new Map();
+        ctx.openCodeRuntimeTools.set(toolUseId, {
+          sessionId: ctx.sessionId,
+          messageId: part.messageID,
+          partId: part.id,
+          callId: toolUseId,
+          toolName,
+          input: toolInput,
+        });
+      }
       const metadata = this.getToolUseMetadata(toolName, toolInput);
 
       const existingToolUse = ctx.contentParts.find(
@@ -7154,6 +7823,14 @@ class GenerationManager {
         }
         case "completed": {
           if (!existingToolUse) {
+            return;
+          }
+          if (
+            ctx.contentParts.some(
+              (contentPart): contentPart is ContentPart & { type: "tool_result" } =>
+                contentPart.type === "tool_result" && contentPart.tool_use_id === toolUseId,
+            )
+          ) {
             return;
           }
           const result = limitToolResultContent(part.state.output);
@@ -7200,6 +7877,14 @@ class GenerationManager {
         }
         case "error": {
           if (!existingToolUse) {
+            return;
+          }
+          if (
+            ctx.contentParts.some(
+              (contentPart): contentPart is ContentPart & { type: "tool_result" } =>
+                contentPart.type === "tool_result" && contentPart.tool_use_id === toolUseId,
+            )
+          ) {
             return;
           }
           const result = limitToolResultContent({ error: part.state.error });
@@ -7496,6 +8181,10 @@ class GenerationManager {
         if (activeCtx.currentInterruptId === resolvedInterrupt.id) {
           activeCtx.currentInterruptId = undefined;
         }
+        if (activeCtx.approvalParkTimeoutId) {
+          clearTimeout(activeCtx.approvalParkTimeoutId);
+          activeCtx.approvalParkTimeoutId = undefined;
+        }
         this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
       }
       return this.resumeGeneration(generationId, userId);
@@ -7530,6 +8219,10 @@ class GenerationManager {
       activeCtx.status = "running";
       if (activeCtx.currentInterruptId === resolvedInterrupt.id) {
         activeCtx.currentInterruptId = undefined;
+      }
+      if (activeCtx.approvalParkTimeoutId) {
+        clearTimeout(activeCtx.approvalParkTimeoutId);
+        activeCtx.approvalParkTimeoutId = undefined;
       }
       this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
     }
@@ -7600,6 +8293,8 @@ class GenerationManager {
       integration: string;
       operation: string;
       command: string;
+      providerRequestId?: string;
+      runtimeTool?: OpenCodeRuntimeToolRef;
     },
   ): Promise<{
     decision: "allow" | "deny" | "pending";
@@ -7627,7 +8322,42 @@ class GenerationManager {
       return { decision: "deny" };
     }
 
+    const providerRequestId =
+      request.providerRequestId ??
+      `plugin-write:${runtimeRecord.id}:${runtimeRecord.activeTurnSeq}:${hashStableProviderRequestPayload(
+        {
+          integration: request.integration,
+          operation: request.operation,
+          command: request.command,
+        },
+      )}`;
+    const existing = await generationInterruptService.findInterruptByProviderRequestId({
+      generationId,
+      providerRequestId,
+    });
+    if (existing) {
+      if (existing.status === "accepted") {
+        await generationInterruptService.markInterruptApplied(existing.id);
+        return { decision: "allow" };
+      }
+      if (existing.status === "pending") {
+        return {
+          decision: "pending",
+          toolUseId: existing.providerToolUseId,
+          interruptId: existing.id,
+          expiresAt: existing.expiresAt?.toISOString(),
+        };
+      }
+      return { decision: "deny" };
+    }
+
     const toolUseId = `plugin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const activeCtx = this.activeGenerations.get(generationId);
+    const runtimeTool = getRuntimeToolRefForInterrupt(activeCtx, {
+      providerRequestId,
+      runtimeTool: request.runtimeTool,
+      command: request.command,
+    });
     const interrupt = await generationInterruptService.createInterrupt({
       generationId,
       runtimeId: runtimeRecord.id,
@@ -7640,19 +8370,22 @@ class GenerationManager {
         operation: request.operation,
         command: request.command,
         toolInput: request.toolInput,
+        runtimeTool,
       },
       provider: "plugin",
+      providerRequestId,
       providerToolUseId: toolUseId,
+      expiresAt: computeParkedInterruptExpiryDate(),
     });
 
     const pendingApprovalEvent = this.projectInterruptPendingEvent(interrupt);
 
-    const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx) {
       activeCtx.status = "awaiting_approval";
       activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, pendingApprovalEvent);
       await this.saveSessionSnapshotIfPossible(activeCtx, "plugin_awaiting_approval");
+      this.scheduleApprovalPark(activeCtx, interrupt);
     } else {
       await this.publishDetachedGenerationStreamEvent({
         generationId,
@@ -7661,7 +8394,12 @@ class GenerationManager {
       });
     }
 
-    return { decision: "pending", toolUseId, interruptId: interrupt.id };
+    return {
+      decision: "pending",
+      toolUseId,
+      interruptId: interrupt.id,
+      expiresAt: interrupt.expiresAt?.toISOString(),
+    };
   }
 
   async requestAuthInterrupt(
@@ -7715,6 +8453,7 @@ class GenerationManager {
       },
       provider: "plugin",
       providerToolUseId: `auth-${Date.now()}-${request.integration}`,
+      expiresAt: computeParkedInterruptExpiryDate(),
     });
 
     const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
@@ -7734,6 +8473,7 @@ class GenerationManager {
       activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, this.projectInterruptPendingEvent(interrupt));
       await this.saveSessionSnapshotIfPossible(activeCtx, "awaiting_auth");
+      this.scheduleApprovalPark(activeCtx, interrupt);
     } else {
       await this.publishDetachedGenerationStreamEvent({
         generationId,
@@ -7795,6 +8535,7 @@ class GenerationManager {
     }
     if (activeCtx) {
       activeCtx.contentParts = nextContentParts;
+      activeCtx.status = "running";
     }
 
     await db
@@ -7806,6 +8547,13 @@ class GenerationManager {
 
     if (activeCtx) {
       this.broadcast(activeCtx, this.projectInterruptResolvedEvent(interrupt));
+      if (activeCtx.approvalParkTimeoutId) {
+        clearTimeout(activeCtx.approvalParkTimeoutId);
+        activeCtx.approvalParkTimeoutId = undefined;
+      }
+    }
+    if (resolvedDecision === "allow") {
+      await generationInterruptService.markInterruptApplied(interrupt.id);
     }
 
     return resolvedDecision;
@@ -7934,6 +8682,11 @@ class GenerationManager {
     ctx.status = nextStatus;
     ctx.currentInterruptId = interrupt.id;
     ctx.suspendedAt = now;
+    if (ctx.approvalParkTimeoutId) {
+      clearTimeout(ctx.approvalParkTimeoutId);
+      ctx.approvalParkTimeoutId = undefined;
+    }
+    this.stopExternalInterruptPolling(ctx);
 
     await this.saveSessionSnapshot(ctx);
     await this.saveProgress(ctx);
@@ -7991,6 +8744,18 @@ class GenerationManager {
     ctx: GenerationContext,
   ): Promise<void> {
     if (ctx.currentInterruptId) {
+      const current = await generationInterruptService.getInterrupt(ctx.currentInterruptId);
+      if (current && current.status !== "pending") {
+        if (current.kind === "plugin_write") {
+          await this.getPluginApprovalStatus(ctx.id, current.id);
+        }
+        ctx.currentInterruptId = undefined;
+        ctx.status = "running";
+        if (ctx.approvalParkTimeoutId) {
+          clearTimeout(ctx.approvalParkTimeoutId);
+          ctx.approvalParkTimeoutId = undefined;
+        }
+      }
       return;
     }
 
@@ -8001,10 +8766,10 @@ class GenerationManager {
       return;
     }
 
-    ctx.currentInterruptId = pendingInterrupt.id;
-    ctx.status = pendingInterrupt.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
-    this.broadcast(ctx, this.projectInterruptPendingEvent(pendingInterrupt));
-    await this.suspendGenerationForInterrupt(ctx, pendingInterrupt);
+    const enrichedInterrupt = await this.enrichPluginWriteInterruptRuntimeTool(ctx, pendingInterrupt);
+    ctx.currentInterruptId = enrichedInterrupt.id;
+    ctx.status = enrichedInterrupt.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
+    this.scheduleApprovalPark(ctx, enrichedInterrupt);
   }
 
   private async finishGeneration(
@@ -8027,6 +8792,11 @@ class GenerationManager {
       if (ctx.approvalTimeoutId) {
         clearTimeout(ctx.approvalTimeoutId);
       }
+      if (ctx.approvalParkTimeoutId) {
+        clearTimeout(ctx.approvalParkTimeoutId);
+        ctx.approvalParkTimeoutId = undefined;
+      }
+      this.stopExternalInterruptPolling(ctx);
       if (ctx.authTimeoutId) {
         clearTimeout(ctx.authTimeoutId);
       }

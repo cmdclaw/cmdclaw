@@ -32,11 +32,14 @@ export type GenerationUsage = {
 };
 
 export type StatusChangeMetadata = {
+  runtimeId?: string;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   runtimeHarness?: "opencode" | "agent-sdk";
   runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
   sandboxId?: string;
   sessionId?: string;
+  parkedInterruptId?: string;
+  releasedSandboxId?: string;
 };
 
 export type SandboxFileData = {
@@ -154,6 +157,7 @@ export type GenerationStartInput = {
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
   debugRunDeadlineMs?: number;
+  debugApprovalHotWaitMs?: number;
   selectedPlatformSkillSlugs?: string[];
   fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
 };
@@ -398,6 +402,12 @@ export interface CmdclawApiClient {
     startGeneration(input: GenerationStartInput): Promise<{
       generationId: string;
       conversationId: string;
+    }>;
+    getActiveGeneration(input: { conversationId: string }): Promise<{
+      generationId: string | null;
+      startedAt: string | null;
+      errorMessage: string | null;
+      status: string | null;
     }>;
     subscribeGeneration(
       input: { generationId: string },

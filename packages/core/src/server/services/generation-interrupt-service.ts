@@ -147,6 +147,21 @@ class GenerationInterruptService {
     );
   }
 
+  async findInterruptByProviderRequestId(params: {
+    generationId: string;
+    providerRequestId: string;
+  }): Promise<GenerationInterruptRecord | null> {
+    return (
+      (await db.query.generationInterrupt.findFirst({
+        where: and(
+          eq(generationInterrupt.generationId, params.generationId),
+          eq(generationInterrupt.providerRequestId, params.providerRequestId),
+        ),
+        orderBy: [desc(generationInterrupt.requestedAt)],
+      })) ?? null
+    );
+  }
+
   async findPendingAuthInterruptByIntegration(params: {
     generationId: string;
     integration: string;
@@ -223,6 +238,19 @@ class GenerationInterruptService {
           eq(generationInterrupt.status, "pending"),
         ),
       )
+      .returning();
+
+    return updated ?? null;
+  }
+
+  async updateInterruptDisplay(
+    interruptId: string,
+    display: GenerationInterruptDisplay,
+  ): Promise<GenerationInterruptRecord | null> {
+    const [updated] = await db
+      .update(generationInterrupt)
+      .set({ display })
+      .where(eq(generationInterrupt.id, interruptId))
       .returning();
 
     return updated ?? null;

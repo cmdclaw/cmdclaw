@@ -120,8 +120,18 @@ async function killAllCommand(): Promise<void> {
   console.log(`Done. Killed: ${killed}, Failed: ${failed}`);
 }
 
+async function killCommand(sandboxId: string | undefined): Promise<void> {
+  if (!sandboxId) {
+    throw new Error("Sandbox id is required. Usage: bun scripts/e2b-sandboxes.ts kill <sandbox-id>");
+  }
+
+  await killSandboxById(sandboxId);
+  console.log(`Killed ${sandboxId}`);
+}
+
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "list";
+  const sandboxId = process.argv[3];
 
   if (!process.env.E2B_API_KEY) {
     console.error("E2B_API_KEY is required.");
@@ -132,12 +142,15 @@ async function main(): Promise<void> {
     case "list":
       await listCommand();
       break;
+    case "kill":
+      await killCommand(sandboxId);
+      break;
     case "kill-all":
       await killAllCommand();
       break;
     default:
       console.error(`Unknown command: ${command}`);
-      console.error("Usage: bun scripts/e2b-sandboxes.ts [list|kill-all]");
+      console.error("Usage: bun scripts/e2b-sandboxes.ts [list|kill <sandbox-id>|kill-all]");
       process.exit(1);
   }
 }

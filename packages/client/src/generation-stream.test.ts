@@ -21,6 +21,7 @@ describe("runGenerationStream", () => {
         model: "openai/gpt-5.4",
         authSource: "user",
         debugRunDeadlineMs: 60_000,
+        debugApprovalHotWaitMs: 5_000,
       },
       callbacks: {},
     });
@@ -30,6 +31,7 @@ describe("runGenerationStream", () => {
       model: "openai/gpt-5.4",
       authSource: "user",
       debugRunDeadlineMs: 60_000,
+      debugApprovalHotWaitMs: 5_000,
     });
   });
 
@@ -47,6 +49,7 @@ describe("runGenerationStream", () => {
               type: "status_change" as const,
               status: "agent_init_ready",
               metadata: {
+                runtimeId: "runtime-789",
                 sandboxProvider: "docker" as const,
                 runtimeHarness: "agent-sdk" as const,
                 runtimeProtocolVersion: "sandbox-agent-v1" as const,
@@ -71,6 +74,7 @@ describe("runGenerationStream", () => {
     });
 
     expect(onStatusChange).toHaveBeenCalledWith("agent_init_ready", {
+      runtimeId: "runtime-789",
       sandboxProvider: "docker",
       runtimeHarness: "agent-sdk",
       runtimeProtocolVersion: "sandbox-agent-v1",

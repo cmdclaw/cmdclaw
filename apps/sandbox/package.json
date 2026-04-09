@@ -19,6 +19,7 @@
     "e2b:build:prod": "bun --env-file=../web/.env src/e2b/build.prod.ts",
     "e2b:build:staging": "bun --env-file=../web/.env src/e2b/build.staging.ts",
     "e2b:sandbox": "bun --env-file=../web/.env scripts/test-sandbox.ts",
+    "e2b:sandbox:kill": "bun --env-file=../web/.env scripts/e2b-sandboxes.ts kill",
     "e2b:sandbox:kill-all": "bun --env-file=../web/.env scripts/e2b-sandboxes.ts kill-all",
     "e2b:sandbox:list": "bun --env-file=../web/.env scripts/e2b-sandboxes.ts list",
     "test:unit": "vitest run --config vitest.config.ts scripts/test-sandbox.test.ts",

@@ -261,7 +261,7 @@ describe("generationRouter", () => {
     });
   });
 
-  it("passes debug run deadline through startGeneration", async () => {
+  it("passes debug lifecycle overrides through startGeneration", async () => {
     generationManagerMock.startGeneration.mockResolvedValueOnce({
       generationId: "gen-start",
       conversationId: "conv-start",
@@ -272,6 +272,7 @@ describe("generationRouter", () => {
         content: "hello",
         model: "openai/gpt-5.4-mini",
         debugRunDeadlineMs: 60_000,
+        debugApprovalHotWaitMs: 5_000,
       },
       context,
     });
@@ -285,6 +286,7 @@ describe("generationRouter", () => {
         content: "hello",
         model: "openai/gpt-5.4-mini",
         debugRunDeadlineMs: 60_000,
+        debugApprovalHotWaitMs: 5_000,
         userId: "user-1",
       }),
     );

@@ -351,6 +351,101 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+function stableJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableJsonStringify(entry)).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`)
+    .join(",")}}`;
+}
+
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function pickOpenCodeRequestId(
+  input: Record<string, unknown>,
+  output: Record<string, unknown>,
+): string | null {
+  const candidates = [
+    input.id,
+    input.callID,
+    input.callId,
+    input.toolCallID,
+    input.toolCallId,
+    output.id,
+    output.callID,
+    output.callId,
+    output.toolCallID,
+    output.toolCallId,
+  ];
+  const match = candidates.find(
+    (candidate) => typeof candidate === "string" && candidate.length > 0,
+  );
+  return typeof match === "string" ? match : null;
+}
+
+function pickStringField(
+  input: Record<string, unknown>,
+  output: Record<string, unknown>,
+  candidates: string[],
+): string | undefined {
+  for (const candidate of candidates) {
+    const inputValue = input[candidate];
+    if (typeof inputValue === "string" && inputValue.length > 0) {
+      return inputValue;
+    }
+    const outputValue = output[candidate];
+    if (typeof outputValue === "string" && outputValue.length > 0) {
+      return outputValue;
+    }
+  }
+  return undefined;
+}
+
+function pickOpenCodeRuntimeTool(
+  input: Record<string, unknown>,
+  output: Record<string, unknown>,
+): {
+  sessionId?: string;
+  messageId?: string;
+  partId?: string;
+  callId?: string;
+  toolName: string;
+  input: Record<string, unknown>;
+} | undefined {
+  const callId = pickOpenCodeRequestId(input, output);
+  const messageId = pickStringField(input, output, ["messageID", "messageId"]);
+  const partId = pickStringField(input, output, ["partID", "partId"]);
+  if (!callId || !messageId || !partId) {
+    return undefined;
+  }
+  const sessionId = pickStringField(input, output, ["sessionID", "sessionId"]);
+  const toolInput =
+    output.args && typeof output.args === "object" && !Array.isArray(output.args)
+      ? (output.args as Record<string, unknown>)
+      : {};
+  return {
+    sessionId,
+    messageId,
+    partId,
+    callId,
+    toolName: typeof input.tool === "string" && input.tool.length > 0 ? input.tool : "bash",
+    input: toolInput,
+  };
+}
+
 export function getCallbackBaseUrls(): string[] {
   const rawCandidates = [
     process.env.E2B_CALLBACK_BASE_URL,
@@ -410,10 +505,22 @@ async function requestApproval(params: {
   operation: string;
   command: string;
   toolInput: unknown;
+  openCodeRequestId?: string | null;
+  runtimeTool?: ReturnType<typeof pickOpenCodeRuntimeTool>;
 }): Promise<{ decision?: "allow" | "deny"; error?: string }> {
   const APPROVAL_POLL_INTERVAL_MS = 1000;
   const serverUrls = getCallbackBaseUrls();
   const runtimeContext = await readRuntimeContext();
+  const providerRequestId = params.openCodeRequestId
+    ? `plugin-write:${runtimeContext.runtimeId}:${runtimeContext.turnSeq}:opencode:${params.openCodeRequestId}`
+    : `plugin-write:${runtimeContext.runtimeId}:${runtimeContext.turnSeq}:${stableHash(
+        stableJsonStringify({
+          integration: params.integration,
+          operation: params.operation,
+          command: params.command,
+          toolInput: params.toolInput,
+        }),
+      )}`;
 
   if (serverUrls.length === 0) {
     const reason = "Missing callback base URL (APP_URL/NEXT_PUBLIC_APP_URL/E2B_CALLBACK_BASE_URL)";
@@ -455,6 +562,8 @@ async function requestApproval(params: {
           operation: params.operation,
           command: params.command,
           toolInput: params.toolInput,
+          providerRequestId,
+          runtimeTool: params.runtimeTool,
         }),
       });
 
@@ -706,8 +815,8 @@ export const IntegrationPermissionsPlugin = async () => {
   loadCustomPermissions();
   return {
     "tool.execute.before": async (
-      input: { tool: string },
-      output: { args: Record<string, unknown> },
+      input: { tool: string } & Record<string, unknown>,
+      output: { args: Record<string, unknown> } & Record<string, unknown>,
     ) => {
       loadRuntimeEnv();
 
@@ -805,6 +914,8 @@ export const IntegrationPermissionsPlugin = async () => {
           operation,
           command,
           toolInput: output.args,
+          openCodeRequestId: pickOpenCodeRequestId(input, output),
+          runtimeTool: pickOpenCodeRuntimeTool(input, output),
         });
 
         if (decision.error) {

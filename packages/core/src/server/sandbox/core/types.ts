@@ -148,6 +148,12 @@ export interface RuntimeHarnessClient {
   createSession(input: {
     title?: string;
   }): Promise<{ data: { id: string; title?: string } | null; error: unknown }>;
+  updatePart(input: {
+    sessionID: string;
+    messageID: string;
+    partID: string;
+    part: unknown;
+  }): Promise<{ data: unknown; error: unknown }>;
   replyPermission(input: { requestID: string; reply: "always" | "reject" }): Promise<void>;
   replyQuestion(input: { requestID: string; answers: string[][] }): Promise<void>;
   rejectQuestion(input: { requestID: string }): Promise<void>;

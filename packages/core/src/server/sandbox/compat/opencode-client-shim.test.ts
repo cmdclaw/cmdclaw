@@ -15,6 +15,9 @@ describe("createRuntimeHarnessClientFromOpencodeClient", () => {
         get: vi.fn(),
         create: vi.fn(),
       },
+      part: {
+        update: vi.fn().mockResolvedValue({ data: { id: "part-1" }, error: null }),
+      },
       permission: {
         reply: vi.fn(),
       },
@@ -37,6 +40,38 @@ describe("createRuntimeHarnessClientFromOpencodeClient", () => {
       agent: "cmdclaw-chat",
       parts: [{ type: "text", text: "hello" }],
       system: "runtime system prompt",
+    });
+  });
+
+  it("forwards updatePart to client.part.update", async () => {
+    const updateMock = vi.fn().mockResolvedValue({ data: { id: "part-1" }, error: null });
+    const client = {
+      event: { subscribe: vi.fn() },
+      session: {
+        prompt: vi.fn(),
+        abort: vi.fn(),
+        messages: vi.fn(),
+        get: vi.fn(),
+        create: vi.fn(),
+      },
+      part: { update: updateMock },
+      permission: { reply: vi.fn() },
+      question: { reply: vi.fn(), reject: vi.fn() },
+    } as Parameters<typeof createRuntimeHarnessClientFromOpencodeClient>[0];
+
+    const harness = createRuntimeHarnessClientFromOpencodeClient(client);
+    await harness.updatePart({
+      sessionID: "session-1",
+      messageID: "message-1",
+      partID: "part-1",
+      part: { type: "tool", id: "part-1" },
+    });
+
+    expect(updateMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      messageID: "message-1",
+      partID: "part-1",
+      part: { type: "tool", id: "part-1" },
     });
   });
 });
