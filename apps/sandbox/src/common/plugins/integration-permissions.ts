@@ -412,7 +412,6 @@ async function requestApproval(params: {
   toolInput: unknown;
 }): Promise<{ decision?: "allow" | "deny"; error?: string }> {
   const APPROVAL_POLL_INTERVAL_MS = 1000;
-  const APPROVAL_FALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
   const runtimeContext = await readRuntimeContext();
 
@@ -499,7 +498,7 @@ async function requestApproval(params: {
   const expiryMs = created.expiresAt ? Date.parse(created.expiresAt) : Number.NaN;
   const pollUntilMs = Number.isFinite(expiryMs)
     ? Math.max(expiryMs + 2_000, start + APPROVAL_POLL_INTERVAL_MS)
-    : start + APPROVAL_FALLBACK_TIMEOUT_MS;
+    : Number.POSITIVE_INFINITY;
 
   while (Date.now() <= pollUntilMs) {
     // eslint-disable-next-line no-await-in-loop -- polling by design
@@ -564,7 +563,6 @@ async function requestAuth(params: {
   reason: string;
 }): Promise<{ success: boolean; tokens?: Record<string, string>; error?: string }> {
   const AUTH_POLL_INTERVAL_MS = 1000;
-  const AUTH_FALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
   const serverUrls = getCallbackBaseUrls();
   const runtimeContext = await readRuntimeContext();
 
@@ -639,7 +637,7 @@ async function requestAuth(params: {
   const expiryMs = created.expiresAt ? Date.parse(created.expiresAt) : Number.NaN;
   const pollUntilMs = Number.isFinite(expiryMs)
     ? Math.max(expiryMs + 2_000, start + AUTH_POLL_INTERVAL_MS)
-    : start + AUTH_FALLBACK_TIMEOUT_MS;
+    : Number.POSITIVE_INFINITY;
 
   while (Date.now() <= pollUntilMs) {
     // eslint-disable-next-line no-await-in-loop -- polling by design

@@ -146,6 +146,17 @@ export const conversationRuntimeService = {
       .where(eq(conversationRuntime.id, runtimeId));
   },
 
+  async suspendRuntime(runtimeId: string): Promise<void> {
+    await db
+      .update(conversationRuntime)
+      .set({
+        status: "active",
+        sandboxId: null,
+        sessionId: null,
+      })
+      .where(eq(conversationRuntime.id, runtimeId));
+  },
+
   async authorizeRuntimeTurn(params: {
     runtimeId: string;
     turnSeq: number;

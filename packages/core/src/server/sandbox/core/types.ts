@@ -31,6 +31,7 @@ export interface SandboxHandle {
   writeFile(path: string, content: string | ArrayBuffer): Promise<void>;
   readFile(path: string): Promise<string>;
   ensureDir(path: string): Promise<void>;
+  teardown?(): Promise<void>;
 }
 
 export type RuntimePromptPart =

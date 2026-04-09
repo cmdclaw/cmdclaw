@@ -90,6 +90,7 @@ export type OpenCodeSandbox = {
     write: (path: string, content: string | ArrayBuffer) => Promise<void>;
     read: (path: string) => Promise<string>;
   };
+  teardown?: () => Promise<void>;
 };
 
 export interface OpenCodeSessionConfig {
@@ -150,6 +151,7 @@ async function getConversationRuntimeState(conversationId: string): Promise<{
 type DaytonaSandboxLike = {
   id: string;
   state?: string;
+  delete?: () => Promise<void>;
   start?: () => Promise<void>;
   waitUntilStarted?: (timeoutSeconds?: number) => Promise<void>;
   getPreviewLink: (port: number) => Promise<{ url: string; token?: string }>;
@@ -284,6 +286,9 @@ function wrapDaytonaSandbox(sandbox: DaytonaSandboxLike): OpenCodeSandbox {
         return typeof raw === "string" ? raw : Buffer.from(raw).toString("utf8");
       },
     },
+    teardown: async () => {
+      await sandbox.delete?.().catch(() => {});
+    },
   };
 }
 
@@ -310,6 +315,9 @@ function wrapDockerSandbox(container: Dockerode.Container): OpenCodeSandbox {
     files: {
       write: async (path, content) => writeFileInContainer(container, path, content),
       read: async (path) => readFileInContainer(container, path),
+    },
+    teardown: async () => {
+      await removeContainerBestEffort(container);
     },
   };
 }
@@ -991,6 +999,9 @@ export async function getOrCreateSandboxForCloudProvider(
         },
         read: async (path) => state.sandbox.files.read(path),
       },
+      teardown: async () => {
+        await state.sandbox.kill().catch(() => {});
+      },
     },
     reused: state.reused,
     connectAgent: async (agentOptions) => {
@@ -1417,6 +1428,9 @@ function wrapE2BSession(
           await session.sandbox.files.write(path, content);
         },
         read: async (path) => session.sandbox.files.read(path),
+      },
+      teardown: async () => {
+        await session.sandbox.kill().catch(() => {});
       },
     },
   };

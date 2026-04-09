@@ -196,6 +196,18 @@ class GenerationInterruptService {
     return this.resolveInterrupt({ interruptId, status: "expired" });
   }
 
+  async markInterruptApplied(interruptId: string): Promise<GenerationInterruptRecord | null> {
+    const [updated] = await db
+      .update(generationInterrupt)
+      .set({
+        appliedAt: new Date(),
+      })
+      .where(eq(generationInterrupt.id, interruptId))
+      .returning();
+
+    return updated ?? null;
+  }
+
   async refreshInterruptExpiry(
     interruptId: string,
     expiresAt: Date,

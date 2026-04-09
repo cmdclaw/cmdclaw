@@ -95,10 +95,10 @@ export function isApprovalExpired(
   },
   now = new Date(),
 ): boolean {
-  const requestedAt = toDate(interrupt.requestedAt) ?? now;
-  const expiresAt =
-    toDate(interrupt.expiresAt) ??
-    new Date(requestedAt.getTime() + generationLifecyclePolicy.approvalTimeoutMs);
+  const expiresAt = toDate(interrupt.expiresAt);
+  if (!expiresAt) {
+    return false;
+  }
   return expiresAt.getTime() <= now.getTime();
 }
 
@@ -109,10 +109,10 @@ export function isAuthExpired(
   },
   now = new Date(),
 ): boolean {
-  const requestedAt = toDate(interrupt.requestedAt) ?? now;
-  const expiresAt =
-    toDate(interrupt.expiresAt) ??
-    new Date(requestedAt.getTime() + generationLifecyclePolicy.authTimeoutMs);
+  const expiresAt = toDate(interrupt.expiresAt);
+  if (!expiresAt) {
+    return false;
+  }
   return expiresAt.getTime() <= now.getTime();
 }
 

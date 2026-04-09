@@ -316,6 +316,16 @@ type GenerationStatus =
   | "error";
 type GenerationRunMode = "normal_run" | "recovery_reattach";
 
+class GenerationSuspendedError extends Error {
+  constructor(
+    readonly interruptId: string,
+    readonly kind: "approval" | "auth",
+  ) {
+    super(`Generation suspended for ${kind} interrupt ${interruptId}`);
+    this.name = "GenerationSuspendedError";
+  }
+}
+
 type BackendType = "opencode";
 type OpenCodeTrackedEvent = Extract<
   RuntimeEvent,
@@ -349,6 +359,9 @@ interface GenerationContext {
   status: GenerationStatus;
   executionPolicy: GenerationExecutionPolicy;
   deadlineAt: Date;
+  remainingRunMs: number;
+  suspendedAt?: Date | null;
+  resumeInterruptId?: string | null;
   lastRuntimeEventAt: Date;
   recoveryAttempts: number;
   completionReason?: GenerationCompletionReason | null;
@@ -1576,6 +1589,21 @@ class GenerationManager {
     return Math.max(0, ctx.deadlineAt.getTime() - Date.now());
   }
 
+  private refreshRemainingRunBudget(ctx: GenerationContext, now = new Date()): number {
+    const remainingRunMs = Math.max(0, ctx.deadlineAt.getTime() - now.getTime());
+    ctx.remainingRunMs = remainingRunMs;
+    return remainingRunMs;
+  }
+
+  private resumeDeadlineFromRemainingBudget(ctx: GenerationContext, now = new Date()): Date {
+    const remainingRunMs =
+      ctx.remainingRunMs && ctx.remainingRunMs > 0
+        ? ctx.remainingRunMs
+        : generationLifecyclePolicy.runDeadlineMs;
+    ctx.deadlineAt = new Date(now.getTime() + remainingRunMs);
+    return ctx.deadlineAt;
+  }
+
   private async recordRecoveryAttempt(ctx: GenerationContext): Promise<void> {
     ctx.recoveryAttempts += 1;
     await db
@@ -1602,6 +1630,8 @@ class GenerationManager {
         pendingApproval: null,
         pendingAuth: null,
         isPaused: false,
+        resumeInterruptId: null,
+        suspendedAt: null,
         cancelRequestedAt: null,
         errorMessage: params.message,
         completionReason: params.completionReason,
@@ -2661,6 +2691,7 @@ class GenerationManager {
         inputTokens: 0,
         outputTokens: 0,
         deadlineAt: lifecycle.deadlineAt,
+        remainingRunMs: generationLifecyclePolicy.runDeadlineMs,
         lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
         recoveryAttempts: lifecycle.recoveryAttempts,
         completionReason: lifecycle.completionReason,
@@ -2842,6 +2873,7 @@ class GenerationManager {
         inputTokens: 0,
         outputTokens: 0,
         deadlineAt: lifecycle.deadlineAt,
+        remainingRunMs: generationLifecyclePolicy.runDeadlineMs,
         lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
         recoveryAttempts: lifecycle.recoveryAttempts,
         completionReason: lifecycle.completionReason,
@@ -2990,6 +3022,12 @@ class GenerationManager {
         startedAt: genRecord.startedAt,
         deadlineAt: genRecord.deadlineAt,
       }),
+      remainingRunMs:
+        genRecord.remainingRunMs && genRecord.remainingRunMs > 0
+          ? genRecord.remainingRunMs
+          : generationLifecyclePolicy.runDeadlineMs,
+      suspendedAt: genRecord.suspendedAt ?? null,
+      resumeInterruptId: genRecord.resumeInterruptId ?? null,
       lastRuntimeEventAt: genRecord.lastRuntimeEventAt ?? genRecord.startedAt,
       recoveryAttempts: genRecord.recoveryAttempts ?? 0,
       completionReason: (genRecord.completionReason as GenerationCompletionReason | null) ?? null,
@@ -3081,6 +3119,14 @@ class GenerationManager {
       },
     );
 
+    if (
+      (ctx.status === "awaiting_approval" || ctx.status === "awaiting_auth") &&
+      pendingInterrupt &&
+      !ctx.resumeInterruptId
+    ) {
+      return;
+    }
+
     this.activeGenerations.set(genRecord.id, ctx);
     this.markPhase(ctx, "generation_started");
     if (
@@ -3133,22 +3179,6 @@ class GenerationManager {
       )
     ) {
       await this.processGenerationTimeout(ctx.id, "auth");
-      return;
-    }
-
-    if (ctx.status === "awaiting_approval" && pendingInterrupt?.provider === "opencode") {
-      const decision = await this.waitForOpenCodeApprovalDecision(pendingInterrupt.id);
-      if (!decision) {
-        await this.handleApprovalTimeout(ctx);
-        return;
-      }
-      await this.applyOpenCodeApprovalDecision(
-        ctx,
-        pendingInterrupt.id,
-        decision.decision,
-        decision.questionAnswers,
-      );
-      await this.runGeneration(ctx, "normal_run");
       return;
     }
 
@@ -3831,7 +3861,7 @@ class GenerationManager {
     const candidates = await db.query.generation.findMany({
       where: and(
         isNull(generation.completedAt),
-        inArray(generation.status, ["running", "awaiting_approval", "awaiting_auth"]),
+        eq(generation.status, "running"),
         lt(
           generation.startedAt,
           new Date(
@@ -3853,17 +3883,11 @@ class GenerationManager {
 
     const nowMs = Date.now();
     const staleRows = candidates.filter((row) => {
-      const ageMs = nowMs - row.startedAt.getTime();
-      switch (row.status) {
-        case "running":
-          return ageMs > STALE_REAPER_RUNNING_MAX_AGE_MS;
-        case "awaiting_approval":
-          return ageMs > STALE_REAPER_AWAITING_APPROVAL_MAX_AGE_MS;
-        case "awaiting_auth":
-          return ageMs > STALE_REAPER_AWAITING_AUTH_MAX_AGE_MS;
-        default:
-          return false;
+      if (row.status !== "running") {
+        return false;
       }
+      const ageMs = nowMs - row.startedAt.getTime();
+      return ageMs > STALE_REAPER_RUNNING_MAX_AGE_MS;
     });
 
     if (staleRows.length === 0) {
@@ -4148,6 +4172,41 @@ class GenerationManager {
       return this.resumeGeneration(generationId, userId);
     }
 
+    if (!activeCtx) {
+      const linkedRun = await db.query.coworkerRun.findFirst({
+        where: eq(coworkerRun.generationId, generationId),
+        columns: { id: true },
+      });
+      const remainingRunMs =
+        genRecord.remainingRunMs && genRecord.remainingRunMs > 0
+          ? genRecord.remainingRunMs
+          : generationLifecyclePolicy.runDeadlineMs;
+      const deadlineAt = new Date(Date.now() + remainingRunMs);
+      await db
+        .update(generation)
+        .set({
+          status: "running",
+          resumeInterruptId: interrupt.id,
+          deadlineAt,
+          suspendedAt: null,
+          isPaused: false,
+        })
+        .where(eq(generation.id, generationId));
+      await db
+        .update(conversation)
+        .set({
+          generationStatus: "generating",
+          sandboxLastUserVisibleActionAt: new Date(),
+        })
+        .where(eq(conversation.id, genRecord.conversationId));
+      if (linkedRun?.id) {
+        await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedRun.id));
+      }
+      await this.enqueueGenerationRun(generationId, linkedRun ? "coworker" : "chat", {
+        dedupeKey: `resume-interrupt-${interrupt.id}`,
+      });
+    }
+
     return true;
   }
 
@@ -4395,6 +4454,7 @@ class GenerationManager {
     try {
       await this.hydrateStreamSequence(ctx);
       if (
+        !ctx.resumeInterruptId &&
         isRunExpired(
           {
             startedAt: ctx.startedAt,
@@ -4424,6 +4484,9 @@ class GenerationManager {
       });
       if (slotStatus === "requeued") {
         return;
+      }
+      if (ctx.resumeInterruptId) {
+        return this.runSuspendedInterruptResume(ctx);
       }
       return runMode === "recovery_reattach"
         ? this.runRecoveryReattach(ctx)
@@ -4540,7 +4603,9 @@ class GenerationManager {
         );
       },
       readFile: async (filePath) => runtimeSandbox.readFile(filePath),
-      teardown: async () => undefined,
+      teardown: async () => {
+        await runtimeSandbox.teardown?.();
+      },
       isAvailable: () => true,
     };
   }
@@ -4586,10 +4651,47 @@ class GenerationManager {
     await this.bindRuntimeSandboxToContext(ctx, params);
   }
 
+  private async runSuspendedInterruptResume(ctx: GenerationContext): Promise<void> {
+    const interruptId = ctx.resumeInterruptId;
+    if (!interruptId) {
+      await this.runOpenCodeGeneration(ctx);
+      return;
+    }
+
+    this.resumeDeadlineFromRemainingBudget(ctx);
+    ctx.status = "running";
+    ctx.suspendedAt = null;
+    await db
+      .update(generation)
+      .set({
+        status: "running",
+        deadlineAt: ctx.deadlineAt,
+        suspendedAt: null,
+      })
+      .where(eq(generation.id, ctx.id));
+
+    await this.runRecoveryReattach(ctx, {
+      allowSnapshotRestore: true,
+      requireLiveSession: false,
+      resumeInterruptId: interruptId,
+      modeLabel: "resume_interrupt",
+    });
+  }
+
   /**
    * Original E2B/OpenCode generation flow. Delegates everything to OpenCode inside E2B sandbox.
    */
-  private async runRecoveryReattach(ctx: GenerationContext): Promise<void> {
+  private async runRecoveryReattach(
+    ctx: GenerationContext,
+    options?: {
+      allowSnapshotRestore?: boolean;
+      requireLiveSession?: boolean;
+      resumeInterruptId?: string;
+      modeLabel?: string;
+    },
+  ): Promise<void> {
+    const requireLiveSession = options?.requireLiveSession ?? true;
+    const modeLabel = options?.modeLabel ?? "recovery_reattach";
     let reattachTimeoutTriggered = false;
     let clearReattachTimeout: (() => void) | undefined;
     let runtimeClient: RuntimeHarnessClient | undefined;
@@ -4600,7 +4702,7 @@ class GenerationManager {
         return;
       }
 
-      if (!ctx.sessionId) {
+      if (requireLiveSession && !ctx.sessionId) {
         this.setCompletionReason(ctx, "broken_runtime_state");
         ctx.errorMessage = "The live runtime could not be reattached because the session ID was missing.";
         await this.finishGeneration(ctx, "error");
@@ -4627,7 +4729,7 @@ class GenerationManager {
             sandboxProviderOverride: ctx.sandboxProviderOverride,
             title: conv?.title || "Conversation",
             replayHistory: false,
-            allowSnapshotRestore: false,
+            allowSnapshotRestore: options?.allowSnapshotRestore ?? false,
             telemetry: {
               source: "generation-manager",
               traceId: ctx.traceId,
@@ -4646,12 +4748,14 @@ class GenerationManager {
       if (session.sessionSource === "created_session") {
         this.setCompletionReason(ctx, "sandbox_missing");
         ctx.errorMessage =
-          "The live runtime could not be reattached because the original sandbox was no longer available.";
+          requireLiveSession
+            ? "The live runtime could not be reattached because the original sandbox was no longer available."
+            : "The suspended runtime could not be resumed because no session snapshot was restored.";
         await this.finishGeneration(ctx, "error");
         return;
       }
 
-      if (session.sessionSource !== "live_session") {
+      if (requireLiveSession && session.sessionSource !== "live_session") {
         this.setCompletionReason(ctx, "broken_runtime_state");
         ctx.errorMessage =
           "The live runtime could not be reattached because only a snapshot restore was available.";
@@ -4659,7 +4763,7 @@ class GenerationManager {
         return;
       }
 
-      if (session.session.id !== ctx.sessionId) {
+      if (ctx.sessionId && session.session.id !== ctx.sessionId) {
         this.setCompletionReason(ctx, "broken_runtime_state");
         ctx.errorMessage =
           "The live runtime could not be reattached because the session no longer matched the active generation.";
@@ -4672,6 +4776,17 @@ class GenerationManager {
         runtimeMetadata: session.metadata,
         sessionId: session.session.id,
       });
+      if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
+        await writeRuntimeContextToSandbox(session.sandbox, {
+          runtimeId: ctx.runtimeId,
+          turnSeq: ctx.runtimeTurnSeq,
+          callbackToken: ctx.runtimeCallbackToken,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      if (options?.resumeInterruptId) {
+        await this.applyResolvedInterruptToRuntime(ctx, options.resumeInterruptId, runtimeClient);
+      }
       await this.setSnapshotRestoreAllowance(ctx, false);
 
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
@@ -4802,7 +4917,7 @@ class GenerationManager {
         throw new Error("Live recovery reattach ended before the runtime reached a terminal state.");
       }
 
-      await this.captureUsageFromRuntimeSession(ctx, runtimeClient, ctx.sessionId);
+      await this.captureUsageFromRuntimeSession(ctx, runtimeClient, session.session.id);
 
       if (ctx.sandbox) {
         try {
@@ -4814,18 +4929,37 @@ class GenerationManager {
 
       if (ctx.abortController.signal.aborted) {
         console.info(
-          `[GenerationManager][SUMMARY] status=cancelled generationId=${ctx.id} conversationId=${ctx.conversationId} mode=recovery_reattach opencodeEvents=${opencodeEventCount} toolCalls=${opencodeToolCallCount} permissions=${opencodePermissionCount} questions=${opencodeQuestionCount}`,
+          `[GenerationManager][SUMMARY] status=cancelled generationId=${ctx.id} conversationId=${ctx.conversationId} mode=${modeLabel} opencodeEvents=${opencodeEventCount} toolCalls=${opencodeToolCallCount} permissions=${opencodePermissionCount} questions=${opencodeQuestionCount}`,
         );
         await this.finishGeneration(ctx, "cancelled");
         return;
       }
 
       console.info(
-        `[GenerationManager][SUMMARY] status=completed generationId=${ctx.id} conversationId=${ctx.conversationId} mode=recovery_reattach opencodeEvents=${opencodeEventCount} toolCalls=${opencodeToolCallCount} permissions=${opencodePermissionCount} questions=${opencodeQuestionCount}`,
+        `[GenerationManager][SUMMARY] status=completed generationId=${ctx.id} conversationId=${ctx.conversationId} mode=${modeLabel} opencodeEvents=${opencodeEventCount} toolCalls=${opencodeToolCallCount} permissions=${opencodePermissionCount} questions=${opencodeQuestionCount}`,
       );
       await this.finishGeneration(ctx, "completed");
     } catch (error) {
       clearReattachTimeout?.();
+      if (error instanceof GenerationSuspendedError) {
+        logServerEvent(
+          "info",
+          "GENERATION_SUSPENDED_FOR_INTERRUPT",
+          {
+            interruptId: error.interruptId,
+            interruptKind: error.kind,
+            remainingRunMs: ctx.remainingRunMs,
+          },
+          {
+            source: "generation-manager",
+            traceId: ctx.traceId,
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+          },
+        );
+        return;
+      }
       console.error("[GenerationManager] Recovery reattach error:", error);
       const runtimeFailure = await this.resolveRuntimeFailure(ctx, runtimeClient);
       this.captureOriginalError(ctx, error, { runtimeFailure });
@@ -5639,6 +5773,7 @@ class GenerationManager {
       let stagedCoworkerDocumentCount = 0;
       let stagedUploadCount = 0;
       let stagedUploadFailureCount = 0;
+      let lastExternalInterruptPollAt = 0;
 
       // Subscribe to SSE events BEFORE sending the prompt
       const promptTimeoutController = new AbortController();
@@ -5851,6 +5986,10 @@ class GenerationManager {
         this.markRuntimeActivity(ctx);
         if (await this.refreshCancellationSignal(ctx)) {
           break;
+        }
+        if (Date.now() - lastExternalInterruptPollAt >= 1_000) {
+          lastExternalInterruptPollAt = Date.now();
+          await this.pollExternalInterruptAndSuspendIfNeeded(ctx);
         }
 
         opencodeEventCount += 1;
@@ -6095,6 +6234,25 @@ class GenerationManager {
       await this.finishGeneration(ctx, "completed");
     } catch (error) {
       clearPromptTimeout?.();
+      if (error instanceof GenerationSuspendedError) {
+        logServerEvent(
+          "info",
+          "GENERATION_SUSPENDED_FOR_INTERRUPT",
+          {
+            interruptId: error.interruptId,
+            interruptKind: error.kind,
+            remainingRunMs: ctx.remainingRunMs,
+          },
+          {
+            source: "generation-manager",
+            traceId: ctx.traceId,
+            generationId: ctx.id,
+            conversationId: ctx.conversationId,
+            userId: ctx.userId,
+          },
+        );
+        return;
+      }
       let promptTimeoutError: Error | null = null;
       if (isBootstrapTimeoutError(error)) {
         this.captureOriginalError(ctx, error, {
@@ -6354,7 +6512,7 @@ class GenerationManager {
 
   private async queueOpenCodeApprovalRequest(
     ctx: GenerationContext,
-    client: ApprovalCapableClient,
+    _client: ApprovalCapableClient,
     openCodeRequest:
       | { kind: "permission"; request: RuntimePermissionRequest }
       | { kind: "question"; request: RuntimeQuestionRequest; defaultAnswers: string[][] },
@@ -6363,7 +6521,6 @@ class GenerationManager {
     if (!ctx.runtimeId || !ctx.runtimeTurnSeq) {
       throw new Error(`Missing runtime binding for generation ${ctx.id}`);
     }
-    const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
     const interrupt = await generationInterruptService.createInterrupt({
       generationId: ctx.id,
       runtimeId: ctx.runtimeId,
@@ -6395,7 +6552,6 @@ class GenerationManager {
       provider: "opencode",
       providerRequestId: openCodeRequest.request.id,
       providerToolUseId: pendingApproval.toolUseId,
-      expiresAt: new Date(expiresAt),
     });
 
     ctx.status = "awaiting_approval";
@@ -6407,27 +6563,8 @@ class GenerationManager {
         .set({ status: "awaiting_approval" })
         .where(eq(coworkerRun.id, ctx.coworkerRunId));
     }
-    await this.enqueueGenerationTimeout(ctx.id, "approval", expiresAt);
-    await this.saveSessionSnapshotIfPossible(ctx, "awaiting_approval");
-
     this.broadcast(ctx, this.projectInterruptPendingEvent(interrupt));
-
-    const decision = await this.waitForOpenCodeApprovalDecision(interrupt.id);
-    if (!decision) {
-      await this.rejectOpenCodePendingApprovalRequest(ctx, client).catch((err) =>
-        console.error("[GenerationManager] Failed to reject OpenCode request on timeout:", err),
-      );
-      await this.handleApprovalTimeout(ctx);
-      return;
-    }
-
-    await this.applyOpenCodeApprovalDecision(
-      ctx,
-      interrupt.id,
-      decision.decision,
-      decision.questionAnswers,
-      client,
-    );
+    await this.suspendGenerationForInterrupt(ctx, interrupt);
   }
 
   private async rejectOpenCodePendingApprovalRequest(
@@ -6659,6 +6796,44 @@ class GenerationManager {
     if (resolvedInterrupt) {
       this.broadcast(ctx, this.projectInterruptResolvedEvent(resolvedInterrupt));
     }
+  }
+
+  private async applyResolvedInterruptToRuntime(
+    ctx: GenerationContext,
+    interruptId: string,
+    runtimeClient: RuntimeHarnessClient,
+  ): Promise<void> {
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
+    if (!interrupt) {
+      throw new Error(`Resume interrupt ${interruptId} was not found`);
+    }
+    if (interrupt.status === "pending") {
+      throw new Error(`Resume interrupt ${interruptId} is still pending`);
+    }
+
+    if (interrupt.provider === "opencode") {
+      await this.applyOpenCodeApprovalDecision(
+        ctx,
+        interrupt.id,
+        interrupt.status === "accepted" ? "allow" : "deny",
+        interrupt.responsePayload?.questionAnswers,
+        runtimeClient,
+      );
+    } else {
+      const resolvedEvent = this.projectInterruptResolvedEvent(interrupt);
+      this.broadcast(ctx, resolvedEvent);
+    }
+
+    await generationInterruptService.markInterruptApplied(interrupt.id);
+    ctx.resumeInterruptId = null;
+    ctx.currentInterruptId = undefined;
+    await db
+      .update(generation)
+      .set({
+        resumeInterruptId: null,
+        suspendedAt: null,
+      })
+      .where(eq(generation.id, ctx.id));
   }
 
   /**
@@ -7333,6 +7508,24 @@ class GenerationManager {
       this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
     }
 
+    if (!activeCtx && resolvedInterrupt) {
+      const remainingRunMs =
+        genRecord.remainingRunMs && genRecord.remainingRunMs > 0
+          ? genRecord.remainingRunMs
+          : generationLifecyclePolicy.runDeadlineMs;
+      await db
+        .update(generation)
+        .set({
+          resumeInterruptId: resolvedInterrupt.id,
+          deadlineAt: new Date(Date.now() + remainingRunMs),
+          suspendedAt: null,
+        })
+        .where(eq(generation.id, generationId));
+      await this.enqueueGenerationRun(generationId, linkedCoworkerRun ? "coworker" : "chat", {
+        dedupeKey: `resume-interrupt-${resolvedInterrupt.id}`,
+      });
+    }
+
     return true;
   }
 
@@ -7358,13 +7551,7 @@ class GenerationManager {
     }
 
     let resolved: "allow" | "deny" | null = null;
-    const approvalExpiryMs = approvalRequest.expiresAt
-      ? Date.parse(approvalRequest.expiresAt)
-      : Date.now() + APPROVAL_TIMEOUT_MS;
     while (resolved === null) {
-      if (Date.now() >= approvalExpiryMs) {
-        break;
-      }
       // eslint-disable-next-line no-await-in-loop -- polling by design
       await new Promise((resolve) => setTimeout(resolve, 400));
       // eslint-disable-next-line no-await-in-loop -- polling by design
@@ -7377,7 +7564,6 @@ class GenerationManager {
     if (resolved) {
       return resolved;
     }
-    await this.processGenerationTimeout(generationId, "approval");
     return "deny";
   }
 
@@ -7416,7 +7602,6 @@ class GenerationManager {
     }
 
     const toolUseId = `plugin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const expiresAt = computeExpiryIso(APPROVAL_TIMEOUT_MS);
     const interrupt = await generationInterruptService.createInterrupt({
       generationId,
       runtimeId: runtimeRecord.id,
@@ -7432,7 +7617,6 @@ class GenerationManager {
       },
       provider: "plugin",
       providerToolUseId: toolUseId,
-      expiresAt: new Date(expiresAt),
     });
 
     const pendingApprovalEvent = this.projectInterruptPendingEvent(interrupt);
@@ -7451,9 +7635,7 @@ class GenerationManager {
       });
     }
 
-    await this.enqueueGenerationTimeout(generationId, "approval", expiresAt);
-
-    return { decision: "pending", toolUseId, interruptId: interrupt.id, expiresAt };
+    return { decision: "pending", toolUseId, interruptId: interrupt.id };
   }
 
   async requestAuthInterrupt(
@@ -7492,7 +7674,6 @@ class GenerationManager {
       return { status: "accepted" };
     }
 
-    const expiresAt = computeExpiryIso(AUTH_TIMEOUT_MS);
     const interrupt = await generationInterruptService.createInterrupt({
       generationId,
       runtimeId: runtimeRecord.id,
@@ -7508,7 +7689,6 @@ class GenerationManager {
       },
       provider: "plugin",
       providerToolUseId: `auth-${Date.now()}-${request.integration}`,
-      expiresAt: new Date(expiresAt),
     });
 
     const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
@@ -7535,9 +7715,7 @@ class GenerationManager {
         event: this.projectInterruptPendingEvent(interrupt),
       });
     }
-    await this.enqueueGenerationTimeout(generationId, "auth", expiresAt);
-
-    return { interruptId: interrupt.id, status: "pending", expiresAt };
+    return { interruptId: interrupt.id, status: "pending" };
   }
 
   async getPluginApprovalStatus(
@@ -7553,14 +7731,12 @@ class GenerationManager {
     }
 
     if (interrupt.status === "pending") {
-      const expiresAtMs = resolveExpiryMs(
-        interrupt.expiresAt?.toISOString(),
-        interrupt.requestedAt.toISOString(),
-        APPROVAL_TIMEOUT_MS,
-      );
-      if (Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs) {
-        await this.processGenerationTimeout(generationId, "approval");
-        return "deny";
+      if (interrupt.expiresAt) {
+        const expiresAtMs = Date.parse(interrupt.expiresAt.toISOString());
+        if (Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs) {
+          await this.processGenerationTimeout(generationId, "approval");
+          return "deny";
+        }
       }
       return "pending";
     }
@@ -7638,11 +7814,11 @@ class GenerationManager {
     if (!interrupt) {
       return { success: false };
     }
-    const expiresAt = authRequest.expiresAt ?? computeExpiryIso(AUTH_TIMEOUT_MS);
+    const expiresAt = authRequest.expiresAt;
 
     let resolved: { success: boolean; userId?: string } | null = null;
     while (resolved === null) {
-      if (Date.now() >= Date.parse(expiresAt)) {
+      if (expiresAt && Date.now() >= Date.parse(expiresAt)) {
         break;
       }
 
@@ -7674,7 +7850,6 @@ class GenerationManager {
     if (resolved) {
       return resolved;
     }
-    await this.processGenerationTimeout(generationId, "auth");
     return { success: false };
   }
 
@@ -7687,28 +7862,123 @@ class GenerationManager {
     }
 
     try {
-      await saveConversationSessionSnapshot({
-        conversationId: ctx.conversationId,
-        sessionId: ctx.sessionId,
-        sandbox: {
-          exec: (command, opts) =>
-            ctx.sandbox!.execute(command, {
-              timeout: opts?.timeoutMs,
-              env: opts?.env,
-            }),
-          writeFile: (path, content) =>
-            ctx.sandbox!.writeFile(
-              path,
-              typeof content === "string" ? content : new Uint8Array(content),
-            ),
-        },
-      });
+      await this.saveSessionSnapshot(ctx);
     } catch (error) {
       console.error(
         `[GenerationManager] Failed to save session snapshot (${reason}) for conversation ${ctx.conversationId}:`,
         error,
       );
     }
+  }
+
+  private async saveSessionSnapshot(
+    ctx: Pick<GenerationContext, "conversationId" | "sessionId" | "sandbox">,
+  ): Promise<void> {
+    if (!ctx.sessionId || !ctx.sandbox) {
+      throw new Error(`Cannot snapshot conversation ${ctx.conversationId}: missing runtime session`);
+    }
+
+    await saveConversationSessionSnapshot({
+      conversationId: ctx.conversationId,
+      sessionId: ctx.sessionId,
+      sandbox: {
+        exec: (command, opts) =>
+          ctx.sandbox!.execute(command, {
+            timeout: opts?.timeoutMs,
+            env: opts?.env,
+          }),
+        writeFile: (path, content) =>
+          ctx.sandbox!.writeFile(
+            path,
+            typeof content === "string" ? content : new Uint8Array(content),
+          ),
+      },
+    });
+  }
+
+  private async suspendGenerationForInterrupt(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<never> {
+    const now = new Date();
+    const remainingRunMs = this.refreshRemainingRunBudget(ctx, now);
+    const nextStatus: GenerationStatus = interrupt.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
+    const nextConversationStatus = interrupt.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
+
+    ctx.status = nextStatus;
+    ctx.currentInterruptId = interrupt.id;
+    ctx.suspendedAt = now;
+
+    await this.saveSessionSnapshot(ctx);
+    await this.saveProgress(ctx);
+
+    await db
+      .update(generation)
+      .set({
+        status: nextStatus,
+        remainingRunMs,
+        suspendedAt: now,
+        resumeInterruptId: null,
+        sandboxId: null,
+        pendingApproval: null,
+        pendingAuth: null,
+        contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
+        lastRuntimeEventAt: ctx.lastRuntimeEventAt,
+      })
+      .where(eq(generation.id, ctx.id));
+
+    await db
+      .update(conversation)
+      .set({
+        generationStatus: nextConversationStatus,
+        sandboxLastUserVisibleActionAt: now,
+      })
+      .where(eq(conversation.id, ctx.conversationId));
+
+    if (ctx.coworkerRunId) {
+      await db
+        .update(coworkerRun)
+        .set({ status: nextStatus })
+        .where(eq(coworkerRun.id, ctx.coworkerRunId));
+    }
+
+    try {
+      await ctx.sandbox?.teardown();
+    } finally {
+      if (ctx.runtimeId) {
+        await conversationRuntimeService.suspendRuntime(ctx.runtimeId);
+      }
+      ctx.sandbox = undefined;
+      ctx.sandboxId = undefined;
+      ctx.sessionId = undefined;
+      await this.releaseSandboxSlotLease(ctx);
+      this.evictActiveGenerationContext(ctx.id);
+    }
+
+    throw new GenerationSuspendedError(
+      interrupt.id,
+      interrupt.kind === "auth" ? "auth" : "approval",
+    );
+  }
+
+  private async pollExternalInterruptAndSuspendIfNeeded(
+    ctx: GenerationContext,
+  ): Promise<void> {
+    if (ctx.currentInterruptId) {
+      return;
+    }
+
+    const pendingInterrupt = await generationInterruptService.getPendingInterruptForGeneration(
+      ctx.id,
+    );
+    if (!pendingInterrupt) {
+      return;
+    }
+
+    ctx.currentInterruptId = pendingInterrupt.id;
+    ctx.status = pendingInterrupt.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
+    this.broadcast(ctx, this.projectInterruptPendingEvent(pendingInterrupt));
+    await this.suspendGenerationForInterrupt(ctx, pendingInterrupt);
   }
 
   private async finishGeneration(
@@ -7889,6 +8159,9 @@ class GenerationManager {
           cancelRequestedAt: null,
           pendingApproval: null,
           pendingAuth: null,
+          resumeInterruptId: null,
+          suspendedAt: null,
+          remainingRunMs: ctx.remainingRunMs,
           contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
           errorMessage: ctx.errorMessage,
           debugInfo: ctx.debugInfo ?? null,
@@ -8073,6 +8346,10 @@ class GenerationManager {
         inputTokens: ctx.usage.inputTokens,
         outputTokens: ctx.usage.outputTokens,
         lastRuntimeEventAt: ctx.lastRuntimeEventAt,
+        deadlineAt: ctx.deadlineAt,
+        remainingRunMs: ctx.remainingRunMs,
+        suspendedAt: ctx.suspendedAt ?? null,
+        resumeInterruptId: ctx.resumeInterruptId ?? null,
         recoveryAttempts: ctx.recoveryAttempts,
         completionReason: ctx.completionReason ?? null,
         debugInfo: ctx.debugInfo ?? null,

@@ -150,6 +150,7 @@ const {
   refreshInterruptExpiryMock,
   resolveInterruptMock,
   expireInterruptMock,
+  markInterruptAppliedMock,
   cancelInterruptsForGenerationMock,
   projectInterruptEventMock,
 } = vi.hoisted(() => {
@@ -255,6 +256,18 @@ const {
   const expireInterruptMock = vi.fn(async (interruptId: string) =>
     resolveInterruptMock({ interruptId, status: "expired" }),
   );
+  const markInterruptAppliedMock = vi.fn(async (interruptId: string) => {
+    const existing = interruptStore.get(interruptId);
+    if (!existing) {
+      return null;
+    }
+    const applied = {
+      ...existing,
+      appliedAt: new Date("2026-03-11T15:02:00.000Z"),
+    };
+    interruptStore.set(applied.id, applied);
+    return applied;
+  });
 
   const cancelInterruptsForGenerationMock = vi.fn(async (generationId: string) => {
     for (const interrupt of interruptStore.values()) {
@@ -276,6 +289,7 @@ const {
     refreshInterruptExpiryMock,
     resolveInterruptMock,
     expireInterruptMock,
+    markInterruptAppliedMock,
     cancelInterruptsForGenerationMock,
     projectInterruptEventMock,
   };
@@ -293,6 +307,7 @@ const {
   updateRuntimeSessionMock,
   clearActiveGenerationMock,
   markRuntimeDeadMock,
+  suspendRuntimeMock,
 } = vi.hoisted(() => ({
   bindGenerationToRuntimeMock: vi.fn(),
   getRuntimeForConversationMock: vi.fn(),
@@ -300,6 +315,7 @@ const {
   updateRuntimeSessionMock: vi.fn(),
   clearActiveGenerationMock: vi.fn(),
   markRuntimeDeadMock: vi.fn(),
+  suspendRuntimeMock: vi.fn(),
 }));
 
 const {
@@ -450,6 +466,7 @@ vi.mock("./generation-interrupt-service", () => ({
     refreshInterruptExpiry: refreshInterruptExpiryMock,
     resolveInterrupt: resolveInterruptMock,
     expireInterrupt: expireInterruptMock,
+    markInterruptApplied: markInterruptAppliedMock,
     cancelInterruptsForGeneration: cancelInterruptsForGenerationMock,
     projectInterruptEvent: projectInterruptEventMock,
   },
@@ -463,6 +480,7 @@ vi.mock("./conversation-runtime-service", () => ({
     updateRuntimeSession: updateRuntimeSessionMock,
     clearActiveGeneration: clearActiveGenerationMock,
     markRuntimeDead: markRuntimeDeadMock,
+    suspendRuntime: suspendRuntimeMock,
     authorizeRuntimeTurn: vi.fn(),
   },
 }));
@@ -579,6 +597,9 @@ function createCtx(overrides: Partial<GenerationCtx> = {}): GenerationCtx {
     status: "running",
     executionPolicy: { allowSnapshotRestoreOnRun: true },
     deadlineAt: new Date(Date.now() + 15 * 60 * 1000),
+    remainingRunMs: 15 * 60 * 1000,
+    suspendedAt: null,
+    resumeInterruptId: null,
     lastRuntimeEventAt: new Date(),
     recoveryAttempts: 0,
     completionReason: null,
@@ -797,6 +818,10 @@ describe("generationManager transitions", () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", {
+      value: "test-anthropic-key",
+      configurable: true,
+    });
     userFindFirstMock.mockResolvedValue({
       role: "admin",
       activeWorkspaceId: null,
@@ -1052,6 +1077,8 @@ describe("generationManager transitions", () => {
     clearActiveGenerationMock.mockResolvedValue(undefined);
     markRuntimeDeadMock.mockReset();
     markRuntimeDeadMock.mockResolvedValue(undefined);
+    suspendRuntimeMock.mockReset();
+    suspendRuntimeMock.mockResolvedValue(undefined);
     insertValuesMock.mockImplementation(() => ({
       returning: insertReturningMock,
     }));
@@ -1074,7 +1101,7 @@ describe("generationManager transitions", () => {
     coworkerRunFindFirstMock.mockResolvedValue(null);
     coworkerFindFirstMock.mockResolvedValue(null);
     providerAuthFindFirstMock.mockResolvedValue(null);
-    sharedProviderAuthFindFirstMock.mockResolvedValue(null);
+    sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-anthropic" });
     vi.mocked(getPreferredCloudSandboxProvider).mockReturnValue("e2b");
     isStatelessServerlessRuntimeMock.mockReturnValue(false);
     ensureBucketMock.mockReset();
@@ -1293,6 +1320,83 @@ describe("generationManager transitions", () => {
         kind: "plugin_write",
         status: "accepted",
         providerToolUseId: "tool-1",
+      }),
+    );
+  });
+
+  it("accepts a detached approval and enqueues the same generation as a suspended resume", async () => {
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-detached-approval",
+      conversationId: "conv-detached-approval",
+      status: "awaiting_approval",
+      contentParts: null,
+      remainingRunMs: 222_000,
+      conversation: {
+        id: "conv-detached-approval",
+        userId: "user-1",
+      },
+    });
+    interruptStore.set("interrupt-detached-approval", {
+      id: "interrupt-detached-approval",
+      generationId: "gen-detached-approval",
+      runtimeId: "runtime-1",
+      conversationId: "conv-detached-approval",
+      turnSeq: 1,
+      kind: "runtime_permission",
+      status: "pending",
+      display: {
+        title: "OpenCode permission",
+        integration: "opencode",
+        operation: "permission",
+        command: "external_directory",
+        toolInput: { permission: "external_directory" },
+      },
+      provider: "opencode",
+      providerRequestId: "permission-request-1",
+      providerToolUseId: "tool-detached-approval",
+      responsePayload: undefined,
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    });
+
+    const result = await generationManager.submitApproval(
+      "gen-detached-approval",
+      "tool-detached-approval",
+      "approve",
+      "user-1",
+    );
+
+    expect(result).toBe(true);
+    expect(resolveInterruptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interruptId: "interrupt-detached-approval",
+        status: "accepted",
+        resolvedByUserId: "user-1",
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "running",
+        resumeInterruptId: "interrupt-detached-approval",
+        deadlineAt: expect.any(Date),
+        suspendedAt: null,
+        isPaused: false,
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationStatus: "generating",
+        sandboxLastUserVisibleActionAt: expect.any(Date),
+      }),
+    );
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-detached-approval", runMode: "normal_run" },
+      expect.objectContaining({
+        jobId: expect.stringContaining("resume-interrupt-interrupt-detached-approval"),
       }),
     );
   });
@@ -1614,19 +1718,104 @@ describe("generationManager transitions", () => {
     );
   });
 
-  it("times out approval into terminal error", async () => {
-    const ctx = createCtx();
+  it("suspends an OpenCode approval by snapshotting, tearing down, and not enqueueing a timeout", async () => {
+    const teardownMock = vi.fn().mockResolvedValue(undefined);
+    const ctx = createCtx({
+      id: "gen-durable-approval",
+      conversationId: "conv-durable-approval",
+      runtimeId: "runtime-durable",
+      runtimeTurnSeq: 7,
+      sessionId: "session-durable",
+      sandboxId: "sandbox-durable",
+      sandbox: {
+        execute: vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        teardown: teardownMock,
+      },
+      deadlineAt: new Date(Date.now() + 123_456),
+      remainingRunMs: 15 * 60 * 1000,
+    });
+    const mgr = asTestManager();
+    mgr.activeGenerations.set(ctx.id, ctx);
+
+    await expect(
+      (mgr as any).queueOpenCodeApprovalRequest(
+        ctx,
+        { replyPermission: vi.fn() },
+        {
+          kind: "permission",
+          request: { id: "permission-request-1", permission: "external_directory" },
+        },
+        {
+          toolUseId: "tool-durable-approval",
+          toolName: "OpenCode permission",
+          toolInput: { permission: "external_directory" },
+          integration: "opencode",
+          operation: "permission",
+          command: "external_directory",
+          requestedAt: new Date().toISOString(),
+        },
+      ),
+    ).rejects.toThrow("Generation suspended for approval interrupt");
+
+    const createdInterrupt = interruptStore.get("interrupt-tool-durable-approval");
+    expect(createdInterrupt?.expiresAt).toBeNull();
+    expect(saveConversationSessionSnapshotMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: ctx.conversationId,
+        sessionId: "session-durable",
+      }),
+    );
+    expect(teardownMock).toHaveBeenCalledTimes(1);
+    expect(suspendRuntimeMock).toHaveBeenCalledWith("runtime-durable");
+    expect(mgr.activeGenerations.has(ctx.id)).toBe(false);
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "awaiting_approval",
+        remainingRunMs: expect.any(Number),
+        suspendedAt: expect.any(Date),
+        resumeInterruptId: null,
+        sandboxId: null,
+      }),
+    );
+    expect(queueAddMock).not.toHaveBeenCalledWith(
+      "generation:approval-timeout",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("finalizes an explicitly expired approval timeout job into terminal error", async () => {
+    const ctx = createCtx({
+      status: "awaiting_approval",
+      currentInterruptId: "interrupt-stale-approval",
+    });
     coworkerRunFindFirstMock.mockResolvedValue({ id: "wf-run-1" });
-    const stalePendingApproval = {
-      toolUseId: "plugin-stale",
-      toolName: "Bash",
-      toolInput: { command: "slack send" },
-      requestedAt: new Date(0).toISOString(),
-      expiresAt: new Date(1).toISOString(),
-      integration: "slack",
-      operation: "send",
-      command: "slack send -t hi",
-    };
+    interruptStore.set("interrupt-stale-approval", {
+      id: "interrupt-stale-approval",
+      generationId: ctx.id,
+      runtimeId: "runtime-1",
+      conversationId: ctx.conversationId,
+      turnSeq: 1,
+      kind: "plugin_write",
+      status: "pending",
+      display: {
+        title: "Bash",
+        integration: "slack",
+        operation: "send",
+        command: "slack send -t hi",
+        toolInput: { command: "slack send" },
+      },
+      provider: "plugin",
+      providerRequestId: null,
+      providerToolUseId: "plugin-stale",
+      responsePayload: undefined,
+      requestedAt: new Date(0),
+      expiresAt: new Date(1),
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    });
 
     const mgr = asTestManager();
     const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
@@ -1639,7 +1828,6 @@ describe("generationManager transitions", () => {
           conversationId: ctx.conversationId,
           runtimeId: "runtime-1",
           status: "awaiting_approval",
-          pendingApproval: stalePendingApproval,
           conversation: {
             id: ctx.conversationId,
             userId: ctx.userId,
@@ -1652,7 +1840,6 @@ describe("generationManager transitions", () => {
         conversationId: ctx.conversationId,
         runtimeId: "runtime-1",
         status: "awaiting_approval",
-        pendingApproval: stalePendingApproval,
         conversation: {
           id: ctx.conversationId,
           userId: ctx.userId,
@@ -1660,16 +1847,7 @@ describe("generationManager transitions", () => {
       };
     });
 
-    const approvalPromise = generationManager.waitForApproval(ctx.id, {
-      toolInput: { command: "slack send" },
-      integration: "slack",
-      operation: "send",
-      command: "slack send -t hi",
-    });
-
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
-
-    await expect(approvalPromise).resolves.toBe("deny");
+    await generationManager.processGenerationTimeout(ctx.id, "approval");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
     expect(ctx.completionReason).toBe("approval_timeout");
     expect(ctx.errorMessage).toBe("Approval request expired before the run could continue.");
@@ -1722,6 +1900,76 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("accepts a detached auth result and enqueues the same generation as a suspended resume", async () => {
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-detached-auth",
+      conversationId: "conv-detached-auth",
+      status: "awaiting_auth",
+      contentParts: null,
+      remainingRunMs: 333_000,
+      conversation: {
+        id: "conv-detached-auth",
+        userId: "user-1",
+      },
+    });
+    interruptStore.set("interrupt-detached-auth", {
+      id: "interrupt-detached-auth",
+      generationId: "gen-detached-auth",
+      runtimeId: "runtime-1",
+      conversationId: "conv-detached-auth",
+      turnSeq: 1,
+      kind: "auth",
+      status: "pending",
+      display: {
+        title: "Connection Required",
+        authSpec: { integrations: ["notion"] },
+      },
+      provider: "plugin",
+      providerRequestId: null,
+      providerToolUseId: "auth-detached-notion",
+      responsePayload: undefined,
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    });
+
+    const result = await generationManager.submitAuthResult(
+      "gen-detached-auth",
+      "notion",
+      true,
+      "user-1",
+    );
+
+    expect(result).toBe(true);
+    expect(resolveInterruptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interruptId: "interrupt-detached-auth",
+        status: "accepted",
+        responsePayload: {
+          connectedIntegrations: ["notion"],
+          integration: "notion",
+        },
+        resolvedByUserId: "user-1",
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeInterruptId: "interrupt-detached-auth",
+        deadlineAt: expect.any(Date),
+        suspendedAt: null,
+      }),
+    );
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-detached-auth", runMode: "normal_run" },
+      expect.objectContaining({
+        jobId: expect.stringContaining("resume-interrupt-interrupt-detached-auth"),
+      }),
+    );
+  });
+
   it("resumeGeneration re-enqueues chat work instead of running inline", async () => {
     generationFindFirstMock.mockResolvedValueOnce({
       id: "gen-resume",
@@ -1749,22 +1997,37 @@ describe("generationManager transitions", () => {
     expect(asTestManager().activeGenerations.has("gen-resume")).toBe(false);
   });
 
-  it("fails on auth timeout", async () => {
-    const ctx = createCtx();
+  it("finalizes an explicitly expired auth timeout job into terminal error", async () => {
+    const ctx = createCtx({
+      status: "awaiting_auth",
+      currentInterruptId: "interrupt-auth-stale",
+    });
     const mgr = asTestManager();
     mgr.activeGenerations.set(ctx.id, ctx);
-    const stalePendingAuth = {
-      integrations: ["slack"],
-      connectedIntegrations: [],
-      requestedAt: new Date(0).toISOString(),
-      expiresAt: new Date(1).toISOString(),
-    };
+    interruptStore.set("interrupt-auth-stale", {
+      id: "interrupt-auth-stale",
+      generationId: ctx.id,
+      runtimeId: "runtime-1",
+      conversationId: ctx.conversationId,
+      turnSeq: 1,
+      kind: "auth",
+      status: "pending",
+      display: { title: "Auth Required", authSpec: { integrations: ["slack"] } },
+      provider: "plugin",
+      providerRequestId: null,
+      providerToolUseId: "auth-stale",
+      responsePayload: undefined,
+      requestedAt: new Date(0),
+      expiresAt: new Date(1),
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    });
     generationFindFirstMock.mockImplementation(async () => ({
       id: ctx.id,
       conversationId: ctx.conversationId,
       runtimeId: "runtime-1",
       status: "awaiting_auth",
-      pendingAuth: stalePendingAuth,
       conversation: {
         id: ctx.conversationId,
         userId: ctx.userId,
@@ -1774,14 +2037,7 @@ describe("generationManager transitions", () => {
 
     const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
 
-    const authPromise = generationManager.waitForAuth(ctx.id, {
-      integration: "slack",
-      reason: "Slack authentication required",
-    });
-
-    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1);
-
-    await expect(authPromise).resolves.toEqual({ success: false });
+    await generationManager.processGenerationTimeout(ctx.id, "auth");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
     expect(ctx.completionReason).toBe("auth_timeout");
     expect(ctx.errorMessage).toBe("Authentication request expired before the run could continue.");
@@ -2225,13 +2481,19 @@ describe("generationManager transitions", () => {
       triggerPayload: null,
     });
     coworkerFindFirstMock.mockResolvedValueOnce({
+      id: "wf-1",
       allowedIntegrations: ["github"],
       allowedCustomIntegrations: [],
       allowedSkillSlugs: [],
       prompt: "prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: "manual",
+      schedule: null,
       promptDo: null,
       promptDont: null,
       autoApprove: false,
+      updatedAt: new Date("2026-03-11T15:00:00.000Z"),
     });
 
     await generationManager.runQueuedGeneration("gen-coworker-queued");
@@ -2396,6 +2658,8 @@ describe("generationManager transitions", () => {
   });
 
   it("rejects startGeneration when an OpenAI model is selected without ChatGPT connection", async () => {
+    sharedProviderAuthFindFirstMock.mockResolvedValueOnce(null);
+
     insertReturningMock.mockResolvedValueOnce([
       {
         id: "conv-new",
@@ -2499,6 +2763,8 @@ describe("generationManager transitions", () => {
   });
 
   it("rejects inaccessible saved coworker models before generation starts", async () => {
+    sharedProviderAuthFindFirstMock.mockResolvedValueOnce(null);
+
     await expect(
       generationManager.startCoworkerGeneration({
         coworkerId: "wf-1",
@@ -3100,7 +3366,7 @@ describe("generationManager transitions", () => {
 
     expect(result.decision).toBe("pending");
     expect(result.toolUseId).toBeTruthy();
-    expect(result.expiresAt).toBeTruthy();
+    expect(result.expiresAt).toBeUndefined();
     expect(ctx.status).toBe("awaiting_approval");
     expect(ctx.pendingApproval).toEqual(
       expect.objectContaining({
@@ -4649,6 +4915,97 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("restores a suspended snapshot, replays the resolved OpenCode approval, and clears resumeInterruptId", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-resume-interrupt",
+      title: "Conversation",
+    });
+    interruptStore.set("interrupt-resume-permission", {
+      id: "interrupt-resume-permission",
+      generationId: "gen-resume-interrupt",
+      runtimeId: "runtime-1",
+      conversationId: "conv-resume-interrupt",
+      turnSeq: 3,
+      kind: "runtime_permission",
+      status: "accepted",
+      display: {
+        title: "OpenCode permission",
+        integration: "opencode",
+        operation: "permission",
+        toolInput: { permission: "external_directory" },
+      },
+      provider: "opencode",
+      providerRequestId: "permission-request-resume",
+      providerToolUseId: "tool-resume-permission",
+      responsePayload: undefined,
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: new Date("2026-03-11T15:01:00.000Z"),
+      requestedByUserId: null,
+      resolvedByUserId: "user-1",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    const runtime = createConversationRuntimeMock({
+      promptMock,
+      subscribeMock,
+      sessionSource: "restored_snapshot",
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      runtime as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+
+    const ctx = createCtx({
+      id: "gen-resume-interrupt",
+      conversationId: "conv-resume-interrupt",
+      resumeInterruptId: "interrupt-resume-permission",
+      currentInterruptId: "interrupt-resume-permission",
+      remainingRunMs: 444_000,
+      deadlineAt: new Date(0),
+      suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
+      status: "awaiting_approval",
+      sessionId: undefined,
+      model: "openai/gpt-5.2-codex",
+      runtimeTurnSeq: 3,
+      runtimeCallbackToken: "runtime-token",
+    });
+
+    await (mgr as any).runSuspendedInterruptResume(ctx);
+
+    expect(vi.mocked(getOrCreateConversationRuntime)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        allowSnapshotRestore: true,
+        replayHistory: false,
+      }),
+    );
+    expect(runtime.harnessClient.replyPermission).toHaveBeenCalledWith({
+      requestID: "permission-request-resume",
+      reply: "always",
+    });
+    expect(markInterruptAppliedMock).toHaveBeenCalledWith("interrupt-resume-permission");
+    expect(ctx.resumeInterruptId).toBeNull();
+    expect(ctx.currentInterruptId).toBeUndefined();
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeInterruptId: null,
+        suspendedAt: null,
+      }),
+    );
+    expect(subscribeMock).toHaveBeenCalledTimes(1);
+    expect(promptMock).not.toHaveBeenCalled();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
   it("reaps stale generations and error-finalizes running and waiting contexts", async () => {
     const now = Date.now();
     interruptStore.set("interrupt-stale-approval", {
@@ -4700,9 +5057,9 @@ describe("generationManager transitions", () => {
 
     expect(summary).toEqual({
       scanned: 4,
-      stale: 3,
+      stale: 1,
       finalizedRunningAsError: 1,
-      finalizedWaitingAsError: 2,
+      finalizedWaitingAsError: 0,
     });
 
     expect(updateSetMock.mock.calls).toEqual(
@@ -4715,26 +5072,14 @@ describe("generationManager transitions", () => {
         ],
         [
           expect.objectContaining({
-            status: "error",
-            completionReason: "approval_timeout",
-          }),
-        ],
-        [
-          expect.objectContaining({
-            status: "error",
-            completionReason: "auth_timeout",
-          }),
-        ],
-        [
-          expect.objectContaining({
             generationStatus: "error",
           }),
         ],
       ]),
     );
     expect(mgr.activeGenerations.has("gen-stale-running")).toBe(false);
-    expect(mgr.activeGenerations.has("gen-stale-approval")).toBe(false);
-    expect(mgr.activeGenerations.has("gen-stale-auth")).toBe(false);
+    expect(mgr.activeGenerations.has("gen-stale-approval")).toBe(true);
+    expect(mgr.activeGenerations.has("gen-stale-auth")).toBe(true);
     expect(mgr.activeGenerations.has("gen-fresh-running")).toBe(true);
   });
 

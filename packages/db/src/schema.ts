@@ -782,6 +782,9 @@ export const generation = pgTable(
     deadlineAt: timestamp("deadline_at")
       .default(sql`now() + interval '15 minutes'`)
       .notNull(),
+    remainingRunMs: integer("remaining_run_ms").default(15 * 60 * 1000).notNull(),
+    suspendedAt: timestamp("suspended_at"),
+    resumeInterruptId: text("resume_interrupt_id"),
     lastRuntimeEventAt: timestamp("last_runtime_event_at").defaultNow().notNull(),
     recoveryAttempts: integer("recovery_attempts").default(0).notNull(),
     completionReason: text("completion_reason"),
@@ -827,6 +830,7 @@ export const generationInterrupt = pgTable(
     requestedAt: timestamp("requested_at").defaultNow().notNull(),
     expiresAt: timestamp("expires_at"),
     resolvedAt: timestamp("resolved_at"),
+    appliedAt: timestamp("applied_at"),
     requestedByUserId: text("requested_by_user_id").references(() => user.id, {
       onDelete: "set null",
     }),

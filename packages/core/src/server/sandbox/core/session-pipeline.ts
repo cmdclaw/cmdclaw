@@ -31,6 +31,7 @@ function toSandboxHandle(sandbox: OpenCodeSandbox): SandboxHandle {
     ensureDir: async (path) => {
       await sandbox.commands.run(`mkdir -p "${path}"`);
     },
+    teardown: sandbox.teardown,
   };
 }
 
