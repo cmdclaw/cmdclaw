@@ -1,18 +1,20 @@
 "use client";
 
-import { ReactFlowProvider } from "@xyflow/react";
+import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
-import { useMemo } from "react";
-import { useCoworkerList, useOrgChartNodes } from "@/orpc/hooks";
+import { useCallback, useMemo } from "react";
+import { useCoworkerList, useCreateOrgChartNode, useOrgChartNodes } from "@/orpc/hooks";
 import { OrgChartCanvas } from "./_components/org-chart-canvas";
 import { UnassignedSidebar } from "./_components/unassigned-sidebar";
 
 const EMPTY_COWORKERS: never[] = [];
 const EMPTY_NODES: never[] = [];
 
-export default function OrgChartPage() {
+function OrgChartInner() {
   const { data: coworkers, isLoading: loadingCoworkers } = useCoworkerList();
   const { data: chartNodes, isLoading: loadingChart } = useOrgChartNodes();
+  const { screenToFlowPosition } = useReactFlow();
+  const createNode = useCreateOrgChartNode();
 
   const coworkerList = coworkers ?? EMPTY_COWORKERS;
   const nodeList = chartNodes ?? EMPTY_NODES;
@@ -30,6 +32,22 @@ export default function OrgChartPage() {
     [coworkerList, placedCoworkerIds],
   );
 
+  const handleAddCoworker = useCallback(
+    (coworkerId: string) => {
+      const center = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      createNode.mutate({
+        type: "coworker",
+        coworkerId,
+        positionX: center.x,
+        positionY: center.y,
+      });
+    },
+    [screenToFlowPosition, createNode],
+  );
+
   if (loadingCoworkers || loadingChart) {
     return (
       <div className="bg-background flex h-full items-center justify-center">
@@ -39,10 +57,18 @@ export default function OrgChartPage() {
   }
 
   return (
+    <>
+      <OrgChartCanvas chartNodes={nodeList} coworkers={coworkerList} unassignedCoworkers={unassigned} onAddCoworker={handleAddCoworker} />
+      <UnassignedSidebar coworkers={unassigned} onAdd={handleAddCoworker} />
+    </>
+  );
+}
+
+export default function OrgChartPage() {
+  return (
     <div className="bg-background flex h-screen w-full">
       <ReactFlowProvider>
-        <UnassignedSidebar coworkers={unassigned} />
-        <OrgChartCanvas chartNodes={nodeList} coworkers={coworkerList} />
+        <OrgChartInner />
       </ReactFlowProvider>
     </div>
   );

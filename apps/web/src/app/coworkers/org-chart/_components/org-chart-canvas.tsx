@@ -11,11 +11,13 @@ import {
 } from "@xyflow/react";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
-import { StickyNote, ArrowLeft } from "lucide-react";
+import { StickyNote, ArrowLeft, Users } from "lucide-react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useCreateOrgChartNode,
   useDeleteOrgChartNode,
@@ -23,6 +25,7 @@ import {
 } from "@/orpc/hooks";
 import { CoworkerNode, type CoworkerNodeData } from "./coworker-node";
 import { LabelNode, type LabelNodeData } from "./label-node";
+import { UnassignedSidebarContent } from "./unassigned-sidebar";
 
 type OrgChartNodeRecord = {
   id: string;
@@ -105,13 +108,27 @@ function buildNodes(
     .filter(Boolean) as Node[];
 }
 
+type UnassignedCoworker = {
+  id: string;
+  name?: string | null;
+  username?: string | null;
+  status: "on" | "off";
+  triggerType: string;
+};
+
 export function OrgChartCanvas({
   chartNodes,
   coworkers,
+  unassignedCoworkers,
+  onAddCoworker,
 }: {
   chartNodes: OrgChartNodeRecord[];
   coworkers: CoworkerRecord[];
+  unassignedCoworkers: UnassignedCoworker[];
+  onAddCoworker: (coworkerId: string) => void;
 }) {
+  const isMobile = useIsMobile();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const coworkerMap = useMemo(() => new Map(coworkers.map((c) => [c.id, c])), [coworkers]);
 
   const initialNodes = useMemo(
@@ -249,7 +266,34 @@ export function OrgChartCanvas({
           <StickyNote className="size-3" />
           Add Label
         </Button>
+        {isMobile && (
+          <>
+            <div className="bg-border/40 mx-0.5 h-4 w-px" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground h-7 gap-1.5 rounded-md px-2.5 text-xs font-medium"
+              onClick={() => setSheetOpen(true)}
+            >
+              <Users className="size-3" />
+              Coworkers
+              {unassignedCoworkers.length > 0 && (
+                <span className="bg-muted text-muted-foreground/70 rounded-md px-1.5 py-px text-[10px] font-medium tabular-nums">
+                  {unassignedCoworkers.length}
+                </span>
+              )}
+            </Button>
+          </>
+        )}
       </div>
+
+      {isMobile && (
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent side="right" className="flex w-[300px] flex-col p-0">
+            <UnassignedSidebarContent coworkers={unassignedCoworkers} onAdd={onAddCoworker} />
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

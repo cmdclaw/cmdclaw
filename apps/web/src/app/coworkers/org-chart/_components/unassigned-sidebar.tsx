@@ -21,7 +21,13 @@ const TRIGGER_LABELS: Record<string, string> = {
   webhook: "Webhook",
 };
 
-function SidebarCard({ coworker }: { coworker: CoworkerSummary }) {
+function SidebarCard({
+  coworker,
+  onAdd,
+}: {
+  coworker: CoworkerSummary;
+  onAdd?: (coworkerId: string) => void;
+}) {
   const isOn = coworker.status === "on";
 
   const handleDragStart = useCallback(
@@ -32,15 +38,20 @@ function SidebarCard({ coworker }: { coworker: CoworkerSummary }) {
     [coworker.id],
   );
 
+  const handleClick = useCallback(() => {
+    onAdd?.(coworker.id);
+  }, [onAdd, coworker.id]);
+
   return (
     <div
       draggable
       onDragStart={handleDragStart}
+      onClick={handleClick}
       className={cn(
-        "flex cursor-grab items-center gap-2.5 rounded-lg px-3 py-2.5 transition-all duration-150",
+        "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 transition-all duration-150",
         "bg-card border-border/20 border",
         "hover:bg-muted/50 hover:border-border/40 hover:shadow-[0_1px_3px_0_rgba(0,0,0,0.03)]",
-        "active:scale-[0.98] active:cursor-grabbing active:shadow-none",
+        "active:scale-[0.98] active:shadow-none",
       )}
     >
       <div className="relative shrink-0">
@@ -64,7 +75,13 @@ function SidebarCard({ coworker }: { coworker: CoworkerSummary }) {
   );
 }
 
-export function UnassignedSidebar({ coworkers }: { coworkers: CoworkerSummary[] }) {
+export function UnassignedSidebarContent({
+  coworkers,
+  onAdd,
+}: {
+  coworkers: CoworkerSummary[];
+  onAdd?: (coworkerId: string) => void;
+}) {
   const [search, setSearch] = useState("");
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,7 +94,7 @@ export function UnassignedSidebar({ coworkers }: { coworkers: CoworkerSummary[] 
   );
 
   return (
-    <div className="bg-background/80 border-border/30 flex h-full w-[280px] shrink-0 flex-col border-r backdrop-blur-sm">
+    <>
       <div className="flex items-center gap-2 px-4 py-3.5">
         <h3 className="text-foreground/80 text-xs font-semibold tracking-widest uppercase">
           Unassigned
@@ -110,9 +127,23 @@ export function UnassignedSidebar({ coworkers }: { coworkers: CoworkerSummary[] 
             </p>
           </div>
         ) : (
-          filtered.map((c) => <SidebarCard key={c.id} coworker={c} />)
+          filtered.map((c) => <SidebarCard key={c.id} coworker={c} onAdd={onAdd} />)
         )}
       </div>
+    </>
+  );
+}
+
+export function UnassignedSidebar({
+  coworkers,
+  onAdd,
+}: {
+  coworkers: CoworkerSummary[];
+  onAdd?: (coworkerId: string) => void;
+}) {
+  return (
+    <div className="bg-background/80 border-border/30 hidden h-full w-[280px] shrink-0 flex-col border-l backdrop-blur-sm md:flex">
+      <UnassignedSidebarContent coworkers={coworkers} onAdd={onAdd} />
     </div>
   );
 }
