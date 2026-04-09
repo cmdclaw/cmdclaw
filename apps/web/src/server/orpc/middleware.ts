@@ -12,6 +12,21 @@ export type AuthenticatedContext = ORPCContext & {
   session: Session;
 };
 
+type SessionWithImpersonation = Session & {
+  impersonatedBy?: string | null;
+};
+
+function getImpersonatedBy(session: Session): string | null {
+  const impersonatedBy = (session as SessionWithImpersonation).impersonatedBy;
+  return typeof impersonatedBy === "string" && impersonatedBy.trim().length > 0
+    ? impersonatedBy
+    : null;
+}
+
+export function resolveDailyActivityUserId(params: { session: Session; user: User }): string {
+  return getImpersonatedBy(params.session) ?? params.user.id;
+}
+
 // Protected procedure requiring authentication
 export const protectedProcedure = baseProcedure.use(async ({ context, next }) => {
   if (!context.user || !context.session) {
@@ -21,7 +36,10 @@ export const protectedProcedure = baseProcedure.use(async ({ context, next }) =>
 
   try {
     await recordUserActiveToday({
-      userId: context.user.id,
+      userId: resolveDailyActivityUserId({
+        session: context.session,
+        user: context.user,
+      }),
     });
   } catch (error) {
     console.error("[Auth Middleware] Failed to record daily user activity", error);
