@@ -50,7 +50,7 @@ function OrgChartInner() {
 
   if (loadingCoworkers || loadingChart) {
     return (
-      <div className="bg-background flex h-full items-center justify-center">
+      <div className="bg-background flex h-full flex-1 items-center justify-center">
         <Loader2 className="text-muted-foreground size-5 animate-spin" />
       </div>
     );

@@ -91,10 +91,10 @@ export function CoworkerCardContent({
     <>
       {/* Header: avatar + name + status */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-3">
-          <CoworkerAvatar username={coworker.username} size={36} className="rounded-full" />
-          <div className="space-y-1">
-            <p className="text-sm leading-tight font-medium">
+        <div className="flex min-w-0 items-start gap-3">
+          <CoworkerAvatar username={coworker.username} size={36} className="shrink-0 rounded-full" />
+          <div className="min-w-0 space-y-1">
+            <p className="truncate text-sm leading-tight font-medium">
               {getCoworkerDisplayName(coworker.name)}
             </p>
             {coworker.username ? (
