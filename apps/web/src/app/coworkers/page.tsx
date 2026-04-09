@@ -363,6 +363,9 @@ function CoworkerCard({
   const handleRunsTriggerClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
   }, []);
+  const handleMenuKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  }, []);
 
   return (
     <div
@@ -400,7 +403,12 @@ function CoworkerCard({
                 <Ellipsis className="size-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent
+              align="end"
+              className="w-52"
+              onClick={handleStopPropagation}
+              onKeyDown={handleMenuKeyDown}
+            >
               <DropdownMenuItem
                 onSelect={handleToggleShare}
                 disabled={isUpdatingShare || isDeleting || isUpdatingStatus}

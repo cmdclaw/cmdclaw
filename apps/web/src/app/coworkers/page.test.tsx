@@ -203,7 +203,19 @@ vi.mock("@/components/ui/context-menu", () => ({
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({
+    children,
+    onClick,
+    onKeyDown,
+  }: {
+    children: React.ReactNode;
+    onClick?: React.MouseEventHandler<HTMLDivElement>;
+    onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  }) => (
+    <div onClick={onClick} onKeyDown={onKeyDown}>
+      {children}
+    </div>
+  ),
   DropdownMenuItem: ({
     children,
     onSelect,
@@ -371,11 +383,14 @@ describe("CoworkersPage", () => {
     render(<CoworkersPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /delete coworker/i }));
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => {
       expect(mockDeleteCoworkerMutateAsync).toHaveBeenCalledWith("cw-1");
     });
+    expect(mockRouterPush).not.toHaveBeenCalled();
     expect(mockToastSuccess).toHaveBeenCalledWith("Coworker deleted.");
   });
 
