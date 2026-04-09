@@ -115,4 +115,46 @@ describe("runChatSession", () => {
       expect(result.assistant.content).toContain("hello");
     }
   });
+
+  it("attaches to an existing generation without starting a new one", async () => {
+    const startGeneration = vi.fn();
+    const subscribeGeneration = vi.fn().mockResolvedValue(
+      (async function* () {
+        yield { type: "text" as const, content: "attached" };
+        yield {
+          type: "done" as const,
+          generationId: "gen-attached",
+          conversationId: "conv-attached",
+          messageId: "msg-attached",
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalCostUsd: 0,
+          },
+        };
+      })(),
+    );
+    const client = {
+      generation: {
+        startGeneration,
+        subscribeGeneration,
+      },
+    };
+
+    const result = await runChatSession({
+      client: client as never,
+      generationId: "gen-attached",
+    });
+
+    expect(startGeneration).not.toHaveBeenCalled();
+    expect(subscribeGeneration).toHaveBeenCalledWith(
+      { generationId: "gen-attached" },
+      expect.any(Object),
+    );
+    expect(result.status).toBe("completed");
+    if (result.status === "completed") {
+      expect(result.conversationId).toBe("conv-attached");
+      expect(result.assistant.content).toContain("attached");
+    }
+  });
 });

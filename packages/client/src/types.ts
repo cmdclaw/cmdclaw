@@ -153,6 +153,7 @@ export type GenerationStartInput = {
   authSource?: ProviderAuthSource | null;
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
+  debugRunDeadlineMs?: number;
   selectedPlatformSkillSlugs?: string[];
   fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
 };

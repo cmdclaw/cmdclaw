@@ -662,6 +662,22 @@ function computeExpiryIso(timeoutMs: number): string {
   return new Date(Date.now() + timeoutMs).toISOString();
 }
 
+function resolveGenerationRunDeadlineMs(debugRunDeadlineMs: number | undefined): number {
+  if (debugRunDeadlineMs === undefined) {
+    return generationLifecyclePolicy.runDeadlineMs;
+  }
+  if (
+    !Number.isInteger(debugRunDeadlineMs) ||
+    debugRunDeadlineMs < 1_000 ||
+    debugRunDeadlineMs > generationLifecyclePolicy.runDeadlineMs
+  ) {
+    throw new Error(
+      `debugRunDeadlineMs must be an integer between 1000 and ${generationLifecyclePolicy.runDeadlineMs}`,
+    );
+  }
+  return debugRunDeadlineMs;
+}
+
 function resolveExpiryMs(
   expiresAt: string | undefined,
   requestedAt: string | undefined,
@@ -2360,12 +2376,14 @@ class GenerationManager {
     userId: string;
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
+    debugRunDeadlineMs?: number;
     allowedIntegrations?: IntegrationType[];
     fileAttachments?: UserFileAttachment[];
     selectedPlatformSkillSlugs?: string[];
     remoteIntegrationSource?: RemoteIntegrationSource;
   }): Promise<{ generationId: string; conversationId: string }> {
     const { content, userId, model, autoApprove } = params;
+    const runDeadlineMs = resolveGenerationRunDeadlineMs(params.debugRunDeadlineMs);
     const fileAttachments = params.fileAttachments;
     const requestedModel = model?.trim();
     if (requestedModel) {
@@ -2680,6 +2698,7 @@ class GenerationManager {
       queuedFileAttachments: fileAttachments,
     });
     const lifecycle = createGenerationLifecycle();
+    lifecycle.deadlineAt = new Date(lifecycle.lastRuntimeEventAt.getTime() + runDeadlineMs);
     const [genRecord] = await db
       .insert(generation)
       .values({
@@ -2691,7 +2710,7 @@ class GenerationManager {
         inputTokens: 0,
         outputTokens: 0,
         deadlineAt: lifecycle.deadlineAt,
-        remainingRunMs: generationLifecyclePolicy.runDeadlineMs,
+        remainingRunMs: runDeadlineMs,
         lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
         recoveryAttempts: lifecycle.recoveryAttempts,
         completionReason: lifecycle.completionReason,

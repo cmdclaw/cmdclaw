@@ -17,7 +17,8 @@ import type {
 
 type ChatRunOptions = {
   client: CmdclawApiClient;
-  input: GenerationStartInput;
+  input?: GenerationStartInput;
+  generationId?: string;
   signal?: AbortSignal;
   onText?: (content: string) => void | Promise<void>;
   onThinking?: (content: string) => void | Promise<void>;
@@ -45,6 +46,13 @@ function toAssistantMessage(runtime: ReturnType<typeof createGenerationRuntime>)
 }
 
 export async function runChatSession(options: ChatRunOptions): Promise<GenerationResult> {
+  if (!options.input && !options.generationId) {
+    throw new Error("runChatSession requires either input or generationId");
+  }
+  if (options.input && options.generationId) {
+    throw new Error("runChatSession accepts input or generationId, not both");
+  }
+
   const runtime = createGenerationRuntime();
   const abortController = new AbortController();
   const signal = options.signal
@@ -77,13 +85,16 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
     done: null,
     cancelled: null,
     failed: null,
-    resolvedIds: {},
+    resolvedIds: {
+      generationId: options.generationId,
+    },
   };
 
   try {
     const result = await runGenerationStream({
       client: options.client,
       input: options.input,
+      generationId: options.generationId,
       signal,
       callbacks: {
         onStarted: (generationId, conversationId) => {

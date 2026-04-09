@@ -25,6 +25,9 @@ In this codebase, an example of"closing the loop" is:
 4. Validate behavior via `bun run cmdclaw -- chat` (real prompt, real execution path).
    Example: `bun run cmdclaw -- chat --message "send a message on slack saying hi" --model openai/gpt-5.4-mini`
    In a real terminal, `--message` seeds the first turn and then keeps the same chat open at `followup>` so you can continue iterating without restarting the CLI.
+   Debug deadline example: `bun run cmdclaw -- chat --chaos-run-deadline 60s --message "<long repro>" --model openai/gpt-5.4-mini`
+   Defer approval example: `bun run cmdclaw -- chat --chaos-approval defer --message "<write-tool repro>" --model openai/gpt-5.4-mini`
+   Attach to a run example: `bun run cmdclaw -- chat --attach <generation-id>`
 5. Read tmux logs to confirm server + worker behavior and catch regressions.
 6. Iterate immediately until the prompt result matches expected behavior.
 

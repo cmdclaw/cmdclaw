@@ -261,6 +261,35 @@ describe("generationRouter", () => {
     });
   });
 
+  it("passes debug run deadline through startGeneration", async () => {
+    generationManagerMock.startGeneration.mockResolvedValueOnce({
+      generationId: "gen-start",
+      conversationId: "conv-start",
+    });
+
+    const result = await generationRouterAny.startGeneration({
+      input: {
+        content: "hello",
+        model: "openai/gpt-5.4-mini",
+        debugRunDeadlineMs: 60_000,
+      },
+      context,
+    });
+
+    expect(result).toEqual({
+      generationId: "gen-start",
+      conversationId: "conv-start",
+    });
+    expect(generationManagerMock.startGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "hello",
+        model: "openai/gpt-5.4-mini",
+        debugRunDeadlineMs: 60_000,
+        userId: "user-1",
+      }),
+    );
+  });
+
   it("passes cancel, approval, and auth calls through to generationManager", async () => {
     const cancelResult = await generationRouterAny.cancelGeneration({
       input: { generationId: "gen-1" },

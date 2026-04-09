@@ -20,6 +20,7 @@ describe("runGenerationStream", () => {
         content: "hi",
         model: "openai/gpt-5.4",
         authSource: "user",
+        debugRunDeadlineMs: 60_000,
       },
       callbacks: {},
     });
@@ -28,6 +29,7 @@ describe("runGenerationStream", () => {
       content: "hi",
       model: "openai/gpt-5.4",
       authSource: "user",
+      debugRunDeadlineMs: 60_000,
     });
   });
 

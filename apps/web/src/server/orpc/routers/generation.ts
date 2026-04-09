@@ -3,6 +3,7 @@ import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import { PROVIDER_AUTH_SOURCES } from "@cmdclaw/core/lib/provider-auth-source";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { isGenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
+import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
 import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observability";
 import { db } from "@cmdclaw/db/client";
@@ -304,6 +305,12 @@ const startGeneration = protectedProcedure
       authSource: providerAuthSourceSchema.nullish(),
       autoApprove: z.boolean().optional(),
       sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
+      debugRunDeadlineMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(generationLifecyclePolicy.runDeadlineMs)
+        .optional(),
       selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
       fileAttachments: z
         .array(
@@ -345,6 +352,7 @@ const startGeneration = protectedProcedure
         userId: context.user.id,
         autoApprove: input.autoApprove,
         sandboxProvider: input.sandboxProvider,
+        debugRunDeadlineMs: input.debugRunDeadlineMs,
         selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
         fileAttachments: input.fileAttachments,
       });

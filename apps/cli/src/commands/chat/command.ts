@@ -50,6 +50,24 @@ export const chatCommand = buildCommand({
         optional: true,
         brief: "Auto-approve tool calls",
       },
+      chaosRunDeadline: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Debug: override this generation's run deadline (for example 60s)",
+      },
+      chaosApproval: {
+        kind: "enum",
+        values: ["ask", "defer"] as const,
+        default: "ask",
+        brief: "Debug: choose how CLI handles approval interrupts",
+      },
+      attach: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Attach to an existing generation stream",
+      },
       validate: {
         kind: "boolean",
         default: true,

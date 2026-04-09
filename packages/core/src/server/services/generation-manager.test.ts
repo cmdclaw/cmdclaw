@@ -2083,6 +2083,56 @@ describe("generationManager transitions", () => {
     expect(asTestManager().activeGenerations.has("gen-new")).toBe(false);
   });
 
+  it("persists a debug run deadline override when starting chat generation", async () => {
+    const startedAtMs = Date.now();
+    insertReturningMock
+      .mockResolvedValueOnce([
+        {
+          id: "conv-debug-deadline",
+          userId: "user-1",
+          model: "anthropic/claude-opus-4-1",
+          autoApprove: false,
+          type: "chat",
+        },
+      ])
+      .mockResolvedValueOnce([{ id: "msg-user" }])
+      .mockResolvedValueOnce([{ id: "gen-debug-deadline" }]);
+
+    await generationManager.startGeneration({
+      content: "Run until the debug deadline",
+      userId: "user-1",
+      debugRunDeadlineMs: 60_000,
+    });
+
+    const generationInsert = insertValuesMock.mock.calls[2]?.[0] as {
+      deadlineAt?: Date;
+      remainingRunMs?: number;
+    };
+    expect(generationInsert.remainingRunMs).toBe(60_000);
+    expect(generationInsert.deadlineAt).toBeInstanceOf(Date);
+    const deadlineDeltaMs = generationInsert.deadlineAt!.getTime() - startedAtMs;
+    expect(deadlineDeltaMs).toBeGreaterThanOrEqual(60_000);
+    expect(deadlineDeltaMs).toBeLessThan(61_000);
+  });
+
+  it("rejects invalid debug run deadline overrides", async () => {
+    await expect(
+      generationManager.startGeneration({
+        content: "hello",
+        userId: "user-1",
+        debugRunDeadlineMs: 999,
+      }),
+    ).rejects.toThrow("debugRunDeadlineMs must be an integer");
+
+    await expect(
+      generationManager.startGeneration({
+        content: "hello",
+        userId: "user-1",
+        debugRunDeadlineMs: 16 * 60 * 1000,
+      }),
+    ).rejects.toThrow("debugRunDeadlineMs must be an integer");
+  });
+
   it("does not persist per-run autoApprove onto an existing conversation", async () => {
     generationFindFirstMock.mockResolvedValueOnce(null);
     conversationFindFirstMock.mockResolvedValueOnce({

@@ -26,6 +26,7 @@ import {
 } from "../../lib/chat-model-source";
 import { resolveCliToolMetadata } from "../../lib/tool-metadata";
 import { createAuthenticatedClient, resolveServerUrl } from "../../lib/client";
+import { parseChaosDurationMs } from "./chaos";
 import { exportPerfettoTraceForCompletedRun } from "./perfetto-trace";
 import {
   buildGenerationTimingLines,
@@ -41,6 +42,9 @@ type ChatFlags = {
   sandbox?: "e2b" | "daytona" | "docker";
   listModels?: boolean;
   autoApprove?: boolean;
+  chaosRunDeadline?: string;
+  chaosApproval: "ask" | "defer";
+  attach?: string;
   validate: boolean;
   questionAnswer?: readonly string[];
   file?: readonly string[];
@@ -62,8 +66,19 @@ type ChatState = {
   sandbox?: "e2b" | "daytona" | "docker";
   server?: string;
   autoApprove?: boolean;
+  chaosApproval: "ask" | "defer";
+  debugRunDeadlineMs?: number;
   validate: boolean;
 };
+
+type ChatGenerationTarget =
+  | {
+      kind: "start";
+      content: string;
+      conversationId?: string;
+      attachments?: { name: string; mimeType: string; dataUrl: string }[];
+    }
+  | { kind: "attach"; generationId: string };
 
 const AUTH_INTEGRATION_TYPES = [
   "google_gmail",
@@ -315,9 +330,7 @@ async function runOneGeneration(
   client: CmdclawApiClient,
   rl: readline.Interface | null,
   state: ChatState,
-  content: string,
-  conversationId: string | undefined,
-  attachments?: { name: string; mimeType: string; dataUrl: string }[],
+  target: ChatGenerationTarget,
 ): Promise<string | null> {
   const resolvedServerUrl = resolveServerUrl(state.server);
   const normalizedServerUrl = resolvedServerUrl.replace(/\/$/, "");
@@ -325,15 +338,20 @@ async function runOneGeneration(
 
   const result = await runChatSession({
     client,
-    input: {
-      conversationId,
-      content,
-      model: state.model,
-      authSource: state.authSource,
-      sandboxProvider: state.sandbox,
-      autoApprove: state.autoApprove,
-      fileAttachments: attachments?.length ? attachments : undefined,
-    },
+    ...(target.kind === "start"
+      ? {
+          input: {
+            conversationId: target.conversationId,
+            content: target.content,
+            model: state.model,
+            authSource: state.authSource,
+            sandboxProvider: state.sandbox,
+            autoApprove: state.autoApprove,
+            debugRunDeadlineMs: state.debugRunDeadlineMs,
+            fileAttachments: target.attachments?.length ? target.attachments : undefined,
+          },
+        }
+      : { generationId: target.generationId }),
     onText: (text) => {
       if (text.length > 0) {
         generationTiming.noteVisibleOutput();
@@ -376,6 +394,11 @@ async function runOneGeneration(
       );
 
       const questionItems = parseQuestionApprovalInput(approval.toolInput);
+      if (state.chaosApproval === "defer") {
+        stdout.write(`[approval_deferred] ${approval.toolUseId}\n`);
+        return "deferred";
+      }
+
       if (questionItems) {
         if (state.questionAnswer.length > 0) {
           const questionAnswers = collectScriptedQuestionAnswers(questionItems, [...state.questionAnswer]);
@@ -495,6 +518,7 @@ async function runOneGeneration(
     case "completed":
       generationTiming.noteCompleted();
       stdout.write("\n");
+      stdout.write(`[generation] ${result.generationId}\n`);
       if (state.validate) {
         await validatePersistedAssistantMessage(client, result.conversationId, result.messageId, {
           content: result.assistant.content,
@@ -522,15 +546,25 @@ async function runOneGeneration(
       stdout.write(`[conversation] ${result.conversationId}\n`);
       return result.conversationId;
     case "needs_auth":
+      stdout.write(`[generation] ${result.generationId}\n`);
       stdout.write(`[conversation] ${result.conversationId}\n`);
       return result.conversationId;
     case "needs_approval":
+      stdout.write(`[generation] ${result.generationId}\n`);
       stdout.write(`[conversation] ${result.conversationId}\n`);
       return result.conversationId;
     case "cancelled":
       stdout.write("\n[cancelled]\n");
+      stdout.write(`[generation] ${result.generationId}\n`);
+      stdout.write(`[conversation] ${result.conversationId}\n`);
       return result.conversationId;
     case "failed":
+      if (result.generationId) {
+        stdout.write(`[generation] ${result.generationId}\n`);
+      }
+      if (result.conversationId) {
+        stdout.write(`[conversation] ${result.conversationId}\n`);
+      }
       stdout.write(`\n[error] ${result.error.message}\n`);
       return null;
   }
@@ -597,9 +631,12 @@ async function runChatLoop(
       client,
       rl,
       state,
-      input,
-      conversationId,
-      attachments.length ? attachments : undefined,
+      {
+        kind: "start",
+        content: input,
+        conversationId,
+        attachments: attachments.length ? attachments : undefined,
+      },
     );
     if (!nextConversationId) {
       return;
@@ -643,6 +680,13 @@ function attachSigintHandler(rl: readline.Interface): void {
 }
 
 export default async function (this: LocalContext, flags: ChatFlags): Promise<void> {
+  if (flags.attach && flags.message) {
+    throw new Error("--attach cannot be used with --message");
+  }
+  const debugRunDeadlineMs = flags.chaosRunDeadline
+    ? parseChaosDurationMs(flags.chaosRunDeadline)
+    : undefined;
+
   const serverUrl = resolveServerUrl(flags.server);
   if (flags.token) {
     defaultProfileStore.save({
@@ -664,6 +708,8 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     authSource: flags.authSource,
     sandbox: flags.sandbox,
     autoApprove: flags.autoApprove,
+    chaosApproval: flags.chaosApproval,
+    debugRunDeadlineMs,
     validate: flags.validate,
     file: flags.file ?? [],
     perfettoTrace: flags.perfettoTrace ?? false,
@@ -682,6 +728,14 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     return;
   }
 
+  if (flags.attach) {
+    await runOneGeneration(this.process.stdout, client, null, state, {
+      kind: "attach",
+      generationId: flags.attach,
+    });
+    return;
+  }
+
   if (state.message) {
     const rl = process.stdin.isTTY && process.stdout.isTTY ? createPrompt() : null;
     if (rl) {
@@ -693,9 +747,12 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
       client,
       rl,
       state,
-      state.message,
-      state.conversationId,
-      attachments.length ? attachments : undefined,
+      {
+        kind: "start",
+        content: state.message,
+        conversationId: state.conversationId,
+        attachments: attachments.length ? attachments : undefined,
+      },
     );
     if (conversationId && rl) {
       state.conversationId = conversationId;
