@@ -703,6 +703,7 @@ export type GenerationExecutionPolicy = {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   allowSnapshotRestoreOnRun?: boolean;
+  debugRunDeadlineMs?: number;
   debugApprovalHotWaitMs?: number;
   queuedFileAttachments?: Array<{
     name: string;

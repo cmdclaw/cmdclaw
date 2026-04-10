@@ -77,6 +77,11 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
       conversationId: string;
       messageId?: string;
     } | null;
+    paused: {
+      generationId?: string;
+      conversationId?: string;
+      pauseReason: "run_deadline";
+    } | null;
     failed: ReturnType<typeof normalizeGenerationError> | null;
     resolvedIds: {
       generationId?: string;
@@ -87,6 +92,7 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
     pendingAuth: null,
     done: null,
     cancelled: null,
+    paused: null,
     failed: null,
     resolvedIds: {
       generationId: options.generationId,
@@ -192,6 +198,14 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
           mutable.cancelled = data;
         },
         onStatusChange: async (status, metadata) => {
+          if (status === "run_deadline_parked") {
+            mutable.paused = {
+              generationId: mutable.resolvedIds.generationId,
+              conversationId: mutable.resolvedIds.conversationId,
+              pauseReason: "run_deadline",
+            };
+            abortController.abort();
+          }
           runtime.setStatus("streaming");
           await options.onStatusChange?.(status, metadata);
         },
@@ -249,6 +263,17 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
       generationId: cancelledResult.generationId,
       conversationId: cancelledResult.conversationId,
       messageId: cancelledResult.messageId,
+      assistant,
+    };
+  }
+
+  const pausedResult = mutable.paused;
+  if (pausedResult !== null) {
+    return {
+      status: "paused",
+      generationId: pausedResult.generationId,
+      conversationId: pausedResult.conversationId,
+      pauseReason: pausedResult.pauseReason,
       assistant,
     };
   }

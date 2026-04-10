@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasCompleteRuntimeMetadata,
   printRuntimeMetadata,
+  shouldAutoResumePausedRunDeadline,
   shouldPrintRuntimeMetadata,
 } from "./impl";
 
@@ -81,5 +82,26 @@ describe("runtime metadata markers", () => {
       "[runtime] id=runtime-1 harness=opencode protocol=opencode-v2\n" +
         "[sandbox] provider=e2b id=sandbox-1 session=session-1\n",
     );
+  });
+
+  it("auto-resumes only paused run-deadline generations", () => {
+    expect(
+      shouldAutoResumePausedRunDeadline({
+        status: "paused",
+        pauseReason: "run_deadline",
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoResumePausedRunDeadline({
+        status: "paused",
+        pauseReason: "approval_timeout",
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoResumePausedRunDeadline({
+        status: "awaiting_auth",
+        pauseReason: "run_deadline",
+      }),
+    ).toBe(false);
   });
 });

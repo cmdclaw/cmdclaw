@@ -81,6 +81,8 @@ type ChatGenerationTarget =
       content: string;
       conversationId?: string;
       attachments?: { name: string; mimeType: string; dataUrl: string }[];
+      debugRunDeadlineMsOverride?: number;
+      resumePausedGenerationId?: string;
     }
   | {
       kind: "attach";
@@ -130,6 +132,15 @@ type PrintedRuntimeMetadata = {
 type PrintedGenerationMarkers = {
   generationId?: string;
   conversationId?: string;
+};
+
+type ActiveConversationGeneration = {
+  generationId: string | null;
+  startedAt: string | null;
+  errorMessage: string | null;
+  status: string | null;
+  pauseReason: string | null;
+  debugRunDeadlineMs: number | null;
 };
 
 function isAuthIntegrationType(integration: string): integration is AuthIntegrationType {
@@ -264,6 +275,26 @@ function printApprovalParked(
   stdout.write(`${parked ?? "[approval_parked]"}\n`);
 }
 
+function printRunDeadlineParked(
+  stdout: NodeJS.WriteStream,
+  status: string,
+  generationId?: string,
+  metadata?: StatusChangeMetadata,
+): void {
+  if (status !== "run_deadline_parked") {
+    return;
+  }
+  const details = [
+    generationId ? `generation=${generationId}` : null,
+    `sandbox=${metadata?.releasedSandboxId ?? metadata?.sandboxId}`,
+  ].filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  stdout.write(
+    details.length > 0
+      ? `[run_deadline_parked] ${details.join(" ")}\n`
+      : "[run_deadline_parked]\n",
+  );
+}
+
 function printApprovalDecisionMarker(
   stdout: NodeJS.WriteStream,
   toolUseId: string,
@@ -321,6 +352,12 @@ function printGenerationMarkers(
 
 function isAttachableGenerationStatus(status: string | null): boolean {
   return status === "generating" || status === "awaiting_approval" || status === "awaiting_auth";
+}
+
+export function shouldAutoResumePausedRunDeadline(
+  active: Pick<ActiveConversationGeneration, "status" | "pauseReason">,
+): boolean {
+  return active.status === "paused" && active.pauseReason === "run_deadline";
 }
 
 function createApprovalPrompt(rl: readline.Interface | null): {
@@ -496,7 +533,9 @@ async function runOneGeneration(
             authSource: state.authSource,
             sandboxProvider: state.sandbox,
             autoApprove: state.autoApprove,
-            debugRunDeadlineMs: state.debugRunDeadlineMs,
+            resumePausedGenerationId: target.resumePausedGenerationId,
+            debugRunDeadlineMs:
+              target.debugRunDeadlineMsOverride ?? state.debugRunDeadlineMs,
             debugApprovalHotWaitMs: state.debugApprovalHotWaitMs,
             fileAttachments: target.attachments?.length ? target.attachments : undefined,
           },
@@ -514,12 +553,14 @@ async function runOneGeneration(
             if (attachRuntimeMetadataUnlocked) {
               printRuntimeMetadata(stdout, printedRuntimeMetadata, metadata);
             }
+            printRunDeadlineParked(stdout, status, target.generationId, metadata);
           },
         }
       : {
           onStatusChange: (status: string, metadata?: StatusChangeMetadata) => {
             printRuntimeMetadata(stdout, printedRuntimeMetadata, metadata);
             printApprovalParked(stdout, status, metadata);
+            printRunDeadlineParked(stdout, status, printedGenerationMarkers.generationId, metadata);
           },
         }),
     onText: (text) => {
@@ -759,6 +800,12 @@ async function runOneGeneration(
         conversationId: result.conversationId,
       });
       return result.conversationId;
+    case "paused":
+      printGenerationMarkers(stdout, printedGenerationMarkers, {
+        generationId: result.generationId,
+        conversationId: result.conversationId,
+      });
+      return result.conversationId ?? null;
     case "failed":
       printGenerationMarkers(stdout, printedGenerationMarkers, {
         generationId: result.generationId,
@@ -951,8 +998,21 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
   if (flags.attach) {
     const active = await client.generation.getActiveGeneration({
       conversationId: flags.attach,
-    });
+    }) as ActiveConversationGeneration;
     state.conversationId = flags.attach;
+    if (shouldAutoResumePausedRunDeadline(active) && active.generationId) {
+      this.process.stdout.write(
+        `[attach] conversation=${flags.attach} generation=${active.generationId} reason=run_deadline; sending continue\n`,
+      );
+      await runOneGeneration(this.process.stdout, client, null, state, {
+        kind: "start",
+        content: "continue",
+        conversationId: flags.attach,
+        debugRunDeadlineMsOverride: active.debugRunDeadlineMs ?? state.debugRunDeadlineMs,
+        resumePausedGenerationId: active.generationId,
+      });
+      return;
+    }
     if (active.generationId && isAttachableGenerationStatus(active.status)) {
       this.process.stdout.write(`[attach] conversation=${flags.attach} generation=${active.generationId}\n`);
       const rl = process.stdin.isTTY && process.stdout.isTTY ? createPrompt() : null;

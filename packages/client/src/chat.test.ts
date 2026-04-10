@@ -265,4 +265,51 @@ describe("runChatSession", () => {
       );
     }
   });
+
+  it("returns paused when a run deadline is parked", async () => {
+    const onStatusChange = vi.fn();
+    const client = {
+      generation: {
+        startGeneration: vi.fn().mockResolvedValue({
+          generationId: "gen-paused",
+          conversationId: "conv-paused",
+        }),
+        subscribeGeneration: vi.fn().mockResolvedValue(
+          (async function* () {
+            yield { type: "text" as const, content: "partial" };
+            yield {
+              type: "status_change" as const,
+              status: "run_deadline_parked",
+              metadata: {
+                runtimeId: "runtime-paused",
+                sandboxProvider: "e2b" as const,
+                sandboxId: "sandbox-paused",
+                releasedSandboxId: "sandbox-paused",
+              },
+            };
+          })(),
+        ),
+      },
+    };
+
+    const result = await runChatSession({
+      client: client as never,
+      input: { content: "hi" },
+      onStatusChange,
+    });
+
+    expect(onStatusChange).toHaveBeenCalledWith("run_deadline_parked", {
+      runtimeId: "runtime-paused",
+      sandboxProvider: "e2b",
+      sandboxId: "sandbox-paused",
+      releasedSandboxId: "sandbox-paused",
+    });
+    expect(result.status).toBe("paused");
+    if (result.status === "paused") {
+      expect(result.generationId).toBe("gen-paused");
+      expect(result.conversationId).toBe("conv-paused");
+      expect(result.pauseReason).toBe("run_deadline");
+      expect(result.assistant.content).toContain("partial");
+    }
+  });
 });

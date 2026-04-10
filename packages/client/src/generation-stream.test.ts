@@ -82,4 +82,88 @@ describe("runGenerationStream", () => {
       sessionId: "session-456",
     });
   });
+
+  it("reconnects automatically when the server returns a replay cursor", async () => {
+    const subscribeGeneration = vi
+      .fn()
+      .mockResolvedValueOnce(
+        (async function* () {
+          yield {
+            type: "text" as const,
+            content: "partial",
+            cursor: "1-1",
+          };
+          yield {
+            type: "error" as const,
+            message:
+              "Generation is still processing. Reconnect with the returned cursor to resume stream replay.",
+            cursor: "1-1",
+          };
+        })(),
+      )
+      .mockResolvedValueOnce(
+        (async function* () {
+          yield {
+            type: "text" as const,
+            content: " done",
+            cursor: "1-2",
+          };
+          yield {
+            type: "done" as const,
+            generationId: "gen-2",
+            conversationId: "conv-2",
+            messageId: "msg-2",
+            usage: {
+              inputTokens: 1,
+              outputTokens: 2,
+              totalCostUsd: 0.01,
+            },
+            cursor: "1-3",
+          };
+        })(),
+      );
+    const onText = vi.fn();
+    const onDone = vi.fn();
+    const onError = vi.fn();
+    const client = {
+      generation: {
+        startGeneration: vi.fn().mockResolvedValue({
+          generationId: "gen-2",
+          conversationId: "conv-2",
+        }),
+        subscribeGeneration,
+      },
+    };
+
+    await runGenerationStream({
+      client: client as never,
+      input: {
+        content: "hi",
+      },
+      callbacks: {
+        onText,
+        onDone,
+        onError,
+      },
+    });
+
+    expect(subscribeGeneration).toHaveBeenNthCalledWith(1, { generationId: "gen-2" });
+    expect(subscribeGeneration).toHaveBeenNthCalledWith(2, {
+      generationId: "gen-2",
+      cursor: "1-1",
+    });
+    expect(onText).toHaveBeenCalledTimes(2);
+    expect(onDone).toHaveBeenCalledWith(
+      "gen-2",
+      "conv-2",
+      "msg-2",
+      {
+        inputTokens: 1,
+        outputTokens: 2,
+        totalCostUsd: 0.01,
+      },
+      undefined,
+    );
+    expect(onError).not.toHaveBeenCalled();
+  });
 });

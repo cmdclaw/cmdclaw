@@ -681,6 +681,7 @@ function buildExecutionPolicy(params: {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   queuedFileAttachments?: UserFileAttachment[];
+  debugRunDeadlineMs?: number;
   debugApprovalHotWaitMs?: number;
 }): GenerationExecutionPolicy {
   return {
@@ -694,6 +695,7 @@ function buildExecutionPolicy(params: {
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
     allowSnapshotRestoreOnRun: true,
     queuedFileAttachments: params.queuedFileAttachments,
+    debugRunDeadlineMs: params.debugRunDeadlineMs,
     debugApprovalHotWaitMs: params.debugApprovalHotWaitMs,
   };
 }
@@ -2275,6 +2277,7 @@ class GenerationManager {
     sandboxProvider?: "e2b" | "daytona" | "docker";
     selectedPlatformSkillSlugs?: string[];
     allowSnapshotRestoreOnRun?: boolean;
+    debugRunDeadlineMs?: number;
     debugApprovalHotWaitMs?: number;
     queuedFileAttachments?: UserFileAttachment[];
   } {
@@ -2309,6 +2312,7 @@ class GenerationManager {
           )
         : undefined,
       allowSnapshotRestoreOnRun: policy?.allowSnapshotRestoreOnRun ?? true,
+      debugRunDeadlineMs: policy?.debugRunDeadlineMs,
       debugApprovalHotWaitMs: policy?.debugApprovalHotWaitMs,
       queuedFileAttachments: Array.isArray(policy?.queuedFileAttachments)
         ? policy.queuedFileAttachments.filter(
@@ -2693,6 +2697,7 @@ class GenerationManager {
     userId: string;
     autoApprove?: boolean;
     sandboxProvider?: "e2b" | "daytona" | "docker";
+    resumePausedGenerationId?: string;
     debugRunDeadlineMs?: number;
     debugApprovalHotWaitMs?: number;
     allowedIntegrations?: IntegrationType[];
@@ -2755,9 +2760,18 @@ class GenerationManager {
         columns: {
           id: true,
           status: true,
+          completionReason: true,
         },
       });
-      if (existing) {
+      const requestedContinuation = params.content.trim().replace(/\s+/g, " ").toLowerCase();
+      const canResumePausedRunDeadline =
+        existing?.status === "paused" &&
+        existing.completionReason === "run_deadline" &&
+        (params.resumePausedGenerationId === existing.id ||
+          (requestedContinuation === "continue" &&
+            (params.resumePausedGenerationId === undefined ||
+              params.resumePausedGenerationId === existing.id)));
+      if (existing && !canResumePausedRunDeadline) {
         throw new GenerationStartError({
           generationErrorCode: START_GENERATION_ERROR_CODES.ACTIVE_GENERATION_EXISTS,
           rpcCode: "BAD_REQUEST",
@@ -3017,6 +3031,7 @@ class GenerationManager {
       sandboxProvider: params.sandboxProvider,
       selectedPlatformSkillSlugs,
       queuedFileAttachments: fileAttachments,
+      debugRunDeadlineMs: params.debugRunDeadlineMs,
       debugApprovalHotWaitMs,
     });
     const lifecycle = createGenerationLifecycle();
@@ -5444,10 +5459,7 @@ class GenerationManager {
 
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
       if (remainingRunTimeMs <= 0) {
-        this.setCompletionReason(ctx, "run_deadline");
-        ctx.errorMessage =
-          "We stopped this run because it exceeded the 15 minute wall-clock limit.";
-        await this.finishGeneration(ctx, "error");
+        await this.parkGenerationForRunDeadline(ctx);
         return;
       }
 
@@ -5575,10 +5587,7 @@ class GenerationManager {
       }
 
       if (reattachTimeoutTriggered) {
-        this.setCompletionReason(ctx, "run_deadline");
-        ctx.errorMessage =
-          "We stopped this run because it exceeded the 15 minute wall-clock limit.";
-        await this.finishGeneration(ctx, "error");
+        await this.parkGenerationForRunDeadline(ctx);
         return;
       }
 
@@ -5610,6 +5619,10 @@ class GenerationManager {
       await this.finishGeneration(ctx, "completed");
     } catch (error) {
       clearReattachTimeout?.();
+      if (reattachTimeoutTriggered) {
+        await this.parkGenerationForRunDeadline(ctx);
+        return;
+      }
       if (error instanceof GenerationSuspendedError) {
         logServerEvent(
           "info",
@@ -6605,8 +6618,8 @@ class GenerationManager {
       const promptSentAtMs = Date.now();
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
       if (remainingRunTimeMs <= 0) {
-        this.setCompletionReason(ctx, "run_deadline");
-        throw new Error("We stopped this run because it exceeded the 15 minute wall-clock limit.");
+        await this.parkGenerationForRunDeadline(ctx);
+        return;
       }
       const promptTimeoutId = setTimeout(() => {
         promptTimeoutTriggered = true;
@@ -6778,8 +6791,8 @@ class GenerationManager {
       }
       const promptElapsedMs = Date.now() - promptSentAtMs;
       if (promptTimeoutTriggered || promptElapsedMs >= remainingRunTimeMs) {
-        promptTimeoutTriggered = true;
-        throw new Error("We stopped this run because it exceeded the 15 minute wall-clock limit.");
+        await this.parkGenerationForRunDeadline(ctx);
+        return;
       }
       this.markPhase(ctx, "prompt_completed");
 
@@ -6926,7 +6939,6 @@ class GenerationManager {
         );
         return;
       }
-      let promptTimeoutError: Error | null = null;
       if (isBootstrapTimeoutError(error)) {
         this.captureOriginalError(ctx, error, {
           phase: this.getCurrentPhase(ctx) ?? "agent_init_failed",
@@ -6946,12 +6958,8 @@ class GenerationManager {
         return;
       }
       if (promptTimeoutTriggered) {
-        this.setCompletionReason(ctx, "run_deadline");
-        ctx.errorMessage =
-          "We stopped this run because it exceeded the 15 minute wall-clock limit.";
-        promptTimeoutError = new Error(
-          `OpenCode prompt timed out after ${OPENCODE_PROMPT_TIMEOUT_MS}ms (${OPENCODE_PROMPT_TIMEOUT_LABEL}) for generation ${ctx.id}`,
-        );
+        await this.parkGenerationForRunDeadline(ctx);
+        return;
       }
       console.error("[GenerationManager] Error:", error);
       const runtimeFailure = await this.resolveRuntimeFailure(ctx, client);
@@ -6992,9 +7000,6 @@ class GenerationManager {
         `[GenerationManager][SUMMARY] status=error generationId=${ctx.id} conversationId=${ctx.conversationId} durationMs=${Date.now() - ctx.startedAt.getTime()} error=${JSON.stringify(ctx.errorMessage)}`,
       );
       await this.finishGeneration(ctx, "error");
-      if (promptTimeoutError) {
-        throw promptTimeoutError;
-      }
     }
   }
 
@@ -8682,6 +8687,83 @@ class GenerationManager {
           ),
       },
     });
+  }
+
+  private async parkGenerationForRunDeadline(ctx: GenerationContext): Promise<void> {
+    const now = new Date();
+    const releasedSandboxId = ctx.sandboxId;
+    const remainingRunMs = this.refreshRemainingRunBudget(ctx, now);
+
+    ctx.status = "paused";
+    ctx.suspendedAt = now;
+    this.setCompletionReason(ctx, "run_deadline");
+    ctx.pendingApproval = null;
+    ctx.pendingAuth = null;
+    ctx.currentInterruptId = undefined;
+    if (ctx.approvalParkTimeoutId) {
+      clearTimeout(ctx.approvalParkTimeoutId);
+      ctx.approvalParkTimeoutId = undefined;
+    }
+    this.stopExternalInterruptPolling(ctx);
+
+    await this.saveSessionSnapshot(ctx);
+    await this.saveProgress(ctx);
+
+    await db
+      .update(generation)
+      .set({
+        status: "paused",
+        isPaused: true,
+        completionReason: "run_deadline",
+        remainingRunMs,
+        suspendedAt: now,
+        resumeInterruptId: null,
+        sandboxId: null,
+        pendingApproval: null,
+        pendingAuth: null,
+        contentParts: ctx.contentParts.length > 0 ? ctx.contentParts : null,
+        lastRuntimeEventAt: ctx.lastRuntimeEventAt,
+      })
+      .where(eq(generation.id, ctx.id));
+
+    await db
+      .update(conversation)
+      .set({
+        generationStatus: "paused",
+        sandboxLastUserVisibleActionAt: now,
+      })
+      .where(eq(conversation.id, ctx.conversationId));
+
+    if (ctx.coworkerRunId) {
+      await db
+        .update(coworkerRun)
+        .set({ status: "paused" })
+        .where(eq(coworkerRun.id, ctx.coworkerRunId));
+    }
+
+    this.broadcast(ctx, {
+      type: "status_change",
+      status: "run_deadline_parked",
+      metadata: {
+        runtimeId: ctx.runtimeId,
+        sandboxProvider: ctx.sandboxProviderOverride,
+        sandboxId: releasedSandboxId,
+        releasedSandboxId,
+      },
+    });
+
+    try {
+      await ctx.sandbox?.teardown();
+    } finally {
+      if (ctx.runtimeId) {
+        await conversationRuntimeService.suspendRuntime(ctx.runtimeId);
+      }
+      ctx.sandbox = undefined;
+      ctx.sandboxId = undefined;
+      ctx.sessionId = undefined;
+      await this.releaseSandboxSlotLease(ctx);
+      this.evictActiveGenerationContext(ctx.id);
+    }
   }
 
   private async suspendGenerationForInterrupt(

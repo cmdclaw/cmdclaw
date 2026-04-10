@@ -308,6 +308,7 @@ const startGeneration = protectedProcedure
       authSource: providerAuthSourceSchema.nullish(),
       autoApprove: z.boolean().optional(),
       sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
+      resumePausedGenerationId: z.string().optional(),
       debugRunDeadlineMs: z
         .number()
         .int()
@@ -361,6 +362,7 @@ const startGeneration = protectedProcedure
         userId: context.user.id,
         autoApprove: input.autoApprove,
         sandboxProvider: input.sandboxProvider,
+        resumePausedGenerationId: input.resumePausedGenerationId,
         debugRunDeadlineMs: input.debugRunDeadlineMs,
         debugApprovalHotWaitMs: input.debugApprovalHotWaitMs,
         selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
@@ -754,6 +756,8 @@ const getActiveGeneration = protectedProcedure
       generationId: z.string().nullable(),
       startedAt: z.string().nullable(),
       errorMessage: z.string().nullable(),
+      pauseReason: z.string().nullable(),
+      debugRunDeadlineMs: z.number().int().nullable(),
       status: z
         .enum([
           "idle",
@@ -779,6 +783,8 @@ const getActiveGeneration = protectedProcedure
           generationId: null,
           startedAt: null,
           errorMessage: null,
+          pauseReason: null,
+          debugRunDeadlineMs: null,
           status: null,
         };
       }
@@ -787,22 +793,48 @@ const getActiveGeneration = protectedProcedure
 
     let startedAt: string | null = null;
     let errorMessage: string | null = null;
+    let pauseReason: string | null = null;
+    let debugRunDeadlineMs: number | null = null;
     if (conv.currentGenerationId) {
       const currentGeneration = await db.query.generation.findFirst({
         where: eq(generation.id, conv.currentGenerationId),
         columns: {
           startedAt: true,
           errorMessage: true,
+          completionReason: true,
+          executionPolicy: true,
+          createdAt: true,
+          deadlineAt: true,
         },
       });
       startedAt = currentGeneration?.startedAt?.toISOString() ?? null;
       errorMessage = currentGeneration?.errorMessage ?? null;
+      pauseReason =
+        conv.generationStatus === "paused" ? (currentGeneration?.completionReason ?? null) : null;
+      const executionPolicy = currentGeneration?.executionPolicy as
+        | { debugRunDeadlineMs?: unknown }
+        | null
+        | undefined;
+      debugRunDeadlineMs =
+        typeof executionPolicy?.debugRunDeadlineMs === "number"
+          ? executionPolicy.debugRunDeadlineMs
+          : conv.generationStatus === "paused" &&
+              currentGeneration?.completionReason === "run_deadline" &&
+              currentGeneration.createdAt instanceof Date &&
+              currentGeneration.deadlineAt instanceof Date
+            ? Math.max(
+                0,
+                currentGeneration.deadlineAt.getTime() - currentGeneration.createdAt.getTime(),
+              )
+            : null;
     }
 
     return {
       generationId: conv.currentGenerationId,
       startedAt,
       errorMessage,
+      pauseReason,
+      debugRunDeadlineMs,
       status: conv.generationStatus,
     };
   });

@@ -156,13 +156,16 @@ export type GenerationStartInput = {
   authSource?: ProviderAuthSource | null;
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
+  resumePausedGenerationId?: string;
   debugRunDeadlineMs?: number;
   debugApprovalHotWaitMs?: number;
   selectedPlatformSkillSlugs?: string[];
   fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
 };
 
-export type GenerationStreamEvent =
+export type GenerationStreamEvent = {
+  cursor?: string;
+} & (
   | { type: "text"; content: string }
   | { type: "system"; content: string; coworkerId?: string }
   | { type: "thinking"; content: string; thinkingId: string }
@@ -233,7 +236,8 @@ export type GenerationStreamEvent =
       filename: string;
       mimeType: string;
       sizeBytes: number | null;
-    };
+    }
+);
 
 export type GenerationSubscription = AsyncIterable<GenerationStreamEvent>;
 
@@ -408,9 +412,11 @@ export interface CmdclawApiClient {
       startedAt: string | null;
       errorMessage: string | null;
       status: string | null;
+      pauseReason: string | null;
+      debugRunDeadlineMs: number | null;
     }>;
     subscribeGeneration(
-      input: { generationId: string },
+      input: { generationId: string; cursor?: string },
       options?: { signal?: AbortSignal },
     ): Promise<GenerationSubscription>;
     submitApproval(input: {
@@ -522,10 +528,19 @@ export type GenerationCancelledResult = {
   assistant: RuntimeAssistantMessage;
 };
 
+export type GenerationPausedResult = {
+  status: "paused";
+  generationId?: string;
+  conversationId?: string;
+  pauseReason: "run_deadline";
+  assistant: RuntimeAssistantMessage;
+};
+
 export type GenerationResult =
   | GenerationCompletedResult
   | GenerationNeedsAuthResult
   | GenerationNeedsApprovalResult
+  | GenerationPausedResult
   | GenerationFailedResult
   | GenerationCancelledResult;
 

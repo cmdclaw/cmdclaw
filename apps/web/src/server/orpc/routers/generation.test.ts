@@ -160,6 +160,8 @@ describe("generationRouter", () => {
       generationId: null,
       startedAt: null,
       errorMessage: null,
+      pauseReason: null,
+      debugRunDeadlineMs: null,
       status: null,
     });
   });
@@ -176,6 +178,8 @@ describe("generationRouter", () => {
       generationId: null,
       startedAt: null,
       errorMessage: null,
+      pauseReason: null,
+      debugRunDeadlineMs: null,
       status: null,
     });
   });
@@ -191,6 +195,8 @@ describe("generationRouter", () => {
     generationFindFirstMock.mockResolvedValue({
       startedAt: null,
       errorMessage: null,
+      completionReason: null,
+      executionPolicy: null,
     });
 
     const result = await generationRouterAny.getActiveGeneration({
@@ -202,6 +208,8 @@ describe("generationRouter", () => {
       generationId: "gen-db",
       startedAt: null,
       errorMessage: null,
+      pauseReason: null,
+      debugRunDeadlineMs: null,
       status: "generating",
     });
   });
@@ -217,6 +225,8 @@ describe("generationRouter", () => {
     generationFindFirstMock.mockResolvedValue({
       startedAt: new Date("2026-02-25T07:40:22.751Z"),
       errorMessage: "401 insufficient permissions",
+      completionReason: null,
+      executionPolicy: null,
     });
 
     const result = await generationRouterAny.getActiveGeneration({
@@ -228,7 +238,75 @@ describe("generationRouter", () => {
       generationId: "gen-db",
       startedAt: "2026-02-25T07:40:22.751Z",
       errorMessage: "401 insufficient permissions",
+      pauseReason: null,
+      debugRunDeadlineMs: null,
       status: "error",
+    });
+  });
+
+  it("returns paused run-deadline metadata for active generation", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      workspaceId: "ws-1",
+      generationStatus: "paused",
+      currentGenerationId: "gen-paused",
+    });
+    generationFindFirstMock.mockResolvedValue({
+      startedAt: new Date("2026-02-25T07:40:22.751Z"),
+      errorMessage: null,
+      completionReason: "run_deadline",
+      executionPolicy: {
+        debugRunDeadlineMs: 30_000,
+      },
+    });
+
+    const result = await generationRouterAny.getActiveGeneration({
+      input: { conversationId: "conv-1" },
+      context,
+    });
+
+    expect(result).toEqual({
+      generationId: "gen-paused",
+      startedAt: "2026-02-25T07:40:22.751Z",
+      errorMessage: null,
+      pauseReason: "run_deadline",
+      debugRunDeadlineMs: 30_000,
+      status: "paused",
+    });
+  });
+
+  it("derives paused run-deadline metadata from timestamps when execution policy no longer carries the debug budget", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      workspaceId: "ws-1",
+      generationStatus: "paused",
+      currentGenerationId: "gen-paused",
+    });
+    generationFindFirstMock.mockResolvedValue({
+      startedAt: new Date("2026-02-25T07:40:22.751Z"),
+      errorMessage: null,
+      completionReason: "run_deadline",
+      executionPolicy: {
+        allowSnapshotRestoreOnRun: false,
+      },
+      createdAt: new Date("2026-02-25T07:40:22.751Z"),
+      deadlineAt: new Date("2026-02-25T07:40:52.751Z"),
+    });
+
+    const result = await generationRouterAny.getActiveGeneration({
+      input: { conversationId: "conv-1" },
+      context,
+    });
+
+    expect(result).toEqual({
+      generationId: "gen-paused",
+      startedAt: "2026-02-25T07:40:22.751Z",
+      errorMessage: null,
+      pauseReason: "run_deadline",
+      debugRunDeadlineMs: 30_000,
+      status: "paused",
     });
   });
 
