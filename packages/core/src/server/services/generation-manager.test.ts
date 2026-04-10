@@ -5229,7 +5229,7 @@ describe("generationManager transitions", () => {
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
-  it("restores a parked plugin write by injecting the approved command result instead of replaying the prompt", async () => {
+  it("restores a parked plugin write, injects the approved command result, and prompts OpenCode to continue", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-plugin-resume",
       title: "Conversation",
@@ -5354,8 +5354,17 @@ describe("generationManager transitions", () => {
         content: '[{"ok":true,"ts":"1775739000.000100"}]\n',
       }),
     );
-    expect(ctx.contentParts).toContainEqual({ type: "text", text: "Done." });
-    expect(promptMock).not.toHaveBeenCalled();
+    expect(ctx.contentParts).not.toContainEqual({ type: "text", text: "Done." });
+    expect(promptMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      parts: [
+        {
+          type: "text",
+          text:
+            "Continue the interrupted assistant turn from the restored tool result. Do not rerun the already approved command.",
+        },
+      ],
+    });
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 

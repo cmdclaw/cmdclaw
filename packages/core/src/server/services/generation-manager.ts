@@ -5221,8 +5221,6 @@ class GenerationManager {
       allowSnapshotRestore: true,
       requireLiveSession: false,
       modeLabel: "resume_plugin_write",
-      completeAfterRuntimeAttached: true,
-      skipUsageCaptureAfterRuntimeAttached: true,
       onRuntimeAttached: async (runtimeClient) => {
         commandExecution = await this.executeApprovedPluginWriteCommand(ctx, interrupt);
         await this.injectParkedPluginWriteResult(ctx, {
@@ -5231,14 +5229,13 @@ class GenerationManager {
           runtimeTool,
           execution: commandExecution,
         });
-        const completionText =
-          commandExecution.status === "completed"
-            ? "Done."
-            : `The approved command failed: ${commandExecution.error}`;
-        ctx.assistantContent += completionText;
-        ctx.contentParts.push({ type: "text", text: completionText });
-        this.broadcast(ctx, { type: "text", content: completionText });
-        await this.saveProgress(ctx);
+        return [
+          {
+            type: "text",
+            text:
+              "Continue the interrupted assistant turn from the restored tool result. Do not rerun the already approved command.",
+          },
+        ];
       },
     });
   }

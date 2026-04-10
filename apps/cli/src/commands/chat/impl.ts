@@ -82,7 +82,11 @@ type ChatGenerationTarget =
       conversationId?: string;
       attachments?: { name: string; mimeType: string; dataUrl: string }[];
     }
-  | { kind: "attach"; generationId: string };
+  | {
+      kind: "attach";
+      generationId: string;
+      suppressReplayRuntimeMetadataUntilDecision?: boolean;
+    };
 
 const AUTH_INTEGRATION_TYPES = [
   "google_gmail",
@@ -203,11 +207,14 @@ function formatKeyValueMarker(label: string, values: Record<string, string | und
   return `[${label}] ${entries.map(([key, value]) => `${key}=${value}`).join(" ")}`;
 }
 
-function printRuntimeMetadata(
+export function printRuntimeMetadata(
   stdout: NodeJS.WriteStream,
   printed: PrintedRuntimeMetadata,
   metadata?: StatusChangeMetadata,
 ): void {
+  if (!shouldPrintRuntimeMetadata(metadata)) {
+    return;
+  }
   const runtime = formatKeyValueMarker("runtime", {
     id: metadata?.runtimeId,
     harness: metadata?.runtimeHarness,
@@ -227,6 +234,19 @@ function printRuntimeMetadata(
     stdout.write(`${sandbox}\n`);
     printed.sandbox = sandbox;
   }
+}
+
+export function hasCompleteRuntimeMetadata(metadata?: StatusChangeMetadata): boolean {
+  return Boolean(
+    metadata?.runtimeHarness ||
+      metadata?.runtimeProtocolVersion ||
+      metadata?.sandboxProvider ||
+      metadata?.sessionId,
+  );
+}
+
+export function shouldPrintRuntimeMetadata(metadata?: StatusChangeMetadata): boolean {
+  return hasCompleteRuntimeMetadata(metadata);
 }
 
 function printApprovalParked(
@@ -462,6 +482,8 @@ async function runOneGeneration(
   const generationTiming = createGenerationTimingTracker();
   const printedRuntimeMetadata: PrintedRuntimeMetadata = {};
   const printedGenerationMarkers: PrintedGenerationMarkers = {};
+  let attachRuntimeMetadataUnlocked =
+    target.kind !== "attach" || !target.suppressReplayRuntimeMetadataUntilDecision;
 
   const result = await runChatSession({
     client,
@@ -489,7 +511,9 @@ async function runOneGeneration(
             printGenerationMarkers(stdout, printedGenerationMarkers, {
               generationId: target.generationId,
             });
-            printRuntimeMetadata(stdout, printedRuntimeMetadata, metadata);
+            if (attachRuntimeMetadataUnlocked) {
+              printRuntimeMetadata(stdout, printedRuntimeMetadata, metadata);
+            }
           },
         }
       : {
@@ -526,6 +550,12 @@ async function runOneGeneration(
       generationTiming.noteVisibleOutput();
       stdout.write(`\n[tool_result] ${toolName}\n`);
       stdout.write(`[tool_result_data] ${typeof resultValue === "string" ? resultValue : JSON.stringify(resultValue)}\n`);
+    },
+    onApprovalResult: () => {
+      attachRuntimeMetadataUnlocked = true;
+    },
+    onAuthResult: () => {
+      attachRuntimeMetadataUnlocked = true;
     },
     onPendingApproval: async (approval, apiClient) => {
       printGenerationMarkers(stdout, printedGenerationMarkers, {
@@ -933,6 +963,8 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
         await runOneGeneration(this.process.stdout, client, rl, state, {
           kind: "attach",
           generationId: active.generationId,
+          suppressReplayRuntimeMetadataUntilDecision:
+            active.status === "awaiting_approval" || active.status === "awaiting_auth",
         });
       } finally {
         rl?.close();
