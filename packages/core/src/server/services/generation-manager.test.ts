@@ -5368,6 +5368,88 @@ describe("generationManager transitions", () => {
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
+  it("restores a parked auth interrupt, applies it, and prompts OpenCode to continue", async () => {
+    interruptStore.set("interrupt-auth-resume", {
+      id: "interrupt-auth-resume",
+      generationId: "gen-auth-resume",
+      runtimeId: "runtime-1",
+      conversationId: "conv-auth-resume",
+      turnSeq: 4,
+      kind: "auth",
+      status: "accepted",
+      display: {
+        title: "Connection Required",
+        authSpec: { integrations: ["notion"] },
+      },
+      provider: "plugin",
+      providerRequestId: null,
+      providerToolUseId: "auth-resume-notion",
+      responsePayload: {
+        connectedIntegrations: ["notion"],
+        integration: "notion",
+      },
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: new Date("2026-03-11T15:01:00.000Z"),
+      requestedByUserId: null,
+      resolvedByUserId: "user-1",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    const runtime = createConversationRuntimeMock({
+      promptMock,
+      subscribeMock,
+      sessionSource: "restored_snapshot",
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      runtime as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    const ctx = createCtx({
+      id: "gen-auth-resume",
+      conversationId: "conv-auth-resume",
+      resumeInterruptId: "interrupt-auth-resume",
+      remainingRunMs: 444_000,
+      deadlineAt: new Date(0),
+      suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
+      status: "awaiting_auth",
+      sessionId: "session-1",
+      model: "openai/gpt-5.2-codex",
+      runtimeTurnSeq: 4,
+      runtimeCallbackToken: "runtime-token",
+    });
+
+    await (mgr as any).runSuspendedInterruptResume(ctx);
+
+    expect(promptMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      parts: [
+        {
+          type: "text",
+          text:
+            "Continue the interrupted assistant turn. Authentication for notion is now complete.",
+        },
+      ],
+    });
+    expect(ctx.resumeInterruptId).toBeNull();
+    expect(ctx.currentInterruptId).toBeUndefined();
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeInterruptId: null,
+        suspendedAt: null,
+      }),
+    );
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
   it("reaps stale generations and error-finalizes running and waiting contexts", async () => {
     const now = Date.now();
     interruptStore.set("interrupt-stale-approval", {

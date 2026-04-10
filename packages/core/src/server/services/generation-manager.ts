@@ -5240,6 +5240,18 @@ class GenerationManager {
     });
   }
 
+  private buildResumedAuthContinuationPrompt(
+    interrupt: GenerationInterruptRecord,
+  ): RuntimePromptPart[] {
+    const integration = interrupt.display.authSpec?.integrations?.[0] ?? "the required";
+    return [
+      {
+        type: "text",
+        text: `Continue the interrupted assistant turn. Authentication for ${integration} is now complete.`,
+      },
+    ];
+  }
+
   private async runSuspendedInterruptResume(ctx: GenerationContext): Promise<void> {
     const interruptId = ctx.resumeInterruptId;
     if (!interruptId) {
@@ -5273,7 +5285,12 @@ class GenerationManager {
       await this.runRecoveryReattach(ctx, {
         allowSnapshotRestore: true,
         requireLiveSession: false,
+        resumeInterruptId: interruptId,
         modeLabel: "resume_interrupt",
+        onRuntimeAttached:
+          interrupt?.kind === "auth"
+            ? async () => this.buildResumedAuthContinuationPrompt(interrupt)
+            : undefined,
       });
       return;
     }
