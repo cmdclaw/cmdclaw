@@ -1,15 +1,16 @@
 "use client";
 
+import { Check, Loader2 } from "lucide-react";
 import { motion, useInView, useMotionValue, useTransform, animate } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
 
 /* ── Step 1: Auto-typing prompt ── */
 
-const TYPING_PROMPT = "When a lead replies on HubSpot, draft a follow-up email and alert the team on Slack";
+const TYPING_PROMPT =
+  "When a lead replies on HubSpot, draft a follow-up email and alert the team on Slack";
 const TYPING_SPEED_MS = 45;
 
 function TypingPrompt({ started }: { started: boolean }) {
@@ -44,9 +45,7 @@ function TypingPrompt({ started }: { started: boolean }) {
             <span className="border-brand ml-0.5 inline-block h-4 w-[2px] animate-[blink-cursor_1s_ease-in-out_infinite] border-l-2" />
           )}
         </span>
-        {!started && (
-          <span className="text-muted-foreground/50 text-sm">Start typing...</span>
-        )}
+        {!started && <span className="text-muted-foreground/50 text-sm">Start typing...</span>}
       </div>
     </div>
   );
@@ -64,14 +63,10 @@ function BuildingAgent({ started }: { started: boolean }) {
     if (!started) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     STEP2_INTEGRATIONS.forEach((_, i) => {
-      timers.push(
-        setTimeout(() => setVisibleBadges(i + 1), 400 * (i + 1))
-      );
+      timers.push(setTimeout(() => setVisibleBadges(i + 1), 400 * (i + 1)));
     });
     // Toggle on after all badges
-    timers.push(
-      setTimeout(() => setIsOn(true), 400 * (STEP2_INTEGRATIONS.length + 1))
-    );
+    timers.push(setTimeout(() => setIsOn(true), 400 * (STEP2_INTEGRATIONS.length + 1)));
     return () => timers.forEach(clearTimeout);
   }, [started]);
 
@@ -85,7 +80,7 @@ function BuildingAgent({ started }: { started: boolean }) {
         <div className="flex items-start gap-2.5">
           <CoworkerAvatar username="lead-followup" size={28} className="shrink-0 rounded-full" />
           <div className="min-w-0">
-            <p className="text-xs font-medium leading-tight">Lead Follow-up Agent</p>
+            <p className="text-xs leading-tight font-medium">Lead Follow-up Agent</p>
             <p className="text-muted-foreground text-[10px]">@lead-followup</p>
           </div>
         </div>
@@ -120,9 +115,7 @@ function BuildingAgent({ started }: { started: boolean }) {
             key={key}
             initial={{ opacity: 0, scale: 0, x: -10 }}
             animate={
-              i < visibleBadges
-                ? { opacity: 1, scale: 1, x: 0 }
-                : { opacity: 0, scale: 0, x: -10 }
+              i < visibleBadges ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0, x: -10 }
             }
             transition={{ type: "spring", stiffness: 400, damping: 20 }}
           >
@@ -201,11 +194,7 @@ function DeployDashboard({ started }: { started: boolean }) {
           <motion.div
             key={row.name}
             initial={{ opacity: 0, x: -10 }}
-            animate={
-              i < visibleRows
-                ? { opacity: 1, x: 0 }
-                : { opacity: 0, x: -10 }
-            }
+            animate={i < visibleRows ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
             transition={{ duration: 0.2 }}
             className="flex items-center gap-2 text-xs"
           >
@@ -237,7 +226,7 @@ function DeployDashboard({ started }: { started: boolean }) {
 
 function FlowingConnector({ active }: { active: boolean }) {
   return (
-    <div className="flex items-center justify-center py-4 md:py-0 md:px-3 md:pt-16">
+    <div className="flex items-center justify-center py-4 md:px-3 md:py-0 md:pt-16">
       <motion.div
         className="bg-border/60 h-8 w-px md:h-px md:w-8"
         initial={{ opacity: 0 }}
@@ -262,16 +251,17 @@ export function AnimatedHowItWorksSection() {
     if (!isInView) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     timers.push(setTimeout(() => setStep1Started(true), 300));
-    timers.push(setTimeout(() => setStep2Started(true), TYPING_PROMPT.length * TYPING_SPEED_MS + 800));
-    timers.push(setTimeout(() => setStep3Started(true), TYPING_PROMPT.length * TYPING_SPEED_MS + 2400));
+    timers.push(
+      setTimeout(() => setStep2Started(true), TYPING_PROMPT.length * TYPING_SPEED_MS + 800),
+    );
+    timers.push(
+      setTimeout(() => setStep3Started(true), TYPING_PROMPT.length * TYPING_SPEED_MS + 2400),
+    );
     return () => timers.forEach(clearTimeout);
   }, [isInView]);
 
   return (
-    <section
-      ref={sectionRef}
-      className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28"
-    >
+    <section ref={sectionRef} className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
       <div className="mx-auto max-w-[1500px]">
         <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
           How it works

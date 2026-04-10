@@ -3,12 +3,12 @@
 import { motion, useMotionValue, useSpring, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { useCallback, useRef, useState, useMemo, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   INTEGRATION_LOGOS,
   INTEGRATION_DISPLAY_NAMES,
   type IntegrationType,
 } from "@/lib/integration-icons";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 /* ── Config ── */
 
@@ -172,7 +172,7 @@ function ConnectionLines({
         y1: hy,
         x2: d!.x,
         y2: d!.y,
-      }))
+      })),
     );
   }, [hoveredIndex, containerRef]);
 

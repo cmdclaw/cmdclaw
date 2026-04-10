@@ -12,11 +12,11 @@ import {
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
 import { StickyNote, ArrowLeft, Users } from "lucide-react";
-import type { IntegrationType } from "@/lib/integration-icons";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Button } from "@/components/ui/button";
+import type { IntegrationType } from "@/lib/integration-icons";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
+import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useCreateOrgChartNode,

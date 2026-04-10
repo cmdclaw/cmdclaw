@@ -1,9 +1,9 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { useRef, useState } from "react";
-import { Check } from "lucide-react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
 
@@ -23,7 +23,8 @@ const SHOWCASE_COWORKERS: ShowcaseCoworker[] = [
   {
     name: "Lead Qualifier",
     username: "lead-qualifier",
-    description: "Scores incoming leads from HubSpot, enriches contacts with Salesforce data, and routes hot leads to the right rep.",
+    description:
+      "Scores incoming leads from HubSpot, enriches contacts with Salesforce data, and routes hot leads to the right rep.",
     trigger: "Webhook",
     integrations: ["hubspot", "salesforce"],
     lastRun: "3m ago",
@@ -37,7 +38,8 @@ const SHOWCASE_COWORKERS: ShowcaseCoworker[] = [
   {
     name: "Ticket Triage",
     username: "ticket-triage",
-    description: "Reads support emails, categorizes by urgency, creates tickets in Notion, and pings the right team in Slack.",
+    description:
+      "Reads support emails, categorizes by urgency, creates tickets in Notion, and pings the right team in Slack.",
     trigger: "Email",
     integrations: ["slack", "notion"],
     lastRun: "1m ago",
@@ -51,7 +53,8 @@ const SHOWCASE_COWORKERS: ShowcaseCoworker[] = [
   {
     name: "Social Monitor",
     username: "social-monitor",
-    description: "Tracks LinkedIn mentions and competitor posts, drafts responses, and logs engagement insights in Slack.",
+    description:
+      "Tracks LinkedIn mentions and competitor posts, drafts responses, and logs engagement insights in Slack.",
     trigger: "Scheduled",
     integrations: ["linkedin", "slack"],
     lastRun: "12m ago",
@@ -86,7 +89,11 @@ function ShowcaseCard({ coworker, index }: { coworker: ShowcaseCoworker; index: 
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-3">
-            <CoworkerAvatar username={coworker.username} size={36} className="shrink-0 rounded-full" />
+            <CoworkerAvatar
+              username={coworker.username}
+              size={36}
+              className="shrink-0 rounded-full"
+            />
             <div className="min-w-0 space-y-1">
               <p className="truncate text-sm leading-tight font-medium">{coworker.name}</p>
               <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
@@ -110,7 +117,7 @@ function ShowcaseCard({ coworker, index }: { coworker: ShowcaseCoworker; index: 
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
             {coworker.trigger}
           </span>
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="ml-auto flex items-center gap-1">
             {coworker.integrations.map((key) => (
               <Image
                 key={key}

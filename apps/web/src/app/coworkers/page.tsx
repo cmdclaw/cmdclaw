@@ -185,7 +185,6 @@ function buildToolSummary(
   };
 }
 
-
 function SharedCoworkerCard({
   coworker,
   connectedIntegrationTypes,

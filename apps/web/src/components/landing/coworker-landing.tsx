@@ -3,9 +3,7 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import {
-  ArrowUp,
-} from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -17,15 +15,15 @@ import type { IntegrationType } from "@/lib/integration-icons";
 import type { PromptSegment } from "@/lib/prompt-segments";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
+import { AnimatedHowItWorksSection } from "@/components/landing/animated-how-it-works";
+import { LiveAgentDemoSection } from "@/components/landing/demo-activity-feed";
+import { CoworkerShowcaseSection } from "@/components/landing/demo-coworker-showcase";
 import {
   clearPendingCoworkerPrompt,
   getPendingCoworkerGenerationContent,
   readPendingCoworkerPrompt,
   writePendingCoworkerPrompt,
 } from "@/components/landing/pending-coworker-prompt";
-import { LiveAgentDemoSection } from "@/components/landing/demo-activity-feed";
-import { CoworkerShowcaseSection } from "@/components/landing/demo-coworker-showcase";
-import { AnimatedHowItWorksSection } from "@/components/landing/animated-how-it-works";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";

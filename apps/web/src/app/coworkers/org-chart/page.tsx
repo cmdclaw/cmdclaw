@@ -58,7 +58,12 @@ function OrgChartInner() {
 
   return (
     <>
-      <OrgChartCanvas chartNodes={nodeList} coworkers={coworkerList} unassignedCoworkers={unassigned} onAddCoworker={handleAddCoworker} />
+      <OrgChartCanvas
+        chartNodes={nodeList}
+        coworkers={coworkerList}
+        unassignedCoworkers={unassigned}
+        onAddCoworker={handleAddCoworker}
+      />
       <UnassignedSidebar coworkers={unassigned} onAdd={handleAddCoworker} />
     </>
   );

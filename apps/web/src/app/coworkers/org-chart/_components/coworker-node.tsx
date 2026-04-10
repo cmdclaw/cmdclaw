@@ -26,10 +26,7 @@ export function CoworkerNode({ data, id, selected }: NodeProps<CoworkerNodeType>
   return (
     <div className="group/node relative p-1">
       <div className="h-[260px] w-[380px] overflow-hidden rounded-xl">
-        <InteractiveCoworkerCard
-          coworker={data}
-          className="w-full h-full hover:bg-card"
-        />
+        <InteractiveCoworkerCard coworker={data} className="hover:bg-card h-full w-full" />
       </div>
       <button
         type="button"

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,15 +25,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import {
   COWORKER_AVAILABLE_INTEGRATION_TYPES,
   INTEGRATION_DISPLAY_NAMES,
   INTEGRATION_LOGOS,
   type IntegrationType,
 } from "@/lib/integration-icons";
-import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
 import {
   useDeleteCoworker,
@@ -43,7 +43,11 @@ import {
   useUnshareCoworker,
   useUpdateCoworker,
 } from "@/orpc/hooks";
-import { CoworkerCardContent, getCoworkerDisplayName, type CoworkerCardData } from "./coworker-card-content";
+import {
+  CoworkerCardContent,
+  getCoworkerDisplayName,
+  type CoworkerCardData,
+} from "./coworker-card-content";
 
 const MAX_VISIBLE_TOOL_INDICATORS = 3;
 
@@ -95,7 +99,10 @@ function getRunStatusColor(status: string) {
 }
 
 function buildToolSummary(
-  coworker: Pick<InteractiveCoworkerCardData, "toolAccessMode" | "allowedIntegrations" | "allowedSkillSlugs">,
+  coworker: Pick<
+    InteractiveCoworkerCardData,
+    "toolAccessMode" | "allowedIntegrations" | "allowedSkillSlugs"
+  >,
   connectedIntegrationTypes: IntegrationType[],
 ) {
   const integrationTypes =
@@ -307,7 +314,10 @@ export function InteractiveCoworkerCard({
       const definition = await exportCoworkerDefinition.mutateAsync(coworker.id);
       const json = JSON.stringify(definition, null, 2);
       const baseLabel = coworker.username?.trim() || coworker.name?.trim() || "coworker";
-      const slug = baseLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const slug = baseLabel
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
       const filename = `${slug || "coworker"}.json`;
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -346,10 +356,7 @@ export function InteractiveCoworkerCard({
         <Loader2 className="size-2.5 animate-spin" />
       ) : (
         <span
-          className={cn(
-            "size-2 rounded-full",
-            isOn ? "bg-green-500" : "bg-muted-foreground/40",
-          )}
+          className={cn("size-2 rounded-full", isOn ? "bg-green-500" : "bg-muted-foreground/40")}
         />
       )}
       {isOn ? "On" : "Off"}

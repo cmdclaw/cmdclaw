@@ -1,9 +1,9 @@
 "use client";
 
+import { Check, Loader2, Activity, Timer } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Check, Loader2, Activity, Timer } from "lucide-react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
 
@@ -42,13 +42,7 @@ const PAUSE_MS = 3000;
 
 /* ── Activity item (lightweight clone) ── */
 
-function DemoActivityItem({
-  item,
-  isLatest,
-}: {
-  item: DemoItem;
-  isLatest: boolean;
-}) {
+function DemoActivityItem({ item, isLatest }: { item: DemoItem; isLatest: boolean }) {
   const logo = INTEGRATION_LOGOS[item.integration];
 
   return (
@@ -58,13 +52,7 @@ function DemoActivityItem({
       transition={{ duration: 0.2 }}
       className="flex items-center gap-1.5 py-0.5 text-xs"
     >
-      <Image
-        src={logo}
-        alt=""
-        width={14}
-        height={14}
-        className="h-3.5 w-auto shrink-0"
-      />
+      <Image src={logo} alt="" width={14} height={14} className="h-3.5 w-auto shrink-0" />
       <span className="text-foreground font-mono">{item.label}</span>
       <div className="flex-1" />
       {isLatest ? (
@@ -148,11 +136,7 @@ function DemoFeed() {
       </div>
 
       {/* Items */}
-      <div
-        ref={scrollRef}
-        className="overflow-y-auto px-3 py-2"
-        style={{ maxHeight: 220 }}
-      >
+      <div ref={scrollRef} className="overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
         <AnimatePresence initial={false}>
           {visibleItems.map((item, i) => (
             <DemoActivityItem
@@ -205,7 +189,11 @@ function DemoCoworkerCard() {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3">
-          <CoworkerAvatar username={COWORKER_DATA.username} size={36} className="shrink-0 rounded-full" />
+          <CoworkerAvatar
+            username={COWORKER_DATA.username}
+            size={36}
+            className="shrink-0 rounded-full"
+          />
           <div className="min-w-0 space-y-1">
             <p className="truncate text-sm leading-tight font-medium">{COWORKER_DATA.name}</p>
             <p className="text-muted-foreground bg-muted/60 inline-flex rounded-full px-2 py-0.5 font-mono text-[10px]">
@@ -220,9 +208,7 @@ function DemoCoworkerCard() {
       </div>
 
       {/* Description */}
-      <p className="text-muted-foreground text-xs leading-relaxed">
-        {COWORKER_DATA.description}
-      </p>
+      <p className="text-muted-foreground text-xs leading-relaxed">{COWORKER_DATA.description}</p>
 
       {/* Badges */}
       <div className="flex items-center gap-2">
@@ -232,7 +218,7 @@ function DemoCoworkerCard() {
         <span className="text-foreground/70 bg-foreground/[0.06] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
           Shared
         </span>
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="ml-auto flex items-center gap-1">
           {COWORKER_DATA.integrations.map((key) => (
             <Image
               key={key}
@@ -247,8 +233,8 @@ function DemoCoworkerCard() {
       </div>
 
       {/* Running status */}
-      <div className="text-xs flex items-center gap-1.5">
-        <Loader2 className="h-3 w-3 animate-spin text-brand" />
+      <div className="flex items-center gap-1.5 text-xs">
+        <Loader2 className="text-brand h-3 w-3 animate-spin" />
         <span className="text-brand font-medium">Running now...</span>
       </div>
     </div>
@@ -268,7 +254,8 @@ export function LiveAgentDemoSection() {
           Watch your agent work in real time
         </h2>
         <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-          Your coworker connects to your tools and executes tasks autonomously — you just watch the activity feed.
+          Your coworker connects to your tools and executes tasks autonomously — you just watch the
+          activity feed.
         </p>
 
         <div className="mx-auto grid max-w-4xl grid-cols-1 items-start gap-8 md:grid-cols-[2fr_3fr]">
