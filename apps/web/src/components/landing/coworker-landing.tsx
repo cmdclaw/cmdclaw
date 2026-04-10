@@ -16,8 +16,9 @@ import type { PromptSegment } from "@/lib/prompt-segments";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
 import { AnimatedHowItWorksSection } from "@/components/landing/animated-how-it-works";
-import { LiveAgentDemoSection } from "@/components/landing/demo-activity-feed";
-import { CoworkerShowcaseSection } from "@/components/landing/demo-coworker-showcase";
+import { BentoFeaturesSection } from "@/components/landing/bento-features";
+import { OrgChartShowcaseSection } from "@/components/landing/org-chart-showcase";
+import { TeamShowcaseSection } from "@/components/landing/team-showcase";
 import {
   clearPendingCoworkerPrompt,
   getPendingCoworkerGenerationContent,
@@ -33,7 +34,6 @@ import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
   INTEGRATION_LOGOS,
-  INTEGRATION_DISPLAY_NAMES,
   COWORKER_AVAILABLE_INTEGRATION_TYPES,
 } from "@/lib/integration-icons";
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
@@ -705,73 +705,30 @@ export function CoworkerLanding({
       {/* ── Landing sections (anonymous only) ── */}
       {isAnonymous ? (
         <>
-          <LiveAgentDemoSection />
-          <CoworkerShowcaseSection />
+          <BentoFeaturesSection />
           <AnimatedHowItWorksSection />
-          {/* ── Integrations ── */}
-          <section className="border-border/60 bg-muted/40 border-t px-6 py-20 md:py-28">
-            <div className="mx-auto max-w-[1500px]">
-              <p className="text-brand mb-2 text-center text-sm font-semibold tracking-wider uppercase">
-                Integrations
-              </p>
-              <h2 className="text-foreground mb-4 text-center text-3xl font-semibold tracking-tight md:text-4xl">
-                Your agents speak to every tool your team uses
-              </h2>
-              <p className="text-muted-foreground mx-auto mb-16 max-w-2xl text-center text-base">
-                One-click OAuth. Shared across your workspace. No API keys to manage.
-              </p>
-              <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-4 md:gap-6">
-                {(
-                  [
-                    "google_gmail",
-                    "google_calendar",
-                    "google_sheets",
-                    "google_docs",
-                    "google_drive",
-                    "slack",
-                    "notion",
-                    "linear",
-                    "github",
-                    "airtable",
-                    "hubspot",
-                    "salesforce",
-                    "linkedin",
-                    "outlook",
-                    "outlook_calendar",
-                    "dynamics",
-                  ] as const
-                ).map((key) => (
-                  <div
-                    key={key}
-                    className="border-border/60 bg-background flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-sm"
-                  >
-                    <Image
-                      src={INTEGRATION_LOGOS[key]}
-                      alt={INTEGRATION_DISPLAY_NAMES[key]}
-                      width={20}
-                      height={20}
-                      className="size-5 shrink-0"
-                    />
-                    <span className="text-foreground text-sm font-medium">
-                      {INTEGRATION_DISPLAY_NAMES[key]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
+          <OrgChartShowcaseSection />
+          <TeamShowcaseSection />
 
           {/* ── CTA ── */}
-          <section className="border-border/60 border-t bg-slate-950 px-6 py-20 md:py-28">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="mb-4 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+          <section className="border-border/40 relative overflow-hidden border-t bg-slate-950 px-6 py-20 md:py-28">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08),transparent_70%)]" />
+            <div className="relative mx-auto max-w-2xl text-center">
+              <p className="mb-4 text-xs font-semibold tracking-[0.2em] uppercase text-slate-500">
+                Get started
+              </p>
+              <h2 className="mb-4 text-4xl font-semibold tracking-tight text-white md:text-5xl">
                 Stop building agents you can&apos;t deploy
               </h2>
-              <p className="mb-8 text-base text-slate-400">
+              <p className="mb-10 text-lg text-slate-400">
                 Start free. Build your first AI coworker in minutes. Deploy it to your team today.
               </p>
-              <div className="flex items-center justify-center">
-                <Button size="lg" asChild className="bg-white text-slate-950 hover:bg-slate-100">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+                <Button
+                  size="lg"
+                  asChild
+                  className="bg-white px-8 text-slate-950 shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-slate-100"
+                >
                   <a
                     href="https://cal.com/hyperstack/try-cmdclaw"
                     target="_blank"
@@ -780,13 +737,21 @@ export function CoworkerLanding({
                     Book a Demo
                   </a>
                 </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  asChild
+                  className="border-slate-700 bg-transparent text-slate-300 hover:border-slate-500 hover:bg-slate-900 hover:text-white"
+                >
+                  <Link href="/login">Start for free</Link>
+                </Button>
               </div>
-              <div className="mt-4 flex items-center justify-center">
+              <div className="mt-6 flex items-center justify-center">
                 <a
                   href="https://github.com/baptistecolle/cmdclaw"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
+                  className="inline-flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-300"
                 >
                   <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
@@ -801,57 +766,93 @@ export function CoworkerLanding({
 
       {/* ── Footer ── */}
       {isAnonymous ? (
-        <footer className="border-border/60 bg-background border-t px-6 py-3 sm:py-5">
-          <div className="text-muted-foreground mx-auto flex max-w-[1500px] items-center justify-between text-xs leading-none">
-            <div className="flex items-center gap-3">
-              <a
-                href="https://github.com/baptistecolle/cmdclaw"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
-                aria-label="GitHub"
-              >
-                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-                </svg>
-              </a>
-              <a
-                href="https://discord.com/invite/NHQy8gXerd"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
-                aria-label="Discord"
-              >
-                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-                </svg>
-              </a>
+        <footer className="border-border/40 bg-background border-t px-6 py-10 md:py-14">
+          <div className="mx-auto max-w-6xl">
+            <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+              {/* Brand */}
+              <div className="max-w-xs">
+                <p className="text-foreground text-sm font-semibold">CmdClaw</p>
+                <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
+                  AI coworkers that connect to your tools and automate work across your team.
+                </p>
+                <div className="mt-4 flex items-center gap-3">
+                  <a
+                    href="https://github.com/baptistecolle/cmdclaw"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="GitHub"
+                  >
+                    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                    </svg>
+                  </a>
+                  <a
+                    href="https://discord.com/invite/NHQy8gXerd"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Discord"
+                  >
+                    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="flex gap-12 md:gap-16">
+                <div>
+                  <p className="text-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
+                    Product
+                  </p>
+                  <nav className="text-muted-foreground flex flex-col gap-2 text-xs">
+                    <a
+                      href="https://docs.cmdclaw.ai/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-foreground transition-colors"
+                    >
+                      Docs
+                    </a>
+                    <Link href="/pricing" className="hover:text-foreground transition-colors">
+                      Pricing
+                    </Link>
+                    <Link href="/templates" className="hover:text-foreground transition-colors">
+                      Templates
+                    </Link>
+                  </nav>
+                </div>
+                <div>
+                  <p className="text-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
+                    Company
+                  </p>
+                  <nav className="text-muted-foreground flex flex-col gap-2 text-xs">
+                    <Link href="/support" className="hover:text-foreground transition-colors">
+                      Support
+                    </Link>
+                    <Link
+                      href="/legal/terms"
+                      className="hover:text-foreground transition-colors"
+                    >
+                      Terms
+                    </Link>
+                    <Link
+                      href="/legal/privacy-policy"
+                      className="hover:text-foreground transition-colors"
+                    >
+                      Privacy
+                    </Link>
+                  </nav>
+                </div>
+              </div>
             </div>
-            <nav className="flex items-center gap-4">
-              <a
-                href="https://docs.cmdclaw.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
-              >
-                Docs
-              </a>
-              <Link href="/pricing" className="hover:text-foreground transition-colors">
-                Pricing
-              </Link>
-              <Link href="/legal/terms" className="hover:text-foreground transition-colors">
-                Terms
-              </Link>
-              <Link
-                href="/legal/privacy-policy"
-                className="hover:text-foreground transition-colors"
-              >
-                Privacy
-              </Link>
-              <Link href="/support" className="hover:text-foreground transition-colors">
-                Support
-              </Link>
-            </nav>
+
+            {/* Bottom line */}
+            <div className="border-border/40 text-muted-foreground/60 mt-10 border-t pt-6 text-xs">
+              &copy; {new Date().getFullYear()} CmdClaw. All rights reserved.
+            </div>
           </div>
         </footer>
       ) : null}
