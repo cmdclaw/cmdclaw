@@ -25,7 +25,7 @@ const SHOWCASE_COWORKERS: ShowcaseCoworker[] = [
     username: "lead-qualifier",
     description:
       "Scores incoming leads from HubSpot, enriches contacts with Salesforce data, and routes hot leads to the right rep.",
-    trigger: "Webhook",
+    trigger: "On new lead",
     integrations: ["hubspot", "salesforce"],
     lastRun: "3m ago",
     recentActions: [

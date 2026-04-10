@@ -6,12 +6,12 @@ import {
   ShieldCheck,
   KeyRound,
   Inbox,
-  MousePointer2,
 } from "lucide-react";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
+import { CursorProvider, Cursor, CursorFollow } from "@/components/ui/cursor";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -31,7 +31,7 @@ const AGENTS: ShowcaseAgent[] = [
     name: "Lead Qualifier",
     username: "lead-qualifier",
     description: "Scores incoming leads from HubSpot and routes hot leads",
-    trigger: "Webhook",
+    trigger: "On new lead",
     integrations: ["hubspot", "salesforce", "slack"],
   },
   {
@@ -61,10 +61,24 @@ const AGENTS: ShowcaseAgent[] = [
 
 type InboxItemStatus = "awaiting_approval" | "awaiting_auth" | "completed" | "running";
 
+type CursorUser = {
+  name: string;
+  color: string;
+};
+
+const CURSOR_USERS: CursorUser[] = [
+  { name: "Sarah", color: "#3B82F6" },
+  { name: "James", color: "#10B981" },
+  { name: "Priya", color: "#F59E0B" },
+  { name: "Alex", color: "#8B5CF6" },
+];
+
+type DismissAction = "approve" | "deny" | "connect";
+
 type TimelineEvent =
   | { type: "add"; item: InboxItemData }
-  | { type: "dismiss"; itemId: string }
-  | { type: "pulse"; agentIndex: number } // flash an agent card
+  | { type: "dismiss"; itemId: string; user: CursorUser; action: DismissAction }
+  | { type: "pulse"; agentIndex: number }
   | { type: "pause" };
 
 type InboxItemData = {
@@ -112,9 +126,7 @@ const TIMELINE: TimelineEvent[] = [
     },
   },
   { type: "pause" },
-  // User dismisses first item (approve)
-  { type: "dismiss", itemId: "a" },
-  // More items arrive
+  { type: "dismiss", itemId: "a", user: CURSOR_USERS[0]!, action: "approve" },
   { type: "pulse", agentIndex: 0 },
   {
     type: "add",
@@ -126,7 +138,7 @@ const TIMELINE: TimelineEvent[] = [
       integration: "hubspot",
     },
   },
-  { type: "dismiss", itemId: "b" },
+  { type: "dismiss", itemId: "b", user: CURSOR_USERS[1]!, action: "approve" },
   { type: "pulse", agentIndex: 3 },
   {
     type: "add",
@@ -139,7 +151,7 @@ const TIMELINE: TimelineEvent[] = [
     },
   },
   { type: "pause" },
-  { type: "dismiss", itemId: "c" },
+  { type: "dismiss", itemId: "c", user: CURSOR_USERS[2]!, action: "connect" },
   { type: "pulse", agentIndex: 1 },
   {
     type: "add",
@@ -151,7 +163,7 @@ const TIMELINE: TimelineEvent[] = [
       integration: "slack",
     },
   },
-  { type: "dismiss", itemId: "d" },
+  { type: "dismiss", itemId: "d", user: CURSOR_USERS[3]!, action: "deny" },
   { type: "pulse", agentIndex: 2 },
   {
     type: "add",
@@ -164,9 +176,9 @@ const TIMELINE: TimelineEvent[] = [
     },
   },
   { type: "pause" },
-  { type: "dismiss", itemId: "e" },
-  { type: "dismiss", itemId: "f" },
-  { type: "dismiss", itemId: "g" },
+  { type: "dismiss", itemId: "e", user: CURSOR_USERS[0]!, action: "approve" },
+  { type: "dismiss", itemId: "f", user: CURSOR_USERS[1]!, action: "approve" },
+  { type: "dismiss", itemId: "g", user: CURSOR_USERS[2]!, action: "deny" },
   { type: "pause" },
 ];
 
@@ -265,17 +277,57 @@ function AgentMiniCard({
    INBOX ROW
    ═══════════════════════════════════════════════════════════════════════════════ */
 
+const ACTION_DISPLAY: Record<DismissAction, { label: string; color: string; dotColor: string }> = {
+  approve: { label: "Approved", color: "text-green-600 dark:text-green-400", dotColor: "bg-green-500" },
+  deny: { label: "Denied", color: "text-red-500", dotColor: "bg-red-500" },
+  connect: { label: "Connected", color: "text-blue-500", dotColor: "bg-blue-500" },
+};
+
+// Shared ref map for status button positions
+type ButtonPositionMap = Map<string, { x: number; y: number }>;
+
 function InboxRow({
   item,
   isDismissing,
   cursorTarget,
+  resolvedAction,
+  inboxRef,
+  buttonPositions,
 }: {
   item: InboxItemData;
   isDismissing: boolean;
   cursorTarget: boolean;
+  resolvedAction: DismissAction | null;
+  inboxRef: React.RefObject<HTMLDivElement | null>;
+  buttonPositions: ButtonPositionMap;
 }) {
   const meta = STATUS_META[item.status];
   const StatusIcon = meta.icon;
+  const actionDisplay = resolvedAction ? ACTION_DISPLAY[resolvedAction] : null;
+  const statusRef = useRef<HTMLDivElement>(null);
+
+  // Measure and register button position relative to inbox container
+  useEffect(() => {
+    const measure = () => {
+      const btn = statusRef.current;
+      const container = inboxRef.current;
+      if (!btn || !container) return;
+      const btnRect = btn.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      buttonPositions.set(item.id, {
+        x: btnRect.left - containerRect.left + btnRect.width / 2,
+        y: btnRect.top - containerRect.top + btnRect.height / 2,
+      });
+    };
+    measure();
+    // Re-measure on layout shifts
+    const ro = new ResizeObserver(measure);
+    if (statusRef.current) ro.observe(statusRef.current);
+    return () => {
+      ro.disconnect();
+      buttonPositions.delete(item.id);
+    };
+  }, [item.id, inboxRef, buttonPositions]);
 
   return (
     <motion.div
@@ -297,12 +349,14 @@ function InboxRow({
       >
         {/* Status dot */}
         <span className="relative flex size-2 shrink-0">
-          {(item.status === "awaiting_approval" || item.status === "awaiting_auth") && (
+          {!actionDisplay && (item.status === "awaiting_approval" || item.status === "awaiting_auth") && (
             <span
               className={`absolute inset-0 animate-ping rounded-full opacity-40 ${meta.dotColor}`}
             />
           )}
-          <span className={`relative inline-flex size-2 rounded-full ${meta.dotColor}`} />
+          <span
+            className={`relative inline-flex size-2 rounded-full ${actionDisplay ? actionDisplay.dotColor : meta.dotColor}`}
+          />
         </span>
 
         {/* Avatar */}
@@ -325,10 +379,29 @@ function InboxRow({
           </div>
         </div>
 
-        {/* Status */}
-        <div className={`flex shrink-0 items-center gap-1 text-[9px] font-medium ${meta.color}`}>
-          <StatusIcon className={`size-3 ${item.status === "running" ? "animate-spin" : ""}`} />
-          <span className="hidden sm:inline">{meta.label}</span>
+        {/* Status — shows resolved action or original status */}
+        <div ref={statusRef} className={`flex w-20 shrink-0 items-center justify-end gap-1 text-[9px] font-medium ${actionDisplay ? actionDisplay.color : meta.color}`}>
+          <AnimatePresence mode="wait">
+            {actionDisplay ? (
+              <motion.span
+                key="action"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-1"
+              >
+                <Check className="size-3" />
+                <span>{actionDisplay.label}</span>
+              </motion.span>
+            ) : (
+              <motion.span
+                key="status"
+                className="flex items-center gap-1"
+              >
+                <StatusIcon className={`size-3 ${item.status === "running" ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">{meta.label}</span>
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.div>
@@ -339,20 +412,57 @@ function InboxRow({
    ANIMATED CURSOR
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function FakeCursor({ visible, x, y }: { visible: boolean; x: number; y: number }) {
+function CursorArrow({ color }: { color: string }) {
+  return (
+    <svg
+      className="size-5"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 40 40"
+    >
+      <path
+        fill={color}
+        d="M1.8 4.4 7 36.2c.3 1.8 2.6 2.3 3.6.8l3.9-5.7c1.7-2.5 4.5-4.1 7.5-4.3l6.9-.5c1.8-.1 2.5-2.4 1.1-3.5L5 2.5c-1.4-1.1-3.5 0-3.3 1.9Z"
+      />
+    </svg>
+  );
+}
+
+function NamedCursor({
+  visible,
+  x,
+  y,
+  user,
+  isClicking,
+}: {
+  visible: boolean;
+  x: number;
+  y: number;
+  user: CursorUser | null;
+  isClicking: boolean;
+}) {
   return (
     <motion.div
       animate={{
         opacity: visible ? 1 : 0,
         x,
         y,
-        scale: visible ? 1 : 0.8,
+        scale: visible ? (isClicking ? 0.85 : 1) : 0.8,
       }}
-      transition={{ duration: 0.5, ease: "easeInOut" }}
+      transition={{ duration: isClicking ? 0.1 : 0.5, ease: "easeInOut" }}
       className="pointer-events-none absolute z-30"
       style={{ left: 0, top: 0 }}
     >
-      <MousePointer2 className="size-4 fill-foreground/80 text-background drop-shadow-md" />
+      <CursorArrow color={user?.color ?? "#6B7280"} />
+      {user && (
+        <motion.span
+          initial={{ opacity: 0, scale: 0.8, x: -4 }}
+          animate={{ opacity: 1, scale: 1, x: 0 }}
+          className="absolute top-4 left-3 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg"
+          style={{ backgroundColor: user.color }}
+        >
+          {user.name}
+        </motion.span>
+      )}
     </motion.div>
   );
 }
@@ -361,13 +471,34 @@ function FakeCursor({ visible, x, y }: { visible: boolean; x: number; y: number 
    ORCHESTRATOR — runs the timeline loop
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function useTimelineLoop(isActive: boolean) {
-  const [items, setItems] = useState<InboxItemData[]>([]);
+// Initial items so inbox is never empty on first render
+const INITIAL_INBOX_ITEMS: InboxItemData[] = [
+  {
+    id: "init-1",
+    agentUsername: "lead-qualifier",
+    title: "Update deal score → Globex Inc",
+    status: "completed",
+    integration: "hubspot",
+  },
+  {
+    id: "init-2",
+    agentUsername: "ticket-triage",
+    title: "Send message → #support-triage",
+    status: "completed",
+    integration: "slack",
+  },
+];
+
+function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) {
+  const [items, setItems] = useState<InboxItemData[]>(INITIAL_INBOX_ITEMS);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [cursorTargetId, setCursorTargetId] = useState<string | null>(null);
+  const [resolvedActions, setResolvedActions] = useState<Record<string, DismissAction>>({});
   const [pulsingAgent, setPulsingAgent] = useState<number | null>(null);
   const [cursorVisible, setCursorVisible] = useState(false);
+  const [cursorClicking, setCursorClicking] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 300, y: 200 });
+  const [cursorUser, setCursorUser] = useState<CursorUser | null>(null);
   const stepRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -375,13 +506,14 @@ function useTimelineLoop(isActive: boolean) {
     const step = stepRef.current;
 
     if (step >= TIMELINE.length) {
-      // Reset loop
       setCursorVisible(false);
       setCursorTargetId(null);
+      setCursorUser(null);
       setPulsingAgent(null);
       timerRef.current = setTimeout(() => {
-        setItems([]);
+        setItems(INITIAL_INBOX_ITEMS);
         setDismissingId(null);
+        setResolvedActions({});
         stepRef.current = 0;
         timerRef.current = setTimeout(runStep, 800);
       }, RESET_PAUSE_MS);
@@ -399,23 +531,65 @@ function useTimelineLoop(isActive: boolean) {
         break;
 
       case "dismiss": {
-        // Move cursor to the item, highlight it, then remove
-        const itemIdx = items.findIndex((i) => i.id === event.itemId);
-        const yPos = 44 + 52 * Math.max(0, itemIdx); // approximate row position
-        setCursorVisible(true);
-        setCursorPos({ x: 280, y: yPos });
-        setCursorTargetId(event.itemId);
+        const needsCursor = event.action === "approve" || event.action === "connect";
 
-        timerRef.current = setTimeout(() => {
+        if (needsCursor) {
+          // Full cursor animation: glide → click → status change → slide away
+          setCursorVisible(true);
+          setCursorClicking(false);
+          setCursorUser(event.user);
+          const btnPos = buttonPositions.get(event.itemId);
+          const itemIdx = items.findIndex((i) => i.id === event.itemId);
+          const fallbackY = 44 + 52 * Math.max(0, itemIdx) + 14;
+          const targetX = btnPos?.x ?? 300;
+          const targetY = btnPos?.y ?? fallbackY;
+
+          // Start cursor offset to the left
+          setCursorPos({ x: targetX - 100, y: targetY });
+
+          // Glide to the button
+          timerRef.current = setTimeout(() => {
+            setCursorTargetId(event.itemId);
+            setCursorPos({ x: targetX, y: targetY });
+
+            // Click animation
+            timerRef.current = setTimeout(() => {
+              setCursorClicking(true);
+
+              // Release click — status changes
+              timerRef.current = setTimeout(() => {
+                setCursorClicking(false);
+                setResolvedActions((prev) => ({ ...prev, [event.itemId]: event.action }));
+
+                // Pause then slide away
+                timerRef.current = setTimeout(() => {
+                  setDismissingId(event.itemId);
+                  timerRef.current = setTimeout(() => {
+                    setItems((prev) => prev.filter((i) => i.id !== event.itemId));
+                    setDismissingId(null);
+                    setCursorTargetId(null);
+                    setCursorVisible(false);
+                    setCursorUser(null);
+                    setResolvedActions((prev) => {
+                      const next = { ...prev };
+                      delete next[event.itemId];
+                      return next;
+                    });
+                    timerRef.current = setTimeout(runStep, 250);
+                  }, 400);
+                }, 600);
+              }, 120);
+            }, 400);
+          }, 300);
+        } else {
+          // No cursor — just silently slide the item away
           setDismissingId(event.itemId);
           timerRef.current = setTimeout(() => {
             setItems((prev) => prev.filter((i) => i.id !== event.itemId));
             setDismissingId(null);
-            setCursorTargetId(null);
-            setCursorVisible(false);
-            timerRef.current = setTimeout(runStep, 300);
+            timerRef.current = setTimeout(runStep, 250);
           }, 400);
-        }, 600);
+        }
         break;
       }
 
@@ -429,6 +603,7 @@ function useTimelineLoop(isActive: boolean) {
       case "pause":
         setCursorVisible(false);
         setCursorTargetId(null);
+        setCursorUser(null);
         timerRef.current = setTimeout(runStep, PAUSE_DURATION_MS);
         break;
     }
@@ -444,12 +619,11 @@ function useTimelineLoop(isActive: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
-  // re-wire runStep when items change so dismiss finds correct index
   useEffect(() => {
     // no-op: just ensures runStep recaptures `items`
   }, [runStep]);
 
-  return { items, dismissingId, cursorTargetId, pulsingAgent, cursorVisible, cursorPos };
+  return { items, dismissingId, cursorTargetId, resolvedActions, pulsingAgent, cursorVisible, cursorClicking, cursorPos, cursorUser };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -458,9 +632,12 @@ function useTimelineLoop(isActive: boolean) {
 
 export function TeamShowcaseSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
+  const inboxRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: false, margin: "-120px" });
-  const { items, dismissingId, cursorTargetId, pulsingAgent, cursorVisible, cursorPos } =
-    useTimelineLoop(isInView);
+  const buttonPositionsRef = useRef<ButtonPositionMap>(new Map());
+
+  const { items, dismissingId, cursorTargetId, resolvedActions, pulsingAgent, cursorVisible, cursorClicking, cursorPos, cursorUser } =
+    useTimelineLoop(isInView, buttonPositionsRef.current);
 
   const pendingCount = items.filter(
     (i) => i.status === "awaiting_approval" || i.status === "awaiting_auth",
@@ -469,26 +646,22 @@ export function TeamShowcaseSection() {
   return (
     <section
       ref={sectionRef}
-      className="bg-background border-border/40 border-t px-6 py-16 md:py-24"
+      className="bg-muted/20 border-border/40 border-t px-6 py-20 md:py-32"
     >
       <div className="mx-auto max-w-6xl">
-        {/* Header */}
+        {/* Header — left-aligned */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="mb-12"
+          className="mb-14 md:mb-20"
         >
-          <p className="text-brand mb-2 text-xs font-semibold tracking-[0.2em] uppercase">
-            Your AI team
-          </p>
-          <h2 className="text-foreground max-w-xl text-4xl font-semibold tracking-tight md:text-5xl">
+          <h2 className="text-foreground max-w-md text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
             Coworkers that handle the work for you
           </h2>
-          <p className="text-muted-foreground mt-4 max-w-2xl text-lg">
-            Your agents work autonomously and surface what matters to your inbox — approvals, auth
-            requests, and results. You stay in control.
+          <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed">
+            Your agents work autonomously and surface what matters to your inbox — approvals, auth requests, and results. You stay in control.
           </p>
         </motion.div>
 
@@ -509,6 +682,7 @@ export function TeamShowcaseSection() {
 
           {/* Inbox feed — order-1 on mobile (above agents), order-2 on md+ (right) */}
           <motion.div
+            ref={inboxRef}
             initial={{ opacity: 0, x: 16 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
@@ -542,24 +716,28 @@ export function TeamShowcaseSection() {
                     item={item}
                     isDismissing={dismissingId === item.id}
                     cursorTarget={cursorTargetId === item.id}
+                    resolvedAction={resolvedActions[item.id] ?? null}
+                    inboxRef={inboxRef}
+                    buttonPositions={buttonPositionsRef.current}
                   />
                 ))}
               </AnimatePresence>
-
-              {items.length === 0 && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-muted-foreground/40 flex h-[280px] flex-col items-center justify-center gap-2"
-                >
-                  <Inbox className="size-8" />
-                  <span className="text-xs">Waiting for agents...</span>
-                </motion.div>
-              )}
             </div>
 
-            {/* Animated cursor */}
-            <FakeCursor visible={cursorVisible} x={cursorPos.x} y={cursorPos.y} />
+            {/* TODO: re-enable cursors later
+            <NamedCursor visible={cursorVisible} x={cursorPos.x} y={cursorPos.y} user={cursorUser} isClicking={cursorClicking} />
+
+            <CursorProvider>
+              <Cursor>
+                <CursorArrow color="#9B4D3C" />
+              </Cursor>
+              <CursorFollow>
+                <div className="rounded-full bg-[#9B4D3C] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
+                  You
+                </div>
+              </CursorFollow>
+            </CursorProvider>
+            */}
           </motion.div>
         </div>
       </div>

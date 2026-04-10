@@ -33,7 +33,7 @@ const EXAMPLES: Example[] = [
       name: "Lead Follow-up Agent",
       username: "lead-followup",
       integrations: ["hubspot", "google_gmail", "slack"],
-      trigger: "Webhook",
+      trigger: "On new reply",
     },
     dashboard: {
       rows: [
@@ -147,20 +147,62 @@ function BuildingAgent({
   agent: Example["agent"];
   started: boolean;
 }) {
+  const [showAvatar, setShowAvatar] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  const [typedUsername, setTypedUsername] = useState("");
+  const [showTrigger, setShowTrigger] = useState(false);
   const [visibleBadges, setVisibleBadges] = useState(0);
   const [isOn, setIsOn] = useState(false);
 
   useEffect(() => {
+    setShowAvatar(false);
+    setTypedName("");
+    setTypedUsername("");
+    setShowTrigger(false);
     setVisibleBadges(0);
     setIsOn(false);
     if (!started) return;
+
     const timers: ReturnType<typeof setTimeout>[] = [];
+    let t = 0;
+
+    // 1. Avatar fades in
+    t += 250;
+    timers.push(setTimeout(() => setShowAvatar(true), t));
+
+    // 2. Name types out letter by letter
+    const nameStart = t + 200;
+    for (let i = 0; i < agent.name.length; i++) {
+      timers.push(
+        setTimeout(() => setTypedName(agent.name.slice(0, i + 1)), nameStart + i * 40),
+      );
+    }
+    t = nameStart + agent.name.length * 40;
+
+    // 3. Username types out
+    const usernameStart = t + 100;
+    const fullUsername = `@${agent.username}`;
+    for (let i = 0; i < fullUsername.length; i++) {
+      timers.push(
+        setTimeout(() => setTypedUsername(fullUsername.slice(0, i + 1)), usernameStart + i * 30),
+      );
+    }
+    t = usernameStart + fullUsername.length * 30;
+
+    // 4. Trigger badge appears
+    t += 200;
+    timers.push(setTimeout(() => setShowTrigger(true), t));
+
+    // 5. Integration icons pop in one by one
     agent.integrations.forEach((_, i) => {
-      timers.push(setTimeout(() => setVisibleBadges(i + 1), 350 * (i + 1)));
+      t += 250;
+      timers.push(setTimeout(() => setVisibleBadges(i + 1), t));
     });
-    timers.push(
-      setTimeout(() => setIsOn(true), 350 * (agent.integrations.length + 1)),
-    );
+
+    // 6. Toggle flips to On
+    t += 300;
+    timers.push(setTimeout(() => setIsOn(true), t));
+
     return () => timers.forEach(clearTimeout);
   }, [started, agent]);
 
@@ -169,14 +211,47 @@ function BuildingAgent({
       {/* Mini card */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5">
-          <CoworkerAvatar
-            username={agent.username}
-            size={28}
-            className="shrink-0 rounded-full"
-          />
+          {/* Avatar: skeleton → real */}
+          <div className="relative size-7 shrink-0">
+            {!showAvatar && (
+              <div className="bg-muted absolute inset-0 rounded-full" />
+            )}
+            {showAvatar && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <CoworkerAvatar
+                  username={agent.username}
+                  size={28}
+                  className="shrink-0 rounded-full"
+                />
+              </motion.div>
+            )}
+          </div>
           <div className="min-w-0">
-            <p className="text-xs leading-tight font-medium">{agent.name}</p>
-            <p className="text-muted-foreground text-[10px]">@{agent.username}</p>
+            {/* Name: skeleton bar → typed text */}
+            <div className="h-4 flex items-center">
+              {typedName ? (
+                <p className="text-xs leading-tight font-medium">
+                  {typedName}
+                  {typedName.length < agent.name.length && (
+                    <span className="ml-px inline-block h-3 w-[1.5px] animate-[blink-cursor_1s_ease-in-out_infinite] bg-foreground/60" />
+                  )}
+                </p>
+              ) : (
+                <div className="bg-muted h-3 w-24 rounded" />
+              )}
+            </div>
+            {/* Username: skeleton bar → typed text */}
+            <div className="mt-0.5 h-3 flex items-center">
+              {typedUsername ? (
+                <p className="text-muted-foreground text-[10px]">{typedUsername}</p>
+              ) : (
+                <div className="bg-muted/60 h-2 w-16 rounded" />
+              )}
+            </div>
           </div>
         </div>
         <motion.div
@@ -214,9 +289,13 @@ function BuildingAgent({
 
       {/* Integration badges */}
       <div className="flex items-center gap-1.5">
-        <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium">
+        <motion.span
+          animate={{ opacity: showTrigger ? 1 : 0, scale: showTrigger ? 1 : 0.8 }}
+          transition={{ type: "spring", stiffness: 400, damping: 20 }}
+          className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium"
+        >
           {agent.trigger}
-        </span>
+        </motion.span>
         {agent.integrations.map((key, i) => (
           <motion.div
             key={key}
@@ -379,7 +458,7 @@ function ExampleDots({
             opacity: i === active ? 1 : 0.3,
           }}
           transition={{ duration: 0.3 }}
-          className="bg-brand h-1.5 rounded-full"
+          className="bg-foreground h-1.5 rounded-full"
         />
       ))}
     </div>
@@ -456,39 +535,36 @@ export function AnimatedHowItWorksSection() {
   return (
     <section
       ref={sectionRef}
-      className="border-border/40 bg-muted/30 border-t px-6 py-16 md:py-24"
+      className="border-border/40 bg-muted/30 border-t px-6 py-20 md:py-32"
     >
       <div className="mx-auto max-w-6xl">
-        {/* Header */}
+        {/* Header — right-aligned to break monotony */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="mb-12"
+          className="mb-14 md:mb-20 md:ml-auto md:max-w-xl md:text-right"
         >
-          <p className="text-brand mb-2 text-xs font-semibold tracking-[0.2em] uppercase">
-            How it works
-          </p>
-          <h2 className="text-foreground max-w-xl text-4xl font-semibold tracking-tight md:text-5xl">
+          <h2 className="text-foreground text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
             From idea to production in minutes
           </h2>
-          <p className="text-muted-foreground mt-4 max-w-2xl text-lg">
+          <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed md:ml-auto">
             Describe what you need. CmdClaw builds it, secures it, and deploys it.
           </p>
         </motion.div>
 
-        {/* 3-step pipeline */}
+        {/* 3-step pipeline — progressive visual weight */}
         <div className="flex flex-col items-stretch gap-3 md:flex-row md:gap-0 md:items-start">
-          {/* Step 1: Describe */}
+          {/* Step 1: Describe — lightest weight */}
           <div className="flex-1">
             <div className="mb-3 flex items-center gap-2.5">
-              <span className="bg-brand/10 text-brand flex size-8 items-center justify-center rounded-lg text-sm font-bold">
+              <span className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground text-sm font-bold">
                 1
               </span>
               <span className="text-foreground text-sm font-semibold">Describe</span>
             </div>
-            <div className="border-border/80 bg-background rounded-2xl border p-5 shadow-sm">
+            <div className="border-border/60 bg-background rounded-2xl border p-5">
               <div className="text-muted-foreground mb-3 text-[10px] font-medium tracking-wider uppercase">
                 Describe your agent
               </div>
@@ -511,10 +587,10 @@ export function AnimatedHowItWorksSection() {
 
           <FlowingConnector active={step2Started} />
 
-          {/* Step 2: Configure */}
+          {/* Step 2: Configure — medium weight */}
           <div className="flex-1">
             <div className="mb-3 flex items-center gap-2.5">
-              <span className="bg-brand/10 text-brand flex size-8 items-center justify-center rounded-lg text-sm font-bold">
+              <span className="bg-muted text-foreground flex size-8 items-center justify-center rounded-lg text-sm font-bold">
                 2
               </span>
               <span className="text-foreground text-sm font-semibold">Configure</span>
@@ -543,16 +619,16 @@ export function AnimatedHowItWorksSection() {
 
           <FlowingConnector active={step3Started} />
 
-          {/* Step 3: Deploy */}
+          {/* Step 3: Deploy — heaviest weight */}
           <div className="flex-1">
             <div className="mb-3 flex items-center gap-2.5">
-              <span className="bg-brand/10 text-brand flex size-8 items-center justify-center rounded-lg text-sm font-bold">
+              <span className="bg-foreground text-background flex size-8 items-center justify-center rounded-lg text-sm font-bold shadow-sm">
                 3
               </span>
-              <span className="text-foreground text-sm font-semibold">Deploy</span>
+              <span className="text-foreground text-sm font-bold">Deploy</span>
             </div>
-            <div className="border-border/80 bg-background space-y-3 rounded-2xl border p-5 shadow-sm">
-              <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wider uppercase">
+            <div className="border-border bg-background space-y-3 rounded-2xl border p-5 shadow-md">
+              <div className="text-foreground mb-1 text-[10px] font-semibold tracking-wider uppercase">
                 Deploy to your team
               </div>
               <AnimatePresence mode="wait">

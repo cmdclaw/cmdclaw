@@ -52,7 +52,7 @@ const DEPARTMENTS: Department[] = [
         name: "Lead Qualifier",
         username: "lead-qualifier",
         description: "Scores leads from HubSpot, routes hot leads to reps",
-        trigger: "Webhook",
+        trigger: "On new lead",
         status: "on",
         integrations: ["hubspot", "salesforce", "slack"],
         x: 40,
@@ -92,7 +92,7 @@ const DEPARTMENTS: Department[] = [
         name: "Escalation Bot",
         username: "escalation-bot",
         description: "Flags P0 tickets and pings on-call in Slack",
-        trigger: "Webhook",
+        trigger: "On new ticket",
         status: "on",
         integrations: ["slack", "linear"],
         x: 830,
@@ -152,7 +152,7 @@ const DEPARTMENTS: Department[] = [
         name: "Onboarding Bot",
         username: "onboarding-bot",
         description: "Sets up new hires in Notion, Slack, and Google",
-        trigger: "Webhook",
+        trigger: "On new hire",
         status: "on",
         integrations: ["notion", "slack", "google_calendar"],
         x: 830,
@@ -162,8 +162,8 @@ const DEPARTMENTS: Department[] = [
   },
 ];
 
-const CYCLE_INTERVAL_MS = 4000;
-const OVERVIEW_PAUSE_MS = 3000;
+const CYCLE_INTERVAL_MS = 2200;
+const OVERVIEW_PAUSE_MS = 5000;
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    MINI COWORKER CARD (static, for canvas)
@@ -491,25 +491,21 @@ function OrgChartCanvas() {
 
 export function OrgChartShowcaseSection() {
   return (
-    <section className="bg-background border-border/40 border-t px-6 py-16 md:py-24">
+    <section className="bg-background border-border/40 border-t px-6 py-20 md:py-32">
       <div className="mx-auto max-w-6xl">
-        {/* Header */}
+        {/* Header — centered for this visual-heavy section */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="mb-12"
+          className="mb-14 md:mb-20 text-center"
         >
-          <p className="text-brand mb-2 text-xs font-semibold tracking-[0.2em] uppercase">
-            Your new org
-          </p>
-          <h2 className="text-foreground max-w-xl text-4xl font-semibold tracking-tight md:text-5xl">
+          <h2 className="text-foreground mx-auto max-w-2xl text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
             Meet your new AI team
           </h2>
-          <p className="text-muted-foreground mt-4 max-w-2xl text-lg">
-            This is what your org looks like when repetitive work disappears. Every department
-            staffed with agents that run 24/7.
+          <p className="text-muted-foreground mx-auto mt-4 max-w-lg text-base leading-relaxed">
+            Every department powered by agents that run 24/7. No repetitive work left behind.
           </p>
         </motion.div>
 

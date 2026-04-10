@@ -214,7 +214,7 @@ function TemplateCard({
     <Link
       href={isMobile ? `/template/${template.id}` : `/?preview=${template.id}`}
       scroll={false}
-      className="group border-border/60 bg-card relative flex min-h-[170px] w-full flex-col gap-3 rounded-xl border p-4 text-left shadow-sm transition-all duration-150 hover:border-slate-300 hover:bg-slate-100"
+      className="group border-border/60 bg-card relative flex min-h-[170px] w-full flex-col gap-3 rounded-xl border p-5 text-left shadow-sm transition-all duration-150 hover:border-slate-300 hover:bg-slate-100"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -572,8 +572,8 @@ export function CoworkerLanding({
 
   return (
     <>
-      <div className="relative min-h-screen overflow-x-hidden bg-slate-950">
-        <div className="pointer-events-none absolute inset-0">
+      <div className="relative min-h-screen overflow-visible">
+        <div className={`pointer-events-none absolute inset-0 overflow-hidden ${isAnonymous ? "[mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)]" : ""}`}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
           <Image
             src="/landing/brick-building-mobile.avif"
@@ -638,7 +638,7 @@ export function CoworkerLanding({
                   loggedInHeadline
                 )}
               </h1>
-              <p className="mb-8 text-center text-base text-white md:text-lg">
+              <p className="mx-auto mb-8 max-w-md text-center text-base text-white/70 md:text-lg">
                 Describe a task and we&apos;ll build it step by step
               </p>
               <PromptBar
@@ -711,19 +711,16 @@ export function CoworkerLanding({
           <TeamShowcaseSection />
 
           {/* ── CTA ── */}
-          <section className="border-border/40 relative overflow-hidden border-t bg-slate-950 px-6 py-20 md:py-28">
+          <section className="border-border/40 relative overflow-hidden border-t bg-slate-950 px-6 py-24 md:py-36">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08),transparent_70%)]" />
-            <div className="relative mx-auto max-w-2xl text-center">
-              <p className="mb-4 text-xs font-semibold tracking-[0.2em] uppercase text-slate-500">
-                Get started
-              </p>
-              <h2 className="mb-4 text-4xl font-semibold tracking-tight text-white md:text-5xl">
-                Stop building agents you can&apos;t deploy
+            <div className="relative mx-auto max-w-xl text-center">
+              <h2 className="mb-5 text-3xl font-bold tracking-tight text-white md:text-[2.75rem] md:leading-[1.15]">
+                Deploy your first AI coworker today
               </h2>
-              <p className="mb-10 text-lg text-slate-400">
-                Start free. Build your first AI coworker in minutes. Deploy it to your team today.
+              <p className="mx-auto mb-10 max-w-sm text-base leading-relaxed text-slate-400">
+                Start free. Build your first AI coworker in minutes.
               </p>
-              <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+              <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                 <Button
                   size="lg"
                   asChild
@@ -736,14 +733,6 @@ export function CoworkerLanding({
                   >
                     Book a Demo
                   </a>
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  asChild
-                  className="border-slate-700 bg-transparent text-slate-300 hover:border-slate-500 hover:bg-slate-900 hover:text-white"
-                >
-                  <Link href="/login">Start for free</Link>
                 </Button>
               </div>
               <div className="mt-6 flex items-center justify-center">

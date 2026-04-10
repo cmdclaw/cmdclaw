@@ -152,7 +152,7 @@ function LiveDemoCard() {
 
   return (
     <BentoCard
-      className="md:col-span-2 md:row-span-2"
+      className="h-full"
       gradient="bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.04),transparent_60%)]"
     >
       <div className="flex h-full flex-col p-6 md:p-8">
@@ -238,12 +238,12 @@ function LiveDemoCard() {
 function ApprovalWorkflowsCard() {
   return (
     <BentoCard gradient="bg-[radial-gradient(ellipse_at_bottom_right,rgba(245,158,11,0.04),transparent_60%)]">
-      <div className="p-6 md:p-8">
+      <div className="p-6">
         <div className="bg-muted/60 border-border/40 mb-4 inline-flex size-10 items-center justify-center rounded-xl border">
           <Shield className="text-foreground/70 size-5" />
         </div>
-        <h3 className="text-foreground text-sm font-semibold">Approval workflows</h3>
-        <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
+        <h3 className="text-foreground text-[15px] font-semibold">Approval workflows</h3>
+        <p className="text-muted-foreground mt-1.5 max-w-xs text-sm leading-relaxed">
           Every sensitive action goes through human review. Your agent asks before sending emails,
           updating CRM records, or posting messages.
         </p>
@@ -274,10 +274,10 @@ const FEATURED_INTEGRATIONS: IntegrationType[] = [
 function IntegrationsCard() {
   return (
     <BentoCard gradient="bg-[radial-gradient(ellipse_at_top_right,rgba(139,92,246,0.04),transparent_60%)]">
-      <div className="p-6 md:p-8">
-        <h3 className="text-foreground text-lg font-semibold">Integrate with all your tools</h3>
-        <p className="text-muted-foreground mt-1 mb-6 text-sm">
-          One-click OAuth. No API keys to manage.
+      <div className="p-6">
+        <h3 className="text-foreground text-[15px] font-semibold">Integrate with all your tools</h3>
+        <p className="text-muted-foreground mt-1 mb-5 text-sm">
+          Connect your tools in one click.
         </p>
         <div className="grid grid-cols-4 gap-2.5">
           {FEATURED_INTEGRATIONS.map((key, i) => (
@@ -323,14 +323,14 @@ const FEATURE_CARDS = [
   {
     icon: Users,
     title: "Team collaboration",
-    desc: "Share agents across your workspace. Role-based permissions. Shared OAuth connections.",
+    desc: "Share agents across your team. Control who can edit, run, or approve.",
     gradient:
       "bg-[radial-gradient(ellipse_at_top_center,rgba(245,158,11,0.05),transparent_60%)]",
   },
   {
     icon: Clock,
     title: "Runs without you",
-    desc: "Schedule agents on cron, trigger on webhooks, or fire on incoming emails. They run 24/7.",
+    desc: "Run every Monday at 9am, on every new CRM deal, or when an email arrives. They never stop.",
     gradient:
       "bg-[radial-gradient(ellipse_at_top_right,rgba(16,185,129,0.05),transparent_60%)]",
   },
@@ -345,12 +345,12 @@ function FeatureCard({
 }: (typeof FEATURE_CARDS)[number] & { index: number }) {
   return (
     <BentoCard gradient={gradient}>
-      <div className="p-6 md:p-8">
+      <div className="p-6">
         <div className="bg-muted/60 border-border/40 mb-4 inline-flex size-10 items-center justify-center rounded-xl border">
           <Icon className="text-foreground/70 size-5" />
         </div>
-        <h3 className="text-foreground text-sm font-semibold">{title}</h3>
-        <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">{desc}</p>
+        <h3 className="text-foreground text-[15px] font-semibold">{title}</h3>
+        <p className="text-muted-foreground mt-1.5 max-w-xs text-sm leading-relaxed">{desc}</p>
       </div>
     </BentoCard>
   );
@@ -362,32 +362,30 @@ function FeatureCard({
 
 export function BentoFeaturesSection() {
   return (
-    <section className="bg-background px-6 py-16 md:py-24">
+    <section className="relative z-10 bg-background px-6 pt-16 pb-20 md:pt-24 md:pb-28">
       <div className="mx-auto max-w-6xl">
-        {/* Left-aligned header */}
+        {/* Left-aligned header — strong typographic hierarchy */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="mb-12"
+          className="mb-14 md:mb-20"
         >
-          <p className="text-brand mb-2 text-xs font-semibold tracking-[0.2em] uppercase">
-            Platform
-          </p>
-          <h2 className="text-foreground max-w-xl text-4xl font-semibold tracking-tight md:text-5xl">
-            Everything you need to ship AI agents
+          <h2 className="text-foreground max-w-lg text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
+            Ship AI agents that actually work
           </h2>
-          <p className="text-muted-foreground mt-4 max-w-2xl text-lg">
-            Build, configure, and deploy autonomous coworkers that connect to your tools and work
-            around the clock.
+          <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed">
+            Build, configure, and deploy autonomous coworkers that connect to your tools and run around the clock.
           </p>
         </motion.div>
 
-        {/* Bento grid */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* Bento grid — consistent 2×3 */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {/* Large card: live demo — spans 2 cols, 2 rows */}
-          <LiveDemoCard />
+          <div className="md:col-span-2 lg:col-span-2 lg:row-span-2">
+            <LiveDemoCard />
+          </div>
 
           {/* Right column: integrations */}
           <IntegrationsCard />
