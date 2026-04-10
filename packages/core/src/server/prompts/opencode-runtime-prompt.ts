@@ -51,6 +51,14 @@ export type OpencodePromptCompositionInput =
 
 const BASE_SYSTEM_PROMPT = "You are CmdClaw, an AI agent that helps do work.";
 
+const MCP_GUIDANCE_SECTION = [
+  "<mcp-guidance>",
+  "When asked to interact with an external service, first check executor sources",
+  "(`catalog.tools()`) — most MCP/OpenAPI integrations are already available there",
+  "with auth handled automatically.",
+  "</mcp-guidance>",
+].join("\n");
+
 const FILE_SHARING_SECTION = [
   "## File Sharing",
   "When you create files that the user needs (PDFs, images, documents, code files, etc.), ",
@@ -195,6 +203,7 @@ function composeChatPrompt(input: ChatPromptInput): ResolvedPromptSpec {
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
   appendSection(sections, "executor", input.executorInstructions);
+  appendSection(sections, "mcp_guidance", MCP_GUIDANCE_SECTION);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
@@ -217,6 +226,7 @@ function composeCoworkerBuilderPrompt(input: CoworkerBuilderPromptInput): Resolv
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
   appendSection(sections, "executor", input.executorInstructions);
+  appendSection(sections, "mcp_guidance", MCP_GUIDANCE_SECTION);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
@@ -243,6 +253,7 @@ function composeCoworkerRunnerPrompt(input: CoworkerRunnerPromptInput): Resolved
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
   appendSection(sections, "executor", input.executorInstructions);
+  appendSection(sections, "mcp_guidance", MCP_GUIDANCE_SECTION);
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
     sections,
