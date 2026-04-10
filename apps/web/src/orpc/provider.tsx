@@ -3,13 +3,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { authClient } from "@/lib/auth-client";
 
 type ORPCProviderProps = {
   children: ReactNode;
+  syncSessionUser?: boolean;
 };
 
-export function ORPCProvider({ children }: ORPCProviderProps) {
+export function ORPCProvider({ children, syncSessionUser = true }: ORPCProviderProps) {
   const pathname = usePathname();
   const [queryClient] = useState(
     () =>
@@ -25,10 +25,15 @@ export function ORPCProvider({ children }: ORPCProviderProps) {
   const lastSessionUserIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
+    if (!syncSessionUser) {
+      return;
+    }
+
     let active = true;
 
-    const syncSessionUser = async () => {
+    const syncSessionUserState = async () => {
       try {
+        const { authClient } = await import("@/lib/auth-client");
         const sessionResult = await authClient.getSession();
         if (!active) {
           return;
@@ -56,7 +61,7 @@ export function ORPCProvider({ children }: ORPCProviderProps) {
     };
 
     const runSync = () => {
-      void syncSessionUser();
+      void syncSessionUserState();
     };
 
     runSync();
@@ -77,7 +82,7 @@ export function ORPCProvider({ children }: ORPCProviderProps) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [pathname, queryClient]);
+  }, [pathname, queryClient, syncSessionUser]);
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }

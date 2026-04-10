@@ -1,15 +1,9 @@
 import type { Metadata } from "next";
 import type React from "react";
-import { AutumnProvider } from "autumn-js/react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
-import { AppShellRouteWrapper } from "@/components/app-shell-route-wrapper";
-import { DesktopNotificationPermissionGate } from "@/components/desktop-notification-permission-gate";
-import { PostHogClientProvider } from "@/components/posthog-provider";
-import { Toaster } from "@/components/ui/sonner";
 import { env } from "@/env";
 import { auth } from "@/lib/auth";
-import { ORPCProvider } from "@/orpc/provider";
 // oxlint-disable-next-line import/no-unassigned-import
 import "./globals.css";
 
@@ -23,23 +17,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const isSelfHostedEdition = env.CMDCLAW_EDITION === "selfhost";
-
-function BillingProviderWrapper({ children }: { children: React.ReactNode }) {
-  if (isSelfHostedEdition) {
-    return children;
-  }
-
-  return (
-    <AutumnProvider betterAuthUrl={env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? ""}>
-      {children}
-    </AutumnProvider>
-  );
-}
-
 export const metadata: Metadata = {
-  title: isSelfHostedEdition ? "CmdClaw Self-hosted" : "CmdClaw",
-  description: isSelfHostedEdition ? "Your self-hosted CmdClaw deployment" : "Your AI Assistant",
+  title: env.CMDCLAW_EDITION === "selfhost" ? "CmdClaw Self-hosted" : "CmdClaw",
+  description:
+    env.CMDCLAW_EDITION === "selfhost"
+      ? "Your self-hosted CmdClaw deployment"
+      : "Your AI Assistant",
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -57,10 +40,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const requestHeaders = await headers();
+  const pathname = requestHeaders.get("x-cmdclaw-pathname");
   const sessionData = await auth.api.getSession({
     headers: requestHeaders,
   });
   const hasSession = Boolean(sessionData?.session && sessionData?.user);
+  const shouldUseMarketingShell = pathname === "/" && !hasSession;
+  const Shell = shouldUseMarketingShell
+    ? (await import("@/components/marketing-root-shell")).MarketingRootShell
+    : (await import("@/components/app-root-shell")).AppRootShell;
 
   return (
     <html lang="en">
@@ -68,15 +56,7 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         data-edition={env.CMDCLAW_EDITION}
       >
-        <PostHogClientProvider>
-          <ORPCProvider>
-            <BillingProviderWrapper>
-              <DesktopNotificationPermissionGate enabled={hasSession} />
-              <AppShellRouteWrapper initialHasSession={hasSession}>{children}</AppShellRouteWrapper>
-              <Toaster />
-            </BillingProviderWrapper>
-          </ORPCProvider>
-        </PostHogClientProvider>
+        <Shell hasSession={hasSession}>{children}</Shell>
       </body>
     </html>
   );

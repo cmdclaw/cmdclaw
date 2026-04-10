@@ -6,6 +6,14 @@ const publicRoutes = ["/login", "/api/auth", "/legal", "/support", "/shared"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-cmdclaw-pathname", pathname);
+  const nextResponse = () =>
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
 
   // Allow public routes and static assets
   if (
@@ -14,7 +22,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api/rpc") ||
     pathname.includes(".")
   ) {
-    return NextResponse.next();
+    return nextResponse();
   }
 
   // Check if accessing a protected route
@@ -33,7 +41,7 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return nextResponse();
 }
 
 export const config = {
