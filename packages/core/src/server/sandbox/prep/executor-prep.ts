@@ -572,7 +572,7 @@ export async function prepareExecutorInSandbox(input: {
     "Use executor through the local server instead of editing `.executor` files manually.",
     "Useful commands:",
     `- \`curl -fsS ${EXECUTOR_BASE_URL}/ >/dev/null && echo 'executor ready'\``,
-    `- \`EXECUTOR_HOME=${homeDirectory} executor call --base-url ${EXECUTOR_BASE_URL} --no-open 'const tools = await catalog.tools(); return tools;'\``,
+    `- \`EXECUTOR_HOME=${homeDirectory} executor call --base-url ${EXECUTOR_BASE_URL} --no-open 'return await tools.discover({ query: \"available tools\", limit: 20 });'\``,
     "Inside executor code, use the discovery workflow and call `tools.*` APIs rather than raw fetch.",
     "Connected workspace sources in this sandbox:",
     ...bootstrap.sources.map(

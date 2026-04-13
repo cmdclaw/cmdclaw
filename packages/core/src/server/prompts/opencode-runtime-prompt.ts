@@ -54,7 +54,7 @@ const BASE_SYSTEM_PROMPT = "You are CmdClaw, an AI agent that helps do work.";
 const MCP_GUIDANCE_SECTION = [
   "<mcp-guidance>",
   "When asked to interact with an external service, first check executor sources",
-  "(`catalog.tools()`) — most MCP/OpenAPI integrations are already available there",
+  "(`tools.discover(...)`) — most MCP/OpenAPI integrations are already available there",
   "with auth handled automatically.",
   "</mcp-guidance>",
 ].join("\n");
