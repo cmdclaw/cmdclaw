@@ -1,5 +1,6 @@
 "use client";
 
+import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowLeft,
@@ -59,11 +60,11 @@ import {
   getEffectiveSeenMessageCount,
   hasUnreadConversationResults,
 } from "@/lib/conversation-seen";
-import { flattenCoworkerRecentRuns } from "@/lib/coworker-recent-runs";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { clientEditionCapabilities } from "@/lib/edition";
 import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
+import { client } from "@/orpc/client";
 import {
   useConversationList,
   useDeleteConversation,
@@ -71,7 +72,6 @@ import {
   useMarkConversationSeen,
   useUpdateConversationPinned,
   useUpdateConversationTitle,
-  useCoworkerList,
 } from "@/orpc/hooks";
 
 type ConversationListData = {
@@ -92,6 +92,18 @@ type ConversationListData = {
     seenMessageCount: number;
   }>;
 };
+type WorkspaceCoworkerRunsData = {
+  runs: Array<{
+    id: string;
+    status: string;
+    startedAt: Date;
+    finishedAt: Date | null;
+    errorMessage: string | null;
+    conversationId: string | null;
+    coworkerId: string | null;
+    coworkerName: string;
+  }>;
+};
 
 const RUNNING_CONVERSATION_STATUSES = new Set([
   "generating",
@@ -99,7 +111,51 @@ const RUNNING_CONVERSATION_STATUSES = new Set([
   "awaiting_auth",
   "paused",
 ]);
+const ACTIVE_COWORKER_RUN_STATUSES = new Set([
+  "running",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+]);
 const EMPTY_CONVERSATIONS: ConversationListData["conversations"] = [];
+const EMPTY_COWORKER_RUNS: WorkspaceCoworkerRunsData["runs"] = [];
+const RECENT_LIST_LOAD_MORE_THRESHOLD_PX = 24;
+
+function isActiveCoworkerRunStatus(status: string | null | undefined): boolean {
+  return typeof status === "string" && ACTIVE_COWORKER_RUN_STATUSES.has(status);
+}
+
+function useWorkspaceCoworkerRuns(options?: { limit?: number; enabled?: boolean }) {
+  const query = useInfiniteQuery({
+    queryKey: ["coworker", "workspace-runs", options?.limit],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      client.coworker.listWorkspaceRuns({
+        limit: options?.limit ?? 50,
+        cursor: pageParam,
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled: options?.enabled ?? true,
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) =>
+        page.runs.some((run) => isActiveCoworkerRunStatus(run.status)),
+      )
+        ? 5_000
+        : false,
+  });
+
+  const data = useMemo(
+    () => ({
+      runs: query.data?.pages.flatMap((page) => page.runs) ?? [],
+    }),
+    [query.data],
+  );
+
+  return {
+    ...query,
+    data,
+  };
+}
 
 function formatRelativeShort(date: Date) {
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -222,10 +278,28 @@ export function AppSidebar() {
     | null
   >(null);
   const latestSeenRef = useRef<Record<string, number>>({});
-
-  const { data: coworkers } = useCoworkerList();
-  const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
+  const recentScrollRef = useRef<HTMLElement | null>(null);
+  const recentChatsLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const recentCoworkerRunsLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const {
+    data: rawConversationData,
+    isLoading: conversationsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useConversationList();
   const conversationData = rawConversationData as ConversationListData | undefined;
+  const isCoworkerPage = pathname === "/coworkers" || pathname.startsWith("/coworkers/");
+  const {
+    data: rawCoworkerRunsData,
+    isLoading: coworkerRunsLoading,
+    fetchNextPage: fetchNextCoworkerRunsPage,
+    hasNextPage: hasNextCoworkerRunsPage,
+    isFetchingNextPage: isFetchingNextCoworkerRunsPage,
+  } = useWorkspaceCoworkerRuns({
+    enabled: isCoworkerPage,
+  });
+  const coworkerRunsData = rawCoworkerRunsData as WorkspaceCoworkerRunsData | undefined;
   const deleteConversation = useDeleteConversation();
   const markAllConversationsSeenMutation = useMarkAllConversationsSeen();
   const markConversationSeenMutation = useMarkConversationSeen();
@@ -305,8 +379,6 @@ export function AppSidebar() {
     }
     return pathname === href || pathname.startsWith(href + "/");
   };
-  const isCoworkerPage = pathname === "/coworkers" || pathname.startsWith("/coworkers/");
-
   // Only animate the recent section when navigating to/from coworkers, not on first load/reload.
   const recentDirection = isCoworkerPage ? 1 : -1;
   const [recentAnimState, setRecentAnimState] = useState<"idle" | "animating">(() => {
@@ -393,10 +465,7 @@ export function AppSidebar() {
     ? [{ icon: Shield, label: "Instance", href: "/instance" }]
     : [];
 
-  const recentCoworkerRuns = useMemo(
-    () => flattenCoworkerRecentRuns(coworkers).slice(0, 5),
-    [coworkers],
-  );
+  const recentCoworkerRuns = coworkerRunsData?.runs ?? EMPTY_COWORKER_RUNS;
   const recentConversations = conversationData?.conversations ?? EMPTY_CONVERSATIONS;
   const unreadConversationCount = recentConversations.filter(
     (conversation) =>
@@ -406,6 +475,78 @@ export function AppSidebar() {
         optimisticSeenCount: latestSeenRef.current[conversation.id],
       }),
   ).length;
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const root = recentScrollRef.current;
+    const node = isCoworkerPage
+      ? recentCoworkerRunsLoadMoreRef.current
+      : recentChatsLoadMoreRef.current;
+    const hasNextRecentPage = isCoworkerPage ? hasNextCoworkerRunsPage : hasNextPage;
+    const isFetchingNextRecentPage = isCoworkerPage
+      ? isFetchingNextCoworkerRunsPage
+      : isFetchingNextPage;
+    const fetchNextRecentPage = isCoworkerPage ? fetchNextCoworkerRunsPage : fetchNextPage;
+    if (!root || !node || !hasNextRecentPage) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isFetchingNextRecentPage) {
+          void fetchNextRecentPage();
+        }
+      },
+      {
+        root,
+        rootMargin: "200px 0px",
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [
+    fetchNextCoworkerRunsPage,
+    fetchNextPage,
+    hasNextCoworkerRunsPage,
+    hasNextPage,
+    isCoworkerPage,
+    isFetchingNextCoworkerRunsPage,
+    isFetchingNextPage,
+  ]);
+
+  useEffect(() => {
+    const isLoadingRecent = isCoworkerPage ? coworkerRunsLoading : conversationsLoading;
+    const isFetchingNextRecentPage = isCoworkerPage
+      ? isFetchingNextCoworkerRunsPage
+      : isFetchingNextPage;
+    const hasNextRecentPage = isCoworkerPage ? hasNextCoworkerRunsPage : hasNextPage;
+    const fetchNextRecentPage = isCoworkerPage ? fetchNextCoworkerRunsPage : fetchNextPage;
+
+    if (isLoadingRecent || isFetchingNextRecentPage || !hasNextRecentPage) {
+      return;
+    }
+
+    const root = recentScrollRef.current;
+    if (!root || root.scrollHeight > root.clientHeight) {
+      return;
+    }
+
+    void fetchNextRecentPage();
+  }, [
+    conversationsLoading,
+    coworkerRunsLoading,
+    fetchNextCoworkerRunsPage,
+    fetchNextPage,
+    hasNextCoworkerRunsPage,
+    hasNextPage,
+    isCoworkerPage,
+    isFetchingNextCoworkerRunsPage,
+    isFetchingNextPage,
+  ]);
 
   useEffect(() => {
     const activeConversationId = pathname.startsWith("/chat/")
@@ -587,6 +728,35 @@ export function AppSidebar() {
     [router],
   );
 
+  const handleRecentListScroll = useCallback(
+    (event: React.UIEvent<HTMLElement>) => {
+      const hasNextRecentPage = isCoworkerPage ? hasNextCoworkerRunsPage : hasNextPage;
+      const isFetchingNextRecentPage = isCoworkerPage
+        ? isFetchingNextCoworkerRunsPage
+        : isFetchingNextPage;
+      const fetchNextRecentPage = isCoworkerPage ? fetchNextCoworkerRunsPage : fetchNextPage;
+
+      if (!hasNextRecentPage || isFetchingNextRecentPage) {
+        return;
+      }
+
+      const node = event.currentTarget;
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      if (distanceFromBottom <= RECENT_LIST_LOAD_MORE_THRESHOLD_PX) {
+        void fetchNextRecentPage();
+      }
+    },
+    [
+      fetchNextCoworkerRunsPage,
+      fetchNextPage,
+      hasNextCoworkerRunsPage,
+      hasNextPage,
+      isCoworkerPage,
+      isFetchingNextCoworkerRunsPage,
+      isFetchingNextPage,
+    ],
+  );
+
   return (
     <>
       <BugReportDialog open={reportOpen} onOpenChange={setReportOpen} />
@@ -656,7 +826,11 @@ export function AppSidebar() {
 
         {/* Scrollable nav */}
         <div className="relative min-h-0 flex-1">
-          <nav className="relative h-full overflow-y-auto px-2.5 pt-1 pb-10">
+          <nav
+            ref={recentScrollRef}
+            onScroll={handleRecentListScroll}
+            className="relative h-full overflow-y-auto px-2.5 pt-1 pb-10"
+          >
             {/* Normal mode panel */}
             <div
               className={cn(
@@ -758,59 +932,179 @@ export function AppSidebar() {
                           No conversations yet
                         </div>
                       ) : (
-                        recentConversations.map((conversation) => {
-                          const isConversationActive = isActive(`/chat/${conversation.id}`);
-                          const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
-                            conversation.generationStatus,
-                          );
-                          const hasUnreadResults = hasUnreadConversationResults({
-                            isConversationActive,
-                            isConversationRunning,
-                            messageCount: conversation.messageCount,
-                            serverSeenCount: conversation.seenMessageCount,
-                            optimisticSeenCount: latestSeenRef.current[conversation.id],
-                          });
-                          const showConversationIndicator =
-                            isConversationRunning || hasUnreadResults;
+                        <>
+                          {recentConversations.map((conversation) => {
+                            const isConversationActive = isActive(`/chat/${conversation.id}`);
+                            const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
+                              conversation.generationStatus,
+                            );
+                            const hasUnreadResults = hasUnreadConversationResults({
+                              isConversationActive,
+                              isConversationRunning,
+                              messageCount: conversation.messageCount,
+                              serverSeenCount: conversation.seenMessageCount,
+                              optimisticSeenCount: latestSeenRef.current[conversation.id],
+                            });
+                            const showConversationIndicator =
+                              isConversationRunning || hasUnreadResults;
+
+                            return (
+                              <div
+                                key={conversation.id}
+                                className={cn(
+                                  "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
+                                  isConversationActive
+                                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                    : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                                )}
+                              >
+                                <Link
+                                  href={`/chat/${conversation.id}`}
+                                  prefetch={false}
+                                  className="flex min-w-0 flex-1 items-center"
+                                >
+                                  {isConversationRunning ? (
+                                    <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                  ) : hasUnreadResults ? (
+                                    <span
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
+                                      aria-label="New unread results"
+                                    />
+                                  ) : null}
+                                  <span
+                                    className={cn(
+                                      "min-w-0 flex-1 truncate",
+                                      showConversationIndicator && "ml-2",
+                                    )}
+                                  >
+                                    {conversation.title || "Untitled"}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
+                                      "group-hover:opacity-0 group-focus-within:opacity-0",
+                                    )}
+                                  >
+                                    {formatRelativeShort(new Date(conversation.updatedAt))}
+                                  </span>
+                                </Link>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
+                                        "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
+                                        "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                                        "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
+                                        isConversationActive
+                                          ? "before:from-sidebar-accent"
+                                          : "before:from-sidebar",
+                                      )}
+                                      aria-label="Conversation actions"
+                                    >
+                                      <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" side="right">
+                                    <DropdownMenuItem
+                                      data-conversation-id={conversation.id}
+                                      data-conversation-pinned={
+                                        conversation.isPinned ? "true" : "false"
+                                      }
+                                      onClick={handlePinMenuClick}
+                                    >
+                                      {conversation.isPinned ? (
+                                        <PinOff className="h-4 w-4" />
+                                      ) : (
+                                        <Pin className="h-4 w-4" />
+                                      )}
+                                      <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      data-conversation-id={conversation.id}
+                                      data-conversation-title={conversation.title ?? "Untitled"}
+                                      onClick={handleUsageMenuClick}
+                                    >
+                                      <BarChart3 className="h-4 w-4" />
+                                      <span>Show usage</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      data-conversation-id={conversation.id}
+                                      data-conversation-title={conversation.title ?? ""}
+                                      onClick={handleRenameMenuClick}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                      <span>Rename</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      data-conversation-id={conversation.id}
+                                      onClick={handleDeleteMenuClick}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      <span>Delete</span>
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            );
+                          })}
+                          {hasNextPage ? (
+                            <div
+                              ref={recentChatsLoadMoreRef}
+                              className="text-sidebar-foreground/45 px-2.5 py-2 text-[12px]"
+                            >
+                              {isFetchingNextPage
+                                ? "Loading older chats..."
+                                : "Scroll for older chats"}
+                            </div>
+                          ) : null}
+                        </>
+                      )
+                    ) : coworkerRunsLoading ? (
+                      <span className="text-sidebar-foreground/55 px-2.5 py-1 text-[12px]">
+                        Loading...
+                      </span>
+                    ) : recentCoworkerRuns.length === 0 ? (
+                      <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
+                        No runs yet
+                      </div>
+                    ) : (
+                      <>
+                        {recentCoworkerRuns.map((run) => {
+                          const runPath = `/coworkers/runs/${run.id}`;
 
                           return (
                             <div
-                              key={conversation.id}
+                              key={run.id}
                               className={cn(
-                                "group relative flex h-8 items-center rounded-md px-2.5 text-[13px] transition-colors",
-                                isConversationActive
+                                "group relative rounded-md text-[13px] transition-colors",
+                                pathname === runPath
                                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                  : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                               )}
                             >
                               <Link
-                                href={`/chat/${conversation.id}`}
+                                href={runPath}
                                 prefetch={false}
-                                className="flex min-w-0 flex-1 items-center"
+                                className="flex min-h-10 flex-col justify-center px-2.5 py-1.5 pr-8"
                               >
-                                {isConversationRunning ? (
-                                  <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                                ) : hasUnreadResults ? (
+                                <span className="flex items-center gap-2">
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {run.coworkerName}
+                                  </span>
                                   <span
-                                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
-                                    aria-label="New unread results"
-                                  />
-                                ) : null}
-                                <span
-                                  className={cn(
-                                    "min-w-0 flex-1 truncate",
-                                    showConversationIndicator && "ml-2",
-                                  )}
-                                >
-                                  {conversation.title || "Untitled"}
+                                    className={cn(
+                                      "text-sidebar-foreground/45 shrink-0 text-[11px] transition-opacity",
+                                      "group-hover:opacity-0 group-focus-within:opacity-0",
+                                    )}
+                                  >
+                                    {formatRelativeShortNullable(run.startedAt)}
+                                  </span>
                                 </span>
-                                <span
-                                  className={cn(
-                                    "text-sidebar-foreground/50 ml-2 shrink-0 text-[12px] transition-opacity",
-                                    "group-hover:opacity-0 group-focus-within:opacity-0",
-                                  )}
-                                >
-                                  {formatRelativeShort(new Date(conversation.updatedAt))}
+                                <span className="text-sidebar-foreground/45 truncate text-[11px]">
+                                  {getCoworkerRunStatusLabel(run.status)}
                                 </span>
                               </Link>
                               <DropdownMenu>
@@ -822,130 +1116,40 @@ export function AppSidebar() {
                                       "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
                                       "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
                                       "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
-                                      isConversationActive
+                                      pathname === runPath
                                         ? "before:from-sidebar-accent"
                                         : "before:from-sidebar",
                                     )}
-                                    aria-label="Conversation actions"
+                                    aria-label="Run actions"
                                   >
                                     <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" side="right">
                                   <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    data-conversation-pinned={
-                                      conversation.isPinned ? "true" : "false"
-                                    }
-                                    onClick={handlePinMenuClick}
-                                  >
-                                    {conversation.isPinned ? (
-                                      <PinOff className="h-4 w-4" />
-                                    ) : (
-                                      <Pin className="h-4 w-4" />
-                                    )}
-                                    <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    data-conversation-title={conversation.title ?? "Untitled"}
-                                    onClick={handleUsageMenuClick}
+                                    data-conversation-id={run.conversationId ?? ""}
+                                    data-run-title={run.coworkerName}
+                                    onClick={handleRunUsageMenuClick}
                                   >
                                     <BarChart3 className="h-4 w-4" />
                                     <span>Show usage</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    data-conversation-title={conversation.title ?? ""}
-                                    onClick={handleRenameMenuClick}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                    <span>Rename</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    data-conversation-id={conversation.id}
-                                    onClick={handleDeleteMenuClick}
-                                    className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                    <span>Delete</span>
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
                           );
-                        })
-                      )
-                    ) : recentCoworkerRuns.length === 0 ? (
-                      <div className="text-sidebar-foreground/30 px-2.5 py-3 text-[12px]">
-                        No runs yet
-                      </div>
-                    ) : (
-                      recentCoworkerRuns.map((run) => {
-                        const runPath = `/coworkers/runs/${run.id}`;
-
-                        return (
+                        })}
+                        {(hasNextCoworkerRunsPage || isFetchingNextCoworkerRunsPage) && (
                           <div
-                            key={run.id}
-                            className={cn(
-                              "group relative rounded-md text-[13px] transition-colors",
-                              pathname === runPath
-                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                            )}
+                            ref={recentCoworkerRunsLoadMoreRef}
+                            className="text-sidebar-foreground/45 px-2.5 py-2 text-[12px]"
                           >
-                            <Link
-                              href={runPath}
-                              prefetch={false}
-                              className="flex min-h-10 flex-col justify-center px-2.5 py-1.5 pr-8"
-                            >
-                              <span className="flex items-center gap-2">
-                                <span className="min-w-0 flex-1 truncate">{run.coworkerName}</span>
-                                <span
-                                  className={cn(
-                                    "text-sidebar-foreground/45 shrink-0 text-[11px] transition-opacity",
-                                    "group-hover:opacity-0 group-focus-within:opacity-0",
-                                  )}
-                                >
-                                  {formatRelativeShortNullable(run.startedAt)}
-                                </span>
-                              </span>
-                              <span className="text-sidebar-foreground/45 truncate text-[11px]">
-                                {getCoworkerRunStatusLabel(run.status)}
-                              </span>
-                            </Link>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={cn(
-                                    "text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-1/2 right-1 z-10 h-6 w-6 -translate-y-1/2 rounded-sm opacity-0 transition-opacity",
-                                    "pointer-events-none group-hover:pointer-events-auto focus-visible:pointer-events-auto data-[state=open]:pointer-events-auto",
-                                    "group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
-                                    "before:pointer-events-none before:absolute before:-inset-y-1 before:-left-9 before:w-9 before:bg-gradient-to-l before:to-transparent",
-                                    pathname === runPath
-                                      ? "before:from-sidebar-accent"
-                                      : "before:from-sidebar",
-                                  )}
-                                  aria-label="Run actions"
-                                >
-                                  <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" side="right">
-                                <DropdownMenuItem
-                                  data-conversation-id={run.conversationId ?? ""}
-                                  data-run-title={run.coworkerName}
-                                  onClick={handleRunUsageMenuClick}
-                                >
-                                  <BarChart3 className="h-4 w-4" />
-                                  <span>Show usage</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            {isFetchingNextCoworkerRunsPage
+                              ? "Loading older runs..."
+                              : "Scroll for older runs"}
                           </div>
-                        );
-                      })
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

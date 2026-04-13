@@ -2398,4 +2398,73 @@ describe("coworkerRouter", () => {
     expect(reconcileStaleCoworkerRunsForCoworkerMock).toHaveBeenCalledWith("wf-1");
     expect(listRunsOrderBy).toEqual(["d:started-col"]);
   });
+
+  it("lists workspace runs with cursor pagination", async () => {
+    const context = createContext();
+    const newestRunAt = new Date("2026-04-13T10:00:00.000Z");
+    const olderRunAt = new Date("2026-04-13T09:00:00.000Z");
+    context.db.query.coworkerRun.findMany.mockResolvedValue([
+      {
+        id: "run-1",
+        status: "success",
+        startedAt: newestRunAt,
+        finishedAt: newestRunAt,
+        errorMessage: null,
+        coworker: {
+          id: "wf-1",
+          name: "Inbox Triage",
+        },
+        generation: {
+          conversationId: "conv-1",
+        },
+      },
+      {
+        id: "run-2",
+        status: "error",
+        startedAt: olderRunAt,
+        finishedAt: olderRunAt,
+        errorMessage: "boom",
+        coworker: {
+          id: "wf-2",
+          name: "Follow Up",
+        },
+        generation: {
+          conversationId: "conv-2",
+        },
+      },
+    ]);
+
+    const result = (await coworkerRouterAny.listWorkspaceRuns({
+      input: { limit: 1 },
+      context,
+    })) as {
+      runs: Array<{
+        id: string;
+        coworkerName: string;
+        conversationId: string | null;
+      }>;
+      nextCursor?: string;
+    };
+    const listRunsArgs = context.db.query.coworkerRun.findMany.mock.calls[0]?.[0];
+
+    expect(result.runs).toEqual([
+      {
+        id: "run-1",
+        status: "success",
+        startedAt: newestRunAt,
+        finishedAt: newestRunAt,
+        errorMessage: null,
+        conversationId: "conv-1",
+        coworkerId: "wf-1",
+        coworkerName: "Inbox Triage",
+      },
+    ]);
+    expect(result.nextCursor).toBeTruthy();
+    expect(JSON.parse(result.nextCursor!)).toEqual({
+      startedAt: newestRunAt.toISOString(),
+      runId: "run-1",
+    });
+    expect(reconcileStaleCoworkerRunsForCoworkersMock).toHaveBeenCalledWith(["wf-1"]);
+    expect(listRunsArgs.orderBy).toHaveLength(2);
+  });
 });

@@ -1476,6 +1476,77 @@ const listRuns = protectedProcedure
     }));
   });
 
+const listWorkspaceRuns = protectedProcedure
+  .input(
+    z.object({
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(100).default(50),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+    const cursor = decodeHistoryCursor(input.cursor);
+    const runs = await context.db.query.coworkerRun.findMany({
+      where: and(
+        eq(coworkerRun.ownerId, context.user.id),
+        eq(coworkerRun.workspaceId, workspaceId),
+        ...(cursor
+          ? [
+              or(
+                lt(coworkerRun.startedAt, cursor.startedAt),
+                and(eq(coworkerRun.startedAt, cursor.startedAt), lt(coworkerRun.id, cursor.runId)),
+              ),
+            ]
+          : []),
+      ),
+      orderBy: [desc(coworkerRun.startedAt), desc(coworkerRun.id)],
+      limit: input.limit + 1,
+      with: {
+        coworker: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+        generation: {
+          columns: {
+            conversationId: true,
+          },
+        },
+      },
+    });
+
+    const hasMore = runs.length > input.limit;
+    const pageRuns = hasMore ? runs.slice(0, -1) : runs;
+
+    await reconcileStaleCoworkerRunsForCoworkers(
+      Array.from(
+        new Set(pageRuns.map((run) => run.coworker?.id).filter((id): id is string => Boolean(id))),
+      ),
+    );
+
+    return {
+      runs: pageRuns.map((run) => ({
+        id: run.id,
+        status: run.status,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        errorMessage: run.errorMessage,
+        conversationId: run.generation?.conversationId ?? null,
+        coworkerId: run.coworker?.id ?? null,
+        coworkerName: run.coworker?.name?.trim() || "Untitled",
+      })),
+      nextCursor: hasMore
+        ? encodeHistoryCursor({
+            startedAt: pageRuns[pageRuns.length - 1]!.startedAt,
+            runId: pageRuns[pageRuns.length - 1]!.id,
+          })
+        : undefined,
+    };
+  });
+
 const getHistory = protectedProcedure
   .input(
     z
@@ -2462,6 +2533,7 @@ export const coworkerRouter = {
   searchRemoteIntegrationUsers: searchRemoteIntegrationUsersProcedure,
   getRun,
   listRuns,
+  listWorkspaceRuns,
   getForwardingAlias,
   createForwardingAlias,
   disableForwardingAlias,
