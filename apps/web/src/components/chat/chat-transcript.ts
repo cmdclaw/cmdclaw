@@ -1,3 +1,4 @@
+import { getExecutorCode, getExecutorMetadataInput, isExecutorToolCall } from "@/lib/executor-tool";
 import type { Message, MessagePart } from "./message-list";
 import { getTimingMetrics } from "./chat-performance-metrics";
 import {
@@ -55,6 +56,22 @@ function formatPart(part: MessagePart): string {
       part.attachmentNames.length > 0 ? `attachments: ${part.attachmentNames.join(", ")}` : null,
       `runId: ${part.runId}`,
       `conversationId: ${part.conversationId}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (isExecutorToolCall(part.name, part.input)) {
+    const metadataInput = getExecutorMetadataInput(part.input);
+    const code = getExecutorCode(part.input);
+
+    return [
+      `[tool_call] ${part.name}`,
+      part.integration ? `integration: ${part.integration}` : null,
+      part.operation ? `operation: ${part.operation}` : null,
+      metadataInput !== undefined ? `input: ${formatValue(metadataInput)}` : null,
+      code ? `code:\n\`\`\`js\n${code}\n\`\`\`` : null,
+      part.result !== undefined ? `result: ${formatValue(part.result)}` : null,
     ]
       .filter(Boolean)
       .join("\n");

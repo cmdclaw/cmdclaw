@@ -4,7 +4,9 @@ import { Check, AlertCircle, ChevronRight, Eye, StopCircle, Timer } from "lucide
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useCallback, useMemo, useState } from "react";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import { cn } from "@/lib/utils";
+import { useExecutorSourceList } from "@/orpc/hooks";
 import type { MessageTiming } from "./chat-performance-metrics";
 import { ActivityItem, type ActivityItemData } from "./activity-item";
 import { formatDuration } from "./chat-performance-metrics";
@@ -38,6 +40,11 @@ export function CollapsedTrace({
   defaultExpanded = false,
   onToggleExpand,
 }: Props) {
+  const { data: executorSourceData } = useExecutorSourceList();
+  const executorSources = useMemo(
+    () => executorSourceData?.sources ?? [],
+    [executorSourceData?.sources],
+  );
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const hasInterrupted = activityItems.some(
     (item) =>
@@ -85,6 +92,22 @@ export function CollapsedTrace({
 
     return null;
   }, [activityItems, timing]);
+  const displayIntegrations = useMemo(() => {
+    const next = new Set<DisplayIntegrationType>(integrationsUsed);
+
+    for (const item of activityItems) {
+      if (item.type !== "tool_call") {
+        continue;
+      }
+
+      const derived = getExecutorDisplayMetadata(item.input, executorSources);
+      if (derived.integration) {
+        next.add(derived.integration);
+      }
+    }
+
+    return [...next];
+  }, [activityItems, executorSources, integrationsUsed]);
 
   // Handle toggle - use external handler if provided
   const handleToggle = useCallback(() => {
@@ -129,7 +152,7 @@ export function CollapsedTrace({
 
         <div className="flex-1" />
 
-        <IntegrationBadges integrations={integrationsUsed} size="sm" />
+        <IntegrationBadges integrations={displayIntegrations} size="sm" />
 
         {summaryDuration && (
           <div className="text-muted-foreground/70 ml-2 inline-flex items-center gap-1 text-xs">
@@ -158,7 +181,7 @@ export function CollapsedTrace({
               {activityItems.length > 0 ? (
                 <div className="space-y-0.5">
                   {activityItems.map((item) => (
-                    <ActivityItem key={item.id} item={item} />
+                    <ActivityItem key={item.id} item={item} executorSources={executorSources} />
                   ))}
                 </div>
               ) : (

@@ -4,7 +4,9 @@ import { ChevronDown, ChevronUp, Activity, Timer } from "lucide-react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import { cn } from "@/lib/utils";
+import { useExecutorSourceList } from "@/orpc/hooks";
 import { ActivityItem, type ActivityItemData } from "./activity-item";
 import { formatDuration } from "./chat-performance-metrics";
 import { IntegrationBadges } from "./integration-badges";
@@ -37,6 +39,11 @@ export function ActivityFeed({
   integrationsUsed,
   elapsedMs,
 }: Props) {
+  const { data: executorSourceData } = useExecutorSourceList();
+  const executorSources = useMemo(
+    () => executorSourceData?.sources ?? [],
+    [executorSourceData?.sources],
+  );
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   const shouldAutoScroll = isStreaming ? false : userHasScrolled;
@@ -47,6 +54,22 @@ export function ActivityFeed({
     () => (elapsedMs === undefined ? null : formatDuration(Math.max(0, elapsedMs))),
     [elapsedMs],
   );
+  const displayIntegrations = useMemo(() => {
+    const next = new Set<DisplayIntegrationType>(integrationsUsed);
+
+    for (const item of items) {
+      if (item.type !== "tool_call") {
+        continue;
+      }
+
+      const derived = getExecutorDisplayMetadata(item.input, executorSources);
+      if (derived.integration) {
+        next.add(derived.integration);
+      }
+    }
+
+    return [...next];
+  }, [executorSources, integrationsUsed, items]);
 
   // Auto-scroll to bottom when new items arrive (unless user has scrolled up)
   useEffect(() => {
@@ -147,7 +170,7 @@ export function ActivityFeed({
                 exit={ACTIVITY_ITEM_EXIT}
                 transition={ACTIVITY_ITEM_TRANSITION}
               >
-                <ActivityItem item={item} />
+                <ActivityItem item={item} executorSources={executorSources} />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -155,9 +178,9 @@ export function ActivityFeed({
       </motion.div>
 
       {/* Integration badges footer */}
-      {integrationsUsed.length > 0 && (
+      {displayIntegrations.length > 0 && (
         <div className="border-border/30 bg-muted/20 border-t px-3 py-1.5">
-          <IntegrationBadges integrations={integrationsUsed} size="sm" />
+          <IntegrationBadges integrations={displayIntegrations} size="sm" />
         </div>
       )}
     </div>

@@ -66,6 +66,22 @@ const ansiResultToolCallFixture: ActivityItemData = {
     "\u001b[32m✓\u001b[0m \u001b[1mExample Domain\u001b[0m\n  \u001b[2mhttps://example.com/\u001b[0m\n\u001b[32m✓\u001b[0m Done\n\u001b[32m✓\u001b[0m Screenshot saved to \u001b[32m/app/example-com.png\u001b[0m",
 };
 
+const executorToolCallFixture: ActivityItemData = {
+  id: "tool-5",
+  timestamp: 5,
+  type: "tool_call",
+  content: "executor_execute",
+  toolName: "executor_execute",
+  status: "complete",
+  input: {
+    code: "const matches = await tools['linear.mcp.list_issues']({ assignee: 'me' });\nreturn matches;",
+    timeoutMs: 30_000,
+  },
+  result: { ok: true },
+};
+
+const executorSourcesFixture = [{ namespace: "linear", kind: "mcp", name: "Linear" }] as const;
+
 describe("ActivityItem", () => {
   it("renders GFM table content for text activity items", () => {
     render(<ActivityItem item={textTableFixture} />);
@@ -125,5 +141,29 @@ describe("ActivityItem", () => {
     expect(container.textContent).not.toContain("\u001b");
     expect(container.textContent).not.toContain("[32m");
     expect(container.textContent).not.toContain("[0m");
+  });
+
+  it("renders executor code separately and uses the mapped integration icon", () => {
+    render(
+      <ActivityItem item={executorToolCallFixture} executorSources={executorSourcesFixture} />,
+    );
+
+    expect(screen.getAllByText("Linear MCP · list issues").length).toBeGreaterThan(0);
+    expect(screen.getByAltText("Linear")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show tool details" }));
+
+    expect(screen.getByText("Code")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => {
+        return (
+          content.includes("const matches = await tools['linear.mcp.list_issues']") &&
+          content.includes("return matches;")
+        );
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Metadata")).toBeInTheDocument();
+    expect(screen.getByText(/"timeoutMs": 30000/)).toBeInTheDocument();
+    expect(screen.getByText("Response")).toBeInTheDocument();
   });
 });

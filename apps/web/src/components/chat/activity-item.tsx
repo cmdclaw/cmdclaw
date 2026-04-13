@@ -2,6 +2,7 @@
 
 import {
   Wrench,
+  Laptop,
   Check,
   Loader2,
   AlertCircle,
@@ -22,6 +23,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { type ExecutorSourceLike, getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import {
   getIntegrationLogo,
   getIntegrationDisplayName,
@@ -79,6 +81,7 @@ export type ActivityItemData = {
 
 type Props = {
   item: ActivityItemData;
+  executorSources?: readonly ExecutorSourceLike[];
 };
 
 const TOOL_DETAILS_INITIAL = { height: 0, opacity: 0, y: -2 };
@@ -136,7 +139,7 @@ function getInputDescription(input: unknown): string | null {
   return trimmedDescription.length > 0 ? trimmedDescription : null;
 }
 
-export function ActivityItem({ item }: Props) {
+export function ActivityItem({ item, executorSources = [] }: Props) {
   const { type, content, toolName, integration, operation, status, input, result } = item;
   const [showDetails, setShowDetails] = useState(false);
   const parsedCommand = useMemo(() => {
@@ -147,10 +150,15 @@ export function ActivityItem({ item }: Props) {
     const command = (input as { command?: unknown }).command;
     return typeof command === "string" ? parseCliCommand(command) : null;
   }, [input, toolName]);
+  const executorDisplay = useMemo(
+    () => getExecutorDisplayMetadata(input, executorSources),
+    [executorSources, input],
+  );
   const displayIntegration = (parsedCommand?.integration ?? integration) as
     | DisplayIntegrationType
     | "coworker"
     | undefined;
+  const resolvedIntegration = displayIntegration ?? executorDisplay.integration;
   const displayOperation = parsedCommand?.operation ?? operation;
   const handleToggleDetails = useCallback(() => {
     setShowDetails((prev) => !prev);
@@ -186,13 +194,13 @@ export function ActivityItem({ item }: Props) {
     }
 
     // Integration icons take priority
-    if (displayIntegration) {
-      const logo = getIntegrationLogo(displayIntegration);
+    if (resolvedIntegration) {
+      const logo = getIntegrationLogo(resolvedIntegration);
       if (logo) {
         return (
           <Image
             src={logo}
-            alt={getIntegrationDisplayName(displayIntegration)}
+            alt={getIntegrationDisplayName(resolvedIntegration)}
             width={14}
             height={14}
             className="h-3.5 w-auto flex-shrink-0"
@@ -200,10 +208,14 @@ export function ActivityItem({ item }: Props) {
         );
       }
 
-      const IntegrationIcon = getIntegrationIcon(displayIntegration);
+      const IntegrationIcon = getIntegrationIcon(resolvedIntegration);
       if (IntegrationIcon) {
         return <IntegrationIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
       }
+    }
+
+    if (executorDisplay.code) {
+      return <Laptop className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
     }
 
     // Tool-specific icons
@@ -273,19 +285,27 @@ export function ActivityItem({ item }: Props) {
       return inputDescription;
     }
 
-    if (displayIntegration) {
+    if (executorDisplay.displayName) {
+      return executorDisplay.displayName;
+    }
+
+    if (resolvedIntegration) {
       const op = displayOperation || toolName;
       return op
-        ? getOperationLabel(displayIntegration, op)
-        : getIntegrationDisplayName(displayIntegration);
+        ? getOperationLabel(resolvedIntegration, op)
+        : getIntegrationDisplayName(resolvedIntegration);
     }
     return toolName ? getToolDisplayName(toolName) : content;
   })();
 
-  const formattedInput = formatInput(input, toolName);
+  const formattedCode = executorDisplay.code ? stripAnsi(executorDisplay.code) : "";
+  const formattedInput = executorDisplay.code
+    ? formatValue(executorDisplay.metadataInput)
+    : formatInput(input, toolName);
   const formattedResult = formatValue(result);
-  const hasDetails = Boolean(formattedInput || formattedResult);
-  const requestLabel = toolName ? `Request (${toolName})` : "Request";
+  const hasDetails = Boolean(formattedCode || formattedInput || formattedResult);
+  const requestLabel =
+    formattedCode && formattedInput ? "Metadata" : toolName ? `Request (${toolName})` : "Request";
 
   return (
     <div className="py-0.5 text-xs">
@@ -324,12 +344,22 @@ export function ActivityItem({ item }: Props) {
             className="mt-1 ml-5 overflow-hidden"
           >
             <div className="border-border/60 space-y-2 border-l pl-3">
+              {formattedCode && (
+                <div className="space-y-1">
+                  <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                    Code
+                  </p>
+                  <pre className="bg-muted/40 text-foreground overflow-x-auto rounded-sm px-2 py-1 font-mono text-[11px] leading-relaxed whitespace-pre">
+                    {formattedCode}
+                  </pre>
+                </div>
+              )}
               {formattedInput && (
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
                     {requestLabel}
                   </p>
-                  <pre className="text-muted-foreground rounded-sm px-2 py-1 font-mono whitespace-pre-wrap">
+                  <pre className="bg-muted/40 text-muted-foreground overflow-x-auto rounded-sm px-2 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
                     {formattedInput}
                   </pre>
                 </div>
@@ -339,7 +369,7 @@ export function ActivityItem({ item }: Props) {
                   <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
                     Response
                   </p>
-                  <pre className="text-muted-foreground rounded-sm px-2 py-1 font-mono whitespace-pre-wrap">
+                  <pre className="bg-muted/40 text-muted-foreground overflow-x-auto rounded-sm px-2 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
                     {formattedResult}
                   </pre>
                 </div>

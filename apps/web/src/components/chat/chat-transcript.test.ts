@@ -154,4 +154,34 @@ describe("formatChatTranscript", () => {
     expect(transcript).toContain("performance metrics:");
     expect(transcript).toContain("- Sandbox connect/create: 800ms");
   });
+
+  it("formats executor code blocks without embedding them inside JSON", () => {
+    const transcript = formatChatTranscript([
+      {
+        id: "m1",
+        role: "assistant",
+        content: "",
+        parts: [
+          {
+            type: "tool_call",
+            id: "tool-1",
+            name: "executor_execute",
+            input: {
+              code: "const issues = await tools['linear.mcp.list_issues']({ assignee: 'me' });\nreturn issues;",
+              timeoutMs: 30_000,
+            },
+            result: { ok: true },
+          },
+        ],
+      },
+    ]);
+
+    expect(transcript).toContain("[tool_call] executor_execute");
+    expect(transcript).toContain('input: {\n  "timeoutMs": 30000\n}');
+    expect(transcript).toContain("code:\n```js");
+    expect(transcript).toContain(
+      "const issues = await tools['linear.mcp.list_issues']({ assignee: 'me' });",
+    );
+    expect(transcript).not.toContain('"code":');
+  });
 });
