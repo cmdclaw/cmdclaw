@@ -5,6 +5,12 @@ import Link from "next/link";
 
 const internalPages = [
   {
+    title: "README Preview",
+    description: "Preview the real app-backed README capture surface",
+    href: "/internal/readme-preview",
+    icon: Eye,
+  },
+  {
     title: "Component Previews",
     description: "Preview integration components with mock data",
     href: "/internal/previews",

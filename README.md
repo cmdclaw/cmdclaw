@@ -5,140 +5,118 @@
 <h1 align="center">CmdClaw</h1>
 
 <p align="center">
-  Your voice coworker — an open-source AI assistant that connects to the tools you use every day.
+  The OS for AI Agents
 </p>
 
 <p align="center">
-  <a href="https://docs.cmdclaw.ai"><img src="https://img.shields.io/badge/docs-cmdclaw.ai-blue" alt="Documentation" /></a>
-  <a href="https://discord.com/invite/NHQy8gXerd"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" /></a>
+  CmdClaw turns plain-English tasks into AI agents that run across your tools, ask for approval when needed, and surface work through an inbox.
+</p>
+
+<p align="center">
+  <a href="https://docs.cmdclaw.ai"><img src="https://img.shields.io/badge/docs-cmdclaw.ai-0f7acb?style=flat-square" alt="Docs" /></a>
+  <a href="https://discord.com/invite/NHQy8gXerd"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT License" /></a>
+  <a href="https://github.com/baptistecolle/cmdclaw/actions/workflows/ci-code-quality.yml"><img src="https://img.shields.io/github/actions/workflow/status/baptistecolle/cmdclaw/ci-code-quality.yml?branch=main&style=flat-square&label=ci" alt="CI" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/AI_Agents-0b1220?style=flat-square" alt="AI Agents" />
+  <img src="https://img.shields.io/badge/Approvals-0b1220?style=flat-square" alt="Approvals" />
+  <img src="https://img.shields.io/badge/Inbox-0b1220?style=flat-square" alt="Inbox" />
+  <img src="https://img.shields.io/badge/Templates-0b1220?style=flat-square" alt="Templates" />
+  <img src="https://img.shields.io/badge/16_Integrations-0b1220?style=flat-square" alt="16 Integrations" />
+  <img src="https://img.shields.io/badge/CLI-0b1220?style=flat-square" alt="CLI" />
+  <img src="https://img.shields.io/badge/MCP-0b1220?style=flat-square" alt="MCP" />
 </p>
 
 <p align="center">
   <a href="https://cmdclaw.ai">Website</a> &middot;
   <a href="https://app.cmdclaw.ai">App</a> &middot;
   <a href="https://docs.cmdclaw.ai">Docs</a> &middot;
+  <a href="https://docs.cmdclaw.ai/self-hosting">Self-Hosting</a> &middot;
   <a href="https://discord.com/invite/NHQy8gXerd">Discord</a>
 </p>
 
----
+<!-- DO NOT DELETE: Regenerate this GIF from /Users/baptiste/Git/cmdclaw/apps/web with `bun scripts/export-readme-preview.ts` while the web app is running and /internal/readme-preview is reachable. -->
+<p align="center">
+  <img src=".github/assets/readme/cmdclaw-agent-inbox.gif" alt="CmdClaw prompt-to-agent inbox workflow" width="100%" />
+</p>
 
-CmdClaw is an open-source, multi-platform AI assistant that lets you interact with your favorite services through conversation. Connect your tools, talk to CmdClaw, and let it handle the rest — from sending emails and scheduling meetings to managing issues and updating your CRM.
+## What Is CmdClaw?
 
-## Features
+CmdClaw is a platform for building and running AI agents across company tools. You can describe a workflow in plain English, launch from a template, or drive the same runtime through chat and the CLI.
 
-- **Conversational AI** — Powered by Claude, with streaming responses and multi-turn context
-- **13+ Integrations** — Gmail, Google Calendar, Google Docs, Google Sheets, Google Drive, Notion, Linear, GitHub, Airtable, Slack, HubSpot, Salesforce, LinkedIn
-- **Voice Input** — Native speech-to-text on macOS and iOS via Whisper
-- **Custom Skills** — Create and manage reusable skills with a built-in editor
-- **Approval Workflow** — Review and approve sensitive actions before they execute
-- **Code Execution** — Sandboxed code running via E2B, Daytona, or Docker
-- **Cross-Platform** — Web (Next.js), macOS (SwiftUI), iOS (SwiftUI)
+Agents can handle one-off tasks or recurring workflows, then escalate through approvals and auth requests in a shared inbox before they act on connected systems.
 
-## Tech Stack
+## Core Capabilities
 
-| Layer | Technology |
-|-------|-----------|
-| Web | Next.js 16, React 19, Tailwind CSS 4 |
-| API | ORPC, Better Auth |
-| Database | PostgreSQL, Drizzle ORM |
-| AI | Anthropic Claude, OpenAI, Google Gemini |
-| Queue | BullMQ, Redis |
-| Storage | S3 / MinIO |
-| Sandbox | E2B, Daytona, Docker |
-| Native | SwiftUI (macOS & iOS) |
+- **Prompt to agent**: turn plain-English tasks into runnable agents with manual, scheduled, email, or webhook triggers.
+- **Templates**: start from prebuilt workflows instead of configuring every agent from scratch.
+- **Inbox and approvals**: sensitive actions pause for approval or auth and surface in one place.
+- **Connected tools**: agents run across the 16 currently available integrations in the repo, including Gmail, Slack, Notion, GitHub, HubSpot, Salesforce, and more.
+- **Multiple interfaces**: use the web app, CLI, desktop shell, or MCP server depending on how you want to operate agents.
 
-## Project Structure
+## Interfaces
+
+- **Web app**: build, run, and monitor agents from the main product surface.
+- **CLI**: work with `chat`, `auth`, and `coworker` command groups from the terminal.
+- **MCP server**: expose CmdClaw capabilities to external agent and tool workflows.
+- **Desktop app**: use the Electron shell around the web app for a native desktop entrypoint.
+
+```bash
+bun run cmdclaw -- --help
+```
+
+## Quickstart
+
+```bash
+bun install
+docker compose -f apps/web/docker-compose.yml up -d
+cp apps/web/.env.selfhost.example apps/web/.env
+bun db:push
+bun dev
+```
+
+`bun dev` starts the web app, worker, and WS runtime together. `bun dev:web` only starts the web app, so it is not enough for end-to-end local runs on its own.
+
+More setup guides:
+
+- [Quickstart](https://docs.cmdclaw.ai/quickstart)
+- [Self-hosting](https://docs.cmdclaw.ai/self-hosting)
+- [Integrations](https://docs.cmdclaw.ai/integrations/overview)
+
+## Repo Structure
 
 ```text
 cmdclaw/
 ├── apps/
-│   ├── web/      # Next.js web app
-│   ├── desktop/  # Electron wrapper
-│   ├── worker/   # BullMQ worker runtime
-│   └── ws/       # WebSocket runtime
+│   ├── web/       # Next.js app
+│   ├── worker/    # BullMQ worker runtime
+│   ├── ws/        # WebSocket runtime
+│   ├── cli/       # Terminal interface
+│   ├── mcp/       # MCP server
+│   ├── sandbox/   # Sandbox runtime assets and build tooling
+│   └── desktop/   # Electron desktop shell
 ├── packages/
-│   ├── config/   # Shared tooling config
-│   ├── core/     # Shared runtime logic
-│   └── db/       # Drizzle schema and DB client
-├── apple/        # macOS and iOS SwiftUI applications
-├── docs/         # Documentation site (Mintlify)
-└── infra/        # Infrastructure as code
+│   ├── core/      # Shared runtime logic
+│   ├── db/        # Drizzle schema and database client
+│   ├── client/    # Shared client runtime
+│   └── config/    # Shared tooling config
+├── docs/          # Mintlify documentation site
+└── infra/         # Infrastructure and deployment
 ```
 
-## Getting Started
+## Docs
 
-### Prerequisites
-
-- [Bun](https://bun.sh) (recommended)
-- PostgreSQL
-- Redis
-
-### Setup
-
-```bash
-# Clone the repo
-git clone https://github.com/your-username/cmdclaw.git
-cd cmdclaw
-
-# Install dependencies
-bun install
-
-# Start local services (Postgres, Redis, MinIO)
-docker compose -f apps/web/docker-compose.yml up -d
-
-# Configure environment variables
-cp apps/web/.env.selfhost.example apps/web/.env
-
-# Push the database schema
-bun db:push
-
-# Seed the database (optional)
-bun db:seed
-
-# Start the web app, worker, and WS runtime
-bun dev
-```
-
-The web app will be available at `http://localhost:3000`.
-
-### Useful Commands
-
-```bash
-bun dev             # Start web + worker + ws
-bun dev:web         # Start only the web app
-bun dev:desktop     # Start the Electron wrapper
-bun dev:docs        # Start the docs site
-bun build           # Production build for all workspaces
-bun db:studio       # Open Drizzle Studio
-bun db:push         # Push schema changes
-bun start:worker    # Start the background job worker (loads apps/web/.env)
-bun start:ws        # Start the WebSocket server (loads apps/web/.env)
-bun check           # Run workspace checks
-bun test            # Run workspace tests
-```
-
-Chat and coworker generations are executed by the BullMQ worker. `bun dev:web` is not enough for
-end-to-end local runs; use `bun dev` or start `bun start:worker` alongside the web app.
-
-## Releases
-
-Releases now use `main` plus date-based production tags. See [RELEASING.md](RELEASING.md) for the
-tag format, required Railway/GitHub setup, and the production release flow.
-
-## Native Apps
-
-The `apple/` directory contains SwiftUI applications for macOS and iOS. Open `apple/cmdclaw.xcodeproj` in Xcode to build and run.
-
-Features specific to native apps:
-- Voice input with Whisper transcription
-- macOS overlay chat interface
-- Native networking layer
+- [Docs home](https://docs.cmdclaw.ai)
+- [Quickstart](https://docs.cmdclaw.ai/quickstart)
+- [Self-hosting](https://docs.cmdclaw.ai/self-hosting)
+- [Integrations overview](https://docs.cmdclaw.ai/integrations/overview)
 
 ## Contributing
 
-CmdClaw is open source and contributions are welcome. Feel free to open issues, submit pull requests, or suggest new integrations.
+Contributions are welcome. Open an issue, submit a pull request, or propose a new integration or agent workflow.
 
 ## License
 
-Open source. See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).
