@@ -3,6 +3,8 @@
 import {
   Wrench,
   Laptop,
+  Puzzle,
+  FileCode,
   Check,
   Loader2,
   AlertCircle,
@@ -23,6 +25,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { getBrandfetchLogoUrl } from "@/lib/brandfetch";
 import { type ExecutorSourceLike, getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import {
   getIntegrationLogo,
@@ -193,7 +196,28 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
       return null;
     }
 
-    // Integration icons take priority
+    if (executorDisplay.source) {
+      const logoUrl = executorDisplay.source.endpoint
+        ? getBrandfetchLogoUrl(executorDisplay.source.endpoint)
+        : null;
+      if (logoUrl) {
+        return (
+          <Image
+            src={logoUrl}
+            alt={executorDisplay.source.name?.trim() || executorDisplay.source.namespace}
+            width={14}
+            height={14}
+            className="h-3.5 w-auto flex-shrink-0 rounded-sm"
+            unoptimized
+          />
+        );
+      }
+
+      const SourceIcon = executorDisplay.source.kind === "mcp" ? Puzzle : FileCode;
+      return <SourceIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
+    }
+
+    // Integration icons take priority when there is no matched source row.
     if (resolvedIntegration) {
       const logo = getIntegrationLogo(resolvedIntegration);
       if (logo) {

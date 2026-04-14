@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Wrench, Check, Loader2, Laptop } from "lucide-react";
+import { ChevronDown, ChevronRight, Wrench, Check, Loader2, Laptop, Puzzle, FileCode } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
+import { getBrandfetchLogoUrl } from "@/lib/brandfetch";
 import { getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import {
   getIntegrationDisplayName,
@@ -42,6 +43,27 @@ export function ToolCallDisplay({ name, input, result }: Props) {
     setExpanded((prev) => !prev);
   }, []);
   const icon = useMemo(() => {
+    if (executorDisplay.source) {
+      const logoUrl = executorDisplay.source.endpoint
+        ? getBrandfetchLogoUrl(executorDisplay.source.endpoint)
+        : null;
+      if (logoUrl) {
+        return (
+          <Image
+            src={logoUrl}
+            alt={executorDisplay.source.name?.trim() || executorDisplay.source.namespace}
+            width={16}
+            height={16}
+            className="h-4 w-auto rounded-sm"
+            unoptimized
+          />
+        );
+      }
+
+      const SourceIcon = executorDisplay.source.kind === "mcp" ? Puzzle : FileCode;
+      return <SourceIcon className="text-muted-foreground h-4 w-4" />;
+    }
+
     if (executorDisplay.code) {
       if (!executorDisplay.integration) {
         return <Laptop className="text-muted-foreground h-4 w-4" />;
@@ -71,7 +93,7 @@ export function ToolCallDisplay({ name, input, result }: Props) {
     ) : (
       <Laptop className="text-muted-foreground h-4 w-4" />
     );
-  }, [executorDisplay.code, executorDisplay.integration]);
+  }, [executorDisplay]);
   const title = executorDisplay.displayName ?? name;
 
   return (

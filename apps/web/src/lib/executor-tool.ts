@@ -8,6 +8,7 @@ export type ExecutorSourceLike = {
   namespace: string;
   kind: "mcp" | "openapi";
   name?: string | null;
+  endpoint?: string | null;
 };
 
 type ExecutorDisplayMetadata = {
@@ -43,6 +44,14 @@ function humanizeSourceName(value: string): string {
     .join(" ");
 }
 
+function normalizeExecutorMatchKey(value: string): string {
+  return value.toLowerCase().replaceAll(/[^a-z0-9]+/g, "");
+}
+
+function stripExecutorSourceSuffix(value: string): string {
+  return value.replace(/(?:[-_\s]?)(mcp|openapi|api)$/i, "");
+}
+
 function parseExecutorSourcePath(path: string): {
   namespace: string;
   kind: "mcp" | "openapi";
@@ -69,6 +78,99 @@ function extractExecutorSourceNamespace(path: string): string | null {
   return parseExecutorSourcePath(path)?.namespace ?? null;
 }
 
+function buildSourceAliases(source: ExecutorSourceLike): string[] {
+  const rawValues = [source.namespace, source.name ?? ""].filter(Boolean);
+  const aliases = new Set<string>();
+
+  for (const rawValue of rawValues) {
+    const normalized = normalizeExecutorMatchKey(rawValue);
+    if (normalized) {
+      aliases.add(normalized);
+    }
+
+    const stripped = normalizeExecutorMatchKey(stripExecutorSourceSuffix(rawValue));
+    if (stripped) {
+      aliases.add(stripped);
+    }
+  }
+
+  return [...aliases];
+}
+
+function detectIntegrationFromSource(
+  source: ExecutorSourceLike | undefined,
+  sourceNamespace: string | null,
+): DisplayIntegrationType | undefined {
+  const candidates = new Set<string>();
+
+  if (sourceNamespace) {
+    candidates.add(normalizeExecutorMatchKey(sourceNamespace));
+    candidates.add(normalizeExecutorMatchKey(stripExecutorSourceSuffix(sourceNamespace)));
+  }
+
+  if (source) {
+    for (const alias of buildSourceAliases(source)) {
+      candidates.add(alias);
+    }
+  }
+
+  for (const integration of ALL_INTEGRATION_TYPES) {
+    const normalized = normalizeExecutorMatchKey(integration);
+    if (candidates.has(normalized)) {
+      return integration;
+    }
+  }
+
+  return undefined;
+}
+
+function findSourceMention(
+  code: string,
+  toolPaths: readonly string[],
+  sources: readonly ExecutorSourceLike[],
+): ExecutorSourceLike | undefined {
+  const codeKeys = new Set<string>();
+  codeKeys.add(normalizeExecutorMatchKey(code));
+
+  for (const toolPath of toolPaths) {
+    const parsed = parseExecutorSourcePath(toolPath);
+    if (!parsed) {
+      continue;
+    }
+
+    codeKeys.add(normalizeExecutorMatchKey(parsed.namespace));
+    codeKeys.add(normalizeExecutorMatchKey(stripExecutorSourceSuffix(parsed.namespace)));
+  }
+
+  let bestScore = -1;
+  let bestSource: ExecutorSourceLike | undefined;
+
+  for (const source of sources) {
+    let score = -1;
+
+    for (const alias of buildSourceAliases(source)) {
+      if (!alias) {
+        continue;
+      }
+
+      if (codeKeys.has(alias)) {
+        score = Math.max(score, 100);
+      } else if ([...codeKeys].some((candidate) => candidate.includes(alias) || alias.includes(candidate))) {
+        score = Math.max(score, 80);
+      } else if (normalizeExecutorMatchKey(code).includes(alias)) {
+        score = Math.max(score, 60);
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestSource = source;
+    }
+  }
+
+  return bestScore >= 0 ? bestSource : undefined;
+}
+
 function buildExecutorDisplayName(
   source: ExecutorSourceLike | undefined,
   toolPath: string | null,
@@ -86,7 +188,12 @@ function buildExecutorDisplayName(
     return `${sourceLabel} ${parsedSourcePath.kind.toUpperCase()} · ${humanizeOperation(leaf)}`;
   }
 
-  return `Computer · ${humanizeOperation(toolPath.replaceAll(".", " "))}`;
+  if (source) {
+    const sourceLabel = source.name?.trim() || source.namespace;
+    return `${sourceLabel} ${source.kind.toUpperCase()}`;
+  }
+
+  return "Computer";
 }
 
 export function isExecutorToolCall(toolName: string | undefined, input: unknown): boolean {
@@ -155,12 +262,13 @@ export function getExecutorDisplayMetadata(
     toolPaths.find((candidate) => extractExecutorSourceNamespace(candidate) !== null) ??
     toolPaths[0] ??
     null;
-  const sourceNamespace = toolPath ? extractExecutorSourceNamespace(toolPath) : null;
-  const source = sourceNamespace
-    ? sources.find((candidate) => candidate.namespace === sourceNamespace)
-    : undefined;
+  const source = findSourceMention(code, toolPaths, sources);
+  const sourceNamespace =
+    source?.namespace ??
+    (toolPath ? extractExecutorSourceNamespace(toolPath) : null);
   const integration =
-    sourceNamespace && isDisplayIntegrationType(sourceNamespace) ? sourceNamespace : undefined;
+    detectIntegrationFromSource(source, sourceNamespace) ??
+    (sourceNamespace && isDisplayIntegrationType(sourceNamespace) ? sourceNamespace : undefined);
 
   return {
     code,

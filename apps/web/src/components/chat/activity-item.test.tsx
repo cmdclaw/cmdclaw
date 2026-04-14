@@ -80,7 +80,14 @@ const executorToolCallFixture: ActivityItemData = {
   result: { ok: true },
 };
 
-const executorSourcesFixture = [{ namespace: "linear", kind: "mcp", name: "Linear" }] as const;
+const executorSourcesFixture = [
+  {
+    namespace: "linear-mcp",
+    kind: "mcp",
+    name: "linear-mcp",
+    endpoint: "https://mcp.linear.app/mcp",
+  },
+] as const;
 
 describe("ActivityItem", () => {
   it("renders GFM table content for text activity items", () => {
@@ -148,8 +155,8 @@ describe("ActivityItem", () => {
       <ActivityItem item={executorToolCallFixture} executorSources={executorSourcesFixture} />,
     );
 
-    expect(screen.getAllByText("Linear MCP · list issues").length).toBeGreaterThan(0);
-    expect(screen.getByAltText("Linear")).toBeInTheDocument();
+    expect(screen.getAllByText("linear-mcp MCP · list issues").length).toBeGreaterThan(0);
+    expect(screen.getByAltText("linear-mcp")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Show tool details" }));
 
