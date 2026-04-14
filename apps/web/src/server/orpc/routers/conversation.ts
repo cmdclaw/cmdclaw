@@ -2,11 +2,45 @@ import { writeSessionTranscriptFromConversation } from "@cmdclaw/core/server/ser
 import { clearConversationSessionSnapshot } from "@cmdclaw/core/server/services/opencode-session-snapshot-service";
 import { conversation, message, messageAttachment, sandboxFile } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { eq, desc, and, isNull, asc, sql } from "drizzle-orm";
+import { eq, desc, and, isNull, asc, sql, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
+
+const conversationListCursorSchema = z.object({
+  updatedAt: z.coerce.date(),
+  id: z.string().min(1),
+  isPinned: z.boolean(),
+});
+
+function encodeConversationListCursor(cursor: {
+  updatedAt: Date;
+  id: string;
+  isPinned: boolean;
+}): string {
+  return JSON.stringify({
+    updatedAt: cursor.updatedAt.toISOString(),
+    id: cursor.id,
+    isPinned: cursor.isPinned,
+  });
+}
+
+function decodeConversationListCursor(
+  cursor: string | undefined,
+): z.infer<typeof conversationListCursorSchema> | null {
+  if (!cursor) {
+    return null;
+  }
+
+  try {
+    return conversationListCursorSchema.parse(JSON.parse(cursor));
+  } catch {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Invalid conversation list cursor",
+    });
+  }
+}
 
 // List conversations for current user
 const list = protectedProcedure
@@ -20,14 +54,37 @@ const list = protectedProcedure
     const {
       workspace: { id: workspaceId },
     } = await requireActiveWorkspaceAccess(context.user.id);
+    const cursor = decodeConversationListCursor(input.cursor);
+    const paginationWhere = !cursor
+      ? undefined
+      : cursor.isPinned
+        ? or(
+            and(
+              eq(conversation.isPinned, true),
+              or(
+                lt(conversation.updatedAt, cursor.updatedAt),
+                and(eq(conversation.updatedAt, cursor.updatedAt), lt(conversation.id, cursor.id)),
+              ),
+            ),
+            eq(conversation.isPinned, false),
+          )
+        : and(
+            eq(conversation.isPinned, false),
+            or(
+              lt(conversation.updatedAt, cursor.updatedAt),
+              and(eq(conversation.updatedAt, cursor.updatedAt), lt(conversation.id, cursor.id)),
+            ),
+          );
+
     const conversations = await context.db.query.conversation.findMany({
       where: and(
         eq(conversation.userId, context.user.id),
         eq(conversation.workspaceId, workspaceId),
         eq(conversation.type, "chat"),
         isNull(conversation.archivedAt),
+        paginationWhere,
       ),
-      orderBy: [desc(conversation.isPinned), desc(conversation.updatedAt)],
+      orderBy: [desc(conversation.isPinned), desc(conversation.updatedAt), desc(conversation.id)],
       limit: input.limit + 1,
       with: {
         messages: {
@@ -51,7 +108,13 @@ const list = protectedProcedure
         messageCount: c.messages.length,
         seenMessageCount: c.seenMessageCount,
       })),
-      nextCursor: hasMore ? items[items.length - 1]?.id : undefined,
+      nextCursor: hasMore
+        ? encodeConversationListCursor({
+            updatedAt: items[items.length - 1]!.updatedAt,
+            id: items[items.length - 1]!.id,
+            isPinned: items[items.length - 1]!.isPinned,
+          })
+        : undefined,
     };
   });
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { InfiniteData } from "@tanstack/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
@@ -22,6 +23,20 @@ vi.mock("./client", () => ({
 }));
 
 import { useDeleteConversation } from "./hooks";
+
+type ConversationListPage = {
+  conversations: Array<{ id: string }>;
+  nextCursor?: string;
+};
+
+function makeConversationListData(
+  ...pages: ConversationListPage[]
+): InfiniteData<ConversationListPage> {
+  return {
+    pages,
+    pageParams: pages.map((page, index) => (index === 0 ? undefined : page.nextCursor)),
+  };
+}
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -63,12 +78,18 @@ describe("useDeleteConversation", () => {
 
     deleteConversationMock.mockReturnValueOnce(deleteDeferred.promise);
 
-    queryClient.setQueryData(["conversation", "list", 50], {
-      conversations: [{ id: "keep" }, { id: "delete-me" }],
-    });
-    queryClient.setQueryData(["conversation", "list", 10], {
-      conversations: [{ id: "delete-me" }],
-    });
+    queryClient.setQueryData(
+      ["conversation", "list", 50],
+      makeConversationListData({
+        conversations: [{ id: "keep" }, { id: "delete-me" }],
+      }),
+    );
+    queryClient.setQueryData(
+      ["conversation", "list", 10],
+      makeConversationListData({
+        conversations: [{ id: "delete-me" }],
+      }),
+    );
     queryClient.setQueryData(["conversation", "get", "delete-me"], {
       id: "delete-me",
       title: "Delete me",
@@ -87,12 +108,16 @@ describe("useDeleteConversation", () => {
 
     await waitFor(() => {
       expect(deleteConversationMock).toHaveBeenCalledWith({ id: "delete-me" });
-      expect(queryClient.getQueryData(["conversation", "list", 50])).toEqual({
-        conversations: [{ id: "keep" }],
-      });
-      expect(queryClient.getQueryData(["conversation", "list", 10])).toEqual({
-        conversations: [],
-      });
+      expect(queryClient.getQueryData(["conversation", "list", 50])).toEqual(
+        makeConversationListData({
+          conversations: [{ id: "keep" }],
+        }),
+      );
+      expect(queryClient.getQueryData(["conversation", "list", 10])).toEqual(
+        makeConversationListData({
+          conversations: [],
+        }),
+      );
       expect(queryClient.getQueryData(["conversation", "get", "delete-me"])).toBeUndefined();
       expect(queryClient.getQueryData(["conversation", "usage", "delete-me"])).toBeUndefined();
     });
@@ -110,9 +135,10 @@ describe("useDeleteConversation", () => {
 
     deleteConversationMock.mockReturnValueOnce(deleteDeferred.promise);
 
-    queryClient.setQueryData(["conversation", "list", 50], {
-      conversations: [{ id: "keep" }, { id: "delete-me" }],
-    });
+    queryClient.setQueryData(
+      ["conversation", "list", 50],
+      makeConversationListData({ conversations: [{ id: "keep" }, { id: "delete-me" }] }),
+    );
     queryClient.setQueryData(["conversation", "get", "delete-me"], {
       id: "delete-me",
       title: "Delete me",
@@ -131,7 +157,8 @@ describe("useDeleteConversation", () => {
 
     await waitFor(() => {
       expect(queryClient.getQueryData(["conversation", "list", 50])).toEqual({
-        conversations: [{ id: "keep" }],
+        pages: [{ conversations: [{ id: "keep" }] }],
+        pageParams: [undefined],
       });
       expect(queryClient.getQueryData(["conversation", "get", "delete-me"])).toBeUndefined();
       expect(queryClient.getQueryData(["conversation", "usage", "delete-me"])).toBeUndefined();
@@ -140,9 +167,9 @@ describe("useDeleteConversation", () => {
     deleteDeferred.reject(new Error("delete failed"));
 
     await waitFor(() => {
-      expect(queryClient.getQueryData(["conversation", "list", 50])).toEqual({
-        conversations: [{ id: "keep" }, { id: "delete-me" }],
-      });
+      expect(queryClient.getQueryData(["conversation", "list", 50])).toEqual(
+        makeConversationListData({ conversations: [{ id: "keep" }, { id: "delete-me" }] }),
+      );
       expect(queryClient.getQueryData(["conversation", "get", "delete-me"])).toEqual({
         id: "delete-me",
         title: "Delete me",
@@ -150,6 +177,54 @@ describe("useDeleteConversation", () => {
       expect(queryClient.getQueryData(["conversation", "usage", "delete-me"])).toEqual({
         totalTokens: 42,
       });
+    });
+  });
+
+  it("removes deleted conversations from every infinite-query page", async () => {
+    const queryClient = new QueryClient();
+    const deleteDeferred = createDeferred<{ success: boolean }>();
+
+    deleteConversationMock.mockReturnValueOnce(deleteDeferred.promise);
+
+    queryClient.setQueryData(
+      ["conversation", "list", 50],
+      makeConversationListData(
+        {
+          conversations: [{ id: "keep-first" }, { id: "delete-me" }],
+          nextCursor: "cursor-1",
+        },
+        {
+          conversations: [{ id: "keep-second" }, { id: "delete-me" }],
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DeleteConversationHarness id="delete-me" />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(["conversation", "list", 50])).toEqual(
+        makeConversationListData(
+          {
+            conversations: [{ id: "keep-first" }],
+            nextCursor: "cursor-1",
+          },
+          {
+            conversations: [{ id: "keep-second" }],
+          },
+        ),
+      );
+    });
+
+    deleteDeferred.resolve({ success: true });
+
+    await waitFor(() => {
+      expect(deleteConversationMock).toHaveBeenCalledTimes(1);
     });
   });
 });

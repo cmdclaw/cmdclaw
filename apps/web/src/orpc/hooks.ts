@@ -2,8 +2,14 @@
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef } from "react";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useMemo, useRef } from "react";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
   runGenerationStream,
@@ -22,9 +28,14 @@ type ConversationListQueryData = {
     id: string;
   }>;
 };
+type ConversationListPage = ConversationListQueryData & {
+  nextCursor?: string;
+};
+type ConversationListInfiniteQueryData = InfiniteData<ConversationListPage>;
+type ConversationListCacheData = ConversationListQueryData | ConversationListInfiniteQueryData;
 type DeleteConversationMutationContext = {
   previousConversationLists: Array<
-    [queryKey: readonly unknown[], data: ConversationListQueryData | undefined]
+    [queryKey: readonly unknown[], data: ConversationListCacheData | undefined]
   >;
   previousConversation: unknown;
   previousConversationUsage: unknown;
@@ -68,12 +79,69 @@ export type {
   GenerationCallbacks,
 };
 
+function isConversationListInfiniteData(
+  data: ConversationListCacheData | undefined,
+): data is ConversationListInfiniteQueryData {
+  return Array.isArray((data as ConversationListInfiniteQueryData | undefined)?.pages);
+}
+
+function removeConversationFromConversationListData(
+  current: ConversationListCacheData | undefined,
+  id: string,
+): ConversationListCacheData | undefined {
+  if (!current) {
+    return current;
+  }
+
+  if (isConversationListInfiniteData(current)) {
+    const pages = current.pages.map((page) => ({
+      ...page,
+      conversations: page.conversations.filter((conversation) => conversation.id !== id),
+    }));
+    const hasChanged = pages.some(
+      (page, index) => page.conversations.length !== current.pages[index]?.conversations.length,
+    );
+
+    return hasChanged
+      ? {
+          ...current,
+          pages,
+        }
+      : current;
+  }
+
+  const nextConversations = current.conversations.filter((conversation) => conversation.id !== id);
+  if (nextConversations.length === current.conversations.length) {
+    return current;
+  }
+
+  return {
+    ...current,
+    conversations: nextConversations,
+  };
+}
+
 // Hook for listing conversations
 export function useConversationList(options?: { limit?: number }) {
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["conversation", "list", options?.limit],
-    queryFn: () => client.conversation.list({ limit: options?.limit ?? 50 }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      client.conversation.list({ limit: options?.limit ?? 50, cursor: pageParam }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
+
+  const data = useMemo(
+    () => ({
+      conversations: query.data?.pages.flatMap((page) => page.conversations) ?? [],
+    }),
+    [query.data],
+  );
+
+  return {
+    ...query,
+    data,
+  };
 }
 
 export function useInboxItems(input?: {
@@ -175,31 +243,15 @@ export function useDeleteConversation() {
     onMutate: async (id): Promise<DeleteConversationMutationContext> => {
       await queryClient.cancelQueries({ queryKey: ["conversation"] });
 
-      const previousConversationLists = queryClient.getQueriesData<ConversationListQueryData>({
+      const previousConversationLists = queryClient.getQueriesData<ConversationListCacheData>({
         queryKey: ["conversation", "list"],
       });
       const previousConversation = queryClient.getQueryData(["conversation", "get", id]);
       const previousConversationUsage = queryClient.getQueryData(["conversation", "usage", id]);
 
-      queryClient.setQueriesData<ConversationListQueryData>(
+      queryClient.setQueriesData<ConversationListCacheData>(
         { queryKey: ["conversation", "list"] },
-        (current) => {
-          if (!current) {
-            return current;
-          }
-
-          const nextConversations = current.conversations.filter(
-            (conversation) => conversation.id !== id,
-          );
-          if (nextConversations.length === current.conversations.length) {
-            return current;
-          }
-
-          return {
-            ...current,
-            conversations: nextConversations,
-          };
-        },
+        (current) => removeConversationFromConversationListData(current, id),
       );
       queryClient.removeQueries({
         queryKey: ["conversation", "get", id],

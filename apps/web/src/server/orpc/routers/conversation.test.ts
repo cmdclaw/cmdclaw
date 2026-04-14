@@ -12,19 +12,22 @@ function createProcedureStub() {
   return stub;
 }
 
-const { conversationFindFirstMock, dbMock } = vi.hoisted(() => {
+const { conversationFindFirstMock, conversationFindManyMock, dbMock } = vi.hoisted(() => {
   const conversationFindFirstMock = vi.fn();
+  const conversationFindManyMock = vi.fn();
 
   const dbMock = {
     query: {
       conversation: {
         findFirst: conversationFindFirstMock,
+        findMany: conversationFindManyMock,
       },
     },
   };
 
   return {
     conversationFindFirstMock,
+    conversationFindManyMock,
     dbMock,
   };
 });
@@ -151,5 +154,81 @@ describe("conversationRouter.getUsage", () => {
       totalTokens: 22,
       assistantMessageCount: 1,
     });
+  });
+});
+
+describe("conversationRouter.list", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns an encoded cursor when another page exists", async () => {
+    conversationFindManyMock.mockResolvedValue([
+      {
+        id: "conv-new",
+        title: "New",
+        isPinned: true,
+        isShared: false,
+        generationStatus: "idle",
+        createdAt: new Date("2026-04-10T10:00:00.000Z"),
+        updatedAt: new Date("2026-04-10T10:00:00.000Z"),
+        seenMessageCount: 1,
+        messages: [{ id: "m-1" }],
+      },
+      {
+        id: "conv-old",
+        title: "Old",
+        isPinned: false,
+        isShared: false,
+        generationStatus: "complete",
+        createdAt: new Date("2026-04-09T09:00:00.000Z"),
+        updatedAt: new Date("2026-04-09T09:00:00.000Z"),
+        seenMessageCount: 2,
+        messages: [{ id: "m-2" }, { id: "m-3" }],
+      },
+      {
+        id: "conv-extra",
+        title: "Extra",
+        isPinned: false,
+        isShared: false,
+        generationStatus: "complete",
+        createdAt: new Date("2026-04-08T08:00:00.000Z"),
+        updatedAt: new Date("2026-04-08T08:00:00.000Z"),
+        seenMessageCount: 0,
+        messages: [],
+      },
+    ]);
+
+    const result = (await conversationRouterAny.list({
+      input: { limit: 2 },
+      context,
+    })) as {
+      conversations: Array<{ id: string; messageCount: number }>;
+      nextCursor?: string;
+    };
+
+    expect(result.conversations).toEqual([
+      expect.objectContaining({ id: "conv-new", messageCount: 1 }),
+      expect.objectContaining({ id: "conv-old", messageCount: 2 }),
+    ]);
+    expect(result.nextCursor).toBe(
+      JSON.stringify({
+        updatedAt: "2026-04-09T09:00:00.000Z",
+        id: "conv-old",
+        isPinned: false,
+      }),
+    );
+  });
+
+  it("rejects an invalid cursor", async () => {
+    await expect(
+      conversationRouterAny.list({
+        input: { limit: 20, cursor: "not-json" },
+        context,
+      }),
+    ).rejects.toMatchObject(
+      new ORPCError("BAD_REQUEST", { message: "Invalid conversation list cursor" }),
+    );
+    expect(conversationFindManyMock).not.toHaveBeenCalled();
   });
 });

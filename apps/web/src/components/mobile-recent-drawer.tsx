@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
 import { ConversationUsageDialog } from "@/components/conversation-usage-dialog";
@@ -52,6 +52,7 @@ const RUNNING_CONVERSATION_STATUSES = new Set([
   "awaiting_auth",
   "paused",
 ]);
+const RECENT_CHATS_LOAD_MORE_THRESHOLD_PX = 24;
 
 function formatRelativeShort(date: Date) {
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -114,8 +115,16 @@ type MobileRecentDrawerProps = {
 export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDrawerProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const recentScrollRef = useRef<HTMLDivElement | null>(null);
+  const recentChatsLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: rawConversationData, isLoading: conversationsLoading } = useConversationList();
+  const {
+    data: rawConversationData,
+    isLoading: conversationsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useConversationList();
   const conversationData = rawConversationData as ConversationListData | undefined;
   const { data: coworkers } = useCoworkerList();
   const deleteConversation = useDeleteConversation();
@@ -255,6 +264,61 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined" || mode !== "chats" || !open) {
+      return;
+    }
+
+    const root = recentScrollRef.current;
+    const node = recentChatsLoadMoreRef.current;
+    if (!root || !node || !hasNextPage) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      {
+        root,
+        rootMargin: "200px 0px",
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, mode, open]);
+
+  useEffect(() => {
+    if (mode !== "chats" || !open || conversationsLoading || isFetchingNextPage || !hasNextPage) {
+      return;
+    }
+
+    const root = recentScrollRef.current;
+    if (!root || root.scrollHeight > root.clientHeight) {
+      return;
+    }
+
+    void fetchNextPage();
+  }, [conversationsLoading, fetchNextPage, hasNextPage, isFetchingNextPage, mode, open]);
+
+  const handleRecentChatsScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (mode !== "chats" || !open || !hasNextPage || isFetchingNextPage) {
+        return;
+      }
+
+      const node = event.currentTarget;
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      if (distanceFromBottom <= RECENT_CHATS_LOAD_MORE_THRESHOLD_PX) {
+        void fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetchingNextPage, mode, open],
+  );
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
@@ -287,7 +351,11 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto py-2">
+          <div
+            ref={recentScrollRef}
+            onScroll={handleRecentChatsScroll}
+            className="flex-1 overflow-y-auto py-2"
+          >
             {mode === "chats" ? (
               conversationsLoading ? (
                 <p className="text-muted-foreground px-4 py-3 text-xs">Loading...</p>
@@ -296,97 +364,107 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                   No conversations yet
                 </p>
               ) : (
-                conversations.map((conversation) => {
-                  const active = isActive(`/chat/${conversation.id}`);
-                  const isRunning = RUNNING_CONVERSATION_STATUSES.has(
-                    conversation.generationStatus,
-                  );
-                  const hasUnread = hasUnreadConversationResults({
-                    isConversationActive: active,
-                    isConversationRunning: isRunning,
-                    messageCount: conversation.messageCount,
-                    serverSeenCount: conversation.seenMessageCount,
-                  });
+                <>
+                  {conversations.map((conversation) => {
+                    const active = isActive(`/chat/${conversation.id}`);
+                    const isRunning = RUNNING_CONVERSATION_STATUSES.has(
+                      conversation.generationStatus,
+                    );
+                    const hasUnread = hasUnreadConversationResults({
+                      isConversationActive: active,
+                      isConversationRunning: isRunning,
+                      messageCount: conversation.messageCount,
+                      serverSeenCount: conversation.seenMessageCount,
+                    });
 
-                  return (
-                    <div
-                      key={conversation.id}
-                      className={cn("group relative flex items-center px-2")}
-                    >
-                      <Link
-                        href={`/chat/${conversation.id}`}
-                        prefetch={false}
-                        onClick={handleClose}
-                        className={cn(
-                          "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors",
-                          active
-                            ? "bg-accent text-accent-foreground"
-                            : "text-foreground/70 hover:bg-accent/50",
-                        )}
+                    return (
+                      <div
+                        key={conversation.id}
+                        className={cn("group relative flex items-center px-2")}
                       >
-                        {isRunning ? (
-                          <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                        ) : hasUnread ? (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-                        ) : null}
-                        <span className="min-w-0 flex-1 truncate">
-                          {conversation.title || "Untitled"}
-                        </span>
-                        <span className="text-muted-foreground shrink-0 text-[11px] group-hover:hidden">
-                          {formatRelativeShort(new Date(conversation.updatedAt))}
-                        </span>
-                      </Link>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className="text-muted-foreground hover:text-foreground ml-1 hidden h-6 w-6 shrink-0 items-center justify-center rounded-sm group-hover:flex"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" side="bottom">
-                          <DropdownMenuItem
-                            data-conversation-id={conversation.id}
-                            data-conversation-pinned={conversation.isPinned ? "true" : "false"}
-                            onClick={handlePinMenuClick}
-                          >
-                            {conversation.isPinned ? (
-                              <PinOff className="h-4 w-4" />
-                            ) : (
-                              <Pin className="h-4 w-4" />
-                            )}
-                            <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            data-conversation-id={conversation.id}
-                            data-conversation-title={conversation.title ?? "Untitled"}
-                            onClick={handleUsageMenuClick}
-                          >
-                            <BarChart3 className="h-4 w-4" />
-                            <span>Show usage</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            data-conversation-id={conversation.id}
-                            data-conversation-title={conversation.title ?? ""}
-                            onClick={handleRenameMenuClick}
-                          >
-                            <Pencil className="h-4 w-4" />
-                            <span>Rename</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            data-conversation-id={conversation.id}
-                            onClick={handleDeleteMenuClick}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span>Delete</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        <Link
+                          href={`/chat/${conversation.id}`}
+                          prefetch={false}
+                          onClick={handleClose}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors",
+                            active
+                              ? "bg-accent text-accent-foreground"
+                              : "text-foreground/70 hover:bg-accent/50",
+                          )}
+                        >
+                          {isRunning ? (
+                            <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                          ) : hasUnread ? (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                          ) : null}
+                          <span className="min-w-0 flex-1 truncate">
+                            {conversation.title || "Untitled"}
+                          </span>
+                          <span className="text-muted-foreground shrink-0 text-[11px] group-hover:hidden">
+                            {formatRelativeShort(new Date(conversation.updatedAt))}
+                          </span>
+                        </Link>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground ml-1 hidden h-6 w-6 shrink-0 items-center justify-center rounded-sm group-hover:flex"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" side="bottom">
+                            <DropdownMenuItem
+                              data-conversation-id={conversation.id}
+                              data-conversation-pinned={conversation.isPinned ? "true" : "false"}
+                              onClick={handlePinMenuClick}
+                            >
+                              {conversation.isPinned ? (
+                                <PinOff className="h-4 w-4" />
+                              ) : (
+                                <Pin className="h-4 w-4" />
+                              )}
+                              <span>{conversation.isPinned ? "Unpin" : "Pin"}</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              data-conversation-id={conversation.id}
+                              data-conversation-title={conversation.title ?? "Untitled"}
+                              onClick={handleUsageMenuClick}
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                              <span>Show usage</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              data-conversation-id={conversation.id}
+                              data-conversation-title={conversation.title ?? ""}
+                              onClick={handleRenameMenuClick}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              <span>Rename</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              data-conversation-id={conversation.id}
+                              onClick={handleDeleteMenuClick}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    );
+                  })}
+                  {hasNextPage ? (
+                    <div
+                      ref={recentChatsLoadMoreRef}
+                      className="text-muted-foreground px-4 py-3 text-xs"
+                    >
+                      {isFetchingNextPage ? "Loading older chats..." : "Scroll for older chats"}
                     </div>
-                  );
-                })
+                  ) : null}
+                </>
               )
             ) : recentCoworkerRuns.length === 0 ? (
               <p className="text-muted-foreground px-4 py-6 text-center text-xs">No runs yet</p>
