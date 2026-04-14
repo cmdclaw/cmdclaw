@@ -53,6 +53,7 @@ describe("GenerationRuntime", () => {
     });
 
     runtime.handlePendingApproval({
+      interruptId: "interrupt-approval-1",
       generationId: "gen-1",
       conversationId: "conv-1",
       toolUseId: "tool-approval",
@@ -83,6 +84,7 @@ describe("GenerationRuntime", () => {
     const runtime = createGenerationRuntime();
 
     runtime.handleAuthNeeded({
+      interruptId: "interrupt-auth-1",
       generationId: "gen-auth",
       conversationId: "conv-auth",
       integrations: ["github", "slack"],
@@ -98,13 +100,20 @@ describe("GenerationRuntime", () => {
 
     const snapshot = runtime.snapshot;
     expect(snapshot.traceStatus).toBe("streaming");
-    expect(snapshot.segments[0]?.auth).toBeUndefined();
+    expect(snapshot.segments[0]?.auth).toEqual({
+      interruptId: "interrupt-auth-1",
+      integrations: ["github", "slack"],
+      connectedIntegrations: ["github", "slack"],
+      reason: "GitHub authentication required",
+      status: "completed",
+    });
   });
 
   test("resolves pending auth immediately after a successful callback returns", () => {
     const runtime = createGenerationRuntime();
 
     runtime.handleAuthNeeded({
+      interruptId: "interrupt-auth-2",
       generationId: "gen-auth",
       conversationId: "conv-auth",
       integrations: ["notion"],
@@ -115,7 +124,13 @@ describe("GenerationRuntime", () => {
 
     const snapshot = runtime.snapshot;
     expect(snapshot.traceStatus).toBe("streaming");
-    expect(snapshot.segments[0]?.auth).toBeUndefined();
+    expect(snapshot.segments[0]?.auth).toEqual({
+      interruptId: "interrupt-auth-2",
+      integrations: ["notion"],
+      connectedIntegrations: ["notion"],
+      reason: "Notion authentication required",
+      status: "completed",
+    });
   });
 
   test("marks running activities interrupted on cancellation and appends system message once", () => {

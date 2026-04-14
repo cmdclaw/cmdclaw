@@ -42,6 +42,7 @@ export type RuntimeActivityItem = {
 };
 
 export type RuntimeSegmentApproval = {
+  interruptId?: string;
   toolUseId: string;
   toolName: string;
   toolInput: unknown;
@@ -53,6 +54,7 @@ export type RuntimeSegmentApproval = {
 };
 
 export type RuntimeSegmentAuth = {
+  interruptId?: string;
   integrations: string[];
   connectedIntegrations: string[];
   reason?: string;
@@ -82,6 +84,7 @@ export type RuntimeThinkingData = {
 };
 
 export type RuntimePendingApprovalData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   toolUseId: string;
@@ -93,6 +96,7 @@ export type RuntimePendingApprovalData = {
 };
 
 export type RuntimeAuthNeededData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   integrations: string[];
@@ -129,6 +133,7 @@ export type RuntimeServerEvent =
   | { type: "tool_result"; toolName: string; result: unknown; toolUseId?: string }
   | {
       type: "pending_approval";
+      interruptId: string;
       generationId: string;
       conversationId: string;
       toolUseId: string;
@@ -156,6 +161,7 @@ export type RuntimeServerEvent =
     }
   | {
       type: "auth_needed";
+      interruptId: string;
       generationId: string;
       conversationId: string;
       integrations: string[];
@@ -395,6 +401,7 @@ export class GenerationRuntime {
 
     const currentSeg = this.getCurrentSegment();
     currentSeg.approval = {
+      interruptId: data.interruptId,
       toolUseId: data.toolUseId,
       toolName: data.toolName,
       toolInput: data.toolInput,
@@ -416,7 +423,10 @@ export class GenerationRuntime {
   setApprovalStatus(toolUseId: string, status: "approved" | "denied"): void {
     for (const seg of this.segments) {
       if (seg.approval?.toolUseId === toolUseId) {
-        seg.approval.status = status;
+        seg.approval = {
+          ...seg.approval,
+          status,
+        };
         const toolItem = seg.items.find(
           (item) => item.type === "tool_call" && item.status === "running",
         );
@@ -459,6 +469,7 @@ export class GenerationRuntime {
     for (const segment of this.segments) {
       if (segment.approval?.toolUseId === data.toolUseId) {
         segment.approval = {
+          interruptId: segment.approval.interruptId,
           toolUseId: data.toolUseId,
           toolName: data.toolName,
           toolInput: data.toolInput,
@@ -476,6 +487,7 @@ export class GenerationRuntime {
     if (!updatedExistingSegment) {
       const currentSeg = this.getCurrentSegment();
       currentSeg.approval = {
+        interruptId: undefined,
         toolUseId: data.toolUseId,
         toolName: data.toolName,
         toolInput: data.toolInput,
@@ -506,6 +518,7 @@ export class GenerationRuntime {
 
     const currentSeg = this.getCurrentSegment();
     currentSeg.auth = {
+      interruptId: data.interruptId,
       integrations: data.integrations,
       connectedIntegrations: [],
       reason: data.reason,
@@ -563,10 +576,10 @@ export class GenerationRuntime {
         (candidate) => !seg.auth?.connectedIntegrations.includes(candidate),
       );
       if (remaining.length === 0) {
-        delete seg.auth;
+        seg.auth.status = "completed";
         this.traceStatus = "streaming";
       } else {
-        seg.auth.status = "pending";
+        seg.auth.status = "connecting";
       }
       break;
     }
@@ -579,10 +592,10 @@ export class GenerationRuntime {
           seg.auth.connectedIntegrations.push(connected);
         }
         if (remaining.length === 0) {
-          delete seg.auth;
+          seg.auth.status = "completed";
           this.traceStatus = "streaming";
         } else {
-          seg.auth.status = "pending";
+          seg.auth.status = "connecting";
         }
         break;
       }
@@ -593,7 +606,7 @@ export class GenerationRuntime {
     for (const seg of this.segments) {
       if (seg.auth && (seg.auth.status === "pending" || seg.auth.status === "connecting")) {
         if (success) {
-          delete seg.auth;
+          seg.auth.status = "completed";
         } else {
           seg.auth.status = "cancelled";
         }

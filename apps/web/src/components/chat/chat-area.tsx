@@ -23,6 +23,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { usePostHog } from "posthog-js/react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import type { StatusChangeMetadata } from "@/lib/generation-stream";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +82,11 @@ import {
 import { ActivityFeed, type ActivityItemData } from "./activity-feed";
 import { AuthRequestCard } from "./auth-request-card";
 import { BottomActionBar } from "./bottom-action-bar";
+import {
+  ChatDebugPopover,
+  type ArmedDebugPreset,
+  type ChatDebugSnapshot,
+} from "./chat-debug-popover";
 import { mergePersistedConversationMessages } from "./chat-message-sync";
 import { useChatModelStore } from "./chat-model-store";
 import { formatDuration } from "./chat-performance-metrics";
@@ -91,12 +97,20 @@ import {
   collectQuestionApprovalToolUseIds,
   isQuestionApprovalRequest,
 } from "./question-approval-utils";
-import { ToolApprovalCard } from "./tool-approval-card";
 import { VoiceIndicator } from "./voice-indicator";
 
 type TraceStatus = RuntimeSnapshot["traceStatus"];
 type ActivitySegment = Omit<RuntimeActivitySegment, "items"> & {
   items: ActivityItemData[];
+};
+
+type HistoricalActivityBlock = {
+  id: string;
+  generationId: string;
+  items: ActivityItemData[];
+  integrationsUsed: DisplayIntegrationType[];
+  runtimeLimitMs: number | null;
+  awaitingResume: boolean;
 };
 
 type Props = {
@@ -106,7 +120,7 @@ type Props = {
   onCoworkerSync?: (payload: { coworkerId: string; prompt?: string; updatedAt?: string }) => void;
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
-  authCompletion?: { integration: string; generationId: string } | null;
+  authCompletion?: { integration: string; interruptId: string } | null;
 };
 
 type QueuedMessage = {
@@ -117,6 +131,75 @@ type QueuedMessage = {
   selectedPlatformSkillSlugs?: string[];
 };
 
+type RunGenerationOptions = {
+  selectedSkillKeysOverride?: string[];
+  resumePausedGenerationId?: string;
+  debugRunDeadlineMs?: number;
+  debugApprovalHotWaitMs?: number;
+};
+
+type PendingRunDeadlineResumeState = {
+  generationId: string;
+  debugRunDeadlineMs: number | null;
+};
+
+function stripResolvedInterruptFromSegments(
+  segments: ActivitySegment[],
+  interruptId: string,
+  kind: "approval" | "auth",
+): ActivitySegment[] {
+  return segments.flatMap((segment) => {
+    const nextSegment: ActivitySegment = {
+      ...segment,
+      items: [...segment.items],
+      approval:
+        kind === "approval" && segment.approval?.interruptId === interruptId
+          ? undefined
+          : segment.approval,
+      auth: kind === "auth" && segment.auth?.interruptId === interruptId ? undefined : segment.auth,
+    };
+
+    if (
+      nextSegment.items.length === 0 &&
+      !nextSegment.approval &&
+      !nextSegment.auth &&
+      segments.length > 1
+    ) {
+      return [];
+    }
+
+    return [nextSegment];
+  });
+}
+
+function markResolvedAuthInterruptInSegments(
+  segments: ActivitySegment[],
+  interruptId: string,
+  integration: string,
+): ActivitySegment[] {
+  return segments.map((segment) => {
+    if (segment.auth?.interruptId !== interruptId) {
+      return segment;
+    }
+
+    const connectedIntegrations = segment.auth.connectedIntegrations.includes(integration)
+      ? segment.auth.connectedIntegrations
+      : [...segment.auth.connectedIntegrations, integration];
+    const remainingIntegrations = segment.auth.integrations.filter(
+      (candidate) => !connectedIntegrations.includes(candidate),
+    );
+
+    return {
+      ...segment,
+      auth: {
+        ...segment.auth,
+        connectedIntegrations,
+        status: remainingIntegrations.length === 0 ? "completed" : "connecting",
+      },
+    };
+  });
+}
+
 function getQueuedMessageSummary(queuedMessage: QueuedMessage): string {
   if (queuedMessage.content) {
     return queuedMessage.content;
@@ -124,6 +207,16 @@ function getQueuedMessageSummary(queuedMessage: QueuedMessage): string {
 
   const attachmentCount = queuedMessage.attachments?.length ?? 0;
   return `${attachmentCount} queued attachment${attachmentCount === 1 ? "" : "s"}`;
+}
+
+function mergeDebugSnapshot(
+  previous: ChatDebugSnapshot,
+  update: Partial<ChatDebugSnapshot>,
+): ChatDebugSnapshot {
+  return {
+    ...previous,
+    ...Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)),
+  };
 }
 
 type QueuedMessageRowProps = {
@@ -231,6 +324,167 @@ const EMPTY_SELECTED_SKILLS: string[] = [];
 const EMPTY_ACTIVITY_ITEMS: ActivityItemData[] = [];
 const CUSTOM_SKILL_PREFIX = "custom:";
 const DEFAULT_VISIBLE_CHAT_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
+const RUN_DEADLINE_DEFAULT_MS = 15 * 60 * 1000;
+const RUN_DEADLINE_RESUME_SEGMENT_ID = "runtime-deadline-resume";
+const RUN_DEADLINE_RESUME_TOOL_USE_ID = "runtime-deadline-resume-tool";
+const NOOP_ACTIVITY_TOGGLE = () => {};
+
+function buildRunDeadlineResumeSegment(
+  pendingRunDeadline: PendingRunDeadlineResumeState,
+): ActivitySegment {
+  const runtimeLimitLabel = formatDuration(
+    pendingRunDeadline.debugRunDeadlineMs ?? RUN_DEADLINE_DEFAULT_MS,
+  );
+
+  return {
+    id: RUN_DEADLINE_RESUME_SEGMENT_ID,
+    items: EMPTY_ACTIVITY_ITEMS,
+    isExpanded: false,
+    approval: {
+      toolUseId: RUN_DEADLINE_RESUME_TOOL_USE_ID,
+      toolName: "question",
+      toolInput: {
+        questions: [
+          {
+            header: "Runtime limit reached",
+            question: `This run hit the ${runtimeLimitLabel} max runtime and stopped. Do you want to continue from where it left off?`,
+            options: [
+              {
+                label: "Yes",
+                description: "Resume this run in a new sandbox.",
+              },
+            ],
+          },
+        ],
+      },
+      integration: "cmdclaw",
+      operation: "question",
+      status: "pending",
+    },
+  };
+}
+
+function buildHistoricalActivityBlock(params: {
+  generationId: string;
+  runtimeLimitMs: number | null;
+  snapshot: RuntimeSnapshot;
+}): HistoricalActivityBlock | null {
+  const items = params.snapshot.segments.flatMap((segment) =>
+    segment.items.map((item) => ({
+      ...item,
+      integration: item.integration as DisplayIntegrationType | undefined,
+    })),
+  );
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const integrationsUsed = Array.from(
+    new Set(
+      items
+        .map((item) => item.integration)
+        .filter((integration): integration is DisplayIntegrationType => Boolean(integration)),
+    ),
+  );
+
+  return {
+    id: `historical-${params.generationId}`,
+    generationId: params.generationId,
+    items,
+    integrationsUsed,
+    runtimeLimitMs: params.runtimeLimitMs,
+    awaitingResume: true,
+  };
+}
+
+function buildHistoricalActivityBlockFromContentParts(params: {
+  generationId: string;
+  runtimeLimitMs: number | null;
+  contentParts: PersistedContentPart[];
+}): HistoricalActivityBlock | null {
+  const runtime = createGenerationRuntime();
+
+  for (const part of params.contentParts) {
+    switch (part.type) {
+      case "text":
+        runtime.handleText(part.text);
+        break;
+      case "thinking":
+        runtime.handleThinking({
+          thinkingId: part.id,
+          content: part.content,
+        });
+        break;
+      case "tool_use":
+        runtime.handleToolUse({
+          toolName: part.name,
+          toolInput: part.input,
+          toolUseId: part.id,
+          integration: part.integration,
+          operation: part.operation,
+        });
+        break;
+      case "tool_result":
+        runtime.handleToolResult("tool_result", part.content, part.tool_use_id);
+        break;
+      case "approval":
+        runtime.handleApproval({
+          toolUseId: part.tool_use_id,
+          toolName: part.tool_name,
+          toolInput: part.tool_input,
+          integration: part.integration,
+          operation: part.operation,
+          command: part.command,
+          status: part.status,
+          questionAnswers: part.question_answers,
+        });
+        break;
+      case "system":
+        runtime.handleSystem(part.content);
+        break;
+      case "coworker_invocation":
+        runtime.handleSystem(part.message);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return buildHistoricalActivityBlock({
+    generationId: params.generationId,
+    runtimeLimitMs: params.runtimeLimitMs,
+    snapshot: runtime.snapshot,
+  });
+}
+
+function isContinueMessage(message: Message): boolean {
+  return message.role === "user" && message.content.trim().toLowerCase() === "continue";
+}
+
+function renderHistoricalActivityBlock(block: HistoricalActivityBlock) {
+  const runtimeLimitLabel = formatDuration(block.runtimeLimitMs ?? RUN_DEADLINE_DEFAULT_MS);
+
+  return (
+    <div key={block.id} className="space-y-2 py-4">
+      <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs">
+        <Timer className="h-3.5 w-3.5" />
+        <span>
+          {block.awaitingResume
+            ? `Stopped after max runtime of ${runtimeLimitLabel}.`
+            : `Stopped after max runtime of ${runtimeLimitLabel}. Resumed below.`}
+        </span>
+      </div>
+      <ActivityFeed
+        items={block.items}
+        isStreaming={false}
+        isExpanded={false}
+        onToggleExpand={NOOP_ACTIVITY_TOGGLE}
+        integrationsUsed={block.integrationsUsed}
+      />
+    </div>
+  );
+}
 
 function extractCoworkerSyncDataFromToolResult(result: unknown): {
   coworkerId?: string;
@@ -692,7 +946,7 @@ export function ChatArea({
   const currentGenerationIdRef = useRef<string | undefined>(undefined);
   const runtimeRef = useRef<GenerationRuntime | null>(null);
   const coworkerEditToolUseIdsRef = useRef(new Set<string>());
-  const authCompletionRef = useRef<{ integration: string; generationId: string } | null>(null);
+  const authCompletionRef = useRef<{ integration: string; interruptId: string } | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingParts, setStreamingParts] = useState<MessagePart[]>([]);
@@ -719,6 +973,17 @@ export function ChatArea({
   const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
   const [skillSearchQuery, setSkillSearchQuery] = useState("");
   const [inputPrefillRequest, setInputPrefillRequest] = useState<InputPrefillRequest | null>(null);
+  const [armedDebugPreset, setArmedDebugPreset] = useState<ArmedDebugPreset | null>(null);
+  const [chatDebugSnapshot, setChatDebugSnapshot] = useState<ChatDebugSnapshot>({});
+  const [isResumingPausedRunDeadline, setIsResumingPausedRunDeadline] = useState(false);
+  const [pendingRunDeadlineResume, setPendingRunDeadlineResume] =
+    useState<PendingRunDeadlineResumeState | null>(null);
+  const [historicalActivityBlocks, setHistoricalActivityBlocks] = useState<
+    HistoricalActivityBlock[]
+  >([]);
+  const [dismissedRunDeadlineGenerationId, setDismissedRunDeadlineGenerationId] = useState<
+    string | null
+  >(null);
   const [editingQueuedMessageId, setEditingQueuedMessageId] = useState<string | null>(null);
   const [isDiscoverOpen, setIsDiscoverOpen] = useState(false);
   const initialPrefillAppliedRef = useRef(false);
@@ -743,14 +1008,21 @@ export function ChatArea({
   const [, setTraceStatus] = useState<TraceStatus>("complete");
   const [agentInitStatus, setAgentInitStatus] = useState<string | null>(null);
   const [streamClockNow, setStreamClockNow] = useState(() => Date.now());
+  const [resumeGenerationNonce, setResumeGenerationNonce] = useState(0);
 
   // Sandbox files collected during streaming
   const [, setStreamingSandboxFiles] = useState<SandboxFileData[]>([]);
+
+  const updateChatDebugSnapshot = useCallback((update: Partial<ChatDebugSnapshot>) => {
+    setChatDebugSnapshot((previous) => mergeDebugSnapshot(previous, update));
+  }, []);
 
   // Current conversation ID (may be set during streaming for new conversations)
   const currentConversationIdRef = useRef<string | undefined>(conversationId);
   const viewedConversationIdRef = useRef<string | undefined>(conversationId);
   const streamScopeRef = useRef(0);
+  const interactiveConversationId =
+    currentConversationIdRef.current ?? draftConversationId ?? conversationId ?? null;
   const queueConversationId = draftConversationId ?? conversationId;
   const { data: queuedMessages } = useConversationQueuedMessages(queueConversationId);
   const normalizedQueuedMessages = useMemo<QueuedMessage[]>(
@@ -777,10 +1049,46 @@ export function ChatArea({
       }),
     [connectedProviders, sharedConnectedProviders],
   );
+  const runDeadlineResumeState = useMemo<PendingRunDeadlineResumeState | null>(() => {
+    if (
+      pendingRunDeadlineResume &&
+      pendingRunDeadlineResume.generationId !== dismissedRunDeadlineGenerationId
+    ) {
+      return pendingRunDeadlineResume;
+    }
+
+    if (
+      activeGeneration?.status === "paused" &&
+      activeGeneration.pauseReason === "run_deadline" &&
+      activeGeneration.generationId &&
+      activeGeneration.generationId !== dismissedRunDeadlineGenerationId
+    ) {
+      return {
+        generationId: activeGeneration.generationId,
+        debugRunDeadlineMs: activeGeneration.debugRunDeadlineMs ?? null,
+      };
+    }
+
+    return null;
+  }, [
+    activeGeneration?.debugRunDeadlineMs,
+    activeGeneration?.generationId,
+    activeGeneration?.pauseReason,
+    activeGeneration?.status,
+    dismissedRunDeadlineGenerationId,
+    pendingRunDeadlineResume,
+  ]);
+  const displaySegments = useMemo(
+    () =>
+      runDeadlineResumeState
+        ? [...segments, buildRunDeadlineResumeSegment(runDeadlineResumeState)]
+        : segments,
+    [runDeadlineResumeState, segments],
+  );
   const suppressedQuestionToolUseIds = useMemo(
     () =>
       collectQuestionApprovalToolUseIds(
-        segments.flatMap((segment) =>
+        displaySegments.flatMap((segment) =>
           segment.approval
             ? [
                 {
@@ -794,12 +1102,12 @@ export function ChatArea({
             : [],
         ),
       ),
-    [segments],
+    [displaySegments],
   );
   const visibleActivityItemsBySegmentId = useMemo(() => {
     const visibleItems = new Map<string, ActivityItemData[]>();
 
-    for (const segment of segments) {
+    for (const segment of displaySegments) {
       visibleItems.set(
         segment.id,
         segment.items.filter(
@@ -812,7 +1120,7 @@ export function ChatArea({
     }
 
     return visibleItems;
-  }, [segments, suppressedQuestionToolUseIds]);
+  }, [displaySegments, suppressedQuestionToolUseIds]);
   const resolvedDefaultModel = useMemo(
     () =>
       isOpenAIConnected
@@ -1233,12 +1541,73 @@ export function ChatArea({
     return formatDuration(streamElapsedMs);
   }, [isStreaming, segments.length, streamElapsedMs]);
 
+  const handleGenerationParkedUi = useCallback(() => {
+    setIsStreaming(false);
+    setStreamingParts([]);
+    setStreamingSandboxFiles([]);
+    setTraceStatus("complete");
+    currentGenerationIdRef.current = undefined;
+    runtimeRef.current = null;
+    clearTrackedCoworkerEditToolUses();
+    resetInitTracking();
+  }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
+
   const handleInitStatusChange = useCallback(
-    (status: string) => {
+    (status: string, metadata?: StatusChangeMetadata) => {
       console.info(
         `[AgentInit][Client] status_change status=${status} generationId=${currentGenerationIdRef.current ?? "unknown"}`,
       );
+      updateChatDebugSnapshot({
+        conversationId:
+          currentConversationIdRef.current ?? draftConversationId ?? conversationId ?? null,
+        generationId: currentGenerationIdRef.current ?? activeGeneration?.generationId ?? null,
+        runtimeId: metadata?.runtimeId,
+        sandboxProvider: metadata?.sandboxProvider,
+        sandboxId: metadata?.sandboxId,
+        sessionId: metadata?.sessionId,
+        lastParkedStatus:
+          status === "approval_parked" ||
+          status === "auth_parked" ||
+          status === "run_deadline_parked"
+            ? status
+            : undefined,
+        releasedSandboxId: metadata?.releasedSandboxId,
+      });
       if (!status.startsWith("sandbox_init_") && !status.startsWith("agent_init_")) {
+        if (status === "run_deadline_parked") {
+          const parkedGenerationId =
+            currentGenerationIdRef.current ?? activeGeneration?.generationId ?? "unknown";
+          const runtimeLimitMs =
+            activeGeneration?.debugRunDeadlineMs ?? armedDebugPreset?.debugRunDeadlineMs ?? null;
+          const runtimeSnapshot = runtimeRef.current?.snapshot;
+          if (runtimeSnapshot) {
+            const historicalBlock = buildHistoricalActivityBlock({
+              generationId: parkedGenerationId,
+              runtimeLimitMs,
+              snapshot: runtimeSnapshot,
+            });
+            if (historicalBlock) {
+              setHistoricalActivityBlocks((current) => [
+                ...current.filter((block) => block.generationId !== parkedGenerationId),
+                historicalBlock,
+              ]);
+            }
+          }
+          setPendingRunDeadlineResume({
+            generationId: parkedGenerationId,
+            debugRunDeadlineMs: runtimeLimitMs,
+          });
+        }
+        if (
+          status === "approval_parked" ||
+          status === "auth_parked" ||
+          status === "run_deadline_parked"
+        ) {
+          handleGenerationParkedUi();
+          queryClient.invalidateQueries({
+            queryKey: ["generation", "active", currentConversationIdRef.current ?? conversationId],
+          });
+        }
         return;
       }
 
@@ -1277,12 +1646,21 @@ export function ChatArea({
       }
     },
     [
+      activeGeneration?.debugRunDeadlineMs,
+      activeGeneration?.generationId,
       clearTrackedCoworkerEditToolUses,
+      conversationId,
+      draftConversationId,
+      handleGenerationParkedUi,
       markInitMissingAtEnd,
       markInitSignal,
       normalizedSelectedModel,
+      armedDebugPreset?.debugRunDeadlineMs,
       posthog,
+      queryClient,
       resetInitTracking,
+      updateChatDebugSnapshot,
+      setPendingRunDeadlineResume,
     ],
   );
 
@@ -1303,6 +1681,65 @@ export function ChatArea({
     setTraceStatus(snapshot.traceStatus);
   }, []);
 
+  const optimisticallyResumeInterruptedGeneration = useCallback(
+    (
+      interruptId: string,
+      kind: "approval" | "auth",
+      options?: { connectedIntegration?: string },
+    ) => {
+      setStreamError(null);
+      setSegments((current) => {
+        if (kind === "auth" && options?.connectedIntegration) {
+          return markResolvedAuthInterruptInSegments(
+            current,
+            interruptId,
+            options.connectedIntegration,
+          );
+        }
+
+        return stripResolvedInterruptFromSegments(current, interruptId, kind);
+      });
+      setTraceStatus("streaming");
+      setIsStreaming(true);
+      const generationId = currentGenerationIdRef.current ?? activeGeneration?.generationId ?? null;
+      if (generationId) {
+        currentGenerationIdRef.current = generationId;
+      }
+      const reconnectStartedAtMs = activeGeneration?.startedAt
+        ? Date.parse(activeGeneration.startedAt)
+        : NaN;
+      beginInitTracking(
+        "reconnect",
+        Number.isFinite(reconnectStartedAtMs) ? reconnectStartedAtMs : undefined,
+      );
+      updateChatDebugSnapshot({
+        conversationId:
+          currentConversationIdRef.current ?? draftConversationId ?? conversationId ?? null,
+        generationId,
+        status: "generating",
+        pauseReason: null,
+      });
+      const activeConversationId =
+        currentConversationIdRef.current ?? draftConversationId ?? conversationId;
+      if (activeConversationId) {
+        void queryClient.refetchQueries({
+          queryKey: ["generation", "active", activeConversationId],
+          exact: true,
+        });
+      }
+      setResumeGenerationNonce((current) => current + 1);
+    },
+    [
+      activeGeneration?.generationId,
+      activeGeneration?.startedAt,
+      beginInitTracking,
+      conversationId,
+      draftConversationId,
+      queryClient,
+      updateChatDebugSnapshot,
+    ],
+  );
+
   useEffect(() => {
     if (!authCompletion) {
       return;
@@ -1312,17 +1749,15 @@ export function ChatArea({
 
     const runtime = runtimeRef.current;
     if (!runtime) {
-      return;
-    }
-
-    const { generationId } = runtime.getCurrentIds();
-    if (generationId !== authCompletion.generationId) {
+      optimisticallyResumeInterruptedGeneration(authCompletion.interruptId, "auth", {
+        connectedIntegration: authCompletion.integration,
+      });
       return;
     }
 
     runtime.resolveAuthSuccess(authCompletion.integration);
     syncFromRuntime(runtime);
-  }, [authCompletion, syncFromRuntime]);
+  }, [authCompletion, optimisticallyResumeInterruptedGeneration, syncFromRuntime]);
 
   const clearActiveGenerationUi = useCallback(() => {
     setStreamingParts([]);
@@ -1333,6 +1768,7 @@ export function ChatArea({
     runtimeRef.current = null;
     clearTrackedCoworkerEditToolUses();
     resetInitTracking();
+    setPendingRunDeadlineResume(null);
   }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
 
   const handleVisibleGenerationError = useCallback(
@@ -1358,6 +1794,10 @@ export function ChatArea({
         generationErrorCode: error.code,
         transportCode: error.transportCode ?? null,
       });
+      updateChatDebugSnapshot({
+        status: "error",
+        pauseReason: null,
+      });
       clearActiveGenerationUi();
       setStreamError(error.message);
     },
@@ -1367,6 +1807,7 @@ export function ChatArea({
       normalizedSelectedModel,
       posthog,
       syncFromRuntime,
+      updateChatDebugSnapshot,
     ],
   );
 
@@ -1381,7 +1822,19 @@ export function ChatArea({
     runtimeRef.current = null;
     clearTrackedCoworkerEditToolUses();
     resetInitTracking();
-  }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
+    setPendingRunDeadlineResume(null);
+    setDismissedRunDeadlineGenerationId(null);
+    updateChatDebugSnapshot({
+      generationId: null,
+      status: "complete",
+      pauseReason: null,
+    });
+  }, [
+    clearTrackedCoworkerEditToolUses,
+    resetInitTracking,
+    setDismissedRunDeadlineGenerationId,
+    updateChatDebugSnapshot,
+  ]);
 
   const handleGenerationCancelledUi = useCallback(() => {
     setIsStreaming(false);
@@ -1389,7 +1842,13 @@ export function ChatArea({
     runtimeRef.current = null;
     clearTrackedCoworkerEditToolUses();
     resetInitTracking();
-  }, [clearTrackedCoworkerEditToolUses, resetInitTracking]);
+    setPendingRunDeadlineResume(null);
+    updateChatDebugSnapshot({
+      generationId: null,
+      status: null,
+      pauseReason: null,
+    });
+  }, [clearTrackedCoworkerEditToolUses, resetInitTracking, updateChatDebugSnapshot]);
 
   const upsertMessageById = useCallback((nextMessage: Message) => {
     setMessages((prev) => {
@@ -1555,6 +2014,9 @@ export function ChatArea({
     setStreamError(null);
     setStreamingSandboxFiles([]);
     currentGenerationIdRef.current = undefined;
+    setPendingRunDeadlineResume(null);
+    setHistoricalActivityBlocks([]);
+    setDismissedRunDeadlineGenerationId(null);
     clearTrackedCoworkerEditToolUses();
     resetInitTracking();
 
@@ -1583,6 +2045,12 @@ export function ChatArea({
       viewedConversationIdRef.current = undefined;
       setDraftConversationId(undefined);
       setLocalAutoApprove(false);
+      setArmedDebugPreset(null);
+      setChatDebugSnapshot({});
+      setIsResumingPausedRunDeadline(false);
+      setPendingRunDeadlineResume(null);
+      setHistoricalActivityBlocks([]);
+      setDismissedRunDeadlineGenerationId(null);
       clearTrackedCoworkerEditToolUses();
       resetInitTracking();
     };
@@ -1730,8 +2198,7 @@ export function ChatArea({
           ) {
             try {
               await submitApproval({
-                generationId: data.generationId,
-                toolUseId: data.toolUseId,
+                interruptId: data.interruptId,
                 decision: "approve",
               });
             } catch (err) {
@@ -1779,7 +2246,7 @@ export function ChatArea({
           runtime.handleAuthNeeded(data);
           if (
             authCompletionRef.current &&
-            authCompletionRef.current.generationId === data.generationId &&
+            authCompletionRef.current.interruptId === data.interruptId &&
             data.integrations.includes(authCompletionRef.current.integration)
           ) {
             runtime.resolveAuthSuccess(authCompletionRef.current.integration);
@@ -1817,14 +2284,14 @@ export function ChatArea({
           runtime.handleSandboxFile(file);
           syncFromRuntime(runtime);
         },
-        onStatusChange: (status) => {
+        onStatusChange: (status, metadata) => {
           if (
             !acceptFurtherEvents ||
             !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
           ) {
             return;
           }
-          handleInitStatusChange(status);
+          handleInitStatusChange(status, metadata);
         },
         onDone: async (generationId, newConversationId, messageId, _usage, artifacts) => {
           if (
@@ -1942,6 +2409,7 @@ export function ChatArea({
     handleVisibleGenerationError,
     hydrateAssistantMessage,
     isStreamEventForActiveScope,
+    resumeGenerationNonce,
     upsertMessageById,
   ]);
 
@@ -2061,11 +2529,7 @@ export function ChatArea({
   }, [segments, toggleSegmentExpand]);
 
   const runGeneration = useCallback(
-    async (
-      content: string,
-      attachments?: AttachmentData[],
-      selectedSkillKeysOverride?: string[],
-    ) => {
+    async (content: string, attachments?: AttachmentData[], options?: RunGenerationOptions) => {
       // Reset scroll lock so auto-scroll works for the new response
       userScrolledUpRef.current = false;
       setStreamError(null);
@@ -2086,6 +2550,11 @@ export function ChatArea({
       setTraceStatus("streaming");
       beginInitTracking("new_generation");
       clearTrackedCoworkerEditToolUses();
+      setPendingRunDeadlineResume(null);
+      setDismissedRunDeadlineGenerationId(null);
+      if (!options?.resumePausedGenerationId) {
+        setHistoricalActivityBlocks([]);
+      }
 
       const runtime = createGenerationRuntime();
       runtimeRef.current = runtime;
@@ -2095,7 +2564,7 @@ export function ChatArea({
       let acceptFurtherEvents = true;
       const generationRequestStartedAtMs = Date.now();
 
-      const selectedKeys = selectedSkillKeysOverride ?? selectedSkillKeys;
+      const selectedKeys = options?.selectedSkillKeysOverride ?? selectedSkillKeys;
       const selectedPlatformSkillSlugs = selectedKeys.filter(
         (key) => !key.startsWith(CUSTOM_SKILL_PREFIX),
       );
@@ -2107,6 +2576,9 @@ export function ChatArea({
           model: normalizedSelectedModel,
           authSource: selectedAuthSource,
           autoApprove: autoApproveEnabled,
+          resumePausedGenerationId: options?.resumePausedGenerationId,
+          debugRunDeadlineMs: options?.debugRunDeadlineMs,
+          debugApprovalHotWaitMs: options?.debugApprovalHotWaitMs,
           selectedPlatformSkillSlugs,
           fileAttachments: attachments,
         },
@@ -2117,6 +2589,12 @@ export function ChatArea({
             }
             streamGenerationId = generationId;
             currentGenerationIdRef.current = generationId;
+            updateChatDebugSnapshot({
+              conversationId: newConversationId,
+              generationId,
+              status: "generating",
+              pauseReason: null,
+            });
             if (forceCoworkerQuerySync && coworkerIdForSync) {
               triggerCoworkerSync({ coworkerId: coworkerIdForSync });
             }
@@ -2215,8 +2693,7 @@ export function ChatArea({
             ) {
               try {
                 await submitApproval({
-                  generationId: data.generationId,
-                  toolUseId: data.toolUseId,
+                  interruptId: data.interruptId,
                   decision: "approve",
                 });
               } catch (err) {
@@ -2264,7 +2741,7 @@ export function ChatArea({
             runtime.handleAuthNeeded(data);
             if (
               authCompletionRef.current &&
-              authCompletionRef.current.generationId === data.generationId &&
+              authCompletionRef.current.interruptId === data.interruptId &&
               data.integrations.includes(authCompletionRef.current.integration)
             ) {
               runtime.resolveAuthSuccess(authCompletionRef.current.integration);
@@ -2302,14 +2779,14 @@ export function ChatArea({
             runtime.handleSandboxFile(file);
             syncFromRuntime(runtime);
           },
-          onStatusChange: (status) => {
+          onStatusChange: (status, metadata) => {
             if (
               !acceptFurtherEvents ||
               !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
             ) {
               return;
             }
-            handleInitStatusChange(status);
+            handleInitStatusChange(status, metadata);
           },
           onDone: async (generationId, newConversationId, messageId, _usage, artifacts) => {
             if (
@@ -2435,6 +2912,7 @@ export function ChatArea({
       syncConversationForNewChat,
       trackCoworkerEditToolUse,
       triggerCoworkerSync,
+      updateChatDebugSnapshot,
       handleVisibleGenerationError,
       hydrateAssistantMessage,
       isStreamEventForActiveScope,
@@ -2462,9 +2940,67 @@ export function ChatArea({
     [detectUserMessageLanguage],
   );
 
+  const handleArmDebugPreset = useCallback((preset: ArmedDebugPreset) => {
+    setArmedDebugPreset(preset);
+    setInputPrefillRequest({
+      id: `debug-preset-${preset.key}-${Date.now()}`,
+      text: preset.prompt,
+      mode: "replace",
+    });
+  }, []);
+
+  const handleClearDebugPreset = useCallback(() => {
+    setArmedDebugPreset(null);
+  }, []);
+
+  const handleResumePausedRunDeadline = useCallback(async () => {
+    if (isStreaming) {
+      return;
+    }
+
+    const pausedGenerationId =
+      pendingRunDeadlineResume?.generationId ??
+      (activeGeneration?.status === "paused" && activeGeneration.pauseReason === "run_deadline"
+        ? activeGeneration.generationId
+        : null);
+
+    if (!pausedGenerationId) {
+      return;
+    }
+    setIsResumingPausedRunDeadline(true);
+    setPendingRunDeadlineResume(null);
+    setDismissedRunDeadlineGenerationId(null);
+    setHistoricalActivityBlocks((current) =>
+      current.map((block) =>
+        block.generationId === pausedGenerationId ? { ...block, awaitingResume: false } : block,
+      ),
+    );
+    try {
+      await runGeneration("continue", undefined, {
+        resumePausedGenerationId: pausedGenerationId,
+        debugRunDeadlineMs:
+          pendingRunDeadlineResume?.debugRunDeadlineMs ??
+          activeGeneration?.debugRunDeadlineMs ??
+          undefined,
+      });
+    } finally {
+      setIsResumingPausedRunDeadline(false);
+    }
+  }, [
+    pendingRunDeadlineResume?.debugRunDeadlineMs,
+    pendingRunDeadlineResume?.generationId,
+    activeGeneration?.debugRunDeadlineMs,
+    activeGeneration?.generationId,
+    activeGeneration?.pauseReason,
+    activeGeneration?.status,
+    isStreaming,
+    runGeneration,
+  ]);
+
   const handleSend = useCallback(
     async (content: string, attachments?: AttachmentData[]) => {
       try {
+        const armedPresetSnapshot = armedDebugPreset;
         const selectedSkillKeysSnapshot = [...selectedSkillKeys];
         const selectedPlatformSkillSlugs = selectedSkillKeysSnapshot.filter(
           (key) => !key.startsWith(CUSTOM_SKILL_PREFIX),
@@ -2519,7 +3055,12 @@ export function ChatArea({
         }
 
         clearSelectedSkillSlugs(skillSelectionScopeKey);
-        await runGeneration(outgoingContent, attachments, selectedSkillKeysSnapshot);
+        setArmedDebugPreset(null);
+        await runGeneration(outgoingContent, attachments, {
+          selectedSkillKeysOverride: selectedSkillKeysSnapshot,
+          debugRunDeadlineMs: armedPresetSnapshot?.debugRunDeadlineMs,
+          debugApprovalHotWaitMs: armedPresetSnapshot?.debugApprovalHotWaitMs,
+        });
         return true;
       } catch (error) {
         console.error("Failed to send chat message:", error);
@@ -2532,6 +3073,7 @@ export function ChatArea({
       }
     },
     [
+      armedDebugPreset,
       buildOutgoingContent,
       clearSelectedSkillSlugs,
       editingQueuedMessageId,
@@ -2572,6 +3114,109 @@ export function ChatArea({
     };
   }, [conversationId, handleSend]);
 
+  useEffect(() => {
+    updateChatDebugSnapshot({
+      conversationId:
+        currentConversationIdRef.current ?? draftConversationId ?? conversationId ?? null,
+      generationId: activeGeneration?.generationId ?? null,
+      status: activeGeneration?.status ?? null,
+      pauseReason: activeGeneration?.pauseReason ?? null,
+    });
+  }, [
+    activeGeneration?.generationId,
+    activeGeneration?.pauseReason,
+    activeGeneration?.status,
+    conversationId,
+    draftConversationId,
+    updateChatDebugSnapshot,
+  ]);
+
+  useEffect(() => {
+    if (
+      activeGeneration?.status === "paused" &&
+      activeGeneration.pauseReason === "run_deadline" &&
+      activeGeneration.generationId
+    ) {
+      const pausedGenerationId = activeGeneration.generationId;
+      const pausedDebugRunDeadlineMs = activeGeneration.debugRunDeadlineMs ?? null;
+      setPendingRunDeadlineResume((current) => {
+        if (
+          current?.generationId === pausedGenerationId &&
+          current.debugRunDeadlineMs === pausedDebugRunDeadlineMs
+        ) {
+          return current;
+        }
+        return {
+          generationId: pausedGenerationId,
+          debugRunDeadlineMs: pausedDebugRunDeadlineMs,
+        };
+      });
+      return;
+    }
+
+    setPendingRunDeadlineResume((current) => {
+      if (!current) {
+        return current;
+      }
+      if (
+        activeGeneration?.generationId &&
+        current.generationId === activeGeneration.generationId &&
+        activeGeneration.status === "paused" &&
+        activeGeneration.pauseReason === "run_deadline"
+      ) {
+        return current;
+      }
+      return null;
+    });
+  }, [
+    activeGeneration?.debugRunDeadlineMs,
+    activeGeneration?.generationId,
+    activeGeneration?.pauseReason,
+    activeGeneration?.status,
+  ]);
+
+  useEffect(() => {
+    if (
+      activeGeneration?.status !== "paused" ||
+      activeGeneration.pauseReason !== "run_deadline" ||
+      !activeGeneration.generationId ||
+      !Array.isArray(activeGeneration.contentParts)
+    ) {
+      return;
+    }
+
+    const hydratedBlock = buildHistoricalActivityBlockFromContentParts({
+      generationId: activeGeneration.generationId,
+      runtimeLimitMs: activeGeneration.debugRunDeadlineMs ?? null,
+      contentParts: activeGeneration.contentParts as PersistedContentPart[],
+    });
+
+    if (!hydratedBlock) {
+      return;
+    }
+
+    setHistoricalActivityBlocks((current) => {
+      const existingIndex = current.findIndex(
+        (block) => block.generationId === activeGeneration.generationId,
+      );
+      if (existingIndex === -1) {
+        return [...current, hydratedBlock];
+      }
+      const next = [...current];
+      next[existingIndex] = {
+        ...hydratedBlock,
+        awaitingResume: current[existingIndex]?.awaitingResume ?? hydratedBlock.awaitingResume,
+      };
+      return next;
+    });
+  }, [
+    activeGeneration?.contentParts,
+    activeGeneration?.debugRunDeadlineMs,
+    activeGeneration?.generationId,
+    activeGeneration?.pauseReason,
+    activeGeneration?.status,
+  ]);
+
   const handleSendQueuedNow = useCallback(
     (queued: QueuedMessage) => {
       const send = async () => {
@@ -2586,7 +3231,9 @@ export function ChatArea({
           queuedMessageId: queued.id,
           conversationId: queueConversationId,
         });
-        await runGeneration(queued.content, queued.attachments, queued.selectedPlatformSkillSlugs);
+        await runGeneration(queued.content, queued.attachments, {
+          selectedSkillKeysOverride: queued.selectedPlatformSkillSlugs,
+        });
       };
       void send();
     },
@@ -2627,41 +3274,70 @@ export function ChatArea({
 
   // Handle approval/denial of tool use
   const handleApprove = useCallback(
-    async (toolUseId: string, questionAnswers?: string[][]) => {
-      const genId = currentGenerationIdRef.current;
-      if (!genId) {
+    async (toolUseId: string, interruptId?: string, questionAnswers?: string[][]) => {
+      if (toolUseId === RUN_DEADLINE_RESUME_TOOL_USE_ID) {
+        const affirmativeAnswer = questionAnswers?.some((answers) =>
+          answers.some((answer) => answer.trim().toLowerCase() === "yes"),
+        );
+        if (affirmativeAnswer ?? true) {
+          await handleResumePausedRunDeadline();
+        }
+        return;
+      }
+
+      if (!interruptId) {
         return;
       }
 
       try {
         await submitApproval({
-          generationId: genId,
-          toolUseId,
+          interruptId,
           decision: "approve",
           questionAnswers,
         });
-        if (runtimeRef.current) {
-          runtimeRef.current.setApprovalStatus(toolUseId, "approved");
-          syncFromRuntime(runtimeRef.current);
+        const runtime = runtimeRef.current;
+        if (runtime) {
+          runtime.setApprovalStatus(toolUseId, "approved");
+          syncFromRuntime(runtime);
+        } else {
+          optimisticallyResumeInterruptedGeneration(interruptId, "approval");
         }
       } catch (err) {
         console.error("Failed to approve tool use:", err);
       }
     },
-    [submitApproval, syncFromRuntime],
+    [
+      handleResumePausedRunDeadline,
+      optimisticallyResumeInterruptedGeneration,
+      submitApproval,
+      syncFromRuntime,
+    ],
   );
 
   const handleDeny = useCallback(
-    async (toolUseId: string) => {
-      const genId = currentGenerationIdRef.current;
-      if (!genId) {
+    async (toolUseId: string, interruptId?: string) => {
+      if (toolUseId === RUN_DEADLINE_RESUME_TOOL_USE_ID) {
+        const generationId =
+          pendingRunDeadlineResume?.generationId ?? activeGeneration?.generationId ?? null;
+        setPendingRunDeadlineResume(null);
+        if (generationId) {
+          setDismissedRunDeadlineGenerationId(generationId);
+          setHistoricalActivityBlocks((current) =>
+            current.map((block) =>
+              block.generationId === generationId ? { ...block, awaitingResume: false } : block,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!interruptId) {
         return;
       }
 
       try {
         await submitApproval({
-          generationId: genId,
-          toolUseId,
+          interruptId,
           decision: "deny",
         });
         if (runtimeRef.current) {
@@ -2672,15 +3348,22 @@ export function ChatArea({
         console.error("Failed to deny tool use:", err);
       }
     },
-    [submitApproval, syncFromRuntime],
+    [
+      activeGeneration?.generationId,
+      pendingRunDeadlineResume?.generationId,
+      submitApproval,
+      syncFromRuntime,
+    ],
   );
 
   // Handle auth connect - redirect to OAuth
   const handleAuthConnect = useCallback(
     async (integration: string) => {
-      const genId = currentGenerationIdRef.current;
-      const convId = currentConversationIdRef.current;
-      if (!genId || !convId) {
+      const convId = interactiveConversationId;
+      const pendingAuthInterruptId =
+        displaySegments.find((segment) => segment.auth?.status === "pending")?.auth?.interruptId ??
+        null;
+      if (!pendingAuthInterruptId || !convId) {
         return;
       }
 
@@ -2711,7 +3394,7 @@ export function ChatArea({
             | "dynamics"
             | "reddit"
             | "twitter",
-          redirectUrl: `${window.location.origin}/chat/${convId}?auth_complete=${integration}&generation_id=${genId}`,
+          redirectUrl: `${window.location.origin}/chat/${convId}?auth_complete=${integration}&interrupt_id=${pendingAuthInterruptId}`,
         });
         window.location.href = result.authUrl;
       } catch (err) {
@@ -2727,26 +3410,21 @@ export function ChatArea({
         }
       }
     },
-    [getAuthUrl, syncFromRuntime],
+    [displaySegments, getAuthUrl, interactiveConversationId, syncFromRuntime],
   );
 
   // Handle auth cancel
   const handleAuthCancel = useCallback(async () => {
-    const genId = currentGenerationIdRef.current;
-    if (!genId) {
-      return;
-    }
-
-    // Find first pending integration
-    const seg = segments.find((s) => s.auth?.status === "pending");
+    const seg = displaySegments.find((s) => s.auth?.status === "pending");
     const integration = seg?.auth?.integrations[0];
-    if (!integration) {
+    const interruptId = seg?.auth?.interruptId;
+    if (!integration || !interruptId) {
       return;
     }
 
     try {
       await submitAuthResult({
-        generationId: genId,
+        interruptId,
         integration,
         success: false,
       });
@@ -2758,33 +3436,35 @@ export function ChatArea({
     } catch (err) {
       console.error("Failed to cancel auth:", err);
     }
-  }, [submitAuthResult, segments, syncFromRuntime]);
+  }, [displaySegments, submitAuthResult, syncFromRuntime]);
   const segmentApproveHandlers = useMemo(() => {
     const handlers = new Map<string, (questionAnswers?: string[][]) => void>();
-    for (const segment of segments) {
+    for (const segment of displaySegments) {
       const toolUseId = segment.approval?.toolUseId;
       if (!toolUseId) {
         continue;
       }
+      const interruptId = segment.approval?.interruptId;
       handlers.set(segment.id, (questionAnswers?: string[][]) => {
-        void handleApprove(toolUseId, questionAnswers);
+        void handleApprove(toolUseId, interruptId, questionAnswers);
       });
     }
     return handlers;
-  }, [handleApprove, segments]);
+  }, [displaySegments, handleApprove]);
   const segmentDenyHandlers = useMemo(() => {
     const handlers = new Map<string, () => void>();
-    for (const segment of segments) {
+    for (const segment of displaySegments) {
       const toolUseId = segment.approval?.toolUseId;
       if (!toolUseId) {
         continue;
       }
+      const interruptId = segment.approval?.interruptId;
       handlers.set(segment.id, () => {
-        void handleDeny(toolUseId);
+        void handleDeny(toolUseId, interruptId);
       });
     }
     return handlers;
-  }, [handleDeny, segments]);
+  }, [displaySegments, handleDeny]);
   const handleAutoApproveChange = useCallback(
     (checked: boolean) => {
       if (isCoworkerConversation) {
@@ -3028,6 +3708,87 @@ export function ChatArea({
     ),
     [autoApproveEnabled, handleAutoApproveChange, isCoworkerConversation],
   );
+  const debugControlNode = useMemo(() => {
+    if (!isAdmin || isAdminLoading) {
+      return null;
+    }
+
+    return (
+      <ChatDebugPopover
+        armedPreset={armedDebugPreset}
+        snapshot={chatDebugSnapshot}
+        disabled={isStreaming}
+        onArmPreset={handleArmDebugPreset}
+        onClearPreset={handleClearDebugPreset}
+        onResumeRunDeadline={handleResumePausedRunDeadline}
+        isResumingRunDeadline={isResumingPausedRunDeadline}
+      />
+    );
+  }, [
+    armedDebugPreset,
+    chatDebugSnapshot,
+    handleArmDebugPreset,
+    handleClearDebugPreset,
+    handleResumePausedRunDeadline,
+    isAdmin,
+    isAdminLoading,
+    isResumingPausedRunDeadline,
+    isStreaming,
+  ]);
+
+  const transcriptNodes = useMemo(() => {
+    const continueMessageIndices = messages.reduce<number[]>((indices, message, index) => {
+      if (isContinueMessage(message)) {
+        indices.push(index);
+      }
+      return indices;
+    }, []);
+
+    const pairedBlockCount = Math.min(
+      historicalActivityBlocks.length,
+      continueMessageIndices.length,
+    );
+    const pairedBlocks = historicalActivityBlocks.slice(0, pairedBlockCount);
+    const trailingBlocks = historicalActivityBlocks.slice(pairedBlockCount);
+
+    const nodes: React.ReactNode[] = [];
+    let cursor = 0;
+
+    for (let index = 0; index < pairedBlockCount; index += 1) {
+      const continueIndex = continueMessageIndices[index];
+      const messageSlice = messages.slice(cursor, continueIndex);
+      if (messageSlice.length > 0) {
+        nodes.push(
+          <MessageList key={`messages-before-${continueIndex}`} messages={messageSlice} />,
+        );
+      }
+
+      const block = pairedBlocks[index];
+      if (block) {
+        nodes.push(renderHistoricalActivityBlock(block));
+      }
+
+      const continueMessage = messages.slice(continueIndex, continueIndex + 1);
+      if (continueMessage.length > 0) {
+        nodes.push(
+          <MessageList key={`messages-continue-${continueIndex}`} messages={continueMessage} />,
+        );
+      }
+
+      cursor = continueIndex + 1;
+    }
+
+    const remainingMessages = messages.slice(cursor);
+    if (remainingMessages.length > 0) {
+      nodes.push(<MessageList key="messages-remaining" messages={remainingMessages} />);
+    }
+
+    for (const block of trailingBlocks) {
+      nodes.push(renderHistoricalActivityBlock(block));
+    }
+
+    return nodes;
+  }, [historicalActivityBlocks, messages]);
 
   // Voice recording: stop and transcribe
   const stopRecordingAndTranscribe = useCallback(async () => {
@@ -3151,13 +3912,13 @@ export function ChatArea({
               <span>{streamError}</span>
             </div>
           )}
+          {transcriptNodes.length > 0 && transcriptNodes}
+
           {isEmptyChat ? null : (
             <>
-              <MessageList messages={messages} />
-
-              {(isStreaming || segments.length > 0) && (
+              {(isStreaming || displaySegments.length > 0) && (
                 <div className="space-y-4 py-4">
-                  {isStreaming && segments.length === 0 && (
+                  {isStreaming && displaySegments.length === 0 && (
                     <div className="border-border/50 bg-muted/30 rounded-lg border">
                       <div className="flex items-center gap-2 px-3 py-2">
                         <Activity className="text-muted-foreground h-4 w-4" />
@@ -3182,9 +3943,9 @@ export function ChatArea({
                   {(() => {
                     const renderedSegments = [];
 
-                    for (let index = 0; index < segments.length; index += 1) {
-                      const segment = segments[index];
-                      const nextSegment = segments[index + 1];
+                    for (let index = 0; index < displaySegments.length; index += 1) {
+                      const segment = displaySegments[index];
+                      const nextSegment = displaySegments[index + 1];
                       const deferredApproval = segment.approval;
                       const visibleSegmentItems =
                         visibleActivityItemsBySegmentId.get(segment.id) ?? EMPTY_ACTIVITY_ITEMS;
@@ -3213,27 +3974,12 @@ export function ChatArea({
                           <div key={`${segment.id}-${nextSegment.id}`} className="space-y-4">
                             <ActivityFeed
                               items={visibleNextSegmentItems}
-                              isStreaming={isStreaming && index + 1 === segments.length - 1}
+                              isStreaming={isStreaming && index + 1 === displaySegments.length - 1}
                               isExpanded={nextSegment.isExpanded}
                               onToggleExpand={segmentToggleHandlers.get(nextSegment.id)!}
                               integrationsUsed={nextSegmentIntegrations}
                               elapsedMs={streamElapsedMs ?? undefined}
                             />
-                            {deferredApproval.status !== "pending" && (
-                              <ToolApprovalCard
-                                toolUseId={deferredApproval.toolUseId}
-                                toolName={deferredApproval.toolName}
-                                toolInput={deferredApproval.toolInput}
-                                integration={deferredApproval.integration}
-                                operation={deferredApproval.operation}
-                                command={deferredApproval.command}
-                                status={deferredApproval.status}
-                                questionAnswers={deferredApproval.questionAnswers}
-                                isLoading={isApproving}
-                                onApprove={segmentApproveHandlers.get(segment.id)!}
-                                onDeny={segmentDenyHandlers.get(segment.id)!}
-                              />
-                            )}
                           </div>,
                         );
                         index += 1;
@@ -3255,7 +4001,7 @@ export function ChatArea({
                               items={visibleSegmentItems}
                               isStreaming={
                                 isStreaming &&
-                                index === segments.length - 1 &&
+                                index === displaySegments.length - 1 &&
                                 !segment.approval &&
                                 !segment.auth
                               }
@@ -3263,22 +4009,6 @@ export function ChatArea({
                               onToggleExpand={segmentToggleHandlers.get(segment.id)!}
                               integrationsUsed={segmentIntegrations}
                               elapsedMs={streamElapsedMs ?? undefined}
-                            />
-                          )}
-
-                          {segment.approval && segment.approval.status !== "pending" && (
-                            <ToolApprovalCard
-                              toolUseId={segment.approval.toolUseId}
-                              toolName={segment.approval.toolName}
-                              toolInput={segment.approval.toolInput}
-                              integration={segment.approval.integration}
-                              operation={segment.approval.operation}
-                              command={segment.approval.command}
-                              status={segment.approval.status}
-                              questionAnswers={segment.approval.questionAnswers}
-                              isLoading={isApproving}
-                              onApprove={segmentApproveHandlers.get(segment.id)!}
-                              onDeny={segmentDenyHandlers.get(segment.id)!}
                             />
                           )}
 
@@ -3454,7 +4184,7 @@ export function ChatArea({
           )}
 
           <BottomActionBar
-            segments={segments}
+            segments={displaySegments}
             segmentApproveHandlers={segmentApproveHandlers}
             segmentDenyHandlers={segmentDenyHandlers}
             isApproving={isApproving}
@@ -3476,6 +4206,7 @@ export function ChatArea({
             renderSkills={skillsMenuNode}
             renderModelSelector={modelSelectorNode}
             renderAutoApproval={autoApprovalNode}
+            renderDebugControl={debugControlNode}
           />
         </div>
       </div>
