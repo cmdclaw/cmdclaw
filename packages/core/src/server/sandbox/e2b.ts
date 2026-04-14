@@ -20,6 +20,7 @@ import {
   getSandboxReadinessUrl,
   getSandboxServerPort,
 } from "./opencode-runtime";
+import { toRuntimeProviderAuthPayload } from "./provider-auth-runtime";
 
 // Use custom template with OpenCode pre-installed
 const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
@@ -218,6 +219,10 @@ export async function getOrCreateBareSandbox(
   let sandbox: Sandbox;
   try {
     sandbox = await Sandbox.create(TEMPLATE_NAME, {
+      metadata: {
+        conversationId: config.conversationId,
+        userId: config.userId || "",
+      },
       envs: {
         ANTHROPIC_API_KEY: config.anthropicApiKey,
         ANVIL_API_KEY: env.ANVIL_API_KEY || "",
@@ -351,6 +356,10 @@ export async function getOrCreateSandbox(
   let sandbox: Sandbox;
   try {
     sandbox = await Sandbox.create(TEMPLATE_NAME, {
+      metadata: {
+        conversationId: config.conversationId,
+        userId: config.userId || "",
+      },
       envs: {
         ANTHROPIC_API_KEY: config.anthropicApiKey,
         ANVIL_API_KEY: env.ANVIL_API_KEY || "",
@@ -879,39 +888,14 @@ export async function injectProviderAuth(
 
     const auths = [openaiAuth, kimiAuth]
       .filter((auth): auth is NonNullable<typeof auth> => Boolean(auth))
-      .map((auth) => ({
-        provider: auth.provider,
-        access: auth.accessToken,
-        refresh: auth.refreshToken ?? "",
-        expires: auth.expiresAt ?? Date.now(),
-      }));
+      .map(toRuntimeProviderAuthPayload);
     await Promise.all(
       auths.map(async (auth) => {
         try {
-          if (auth.provider === "kimi") {
-            await client.auth.set({
-              providerID: "kimi-for-coding",
-              auth: {
-                type: "api",
-                key: auth.access,
-              },
-            });
-            console.log(`[E2B] Injected kimi-for-coding auth for user ${userId}`);
-            return;
-          }
-
-          await client.auth.set({
-            providerID: auth.provider,
-            auth: {
-              type: "oauth",
-              access: auth.access,
-              refresh: auth.refresh,
-              expires: auth.expires,
-            },
-          });
-          console.log(`[E2B] Injected ${auth.provider} auth for user ${userId}`);
+          await client.auth.set(auth);
+          console.log(`[E2B] Injected ${auth.providerID} auth for user ${userId}`);
         } catch (err) {
-          console.error(`[E2B] Failed to inject ${auth.provider} auth:`, err);
+          console.error(`[E2B] Failed to inject ${auth.providerID} auth:`, err);
         }
       }),
     );
@@ -1235,4 +1219,57 @@ export class E2BSandboxBackend implements SandboxBackend {
   isAvailable(): boolean {
     return isE2BConfigured();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Admin utilities for listing and killing sandboxes
+// ---------------------------------------------------------------------------
+
+export type { SandboxInfo } from "e2b";
+
+export async function listAllE2BSandboxes(): Promise<
+  Array<{
+    sandboxId: string;
+    templateId: string;
+    state: "running" | "paused";
+    startedAt: Date;
+    endAt: Date;
+    cpuCount: number;
+    memoryMB: number;
+    metadata: Record<string, string>;
+  }>
+> {
+  const paginator = Sandbox.list();
+  const results: Array<{
+    sandboxId: string;
+    templateId: string;
+    state: "running" | "paused";
+    startedAt: Date;
+    endAt: Date;
+    cpuCount: number;
+    memoryMB: number;
+    metadata: Record<string, string>;
+  }> = [];
+
+  while (paginator.hasNext) {
+    const page = await paginator.nextItems();
+    for (const s of page) {
+      results.push({
+        sandboxId: s.sandboxId,
+        templateId: s.templateId,
+        state: s.state,
+        startedAt: s.startedAt,
+        endAt: s.endAt,
+        cpuCount: s.cpuCount,
+        memoryMB: s.memoryMB,
+        metadata: s.metadata,
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function killE2BSandboxById(sandboxId: string): Promise<boolean> {
+  return Sandbox.kill(sandboxId);
 }

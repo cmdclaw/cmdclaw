@@ -1,10 +1,10 @@
+import { getResolvedProviderAuth } from "@cmdclaw/core/server/control-plane/subscription-providers";
 import { getWorkspaceExecutorBootstrap } from "@cmdclaw/core/server/executor/workspace-sources";
 import {
   getCliEnvForUser,
   getEnabledIntegrationTypes,
   getTokensForIntegrations,
 } from "@cmdclaw/core/server/integrations/cli-env";
-import { decrypt } from "@cmdclaw/core/server/utils/encryption";
 import { db } from "@cmdclaw/db/client";
 import { providerAuth, user, workspace } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
@@ -28,11 +28,19 @@ export async function POST(request: Request) {
       where: eq(providerAuth.userId, body.cloudUserId),
       columns: {
         provider: true,
-        accessToken: true,
-        refreshToken: true,
-        expiresAt: true,
       },
     });
+    const resolvedProviderAuths = (
+      await Promise.all(
+        auths.map((auth) =>
+          getResolvedProviderAuth({
+            userId: body.cloudUserId!,
+            provider: auth.provider,
+            authSource: "user",
+          }),
+        ),
+      )
+    ).filter((auth): auth is NonNullable<typeof auth> => Boolean(auth));
     const controlPlaneUser = await db.query.user.findFirst({
       where: eq(user.id, body.cloudUserId),
       columns: {
@@ -62,12 +70,12 @@ export async function POST(request: Request) {
       cliEnv: await getCliEnvForUser(body.cloudUserId),
       tokens: await getTokensForIntegrations(body.cloudUserId, body.integrationTypes ?? []),
       enabledIntegrations: await getEnabledIntegrationTypes(body.cloudUserId),
-      connectedProviders: auths.map((auth) => auth.provider),
-      providerAuths: auths.map((auth) => ({
+      connectedProviders: resolvedProviderAuths.map((auth) => auth.provider),
+      providerAuths: resolvedProviderAuths.map((auth) => ({
         provider: auth.provider,
-        accessToken: decrypt(auth.accessToken),
-        refreshToken: auth.refreshToken ? decrypt(auth.refreshToken) : null,
-        expiresAt: auth.expiresAt?.getTime() ?? null,
+        accessToken: auth.accessToken,
+        refreshToken: auth.refreshToken,
+        expiresAt: auth.expiresAt,
       })),
       executorBootstrap,
       issuedAt: new Date().toISOString(),

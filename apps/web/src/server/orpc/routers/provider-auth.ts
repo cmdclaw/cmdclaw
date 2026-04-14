@@ -10,9 +10,12 @@ import {
   getCloudManagedProviderAuthStatus,
   getCloudManagedSubscriptionsUrl,
 } from "@cmdclaw/core/server/control-plane/client";
+import {
+  storeProviderTokens as persistProviderTokens,
+  storeSharedProviderTokens as persistSharedProviderTokens,
+} from "@cmdclaw/core/server/control-plane/subscription-providers";
 import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
-import { encrypt } from "@cmdclaw/core/server/utils/encryption";
-import { providerAuth, sharedProviderAuth } from "@cmdclaw/db/schema";
+import { providerAuth } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -458,80 +461,6 @@ const freeModels = protectedProcedure.handler(async () => {
   return { models };
 });
 
-/**
- * Internal: Store tokens after OAuth callback.
- * Called from the API callback route, not directly from the client.
- */
-async function upsertEncryptedProviderTokens(params: {
-  table: typeof providerAuth | typeof sharedProviderAuth;
-  provider: SubscriptionProviderID;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: Date;
-  userId?: string;
-  managedByUserId?: string;
-}): Promise<void> {
-  const { db } = await import("@cmdclaw/db/client");
-
-  const encryptedAccess = encrypt(params.accessToken);
-  const encryptedRefresh = encrypt(params.refreshToken);
-
-  if (params.table === providerAuth) {
-    const existing = await db.query.providerAuth.findFirst({
-      where: and(
-        eq(providerAuth.userId, params.userId!),
-        eq(providerAuth.provider, params.provider),
-      ),
-    });
-
-    if (existing) {
-      await db
-        .update(providerAuth)
-        .set({
-          accessToken: encryptedAccess,
-          refreshToken: encryptedRefresh,
-          expiresAt: params.expiresAt,
-        })
-        .where(eq(providerAuth.id, existing.id));
-      return;
-    }
-
-    await db.insert(providerAuth).values({
-      userId: params.userId!,
-      provider: params.provider,
-      accessToken: encryptedAccess,
-      refreshToken: encryptedRefresh,
-      expiresAt: params.expiresAt,
-    });
-    return;
-  }
-
-  const existing = await db.query.sharedProviderAuth.findFirst({
-    where: eq(sharedProviderAuth.provider, params.provider),
-  });
-
-  if (existing) {
-    await db
-      .update(sharedProviderAuth)
-      .set({
-        accessToken: encryptedAccess,
-        refreshToken: encryptedRefresh,
-        expiresAt: params.expiresAt,
-        managedByUserId: params.managedByUserId ?? null,
-      })
-      .where(eq(sharedProviderAuth.id, existing.id));
-    return;
-  }
-
-  await db.insert(sharedProviderAuth).values({
-    provider: params.provider,
-    accessToken: encryptedAccess,
-    refreshToken: encryptedRefresh,
-    expiresAt: params.expiresAt,
-    managedByUserId: params.managedByUserId ?? null,
-  });
-}
-
 export async function storeProviderTokens(params: {
   userId: string;
   provider: SubscriptionProviderID;
@@ -539,14 +468,7 @@ export async function storeProviderTokens(params: {
   refreshToken: string;
   expiresAt: Date;
 }): Promise<void> {
-  await upsertEncryptedProviderTokens({
-    table: providerAuth,
-    userId: params.userId,
-    provider: params.provider,
-    accessToken: params.accessToken,
-    refreshToken: params.refreshToken,
-    expiresAt: params.expiresAt,
-  });
+  await persistProviderTokens(params);
 }
 
 export async function storeSharedProviderTokens(params: {
@@ -556,14 +478,7 @@ export async function storeSharedProviderTokens(params: {
   refreshToken: string;
   expiresAt: Date;
 }): Promise<void> {
-  await upsertEncryptedProviderTokens({
-    table: sharedProviderAuth,
-    managedByUserId: params.managedByUserId,
-    provider: params.provider,
-    accessToken: params.accessToken,
-    refreshToken: params.refreshToken,
-    expiresAt: params.expiresAt,
-  });
+  await persistSharedProviderTokens(params);
 }
 
 export const providerAuthRouter = {
