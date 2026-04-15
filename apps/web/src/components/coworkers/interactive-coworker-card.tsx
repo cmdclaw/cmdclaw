@@ -1,6 +1,18 @@
 "use client";
 
-import { Circle, Download, Ellipsis, Loader2, PenLine, Play, Share2, Trash2 } from "lucide-react";
+import {
+  Circle,
+  Download,
+  Ellipsis,
+  Loader2,
+  PenLine,
+  Pin,
+  PinOff,
+  Play,
+  Share2,
+  Tag,
+  Trash2,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -48,6 +60,8 @@ import {
   getCoworkerDisplayName,
   type CoworkerCardData,
 } from "./coworker-card-content";
+import { TagBadge } from "./tag-badge";
+import { TagManagerContent } from "./tag-picker";
 
 const MAX_VISIBLE_TOOL_INDICATORS = 3;
 
@@ -56,6 +70,8 @@ export type InteractiveCoworkerCardData = CoworkerCardData & {
   toolAccessMode?: "all" | "selected" | null;
   allowedIntegrations?: IntegrationType[];
   allowedSkillSlugs?: string[];
+  isPinned?: boolean;
+  tags?: { id: string; name: string; color: string | null }[];
 };
 
 function formatDate(value?: Date | string | null) {
@@ -294,6 +310,15 @@ export function InteractiveCoworkerCard({
     e.stopPropagation();
   }, []);
 
+  const handleTogglePin = useCallback(async () => {
+    try {
+      await updateCoworker.mutateAsync({ id: coworker.id, isPinned: !coworker.isPinned });
+      toast.success(coworker.isPinned ? "Unpinned." : "Pinned.");
+    } catch {
+      toast.error("Failed to update pin.");
+    }
+  }, [updateCoworker, coworker.id, coworker.isPinned]);
+
   const handleRequestDelete = useCallback(() => {
     setPendingDelete(true);
   }, []);
@@ -363,9 +388,20 @@ export function InteractiveCoworkerCard({
     </button>
   );
 
+  const coworkerTags = coworker.tags ?? [];
+  const currentTagIds = coworkerTags.map((t) => t.id);
+
+  const [menuPanel, setMenuPanel] = useState<"main" | "tags">("main");
+
   // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern
   const actionsMenu = (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) {
+          setMenuPanel("main");
+        }
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -384,30 +420,70 @@ export function InteractiveCoworkerCard({
         className="w-52"
         onClick={handleStopPropagation}
         onKeyDown={handleMenuKeyDown}
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <DropdownMenuItem
-          onSelect={handleToggleShare}
-          disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
-        >
-          <Share2 className="size-4" />
-          {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={handleExport}
-          disabled={isExporting || isDeleting || isUpdatingStatus}
-        >
-          <Download className="size-4" />
-          Export as JSON
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={handleRequestDelete}
-          disabled={isDeleting || isUpdatingStatus}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="size-4" />
-          Delete coworker
-        </DropdownMenuItem>
+        {menuPanel === "main" ? (
+          <>
+            <DropdownMenuItem onSelect={handleTogglePin}>
+              {coworker.isPinned ? (
+                <>
+                  <PinOff className="size-4" />
+                  Unpin
+                </>
+              ) : (
+                <>
+                  <Pin className="size-4" />
+                  Pin to top
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                setMenuPanel("tags");
+              }}
+            >
+              <Tag className="size-4" />
+              Manage tags
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={handleToggleShare}
+              disabled={isUpdatingShare || isDeleting || isUpdatingStatus}
+            >
+              <Share2 className="size-4" />
+              {coworker.sharedAt ? "Unshare from workspace" : "Share with workspace"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={handleExport}
+              disabled={isExporting || isDeleting || isUpdatingStatus}
+            >
+              <Download className="size-4" />
+              Export as JSON
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={handleRequestDelete}
+              disabled={isDeleting || isUpdatingStatus}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="size-4" />
+              Delete coworker
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <div onClick={handleStopPropagation} onKeyDown={handleMenuKeyDown}>
+            <button
+              type="button"
+              onClick={() => setMenuPanel("main")}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
+            >
+              ← Back
+            </button>
+            <DropdownMenuSeparator />
+            <TagManagerContent coworkerId={coworker.id} currentTagIds={currentTagIds} />
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -415,6 +491,12 @@ export function InteractiveCoworkerCard({
   // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern
   const toolBadges = (
     <>
+      {coworkerTags.slice(0, 3).map((tag) => (
+        <TagBadge key={tag.id} name={tag.name} color={tag.color} size="sm" />
+      ))}
+      {coworkerTags.length > 3 && (
+        <span className="text-muted-foreground/60 text-[10px]">+{coworkerTags.length - 3}</span>
+      )}
       {toolSummary.visibleIntegrations.length > 0 && (
         <div className="flex items-center gap-1">
           {toolSummary.visibleIntegrations.map((key) => {

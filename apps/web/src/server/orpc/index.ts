@@ -4,6 +4,8 @@ import { adminSharedProviderAuthRouter } from "./routers/admin-shared-provider-a
 import { billingRouter } from "./routers/billing";
 import { conversationRouter } from "./routers/conversation";
 import { coworkerRouter } from "./routers/coworker";
+import { coworkerTagRouter } from "./routers/coworker-tag";
+import { coworkerViewRouter } from "./routers/coworker-view";
 import { executorSourceRouter } from "./routers/executor-source";
 import { generationRouter } from "./routers/generation";
 import { inboxRouter } from "./routers/inbox";
@@ -39,6 +41,8 @@ export const appRouter = {
   user: userRouter,
   voice: voiceRouter,
   coworker: coworkerRouter,
+  coworkerTag: coworkerTagRouter,
+  coworkerView: coworkerViewRouter,
   orgChart: orgChartRouter,
   health: { ping },
 };

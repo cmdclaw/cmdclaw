@@ -51,6 +51,8 @@ import {
   coworkerEmailAlias,
   coworkerRun,
   coworkerRunEvent,
+  coworkerTag,
+  coworkerTagAssignment,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, desc, eq, gte, inArray, lt, lte, or } from "drizzle-orm";
@@ -764,6 +766,28 @@ const list = protectedProcedure.handler(async ({ context }) => {
 
   await reconcileStaleCoworkerRunsForCoworkers(coworkers.map((row) => row.id));
 
+  // Batch-fetch tag assignments for all coworkers
+  const coworkerIds = coworkers.map((c) => c.id);
+  const tagAssignments =
+    coworkerIds.length > 0
+      ? await context.db
+          .select({
+            coworkerId: coworkerTagAssignment.coworkerId,
+            tagId: coworkerTag.id,
+            tagName: coworkerTag.name,
+            tagColor: coworkerTag.color,
+          })
+          .from(coworkerTagAssignment)
+          .innerJoin(coworkerTag, eq(coworkerTagAssignment.tagId, coworkerTag.id))
+          .where(inArray(coworkerTagAssignment.coworkerId, coworkerIds))
+      : [];
+  const tagsByCoworkerId = new Map<string, { id: string; name: string; color: string | null }[]>();
+  for (const row of tagAssignments) {
+    const tags = tagsByCoworkerId.get(row.coworkerId) ?? [];
+    tags.push({ id: row.tagId, name: row.tagName, color: row.tagColor });
+    tagsByCoworkerId.set(row.coworkerId, tags);
+  }
+
   const items = await Promise.all(
     coworkers.map(async (coworkerRow) => {
       const wf = await ensureBuilderCoworkerMetadata({
@@ -802,10 +826,12 @@ const list = protectedProcedure.handler(async ({ context }) => {
         allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
         allowedSkillSlugs,
         schedule: wf.schedule,
+        isPinned: wf.isPinned,
         sharedAt: wf.sharedAt,
         updatedAt: wf.updatedAt,
         lastRunStatus: lastRun?.status ?? null,
         lastRunAt: lastRun?.startedAt ?? null,
+        tags: tagsByCoworkerId.get(wf.id) ?? [],
         recentRuns: runs.map((run) => {
           const payload =
             run.triggerPayload && typeof run.triggerPayload === "object"
@@ -824,6 +850,14 @@ const list = protectedProcedure.handler(async ({ context }) => {
       };
     }),
   );
+
+  // Pinned coworkers first, then by updatedAt
+  items.sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+    return 0;
+  });
 
   return items;
 });
@@ -1001,6 +1035,7 @@ const update = protectedProcedure
       promptDo: z.string().max(2000).nullish(),
       promptDont: z.string().max(2000).nullish(),
       autoApprove: z.boolean().optional(),
+      isPinned: z.boolean().optional(),
       toolAccessMode: toolAccessModeSchema.optional(),
       allowedIntegrations: z.array(integrationTypeSchema).optional(),
       allowedCustomIntegrations: z.array(z.string()).optional(),
@@ -1079,6 +1114,9 @@ const update = protectedProcedure
     }
     if (input.autoApprove !== undefined) {
       updates.autoApprove = input.autoApprove;
+    }
+    if (input.isPinned !== undefined) {
+      updates.isPinned = input.isPinned;
     }
     if (input.toolAccessMode !== undefined) {
       updates.toolAccessMode = input.toolAccessMode;

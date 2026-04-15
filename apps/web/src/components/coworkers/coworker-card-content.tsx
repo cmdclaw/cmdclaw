@@ -1,5 +1,6 @@
 "use client";
 
+import { Pin } from "lucide-react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
@@ -10,6 +11,7 @@ export type CoworkerCardData = {
   description?: string | null;
   status: "on" | "off";
   triggerType: string;
+  isPinned?: boolean;
   sharedAt?: Date | string | null;
   recentRuns?: {
     id?: string;
@@ -98,7 +100,10 @@ export function CoworkerCardContent({
             className="shrink-0 rounded-full"
           />
           <div className="min-w-0 space-y-1">
-            <p className="truncate text-sm leading-tight font-medium">
+            <p className="flex items-center gap-1 truncate text-sm leading-tight font-medium">
+              {coworker.isPinned && (
+                <Pin className="text-muted-foreground size-3 shrink-0 rotate-45" />
+              )}
               {getCoworkerDisplayName(coworker.name)}
             </p>
             {coworker.username ? (

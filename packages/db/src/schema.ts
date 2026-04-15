@@ -1039,6 +1039,7 @@ export const coworker = pgTable(
     builderConversationId: text("builder_conversation_id").references(() => conversation.id, {
       onDelete: "set null",
     }),
+    isPinned: boolean("is_pinned").default(false).notNull(),
     sharedAt: timestamp("shared_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -1173,6 +1174,76 @@ export const coworkerRunEvent = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("coworker_run_event_run_id_idx").on(table.coworkerRunId)],
+);
+
+// ========== COWORKER TAGS & VIEWS ==========
+
+export const coworkerTag = pgTable(
+  "coworker_tag",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("coworker_tag_workspace_id_idx").on(table.workspaceId),
+    uniqueIndex("coworker_tag_workspace_name_idx").on(table.workspaceId, table.name),
+  ],
+);
+
+export const coworkerTagAssignment = pgTable(
+  "coworker_tag_assignment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    coworkerId: text("coworker_id")
+      .notNull()
+      .references(() => coworker.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => coworkerTag.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("coworker_tag_assignment_unique_idx").on(table.coworkerId, table.tagId),
+    index("coworker_tag_assignment_coworker_idx").on(table.coworkerId),
+    index("coworker_tag_assignment_tag_idx").on(table.tagId),
+  ],
+);
+
+export const coworkerView = pgTable(
+  "coworker_view",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    filters: jsonb("filters").notNull(),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("coworker_view_workspace_id_idx").on(table.workspaceId),
+    uniqueIndex("coworker_view_workspace_name_idx").on(table.workspaceId, table.name),
+  ],
 );
 
 export const inboxReadState = pgTable(
@@ -1469,6 +1540,7 @@ export const coworkerRelations = relations(coworker, ({ one, many }) => ({
   runs: many(coworkerRun),
   documents: many(coworkerDocument),
   emailAliases: many(coworkerEmailAlias),
+  tagAssignments: many(coworkerTagAssignment),
 }));
 
 export const orgChartNodeRelations = relations(orgChartNode, ({ one }) => ({
@@ -1525,6 +1597,32 @@ export const coworkerEmailAliasRelations = relations(coworkerEmailAlias, ({ one 
     fields: [coworkerEmailAlias.replacedByAliasId],
     references: [coworkerEmailAlias.id],
     relationName: "replacedByAlias",
+  }),
+}));
+
+export const coworkerTagRelations = relations(coworkerTag, ({ one, many }) => ({
+  workspace: one(workspace, {
+    fields: [coworkerTag.workspaceId],
+    references: [workspace.id],
+  }),
+  assignments: many(coworkerTagAssignment),
+}));
+
+export const coworkerTagAssignmentRelations = relations(coworkerTagAssignment, ({ one }) => ({
+  coworker: one(coworker, {
+    fields: [coworkerTagAssignment.coworkerId],
+    references: [coworker.id],
+  }),
+  tag: one(coworkerTag, {
+    fields: [coworkerTagAssignment.tagId],
+    references: [coworkerTag.id],
+  }),
+}));
+
+export const coworkerViewRelations = relations(coworkerView, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [coworkerView.workspaceId],
+    references: [workspace.id],
   }),
 }));
 

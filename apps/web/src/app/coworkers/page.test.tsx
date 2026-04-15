@@ -289,6 +289,14 @@ vi.mock("@/orpc/hooks", () => ({
     data: { connected: { openai: true }, shared: { openai: true } },
   }),
   useTranscribe: () => ({ mutateAsync: vi.fn() }),
+  useCoworkerTagList: () => ({ data: [] }),
+  useCoworkerViewList: () => ({ data: [] }),
+  useCreateCoworkerTag: () => ({ mutateAsync: vi.fn() }),
+  useAssignCoworkerTag: () => ({ mutate: vi.fn() }),
+  useUnassignCoworkerTag: () => ({ mutate: vi.fn() }),
+  useCreateCoworkerView: () => ({ mutateAsync: vi.fn() }),
+  useUpdateCoworkerView: () => ({ mutateAsync: vi.fn() }),
+  useDeleteCoworkerView: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("sonner", () => ({

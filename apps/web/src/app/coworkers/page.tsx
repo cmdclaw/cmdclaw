@@ -6,16 +6,22 @@ import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-pol
 import {
   Activity,
   BarChart3,
+  Clock,
+  Filter,
   History,
+  Mail,
   Network,
   Download,
   Eye,
   Loader2,
   Menu,
+  Play,
   Plus,
   Search,
   Share2,
   Upload,
+  Webhook,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
@@ -29,6 +35,7 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { getCoworkerDisplayName } from "@/components/coworkers/coworker-card-content";
 import { InteractiveCoworkerCard } from "@/components/coworkers/interactive-coworker-card";
+import { ViewTabs } from "@/components/coworkers/view-tabs";
 // Commented out — prompt bar removed from coworkers page
 // import { VoiceIndicator } from "@/components/chat/voice-indicator";
 // import { PromptBar } from "@/components/prompt-bar";
@@ -52,6 +59,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { normalizeGenerationError } from "@/lib/generation-errors";
@@ -66,6 +74,7 @@ import { client } from "@/orpc/client";
 import {
   useCreateCoworker,
   useCoworkerList,
+  useCoworkerViewList,
   useDeleteCoworker,
   useImportCoworkerDefinition,
   useImportSharedCoworker,
@@ -92,7 +101,9 @@ type CoworkerItem = {
     conversationId?: string | null;
     source?: string;
   }[];
+  isPinned?: boolean;
   sharedAt?: Date | string | null;
+  tags?: { id: string; name: string; color: string | null }[];
 };
 
 type SharedCoworkerItem = {
@@ -115,6 +126,13 @@ type SharedCoworkerItem = {
 
 const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 const MAX_VISIBLE_TOOL_INDICATORS = 3;
+
+const TRIGGER_TYPE_OPTIONS = [
+  { value: "manual", label: "Manual", icon: Play },
+  { value: "schedule", label: "Scheduled", icon: Clock },
+  { value: "email", label: "Email", icon: Mail },
+  { value: "webhook", label: "Webhook", icon: Webhook },
+] as const;
 
 const CARD_MOTION = {
   initial: { opacity: 0, y: 8 },
@@ -337,6 +355,51 @@ export default function CoworkersPage() {
   const [filterShared, setFilterShared] = useState(false);
   const handleToggleFilterShared = useCallback(() => setFilterShared((v) => !v), []);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [selectedTriggerTypes, setSelectedTriggerTypes] = useState<Set<string>>(new Set());
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const { data: views } = useCoworkerViewList();
+  const handleToggleTagFilter = useCallback((tagId: string) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) {
+        next.delete(tagId);
+      } else {
+        next.add(tagId);
+      }
+      return next;
+    });
+    setActiveViewId(null);
+  }, []);
+  const handleToggleTriggerType = useCallback((triggerType: string) => {
+    setSelectedTriggerTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(triggerType)) {
+        next.delete(triggerType);
+      } else {
+        next.add(triggerType);
+      }
+      return next;
+    });
+    setActiveViewId(null);
+  }, []);
+  const handleSelectView = useCallback(
+    (viewId: string | null) => {
+      setActiveViewId(viewId);
+      if (viewId === null) {
+        setSelectedTagIds(new Set());
+        setSelectedTriggerTypes(new Set());
+      } else {
+        const view = (views ?? []).find((v) => v.id === viewId);
+        if (view) {
+          const filters = view.filters as { tagIds?: string[]; triggerTypes?: string[] };
+          setSelectedTagIds(new Set(filters.tagIds ?? []));
+          setSelectedTriggerTypes(new Set(filters.triggerTypes ?? []));
+        }
+      }
+    },
+    [views],
+  );
   const handleSearchChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value),
     [],
@@ -383,6 +446,14 @@ export default function CoworkersPage() {
     () => coworkerList.filter((c) => c.sharedAt != null).length,
     [coworkerList],
   );
+  const currentFilters = useMemo(
+    () => ({
+      tagIds: selectedTagIds.size > 0 ? [...selectedTagIds] : undefined,
+      triggerTypes: selectedTriggerTypes.size > 0 ? [...selectedTriggerTypes] : undefined,
+    }),
+    [selectedTagIds, selectedTriggerTypes],
+  );
+  const hasActiveFilters = selectedTagIds.size > 0 || selectedTriggerTypes.size > 0;
   const displayedCoworkerList = useMemo(() => {
     let list = filterShared ? coworkerList.filter((c) => c.sharedAt != null) : coworkerList;
     if (searchQuery.trim()) {
@@ -391,8 +462,14 @@ export default function CoworkersPage() {
         (c) => c.name?.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q),
       );
     }
+    if (selectedTagIds.size > 0) {
+      list = list.filter((c) => (c.tags ?? []).some((tag) => selectedTagIds.has(tag.id)));
+    }
+    if (selectedTriggerTypes.size > 0) {
+      list = list.filter((c) => selectedTriggerTypes.has(c.triggerType));
+    }
     return list;
-  }, [coworkerList, filterShared, searchQuery]);
+  }, [coworkerList, filterShared, searchQuery, selectedTagIds, selectedTriggerTypes]);
   const displayedSharedCoworkerList = useMemo(() => {
     if (!searchQuery.trim()) {
       return sharedCoworkerList;
@@ -722,14 +799,68 @@ export default function CoworkersPage() {
                 <span className="hidden sm:inline">Org Chart</span>
               </Link>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="text-muted-foreground/60 pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
-              <Input
-                value={searchQuery}
-                onChange={handleSearchChange}
-                placeholder="Search coworkers..."
-                className="h-8 pl-8 text-xs"
-              />
+            <div className="flex items-center gap-1.5">
+              <div className="relative w-full sm:w-64">
+                <Search className="text-muted-foreground/60 pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+                <Input
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  placeholder="Search coworkers..."
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "border-border/60 hover:border-border inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                      selectedTriggerTypes.size > 0
+                        ? "border-foreground/20 bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Filter className="size-3" />
+                    {selectedTriggerTypes.size > 0 ? (
+                      <span className="bg-background/20 rounded px-1 text-[10px] tabular-nums">
+                        {selectedTriggerTypes.size}
+                      </span>
+                    ) : (
+                      <span className="hidden sm:inline">Trigger</span>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-40 p-1.5">
+                  <p className="text-muted-foreground px-2 py-1 text-[10px] font-medium tracking-wider uppercase">
+                    Trigger
+                  </p>
+                  {TRIGGER_TYPE_OPTIONS.map((trigger) => {
+                    const isActive = selectedTriggerTypes.has(trigger.value);
+                    const Icon = trigger.icon;
+                    return (
+                      <button
+                        key={trigger.value}
+                        type="button"
+                        onClick={() => handleToggleTriggerType(trigger.value)}
+                        className="hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
+                      >
+                        <div
+                          className={cn(
+                            "flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors",
+                            isActive
+                              ? "border-brand bg-brand text-primary-foreground"
+                              : "border-input bg-transparent",
+                          )}
+                        >
+                          {isActive && <X className="size-2.5" />}
+                        </div>
+                        <Icon className="text-muted-foreground size-3" />
+                        <span className="text-foreground">{trigger.label}</span>
+                      </button>
+                    );
+                  })}
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -778,6 +909,22 @@ export default function CoworkersPage() {
               Import coworker
             </button>
           </div>
+
+          {/* View tabs with integrated tag filters */}
+          <ViewTabs
+            activeViewId={activeViewId}
+            onSelectView={handleSelectView}
+            currentFilters={currentFilters}
+            hasActiveFilters={hasActiveFilters}
+            selectedTagIds={selectedTagIds}
+            onToggleTag={handleToggleTagFilter}
+            onClearAll={() => {
+              setSelectedTagIds(new Set());
+              setSelectedTriggerTypes(new Set());
+              setActiveViewId(null);
+            }}
+          />
+
           {displayedCoworkerList.length === 0 ? (
             <div className="border-border rounded-xl border border-dashed p-10 text-center">
               <p className="text-muted-foreground text-sm">

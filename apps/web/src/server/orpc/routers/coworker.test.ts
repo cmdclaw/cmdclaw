@@ -129,6 +129,11 @@ function createContext() {
   const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
   const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
 
+  const selectWhereMock = vi.fn().mockResolvedValue([]);
+  const selectInnerJoinMock = vi.fn(() => ({ where: selectWhereMock }));
+  const selectFromMock = vi.fn(() => ({ innerJoin: selectInnerJoinMock }));
+  const selectMock = vi.fn(() => ({ from: selectFromMock }));
+
   const context = {
     user: { id: "user-1" },
     db: {
@@ -161,6 +166,7 @@ function createContext() {
       insert: insertMock,
       update: updateMock,
       delete: deleteMock,
+      select: selectMock,
     },
     mocks: {
       insertReturningMock,
@@ -319,6 +325,7 @@ describe("coworkerRouter", () => {
         username: "daily-coworker",
         status: "on",
         autoApprove: true,
+        isPinned: false,
         triggerType: "schedule",
         allowedIntegrations: ["slack"],
         allowedCustomIntegrations: [],
@@ -332,6 +339,7 @@ describe("coworkerRouter", () => {
         username: null,
         status: "off",
         autoApprove: false,
+        isPinned: false,
         triggerType: "manual",
         allowedIntegrations: ["github"],
         allowedCustomIntegrations: [],
@@ -376,6 +384,8 @@ describe("coworkerRouter", () => {
         allowedCustomIntegrations: [],
         schedule: { type: "daily", time: "09:30", timezone: "UTC" },
         updatedAt: now,
+        isPinned: false,
+        tags: [],
         lastRunStatus: "success",
         lastRunAt: startedAt,
         recentRuns: [
@@ -410,6 +420,8 @@ describe("coworkerRouter", () => {
         allowedCustomIntegrations: [],
         schedule: null,
         updatedAt: now,
+        isPinned: false,
+        tags: [],
         lastRunStatus: null,
         lastRunAt: null,
         recentRuns: [],
