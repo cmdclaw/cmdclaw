@@ -1,7 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { clientEditionCapabilities } from "@/lib/edition";
 
 function getActiveKey(pathname: string) {
@@ -23,17 +25,21 @@ function getActiveKey(pathname: string) {
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeKey = getActiveKey(pathname);
-  const settingsTabs = [
-    { key: "general", label: "General", href: "/settings" },
-    { key: "workspace", label: "Workspace", href: "/settings/workspace" },
-    ...(clientEditionCapabilities.hasBilling
-      ? [
-          { key: "usage", label: "Usage", href: "/settings/usage" },
-          { key: "billing", label: "Billing", href: "/settings/billing" },
-        ]
-      : []),
-    { key: "subscriptions", label: "Connected AI Account", href: "/settings/subscriptions" },
-  ];
+  const { isAdmin } = useIsAdmin();
+  const settingsTabs = useMemo(
+    () => [
+      { key: "general", label: "General", href: "/settings" },
+      { key: "workspace", label: "Workspace", href: "/settings/workspace" },
+      ...(clientEditionCapabilities.hasBilling && isAdmin
+        ? [
+            { key: "usage", label: "Usage", href: "/settings/usage" },
+            { key: "billing", label: "Billing", href: "/settings/billing" },
+          ]
+        : []),
+      { key: "subscriptions", label: "Connected AI Account", href: "/settings/subscriptions" },
+    ],
+    [isAdmin],
+  );
 
   return (
     <div className="bg-background min-h-full">

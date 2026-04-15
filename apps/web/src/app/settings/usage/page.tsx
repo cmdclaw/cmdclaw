@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { clientEditionCapabilities } from "@/lib/edition";
 import { useBillingOverview, useManualBillingTopUp } from "@/orpc/hooks";
 
@@ -24,7 +25,10 @@ function formatDate(value: number | string | Date | null | undefined): string {
 
 export default function UsagePage() {
   const router = useRouter();
-  const { data, isLoading, refetch } = useBillingOverview();
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
+  const { data, isLoading, refetch } = useBillingOverview(
+    clientEditionCapabilities.hasBilling && isAdmin,
+  );
   const manualTopUp = useManualBillingTopUp();
   const [topUpUsd, setTopUpUsd] = useState("25");
 
@@ -93,16 +97,16 @@ export default function UsagePage() {
   );
 
   useEffect(() => {
-    if (!clientEditionCapabilities.hasBilling) {
+    if (!clientEditionCapabilities.hasBilling || (!isAdminLoading && !isAdmin)) {
       router.replace("/settings");
     }
-  }, [router]);
+  }, [isAdmin, isAdminLoading, router]);
 
-  if (!clientEditionCapabilities.hasBilling) {
+  if (!clientEditionCapabilities.hasBilling || (!isAdmin && !isAdminLoading)) {
     return null;
   }
 
-  if (isLoading) {
+  if (isAdminLoading || isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />

@@ -12,6 +12,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { clientEditionCapabilities } from "@/lib/edition";
 import {
   useAttachBillingPlan,
@@ -26,7 +27,12 @@ const EMPTY_WORKSPACE_OPTIONS: Array<{ id: string; name: string }> = [];
 
 export default function BillingPage() {
   const router = useRouter();
-  const { data: overview, isLoading, refetch } = useBillingOverview();
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
+  const {
+    data: overview,
+    isLoading,
+    refetch,
+  } = useBillingOverview(clientEditionCapabilities.hasBilling && isAdmin);
   const attachPlan = useAttachBillingPlan();
   const openPortal = useOpenBillingPortal();
   const cancelPlan = useCancelBillingPlan();
@@ -164,16 +170,16 @@ export default function BillingPage() {
   const showConsumedTopUpHint = topUpBalance === 0 && hasRecentTopUps;
 
   useEffect(() => {
-    if (!clientEditionCapabilities.hasBilling) {
+    if (!clientEditionCapabilities.hasBilling || (!isAdminLoading && !isAdmin)) {
       router.replace("/settings");
     }
-  }, [router]);
+  }, [isAdmin, isAdminLoading, router]);
 
-  if (!clientEditionCapabilities.hasBilling) {
+  if (!clientEditionCapabilities.hasBilling || (!isAdmin && !isAdminLoading)) {
     return null;
   }
 
-  if (isLoading) {
+  if (isAdminLoading || isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
