@@ -15,6 +15,7 @@ import { INVITE_ONLY_LOGIN_ERROR, shouldGrantAdminRole } from "@/lib/admin-email
 import { buildMagicLinkEmailPayload } from "@/lib/magic-link-email";
 import { MAGIC_LINK_TTL_SECONDS } from "@/lib/magic-link-request";
 import { buildSignInMagicLinkUrl } from "@/lib/magic-link-request";
+import { buildPasswordResetEmailPayload } from "@/lib/password-reset-email";
 import { getTrustedOrigins } from "@/lib/trusted-origins";
 import { isApprovedLoginEmail } from "@/server/lib/approved-login-emails";
 import { createMagicLinkRequestState } from "@/server/lib/magic-link-request-state";
@@ -60,6 +61,27 @@ const socialProviders = isSelfHostedEdition()
 export const auth = betterAuth({
   appName: "CmdClaw",
   baseURL: appUrl,
+  emailAndPassword: {
+    enabled: true,
+    disableSignUp: true,
+    requireEmailVerification: false,
+    revokeSessionsOnPasswordReset: true,
+    async sendResetPassword({ user, url }) {
+      if (resend && env.EMAIL_FROM) {
+        const emailContent = buildPasswordResetEmailPayload(url, user.email);
+
+        await resend.emails.send({
+          from: `CmdClaw <${env.EMAIL_FROM}>`,
+          to: user.email,
+          subject: `Set your CmdClaw password | ${new Date().toISOString().slice(0, 19).replace("T", " ")}`,
+          html: emailContent.html,
+          text: emailContent.text,
+        });
+      } else {
+        console.info(`[better-auth] Password reset for ${user.email}: ${url}`);
+      }
+    },
+  },
   user: {
     additionalFields: {
       phoneNumber: {

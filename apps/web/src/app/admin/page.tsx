@@ -14,9 +14,11 @@ import {
   useAddApprovedLoginEmailAllowlistEntry,
   useAddGoogleAccessAllowlistEntry,
   useApprovedLoginEmailAllowlist,
+  useCreateDemoPasswordAccount,
   useGoogleAccessAllowlist,
   useRemoveApprovedLoginEmailAllowlistEntry,
   useRemoveGoogleAccessAllowlistEntry,
+  useResetDemoPassword,
 } from "@/orpc/hooks";
 import { getImpersonationErrorMessage } from "./impersonation-errors";
 
@@ -40,6 +42,11 @@ type UnifiedUserRow = {
   isBuiltInApproved: boolean;
   googleAccessId: string | null;
   hasGoogleAccess: boolean;
+};
+
+type DemoCredentialResult = {
+  email: string;
+  password: string;
 };
 
 function readImpersonatedBy(sessionData: SessionData | null): string | null {
@@ -169,6 +176,51 @@ function ImpersonateButton({
         <UserRoundCog className="h-4 w-4" />
       )}
     </Button>
+  );
+}
+
+function DemoPasswordButton({
+  disabled,
+  isWorking,
+  onReset,
+}: {
+  disabled: boolean;
+  isWorking: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <Button variant="outline" size="sm" disabled={disabled || isWorking} onClick={onReset}>
+      {isWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reset"}
+    </Button>
+  );
+}
+
+function DemoCredentialsCard({
+  credentials,
+  title,
+}: {
+  credentials: DemoCredentialResult;
+  title: string;
+}) {
+  return (
+    <div className="bg-card mb-4 rounded-lg border p-4">
+      <div className="mb-3">
+        <h3 className="font-medium">{title}</h3>
+        <p className="text-muted-foreground text-sm">
+          Copy these now. The password is only shown for this action.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <div className="text-muted-foreground text-xs font-medium uppercase">Email</div>
+          <Input value={credentials.email} readOnly />
+        </div>
+        <div className="space-y-1">
+          <div className="text-muted-foreground text-xs font-medium uppercase">Password</div>
+          <Input value={credentials.password} readOnly />
+        </div>
+      </div>
+    </div>
   );
 }
 

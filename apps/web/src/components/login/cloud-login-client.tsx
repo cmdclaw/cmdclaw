@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { authClient } from "@/lib/auth-client";
 
-type SignInState = "idle" | "sending" | "sent" | "error";
+type Step = "initial" | "choose-method" | "magic-link-sent" | "password" | "password-reset-sent";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -47,11 +48,59 @@ function AppleIcon() {
 
 function LastUsedBadge() {
   return (
-    <span className="bg-muted text-muted-foreground ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium">
+    <span className="bg-brand/10 text-brand ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium">
       Last used
     </span>
   );
 }
+
+function MailCheckIcon() {
+  return (
+    <svg
+      width="48"
+      height="48"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-brand"
+    >
+      <path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+      <path d="m16 19 2 2 4-4" />
+    </svg>
+  );
+}
+
+function KeyIcon() {
+  return (
+    <svg
+      width="48"
+      height="48"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-brand"
+    >
+      <path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4" />
+      <path d="m21 2-9.6 9.6" />
+      <circle cx="7.5" cy="15.5" r="5.5" />
+    </svg>
+  );
+}
+
+const stepVariants = {
+  enter: { opacity: 0, y: 8, filter: "blur(4px)" },
+  center: { opacity: 1, y: 0, filter: "blur(0px)" },
+  exit: { opacity: 0, y: -8, filter: "blur(4px)" },
+};
+
+const stepTransition = { duration: 0.25, ease: [0.4, 0, 0.2, 1] as const };
 
 export function CloudLoginClient({
   callbackUrl,
@@ -62,40 +111,95 @@ export function CloudLoginClient({
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [step, setStep] = useState<Step>("initial");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
-  const [status, setStatus] = useState<SignInState>("idle");
   const lastMethod = authClient.getLastUsedLoginMethod();
 
-  const requestMagicLink = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleContinue = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      setStatus("sending");
+      if (!email) return;
       setError(null);
+      setStep("choose-method");
+    },
+    [email],
+  );
 
-      const { error: signInError } = await authClient.signIn.magicLink({
-        email,
-        callbackURL: callbackUrl,
-        newUserCallbackURL: callbackUrl,
-        errorCallbackURL: "/login?error=magic-link",
-      });
+  const requestMagicLink = useCallback(async () => {
+    setSubmitting(true);
+    setError(null);
 
-      if (signInError) {
-        if (signInError.message === INVITE_ONLY_LOGIN_ERROR) {
-          router.push(
-            `/invite-only?source=magic-link&email=${encodeURIComponent(normalizeEmail(email))}`,
-          );
-          return;
-        }
+    const { error: signInError } = await authClient.signIn.magicLink({
+      email: normalizeEmail(email),
+      callbackURL: callbackUrl,
+      newUserCallbackURL: callbackUrl,
+      errorCallbackURL: "/login?error=magic-link",
+    });
 
-        setStatus("error");
-        setError(signInError.message || "Unable to send the magic link right now.");
+    if (signInError) {
+      if (signInError.message === INVITE_ONLY_LOGIN_ERROR) {
+        router.push(
+          `/invite-only?source=magic-link&email=${encodeURIComponent(normalizeEmail(email))}`,
+        );
         return;
       }
 
-      setStatus("sent");
+      setSubmitting(false);
+      setError(signInError.message || "Unable to send the magic link right now.");
+      return;
+    }
+
+    setSubmitting(false);
+    setStep("magic-link-sent");
+  }, [callbackUrl, email, router]);
+
+  const signInWithPassword = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitting(true);
+      setError(null);
+
+      const { error: signInError } = await authClient.signIn.email({
+        email: normalizeEmail(email),
+        password,
+        callbackURL: callbackUrl,
+      });
+
+      if (signInError) {
+        setSubmitting(false);
+        setError("Invalid email or password.");
+        return;
+      }
+
+      router.push(callbackUrl);
     },
-    [callbackUrl, email, router],
+    [callbackUrl, email, password, router],
   );
+
+  const requestPasswordSetup = useCallback(async () => {
+    setSubmitting(true);
+    setError(null);
+
+    const response = await fetch("/api/auth/password/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: normalizeEmail(email),
+        callbackUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      setSubmitting(false);
+      setError("Unable to send a password email right now.");
+      return;
+    }
+
+    setSubmitting(false);
+    setStep("password-reset-sent");
+  }, [callbackUrl, email]);
 
   const handleGoogleSignIn = useCallback(async () => {
     await authClient.signIn.social({
@@ -113,23 +217,36 @@ export function CloudLoginClient({
     });
   }, [callbackUrl]);
 
+  const handleBack = useCallback(() => {
+    setStep("initial");
+    setPassword("");
+    setError(null);
+    setSubmitting(false);
+  }, []);
+
   const handleEmailChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(event.target.value);
   }, []);
 
+  const handlePasswordChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(event.target.value);
+  }, []);
+
   return (
-    <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
+    <div className="bg-card mx-auto flex w-full max-w-md flex-col gap-6 rounded-2xl border p-8 shadow-sm">
+      {/* Header */}
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
           CmdClaw
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
-        <p className="text-muted-foreground text-sm">
-          CmdClaw is currently invite-only. Enter an approved email to get a magic link.
+        <p className="text-muted-foreground text-sm text-balance">
+          CmdClaw is invite-only. Use an approved email to sign in.
         </p>
       </div>
 
-      <div className="space-y-4">
+      {/* Social buttons — always visible on initial/choose-method */}
+      {(step === "initial" || step === "choose-method") && (
         <div className="flex flex-col gap-2">
           <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
             <GoogleIcon />
@@ -142,50 +259,223 @@ export function CloudLoginClient({
             {lastMethod === "apple" && <LastUsedBadge />}
           </Button>
         </div>
+      )}
 
+      {/* Divider — only on initial/choose-method */}
+      {(step === "initial" || step === "choose-method") && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card text-muted-foreground px-2">Or continue with</span>
+            <span className="bg-card text-muted-foreground px-2">Or continue with email</span>
           </div>
         </div>
+      )}
 
-        <form onSubmit={requestMagicLink} className="space-y-3">
-          <label className="text-muted-foreground text-sm font-medium" htmlFor="email">
-            Email
-          </label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={handleEmailChange}
-            required
-            aria-invalid={status === "error"}
-          />
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!email || status === "sending" || status === "sent"}
+      {/* Step content with animated transitions */}
+      <AnimatePresence mode="wait" initial={false}>
+        {step === "initial" && (
+          <motion.div
+            key="initial"
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={stepTransition}
           >
-            {status === "sending"
-              ? "Sending..."
-              : status === "sent"
-                ? "Email sent, check your inbox"
-                : "Send magic link"}
-            {lastMethod === "email" && <LastUsedBadge />}
-          </Button>
-        </form>
-      </div>
+            <form onSubmit={handleContinue} className="space-y-3">
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={handleEmailChange}
+                required
+              />
+              <Button type="submit" className="w-full" disabled={!email}>
+                Continue with email
+                {lastMethod === "email" && <LastUsedBadge />}
+              </Button>
+            </form>
+          </motion.div>
+        )}
 
-      {error ? (
-        <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border p-3 text-sm">
+        {step === "choose-method" && (
+          <motion.div
+            key="choose-method"
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={stepTransition}
+          >
+            <div className="space-y-4">
+              {/* Email display with change option */}
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                <span className="truncate text-sm">{email}</span>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="text-brand hover:text-brand-dark ml-2 shrink-0 text-sm font-medium"
+                >
+                  Change
+                </button>
+              </div>
+
+              <div className="text-muted-foreground text-center text-sm">
+                How would you like to sign in?
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={submitting}
+                  onClick={requestMagicLink}
+                >
+                  {submitting ? "Sending..." : "Send magic link"}
+                  {lastMethod === "email" && <LastUsedBadge />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setError(null);
+                    setStep("password");
+                  }}
+                >
+                  Use password
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {step === "magic-link-sent" && (
+          <motion.div
+            key="magic-link-sent"
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={stepTransition}
+          >
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <MailCheckIcon />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Check your inbox</p>
+                <p className="text-muted-foreground text-sm">
+                  We sent a magic link to{" "}
+                  <span className="text-foreground font-medium">{email}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleBack}
+                className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors"
+              >
+                Back to login
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {step === "password" && (
+          <motion.div
+            key="password"
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={stepTransition}
+          >
+            <div className="space-y-4">
+              {/* Email display with change option */}
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                <span className="truncate text-sm">{email}</span>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="text-brand hover:text-brand-dark ml-2 shrink-0 text-sm font-medium"
+                >
+                  Change
+                </button>
+              </div>
+
+              <form onSubmit={signInWithPassword} className="space-y-3">
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={handlePasswordChange}
+                  required
+                  aria-invalid={!!error}
+                  autoFocus
+                />
+                <Button type="submit" className="w-full" disabled={!password || submitting}>
+                  {submitting ? "Signing in..." : "Sign in"}
+                </Button>
+              </form>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={requestPasswordSetup}
+                  disabled={submitting}
+                  className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors disabled:opacity-50"
+                >
+                  Create or reset password
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {step === "password-reset-sent" && (
+          <motion.div
+            key="password-reset-sent"
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={stepTransition}
+          >
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <KeyIcon />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Password email sent</p>
+                <p className="text-muted-foreground text-sm">
+                  We sent a link to <span className="text-foreground font-medium">{email}</span> to
+                  create or reset your password.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleBack}
+                className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors"
+              >
+                Back to login
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error display */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border p-3 text-sm"
+        >
           {error}
-        </div>
-      ) : null}
+        </motion.div>
+      )}
     </div>
   );
 }

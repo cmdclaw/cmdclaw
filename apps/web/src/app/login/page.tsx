@@ -143,7 +143,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         )}
 
         <p className="text-muted-foreground text-center text-xs">
-          Sign in with Google or magic link on CmdClaw Cloud, then return here automatically.
+          Sign in with Google, magic link, or email and password on CmdClaw Cloud, then return here
+          automatically.
         </p>
       </LoginCard>
     </div>
