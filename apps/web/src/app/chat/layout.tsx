@@ -2,7 +2,8 @@
 
 import { Menu } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChatHeaderActionsProvider } from "@/app/chat/chat-header-actions-context";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
@@ -16,6 +17,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const [liveConversationId, setLiveConversationId] = useState<string | undefined>(
     routeConversationId,
   );
+  const [headerActions, setHeaderActions] = useState<React.ReactNode>(null);
+  const headerActionsContextValue = useMemo(() => ({ setHeaderActions }), []);
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const setTimezoneMutation = useSetUserTimezone();
   const lastTimezoneSyncRef = useRef<string | null>(null);
@@ -64,21 +67,30 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   }, [userLoading, user, setTimezoneMutation]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden pb-[calc(3.5rem+var(--safe-area-inset-bottom))] md:pb-0">
-      <header className="bg-background flex shrink-0 items-center gap-2 px-4 pt-[max(0.5rem,var(--safe-area-inset-top))] pb-2 md:h-14 md:pt-0 md:pb-0">
-        <button
-          type="button"
-          onClick={openRecentDrawer}
-          className="text-muted-foreground hover:text-foreground -ml-1 flex h-9 w-9 items-center justify-center rounded-xl md:hidden"
-          aria-label="Recent chats"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <ChatCopyButton conversationId={liveConversationId} className="ml-auto" />
-        <ChatShareControls conversationId={liveConversationId} />
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
-      <MobileRecentDrawer open={recentDrawerOpen} onOpenChange={setRecentDrawerOpen} mode="chats" />
-    </div>
+    <ChatHeaderActionsProvider value={headerActionsContextValue}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden pb-[calc(3.5rem+var(--safe-area-inset-bottom))] md:pb-0">
+        <header className="bg-background flex shrink-0 items-center gap-2 px-4 pt-[max(0.5rem,var(--safe-area-inset-top))] pb-2 md:h-14 md:pt-0 md:pb-0">
+          <button
+            type="button"
+            onClick={openRecentDrawer}
+            className="text-muted-foreground hover:text-foreground -ml-1 flex h-9 w-9 items-center justify-center rounded-xl md:hidden"
+            aria-label="Recent chats"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {headerActions}
+            <ChatCopyButton conversationId={liveConversationId} />
+            <ChatShareControls conversationId={liveConversationId} />
+          </div>
+        </header>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+        <MobileRecentDrawer
+          open={recentDrawerOpen}
+          onOpenChange={setRecentDrawerOpen}
+          mode="chats"
+        />
+      </div>
+    </ChatHeaderActionsProvider>
   );
 }

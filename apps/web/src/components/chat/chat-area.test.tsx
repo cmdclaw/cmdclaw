@@ -4,6 +4,7 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ChatHeaderActionsProvider } from "@/app/chat/chat-header-actions-context";
 
 void jestDomVitest;
 
@@ -323,13 +324,11 @@ vi.mock("./auth-request-card", () => ({
 vi.mock("./bottom-action-bar", () => ({
   BottomActionBar: ({
     onSubmit,
-    renderDebugControl,
     prefillRequest,
     segments,
     segmentApproveHandlers,
   }: {
     onSubmit: (content: string) => void | Promise<unknown>;
-    renderDebugControl?: React.ReactNode;
     prefillRequest?: { text: string } | null;
     segments?: Array<{
       id: string;
@@ -365,7 +364,6 @@ vi.mock("./bottom-action-bar", () => ({
     }, [pendingApprovalSegment, segmentApproveHandlers]);
     return (
       <div>
-        {renderDebugControl}
         {firstQuestion ? (
           <div>
             <div>{firstQuestion.header}</div>
@@ -393,6 +391,22 @@ vi.mock("./chat-message-sync", () => ({
     persistedMessages: unknown[];
   }) => (persistedMessages.length > 0 ? persistedMessages : currentMessages),
 }));
+
+function renderInChatHeader(children: React.ReactNode) {
+  function HeaderShell({ innerChildren }: { innerChildren: React.ReactNode }) {
+    const [headerActions, setHeaderActions] = React.useState<React.ReactNode>(null);
+    const contextValue = React.useMemo(() => ({ setHeaderActions }), []);
+
+    return (
+      <ChatHeaderActionsProvider value={contextValue}>
+        <div>{headerActions}</div>
+        {innerChildren}
+      </ChatHeaderActionsProvider>
+    );
+  }
+
+  return render(<HeaderShell innerChildren={children} />);
+}
 
 vi.mock("./chat-model-store", () => ({
   useChatModelStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -711,8 +725,9 @@ describe("ChatArea generation errors", () => {
     mockAdminState.isAdmin = true;
     mockStartGeneration.mockResolvedValue(null);
 
-    render(<ChatArea conversationId="conv-1" />);
+    renderInChatHeader(<ChatArea conversationId="conv-1" />);
 
+    fireEvent.click(screen.getByRole("button", { name: /admin debug controls/i }));
     fireEvent.change(screen.getAllByRole("spinbutton")[0], { target: { value: "7" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Arm" })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -733,8 +748,9 @@ describe("ChatArea generation errors", () => {
     mockAdminState.isAdmin = true;
     mockStartGeneration.mockResolvedValue(null);
 
-    render(<ChatArea conversationId="conv-1" />);
+    renderInChatHeader(<ChatArea conversationId="conv-1" />);
 
+    fireEvent.click(screen.getByRole("button", { name: /admin debug controls/i }));
     fireEvent.change(screen.getAllByRole("spinbutton")[1], { target: { value: "9" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Arm" })[1]);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -765,8 +781,9 @@ describe("ChatArea generation errors", () => {
     };
     mockStartGeneration.mockResolvedValue(null);
 
-    render(<ChatArea conversationId="conv-1" />);
+    renderInChatHeader(<ChatArea conversationId="conv-1" />);
 
+    fireEvent.click(screen.getByRole("button", { name: /admin debug controls/i }));
     fireEvent.click(screen.getByRole("button", { name: /resume paused runtime/i }));
 
     await waitFor(() => {

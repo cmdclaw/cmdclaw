@@ -25,6 +25,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { StatusChangeMetadata } from "@/lib/generation-stream";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { useChatHeaderActions } from "@/app/chat/chat-header-actions-context";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -923,6 +924,7 @@ export function ChatArea({
   initialPrefillText,
   authCompletion,
 }: Props) {
+  const { setHeaderActions } = useChatHeaderActions();
   const queryClient = useQueryClient();
   const posthog = usePostHog();
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
@@ -3731,6 +3733,13 @@ export function ChatArea({
     isStreaming,
   ]);
 
+  useEffect(() => {
+    setHeaderActions(debugControlNode);
+    return () => {
+      setHeaderActions(null);
+    };
+  }, [debugControlNode, setHeaderActions]);
+
   const transcriptNodes = useMemo(() => {
     const continueMessageIndices = messages.reduce<number[]>((indices, message, index) => {
       if (isContinueMessage(message)) {
@@ -4201,7 +4210,6 @@ export function ChatArea({
             renderSkills={skillsMenuNode}
             renderModelSelector={modelSelectorNode}
             renderAutoApproval={autoApprovalNode}
-            renderDebugControl={debugControlNode}
           />
         </div>
       </div>
