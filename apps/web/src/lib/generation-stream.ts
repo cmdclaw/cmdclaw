@@ -19,6 +19,7 @@ export type ThinkingData = {
 };
 
 export type GenerationPendingApprovalData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   toolUseId: string;
@@ -41,6 +42,7 @@ export type GenerationApprovalData = {
 };
 
 export type AuthNeededData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   integrations: string[];
@@ -57,10 +59,13 @@ export type SandboxFileData = {
 
 export type StatusChangeMetadata = {
   sandboxProvider?: "e2b" | "daytona" | "docker";
+  runtimeId?: string;
   runtimeHarness?: "opencode" | "agent-sdk";
   runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
   sandboxId?: string;
   sessionId?: string;
+  parkedInterruptId?: string;
+  releasedSandboxId?: string;
 };
 
 export type DoneArtifactsData = {
@@ -104,6 +109,9 @@ export type GenerationStartInput = {
   authSource?: ProviderAuthSource | null;
   autoApprove?: boolean;
   sandboxProvider?: "e2b" | "daytona" | "docker";
+  resumePausedGenerationId?: string;
+  debugRunDeadlineMs?: number;
+  debugApprovalHotWaitMs?: number;
   selectedPlatformSkillSlugs?: string[];
   fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
 };
@@ -150,12 +158,27 @@ type RunGenerationStreamParams = {
   callbacks: GenerationCallbacks;
 };
 
+function shouldReconnectWithCursor(event: {
+  type: string;
+  message?: string;
+  cursor?: string;
+}): event is { type: "error"; message: string; cursor: string } {
+  return (
+    event.type === "error" &&
+    typeof event.cursor === "string" &&
+    event.cursor.length > 0 &&
+    typeof event.message === "string" &&
+    event.message.includes("Reconnect with the returned cursor")
+  );
+}
+
 export async function runGenerationStream(
   params: RunGenerationStreamParams,
 ): Promise<{ generationId: string; conversationId: string } | null> {
   const { client, input, callbacks, signal } = params;
   let generationId = params.generationId;
   let conversationId: string | undefined;
+  let cursor: string | undefined;
 
   if (input) {
     const started = await client.generation.startGeneration(input);
@@ -168,131 +191,164 @@ export async function runGenerationStream(
     throw new Error("runGenerationStream requires either input or generationId");
   }
 
-  const iterator = signal
-    ? await client.generation.subscribeGeneration({ generationId }, { signal })
-    : await client.generation.subscribeGeneration({ generationId });
-
-  for await (const event of iterator) {
+  let shouldReconnect = false;
+  while (true) {
     if (signal?.aborted) {
       break;
     }
+    shouldReconnect = false;
+    const subscriptionInput = cursor ? { generationId, cursor } : { generationId };
+    let iterator:
+      | Awaited<ReturnType<RouterClient<AppRouter>["generation"]["subscribeGeneration"]>>
+      | undefined;
+    if (signal) {
+      // eslint-disable-next-line no-await-in-loop
+      iterator = await client.generation.subscribeGeneration(subscriptionInput, { signal });
+    } else {
+      // eslint-disable-next-line no-await-in-loop
+      iterator = await client.generation.subscribeGeneration(subscriptionInput);
+    }
 
-    switch (event.type) {
-      case "text":
-        await callbacks.onText?.(event.content);
+    // eslint-disable-next-line no-await-in-loop
+    for await (const event of iterator) {
+      if (signal?.aborted) {
         break;
-      case "system":
-        await callbacks.onSystem?.({
-          content: event.content,
-          coworkerId: event.coworkerId,
-        });
-        break;
-      case "thinking":
-        await callbacks.onThinking?.({
-          content: event.content,
-          thinkingId: event.thinkingId,
-        });
-        break;
-      case "tool_use":
-        await callbacks.onToolUse?.({
-          toolName: event.toolName,
-          toolInput: event.toolInput,
-          toolUseId: event.toolUseId,
-          integration: event.integration,
-          operation: event.operation,
-          isWrite: event.isWrite,
-        });
-        break;
-      case "tool_result":
-        await callbacks.onToolResult?.(event.toolName, event.result, event.toolUseId);
-        break;
-      case "interrupt_pending":
-        conversationId = event.conversationId;
-        if (event.kind === "auth") {
-          await callbacks.onAuthNeeded?.({
+      }
+      if ("cursor" in event && typeof event.cursor === "string" && event.cursor.length > 0) {
+        cursor = event.cursor;
+      }
+
+      switch (event.type) {
+        case "text":
+          await callbacks.onText?.(event.content);
+          break;
+        case "system":
+          await callbacks.onSystem?.({
+            content: event.content,
+            coworkerId: event.coworkerId,
+          });
+          break;
+        case "thinking":
+          await callbacks.onThinking?.({
+            content: event.content,
+            thinkingId: event.thinkingId,
+          });
+          break;
+        case "tool_use":
+          await callbacks.onToolUse?.({
+            toolName: event.toolName,
+            toolInput: event.toolInput,
+            toolUseId: event.toolUseId,
+            integration: event.integration,
+            operation: event.operation,
+            isWrite: event.isWrite,
+          });
+          break;
+        case "tool_result":
+          await callbacks.onToolResult?.(event.toolName, event.result, event.toolUseId);
+          break;
+        case "interrupt_pending":
+          conversationId = event.conversationId;
+          if (event.kind === "auth") {
+            await callbacks.onAuthNeeded?.({
+              interruptId: event.interruptId,
+              generationId: event.generationId,
+              conversationId: event.conversationId,
+              integrations: event.display.authSpec?.integrations ?? [],
+              reason: event.display.authSpec?.reason,
+            });
+          } else {
+            await callbacks.onPendingApproval?.({
+              interruptId: event.interruptId,
+              generationId: event.generationId,
+              conversationId: event.conversationId,
+              toolUseId: event.providerToolUseId,
+              toolName: event.display.title,
+              toolInput: event.display.toolInput ?? {},
+              integration: event.display.integration ?? "cmdclaw",
+              operation: event.display.operation ?? "unknown",
+              command: event.display.command,
+            });
+          }
+          break;
+        case "interrupt_resolved":
+          if (event.kind === "auth") {
+            const connectedIntegrations = event.responsePayload?.connectedIntegrations ?? [];
+            const remaining = (event.display.authSpec?.integrations ?? []).filter(
+              (integration) => !connectedIntegrations.includes(integration),
+            );
+            await Promise.all(
+              connectedIntegrations.map((connected) =>
+                callbacks.onAuthProgress?.(connected, remaining),
+              ),
+            );
+            await callbacks.onAuthResult?.(
+              event.status === "accepted",
+              event.display.authSpec?.integrations,
+            );
+          } else {
+            const toolUseId = event.providerToolUseId;
+            const decision = event.status === "accepted" ? "approved" : "denied";
+            await callbacks.onApprovalResult?.(toolUseId, decision);
+            await callbacks.onApproval?.({
+              toolUseId,
+              toolName: event.display.title,
+              toolInput: event.display.toolInput ?? {},
+              integration: event.display.integration ?? "cmdclaw",
+              operation: event.display.operation ?? "unknown",
+              command: event.display.command,
+              status: decision,
+              questionAnswers: event.responsePayload?.questionAnswers,
+            });
+          }
+          break;
+        case "sandbox_file":
+          await callbacks.onSandboxFile?.({
+            fileId: event.fileId,
+            path: event.path,
+            filename: event.filename,
+            mimeType: event.mimeType,
+            sizeBytes: event.sizeBytes,
+          });
+          break;
+        case "done":
+          conversationId = event.conversationId;
+          await callbacks.onDone?.(
+            event.generationId,
+            event.conversationId,
+            event.messageId,
+            event.usage,
+            event.artifacts,
+          );
+          break;
+        case "error":
+          if (!signal?.aborted && shouldReconnectWithCursor(event)) {
+            shouldReconnect = true;
+            break;
+          }
+          await callbacks.onError?.(
+            normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
+          );
+          break;
+        case "cancelled":
+          await callbacks.onCancelled?.({
             generationId: event.generationId,
             conversationId: event.conversationId,
-            integrations: event.display.authSpec?.integrations ?? [],
-            reason: event.display.authSpec?.reason,
+            messageId: event.messageId,
           });
-        } else {
-          await callbacks.onPendingApproval?.({
-            generationId: event.generationId,
-            conversationId: event.conversationId,
-            toolUseId: event.providerToolUseId,
-            toolName: event.display.title,
-            toolInput: event.display.toolInput ?? {},
-            integration: event.display.integration ?? "cmdclaw",
-            operation: event.display.operation ?? "unknown",
-            command: event.display.command,
-          });
-        }
+          break;
+        case "status_change":
+          await callbacks.onStatusChange?.(event.status, event.metadata);
+          break;
+      }
+
+      if (shouldReconnect) {
         break;
-      case "interrupt_resolved":
-        if (event.kind === "auth") {
-          const connectedIntegrations = event.responsePayload?.connectedIntegrations ?? [];
-          const remaining = (event.display.authSpec?.integrations ?? []).filter(
-            (integration) => !connectedIntegrations.includes(integration),
-          );
-          await Promise.all(
-            connectedIntegrations.map((connected) =>
-              callbacks.onAuthProgress?.(connected, remaining),
-            ),
-          );
-          await callbacks.onAuthResult?.(
-            event.status === "accepted",
-            event.display.authSpec?.integrations,
-          );
-        } else {
-          const toolUseId = event.providerToolUseId;
-          const decision = event.status === "accepted" ? "approved" : "denied";
-          await callbacks.onApprovalResult?.(toolUseId, decision);
-          await callbacks.onApproval?.({
-            toolUseId,
-            toolName: event.display.title,
-            toolInput: event.display.toolInput ?? {},
-            integration: event.display.integration ?? "cmdclaw",
-            operation: event.display.operation ?? "unknown",
-            command: event.display.command,
-            status: decision,
-            questionAnswers: event.responsePayload?.questionAnswers,
-          });
-        }
-        break;
-      case "sandbox_file":
-        await callbacks.onSandboxFile?.({
-          fileId: event.fileId,
-          path: event.path,
-          filename: event.filename,
-          mimeType: event.mimeType,
-          sizeBytes: event.sizeBytes,
-        });
-        break;
-      case "done":
-        conversationId = event.conversationId;
-        await callbacks.onDone?.(
-          event.generationId,
-          event.conversationId,
-          event.messageId,
-          event.usage,
-          event.artifacts,
-        );
-        break;
-      case "error":
-        await callbacks.onError?.(
-          normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
-        );
-        break;
-      case "cancelled":
-        await callbacks.onCancelled?.({
-          generationId: event.generationId,
-          conversationId: event.conversationId,
-          messageId: event.messageId,
-        });
-        break;
-      case "status_change":
-        await callbacks.onStatusChange?.(event.status, event.metadata);
-        break;
+      }
+    }
+
+    if (!shouldReconnect) {
+      break;
     }
   }
 

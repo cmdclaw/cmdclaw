@@ -1,6 +1,15 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Wrench, Check, Loader2, Laptop, Puzzle, FileCode } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Wrench,
+  Check,
+  Loader2,
+  Laptop,
+  Puzzle,
+  FileCode,
+} from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
 import { getBrandfetchLogoUrl } from "@/lib/brandfetch";

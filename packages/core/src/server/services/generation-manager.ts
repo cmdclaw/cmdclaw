@@ -8841,6 +8841,29 @@ class GenerationManager {
     }
   }
 
+  private async saveSessionSnapshotForInterruptPark(ctx: GenerationContext): Promise<void> {
+    if (!ctx.sessionId || !ctx.sandbox) {
+      return;
+    }
+
+    try {
+      const snapshotOutcome = await this.awaitWithTimeout(
+        this.saveSessionSnapshot(ctx),
+        RUN_DEADLINE_SNAPSHOT_TIMEOUT_MS,
+      );
+      if (snapshotOutcome.type === "timed_out") {
+        console.error(
+          `[GenerationManager] Timed out saving session snapshot before interrupt park for conversation ${ctx.conversationId}`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[GenerationManager] Failed to save session snapshot before interrupt park for conversation ${ctx.conversationId}:`,
+        error,
+      );
+    }
+  }
+
   private async parkGenerationForRunDeadline(
     ctx: GenerationContext,
     runtimeClient?: RuntimeHarnessClient,
@@ -8940,7 +8963,7 @@ class GenerationManager {
     }
     this.stopExternalInterruptPolling(ctx);
 
-    await this.saveSessionSnapshot(ctx);
+    await this.saveSessionSnapshotForInterruptPark(ctx);
     await this.saveProgress(ctx);
 
     await db

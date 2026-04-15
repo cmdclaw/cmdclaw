@@ -4,7 +4,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InboxPage from "./page";
 
+type MockFn = (...args: unknown[]) => unknown;
+
 const {
+  mockStartGeneration,
   mockRouterPush,
   mockRouterReplace,
   mockUseIsAdmin,
@@ -23,22 +26,23 @@ const {
   toastSuccessMock,
 } = vi.hoisted(() => {
   return {
-    mockRouterPush: vi.fn(),
-    mockRouterReplace: vi.fn(),
-    mockUseIsAdmin: vi.fn(),
-    mockUseInboxItems: vi.fn(),
-    mockCoworkerList: vi.fn(),
-    mockSubmitApprovalMutateAsync: vi.fn(),
-    mockSubmitAuthResultMutateAsync: vi.fn(),
-    mockCancelGenerationMutateAsync: vi.fn(),
-    mockEnqueueConversationMessageMutateAsync: vi.fn(),
-    mockTriggerCoworkerMutateAsync: vi.fn(),
-    mockGetAuthUrlMutateAsync: vi.fn(),
-    mockGetOrCreateBuilderConversationMutateAsync: vi.fn(),
-    mockEditApprovalAndResendMutateAsync: vi.fn(),
-    mockMarkAsReadMutateAsync: vi.fn(),
-    toastErrorMock: vi.fn(),
-    toastSuccessMock: vi.fn(),
+    mockStartGeneration: vi.fn<MockFn>(),
+    mockRouterPush: vi.fn<MockFn>(),
+    mockRouterReplace: vi.fn<MockFn>(),
+    mockUseIsAdmin: vi.fn<MockFn>(),
+    mockUseInboxItems: vi.fn<MockFn>(),
+    mockCoworkerList: vi.fn<MockFn>(),
+    mockSubmitApprovalMutateAsync: vi.fn<MockFn>(),
+    mockSubmitAuthResultMutateAsync: vi.fn<MockFn>(),
+    mockCancelGenerationMutateAsync: vi.fn<MockFn>(),
+    mockEnqueueConversationMessageMutateAsync: vi.fn<MockFn>(),
+    mockTriggerCoworkerMutateAsync: vi.fn<MockFn>(),
+    mockGetAuthUrlMutateAsync: vi.fn<MockFn>(),
+    mockGetOrCreateBuilderConversationMutateAsync: vi.fn<MockFn>(),
+    mockEditApprovalAndResendMutateAsync: vi.fn<MockFn>(),
+    mockMarkAsReadMutateAsync: vi.fn<MockFn>(),
+    toastErrorMock: vi.fn<MockFn>(),
+    toastSuccessMock: vi.fn<MockFn>(),
   };
 });
 
@@ -57,6 +61,14 @@ vi.mock("next/image", () => ({
 
 vi.mock("@/hooks/use-is-admin", () => ({
   useIsAdmin: () => mockUseIsAdmin(),
+}));
+
+vi.mock("@/orpc/client", () => ({
+  client: {
+    generation: {
+      startGeneration: mockStartGeneration,
+    },
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -108,6 +120,7 @@ describe("InboxPage", () => {
             conversationId: "conv-1",
             errorMessage: null,
             pendingApproval: {
+              interruptId: "interrupt-approval-1",
               toolUseId: "tool-1",
               toolName: "Slack send",
               toolInput: { channel: "#sales", text: "hello" },
@@ -115,6 +128,19 @@ describe("InboxPage", () => {
               operation: "send",
               command: 'slack send --channel "#sales" --text "hello"',
             },
+          },
+          {
+            kind: "chat",
+            id: "conv-paused",
+            conversationId: "conv-paused",
+            conversationTitle: "Long email analysis",
+            title: "Long email analysis",
+            status: "paused",
+            updatedAt: new Date("2026-03-30T15:35:00.000Z"),
+            createdAt: new Date("2026-03-30T15:00:00.000Z"),
+            generationId: "gen-paused",
+            pauseReason: "run_deadline",
+            errorMessage: null,
           },
           {
             kind: "chat",
@@ -147,6 +173,10 @@ describe("InboxPage", () => {
     });
     mockEditApprovalAndResendMutateAsync.mockResolvedValue({ success: true });
     mockMarkAsReadMutateAsync.mockResolvedValue({ success: true });
+    mockStartGeneration.mockResolvedValue({
+      generationId: "gen-resumed",
+      conversationId: "conv-paused",
+    });
   });
 
   it("shows a beta access message to non-admin users", () => {
@@ -165,7 +195,7 @@ describe("InboxPage", () => {
     expect(screen.getByText("Follow up with prospect")).toBeTruthy();
     expect(mockUseInboxItems).toHaveBeenCalledWith(
       expect.objectContaining({
-        statuses: ["awaiting_approval", "awaiting_auth"],
+        statuses: ["awaiting_approval", "awaiting_auth", "paused"],
       }),
     );
 
@@ -175,10 +205,27 @@ describe("InboxPage", () => {
       expect(mockUseInboxItems).toHaveBeenLastCalledWith(
         expect.objectContaining({
           type: "chats",
-          statuses: ["awaiting_approval", "awaiting_auth"],
+          statuses: ["awaiting_approval", "awaiting_auth", "paused"],
         }),
       );
     });
+  });
+
+  it("continues a paused runtime item and opens the resumed thread", async () => {
+    render(<InboxPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Long email analysis/i })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: /Continue/i }));
+
+    await waitFor(() => {
+      expect(mockStartGeneration).toHaveBeenCalledWith({
+        conversationId: "conv-paused",
+        content: "continue",
+        resumePausedGenerationId: "gen-paused",
+      });
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/conv-paused");
   });
 
   it("wires approve and edit-before-approval actions to real mutations", async () => {
@@ -189,8 +236,7 @@ describe("InboxPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Approve/i }));
     await waitFor(() => {
       expect(mockSubmitApprovalMutateAsync).toHaveBeenCalledWith({
-        generationId: "gen-1",
-        toolUseId: "tool-1",
+        interruptId: "interrupt-approval-1",
         decision: "approve",
         questionAnswers: undefined,
       });

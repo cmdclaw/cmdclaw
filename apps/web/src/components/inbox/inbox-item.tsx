@@ -11,6 +11,7 @@ import {
   Send,
   ShieldCheck,
   Square,
+  TimerReset,
   Wrench,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -25,8 +26,16 @@ import { InboxEditForm } from "./inbox-edit-form";
 const STATUS_CONFIG = {
   awaiting_approval: { color: "bg-amber-500", icon: ShieldCheck },
   awaiting_auth: { color: "bg-orange-500", icon: KeyRound },
+  paused: { color: "bg-blue-500", icon: TimerReset },
   error: { color: "bg-red-500", icon: AlertTriangle },
 } as const;
+
+const STATUS_LABELS: Record<InboxItemType["status"], string> = {
+  awaiting_approval: "awaiting approval",
+  awaiting_auth: "awaiting auth",
+  paused: "needs continuation",
+  error: "error",
+};
 
 function formatRelative(date: Date): string {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -119,6 +128,7 @@ type Props = {
   onApprove: (questionAnswers?: string[][]) => void;
   onDeny: () => void;
   onStop: () => void;
+  onContinue: () => void;
   onAuthConnect: (integration: string) => void;
   onAuthCancel: () => void;
   onSaveEdit: (updated: ToolApprovalData) => void;
@@ -138,6 +148,7 @@ export function InboxItem({
   onApprove,
   onDeny,
   onStop,
+  onContinue,
   onAuthConnect,
   onAuthCancel,
   onSaveEdit,
@@ -153,7 +164,9 @@ export function InboxItem({
     [item],
   );
 
-  const showStop = Boolean(item.generationId) && item.status !== "error";
+  const showStop =
+    Boolean(item.generationId) && item.status !== "error" && item.status !== "paused";
+  const showContinue = item.status === "paused" && item.pauseReason === "run_deadline";
   const showBuilder = item.kind === "coworker" && item.status === "error" && item.builderAvailable;
 
   return (
@@ -206,11 +219,12 @@ export function InboxItem({
                 "h-3.5 w-3.5",
                 item.status === "awaiting_approval" && "text-amber-400",
                 item.status === "awaiting_auth" && "text-orange-400",
+                item.status === "paused" && "text-blue-400",
                 item.status === "error" && "text-red-400",
               )}
             />
             <span className="font-mono text-[11px] tracking-wide uppercase">
-              {item.status.replaceAll("_", " ")}
+              {STATUS_LABELS[item.status]}
             </span>
             <span className="text-muted-foreground/40">|</span>
             <span>{sourceLabel}</span>
@@ -242,6 +256,12 @@ export function InboxItem({
               <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onStop}>
                 <Square className="mr-1 h-3.5 w-3.5" />
                 Stop
+              </Button>
+            ) : null}
+            {showContinue ? (
+              <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onContinue}>
+                <TimerReset className="mr-1 h-3.5 w-3.5" />
+                Continue
               </Button>
             ) : null}
           </div>
@@ -303,6 +323,12 @@ export function InboxItem({
           {item.errorMessage ? (
             <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2">
               <p className="font-mono text-[12px] text-red-400">{item.errorMessage}</p>
+            </div>
+          ) : null}
+
+          {showContinue ? (
+            <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[12px] text-blue-300">
+              This run hit the max runtime and can be continued from the saved conversation state.
             </div>
           ) : null}
 

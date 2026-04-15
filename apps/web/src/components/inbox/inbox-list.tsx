@@ -14,6 +14,7 @@ type Props = {
   onApprove: (item: InboxItemType, questionAnswers?: string[][]) => void;
   onDeny: (item: InboxItemType) => void;
   onStop: (item: InboxItemType) => void;
+  onContinue: (item: InboxItemType) => void;
   onAuthConnect: (item: InboxItemType, integration: string) => void;
   onAuthCancel: (item: InboxItemType) => void;
   onSaveEdit: (item: InboxItemType, updated: ToolApprovalData) => void;
@@ -33,6 +34,7 @@ export function InboxList({
   onApprove,
   onDeny,
   onStop,
+  onContinue,
   onAuthConnect,
   onAuthCancel,
   onSaveEdit,
@@ -47,7 +49,7 @@ export function InboxList({
         <div className="space-y-2 text-center">
           <p className="text-muted-foreground text-sm font-medium">No items in inbox</p>
           <p className="text-muted-foreground/60 text-[13px]">
-            Approvals, auth requests, and errors will appear here.
+            Approvals, auth requests, continuation tasks, and errors will appear here.
           </p>
         </div>
       </div>
@@ -68,6 +70,7 @@ export function InboxList({
           onApprove={onApprove}
           onDeny={onDeny}
           onStop={onStop}
+          onContinue={onContinue}
           onAuthConnect={onAuthConnect}
           onAuthCancel={onAuthCancel}
           onSaveEdit={onSaveEdit}
@@ -91,6 +94,7 @@ function InboxListRow({
   onApprove,
   onDeny,
   onStop,
+  onContinue,
   onAuthConnect,
   onAuthCancel,
   onSaveEdit,
@@ -108,6 +112,7 @@ function InboxListRow({
   onApprove: (item: InboxItemType, questionAnswers?: string[][]) => void;
   onDeny: (item: InboxItemType) => void;
   onStop: (item: InboxItemType) => void;
+  onContinue: (item: InboxItemType) => void;
   onAuthConnect: (item: InboxItemType, integration: string) => void;
   onAuthCancel: (item: InboxItemType) => void;
   onSaveEdit: (item: InboxItemType, updated: ToolApprovalData) => void;
@@ -134,6 +139,9 @@ function InboxListRow({
   const handleStop = useCallback(() => {
     onStop(item);
   }, [item, onStop]);
+  const handleContinue = useCallback(() => {
+    onContinue(item);
+  }, [item, onContinue]);
   const handleAuthConnect = useCallback(
     (integration: string) => {
       onAuthConnect(item, integration);
@@ -179,6 +187,7 @@ function InboxListRow({
       onApprove={handleApprove}
       onDeny={handleDeny}
       onStop={handleStop}
+      onContinue={handleContinue}
       onAuthConnect={handleAuthConnect}
       onAuthCancel={handleAuthCancel}
       onSaveEdit={handleSaveEdit}

@@ -3,11 +3,14 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mswServer } from "@/test/msw/server";
 
+type MockFn = (...args: any[]) => any;
+
 const {
   getSessionMock,
   getOAuthConfigMock,
   fetchDynamicsInstancesMock,
   submitAuthResultMock,
+  submitAuthResultByInterruptMock,
   consumeExecutorSourceOAuthPendingMock,
   exchangeMcpOAuthAuthorizationCodeMock,
   computeWorkspaceExecutorSourceRevisionHashMock,
@@ -21,29 +24,30 @@ const {
   insertValuesMock,
   dbMock,
 } = vi.hoisted(() => {
-  const getSessionMock = vi.fn();
-  const getOAuthConfigMock = vi.fn();
-  const fetchDynamicsInstancesMock = vi.fn();
-  const submitAuthResultMock = vi.fn();
-  const consumeExecutorSourceOAuthPendingMock = vi.fn();
-  const exchangeMcpOAuthAuthorizationCodeMock = vi.fn();
-  const computeWorkspaceExecutorSourceRevisionHashMock = vi.fn(() => "native-hash");
-  const setWorkspaceExecutorSourceOAuthCredentialMock = vi.fn();
+  const getSessionMock = vi.fn<MockFn>();
+  const getOAuthConfigMock = vi.fn<MockFn>();
+  const fetchDynamicsInstancesMock = vi.fn<MockFn>();
+  const submitAuthResultMock = vi.fn<MockFn>();
+  const submitAuthResultByInterruptMock = vi.fn<MockFn>();
+  const consumeExecutorSourceOAuthPendingMock = vi.fn<MockFn>();
+  const exchangeMcpOAuthAuthorizationCodeMock = vi.fn<MockFn>();
+  const computeWorkspaceExecutorSourceRevisionHashMock = vi.fn<MockFn>(() => "native-hash");
+  const setWorkspaceExecutorSourceOAuthCredentialMock = vi.fn<MockFn>();
 
-  const integrationFindFirstMock = vi.fn();
-  const workspaceExecutorSourceFindFirstMock = vi.fn();
-  const workspaceExecutorSourceCredentialFindFirstMock = vi.fn();
+  const integrationFindFirstMock = vi.fn<MockFn>();
+  const workspaceExecutorSourceFindFirstMock = vi.fn<MockFn>();
+  const workspaceExecutorSourceCredentialFindFirstMock = vi.fn<MockFn>();
 
-  const updateWhereMock = vi.fn();
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+  const updateWhereMock = vi.fn<MockFn>();
+  const updateSetMock = vi.fn<MockFn>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<MockFn>(() => ({ set: updateSetMock }));
 
-  const deleteWhereMock = vi.fn();
-  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+  const deleteWhereMock = vi.fn<MockFn>();
+  const deleteMock = vi.fn<MockFn>(() => ({ where: deleteWhereMock }));
 
-  const insertReturningMock = vi.fn();
-  const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const insertReturningMock = vi.fn<MockFn>();
+  const insertValuesMock = vi.fn<MockFn>(() => ({ returning: insertReturningMock }));
+  const insertMock = vi.fn<MockFn>(() => ({ values: insertValuesMock }));
 
   const dbMock = {
     query: {
@@ -67,6 +71,7 @@ const {
     getOAuthConfigMock,
     fetchDynamicsInstancesMock,
     submitAuthResultMock,
+    submitAuthResultByInterruptMock,
     consumeExecutorSourceOAuthPendingMock,
     exchangeMcpOAuthAuthorizationCodeMock,
     computeWorkspaceExecutorSourceRevisionHashMock,
@@ -118,6 +123,7 @@ vi.mock("@/server/executor-source-oauth", () => ({
 vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
   generationManager: {
     submitAuthResult: submitAuthResultMock,
+    submitAuthResultByInterrupt: submitAuthResultByInterruptMock,
   },
 }));
 
@@ -150,6 +156,7 @@ describe("GET /api/oauth/callback", () => {
       },
     ]);
     submitAuthResultMock.mockResolvedValue(true);
+    submitAuthResultByInterruptMock.mockResolvedValue(true);
     consumeExecutorSourceOAuthPendingMock.mockResolvedValue(undefined);
     exchangeMcpOAuthAuthorizationCodeMock.mockResolvedValue({
       accessToken: "oauth-access",
@@ -180,7 +187,7 @@ describe("GET /api/oauth/callback", () => {
       tokenUrl: "https://oauth.example.com/token",
       redirectUri: "https://app.example.com/api/oauth/callback",
       scopes: ["scope:one"],
-      getUserInfo: vi.fn(async () => ({
+      getUserInfo: vi.fn<MockFn>(async () => ({
         id: "provider-user",
         displayName: "Provider User",
         metadata: { team: "alpha" },
@@ -449,7 +456,7 @@ describe("GET /api/oauth/callback", () => {
     const state = encodeState({
       userId: "user-1",
       type: "google_sheets",
-      redirectUrl: "/chat/conv-1?auth_complete=google_sheets&generation_id=gen-1",
+      redirectUrl: "/chat/conv-1?auth_complete=google_sheets&interrupt_id=interrupt-1",
     });
 
     mswServer.use(
@@ -471,9 +478,14 @@ describe("GET /api/oauth/callback", () => {
 
     expect(location).toContain("https://app.example.com/chat/conv-1?");
     expect(location).toContain("auth_complete=google_sheets");
-    expect(location).toContain("generation_id=gen-1");
+    expect(location).toContain("interrupt_id=interrupt-1");
     expect(location).toContain("success=true");
-    expect(submitAuthResultMock).toHaveBeenCalledWith("gen-1", "google_sheets", true, "user-1");
+    expect(submitAuthResultByInterruptMock).toHaveBeenCalledWith(
+      "interrupt-1",
+      "google_sheets",
+      true,
+      "user-1",
+    );
   });
 
   it("normalizes internal redirect targets from OAuth state to APP_URL", async () => {
@@ -482,7 +494,7 @@ describe("GET /api/oauth/callback", () => {
     const state = encodeState({
       userId: "user-1",
       type: "outlook",
-      redirectUrl: "https://0.0.0.0:8080/toolbox?auth_complete=outlook&generation_id=gen-1",
+      redirectUrl: "https://0.0.0.0:8080/toolbox?auth_complete=outlook&interrupt_id=interrupt-1",
     });
 
     mswServer.use(
@@ -502,13 +514,18 @@ describe("GET /api/oauth/callback", () => {
     const response = await GET(request);
 
     expect(getLocation(response)).toBe(
-      "https://app.example.com/toolbox?auth_complete=outlook&generation_id=gen-1&success=true",
+      "https://app.example.com/toolbox?auth_complete=outlook&interrupt_id=interrupt-1&success=true",
     );
-    expect(submitAuthResultMock).toHaveBeenCalledWith("gen-1", "outlook", true, "user-1");
+    expect(submitAuthResultByInterruptMock).toHaveBeenCalledWith(
+      "interrupt-1",
+      "outlook",
+      true,
+      "user-1",
+    );
   });
 
   it("merges Salesforce instance_url into metadata", async () => {
-    const getUserInfo = vi.fn(async () => ({
+    const getUserInfo = vi.fn<MockFn>(async () => ({
       id: "sf-user",
       displayName: "Salesforce User",
       metadata: { org: "acme" },
@@ -642,7 +659,7 @@ describe("GET /api/oauth/callback", () => {
     const state = encodeState({
       userId: "user-1",
       type: "dynamics",
-      redirectUrl: "/integrations?auth_complete=dynamics&generation_id=gen-1",
+      redirectUrl: "/integrations?auth_complete=dynamics&interrupt_id=interrupt-1",
       dynamicsInstanceUrl: "https://org123.api.crm4.dynamics.com",
       dynamicsInstanceName: "Contoso Prod",
     });
@@ -654,7 +671,7 @@ describe("GET /api/oauth/callback", () => {
     const response = await GET(request);
 
     expect(getLocation(response)).toBe(
-      "https://app.example.com/integrations?auth_complete=dynamics&generation_id=gen-1&success=true",
+      "https://app.example.com/integrations?auth_complete=dynamics&interrupt_id=interrupt-1&success=true",
     );
     expect(fetchDynamicsInstancesMock).not.toHaveBeenCalled();
     const integrationInsertCall = (
@@ -672,6 +689,11 @@ describe("GET /api/oauth/callback", () => {
         }),
       }),
     );
-    expect(submitAuthResultMock).toHaveBeenCalledWith("gen-1", "dynamics", true, "user-1");
+    expect(submitAuthResultByInterruptMock).toHaveBeenCalledWith(
+      "interrupt-1",
+      "dynamics",
+      true,
+      "user-1",
+    );
   });
 });

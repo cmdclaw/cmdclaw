@@ -13,19 +13,19 @@ export default function ConversationPage({ params }: Props) {
   const { conversationId } = use(params);
   const searchParams = useSearchParams();
   const authComplete = searchParams.get("auth_complete");
-  const generationId = searchParams.get("generation_id");
+  const interruptId = searchParams.get("interrupt_id");
   const authCompletion = useMemo(
-    () => (authComplete && generationId ? { integration: authComplete, generationId } : null),
-    [authComplete, generationId],
+    () => (authComplete && interruptId ? { integration: authComplete, interruptId } : null),
+    [authComplete, interruptId],
   );
 
   // Handle OAuth callback
   useEffect(() => {
-    if (authComplete && generationId) {
+    if (authComplete && interruptId) {
       // Notify server that auth is complete
       client.generation
         .submitAuthResult({
-          generationId,
+          interruptId,
           integration: authComplete,
           success: true,
         })
@@ -37,7 +37,7 @@ export default function ConversationPage({ params }: Props) {
           console.error("Failed to submit auth result:", err);
         });
     }
-  }, [authComplete, conversationId, generationId]);
+  }, [authComplete, conversationId, interruptId]);
 
   return <ChatArea conversationId={conversationId} authCompletion={authCompletion} />;
 }

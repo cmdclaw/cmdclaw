@@ -63,6 +63,9 @@ export function InboxAgentFilter({
   const handleAwaitingAuthToggle = useCallback(() => {
     onToggleStatus("awaiting_auth");
   }, [onToggleStatus]);
+  const handlePausedToggle = useCallback(() => {
+    onToggleStatus("paused");
+  }, [onToggleStatus]);
   const handleErrorToggle = useCallback(() => {
     onToggleStatus("error");
   }, [onToggleStatus]);
@@ -96,6 +99,11 @@ export function InboxAgentFilter({
           label="Awaiting auth"
           active={statusFilters.includes("awaiting_auth")}
           onClick={handleAwaitingAuthToggle}
+        />
+        <FilterChip
+          label="Needs continuation"
+          active={statusFilters.includes("paused")}
+          onClick={handlePausedToggle}
         />
         <FilterChip
           label="Error"

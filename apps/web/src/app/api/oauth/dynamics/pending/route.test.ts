@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type MockFn = (...args: any[]) => any;
+
 const { getSessionMock, findFirstMock, updateWhereMock, getOAuthConfigMock } = vi.hoisted(() => {
-  const getSessionMock = vi.fn();
-  const findFirstMock = vi.fn();
-  const updateWhereMock = vi.fn();
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
-  const getOAuthConfigMock = vi.fn();
+  const getSessionMock = vi.fn<MockFn>();
+  const findFirstMock = vi.fn<MockFn>();
+  const updateWhereMock = vi.fn<MockFn>();
+  const updateSetMock = vi.fn<MockFn>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<MockFn>(() => ({ set: updateSetMock }));
+  const getOAuthConfigMock = vi.fn<MockFn>();
 
   return {
     getSessionMock,
@@ -39,8 +41,8 @@ vi.mock("@cmdclaw/db/client", () => ({
         findFirst: findFirstMock,
       },
     },
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({ where: updateWhereMock })),
+    update: vi.fn<MockFn>(() => ({
+      set: vi.fn<MockFn>(() => ({ where: updateWhereMock })),
     })),
   },
 }));
@@ -79,7 +81,7 @@ describe("Dynamics pending selection route", () => {
       tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
       redirectUri: "https://app.example.com/api/oauth/callback",
       scopes: ["scope:one"],
-      getUserInfo: vi.fn(),
+      getUserInfo: vi.fn<MockFn>(),
     });
   });
 
@@ -107,7 +109,7 @@ describe("Dynamics pending selection route", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           instanceUrl: "https://acme.crm.dynamics.com",
-          generationId: "gen-1",
+          interruptId: "interrupt-1",
           integration: "dynamics",
         }),
       }),
@@ -122,6 +124,13 @@ describe("Dynamics pending selection route", () => {
     expect(payload.authUrl).toContain(
       encodeURIComponent("https://acme.crm.dynamics.com/user_impersonation"),
     );
+    const authUrl = new URL(payload.authUrl);
+    const state = authUrl.searchParams.get("state");
+    expect(state).toBeTruthy();
+    const decodedState = JSON.parse(Buffer.from(state!, "base64url").toString("utf8")) as {
+      redirectUrl: string;
+    };
+    expect(decodedState.redirectUrl).toContain("interrupt_id=interrupt-1");
   });
 
   it("uses APP_URL instead of request host for the post-reauth redirect target", async () => {

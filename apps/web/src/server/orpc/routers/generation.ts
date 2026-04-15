@@ -7,9 +7,9 @@ import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecyc
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
 import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observability";
 import { db } from "@cmdclaw/db/client";
-import { generation, conversation } from "@cmdclaw/db/schema";
+import { generation, conversation, generationInterrupt } from "@cmdclaw/db/schema";
 import { eventIterator, ORPCError } from "@orpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { detectMessageLanguage } from "@/server/utils/detect-message-language";
 import { protectedProcedure } from "../middleware";
@@ -283,6 +283,38 @@ async function requireGenerationAccessInActiveWorkspace(userId: string, generati
   }
 
   return { generation: genRecord, workspaceId };
+}
+
+async function requireInterruptAccessInActiveWorkspace(userId: string, interruptId: string) {
+  const {
+    workspace: { id: workspaceId },
+  } = await requireActiveWorkspaceAccess(userId);
+  const interrupt = await db.query.generationInterrupt.findFirst({
+    where: eq(generationInterrupt.id, interruptId),
+    columns: {
+      id: true,
+      conversationId: true,
+    },
+  });
+
+  const conv = interrupt
+    ? await db.query.conversation.findFirst({
+        where: and(
+          eq(conversation.id, interrupt.conversationId),
+          eq(conversation.userId, userId),
+          eq(conversation.workspaceId, workspaceId),
+        ),
+        columns: {
+          id: true,
+        },
+      })
+    : null;
+
+  if (!interrupt || !conv) {
+    throw new ORPCError("NOT_FOUND", { message: "Interrupt not found" });
+  }
+
+  return { interrupt, workspaceId };
 }
 
 // Start a new generation (returns immediately with generationId)
@@ -654,15 +686,33 @@ const resumeGeneration = protectedProcedure
 // Submit approval decision
 const submitApproval = protectedProcedure
   .input(
-    z.object({
-      generationId: z.string(),
-      toolUseId: z.string(),
-      decision: z.enum(["approve", "deny"]),
-      questionAnswers: z.array(z.array(z.string())).optional(),
-    }),
+    z.union([
+      z.object({
+        interruptId: z.string(),
+        decision: z.enum(["approve", "deny"]),
+        questionAnswers: z.array(z.array(z.string())).optional(),
+      }),
+      z.object({
+        generationId: z.string(),
+        toolUseId: z.string(),
+        decision: z.enum(["approve", "deny"]),
+        questionAnswers: z.array(z.array(z.string())).optional(),
+      }),
+    ]),
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    if ("interruptId" in input) {
+      await requireInterruptAccessInActiveWorkspace(context.user.id, input.interruptId);
+      const success = await generationManager.submitApprovalByInterrupt(
+        input.interruptId,
+        input.decision,
+        context.user.id,
+        input.questionAnswers,
+      );
+      return { success };
+    }
+
     await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const success = await generationManager.submitApproval(
       input.generationId,
@@ -677,14 +727,32 @@ const submitApproval = protectedProcedure
 // Submit auth result (after OAuth completes)
 const submitAuthResult = protectedProcedure
   .input(
-    z.object({
-      generationId: z.string(),
-      integration: z.string(),
-      success: z.boolean(),
-    }),
+    z.union([
+      z.object({
+        interruptId: z.string(),
+        integration: z.string(),
+        success: z.boolean(),
+      }),
+      z.object({
+        generationId: z.string(),
+        integration: z.string(),
+        success: z.boolean(),
+      }),
+    ]),
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
+    if ("interruptId" in input) {
+      await requireInterruptAccessInActiveWorkspace(context.user.id, input.interruptId);
+      const success = await generationManager.submitAuthResultByInterrupt(
+        input.interruptId,
+        input.integration,
+        input.success,
+        context.user.id,
+      );
+      return { success };
+    }
+
     await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
     const success = await generationManager.submitAuthResult(
       input.generationId,
@@ -758,6 +826,7 @@ const getActiveGeneration = protectedProcedure
       errorMessage: z.string().nullable(),
       pauseReason: z.string().nullable(),
       debugRunDeadlineMs: z.number().int().nullable(),
+      contentParts: z.array(z.unknown()).nullable(),
       status: z
         .enum([
           "idle",
@@ -785,6 +854,7 @@ const getActiveGeneration = protectedProcedure
           errorMessage: null,
           pauseReason: null,
           debugRunDeadlineMs: null,
+          contentParts: null,
           status: null,
         };
       }
@@ -795,6 +865,7 @@ const getActiveGeneration = protectedProcedure
     let errorMessage: string | null = null;
     let pauseReason: string | null = null;
     let debugRunDeadlineMs: number | null = null;
+    let contentParts: unknown[] | null = null;
     if (conv.currentGenerationId) {
       const currentGeneration = await db.query.generation.findFirst({
         where: eq(generation.id, conv.currentGenerationId),
@@ -803,8 +874,8 @@ const getActiveGeneration = protectedProcedure
           errorMessage: true,
           completionReason: true,
           executionPolicy: true,
-          createdAt: true,
           deadlineAt: true,
+          contentParts: true,
         },
       });
       startedAt = currentGeneration?.startedAt?.toISOString() ?? null;
@@ -820,13 +891,19 @@ const getActiveGeneration = protectedProcedure
           ? executionPolicy.debugRunDeadlineMs
           : conv.generationStatus === "paused" &&
               currentGeneration?.completionReason === "run_deadline" &&
-              currentGeneration.createdAt instanceof Date &&
+              currentGeneration.startedAt instanceof Date &&
               currentGeneration.deadlineAt instanceof Date
             ? Math.max(
                 0,
-                currentGeneration.deadlineAt.getTime() - currentGeneration.createdAt.getTime(),
+                currentGeneration.deadlineAt.getTime() - currentGeneration.startedAt.getTime(),
               )
             : null;
+      contentParts =
+        conv.generationStatus === "paused" &&
+        currentGeneration?.completionReason === "run_deadline" &&
+        Array.isArray(currentGeneration.contentParts)
+          ? currentGeneration.contentParts
+          : null;
     }
 
     return {
@@ -835,6 +912,7 @@ const getActiveGeneration = protectedProcedure
       errorMessage,
       pauseReason,
       debugRunDeadlineMs,
+      contentParts,
       status: conv.generationStatus,
     };
   });

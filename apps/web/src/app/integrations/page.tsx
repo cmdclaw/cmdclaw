@@ -607,6 +607,7 @@ function IntegrationsPageContent() {
         body: JSON.stringify({
           instanceUrl: selectedDynamicsInstance,
           generationId: searchParams.get("generation_id") ?? undefined,
+          interruptId: searchParams.get("interrupt_id") ?? undefined,
           integration: searchParams.get("auth_complete") ?? undefined,
         }),
       });

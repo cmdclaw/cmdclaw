@@ -42,6 +42,7 @@ export type RuntimeActivityItem = {
 };
 
 export type RuntimeSegmentApproval = {
+  interruptId?: string;
   toolUseId: string;
   toolName: string;
   toolInput: unknown;
@@ -53,6 +54,7 @@ export type RuntimeSegmentApproval = {
 };
 
 export type RuntimeSegmentAuth = {
+  interruptId?: string;
   integrations: string[];
   connectedIntegrations: string[];
   reason?: string;
@@ -82,6 +84,7 @@ export type RuntimeThinkingData = {
 };
 
 export type RuntimePendingApprovalData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   toolUseId: string;
@@ -93,6 +96,7 @@ export type RuntimePendingApprovalData = {
 };
 
 export type RuntimeAuthNeededData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   integrations: string[];
@@ -129,6 +133,7 @@ export type RuntimeServerEvent =
   | { type: "tool_result"; toolName: string; result: unknown; toolUseId?: string }
   | {
       type: "pending_approval";
+      interruptId: string;
       generationId: string;
       conversationId: string;
       toolUseId: string;
@@ -156,6 +161,7 @@ export type RuntimeServerEvent =
     }
   | {
       type: "auth_needed";
+      interruptId: string;
       generationId: string;
       conversationId: string;
       integrations: string[];
@@ -395,6 +401,7 @@ export class GenerationRuntime {
 
     const currentSeg = this.getCurrentSegment();
     currentSeg.approval = {
+      interruptId: data.interruptId,
       toolUseId: data.toolUseId,
       toolName: data.toolName,
       toolInput: data.toolInput,
@@ -459,6 +466,7 @@ export class GenerationRuntime {
     for (const segment of this.segments) {
       if (segment.approval?.toolUseId === data.toolUseId) {
         segment.approval = {
+          interruptId: segment.approval.interruptId,
           toolUseId: data.toolUseId,
           toolName: data.toolName,
           toolInput: data.toolInput,
@@ -476,6 +484,7 @@ export class GenerationRuntime {
     if (!updatedExistingSegment) {
       const currentSeg = this.getCurrentSegment();
       currentSeg.approval = {
+        interruptId: undefined,
         toolUseId: data.toolUseId,
         toolName: data.toolName,
         toolInput: data.toolInput,
@@ -506,6 +515,7 @@ export class GenerationRuntime {
 
     const currentSeg = this.getCurrentSegment();
     currentSeg.auth = {
+      interruptId: data.interruptId,
       integrations: data.integrations,
       connectedIntegrations: [],
       reason: data.reason,

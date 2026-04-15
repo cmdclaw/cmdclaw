@@ -244,7 +244,8 @@ describe("runChatSession", () => {
           (async function* () {
             yield {
               type: "error" as const,
-              message: "The sandbox stopped while this run was still active.",
+              message:
+                "The sandbox stopped while this run was still active.\nUnderlying error: SandboxError: 403: blocked: team is blocked",
               diagnosticMessage: "SandboxError: 403: blocked: team is blocked",
             };
           })(),
@@ -259,7 +260,9 @@ describe("runChatSession", () => {
 
     expect(result.status).toBe("failed");
     if (result.status === "failed") {
-      expect(result.error.message).toBe("The sandbox stopped while this run was still active.");
+      expect(result.error.message).toBe(
+        "The sandbox stopped while this run was still active.\nUnderlying error: SandboxError: 403: blocked: team is blocked",
+      );
       expect(result.error.diagnosticMessage).toBe(
         "SandboxError: 403: blocked: team is blocked",
       );

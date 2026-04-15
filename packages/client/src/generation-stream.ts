@@ -139,6 +139,7 @@ export async function runGenerationStream(
           conversationId = event.conversationId;
           if (event.kind === "auth") {
             await callbacks.onAuthNeeded?.({
+              interruptId: event.interruptId,
               generationId: event.generationId,
               conversationId: event.conversationId,
               integrations: event.display.authSpec?.integrations ?? [],
@@ -146,6 +147,7 @@ export async function runGenerationStream(
             });
           } else {
             await callbacks.onPendingApproval?.({
+              interruptId: event.interruptId,
               generationId: event.generationId,
               conversationId: event.conversationId,
               toolUseId: event.providerToolUseId,

@@ -16,43 +16,55 @@ function createProcedureStub() {
   return stub;
 }
 
-const { generationFindFirstMock, conversationFindFirstMock, dbMock, generationManagerMock } =
-  vi.hoisted(() => {
-    const generationFindFirstMock = vi.fn();
-    const conversationFindFirstMock = vi.fn();
+const {
+  generationFindFirstMock,
+  conversationFindFirstMock,
+  generationInterruptFindFirstMock,
+  dbMock,
+  generationManagerMock,
+} = vi.hoisted(() => {
+  const generationFindFirstMock = vi.fn();
+  const conversationFindFirstMock = vi.fn();
+  const generationInterruptFindFirstMock = vi.fn();
 
-    const dbMock = {
-      query: {
-        generation: {
-          findFirst: generationFindFirstMock,
-        },
-        conversation: {
-          findFirst: conversationFindFirstMock,
-        },
+  const dbMock = {
+    query: {
+      generation: {
+        findFirst: generationFindFirstMock,
       },
-    };
+      generationInterrupt: {
+        findFirst: generationInterruptFindFirstMock,
+      },
+      conversation: {
+        findFirst: conversationFindFirstMock,
+      },
+    },
+  };
 
-    const generationManagerMock = {
-      startGeneration: vi.fn(),
-      enqueueConversationMessage: vi.fn(),
-      listConversationQueuedMessages: vi.fn(),
-      removeConversationQueuedMessage: vi.fn(),
-      updateConversationQueuedMessage: vi.fn(),
-      subscribeToGeneration: vi.fn(),
-      cancelGeneration: vi.fn(),
-      submitApproval: vi.fn(),
-      submitAuthResult: vi.fn(),
-      getGenerationStatus: vi.fn(),
-      getGenerationForConversation: vi.fn(),
-    };
+  const generationManagerMock = {
+    startGeneration: vi.fn(),
+    enqueueConversationMessage: vi.fn(),
+    listConversationQueuedMessages: vi.fn(),
+    removeConversationQueuedMessage: vi.fn(),
+    updateConversationQueuedMessage: vi.fn(),
+    subscribeToGeneration: vi.fn(),
+    cancelGeneration: vi.fn(),
+    submitApproval: vi.fn(),
+    submitApprovalByInterrupt: vi.fn(),
+    submitAuthResult: vi.fn(),
+    submitAuthResultByInterrupt: vi.fn(),
+    getGenerationStatus: vi.fn(),
+    getGenerationForConversation: vi.fn(),
+  };
 
-    return {
-      generationFindFirstMock,
-      conversationFindFirstMock,
-      dbMock,
-      generationManagerMock,
-    };
-  });
+  return {
+    generationFindFirstMock,
+    conversationFindFirstMock,
+    generationInterruptFindFirstMock,
+    dbMock,
+    generationManagerMock,
+  };
+});
 
 vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
@@ -102,9 +114,18 @@ describe("generationRouter", () => {
         workspaceId: "ws-1",
       },
     });
+    generationInterruptFindFirstMock.mockResolvedValue({
+      id: "interrupt-1",
+      conversation: {
+        userId: "user-1",
+        workspaceId: "ws-1",
+      },
+    });
     generationManagerMock.cancelGeneration.mockResolvedValue(true);
     generationManagerMock.submitApproval.mockResolvedValue(true);
+    generationManagerMock.submitApprovalByInterrupt.mockResolvedValue(true);
     generationManagerMock.submitAuthResult.mockResolvedValue(true);
+    generationManagerMock.submitAuthResultByInterrupt.mockResolvedValue(true);
     generationManagerMock.enqueueConversationMessage.mockResolvedValue({
       queuedMessageId: "queue-1",
     });
@@ -162,6 +183,7 @@ describe("generationRouter", () => {
       errorMessage: null,
       pauseReason: null,
       debugRunDeadlineMs: null,
+      contentParts: null,
       status: null,
     });
   });
@@ -180,6 +202,7 @@ describe("generationRouter", () => {
       errorMessage: null,
       pauseReason: null,
       debugRunDeadlineMs: null,
+      contentParts: null,
       status: null,
     });
   });
@@ -210,6 +233,7 @@ describe("generationRouter", () => {
       errorMessage: null,
       pauseReason: null,
       debugRunDeadlineMs: null,
+      contentParts: null,
       status: "generating",
     });
   });
@@ -240,6 +264,7 @@ describe("generationRouter", () => {
       errorMessage: "401 insufficient permissions",
       pauseReason: null,
       debugRunDeadlineMs: null,
+      contentParts: null,
       status: "error",
     });
   });
@@ -259,6 +284,14 @@ describe("generationRouter", () => {
       executionPolicy: {
         debugRunDeadlineMs: 30_000,
       },
+      contentParts: [
+        {
+          type: "tool_use",
+          id: "tool-1",
+          name: "Bash",
+          input: { command: "google-gmail list -l 30" },
+        },
+      ],
     });
 
     const result = await generationRouterAny.getActiveGeneration({
@@ -272,6 +305,14 @@ describe("generationRouter", () => {
       errorMessage: null,
       pauseReason: "run_deadline",
       debugRunDeadlineMs: 30_000,
+      contentParts: [
+        {
+          type: "tool_use",
+          id: "tool-1",
+          name: "Bash",
+          input: { command: "google-gmail list -l 30" },
+        },
+      ],
       status: "paused",
     });
   });
@@ -293,6 +334,7 @@ describe("generationRouter", () => {
       },
       createdAt: new Date("2026-02-25T07:40:22.751Z"),
       deadlineAt: new Date("2026-02-25T07:40:52.751Z"),
+      contentParts: null,
     });
 
     const result = await generationRouterAny.getActiveGeneration({
@@ -306,6 +348,7 @@ describe("generationRouter", () => {
       errorMessage: null,
       pauseReason: "run_deadline",
       debugRunDeadlineMs: 30_000,
+      contentParts: null,
       status: "paused",
     });
   });
@@ -402,6 +445,36 @@ describe("generationRouter", () => {
     );
     expect(generationManagerMock.submitAuthResult).toHaveBeenCalledWith(
       "gen-1",
+      "slack",
+      true,
+      "user-1",
+    );
+  });
+
+  it("passes interrupt-based approval and auth calls through to generationManager", async () => {
+    const approvalResult = await generationRouterAny.submitApproval({
+      input: {
+        interruptId: "interrupt-1",
+        decision: "approve",
+      },
+      context,
+    });
+    const authResult = await generationRouterAny.submitAuthResult({
+      input: { interruptId: "interrupt-1", integration: "slack", success: true },
+      context,
+    });
+
+    expect(approvalResult).toEqual({ success: true });
+    expect(authResult).toEqual({ success: true });
+
+    expect(generationManagerMock.submitApprovalByInterrupt).toHaveBeenCalledWith(
+      "interrupt-1",
+      "approve",
+      "user-1",
+      undefined,
+    );
+    expect(generationManagerMock.submitAuthResultByInterrupt).toHaveBeenCalledWith(
+      "interrupt-1",
       "slack",
       true,
       "user-1",

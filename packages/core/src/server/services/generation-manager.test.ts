@@ -3671,6 +3671,62 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("parks a pending plugin write approval even if the park snapshot export hangs", async () => {
+    vi.useFakeTimers();
+    const teardownMock = vi.fn().mockResolvedValue(undefined);
+    const ctx = createCtx({
+      id: "gen-plugin-park-timeout",
+      conversationId: "conv-plugin-park-timeout",
+      runtimeId: "runtime-plugin-park-timeout",
+      runtimeTurnSeq: 3,
+      sessionId: "session-plugin-park-timeout",
+      sandboxId: "sandbox-plugin-park-timeout",
+      approvalHotWaitMs: 1_000,
+      sandbox: {
+        execute: vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        teardown: teardownMock,
+      },
+    });
+    asTestManager().activeGenerations.set(ctx.id, ctx);
+    generationFindFirstMock.mockResolvedValue({
+      id: ctx.id,
+      conversationId: ctx.conversationId,
+      runtimeId: ctx.runtimeId,
+      conversation: {
+        id: ctx.conversationId,
+        userId: ctx.userId,
+        autoApprove: false,
+      },
+    });
+    saveConversationSessionSnapshotMock
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    const result = await generationManager.requestPluginApproval(ctx.id, {
+      providerRequestId: "provider-plugin-park-timeout",
+      toolInput: { command: "slack send -c C123 -t hi" },
+      integration: "slack",
+      operation: "send",
+      command: "slack send -c C123 -t hi",
+    });
+
+    expect(result.decision).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1_250 + 15_000);
+    vi.useRealTimers();
+
+    expect(teardownMock).toHaveBeenCalledTimes(1);
+    expect(suspendRuntimeMock).toHaveBeenCalledWith("runtime-plugin-park-timeout");
+    expect(asTestManager().activeGenerations.has(ctx.id)).toBe(false);
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "awaiting_approval",
+        sandboxId: null,
+        suspendedAt: expect.any(Date),
+      }),
+    );
+  });
+
   it("publishes pending approval to the generation stream without an active in-memory context", async () => {
     generationFindFirstMock.mockResolvedValue({
       id: "gen-detached",

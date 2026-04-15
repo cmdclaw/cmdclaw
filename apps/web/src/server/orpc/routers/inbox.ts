@@ -3,6 +3,7 @@ import {
   conversation,
   coworkerRun,
   coworkerRunEvent,
+  coworkerTagAssignment,
   generation,
   generationInterrupt,
   inboxReadState,
@@ -14,12 +15,13 @@ import { z } from "zod";
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 import { requireActiveWorkspaceAccess } from "../workspace-access";
 
-const inboxStatusSchema = z.enum(["awaiting_approval", "awaiting_auth", "error"]);
+const inboxStatusSchema = z.enum(["awaiting_approval", "awaiting_auth", "paused", "error"]);
 const inboxTypeSchema = z.enum(["all", "coworkers", "chats"]);
 
 type InboxStatus = z.infer<typeof inboxStatusSchema>;
 
 type InboxPendingApproval = {
+  interruptId: string;
   toolUseId: string;
   toolName: string;
   toolInput: unknown;
@@ -29,6 +31,7 @@ type InboxPendingApproval = {
 };
 
 type InboxPendingAuth = {
+  interruptId: string;
   integrations: string[];
   connectedIntegrations: string[];
   reason?: string;
@@ -49,6 +52,7 @@ type InboxListItem =
       generationId: string | null;
       conversationId: string | null;
       errorMessage: string | null;
+      pauseReason?: string | null;
       pendingApproval?: InboxPendingApproval;
       pendingAuth?: InboxPendingAuth;
     }
@@ -63,6 +67,7 @@ type InboxListItem =
       createdAt: Date;
       generationId: string | null;
       errorMessage: string | null;
+      pauseReason?: string | null;
       pendingApproval?: InboxPendingApproval;
       pendingAuth?: InboxPendingAuth;
     };
@@ -86,6 +91,7 @@ function formatCoworkerTitle(coworkerName: string, startedAt: Date): string {
 function normalizePendingApproval(
   interrupt:
     | {
+        id: string;
         providerToolUseId: string;
         display: {
           title: string;
@@ -102,6 +108,7 @@ function normalizePendingApproval(
   }
 
   return {
+    interruptId: interrupt.id,
     toolUseId: interrupt.providerToolUseId,
     toolName: interrupt.display.title,
     toolInput: interrupt.display.toolInput ?? {},
@@ -114,6 +121,7 @@ function normalizePendingApproval(
 function normalizePendingAuth(
   interrupt:
     | {
+        id: string;
         display: {
           authSpec?: {
             integrations: string[];
@@ -132,6 +140,7 @@ function normalizePendingAuth(
   }
 
   return {
+    interruptId: interrupt.id,
     integrations: authSpec.integrations,
     connectedIntegrations: interrupt?.responsePayload?.connectedIntegrations ?? [],
     reason: authSpec.reason,
@@ -248,6 +257,7 @@ const list = protectedProcedure
       type: inboxTypeSchema.default("all"),
       statuses: z.array(inboxStatusSchema).default([]),
       sourceCoworkerId: z.string().optional(),
+      tagIds: z.array(z.string()).optional(),
       query: z.string().default(""),
     }),
   )
@@ -262,6 +272,16 @@ const list = protectedProcedure
       } = await requireActiveWorkspaceAccess(context.user.id);
       const statuses = input.statuses.length > 0 ? input.statuses : inboxStatusSchema.options;
 
+      // If tagIds filter is provided, resolve matching coworker IDs
+      let tagFilteredCoworkerIds: string[] | undefined;
+      if (input.tagIds && input.tagIds.length > 0) {
+        const taggedRows = await context.db
+          .selectDistinct({ coworkerId: coworkerTagAssignment.coworkerId })
+          .from(coworkerTagAssignment)
+          .where(inArray(coworkerTagAssignment.tagId, input.tagIds));
+        tagFilteredCoworkerIds = taggedRows.map((r) => r.coworkerId);
+      }
+
       const coworkerFilters = [
         eq(coworkerRun.ownerId, context.user.id),
         eq(coworkerRun.workspaceId, workspaceId),
@@ -269,6 +289,14 @@ const list = protectedProcedure
       ];
       if (input.sourceCoworkerId && input.type !== "chats") {
         coworkerFilters.push(eq(coworkerRun.coworkerId, input.sourceCoworkerId));
+      }
+      if (tagFilteredCoworkerIds !== undefined) {
+        if (tagFilteredCoworkerIds.length === 0) {
+          // No coworkers match the tags — skip the query entirely
+          coworkerFilters.push(eq(coworkerRun.coworkerId, "__no_match__"));
+        } else {
+          coworkerFilters.push(inArray(coworkerRun.coworkerId, tagFilteredCoworkerIds));
+        }
       }
 
       const coworkerRuns =
@@ -344,6 +372,7 @@ const list = protectedProcedure
               ),
               orderBy: (interrupt, { desc: orderDesc }) => [orderDesc(interrupt.requestedAt)],
               columns: {
+                id: true,
                 generationId: true,
                 kind: true,
                 providerToolUseId: true,
@@ -360,6 +389,7 @@ const list = protectedProcedure
               columns: {
                 id: true,
                 errorMessage: true,
+                completionReason: true,
               },
             });
 
@@ -405,6 +435,10 @@ const list = protectedProcedure
           generationId: run.generationId,
           conversationId: run.generation?.conversationId ?? null,
           errorMessage: run.errorMessage ?? null,
+          pauseReason:
+            run.status === "paused" && generationById.get(run.generationId ?? "")?.completionReason
+              ? generationById.get(run.generationId ?? "")?.completionReason
+              : null,
           pendingApproval:
             run.status === "awaiting_approval" && interrupt?.kind !== "auth"
               ? normalizePendingApproval(interrupt)
@@ -435,6 +469,8 @@ const list = protectedProcedure
           createdAt: conv.createdAt,
           generationId: conv.currentGenerationId,
           errorMessage: generationRecord?.errorMessage ?? null,
+          pauseReason:
+            conv.generationStatus === "paused" ? generationRecord?.completionReason : null,
           pendingApproval:
             conv.generationStatus === "awaiting_approval" && interrupt?.kind !== "auth"
               ? normalizePendingApproval(interrupt)
@@ -446,8 +482,12 @@ const list = protectedProcedure
         });
       }
 
+      const resumablePausedItems = items.filter(
+        (item) => item.status !== "paused" || item.pauseReason === "run_deadline",
+      );
+
       const readStates =
-        items.length === 0
+        resumablePausedItems.length === 0
           ? []
           : await context.db.query.inboxReadState.findMany({
               where: and(
@@ -455,7 +495,7 @@ const list = protectedProcedure
                 eq(inboxReadState.workspaceId, workspaceId),
                 inArray(
                   inboxReadState.itemId,
-                  items.map((item) => item.id),
+                  resumablePausedItems.map((item) => item.id),
                 ),
               ),
               columns: {
@@ -467,7 +507,7 @@ const list = protectedProcedure
       const readStateByItemKey = new Map(
         readStates.map((state) => [`${state.itemKind}:${state.itemId}`, state]),
       );
-      const unreadItems = items.filter((item) => {
+      const unreadItems = resumablePausedItems.filter((item) => {
         const state = readStateByItemKey.get(`${item.kind}:${item.id}`);
         return !state || state.readAt.getTime() < item.updatedAt.getTime();
       });

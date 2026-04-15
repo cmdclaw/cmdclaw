@@ -193,6 +193,7 @@ describe("inboxRouter", () => {
     ]);
     generationInterruptFindManyMock.mockResolvedValue([
       {
+        id: "interrupt-1",
         generationId: "gen-1",
         kind: "runtime_permission",
         providerToolUseId: "tool-1",
@@ -236,6 +237,7 @@ describe("inboxRouter", () => {
       coworkerId: "cw-1",
       conversationId: "conv-cw-1",
       pendingApproval: {
+        interruptId: "interrupt-1",
         toolUseId: "tool-1",
         integration: "slack",
         operation: "send",
@@ -286,6 +288,7 @@ describe("inboxRouter", () => {
     conversationFindManyMock.mockResolvedValue([]);
     generationInterruptFindManyMock.mockResolvedValue([
       {
+        id: "interrupt-auth-1",
         generationId: "gen-1",
         kind: "auth",
         providerToolUseId: "tool-auth",
@@ -315,6 +318,7 @@ describe("inboxRouter", () => {
         runId: "run-1",
         status: "awaiting_auth",
         pendingAuth: {
+          interruptId: "interrupt-auth-1",
           integrations: ["google_gmail"],
           connectedIntegrations: [],
           reason: "Need Gmail",
@@ -350,6 +354,7 @@ describe("inboxRouter", () => {
     ]);
     generationInterruptFindManyMock.mockResolvedValue([
       {
+        id: "interrupt-1",
         generationId: "gen-1",
         kind: "runtime_permission",
         providerToolUseId: "tool-1",
@@ -394,6 +399,72 @@ describe("inboxRouter", () => {
       expect.objectContaining({
         kind: "chat",
         conversationId: "conv-1",
+      }),
+    ]);
+  });
+
+  it("includes paused run-deadline items and excludes other paused generations", async () => {
+    coworkerRunFindManyMock.mockResolvedValue([
+      {
+        id: "run-paused",
+        coworkerId: "cw-1",
+        generationId: "gen-paused",
+        status: "paused",
+        startedAt: new Date("2026-03-30T14:32:00.000Z"),
+        finishedAt: null,
+        errorMessage: null,
+        coworker: { id: "cw-1", name: "Inbox Triage" },
+        generation: { id: "gen-paused", conversationId: "conv-cw-1" },
+        events: [{ createdAt: new Date("2026-03-30T14:40:00.000Z") }],
+      },
+    ]);
+    conversationFindManyMock.mockResolvedValue([
+      {
+        id: "conv-keep",
+        title: "Long email analysis",
+        createdAt: new Date("2026-03-30T13:00:00.000Z"),
+        updatedAt: new Date("2026-03-30T13:35:00.000Z"),
+        currentGenerationId: "gen-keep",
+        generationStatus: "paused",
+      },
+      {
+        id: "conv-drop",
+        title: "Broken paused state",
+        createdAt: new Date("2026-03-30T12:00:00.000Z"),
+        updatedAt: new Date("2026-03-30T12:35:00.000Z"),
+        currentGenerationId: "gen-drop",
+        generationStatus: "paused",
+      },
+    ]);
+    generationInterruptFindManyMock.mockResolvedValue([]);
+    generationFindManyMock.mockResolvedValue([
+      { id: "gen-paused", errorMessage: null, completionReason: "run_deadline" },
+      { id: "gen-keep", errorMessage: null, completionReason: "run_deadline" },
+      { id: "gen-drop", errorMessage: null, completionReason: "broken_runtime_state" },
+    ]);
+
+    const result = (await inboxRouterAny.list({
+      input: {
+        limit: 20,
+        type: "all",
+        statuses: ["paused"],
+        query: "",
+      },
+      context,
+    })) as { items: Array<Record<string, unknown>> };
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        kind: "coworker",
+        runId: "run-paused",
+        status: "paused",
+        pauseReason: "run_deadline",
+      }),
+      expect.objectContaining({
+        kind: "chat",
+        conversationId: "conv-keep",
+        status: "paused",
+        pauseReason: "run_deadline",
       }),
     ]);
   });

@@ -174,11 +174,16 @@ export async function GET(request: NextRequest) {
     return redirectUrl;
   };
 
-  const resolveAuthResumeContext = (): { generationId?: string; integration?: string } => {
+  const resolveAuthResumeContext = (): {
+    generationId?: string;
+    interruptId?: string;
+    integration?: string;
+  } => {
     try {
       const redirectUrl = buildRequestAwareUrl(stateData.redirectUrl, request);
       return {
         generationId: redirectUrl.searchParams.get("generation_id") ?? undefined,
+        interruptId: redirectUrl.searchParams.get("interrupt_id") ?? undefined,
         integration: redirectUrl.searchParams.get("auth_complete") ?? undefined,
       };
     } catch {
@@ -370,6 +375,9 @@ export async function GET(request: NextRequest) {
       const dynamicsRedirect = new URL("/integrations", getRequestAwareOrigin(request));
       dynamicsRedirect.searchParams.set("dynamics_select", "true");
       const authResume = resolveAuthResumeContext();
+      if (authResume.interruptId) {
+        dynamicsRedirect.searchParams.set("interrupt_id", authResume.interruptId);
+      }
       if (authResume.generationId) {
         dynamicsRedirect.searchParams.set("generation_id", authResume.generationId);
       }
@@ -380,7 +388,18 @@ export async function GET(request: NextRequest) {
     }
 
     const authResume = resolveAuthResumeContext();
-    if (authResume.generationId) {
+    if (authResume.interruptId) {
+      try {
+        await generationManager.submitAuthResultByInterrupt(
+          authResume.interruptId,
+          authResume.integration ?? stateData.type,
+          true,
+          sessionData.user.id,
+        );
+      } catch (resumeError) {
+        console.warn("[OAuth callback] Failed to auto-submit auth result:", resumeError);
+      }
+    } else if (authResume.generationId) {
       try {
         await generationManager.submitAuthResult(
           authResume.generationId,

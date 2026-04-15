@@ -46,12 +46,8 @@ import {
   useCoworkerList,
 } from "@/orpc/hooks";
 
-const RUNNING_CONVERSATION_STATUSES = new Set([
-  "generating",
-  "awaiting_approval",
-  "awaiting_auth",
-  "paused",
-]);
+const RUNNING_CONVERSATION_STATUSES = new Set(["generating"]);
+const HUMAN_INPUT_CONVERSATION_STATUSES = new Set(["awaiting_approval", "awaiting_auth", "paused"]);
 const RECENT_CHATS_LOAD_MORE_THRESHOLD_PX = 24;
 
 function formatRelativeShort(date: Date) {
@@ -85,6 +81,12 @@ function formatRelativeShortNullable(value?: Date | string | null) {
 
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? formatRelativeShort(date) : "—";
+}
+
+function HumanInputDot() {
+  return (
+    <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" aria-label="Needs human input" />
+  );
 }
 
 type ConversationListData = {
@@ -370,6 +372,9 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                     const isRunning = RUNNING_CONVERSATION_STATUSES.has(
                       conversation.generationStatus,
                     );
+                    const needsHumanInput = HUMAN_INPUT_CONVERSATION_STATUSES.has(
+                      conversation.generationStatus,
+                    );
                     const hasUnread = hasUnreadConversationResults({
                       isConversationActive: active,
                       isConversationRunning: isRunning,
@@ -395,6 +400,8 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                         >
                           {isRunning ? (
                             <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                          ) : needsHumanInput ? (
+                            <HumanInputDot />
                           ) : hasUnread ? (
                             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
                           ) : null}

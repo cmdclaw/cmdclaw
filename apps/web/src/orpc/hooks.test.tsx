@@ -70,6 +70,29 @@ function HookHarness() {
   );
 }
 
+function ForwardingHarness() {
+  const { startGeneration } = useGeneration();
+  const handleStart = React.useCallback(() => {
+    void startGeneration(
+      {
+        conversationId: "conv-1",
+        content: "continue",
+        model: "openai/gpt-5.4-mini",
+        resumePausedGenerationId: "gen-paused",
+        debugRunDeadlineMs: 60_000,
+        debugApprovalHotWaitMs: 5_000,
+      },
+      {},
+    );
+  }, [startGeneration]);
+
+  return (
+    <button type="button" onClick={handleStart}>
+      Forward
+    </button>
+  );
+}
+
 describe("useGeneration", () => {
   beforeEach(() => {
     runGenerationStreamMock.mockReset();
@@ -110,6 +133,40 @@ describe("useGeneration", () => {
       expect(screen.getByTestId("phase")).toHaveTextContent(GENERATION_ERROR_PHASES.START_RPC);
       expect(screen.getByTestId("code")).toHaveTextContent(
         START_GENERATION_ERROR_CODES.MODEL_ACCESS_DENIED,
+      );
+    });
+  });
+
+  it("forwards debug generation controls unchanged", async () => {
+    runGenerationStreamMock.mockResolvedValueOnce(null);
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ForwardingHarness />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+
+    await waitFor(() => {
+      expect(runGenerationStreamMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            conversationId: "conv-1",
+            content: "continue",
+            resumePausedGenerationId: "gen-paused",
+            debugRunDeadlineMs: 60_000,
+            debugApprovalHotWaitMs: 5_000,
+          }),
+        }),
       );
     });
   });

@@ -51,6 +51,7 @@ export type SandboxFileData = {
 };
 
 export type GenerationPendingApprovalData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   toolUseId: string;
@@ -73,6 +74,7 @@ export type GenerationApprovalData = {
 };
 
 export type AuthNeededData = {
+  interruptId: string;
   generationId: string;
   conversationId: string;
   integrations: string[];
@@ -181,6 +183,7 @@ export type GenerationStreamEvent = {
   | { type: "tool_result"; toolName: string; result: unknown; toolUseId?: string }
   | {
       type: "interrupt_pending";
+      interruptId: string;
       generationId: string;
       conversationId: string;
       kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
@@ -199,6 +202,7 @@ export type GenerationStreamEvent = {
     }
   | {
       type: "interrupt_resolved";
+      interruptId: string;
       status: "pending" | "accepted" | "rejected" | "expired" | "cancelled";
       kind: "plugin_write" | "runtime_permission" | "runtime_question" | "auth";
       providerToolUseId: string;

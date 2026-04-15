@@ -14,6 +14,7 @@ import { InboxAgentFilter } from "@/components/inbox/inbox-agent-filter";
 import { InboxCreateInput } from "@/components/inbox/inbox-create-input";
 import { InboxList } from "@/components/inbox/inbox-list";
 import { useIsAdmin } from "@/hooks/use-is-admin";
+import { client } from "@/orpc/client";
 import {
   useCancelGeneration,
   useCoworkerList,
@@ -28,8 +29,8 @@ import {
   useTriggerCoworker,
 } from "@/orpc/hooks";
 
-const ALL_STATUSES: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth", "error"];
-const DEFAULT_STATUS_FILTERS: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth"];
+const ALL_STATUSES: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth", "paused", "error"];
+const DEFAULT_STATUS_FILTERS: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth", "paused"];
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
@@ -53,6 +54,7 @@ function normalizeInboxItems(items: InboxItem[] | undefined): InboxItem[] {
         generationId: item.generationId,
         conversationId: item.conversationId,
         errorMessage: item.errorMessage,
+        pauseReason: item.pauseReason,
         pendingApproval: item.pendingApproval,
         pendingAuth: item.pendingAuth,
       });
@@ -70,6 +72,7 @@ function normalizeInboxItems(items: InboxItem[] | undefined): InboxItem[] {
       createdAt: toDate(item.createdAt),
       generationId: item.generationId,
       errorMessage: item.errorMessage,
+      pauseReason: item.pauseReason,
       pendingApproval: item.pendingApproval,
       pendingAuth: item.pendingAuth,
     });
@@ -114,12 +117,12 @@ function InboxPageContent() {
 
   useEffect(() => {
     const authComplete = searchParams.get("auth_complete");
-    const generationId = searchParams.get("generation_id");
-    if (!authComplete || !generationId) {
+    const interruptId = searchParams.get("interrupt_id");
+    if (!authComplete || !interruptId) {
       return;
     }
 
-    const handledKey = `${generationId}:${authComplete}`;
+    const handledKey = `${interruptId}:${authComplete}`;
     if (authCallbackHandledRef.current === handledKey) {
       return;
     }
@@ -127,7 +130,7 @@ function InboxPageContent() {
 
     submitAuthResult
       .mutateAsync({
-        generationId,
+        interruptId,
         integration: authComplete,
         success: true,
       })
@@ -207,14 +210,14 @@ function InboxPageContent() {
 
   const handleApprove = useCallback(
     async (item: InboxItem, questionAnswers?: string[][]) => {
-      if (!item.generationId || !item.pendingApproval) {
+      const pendingApproval = item.pendingApproval;
+      if (!pendingApproval) {
         return;
       }
 
       await runItemAction(item.id, async () => {
         await submitApproval.mutateAsync({
-          generationId: item.generationId!,
-          toolUseId: item.pendingApproval!.toolUseId,
+          interruptId: pendingApproval.interruptId,
           decision: "approve",
           questionAnswers,
         });
@@ -225,14 +228,14 @@ function InboxPageContent() {
 
   const handleDeny = useCallback(
     async (item: InboxItem) => {
-      if (!item.generationId || !item.pendingApproval) {
+      const pendingApproval = item.pendingApproval;
+      if (!pendingApproval) {
         return;
       }
 
       await runItemAction(item.id, async () => {
         await submitApproval.mutateAsync({
-          generationId: item.generationId!,
-          toolUseId: item.pendingApproval!.toolUseId,
+          interruptId: pendingApproval.interruptId,
           decision: "deny",
         });
       });
@@ -253,9 +256,38 @@ function InboxPageContent() {
     [cancelGeneration, runItemAction],
   );
 
+  const handleContinue = useCallback(
+    async (item: InboxItem) => {
+      if (!item.generationId) {
+        toast.error("This item cannot be continued because it has no paused generation.");
+        return;
+      }
+
+      const conversationId = item.kind === "chat" ? item.conversationId : item.conversationId;
+      if (!conversationId) {
+        toast.error("This item cannot be continued because it has no linked conversation.");
+        return;
+      }
+
+      await runItemAction(item.id, async () => {
+        await client.generation.startGeneration({
+          conversationId,
+          content: "continue",
+          resumePausedGenerationId: item.generationId!,
+        });
+
+        router.push(
+          item.kind === "chat" ? `/chat/${conversationId}` : `/coworkers/runs/${item.runId}`,
+        );
+      });
+    },
+    [router, runItemAction],
+  );
+
   const handleAuthConnect = useCallback(
     async (item: InboxItem, integration: string) => {
-      if (!item.generationId) {
+      const interruptId = item.pendingAuth?.interruptId;
+      if (!interruptId) {
         return;
       }
 
@@ -280,7 +312,7 @@ function InboxPageContent() {
             | "dynamics"
             | "reddit"
             | "twitter",
-          redirectUrl: `${window.location.origin}/inbox?auth_complete=${integration}&generation_id=${item.generationId}`,
+          redirectUrl: `${window.location.origin}/inbox?auth_complete=${integration}&interrupt_id=${interruptId}`,
         });
         window.location.href = result.authUrl;
       });
@@ -291,13 +323,14 @@ function InboxPageContent() {
   const handleAuthCancel = useCallback(
     async (item: InboxItem) => {
       const integration = item.pendingAuth?.integrations[0];
-      if (!item.generationId || !integration) {
+      const interruptId = item.pendingAuth?.interruptId;
+      if (!integration || !interruptId) {
         return;
       }
 
       await runItemAction(item.id, async () => {
         await submitAuthResult.mutateAsync({
-          generationId: item.generationId!,
+          interruptId,
           integration,
           success: false,
         });
@@ -451,6 +484,14 @@ function InboxPageContent() {
     },
     [handleStop],
   );
+  const handleContinueWithToast = useCallback(
+    (item: InboxItem) => {
+      void handleContinue(item).catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to continue paused run.");
+      });
+    },
+    [handleContinue],
+  );
   const handleAuthConnectWithToast = useCallback(
     (item: InboxItem, integration: string) => {
       void handleAuthConnect(item, integration).catch((error) => {
@@ -545,6 +586,7 @@ function InboxPageContent() {
           onApprove={handleApproveWithToast}
           onDeny={handleDenyWithToast}
           onStop={handleStopWithToast}
+          onContinue={handleContinueWithToast}
           onAuthConnect={handleAuthConnectWithToast}
           onAuthCancel={handleAuthCancelWithToast}
           onSaveEdit={handleSaveEditWithToast}

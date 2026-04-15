@@ -1,6 +1,7 @@
-export type InboxItemStatus = "awaiting_approval" | "awaiting_auth" | "error";
+export type InboxItemStatus = "awaiting_approval" | "awaiting_auth" | "paused" | "error";
 
 export type ToolApprovalData = {
+  interruptId: string;
   toolUseId: string;
   toolName: string;
   toolInput: unknown;
@@ -10,6 +11,7 @@ export type ToolApprovalData = {
 };
 
 export type AuthRequestData = {
+  interruptId: string;
   integrations: string[];
   connectedIntegrations: string[];
   reason?: string;
@@ -29,6 +31,7 @@ export type InboxCoworkerItem = {
   generationId: string | null;
   conversationId: string | null;
   errorMessage: string | null;
+  pauseReason?: string | null;
   pendingApproval?: ToolApprovalData;
   pendingAuth?: AuthRequestData;
 };
@@ -44,6 +47,7 @@ export type InboxChatItem = {
   createdAt: Date;
   generationId: string | null;
   errorMessage: string | null;
+  pauseReason?: string | null;
   pendingApproval?: ToolApprovalData;
   pendingAuth?: AuthRequestData;
 };

@@ -25,6 +25,7 @@ type DynamicsMetadata = {
 const completeSchema = z.object({
   instanceUrl: z.string().url(),
   generationId: z.string().optional(),
+  interruptId: z.string().optional(),
   integration: z.string().optional(),
 });
 
@@ -103,6 +104,9 @@ export async function POST(request: Request) {
   const redirectUrl = new URL("/integrations", getRedirectBaseUrl(request));
   if (parsed.data.generationId) {
     redirectUrl.searchParams.set("generation_id", parsed.data.generationId);
+  }
+  if (parsed.data.interruptId) {
+    redirectUrl.searchParams.set("interrupt_id", parsed.data.interruptId);
   }
   if (parsed.data.integration) {
     redirectUrl.searchParams.set("auth_complete", parsed.data.integration);

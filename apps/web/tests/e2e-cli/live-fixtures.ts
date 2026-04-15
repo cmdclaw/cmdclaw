@@ -27,7 +27,7 @@ export const transientRetryDelayMs = Number(process.env.E2E_TRANSIENT_RETRY_DELA
 
 export const expectedUserEmail = "baptiste@heybap.com";
 export const sourceChannelName = "cmdclaw-experiments";
-export const targetChannelName = "e2e-slack-testing";
+export const targetChannelName = process.env.E2E_SLACK_TARGET_CHANNEL ?? "e2e-slack-testing";
 export const echoPrefix = "test message: the previous message is:";
 
 export const questionPrompt =
@@ -43,6 +43,10 @@ export type CommandResult = {
   stderr: string;
   timedOut: boolean;
 };
+
+export function buildCliCommandArgs(...args: string[]): string[] {
+  return ["run", "--cwd", "../cli", "start", "--", ...args];
+}
 
 type SlackMessage = {
   ts?: string;
@@ -179,8 +183,8 @@ export function assertExitOk(result: CommandResult, label: string): void {
 }
 
 export async function ensureCliAuth(): Promise<void> {
-  const authResult = await runBunCommand(["run", "cmdclaw", "--", "auth", "login"], 120_000);
-  assertExitOk(authResult, "bun run cmdclaw -- auth login");
+  const authResult = await runBunCommand(buildCliCommandArgs("auth", "login"), 120_000);
+  assertExitOk(authResult, "bun run --cwd ../cli start -- auth login");
 }
 
 export async function withIntegrationTokensTemporarilyRemoved<T>(args: {
@@ -243,7 +247,7 @@ export function getCliClient() {
   const config = defaultProfileStore.load(serverUrl);
   if (!config?.token) {
     throw new Error(
-      `Missing CLI auth token for ${serverUrl}. Run: bun run cmdclaw -- auth login --server ${serverUrl}`,
+      `Missing CLI auth token for ${serverUrl}. Run: bun run --cwd ../cli start -- auth login --server ${serverUrl}`,
     );
   }
   return createRpcClient(serverUrl, config.token);
@@ -279,7 +283,7 @@ export async function runChatMessage(args: {
   sandboxProvider?: SandboxProvider;
   timeoutMs?: number;
 }): Promise<CommandResult> {
-  const commandArgs = ["run", "cmdclaw", "--", "chat", "--message", args.message, "--no-validate"];
+  const commandArgs = buildCliCommandArgs("chat", "--message", args.message, "--no-validate");
 
   if (args.model) {
     commandArgs.push("--model", args.model);

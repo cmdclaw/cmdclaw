@@ -155,7 +155,9 @@ function findSourceMention(
 
       if (codeKeys.has(alias)) {
         score = Math.max(score, 100);
-      } else if ([...codeKeys].some((candidate) => candidate.includes(alias) || alias.includes(candidate))) {
+      } else if (
+        [...codeKeys].some((candidate) => candidate.includes(alias) || alias.includes(candidate))
+      ) {
         score = Math.max(score, 80);
       } else if (normalizeExecutorMatchKey(code).includes(alias)) {
         score = Math.max(score, 60);
@@ -264,8 +266,7 @@ export function getExecutorDisplayMetadata(
     null;
   const source = findSourceMention(code, toolPaths, sources);
   const sourceNamespace =
-    source?.namespace ??
-    (toolPath ? extractExecutorSourceNamespace(toolPath) : null);
+    source?.namespace ?? (toolPath ? extractExecutorSourceNamespace(toolPath) : null);
   const integration =
     detectIntegrationFromSource(source, sourceNamespace) ??
     (sourceNamespace && isDisplayIntegrationType(sourceNamespace) ? sourceNamespace : undefined);
