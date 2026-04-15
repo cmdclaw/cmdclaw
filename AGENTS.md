@@ -18,6 +18,9 @@ This repository is organized into several top-level folders. Each folder can hav
 Avoid mocks as much as possible, Test actual implementation, do not duplicate logic into tests
 try to colocated tests with the code they test when relevant. for collacting use this format `*.test.ts` or `*.e2e.test.ts`
 
+## Lint policy
+- Every lint setting modification requires explicit user approval.
+- Do not change lint rules or lint configuration without explicit user approval.
 
 ## Commit policy
 -  Do not commit unless the user explicitly asks.
