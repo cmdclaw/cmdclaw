@@ -1,11 +1,22 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
+
+const SHOWCASE_CARD_INITIAL = { opacity: 0, y: 20 } as const;
+const SHOWCASE_CARD_WHILE_IN_VIEW = { opacity: 1, y: 0 } as const;
+const SHOWCASE_CARD_VIEWPORT = { once: true, margin: "-80px" } as const;
+const SHOWCASE_HOVER = { scale: 1.02 } as const;
+const SHOWCASE_HOVER_TRANSITION = { type: "spring", stiffness: 300, damping: 25 } as const;
+const RECENT_ACTIVITY_INITIAL = { height: 0, opacity: 0 } as const;
+const RECENT_ACTIVITY_ANIMATE = { height: "auto", opacity: 1 } as const;
+const RECENT_ACTIVITY_EXIT = { height: 0, opacity: 0 } as const;
 
 /* ── Demo data ── */
 
@@ -71,19 +82,32 @@ const SHOWCASE_COWORKERS: ShowcaseCoworker[] = [
 
 function ShowcaseCard({ coworker, index }: { coworker: ShowcaseCoworker; index: number }) {
   const [isHovered, setIsHovered] = useState(false);
+  const handleMouseEnter = useCallback(() => {
+    setIsHovered(true);
+  }, []);
+  const handleMouseLeave = useCallback(() => {
+    setIsHovered(false);
+  }, []);
+  const transition = useMemo(
+    () => ({
+      duration: 0.4,
+      delay: index * 0.15,
+    }),
+    [index],
+  );
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.4, delay: index * 0.15 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      initial={SHOWCASE_CARD_INITIAL}
+      whileInView={SHOWCASE_CARD_WHILE_IN_VIEW}
+      viewport={SHOWCASE_CARD_VIEWPORT}
+      transition={transition}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <motion.div
-        whileHover={{ scale: 1.02 }}
-        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        whileHover={SHOWCASE_HOVER}
+        transition={SHOWCASE_HOVER_TRANSITION}
         className="border-border/60 bg-background space-y-3 rounded-xl border p-5 shadow-sm"
       >
         {/* Header */}
@@ -140,9 +164,9 @@ function ShowcaseCard({ coworker, index }: { coworker: ShowcaseCoworker; index: 
         <AnimatePresence>
           {isHovered && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
+              initial={RECENT_ACTIVITY_INITIAL}
+              animate={RECENT_ACTIVITY_ANIMATE}
+              exit={RECENT_ACTIVITY_EXIT}
               transition={{ duration: 0.25, ease: "easeOut" }}
               className="overflow-hidden"
             >

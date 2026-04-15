@@ -1,11 +1,12 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { Check, Loader2, ShieldCheck, KeyRound, Inbox } from "lucide-react";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
-import { CursorProvider, Cursor, CursorFollow } from "@/components/ui/cursor";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -55,23 +56,11 @@ const AGENTS: ShowcaseAgent[] = [
 
 type InboxItemStatus = "awaiting_approval" | "awaiting_auth" | "completed" | "running";
 
-type CursorUser = {
-  name: string;
-  color: string;
-};
-
-const CURSOR_USERS: CursorUser[] = [
-  { name: "Sarah", color: "#3B82F6" },
-  { name: "James", color: "#10B981" },
-  { name: "Priya", color: "#F59E0B" },
-  { name: "Alex", color: "#8B5CF6" },
-];
-
 type DismissAction = "approve" | "deny" | "connect";
 
 type TimelineEvent =
   | { type: "add"; item: InboxItemData }
-  | { type: "dismiss"; itemId: string; user: CursorUser; action: DismissAction }
+  | { type: "dismiss"; itemId: string; action: DismissAction }
   | { type: "pulse"; agentIndex: number }
   | { type: "pause" };
 
@@ -120,7 +109,7 @@ const TIMELINE: TimelineEvent[] = [
     },
   },
   { type: "pause" },
-  { type: "dismiss", itemId: "a", user: CURSOR_USERS[0]!, action: "approve" },
+  { type: "dismiss", itemId: "a", action: "approve" },
   { type: "pulse", agentIndex: 0 },
   {
     type: "add",
@@ -132,7 +121,7 @@ const TIMELINE: TimelineEvent[] = [
       integration: "hubspot",
     },
   },
-  { type: "dismiss", itemId: "b", user: CURSOR_USERS[1]!, action: "approve" },
+  { type: "dismiss", itemId: "b", action: "approve" },
   { type: "pulse", agentIndex: 3 },
   {
     type: "add",
@@ -145,7 +134,7 @@ const TIMELINE: TimelineEvent[] = [
     },
   },
   { type: "pause" },
-  { type: "dismiss", itemId: "c", user: CURSOR_USERS[2]!, action: "connect" },
+  { type: "dismiss", itemId: "c", action: "connect" },
   { type: "pulse", agentIndex: 1 },
   {
     type: "add",
@@ -157,7 +146,7 @@ const TIMELINE: TimelineEvent[] = [
       integration: "slack",
     },
   },
-  { type: "dismiss", itemId: "d", user: CURSOR_USERS[3]!, action: "deny" },
+  { type: "dismiss", itemId: "d", action: "deny" },
   { type: "pulse", agentIndex: 2 },
   {
     type: "add",
@@ -170,9 +159,9 @@ const TIMELINE: TimelineEvent[] = [
     },
   },
   { type: "pause" },
-  { type: "dismiss", itemId: "e", user: CURSOR_USERS[0]!, action: "approve" },
-  { type: "dismiss", itemId: "f", user: CURSOR_USERS[1]!, action: "approve" },
-  { type: "dismiss", itemId: "g", user: CURSOR_USERS[2]!, action: "deny" },
+  { type: "dismiss", itemId: "e", action: "approve" },
+  { type: "dismiss", itemId: "f", action: "approve" },
+  { type: "dismiss", itemId: "g", action: "deny" },
   { type: "pause" },
 ];
 
@@ -301,7 +290,9 @@ function InboxRow({
     const measure = () => {
       const btn = statusRef.current;
       const container = inboxRef.current;
-      if (!btn || !container) return;
+      if (!btn || !container) {
+        return;
+      }
       const btnRect = btn.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
       buttonPositions.set(item.id, {
@@ -312,7 +303,9 @@ function InboxRow({
     measure();
     // Re-measure on layout shifts
     const ro = new ResizeObserver(measure);
-    if (statusRef.current) ro.observe(statusRef.current);
+    if (statusRef.current) {
+      ro.observe(statusRef.current);
+    }
     return () => {
       ro.disconnect();
       buttonPositions.delete(item.id);
@@ -402,61 +395,6 @@ function InboxRow({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   ANIMATED CURSOR
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-function CursorArrow({ color }: { color: string }) {
-  return (
-    <svg className="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-      <path
-        fill={color}
-        d="M1.8 4.4 7 36.2c.3 1.8 2.6 2.3 3.6.8l3.9-5.7c1.7-2.5 4.5-4.1 7.5-4.3l6.9-.5c1.8-.1 2.5-2.4 1.1-3.5L5 2.5c-1.4-1.1-3.5 0-3.3 1.9Z"
-      />
-    </svg>
-  );
-}
-
-function NamedCursor({
-  visible,
-  x,
-  y,
-  user,
-  isClicking,
-}: {
-  visible: boolean;
-  x: number;
-  y: number;
-  user: CursorUser | null;
-  isClicking: boolean;
-}) {
-  return (
-    <motion.div
-      animate={{
-        opacity: visible ? 1 : 0,
-        x,
-        y,
-        scale: visible ? (isClicking ? 0.85 : 1) : 0.8,
-      }}
-      transition={{ duration: isClicking ? 0.1 : 0.5, ease: "easeInOut" }}
-      className="pointer-events-none absolute z-30"
-      style={{ left: 0, top: 0 }}
-    >
-      <CursorArrow color={user?.color ?? "#6B7280"} />
-      {user && (
-        <motion.span
-          initial={{ opacity: 0, scale: 0.8, x: -4 }}
-          animate={{ opacity: 1, scale: 1, x: 0 }}
-          className="absolute top-4 left-3 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white shadow-lg"
-          style={{ backgroundColor: user.color }}
-        >
-          {user.name}
-        </motion.span>
-      )}
-    </motion.div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
    ORCHESTRATOR — runs the timeline loop
    ═══════════════════════════════════════════════════════════════════════════════ */
 
@@ -478,16 +416,12 @@ const INITIAL_INBOX_ITEMS: InboxItemData[] = [
   },
 ];
 
-function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) {
+function useTimelineLoop(isActive: boolean, _buttonPositions: ButtonPositionMap) {
   const [items, setItems] = useState<InboxItemData[]>(INITIAL_INBOX_ITEMS);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [cursorTargetId, setCursorTargetId] = useState<string | null>(null);
   const [resolvedActions, setResolvedActions] = useState<Record<string, DismissAction>>({});
   const [pulsingAgent, setPulsingAgent] = useState<number | null>(null);
-  const [cursorVisible, setCursorVisible] = useState(false);
-  const [cursorClicking, setCursorClicking] = useState(false);
-  const [cursorPos, setCursorPos] = useState({ x: 300, y: 200 });
-  const [cursorUser, setCursorUser] = useState<CursorUser | null>(null);
   const stepRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -495,9 +429,7 @@ function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) 
     const step = stepRef.current;
 
     if (step >= TIMELINE.length) {
-      setCursorVisible(false);
       setCursorTargetId(null);
-      setCursorUser(null);
       setPulsingAgent(null);
       timerRef.current = setTimeout(() => {
         setItems(INITIAL_INBOX_ITEMS);
@@ -520,65 +452,27 @@ function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) 
         break;
 
       case "dismiss": {
-        const needsCursor = event.action === "approve" || event.action === "connect";
-
-        if (needsCursor) {
-          // Full cursor animation: glide → click → status change → slide away
-          setCursorVisible(true);
-          setCursorClicking(false);
-          setCursorUser(event.user);
-          const btnPos = buttonPositions.get(event.itemId);
-          const itemIdx = items.findIndex((i) => i.id === event.itemId);
-          const fallbackY = 44 + 52 * Math.max(0, itemIdx) + 14;
-          const targetX = btnPos?.x ?? 300;
-          const targetY = btnPos?.y ?? fallbackY;
-
-          // Start cursor offset to the left
-          setCursorPos({ x: targetX - 100, y: targetY });
-
-          // Glide to the button
-          timerRef.current = setTimeout(() => {
-            setCursorTargetId(event.itemId);
-            setCursorPos({ x: targetX, y: targetY });
-
-            // Click animation
+        setCursorTargetId(event.itemId);
+        timerRef.current = setTimeout(
+          () => {
+            setResolvedActions((prev) => ({ ...prev, [event.itemId]: event.action }));
             timerRef.current = setTimeout(() => {
-              setCursorClicking(true);
-
-              // Release click — status changes
+              setDismissingId(event.itemId);
               timerRef.current = setTimeout(() => {
-                setCursorClicking(false);
-                setResolvedActions((prev) => ({ ...prev, [event.itemId]: event.action }));
-
-                // Pause then slide away
-                timerRef.current = setTimeout(() => {
-                  setDismissingId(event.itemId);
-                  timerRef.current = setTimeout(() => {
-                    setItems((prev) => prev.filter((i) => i.id !== event.itemId));
-                    setDismissingId(null);
-                    setCursorTargetId(null);
-                    setCursorVisible(false);
-                    setCursorUser(null);
-                    setResolvedActions((prev) => {
-                      const next = { ...prev };
-                      delete next[event.itemId];
-                      return next;
-                    });
-                    timerRef.current = setTimeout(runStep, 250);
-                  }, 400);
-                }, 600);
-              }, 120);
-            }, 400);
-          }, 300);
-        } else {
-          // No cursor — just silently slide the item away
-          setDismissingId(event.itemId);
-          timerRef.current = setTimeout(() => {
-            setItems((prev) => prev.filter((i) => i.id !== event.itemId));
-            setDismissingId(null);
-            timerRef.current = setTimeout(runStep, 250);
-          }, 400);
-        }
+                setItems((prev) => prev.filter((i) => i.id !== event.itemId));
+                setDismissingId(null);
+                setCursorTargetId(null);
+                setResolvedActions((prev) => {
+                  const next = { ...prev };
+                  delete next[event.itemId];
+                  return next;
+                });
+                timerRef.current = setTimeout(runStep, 250);
+              }, 400);
+            }, 600);
+          },
+          event.action === "approve" || event.action === "connect" ? 420 : 120,
+        );
         break;
       }
 
@@ -590,9 +484,7 @@ function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) 
         break;
 
       case "pause":
-        setCursorVisible(false);
         setCursorTargetId(null);
-        setCursorUser(null);
         timerRef.current = setTimeout(runStep, PAUSE_DURATION_MS);
         break;
     }
@@ -600,10 +492,14 @@ function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) 
   }, [items]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      return;
+    }
     timerRef.current = setTimeout(runStep, 1200);
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
@@ -618,10 +514,6 @@ function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) 
     cursorTargetId,
     resolvedActions,
     pulsingAgent,
-    cursorVisible,
-    cursorClicking,
-    cursorPos,
-    cursorUser,
   };
 }
 
@@ -635,17 +527,10 @@ export function TeamShowcaseSection() {
   const isInView = useInView(sectionRef, { once: false, margin: "-120px" });
   const buttonPositionsRef = useRef<ButtonPositionMap>(new Map());
 
-  const {
-    items,
-    dismissingId,
-    cursorTargetId,
-    resolvedActions,
-    pulsingAgent,
-    cursorVisible,
-    cursorClicking,
-    cursorPos,
-    cursorUser,
-  } = useTimelineLoop(isInView, buttonPositionsRef.current);
+  const { items, dismissingId, cursorTargetId, resolvedActions, pulsingAgent } = useTimelineLoop(
+    isInView,
+    buttonPositionsRef.current,
+  );
 
   const pendingCount = items.filter(
     (i) => i.status === "awaiting_approval" || i.status === "awaiting_auth",
@@ -729,21 +614,6 @@ export function TeamShowcaseSection() {
                 ))}
               </AnimatePresence>
             </div>
-
-            {/* TODO: re-enable cursors later
-            <NamedCursor visible={cursorVisible} x={cursorPos.x} y={cursorPos.y} user={cursorUser} isClicking={cursorClicking} />
-
-            <CursorProvider>
-              <Cursor>
-                <CursorArrow color="#9B4D3C" />
-              </Cursor>
-              <CursorFollow>
-                <div className="rounded-full bg-[#9B4D3C] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                  You
-                </div>
-              </CursorFollow>
-            </CursorProvider>
-            */}
           </motion.div>
         </div>
       </div>

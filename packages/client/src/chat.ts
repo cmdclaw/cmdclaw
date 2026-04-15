@@ -37,10 +37,15 @@ type ChatRunOptions = {
     data: GenerationPendingApprovalData,
     client: CmdclawApiClient,
   ) => Promise<"handled" | "deferred">;
+  onApprovalResult?: (
+    toolUseId: string,
+    decision: "approved" | "denied",
+  ) => void | Promise<void>;
   onAuthNeeded?: (
     data: AuthNeededData,
     client: CmdclawApiClient,
   ) => Promise<"handled" | "deferred">;
+  onAuthResult?: (success: boolean, integrations?: string[]) => void | Promise<void>;
   onStatusChange?: (status: string, metadata?: StatusChangeMetadata) => void | Promise<void>;
 };
 
@@ -144,8 +149,9 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
           mutable.pendingApproval = data;
           abortController.abort();
         },
-        onApprovalResult: (toolUseId, decision) => {
+        onApprovalResult: async (toolUseId, decision) => {
           runtime.handleApprovalResult(toolUseId, decision);
+          await options.onApprovalResult?.(toolUseId, decision);
         },
         onApproval: (data) => {
           runtime.handleApproval(data);
@@ -168,8 +174,9 @@ export async function runChatSession(options: ChatRunOptions): Promise<Generatio
         onAuthProgress: (connected, remaining) => {
           runtime.handleAuthProgress(connected, remaining);
         },
-        onAuthResult: (success) => {
+        onAuthResult: async (success, integrations) => {
           runtime.handleAuthResult(success);
+          await options.onAuthResult?.(success, integrations);
         },
         onSandboxFile: (file) => {
           runtime.handleSandboxFile(file);

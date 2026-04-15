@@ -389,19 +389,28 @@ export function InteractiveCoworkerCard({
   );
 
   const coworkerTags = coworker.tags ?? [];
-  const currentTagIds = coworkerTags.map((t) => t.id);
+  const currentTagIds = useMemo(() => (coworker.tags ?? []).map((tag) => tag.id), [coworker.tags]);
 
   const [menuPanel, setMenuPanel] = useState<"main" | "tags">("main");
+  const handleMenuOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setMenuPanel("main");
+    }
+  }, []);
+  const handleCloseAutoFocus = useCallback((event: Event) => {
+    event.preventDefault();
+  }, []);
+  const handleOpenTagsPanel = useCallback((event: Event) => {
+    event.preventDefault();
+    setMenuPanel("tags");
+  }, []);
+  const handleBackToMainPanel = useCallback(() => {
+    setMenuPanel("main");
+  }, []);
 
   // oxlint-disable-next-line react-perf/jsx-no-jsx-as-prop -- slot pattern
   const actionsMenu = (
-    <DropdownMenu
-      onOpenChange={(open) => {
-        if (!open) {
-          setMenuPanel("main");
-        }
-      }}
-    >
+    <DropdownMenu onOpenChange={handleMenuOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -420,7 +429,7 @@ export function InteractiveCoworkerCard({
         className="w-52"
         onClick={handleStopPropagation}
         onKeyDown={handleMenuKeyDown}
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={handleCloseAutoFocus}
       >
         {menuPanel === "main" ? (
           <>
@@ -437,12 +446,7 @@ export function InteractiveCoworkerCard({
                 </>
               )}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                setMenuPanel("tags");
-              }}
-            >
+            <DropdownMenuItem onSelect={handleOpenTagsPanel}>
               <Tag className="size-4" />
               Manage tags
             </DropdownMenuItem>
@@ -475,7 +479,7 @@ export function InteractiveCoworkerCard({
           <div onClick={handleStopPropagation} onKeyDown={handleMenuKeyDown}>
             <button
               type="button"
-              onClick={() => setMenuPanel("main")}
+              onClick={handleBackToMainPanel}
               className="text-muted-foreground hover:text-foreground hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
             >
               ← Back

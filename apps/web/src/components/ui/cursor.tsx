@@ -1,5 +1,7 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props and styles are computed animation values */
+
 import {
   motion,
   useMotionValue,
@@ -37,13 +39,21 @@ function CursorProvider({ ref, children, ...props }: CursorProviderProps) {
   const [isActive, setIsActive] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const cursorRef = React.useRef<HTMLDivElement>(null);
+  const contextValue = React.useMemo(
+    () => ({ cursorPos, isActive, containerRef, cursorRef }),
+    [cursorPos, isActive],
+  );
   React.useImperativeHandle(ref, () => containerRef.current as HTMLDivElement);
 
   React.useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) {
+      return;
+    }
 
     const parent = containerRef.current.parentElement;
-    if (!parent) return;
+    if (!parent) {
+      return;
+    }
 
     if (getComputedStyle(parent).position === "static") {
       parent.style.position = "relative";
@@ -66,7 +76,7 @@ function CursorProvider({ ref, children, ...props }: CursorProviderProps) {
   }, []);
 
   return (
-    <CursorContext.Provider value={{ cursorPos, isActive, containerRef, cursorRef }}>
+    <CursorContext.Provider value={contextValue}>
       <div ref={containerRef} data-slot="cursor-provider" {...props}>
         {children}
       </div>
@@ -88,10 +98,14 @@ function Cursor({ ref, children, className, style, ...props }: CursorProps) {
   React.useEffect(() => {
     const parentElement = containerRef.current?.parentElement;
 
-    if (parentElement && isActive) parentElement.style.cursor = "none";
+    if (parentElement && isActive) {
+      parentElement.style.cursor = "none";
+    }
 
     return () => {
-      if (parentElement) parentElement.style.cursor = "default";
+      if (parentElement) {
+        parentElement.style.cursor = "default";
+      }
     };
   }, [containerRef, cursorPos, isActive]);
 

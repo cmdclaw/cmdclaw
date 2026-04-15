@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mswServer } from "@/test/msw/server";
 
-type MockFn = (...args: any[]) => any;
+type MockFn = (...args: unknown[]) => unknown;
 
 const {
   getSessionMock,

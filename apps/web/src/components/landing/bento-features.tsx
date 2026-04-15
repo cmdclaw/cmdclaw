@@ -1,5 +1,7 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { Activity, Check, Loader2, Timer, Shield, Users, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
@@ -67,6 +69,14 @@ const COWORKER_INTEGRATIONS: IntegrationType[] = ["hubspot", "google_gmail", "sl
 const INTERVAL_MS = 2200;
 const PAUSE_MS = 3000;
 
+function formatElapsed(ms: number) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) {
+    return `${s}s`;
+  }
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
 function DemoActivityItem({ item, isLatest }: { item: DemoItem; isLatest: boolean }) {
   return (
     <motion.div
@@ -131,14 +141,10 @@ function LiveDemoCard() {
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [visibleItems]);
-
-  const formatElapsed = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    if (s < 60) return `${s}s`;
-    return `${Math.floor(s / 60)}m ${s % 60}s`;
-  };
 
   return (
     <BentoCard
@@ -186,7 +192,7 @@ function LiveDemoCard() {
             <AnimatePresence initial={false}>
               {visibleItems.map((item, i) => (
                 <DemoActivityItem
-                  key={`${item.id}-${Math.floor(i / DEMO_ITEMS.length)}`}
+                  key={item.id}
                   item={item}
                   isLatest={i === visibleItems.length - 1}
                 />
@@ -321,13 +327,7 @@ const FEATURE_CARDS = [
   },
 ] as const;
 
-function FeatureCard({
-  icon: Icon,
-  title,
-  desc,
-  gradient,
-  index,
-}: (typeof FEATURE_CARDS)[number] & { index: number }) {
+function FeatureCard({ icon: Icon, title, desc, gradient }: (typeof FEATURE_CARDS)[number]) {
   return (
     <BentoCard gradient={gradient}>
       <div className="p-6">
@@ -380,8 +380,8 @@ export function BentoFeaturesSection() {
           <ApprovalWorkflowsCard />
 
           {/* Bottom row: 3 feature cards */}
-          {FEATURE_CARDS.map((card, i) => (
-            <FeatureCard key={card.title} {...card} index={i} />
+          {FEATURE_CARDS.map((card) => (
+            <FeatureCard key={card.title} {...card} />
           ))}
         </div>
       </div>

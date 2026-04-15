@@ -210,6 +210,9 @@ export function OrgChartCanvas({
       positionY: center.y,
     });
   }, [screenToFlowPosition, createNode]);
+  const handleOpenSheet = useCallback(() => {
+    setSheetOpen(true);
+  }, []);
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -273,7 +276,7 @@ export function OrgChartCanvas({
               variant="ghost"
               size="sm"
               className="text-muted-foreground hover:text-foreground h-7 gap-1.5 rounded-md px-2.5 text-xs font-medium"
-              onClick={() => setSheetOpen(true)}
+              onClick={handleOpenSheet}
             >
               <Users className="size-3" />
               Coworkers

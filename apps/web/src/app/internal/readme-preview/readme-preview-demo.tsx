@@ -1,5 +1,7 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { Check, Loader2, ShieldCheck, KeyRound, Inbox, Plus, ArrowUp } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
@@ -221,6 +223,7 @@ const TYPING_SPEED_MS = 35;
 const BUILD_DELAY_MS = 400;
 const HOLD_AFTER_BUILD_MS = 1800;
 const RESET_HOLD_MS = 3500;
+const PLACEHOLDER_SLOT_KEYS = ["slot-1", "slot-2", "slot-3", "slot-4", "slot-5", "slot-6"] as const;
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    DEMO PROMPT BAR
@@ -378,7 +381,7 @@ function AnimatedInboxPanel() {
   const [items, setItems] = useState<InboxItemData[]>([]);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
   const eventIndexRef = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const tick = useCallback(() => {
     const idx = eventIndexRef.current;
@@ -419,7 +422,9 @@ function AnimatedInboxPanel() {
   useEffect(() => {
     timerRef.current = setTimeout(tick, 600);
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
     };
   }, [tick]);
 
@@ -483,7 +488,9 @@ export function ReadmePreviewDemo() {
 
   // Typing effect
   useEffect(() => {
-    if (phase !== "typing") return;
+    if (phase !== "typing") {
+      return;
+    }
 
     const prompt = currentPrompt.prompt;
     let charIndex = 0;
@@ -508,7 +515,9 @@ export function ReadmePreviewDemo() {
 
   // Building phase — add coworker card
   useEffect(() => {
-    if (phase !== "building") return;
+    if (phase !== "building") {
+      return;
+    }
 
     const coworker = currentPrompt.coworker;
     setAddedCoworkers((prev) =>
@@ -542,7 +551,9 @@ export function ReadmePreviewDemo() {
   }, [promptIndex]);
 
   useEffect(() => {
-    if (phase !== "hold") return;
+    if (phase !== "hold") {
+      return;
+    }
 
     const timeout = setTimeout(advance, 200);
     return () => clearTimeout(timeout);
@@ -568,9 +579,9 @@ export function ReadmePreviewDemo() {
             ))}
           </AnimatePresence>
           {/* Placeholder slots for remaining empty spaces (grid of 2 cols, up to 6 total) */}
-          {Array.from({ length: Math.max(0, 6 - allCoworkers.length) }).map((_, i) => (
+          {PLACEHOLDER_SLOT_KEYS.slice(0, Math.max(0, 6 - allCoworkers.length)).map((slotKey) => (
             <div
-              key={`placeholder-${i}`}
+              key={slotKey}
               className="rounded-xl border border-dashed border-slate-200/60 bg-slate-50/50 p-4 opacity-40"
             >
               <div className="flex items-start gap-3">

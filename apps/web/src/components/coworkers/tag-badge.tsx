@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 const TAG_FALLBACK_COLOR = "#6b7280";
@@ -16,26 +17,31 @@ type TagBadgeProps = {
 export function TagBadge({ name, color, size = "default", onRemove, onClick }: TagBadgeProps) {
   const dotColor = color || TAG_FALLBACK_COLOR;
   const isSmall = size === "sm";
+  const dotStyle = useMemo(
+    () => ({
+      backgroundColor: dotColor,
+      width: isSmall ? 5 : 6,
+      height: isSmall ? 5 : 6,
+      boxShadow: `0 0 4px ${dotColor}40`,
+    }),
+    [dotColor, isSmall],
+  );
+  const handleRemoveClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      onRemove?.();
+    },
+    [onRemove],
+  );
 
   const content = (
     <>
-      <span
-        className="shrink-0 rounded-full"
-        style={{
-          backgroundColor: dotColor,
-          width: isSmall ? 5 : 6,
-          height: isSmall ? 5 : 6,
-          boxShadow: `0 0 4px ${dotColor}40`,
-        }}
-      />
+      <span className="shrink-0 rounded-full" style={dotStyle} />
       <span className="max-w-[100px] truncate">{name}</span>
       {onRemove && (
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
+          onClick={handleRemoveClick}
           className="text-muted-foreground/60 hover:text-foreground -mr-0.5 shrink-0 transition-colors"
         >
           <X className={isSmall ? "size-2.5" : "size-3"} />

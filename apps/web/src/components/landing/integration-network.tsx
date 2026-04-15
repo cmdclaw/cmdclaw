@@ -1,8 +1,10 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, AnimatePresence } from "motion/react";
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
+import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
-import { useCallback, useRef, useState, useMemo, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   INTEGRATION_LOGOS,
@@ -56,8 +58,8 @@ function FloatingNode({
   node: IntegrationNode;
   index: number;
   isHovered: boolean;
-  onHover: () => void;
-  onLeave: () => void;
+  onHover: React.MouseEventHandler<HTMLDivElement>;
+  onLeave: React.MouseEventHandler<HTMLDivElement>;
 }) {
   const drift = DRIFT_CONFIGS[index]!;
 
@@ -146,7 +148,9 @@ function ConnectionLines({
     const containerRect = container.getBoundingClientRect();
     const nodes = container.querySelectorAll<HTMLElement>("[data-integration-node]");
     const hoveredNode = nodes[hoveredIndex];
-    if (!hoveredNode) return;
+    if (!hoveredNode) {
+      return;
+    }
 
     const hoveredRect = hoveredNode.getBoundingClientRect();
     const hx = hoveredRect.left + hoveredRect.width / 2 - containerRect.left;
@@ -155,7 +159,9 @@ function ConnectionLines({
     // Connect to 2-3 nearest neighbors
     const distances = Array.from(nodes)
       .map((node, i) => {
-        if (i === hoveredIndex) return null;
+        if (i === hoveredIndex) {
+          return null;
+        }
         const rect = node.getBoundingClientRect();
         const nx = rect.left + rect.width / 2 - containerRect.left;
         const ny = rect.top + rect.height / 2 - containerRect.top;
@@ -163,7 +169,7 @@ function ConnectionLines({
         return { i, x: nx, y: ny, dist };
       })
       .filter(Boolean)
-      .sort((a, b) => a!.dist - b!.dist)
+      .toSorted((a, b) => a!.dist - b!.dist)
       .slice(0, 3);
 
     setLines(
@@ -176,13 +182,15 @@ function ConnectionLines({
     );
   }, [hoveredIndex, containerRef]);
 
-  if (lines.length === 0) return null;
+  if (lines.length === 0) {
+    return null;
+  }
 
   return (
     <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-visible">
-      {lines.map((line, i) => (
+      {lines.map((line) => (
         <motion.line
-          key={i}
+          key={`${line.x1}-${line.y1}-${line.x2}-${line.y2}`}
           x1={line.x1}
           y1={line.y1}
           x2={line.x2}
@@ -238,6 +246,15 @@ export function IntegrationNetworkSection() {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const handleNodeHover = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const index = event.currentTarget.dataset.index;
+    if (index) {
+      setHoveredIndex(Number(index));
+    }
+  }, []);
+  const handleNodeLeave = useCallback(() => {
+    setHoveredIndex(null);
+  }, []);
 
   return (
     <section className="bg-background border-border/60 border-t px-6 py-20 md:py-28">
@@ -259,13 +276,13 @@ export function IntegrationNetworkSection() {
             <ConnectionLines hoveredIndex={hoveredIndex} containerRef={containerRef} />
             <div className="relative z-10 flex flex-wrap items-center justify-center gap-5">
               {NODES.map((node, i) => (
-                <div key={node.key} data-integration-node>
+                <div key={node.key} data-integration-node data-index={i}>
                   <FloatingNode
                     node={node}
                     index={i}
                     isHovered={hoveredIndex === i}
-                    onHover={() => setHoveredIndex(i)}
-                    onLeave={() => setHoveredIndex(null)}
+                    onHover={handleNodeHover}
+                    onLeave={handleNodeLeave}
                   />
                 </div>
               ))}

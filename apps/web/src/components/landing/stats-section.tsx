@@ -1,7 +1,13 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { motion, useMotionValue, useTransform, animate, useInView } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+
+const STAT_INITIAL = { opacity: 0, y: 20 } as const;
+const STAT_WHILE_IN_VIEW = { opacity: 1, y: 0 } as const;
+const STAT_VIEWPORT = { once: true, margin: "-60px" } as const;
 
 function AnimatedStat({
   target,
@@ -23,7 +29,9 @@ function AnimatedStat({
   const [display, setDisplay] = useState(0);
 
   useEffect(() => {
-    if (!isInView) return;
+    if (!isInView) {
+      return;
+    }
     const timer = setTimeout(() => {
       const controls = animate(motionValue, target, {
         duration: 1.5,
@@ -41,9 +49,9 @@ function AnimatedStat({
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
+      initial={STAT_INITIAL}
+      whileInView={STAT_WHILE_IN_VIEW}
+      viewport={STAT_VIEWPORT}
       transition={{ duration: 0.5, delay: delay / 1000 }}
       className="text-center"
     >

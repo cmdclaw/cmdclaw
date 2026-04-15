@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-type MockFn = (...args: any[]) => any;
+type MockFn = (...args: unknown[]) => unknown;
 
 const { getSessionMock, findFirstMock, updateWhereMock, getOAuthConfigMock } = vi.hoisted(() => {
   const getSessionMock = vi.fn<MockFn>();

@@ -1,7 +1,8 @@
 "use client";
 
-import { Loader2, Check } from "lucide-react";
-import { motion, AnimatePresence, useInView } from "motion/react";
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
+import { motion, useInView } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -281,11 +282,19 @@ function DeptSelector({
   activeIndex: number | null;
   onSelect: (index: number | null) => void;
 }) {
+  const handleSelect = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const index = event.currentTarget.dataset.index;
+      onSelect(index ? Number(index) : null);
+    },
+    [onSelect],
+  );
+
   return (
     <div className="border-border/60 bg-background/80 absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full border px-1 py-1 shadow-sm backdrop-blur-md md:gap-1.5 md:px-2 md:py-1.5">
       <button
         type="button"
-        onClick={() => onSelect(null)}
+        onClick={handleSelect}
         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all md:px-3 md:py-1 md:text-[11px] ${
           activeIndex === null
             ? "bg-foreground text-background"
@@ -298,7 +307,8 @@ function DeptSelector({
         <button
           key={dept.label}
           type="button"
-          onClick={() => onSelect(i)}
+          data-index={i}
+          onClick={handleSelect}
           className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all md:gap-1.5 md:px-3 md:py-1 md:text-[11px] ${
             activeIndex === i
               ? "bg-foreground text-background"
@@ -359,7 +369,9 @@ function OrgChartCanvas() {
   // Measure container
   useEffect(() => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
@@ -375,12 +387,18 @@ function OrgChartCanvas() {
 
   // Auto-cycle departments
   useEffect(() => {
-    if (!isInView || manualRef.current) return;
+    if (!isInView || manualRef.current) {
+      return;
+    }
 
     function cycle() {
       setActiveDeptIndex((prev) => {
-        if (prev === null) return 0;
-        if (prev >= DEPARTMENTS.length - 1) return null;
+        if (prev === null) {
+          return 0;
+        }
+        if (prev >= DEPARTMENTS.length - 1) {
+          return null;
+        }
         return prev + 1;
       });
     }
@@ -390,7 +408,9 @@ function OrgChartCanvas() {
     cycleRef.current = setTimeout(cycle, delay);
 
     return () => {
-      if (cycleRef.current) clearTimeout(cycleRef.current);
+      if (cycleRef.current) {
+        clearTimeout(cycleRef.current);
+      }
     };
   }, [isInView, activeDeptIndex]);
 
@@ -399,7 +419,9 @@ function OrgChartCanvas() {
     setActiveDeptIndex(index);
 
     // Resume auto-cycle after 8s of inactivity
-    if (cycleRef.current) clearTimeout(cycleRef.current);
+    if (cycleRef.current) {
+      clearTimeout(cycleRef.current);
+    }
     cycleRef.current = setTimeout(() => {
       manualRef.current = false;
     }, 8000);

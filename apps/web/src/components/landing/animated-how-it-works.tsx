@@ -1,5 +1,7 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { Check, Loader2 } from "lucide-react";
 import {
   motion,
@@ -145,7 +147,9 @@ function BuildingAgent({ agent, started }: { agent: Example["agent"]; started: b
     setShowTrigger(false);
     setVisibleBadges(0);
     setIsOn(false);
-    if (!started) return;
+    if (!started) {
+      return;
+    }
 
     const timers: ReturnType<typeof setTimeout>[] = [];
     let t = 0;
@@ -299,7 +303,9 @@ function AnimatedCounter({ target, started }: { target: number; started: boolean
   useEffect(() => {
     motionValue.set(0);
     setDisplay(0);
-    if (!started) return;
+    if (!started) {
+      return;
+    }
     const controls = animate(motionValue, target, {
       duration: 1.2,
       ease: "easeOut",
@@ -325,7 +331,9 @@ function DeployDashboard({
 
   useEffect(() => {
     setVisibleRows(0);
-    if (!started) return;
+    if (!started) {
+      return;
+    }
     const timers: ReturnType<typeof setTimeout>[] = [];
     dashboard.rows.forEach((_, i) => {
       timers.push(setTimeout(() => setVisibleRows(i + 1), 200 * (i + 1)));
@@ -398,11 +406,13 @@ function FlowingConnector({ active }: { active: boolean }) {
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 function ExampleDots({ count, active }: { count: number; active: number }) {
+  const dotKeys = Array.from({ length: count }, (_, index) => `dot-${index + 1}`);
+
   return (
     <div className="flex items-center justify-center gap-2">
-      {Array.from({ length: count }).map((_, i) => (
+      {dotKeys.map((dotKey, i) => (
         <motion.div
-          key={i}
+          key={dotKey}
           animate={{
             width: i === active ? 24 : 6,
             opacity: i === active ? 1 : 0.3,
@@ -432,7 +442,9 @@ function useExampleCycle(isInView: boolean) {
 
   // Phase transitions
   useEffect(() => {
-    if (!isInView) return;
+    if (!isInView) {
+      return;
+    }
 
     if (phase === "building") {
       const buildTime = 350 * (example.agent.integrations.length + 2);
@@ -447,7 +459,9 @@ function useExampleCycle(isInView: boolean) {
     }
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
     };
   }, [phase, isInView, example]);
 

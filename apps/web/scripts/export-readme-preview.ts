@@ -24,7 +24,13 @@ const totalFrames = Math.round((durationMs / 1000) * fps);
 async function waitForPreview(page: Page) {
   let lastError: unknown = null;
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  async function attemptLoad(attempt: number): Promise<void> {
+    if (attempt >= 20) {
+      throw new Error(
+        `Preview route was not reachable at ${previewUrl}. Start the web app and try again.\n${String(lastError)}`,
+      );
+    }
+
     try {
       const response = await page.goto(previewUrl, {
         waitUntil: "domcontentloaded",
@@ -40,11 +46,10 @@ async function waitForPreview(page: Page) {
     }
 
     await page.waitForTimeout(500);
+    return attemptLoad(attempt + 1);
   }
 
-  throw new Error(
-    `Preview route was not reachable at ${previewUrl}. Start the web app and try again.\n${String(lastError)}`,
-  );
+  return attemptLoad(0);
 }
 
 async function main() {
@@ -76,12 +81,17 @@ async function main() {
     // Wait for initial animations to start
     await page.waitForTimeout(600);
 
-    for (let frame = 0; frame < totalFrames; frame += 1) {
+    async function captureFrame(frame: number): Promise<void> {
+      if (frame >= totalFrames) {
+        return;
+      }
       await page.waitForTimeout(Math.round(1000 / fps));
       await page.screenshot({
         path: join(framesDir, `frame-${String(frame).padStart(4, "0")}.png`),
       });
+      return captureFrame(frame + 1);
     }
+    await captureFrame(0);
 
     // Poster: capture a frame after some animation has played
     await page.waitForTimeout(300);

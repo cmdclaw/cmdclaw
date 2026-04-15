@@ -1,7 +1,7 @@
 "use client";
 
 import { Bookmark, Ellipsis, Pencil, Trash2, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +33,12 @@ type ViewTabsProps = {
   onToggleTag: (tagId: string) => void;
   onClearAll: () => void;
 };
+
+function TagIndicator({ color }: { color?: string | null }) {
+  const style = useMemo(() => ({ backgroundColor: color || "#6b7280" }), [color]);
+
+  return <span className="size-1.5 shrink-0 rounded-full" style={style} />;
+}
 
 export function ViewTabs({
   activeViewId,
@@ -94,9 +100,85 @@ export function ViewTabs({
     [deleteView, activeViewId, onSelectView],
   );
 
-  const hasTags = (tags ?? []).length > 0;
   const hasViews = (views ?? []).length > 0;
   const isAllSelected = activeViewId === null && selectedTagIds.size === 0;
+  const handleTagClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const tagId = event.currentTarget.dataset.tagId;
+      if (tagId) {
+        onToggleTag(tagId);
+      }
+    },
+    [onToggleTag],
+  );
+  const handleRenameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setRenameValue(event.target.value);
+  }, []);
+  const handleRenameKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!renamingId) {
+        return;
+      }
+      if (event.key === "Enter") {
+        void handleRename(renamingId);
+      }
+      if (event.key === "Escape") {
+        setRenamingId(null);
+        setRenameValue("");
+      }
+    },
+    [handleRename, renamingId],
+  );
+  const handleRenameBlur = useCallback(() => {
+    setRenamingId(null);
+    setRenameValue("");
+  }, []);
+  const handleViewSelect = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const viewId = event.currentTarget.dataset.viewId;
+      if (viewId) {
+        onSelectView(viewId);
+      }
+    },
+    [onSelectView],
+  );
+  const handleStartRename = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const { viewId, viewName } = event.currentTarget.dataset;
+    if (!viewId || !viewName) {
+      return;
+    }
+    setRenamingId(viewId);
+    setRenameValue(viewName);
+    setTimeout(() => renameInputRef.current?.focus(), 0);
+  }, []);
+  const handleDeleteView = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const { viewId } = event.currentTarget.dataset;
+      if (viewId) {
+        void handleDelete(viewId);
+      }
+    },
+    [handleDelete],
+  );
+  const handleSaveNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setSaveName(event.target.value);
+  }, []);
+  const handleSaveNameKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        void handleSaveView();
+      }
+      if (event.key === "Escape") {
+        setIsSaving(false);
+        setSaveName("");
+      }
+    },
+    [handleSaveView],
+  );
+  const handleStartSaving = useCallback(() => {
+    setIsSaving(true);
+    setTimeout(() => saveInputRef.current?.focus(), 0);
+  }, []);
 
   return (
     <div className="border-border/40 scrollbar-none inline-flex w-fit items-center gap-1.5 overflow-x-auto rounded-lg border p-1">
@@ -123,7 +205,8 @@ export function ViewTabs({
           <button
             key={`tag-${tag.id}`}
             type="button"
-            onClick={() => onToggleTag(tag.id)}
+            data-tag-id={tag.id}
+            onClick={handleTagClick}
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap",
               isActive
@@ -131,10 +214,7 @@ export function ViewTabs({
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
             )}
           >
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: tag.color || "#6b7280" }}
-            />
+            <TagIndicator color={tag.color} />
             {tag.name}
             {isActive && <X className="size-2.5 opacity-60" />}
           </button>
@@ -151,27 +231,17 @@ export function ViewTabs({
             <Input
               ref={renameInputRef}
               value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleRename(view.id);
-                }
-                if (e.key === "Escape") {
-                  setRenamingId(null);
-                  setRenameValue("");
-                }
-              }}
-              onBlur={() => {
-                setRenamingId(null);
-                setRenameValue("");
-              }}
+              onChange={handleRenameChange}
+              onKeyDown={handleRenameKeyDown}
+              onBlur={handleRenameBlur}
               className="h-6 w-24 rounded-md px-2 text-xs"
               autoFocus
             />
           ) : (
             <button
               type="button"
-              onClick={() => onSelectView(view.id)}
+              data-view-id={view.id}
+              onClick={handleViewSelect}
               className={cn(
                 "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                 activeViewId === view.id
@@ -199,18 +269,17 @@ export function ViewTabs({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-32">
               <DropdownMenuItem
-                onClick={() => {
-                  setRenamingId(view.id);
-                  setRenameValue(view.name);
-                  setTimeout(() => renameInputRef.current?.focus(), 0);
-                }}
+                data-view-id={view.id}
+                data-view-name={view.name}
+                onClick={handleStartRename}
                 className="text-xs"
               >
                 <Pencil className="mr-1.5 size-3" />
                 Rename
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => handleDelete(view.id)}
+                data-view-id={view.id}
+                onClick={handleDeleteView}
                 className="text-destructive focus:text-destructive text-xs"
               >
                 <Trash2 className="mr-1.5 size-3" />
@@ -230,16 +299,8 @@ export function ViewTabs({
               <Input
                 ref={saveInputRef}
                 value={saveName}
-                onChange={(e) => setSaveName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSaveView();
-                  }
-                  if (e.key === "Escape") {
-                    setIsSaving(false);
-                    setSaveName("");
-                  }
-                }}
+                onChange={handleSaveNameChange}
+                onKeyDown={handleSaveNameKeyDown}
                 placeholder="View name..."
                 className="h-6 w-28 rounded-md px-2 text-xs"
                 autoFocus
@@ -256,10 +317,7 @@ export function ViewTabs({
           ) : (
             <button
               type="button"
-              onClick={() => {
-                setIsSaving(true);
-                setTimeout(() => saveInputRef.current?.focus(), 0);
-              }}
+              onClick={handleStartSaving}
               className="text-muted-foreground/60 hover:text-muted-foreground flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors"
             >
               <Bookmark className="size-3" />

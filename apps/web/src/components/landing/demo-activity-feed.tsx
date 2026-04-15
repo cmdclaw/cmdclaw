@@ -1,9 +1,11 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import { Check, Loader2, Activity, Timer } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { INTEGRATION_LOGOS, type IntegrationType } from "@/lib/integration-icons";
 
@@ -39,6 +41,19 @@ const COWORKER_DATA = {
 
 const INTERVAL_MS = 2200;
 const PAUSE_MS = 3000;
+const DEMO_ITEM_INITIAL = { opacity: 0, y: 6 } as const;
+const DEMO_ITEM_ANIMATE = { opacity: 1, y: 0 } as const;
+const DEMO_ITEM_TRANSITION = { duration: 0.2 } as const;
+const FOOTER_ICON_INITIAL = { opacity: 0, scale: 0.8 } as const;
+const FOOTER_ICON_ANIMATE = { opacity: 1, scale: 1 } as const;
+
+function formatElapsed(ms: number) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) {
+    return `${s}s`;
+  }
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
 
 /* ── Activity item (lightweight clone) ── */
 
@@ -47,9 +62,9 @@ function DemoActivityItem({ item, isLatest }: { item: DemoItem; isLatest: boolea
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      initial={DEMO_ITEM_INITIAL}
+      animate={DEMO_ITEM_ANIMATE}
+      transition={DEMO_ITEM_TRANSITION}
       className="flex items-center gap-1.5 py-0.5 text-xs"
     >
       <Image src={logo} alt="" width={14} height={14} className="h-3.5 w-auto shrink-0" />
@@ -110,14 +125,10 @@ function DemoFeed() {
   // Auto-scroll
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [visibleItems]);
-
-  const formatElapsed = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    if (s < 60) return `${s}s`;
-    return `${Math.floor(s / 60)}m ${s % 60}s`;
-  };
 
   return (
     <div className="border-border/50 bg-muted/30 overflow-hidden rounded-lg border">
@@ -139,11 +150,7 @@ function DemoFeed() {
       <div ref={scrollRef} className="overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
         <AnimatePresence initial={false}>
           {visibleItems.map((item, i) => (
-            <DemoActivityItem
-              key={`${item.id}-${Math.floor(i / DEMO_ITEMS.length)}`}
-              item={item}
-              isLatest={i === visibleItems.length - 1}
-            />
+            <DemoActivityItem key={item.id} item={item} isLatest={i === visibleItems.length - 1} />
           ))}
         </AnimatePresence>
         {visibleItems.length === 0 && (
@@ -163,9 +170,9 @@ function DemoFeed() {
         {COWORKER_DATA.integrations.map((key) => (
           <motion.div
             key={key}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
+            initial={FOOTER_ICON_INITIAL}
+            animate={FOOTER_ICON_ANIMATE}
+            transition={DEMO_ITEM_TRANSITION}
           >
             <Image
               src={INTEGRATION_LOGOS[key]}

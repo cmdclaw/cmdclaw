@@ -383,6 +383,20 @@ export default function CoworkersPage() {
     });
     setActiveViewId(null);
   }, []);
+  const handleTriggerTypeButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const triggerType = event.currentTarget.dataset.triggerType;
+      if (triggerType) {
+        handleToggleTriggerType(triggerType);
+      }
+    },
+    [handleToggleTriggerType],
+  );
+  const handleClearAllFilters = useCallback(() => {
+    setSelectedTagIds(new Set());
+    setSelectedTriggerTypes(new Set());
+    setActiveViewId(null);
+  }, []);
   const handleSelectView = useCallback(
     (viewId: string | null) => {
       setActiveViewId(viewId);
@@ -841,7 +855,8 @@ export default function CoworkersPage() {
                       <button
                         key={trigger.value}
                         type="button"
-                        onClick={() => handleToggleTriggerType(trigger.value)}
+                        data-trigger-type={trigger.value}
+                        onClick={handleTriggerTypeButtonClick}
                         className="hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
                       >
                         <div
@@ -918,11 +933,7 @@ export default function CoworkersPage() {
             hasActiveFilters={hasActiveFilters}
             selectedTagIds={selectedTagIds}
             onToggleTag={handleToggleTagFilter}
-            onClearAll={() => {
-              setSelectedTagIds(new Set());
-              setSelectedTriggerTypes(new Set());
-              setActiveViewId(null);
-            }}
+            onClearAll={handleClearAllFilters}
           />
 
           {displayedCoworkerList.length === 0 ? (

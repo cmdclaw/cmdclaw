@@ -1,5 +1,7 @@
 "use client";
 
+/* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
+
 import type React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
@@ -120,7 +122,9 @@ export function CloudLoginClient({
   const handleContinue = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (!email) return;
+      if (!email) {
+        return;
+      }
       setError(null);
       setStep("choose-method");
     },
@@ -200,6 +204,10 @@ export function CloudLoginClient({
     setSubmitting(false);
     setStep("password-reset-sent");
   }, [callbackUrl, email]);
+  const handleUsePassword = useCallback(() => {
+    setError(null);
+    setStep("password");
+  }, []);
 
   const handleGoogleSignIn = useCallback(async () => {
     await authClient.signIn.social({
@@ -342,10 +350,7 @@ export function CloudLoginClient({
                   type="button"
                   variant="outline"
                   className="w-full"
-                  onClick={() => {
-                    setError(null);
-                    setStep("password");
-                  }}
+                  onClick={handleUsePassword}
                 >
                   Use password
                 </Button>

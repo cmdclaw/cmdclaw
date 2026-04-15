@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Plus } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +26,44 @@ type TagManagerContentProps = {
   coworkerId: string;
   currentTagIds: string[];
 };
+
+function TagColorDot({ color }: { color?: string | null }) {
+  const resolvedColor = color || "#6b7280";
+  const style = useMemo(
+    () => ({
+      backgroundColor: resolvedColor,
+      boxShadow: `0 0 3px ${resolvedColor}30`,
+    }),
+    [resolvedColor],
+  );
+
+  return <span className="size-2 shrink-0 rounded-full" style={style} />;
+}
+
+function PresetColorButton({
+  color,
+  isSelected,
+  onSelect,
+}: {
+  color: string;
+  isSelected: boolean;
+  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  const style = useMemo(() => ({ backgroundColor: color }), [color]);
+
+  return (
+    <button
+      type="button"
+      data-color={color}
+      onClick={onSelect}
+      className={cn(
+        "size-4 rounded-full border-2 transition-all",
+        isSelected ? "border-foreground scale-110" : "border-transparent hover:scale-105",
+      )}
+      style={style}
+    />
+  );
+}
 
 /**
  * Tag management UI — renders the tag list + create form inline.
@@ -69,6 +107,50 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
     }
   }, [newTagName, selectedColor, createTag, assignTag, coworkerId]);
 
+  const handleTagButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const { tagId, assigned } = event.currentTarget.dataset;
+      if (!tagId) {
+        return;
+      }
+      handleToggleTag(tagId, assigned === "true");
+    },
+    [handleToggleTag],
+  );
+
+  const handleNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setNewTagName(event.target.value);
+  }, []);
+
+  const handleCancelCreate = useCallback(() => {
+    setShowCreate(false);
+    setNewTagName("");
+  }, []);
+
+  const handleNameKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        void handleCreateTag();
+      }
+      if (event.key === "Escape") {
+        handleCancelCreate();
+      }
+    },
+    [handleCreateTag, handleCancelCreate],
+  );
+
+  const handleColorSelect = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    const color = event.currentTarget.dataset.color;
+    if (color) {
+      setSelectedColor(color);
+    }
+  }, []);
+
+  const handleOpenCreate = useCallback(() => {
+    setShowCreate(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+
   return (
     <>
       {/* Tag list */}
@@ -82,7 +164,9 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
             <button
               key={tag.id}
               type="button"
-              onClick={() => handleToggleTag(tag.id, isAssigned)}
+              data-tag-id={tag.id}
+              data-assigned={String(isAssigned)}
+              onClick={handleTagButtonClick}
               className="hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
             >
               <div
@@ -95,13 +179,7 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
               >
                 {isAssigned && <Check className="size-2.5" />}
               </div>
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{
-                  backgroundColor: tag.color || "#6b7280",
-                  boxShadow: `0 0 3px ${tag.color || "#6b7280"}30`,
-                }}
-              />
+              <TagColorDot color={tag.color} />
               <span className="text-foreground truncate">{tag.name}</span>
               <span className="text-muted-foreground/50 ml-auto text-[10px] tabular-nums">
                 {tag.coworkerCount}
@@ -118,33 +196,19 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
             <Input
               ref={inputRef}
               value={newTagName}
-              onChange={(e) => setNewTagName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleCreateTag();
-                }
-                if (e.key === "Escape") {
-                  setShowCreate(false);
-                  setNewTagName("");
-                }
-              }}
+              onChange={handleNameChange}
+              onKeyDown={handleNameKeyDown}
               placeholder="Tag name..."
               className="h-7 text-xs"
               autoFocus
             />
             <div className="flex items-center gap-1">
               {PRESET_COLORS.map((color) => (
-                <button
+                <PresetColorButton
                   key={color}
-                  type="button"
-                  onClick={() => setSelectedColor(color)}
-                  className={cn(
-                    "size-4 rounded-full border-2 transition-all",
-                    selectedColor === color
-                      ? "border-foreground scale-110"
-                      : "border-transparent hover:scale-105",
-                  )}
-                  style={{ backgroundColor: color }}
+                  color={color}
+                  isSelected={selectedColor === color}
+                  onSelect={handleColorSelect}
                 />
               ))}
             </div>
@@ -159,10 +223,7 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowCreate(false);
-                  setNewTagName("");
-                }}
+                onClick={handleCancelCreate}
                 className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1 text-xs transition-colors"
               >
                 Cancel
@@ -172,10 +233,7 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
         ) : (
           <button
             type="button"
-            onClick={() => {
-              setShowCreate(true);
-              setTimeout(() => inputRef.current?.focus(), 0);
-            }}
+            onClick={handleOpenCreate}
             className="text-muted-foreground hover:text-foreground hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
           >
             <Plus className="size-3.5" />
