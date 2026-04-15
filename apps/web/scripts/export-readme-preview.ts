@@ -21,27 +21,6 @@ const fps = 20;
 const durationMs = 8000;
 const totalFrames = Math.round((durationMs / 1000) * fps);
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
-
-function easeInOutCubic(value: number) {
-  return value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
-}
-
-function getScrollTarget(timeMs: number, inboxTop: number) {
-  if (timeMs <= 2800) {
-    return 0;
-  }
-
-  if (timeMs >= 4600) {
-    return inboxTop;
-  }
-
-  const progress = clamp01((timeMs - 2800) / 1800);
-  return Math.round(inboxTop * easeInOutCubic(progress));
-}
-
 async function waitForPreview(page: Page) {
   let lastError: unknown = null;
 
@@ -88,34 +67,23 @@ async function main() {
         html { scroll-behavior: auto !important; }
         html, body { scrollbar-width: none !important; }
         ::-webkit-scrollbar { display: none !important; }
+        [data-nextjs-dialog-overlay],
+        [data-nextjs-toast],
+        nextjs-portal { display: none !important; }
       `,
     });
 
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(400);
-
-    const inboxTop = await page.evaluate(() => {
-      const element = document.getElementById("readme-preview-inbox");
-      if (!element) {
-        throw new Error("Missing #readme-preview-inbox anchor");
-      }
-
-      const rect = element.getBoundingClientRect();
-      return Math.max(0, window.scrollY + rect.top - 80);
-    });
+    // Wait for initial animations to start
+    await page.waitForTimeout(600);
 
     for (let frame = 0; frame < totalFrames; frame += 1) {
-      const timeMs = Math.round((frame / fps) * 1000);
-      const scrollY = getScrollTarget(timeMs, inboxTop);
-
-      await page.evaluate((value) => window.scrollTo(0, value), scrollY);
       await page.waitForTimeout(Math.round(1000 / fps));
       await page.screenshot({
         path: join(framesDir, `frame-${String(frame).padStart(4, "0")}.png`),
       });
     }
 
-    await page.evaluate((value) => window.scrollTo(0, value), inboxTop);
+    // Poster: capture a frame after some animation has played
     await page.waitForTimeout(300);
     await page.screenshot({ path: posterPath });
   } finally {

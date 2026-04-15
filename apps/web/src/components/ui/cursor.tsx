@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import {
   motion,
   useMotionValue,
@@ -9,7 +8,7 @@ import {
   type HTMLMotionProps,
   type SpringOptions,
 } from "motion/react";
-
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 type CursorContextType = {

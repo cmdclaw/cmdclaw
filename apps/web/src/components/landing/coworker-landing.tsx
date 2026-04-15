@@ -18,13 +18,13 @@ import { VoiceIndicator } from "@/components/chat/voice-indicator";
 import { AnimatedHowItWorksSection } from "@/components/landing/animated-how-it-works";
 import { BentoFeaturesSection } from "@/components/landing/bento-features";
 import { OrgChartShowcaseSection } from "@/components/landing/org-chart-showcase";
-import { TeamShowcaseSection } from "@/components/landing/team-showcase";
 import {
   clearPendingCoworkerPrompt,
   getPendingCoworkerGenerationContent,
   readPendingCoworkerPrompt,
   writePendingCoworkerPrompt,
 } from "@/components/landing/pending-coworker-prompt";
+import { TeamShowcaseSection } from "@/components/landing/team-showcase";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -32,10 +32,7 @@ import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
 import { normalizeGenerationError } from "@/lib/generation-errors";
-import {
-  INTEGRATION_LOGOS,
-  COWORKER_AVAILABLE_INTEGRATION_TYPES,
-} from "@/lib/integration-icons";
+import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
 import { client } from "@/orpc/client";
 import { useCreateCoworker, useProviderAuthStatus, useTranscribe } from "@/orpc/hooks";
@@ -573,7 +570,9 @@ export function CoworkerLanding({
   return (
     <>
       <div className="relative min-h-screen overflow-visible">
-        <div className={`pointer-events-none absolute inset-0 overflow-hidden ${isAnonymous ? "[mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)]" : ""}`}>
+        <div
+          className={`pointer-events-none absolute inset-0 overflow-hidden ${isAnonymous ? "[mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)]" : ""}`}
+        >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
           <Image
             src="/landing/brick-building-mobile.avif"
@@ -821,10 +820,7 @@ export function CoworkerLanding({
                     <Link href="/support" className="hover:text-foreground transition-colors">
                       Support
                     </Link>
-                    <Link
-                      href="/legal/terms"
-                      className="hover:text-foreground transition-colors"
-                    >
+                    <Link href="/legal/terms" className="hover:text-foreground transition-colors">
                       Terms
                     </Link>
                     <Link

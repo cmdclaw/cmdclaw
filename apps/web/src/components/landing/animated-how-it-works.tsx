@@ -1,7 +1,14 @@
 "use client";
 
 import { Check, Loader2 } from "lucide-react";
-import { motion, useInView, useMotionValue, useTransform, animate, AnimatePresence } from "motion/react";
+import {
+  motion,
+  useInView,
+  useMotionValue,
+  useTransform,
+  animate,
+  AnimatePresence,
+} from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -27,8 +34,7 @@ type Example = {
 
 const EXAMPLES: Example[] = [
   {
-    prompt:
-      "When a lead replies on HubSpot, draft a follow-up email and alert the team on Slack",
+    prompt: "When a lead replies on HubSpot, draft a follow-up email and alert the team on Slack",
     agent: {
       name: "Lead Follow-up Agent",
       username: "lead-followup",
@@ -89,20 +95,12 @@ const HOLD_AFTER_COMPLETE_MS = 1200;
    STEP 1: TYPING PROMPT
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function TypingPrompt({
-  prompt,
-  onTypingDone,
-}: {
-  prompt: string;
-  onTypingDone: () => void;
-}) {
+function TypingPrompt({ prompt, onTypingDone }: { prompt: string; onTypingDone: () => void }) {
   const [text, setText] = useState("");
-  const [showCursor, setShowCursor] = useState(true);
   const doneRef = useRef(false);
 
   useEffect(() => {
     setText("");
-    setShowCursor(true);
     doneRef.current = false;
     let i = 0;
     const interval = setInterval(() => {
@@ -113,7 +111,6 @@ function TypingPrompt({
         clearInterval(interval);
         if (!doneRef.current) {
           doneRef.current = true;
-          setTimeout(() => setShowCursor(false), 800);
           onTypingDone();
         }
       }
@@ -123,15 +120,8 @@ function TypingPrompt({
 
   return (
     <div className="bg-muted/40 border-border/40 min-h-[72px] rounded-lg border px-3 py-2.5">
-      <span className="text-foreground text-sm leading-relaxed">
-        {text}
-        {showCursor && (
-          <span className="border-brand ml-0.5 inline-block h-4 w-[2px] animate-[blink-cursor_1s_ease-in-out_infinite] border-l-2" />
-        )}
-      </span>
-      {!text && (
-        <span className="text-muted-foreground/50 text-sm">Start typing...</span>
-      )}
+      <span className="text-foreground text-sm leading-relaxed">{text}</span>
+      {!text && <span className="text-muted-foreground/50 text-sm">Start typing...</span>}
     </div>
   );
 }
@@ -140,13 +130,7 @@ function TypingPrompt({
    STEP 2: BUILDING AGENT
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function BuildingAgent({
-  agent,
-  started,
-}: {
-  agent: Example["agent"];
-  started: boolean;
-}) {
+function BuildingAgent({ agent, started }: { agent: Example["agent"]; started: boolean }) {
   const [showAvatar, setShowAvatar] = useState(false);
   const [typedName, setTypedName] = useState("");
   const [typedUsername, setTypedUsername] = useState("");
@@ -173,9 +157,7 @@ function BuildingAgent({
     // 2. Name types out letter by letter
     const nameStart = t + 200;
     for (let i = 0; i < agent.name.length; i++) {
-      timers.push(
-        setTimeout(() => setTypedName(agent.name.slice(0, i + 1)), nameStart + i * 40),
-      );
+      timers.push(setTimeout(() => setTypedName(agent.name.slice(0, i + 1)), nameStart + i * 40));
     }
     t = nameStart + agent.name.length * 40;
 
@@ -213,9 +195,7 @@ function BuildingAgent({
         <div className="flex items-start gap-2.5">
           {/* Avatar: skeleton → real */}
           <div className="relative size-7 shrink-0">
-            {!showAvatar && (
-              <div className="bg-muted absolute inset-0 rounded-full" />
-            )}
+            {!showAvatar && <div className="bg-muted absolute inset-0 rounded-full" />}
             {showAvatar && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -232,12 +212,12 @@ function BuildingAgent({
           </div>
           <div className="min-w-0">
             {/* Name: skeleton bar → typed text */}
-            <div className="h-4 flex items-center">
+            <div className="flex h-4 items-center">
               {typedName ? (
                 <p className="text-xs leading-tight font-medium">
                   {typedName}
                   {typedName.length < agent.name.length && (
-                    <span className="ml-px inline-block h-3 w-[1.5px] animate-[blink-cursor_1s_ease-in-out_infinite] bg-foreground/60" />
+                    <span className="bg-foreground/60 ml-px inline-block h-3 w-[1.5px] animate-[blink-cursor_1s_ease-in-out_infinite]" />
                   )}
                 </p>
               ) : (
@@ -245,7 +225,7 @@ function BuildingAgent({
               )}
             </div>
             {/* Username: skeleton bar → typed text */}
-            <div className="mt-0.5 h-3 flex items-center">
+            <div className="mt-0.5 flex h-3 items-center">
               {typedUsername ? (
                 <p className="text-muted-foreground text-[10px]">{typedUsername}</p>
               ) : (
@@ -256,32 +236,20 @@ function BuildingAgent({
         </div>
         <motion.div
           animate={{
-            backgroundColor: isOn
-              ? "oklch(0.72 0.17 142 / 0.1)"
-              : "oklch(0 0 0 / 0.04)",
-            borderColor: isOn
-              ? "oklch(0.72 0.17 142 / 0.2)"
-              : "oklch(0 0 0 / 0.1)",
+            backgroundColor: isOn ? "oklch(0.72 0.17 142 / 0.1)" : "oklch(0 0 0 / 0.04)",
+            borderColor: isOn ? "oklch(0.72 0.17 142 / 0.2)" : "oklch(0 0 0 / 0.1)",
           }}
           transition={{ duration: 0.3 }}
           className="inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-medium"
         >
           <motion.span
             animate={{
-              backgroundColor: isOn
-                ? "oklch(0.72 0.17 142)"
-                : "oklch(0 0 0 / 0.2)",
+              backgroundColor: isOn ? "oklch(0.72 0.17 142)" : "oklch(0 0 0 / 0.2)",
             }}
             transition={{ duration: 0.3 }}
             className="size-1.5 rounded-full"
           />
-          <span
-            className={
-              isOn
-                ? "text-green-600 dark:text-green-400"
-                : "text-muted-foreground"
-            }
-          >
+          <span className={isOn ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
             {isOn ? "On" : "Off"}
           </span>
         </motion.div>
@@ -301,9 +269,7 @@ function BuildingAgent({
             key={key}
             initial={{ opacity: 0, scale: 0, x: -10 }}
             animate={
-              i < visibleBadges
-                ? { opacity: 1, scale: 1, x: 0 }
-                : { opacity: 0, scale: 0, x: -10 }
+              i < visibleBadges ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0, x: -10 }
             }
             transition={{ type: "spring", stiffness: 400, damping: 20 }}
           >
@@ -325,13 +291,7 @@ function BuildingAgent({
    STEP 3: DEPLOY DASHBOARD
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function AnimatedCounter({
-  target,
-  started,
-}: {
-  target: number;
-  started: boolean;
-}) {
+function AnimatedCounter({ target, started }: { target: number; started: boolean }) {
   const motionValue = useMotionValue(0);
   const rounded = useTransform(motionValue, (v) => Math.round(v));
   const [display, setDisplay] = useState(0);
@@ -389,11 +349,7 @@ function DeployDashboard({
           <motion.div
             key={row.name}
             initial={{ opacity: 0, x: -10 }}
-            animate={
-              i < visibleRows
-                ? { opacity: 1, x: 0 }
-                : { opacity: 0, x: -10 }
-            }
+            animate={i < visibleRows ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
             transition={{ duration: 0.2 }}
             className="flex items-center gap-2 text-xs"
           >
@@ -441,13 +397,7 @@ function FlowingConnector({ active }: { active: boolean }) {
    EXAMPLE INDICATOR DOTS
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function ExampleDots({
-  count,
-  active,
-}: {
-  count: number;
-  active: number;
-}) {
+function ExampleDots({ count, active }: { count: number; active: number }) {
   return (
     <div className="flex items-center justify-center gap-2">
       {Array.from({ length: count }).map((_, i) => (
@@ -524,19 +474,11 @@ export function AnimatedHowItWorksSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: false, margin: "-100px" });
 
-  const {
-    example,
-    exampleIndex,
-    onTypingDone,
-    step2Started,
-    step3Started,
-  } = useExampleCycle(isInView);
+  const { example, exampleIndex, onTypingDone, step2Started, step3Started } =
+    useExampleCycle(isInView);
 
   return (
-    <section
-      ref={sectionRef}
-      className="border-border/40 bg-muted/30 border-t px-6 py-20 md:py-32"
-    >
+    <section ref={sectionRef} className="border-border/40 bg-muted/30 border-t px-6 py-20 md:py-32">
       <div className="mx-auto max-w-6xl">
         {/* Header — right-aligned to break monotony */}
         <motion.div
@@ -555,11 +497,11 @@ export function AnimatedHowItWorksSection() {
         </motion.div>
 
         {/* 3-step pipeline — progressive visual weight */}
-        <div className="flex flex-col items-stretch gap-3 md:flex-row md:gap-0 md:items-start">
+        <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-start md:gap-0">
           {/* Step 1: Describe — lightest weight */}
           <div className="flex-1">
             <div className="mb-3 flex items-center gap-2.5">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground text-sm font-bold">
+              <span className="bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-lg text-sm font-bold">
                 1
               </span>
               <span className="text-foreground text-sm font-semibold">Describe</span>
@@ -576,10 +518,7 @@ export function AnimatedHowItWorksSection() {
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <TypingPrompt
-                    prompt={example.prompt}
-                    onTypingDone={onTypingDone}
-                  />
+                  <TypingPrompt prompt={example.prompt} onTypingDone={onTypingDone} />
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -608,10 +547,7 @@ export function AnimatedHowItWorksSection() {
                   transition={{ duration: 0.3 }}
                   className="space-y-3"
                 >
-                  <BuildingAgent
-                    agent={example.agent}
-                    started={step2Started}
-                  />
+                  <BuildingAgent agent={example.agent} started={step2Started} />
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -640,10 +576,7 @@ export function AnimatedHowItWorksSection() {
                   transition={{ duration: 0.3 }}
                   className="space-y-3"
                 >
-                  <DeployDashboard
-                    dashboard={example.dashboard}
-                    started={step3Started}
-                  />
+                  <DeployDashboard dashboard={example.dashboard} started={step3Started} />
                 </motion.div>
               </AnimatePresence>
             </div>

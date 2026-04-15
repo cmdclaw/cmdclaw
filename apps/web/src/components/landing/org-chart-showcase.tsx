@@ -169,13 +169,7 @@ const OVERVIEW_PAUSE_MS = 5000;
    MINI COWORKER CARD (static, for canvas)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function MiniCard({
-  agent,
-  isHighlighted,
-}: {
-  agent: MockAgent;
-  isHighlighted: boolean;
-}) {
+function MiniCard({ agent, isHighlighted }: { agent: MockAgent; isHighlighted: boolean }) {
   return (
     <motion.div
       animate={{
@@ -183,14 +177,14 @@ function MiniCard({
         opacity: isHighlighted ? 1 : 0.55,
       }}
       transition={{ duration: 0.6, ease: "easeInOut" }}
-      className="bg-background absolute w-[220px] rounded-xl border border-border/80 p-3.5 shadow-sm"
+      className="bg-background border-border/80 absolute w-[220px] rounded-xl border p-3.5 shadow-sm"
       style={{ left: agent.x, top: agent.y }}
     >
       {/* Header */}
       <div className="flex items-start gap-2.5">
         <CoworkerAvatar username={agent.username} size={28} className="shrink-0 rounded-full" />
         <div className="min-w-0 flex-1">
-          <p className="text-foreground truncate text-xs font-semibold leading-tight">
+          <p className="text-foreground truncate text-xs leading-tight font-semibold">
             {agent.name}
           </p>
           <p className="text-muted-foreground font-mono text-[9px]">@{agent.username}</p>
@@ -202,9 +196,7 @@ function MiniCard({
               : "border-border bg-muted text-muted-foreground"
           }`}
         >
-          {agent.status === "on" && (
-            <span className="size-1.5 rounded-full bg-green-500" />
-          )}
+          {agent.status === "on" && <span className="size-1.5 rounded-full bg-green-500" />}
           {agent.status === "on" ? "On" : "Off"}
         </div>
       </div>
@@ -240,13 +232,7 @@ function MiniCard({
    DEPARTMENT LABEL (on canvas)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function DeptLabel({
-  dept,
-  isActive,
-}: {
-  dept: Department;
-  isActive: boolean;
-}) {
+function DeptLabel({ dept, isActive }: { dept: Department; isActive: boolean }) {
   return (
     <motion.div
       animate={{
@@ -258,13 +244,8 @@ function DeptLabel({
       style={{ left: dept.labelX, top: dept.labelY }}
     >
       <div className="flex items-center gap-2">
-        <span
-          className="size-2 rounded-full"
-          style={{ backgroundColor: dept.color }}
-        />
-        <span className="text-foreground text-sm font-semibold tracking-tight">
-          {dept.label}
-        </span>
+        <span className="size-2 rounded-full" style={{ backgroundColor: dept.color }} />
+        <span className="text-foreground text-sm font-semibold tracking-tight">{dept.label}</span>
       </div>
     </motion.div>
   );
@@ -301,7 +282,7 @@ function DeptSelector({
   onSelect: (index: number | null) => void;
 }) {
   return (
-    <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-border/60 bg-background/80 px-1 py-1 shadow-sm backdrop-blur-md md:gap-1.5 md:px-2 md:py-1.5">
+    <div className="border-border/60 bg-background/80 absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full border px-1 py-1 shadow-sm backdrop-blur-md md:gap-1.5 md:px-2 md:py-1.5">
       <button
         type="button"
         onClick={() => onSelect(null)}
@@ -324,10 +305,7 @@ function DeptSelector({
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <span
-            className="size-1.5 rounded-full"
-            style={{ backgroundColor: dept.color }}
-          />
+          <span className="size-1.5 rounded-full" style={{ backgroundColor: dept.color }} />
           {dept.label}
         </button>
       ))}
@@ -433,7 +411,7 @@ function OrgChartCanvas() {
   return (
     <div
       ref={containerRef}
-      className="bg-muted/40 relative h-[360px] w-full overflow-hidden rounded-2xl border border-border/80 md:h-[520px]"
+      className="bg-muted/40 border-border/80 relative h-[360px] w-full overflow-hidden rounded-2xl border md:h-[520px]"
     >
       <DotGrid />
 
@@ -499,7 +477,7 @@ export function OrgChartShowcaseSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="mb-14 md:mb-20 text-center"
+          className="mb-14 text-center md:mb-20"
         >
           <h2 className="text-foreground mx-auto max-w-2xl text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
             Meet your new AI team

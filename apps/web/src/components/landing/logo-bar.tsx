@@ -4,7 +4,10 @@ import { motion } from "motion/react";
 
 const LOGOS = [
   { name: "Ramp", svg: "M12 2L2 19h20L12 2zm0 4l6.5 11h-13L12 6z" },
-  { name: "Gusto", svg: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" },
+  {
+    name: "Gusto",
+    svg: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z",
+  },
 ] as const;
 
 export function LogoBar() {
@@ -19,14 +22,7 @@ export function LogoBar() {
       >
         <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 opacity-30 grayscale">
           {(
-            [
-              "Acme Corp",
-              "TechFlow",
-              "DataBridge",
-              "ScaleOps",
-              "NovaPay",
-              "CloudFirst",
-            ] as const
+            ["Acme Corp", "TechFlow", "DataBridge", "ScaleOps", "NovaPay", "CloudFirst"] as const
           ).map((name) => (
             <div key={name} className="flex items-center gap-2">
               <div className="bg-foreground/80 size-5 rounded" />

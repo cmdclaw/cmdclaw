@@ -61,24 +61,9 @@ export function StatsSection() {
   return (
     <section className="border-border/40 bg-muted/30 border-t px-6 py-16 md:py-24">
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-10 md:grid-cols-3 md:gap-8">
-        <AnimatedStat
-          target={50}
-          suffix="+"
-          label="Teams using CmdClaw"
-          delay={0}
-        />
-        <AnimatedStat
-          target={10}
-          suffix="K+"
-          label="Tasks automated this month"
-          delay={150}
-        />
-        <AnimatedStat
-          target={99.9}
-          suffix="%"
-          label="Uptime SLA"
-          delay={300}
-        />
+        <AnimatedStat target={50} suffix="+" label="Teams using CmdClaw" delay={0} />
+        <AnimatedStat target={10} suffix="K+" label="Tasks automated this month" delay={150} />
+        <AnimatedStat target={99.9} suffix="%" label="Uptime SLA" delay={300} />
       </div>
     </section>
   );

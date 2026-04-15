@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  Check,
-  Loader2,
-  ShieldCheck,
-  KeyRound,
-  Inbox,
-} from "lucide-react";
+import { Check, Loader2, ShieldCheck, KeyRound, Inbox } from "lucide-react";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -220,19 +214,11 @@ const STATUS_META: Record<
    AGENT MINI CARD
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function AgentMiniCard({
-  agent,
-  isPulsing,
-}: {
-  agent: ShowcaseAgent;
-  isPulsing: boolean;
-}) {
+function AgentMiniCard({ agent, isPulsing }: { agent: ShowcaseAgent; isPulsing: boolean }) {
   return (
     <div
       className={`border-border/80 bg-background rounded-xl border p-3.5 transition-all duration-500 ${
-        isPulsing
-          ? "border-brand/40 shadow-[0_0_20px_rgba(59,130,246,0.1)]"
-          : ""
+        isPulsing ? "border-brand/40 shadow-[0_0_20px_rgba(59,130,246,0.1)]" : ""
       }`}
     >
       <div className="flex items-start gap-2.5">
@@ -278,7 +264,11 @@ function AgentMiniCard({
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 const ACTION_DISPLAY: Record<DismissAction, { label: string; color: string; dotColor: string }> = {
-  approve: { label: "Approved", color: "text-green-600 dark:text-green-400", dotColor: "bg-green-500" },
+  approve: {
+    label: "Approved",
+    color: "text-green-600 dark:text-green-400",
+    dotColor: "bg-green-500",
+  },
   deny: { label: "Denied", color: "text-red-500", dotColor: "bg-red-500" },
   connect: { label: "Connected", color: "text-blue-500", dotColor: "bg-blue-500" },
 };
@@ -349,11 +339,12 @@ function InboxRow({
       >
         {/* Status dot */}
         <span className="relative flex size-2 shrink-0">
-          {!actionDisplay && (item.status === "awaiting_approval" || item.status === "awaiting_auth") && (
-            <span
-              className={`absolute inset-0 animate-ping rounded-full opacity-40 ${meta.dotColor}`}
-            />
-          )}
+          {!actionDisplay &&
+            (item.status === "awaiting_approval" || item.status === "awaiting_auth") && (
+              <span
+                className={`absolute inset-0 animate-ping rounded-full opacity-40 ${meta.dotColor}`}
+              />
+            )}
           <span
             className={`relative inline-flex size-2 rounded-full ${actionDisplay ? actionDisplay.dotColor : meta.dotColor}`}
           />
@@ -380,7 +371,10 @@ function InboxRow({
         </div>
 
         {/* Status — shows resolved action or original status */}
-        <div ref={statusRef} className={`flex w-20 shrink-0 items-center justify-end gap-1 text-[9px] font-medium ${actionDisplay ? actionDisplay.color : meta.color}`}>
+        <div
+          ref={statusRef}
+          className={`flex w-20 shrink-0 items-center justify-end gap-1 text-[9px] font-medium ${actionDisplay ? actionDisplay.color : meta.color}`}
+        >
           <AnimatePresence mode="wait">
             {actionDisplay ? (
               <motion.span
@@ -393,11 +387,10 @@ function InboxRow({
                 <span>{actionDisplay.label}</span>
               </motion.span>
             ) : (
-              <motion.span
-                key="status"
-                className="flex items-center gap-1"
-              >
-                <StatusIcon className={`size-3 ${item.status === "running" ? "animate-spin" : ""}`} />
+              <motion.span key="status" className="flex items-center gap-1">
+                <StatusIcon
+                  className={`size-3 ${item.status === "running" ? "animate-spin" : ""}`}
+                />
                 <span className="hidden sm:inline">{meta.label}</span>
               </motion.span>
             )}
@@ -414,11 +407,7 @@ function InboxRow({
 
 function CursorArrow({ color }: { color: string }) {
   return (
-    <svg
-      className="size-5"
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 40 40"
-    >
+    <svg className="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
       <path
         fill={color}
         d="M1.8 4.4 7 36.2c.3 1.8 2.6 2.3 3.6.8l3.9-5.7c1.7-2.5 4.5-4.1 7.5-4.3l6.9-.5c1.8-.1 2.5-2.4 1.1-3.5L5 2.5c-1.4-1.1-3.5 0-3.3 1.9Z"
@@ -457,7 +446,7 @@ function NamedCursor({
         <motion.span
           initial={{ opacity: 0, scale: 0.8, x: -4 }}
           animate={{ opacity: 1, scale: 1, x: 0 }}
-          className="absolute top-4 left-3 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg"
+          className="absolute top-4 left-3 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white shadow-lg"
           style={{ backgroundColor: user.color }}
         >
           {user.name}
@@ -623,7 +612,17 @@ function useTimelineLoop(isActive: boolean, buttonPositions: ButtonPositionMap) 
     // no-op: just ensures runStep recaptures `items`
   }, [runStep]);
 
-  return { items, dismissingId, cursorTargetId, resolvedActions, pulsingAgent, cursorVisible, cursorClicking, cursorPos, cursorUser };
+  return {
+    items,
+    dismissingId,
+    cursorTargetId,
+    resolvedActions,
+    pulsingAgent,
+    cursorVisible,
+    cursorClicking,
+    cursorPos,
+    cursorUser,
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -636,18 +635,24 @@ export function TeamShowcaseSection() {
   const isInView = useInView(sectionRef, { once: false, margin: "-120px" });
   const buttonPositionsRef = useRef<ButtonPositionMap>(new Map());
 
-  const { items, dismissingId, cursorTargetId, resolvedActions, pulsingAgent, cursorVisible, cursorClicking, cursorPos, cursorUser } =
-    useTimelineLoop(isInView, buttonPositionsRef.current);
+  const {
+    items,
+    dismissingId,
+    cursorTargetId,
+    resolvedActions,
+    pulsingAgent,
+    cursorVisible,
+    cursorClicking,
+    cursorPos,
+    cursorUser,
+  } = useTimelineLoop(isInView, buttonPositionsRef.current);
 
   const pendingCount = items.filter(
     (i) => i.status === "awaiting_approval" || i.status === "awaiting_auth",
   ).length;
 
   return (
-    <section
-      ref={sectionRef}
-      className="bg-muted/20 border-border/40 border-t px-6 py-20 md:py-32"
-    >
+    <section ref={sectionRef} className="bg-muted/20 border-border/40 border-t px-6 py-20 md:py-32">
       <div className="mx-auto max-w-6xl">
         {/* Header — left-aligned */}
         <motion.div
@@ -661,7 +666,8 @@ export function TeamShowcaseSection() {
             Coworkers that handle the work for you
           </h2>
           <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed">
-            Your agents work autonomously and surface what matters to your inbox — approvals, auth requests, and results. You stay in control.
+            Your agents work autonomously and surface what matters to your inbox — approvals, auth
+            requests, and results. You stay in control.
           </p>
         </motion.div>
 
@@ -699,7 +705,7 @@ export function TeamShowcaseSection() {
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
-                    className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-amber-600 dark:text-amber-400"
+                    className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600 tabular-nums dark:text-amber-400"
                   >
                     {pendingCount}
                   </motion.span>

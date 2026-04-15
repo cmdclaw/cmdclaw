@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  Activity,
-  Check,
-  Loader2,
-  Timer,
-  Shield,
-  Users,
-  Clock,
-} from "lucide-react";
+import { Activity, Check, Loader2, Timer, Shield, Users, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -38,11 +30,9 @@ function BentoCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className={`group relative overflow-hidden rounded-2xl border border-border/80 bg-background transition-all duration-300 hover:border-border hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] ${className}`}
+      className={`group border-border/80 bg-background hover:border-border relative overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] ${className}`}
     >
-      {gradient && (
-        <div className={`pointer-events-none absolute inset-0 ${gradient}`} />
-      )}
+      {gradient && <div className={`pointer-events-none absolute inset-0 ${gradient}`} />}
       <div className="relative">{children}</div>
     </motion.div>
   );
@@ -276,9 +266,7 @@ function IntegrationsCard() {
     <BentoCard gradient="bg-[radial-gradient(ellipse_at_top_right,rgba(139,92,246,0.04),transparent_60%)]">
       <div className="p-6">
         <h3 className="text-foreground text-[15px] font-semibold">Integrate with all your tools</h3>
-        <p className="text-muted-foreground mt-1 mb-5 text-sm">
-          Connect your tools in one click.
-        </p>
+        <p className="text-muted-foreground mt-1 mb-5 text-sm">Connect your tools in one click.</p>
         <div className="grid grid-cols-4 gap-2.5">
           {FEATURED_INTEGRATIONS.map((key, i) => (
             <motion.div
@@ -288,7 +276,7 @@ function IntegrationsCard() {
               viewport={{ once: true }}
               transition={{ duration: 0.3, delay: i * 0.04 }}
               whileHover={{ scale: 1.08, y: -3 }}
-              className="border-border/50 bg-muted/30 flex aspect-square flex-col items-center justify-center gap-1.5 rounded-xl border transition-shadow duration-200 hover:border-border hover:shadow-[0_4px_16px_rgb(0,0,0,0.06)]"
+              className="border-border/50 bg-muted/30 hover:border-border flex aspect-square flex-col items-center justify-center gap-1.5 rounded-xl border transition-shadow duration-200 hover:shadow-[0_4px_16px_rgb(0,0,0,0.06)]"
             >
               <Image
                 src={INTEGRATION_LOGOS[key]}
@@ -297,7 +285,7 @@ function IntegrationsCard() {
                 height={24}
                 className="size-6"
               />
-              <span className="text-muted-foreground text-[9px] font-medium leading-none">
+              <span className="text-muted-foreground text-[9px] leading-none font-medium">
                 {INTEGRATION_DISPLAY_NAMES[key].replace("Google ", "").replace("Microsoft ", "")}
               </span>
             </motion.div>
@@ -317,22 +305,19 @@ const FEATURE_CARDS = [
     icon: Shield,
     title: "Full visibility",
     desc: "Every action logged. Every tool call traced. Complete audit trail for your team.",
-    gradient:
-      "bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.05),transparent_60%)]",
+    gradient: "bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.05),transparent_60%)]",
   },
   {
     icon: Users,
     title: "Team collaboration",
     desc: "Share agents across your team. Control who can edit, run, or approve.",
-    gradient:
-      "bg-[radial-gradient(ellipse_at_top_center,rgba(245,158,11,0.05),transparent_60%)]",
+    gradient: "bg-[radial-gradient(ellipse_at_top_center,rgba(245,158,11,0.05),transparent_60%)]",
   },
   {
     icon: Clock,
     title: "Runs without you",
     desc: "Run every Monday at 9am, on every new CRM deal, or when an email arrives. They never stop.",
-    gradient:
-      "bg-[radial-gradient(ellipse_at_top_right,rgba(16,185,129,0.05),transparent_60%)]",
+    gradient: "bg-[radial-gradient(ellipse_at_top_right,rgba(16,185,129,0.05),transparent_60%)]",
   },
 ] as const;
 
@@ -362,7 +347,7 @@ function FeatureCard({
 
 export function BentoFeaturesSection() {
   return (
-    <section className="relative z-10 bg-background px-6 pt-16 pb-20 md:pt-24 md:pb-28">
+    <section className="bg-background relative z-10 px-6 pt-16 pb-20 md:pt-24 md:pb-28">
       <div className="mx-auto max-w-6xl">
         {/* Left-aligned header — strong typographic hierarchy */}
         <motion.div
@@ -376,7 +361,8 @@ export function BentoFeaturesSection() {
             Ship AI agents that actually work
           </h2>
           <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed">
-            Build, configure, and deploy autonomous coworkers that connect to your tools and run around the clock.
+            Build, configure, and deploy autonomous coworkers that connect to your tools and run
+            around the clock.
           </p>
         </motion.div>
 
