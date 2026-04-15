@@ -24,6 +24,25 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   });
 }
 
+if (typeof globalThis.ResizeObserver === "undefined") {
+  class ResizeObserverStub {
+    callback?: ResizeObserverCallback;
+
+    constructor(callback?: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+    observe(_target: Element) {}
+    unobserve(_target: Element) {}
+    disconnect() {}
+  }
+
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    writable: true,
+    configurable: true,
+    value: ResizeObserverStub,
+  });
+}
+
 beforeAll(() => {
   if (isLiveE2E) {
     return;

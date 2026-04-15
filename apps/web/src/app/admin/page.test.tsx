@@ -12,11 +12,15 @@ const {
   removeApprovedLoginEntryMutateAsyncMock,
   addAllowlistEntryMutateAsyncMock,
   removeAllowlistEntryMutateAsyncMock,
+  getSessionMock,
+  listUsersMock,
 } = vi.hoisted(() => ({
   addApprovedLoginEntryMutateAsyncMock: vi.fn(),
   removeApprovedLoginEntryMutateAsyncMock: vi.fn(),
   addAllowlistEntryMutateAsyncMock: vi.fn(),
   removeAllowlistEntryMutateAsyncMock: vi.fn(),
+  getSessionMock: vi.fn(),
+  listUsersMock: vi.fn(),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -35,6 +39,27 @@ vi.mock("@/components/ui/button", () => ({
 
 vi.mock("@/components/ui/input", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+}));
+
+vi.mock("@/components/ui/data-table", () => ({
+  DataTable: ({ data }: { data: Array<{ email: string }> }) => (
+    <div>
+      {data.map((row) => (
+        <div key={row.email}>{row.email}</div>
+      ))}
+    </div>
+  ),
+}));
+
+vi.mock("@/lib/auth-client", () => ({
+  authClient: {
+    getSession: getSessionMock,
+    admin: {
+      listUsers: listUsersMock,
+      impersonateUser: vi.fn(),
+      stopImpersonating: vi.fn(),
+    },
+  },
 }));
 
 vi.mock("@/orpc/hooks", () => ({
@@ -83,13 +108,17 @@ describe("AdminPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    getSessionMock.mockResolvedValue({ data: null });
+    listUsersMock.mockResolvedValue({ data: { users: [] } });
   });
 
-  it("shows the invite-only waitlist emails", () => {
+  it("shows the invite-only waitlist emails", async () => {
     render(<AdminPage />);
 
-    expect(screen.getByText("Approved Login Emails")).toBeInTheDocument();
-    expect(screen.getByText("baptiste@heybap.com")).toBeInTheDocument();
+    expect(screen.getByText("User Management")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("baptiste@heybap.com")).toBeInTheDocument();
+    });
   });
 
   it("adds an approved login email", async () => {
@@ -103,9 +132,10 @@ describe("AdminPage", () => {
 
     render(<AdminPage />);
 
-    const inputs = screen.getAllByPlaceholderText("user@company.com");
-    fireEvent.change(inputs[0], { target: { value: "User@Example.com " } });
-    fireEvent.click(screen.getByRole("button", { name: "Add approved email" }));
+    fireEvent.change(screen.getByPlaceholderText("user@company.com"), {
+      target: { value: "User@Example.com " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
       expect(addApprovedLoginEntryMutateAsyncMock).toHaveBeenCalledWith({

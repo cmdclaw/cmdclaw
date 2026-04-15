@@ -38,6 +38,7 @@ describe("composeOpencodePromptSpec", () => {
       "user_timezone",
       "cli",
       "executor",
+      "mcp_guidance",
       "coworker_cli",
       "skills",
       "selected_platform_skills",
@@ -109,6 +110,7 @@ describe("composeOpencodePromptSpec", () => {
     expect(result.sections.map((section) => section.key)).toEqual([
       "base_system",
       "file_sharing",
+      "mcp_guidance",
       "coworker_cli",
       "integration_skill_drafts",
     ]);

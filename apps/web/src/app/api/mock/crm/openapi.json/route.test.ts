@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest";
 import { GET } from "./route";
 
 describe("GET /api/mock/crm/openapi.json", () => {
-  it("returns an OpenAPI document rooted at the request origin", async () => {
-    const response = await GET(new Request("https://demo.localcan.dev/api/mock/crm/openapi.json"));
+  it("returns an OpenAPI document rooted at the forwarded origin", async () => {
+    const response = await GET(
+      new Request("https://localcan.baptistecolle.com/api/mock/crm/openapi.json", {
+        headers: {
+          "x-forwarded-host": "demo.localcan.dev",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
     const body = await response.json();
 
     expect(response.status).toBe(200);

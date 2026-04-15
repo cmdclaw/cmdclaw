@@ -117,21 +117,20 @@ describe("AdminUsagePage", () => {
       error: null,
     });
     useAdminUsageDashboardMock.mockImplementation((workspaceId: string | null) => {
-      if (workspaceId === "ws-1") {
+      if (workspaceId === "all") {
         return {
           data: {
             summary: {
-              inputTokens: 110,
-              outputTokens: 70,
-              totalTokens: 180,
+              inputTokens: 119,
+              outputTokens: 76,
+              totalTokens: 195,
             },
-            dailyByModel: [
-              { date: "2026-04-01", model: "claude-sonnet-4-6", totalTokens: 120 },
-              { date: "2026-04-02", model: "gpt-4o", totalTokens: 60 },
-            ],
-            dailyByType: [
-              { date: "2026-04-01", type: "coworker_runner", totalTokens: 120 },
-              { date: "2026-04-02", type: "chat", totalTokens: 60 },
+            dailyByModel: [],
+            dailyByType: [],
+            dailyByWorkspace: [
+              { date: "2026-04-01", workspace: "Acme Corp", totalTokens: 120 },
+              { date: "2026-04-02", workspace: "Acme Corp", totalTokens: 60 },
+              { date: "2026-04-03", workspace: "Startup Labs", totalTokens: 15 },
             ],
             coworkerBreakdown: [
               {
@@ -148,7 +147,70 @@ describe("AdminUsagePage", () => {
                 outputTokens: 30,
                 totalTokens: 60,
               },
+              {
+                name: "Coworker Builder",
+                type: "coworker_builder",
+                inputTokens: 9,
+                outputTokens: 6,
+                totalTokens: 15,
+              },
             ],
+            workspaceBreakdown: [
+              {
+                workspaceId: "ws-1",
+                workspaceName: "Acme Corp",
+                inputTokens: 110,
+                outputTokens: 70,
+                totalTokens: 180,
+              },
+              {
+                workspaceId: "ws-2",
+                workspaceName: "Startup Labs",
+                inputTokens: 9,
+                outputTokens: 6,
+                totalTokens: 15,
+              },
+            ],
+          },
+          isLoading: false,
+          error: null,
+        };
+      }
+
+      if (workspaceId === "ws-1") {
+        return {
+          data: {
+            summary: {
+              inputTokens: 110,
+              outputTokens: 70,
+              totalTokens: 180,
+            },
+            dailyByModel: [
+              { date: "2026-04-01", model: "claude-sonnet-4-6", totalTokens: 120 },
+              { date: "2026-04-02", model: "gpt-4o", totalTokens: 60 },
+            ],
+            dailyByType: [
+              { date: "2026-04-01", type: "coworker_runner", totalTokens: 120 },
+              { date: "2026-04-02", type: "chat", totalTokens: 60 },
+            ],
+            dailyByWorkspace: [],
+            coworkerBreakdown: [
+              {
+                name: "@reviewer",
+                type: "coworker_runner",
+                inputTokens: 80,
+                outputTokens: 40,
+                totalTokens: 120,
+              },
+              {
+                name: "Chat (direct)",
+                type: "chat",
+                inputTokens: 30,
+                outputTokens: 30,
+                totalTokens: 60,
+              },
+            ],
+            workspaceBreakdown: [],
           },
           isLoading: false,
           error: null,
@@ -165,6 +227,7 @@ describe("AdminUsagePage", () => {
             },
             dailyByModel: [{ date: "2026-04-03", model: "claude-haiku-4-5", totalTokens: 15 }],
             dailyByType: [{ date: "2026-04-03", type: "coworker_builder", totalTokens: 15 }],
+            dailyByWorkspace: [],
             coworkerBreakdown: [
               {
                 name: "Coworker Builder",
@@ -174,6 +237,7 @@ describe("AdminUsagePage", () => {
                 totalTokens: 15,
               },
             ],
+            workspaceBreakdown: [],
           },
           isLoading: false,
           error: null,
@@ -192,11 +256,12 @@ describe("AdminUsagePage", () => {
     render(<AdminUsagePage />);
 
     await waitFor(() => {
-      expect(useAdminUsageDashboardMock).toHaveBeenCalledWith("ws-1");
+      expect(useAdminUsageDashboardMock).toHaveBeenCalledWith("all");
     });
 
-    expect(screen.getByText("180")).toBeInTheDocument();
+    expect(screen.getByText("195")).toBeInTheDocument();
     expect(screen.getByText("@reviewer")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getAllByRole("combobox")[0], {
       target: { value: "ws-2" },
@@ -228,7 +293,7 @@ describe("AdminUsagePage", () => {
   });
 
   it("shows empty states when the selected workspace has no usage", async () => {
-    useAdminWorkspacesMock.mockReturnValueOnce({
+    useAdminWorkspacesMock.mockReturnValue({
       data: [{ id: "ws-empty", name: "Empty Workspace" }],
       isLoading: false,
       error: null,
@@ -240,7 +305,9 @@ describe("AdminUsagePage", () => {
             summary: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             dailyByModel: [],
             dailyByType: [],
+            dailyByWorkspace: [],
             coworkerBreakdown: [],
+            workspaceBreakdown: [],
           },
           isLoading: false,
           error: null,
@@ -256,13 +323,15 @@ describe("AdminUsagePage", () => {
 
     render(<AdminUsagePage />);
 
+    fireEvent.change(screen.getAllByRole("combobox")[0], {
+      target: { value: "ws-empty" },
+    });
+
     await waitFor(() => {
       expect(useAdminUsageDashboardMock).toHaveBeenCalledWith("ws-empty");
     });
 
     expect(screen.getAllByText("0").length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("No usage data for this workspace in the last 30 days.").length,
-    ).toBe(2);
+    expect(screen.getAllByText(/No usage data .*in the last 30 days\./).length).toBe(2);
   });
 });

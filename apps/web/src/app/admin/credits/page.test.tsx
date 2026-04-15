@@ -150,6 +150,9 @@ describe("AdminCreditsPage", () => {
         searchField: "email",
       }),
     });
+
+    fireEvent.click(screen.getByRole("button", { name: /alice@example\.com/i }));
+
     expect(screen.getByText("Alice Workspace")).toBeInTheDocument();
     expect(screen.getByText(/Top-up bal\./i)).toBeInTheDocument();
     expect(screen.getByText(/Recent Top-Ups/i)).toBeInTheDocument();
@@ -196,6 +199,11 @@ describe("AdminCreditsPage", () => {
     await waitFor(() => {
       expect(listUsersMock).toHaveBeenCalledTimes(2);
       expect(screen.getAllByText(/bob@example\.com/i).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /bob@example\.com/i }));
+
+    await waitFor(() => {
       expect(screen.getByText("None")).toBeInTheDocument();
     });
   });
@@ -220,6 +228,12 @@ describe("AdminCreditsPage", () => {
     render(<AdminCreditsPage />);
 
     await waitFor(() => {
+      expect(listUsersMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /alice@example\.com/i }));
+
+    await waitFor(() => {
       expect(screen.getByText("Alice Workspace")).toBeInTheDocument();
     });
 
@@ -240,6 +254,12 @@ describe("AdminCreditsPage", () => {
     manualTopUpMutateAsyncMock.mockRejectedValueOnce(new Error("Grant failed."));
 
     render(<AdminCreditsPage />);
+
+    await waitFor(() => {
+      expect(listUsersMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /alice@example\.com/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Alice Workspace")).toBeInTheDocument();

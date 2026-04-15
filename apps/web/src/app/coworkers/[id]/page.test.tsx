@@ -638,7 +638,7 @@ describe("CoworkerEditorPage", () => {
     const { rerender } = render(<CoworkerEditorPage />);
 
     expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
-    expect(screen.getByDisplayValue("Existing prompt")).toBeInTheDocument();
+    expect(screen.getAllByText("Existing prompt").length).toBeGreaterThan(0);
 
     mockCoworkerData.current = {
       ...mockCoworkerData.current,
@@ -651,7 +651,7 @@ describe("CoworkerEditorPage", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+    expect(screen.getAllByText("Builder patched prompt").length).toBeGreaterThan(0);
   });
 
   it("merges an external prompt patch even when another local edit is still unsaved", async () => {
@@ -673,7 +673,7 @@ describe("CoworkerEditorPage", () => {
     });
 
     expect(screen.getByDisplayValue("Locally edited description")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+    expect(screen.getAllByText("Builder patched prompt").length).toBeGreaterThan(0);
   });
 
   it("refetches coworker instructions when builder chat reports a coworker sync", async () => {
@@ -691,7 +691,7 @@ describe("CoworkerEditorPage", () => {
     await flushMicrotasks();
 
     expect(screen.getByText("Chat")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Existing prompt")).toBeInTheDocument();
+    expect(screen.getAllByText("Existing prompt").length).toBeGreaterThan(0);
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Sync coworker" }));
@@ -702,7 +702,7 @@ describe("CoworkerEditorPage", () => {
 
     expect(mockCoworkerRefetch).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
-    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+    expect(screen.getAllByText("Builder patched prompt").length).toBeGreaterThan(0);
   });
 
   it("collapses the builder panel when there are no instructions", () => {
@@ -743,7 +743,7 @@ describe("CoworkerEditorPage", () => {
     });
 
     expect(screen.getByTestId("mock-right-panel")).toHaveAttribute("data-collapsed", "false");
-    expect(screen.getByDisplayValue("Builder patched prompt")).toBeInTheDocument();
+    expect(screen.getAllByText("Builder patched prompt").length).toBeGreaterThan(0);
   });
 
   it("does not expand the builder panel before instructions are updated", async () => {

@@ -98,7 +98,7 @@ describe("CloudLoginClient", () => {
     expect(mocks.routerPush).toHaveBeenCalledWith("/chat");
   });
 
-  it("requests a password setup email via forgot password", async () => {
+  it("requests a password setup email", async () => {
     render(<CloudLoginClient callbackUrl="/chat" />);
 
     // Step 1: enter email and continue
@@ -110,8 +110,8 @@ describe("CloudLoginClient", () => {
     // Step 2: choose password method
     fireEvent.click(screen.getByRole("button", { name: "Use password" }));
 
-    // Step 3: click forgot password
-    fireEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
+    // Step 3: request a password email
+    fireEvent.click(screen.getByRole("button", { name: "Create or reset password" }));
 
     await waitFor(() => {
       expect(mocks.fetchMock).toHaveBeenCalledWith("/api/auth/password/start", {
@@ -126,7 +126,7 @@ describe("CloudLoginClient", () => {
       });
     });
 
-    expect(screen.getByText("Password reset sent")).toBeInTheDocument();
+    expect(screen.getByText("Password email sent")).toBeInTheDocument();
   });
 
   it("sends a magic link", async () => {
