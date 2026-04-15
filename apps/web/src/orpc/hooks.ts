@@ -147,7 +147,7 @@ export function useConversationList(options?: { limit?: number }) {
 export function useInboxItems(input?: {
   limit?: number;
   type?: "all" | "coworkers" | "chats";
-  statuses?: Array<"awaiting_approval" | "awaiting_auth" | "error">;
+  statuses?: Array<"awaiting_approval" | "awaiting_auth" | "paused" | "error">;
   sourceCoworkerId?: string;
   query?: string;
 }) {
@@ -490,6 +490,20 @@ export function useRequestGoogleAccess() {
         queryKey: ["integration", "google-access-status"],
       });
     },
+  });
+}
+
+export function useCreateDemoPasswordAccount() {
+  return useMutation({
+    mutationFn: (input: { email: string; name?: string }) =>
+      client.admin.createDemoPasswordAccount(input),
+  });
+}
+
+export function useResetDemoPassword() {
+  return useMutation({
+    mutationFn: (input: { userId?: string; email?: string }) =>
+      client.admin.resetDemoPassword(input),
   });
 }
 
@@ -1298,6 +1312,7 @@ export function useUpdateCoworker() {
       promptDo?: string | null;
       promptDont?: string | null;
       autoApprove?: boolean;
+      isPinned?: boolean;
       toolAccessMode?: CoworkerToolAccessMode;
       allowedIntegrations?: (
         | "google_gmail"
@@ -1611,6 +1626,119 @@ export function useGetOrCreateBuilderConversation() {
   });
 }
 
+// ========== COWORKER TAG HOOKS ==========
+
+export function useCoworkerTagList() {
+  return useQuery({
+    queryKey: ["coworkerTag", "list"],
+    queryFn: () => client.coworkerTag.list(),
+  });
+}
+
+export function useCreateCoworkerTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; color?: string | null }) =>
+      client.coworkerTag.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerTag"] });
+    },
+  });
+}
+
+export function useUpdateCoworkerTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; name?: string; color?: string | null }) =>
+      client.coworkerTag.update(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerTag"] });
+    },
+  });
+}
+
+export function useDeleteCoworkerTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => client.coworkerTag.delete({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerTag"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker", "list"] });
+    },
+  });
+}
+
+export function useAssignCoworkerTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { coworkerId: string; tagIds: string[] }) =>
+      client.coworkerTag.assign(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerTag"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker", "list"] });
+    },
+  });
+}
+
+export function useUnassignCoworkerTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { coworkerId: string; tagIds: string[] }) =>
+      client.coworkerTag.unassign(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerTag"] });
+      queryClient.invalidateQueries({ queryKey: ["coworker", "list"] });
+    },
+  });
+}
+
+// ========== COWORKER VIEW HOOKS ==========
+
+export function useCoworkerViewList() {
+  return useQuery({
+    queryKey: ["coworkerView", "list"],
+    queryFn: () => client.coworkerView.list(),
+  });
+}
+
+export function useCreateCoworkerView() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      filters: { tagIds?: string[]; statuses?: string[]; triggerTypes?: string[] };
+    }) => client.coworkerView.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerView"] });
+    },
+  });
+}
+
+export function useUpdateCoworkerView() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      name?: string;
+      filters?: { tagIds?: string[]; statuses?: string[]; triggerTypes?: string[] };
+      position?: number;
+    }) => client.coworkerView.update(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerView"] });
+    },
+  });
+}
+
+export function useDeleteCoworkerView() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => client.coworkerView.delete({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coworkerView"] });
+    },
+  });
+}
+
 // Hook for deleting a file
 export function useDeleteSkillFile() {
   const queryClient = useQueryClient();
@@ -1760,10 +1888,11 @@ export function useSetTaskDonePushEnabled() {
 
 // ========== BILLING HOOKS ==========
 
-export function useBillingOverview() {
+export function useBillingOverview(enabled = true) {
   return useQuery({
     queryKey: ["billing", "overview"],
     queryFn: () => client.billing.overview(),
+    enabled,
   });
 }
 
@@ -2137,6 +2266,9 @@ export function useGeneration() {
         model?: string;
         authSource?: ProviderAuthSource | null;
         autoApprove?: boolean;
+        resumePausedGenerationId?: string;
+        debugRunDeadlineMs?: number;
+        debugApprovalHotWaitMs?: number;
         selectedPlatformSkillSlugs?: string[];
         fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
       },
@@ -2178,10 +2310,14 @@ export function useGeneration() {
                 queryClient.invalidateQueries({
                   queryKey: ["conversation", "list"],
                 });
+                queryClient.invalidateQueries({
+                  queryKey: ["generation"],
+                });
               },
               onDone: (generationId, conversationId, messageId, usage, artifacts) => {
                 callbacks.onDone?.(generationId, conversationId, messageId, usage, artifacts);
                 queryClient.invalidateQueries({ queryKey: ["conversation"] });
+                queryClient.invalidateQueries({ queryKey: ["generation"] });
               },
               onError: (error) => {
                 if (isStreamNotReadyError(error.message)) {
@@ -2466,19 +2602,16 @@ export function useSubmitApproval() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      generationId,
-      toolUseId,
+      interruptId,
       decision,
       questionAnswers,
     }: {
-      generationId: string;
-      toolUseId: string;
+      interruptId: string;
       decision: "approve" | "deny";
       questionAnswers?: string[][];
     }) =>
       client.generation.submitApproval({
-        generationId,
-        toolUseId,
+        interruptId,
         decision,
         questionAnswers,
       }),
@@ -2496,16 +2629,16 @@ export function useSubmitAuthResult() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      generationId,
+      interruptId,
       integration,
       success,
     }: {
-      generationId: string;
+      interruptId: string;
       integration: string;
       success: boolean;
     }) =>
       client.generation.submitAuthResult({
-        generationId,
+        interruptId,
         integration,
         success,
       }),
@@ -2701,6 +2834,28 @@ export function useDeleteOrgChartNode() {
     mutationFn: (input: { id: string }) => client.orgChart.delete(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orgChart"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin sandbox hooks
+// ---------------------------------------------------------------------------
+
+export function useAdminListSandboxes() {
+  return useQuery({
+    queryKey: ["admin", "sandboxes"],
+    queryFn: () => client.admin.listSandboxes(),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useAdminKillSandbox() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { sandboxId: string }) => client.admin.killSandbox(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "sandboxes"] });
     },
   });
 }

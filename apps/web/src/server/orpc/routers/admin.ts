@@ -3,9 +3,13 @@ import {
   buildQueueJobId,
   getQueue,
 } from "@cmdclaw/core/server/queues";
+import { listAllE2BSandboxes, killE2BSandboxById } from "@cmdclaw/core/server/sandbox/e2b";
+import { conversationRuntimeService } from "@cmdclaw/core/server/services/conversation-runtime-service";
 import {
+  approvedLoginEmailAllowlist,
   billingLedger,
   conversation,
+  conversationRuntime,
   coworker,
   coworkerRun,
   generation,
@@ -13,8 +17,20 @@ import {
   user,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
+import { randomBytes } from "crypto";
 import { eq, inArray, sql } from "drizzle-orm";
+import { Pool } from "pg";
 import { z } from "zod";
+import {
+  isApprovedLoginEmail,
+  normalizeApprovedLoginEmail,
+} from "@/server/lib/approved-login-emails";
+import {
+  findAuthUserByEmail,
+  findAuthUserById,
+  resolveOrCreateAuthUserByEmail,
+  setCredentialPassword,
+} from "@/server/lib/credential-accounts";
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 import { queryCoworkerOverview } from "../shared/overview-queries";
 import { queryUsageDashboard } from "../shared/usage-queries";
@@ -28,6 +44,44 @@ async function requireAdmin(context: Pick<AuthenticatedContext, "db" | "user">) 
   if (dbUser?.role !== "admin") {
     throw new ORPCError("FORBIDDEN", { message: "Admin access required" });
   }
+}
+
+function generateDemoPassword(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+async function ensureApprovedLoginEntry(context: AuthenticatedContext, email: string) {
+  if (await isApprovedLoginEmail(email)) {
+    return;
+  }
+
+  await context.db
+    .insert(approvedLoginEmailAllowlist)
+    .values({
+      email,
+      createdByUserId: context.user.id,
+    })
+    .onConflictDoNothing({
+      target: [approvedLoginEmailAllowlist.email],
+    });
+}
+
+async function resolveOrCreateDemoUser(params: {
+  context: AuthenticatedContext;
+  email: string;
+  name?: string | null;
+}) {
+  const normalizedEmail = normalizeApprovedLoginEmail(params.email);
+  await ensureApprovedLoginEntry(params.context, normalizedEmail);
+  const createdUser = await resolveOrCreateAuthUserByEmail({
+    email: normalizedEmail,
+    name: params.name,
+  });
+
+  return {
+    userId: createdUser.id,
+    email: createdUser.email,
+  };
 }
 
 type CoworkerSchedule =
@@ -113,6 +167,73 @@ const getCoworkerOverview = protectedProcedure
     return queryCoworkerOverview(context.db, {
       workspaceId: input.workspaceId,
     });
+  });
+
+const createDemoPasswordAccount = protectedProcedure
+  .input(
+    z.object({
+      email: z.string().email(),
+      name: z.string().trim().min(1).max(120).optional(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    await requireAdmin(context);
+
+    const password = generateDemoPassword();
+    const user = await resolveOrCreateDemoUser({
+      context,
+      email: input.email,
+      name: input.name,
+    });
+
+    await setCredentialPassword({
+      userId: user.userId,
+      password,
+    });
+
+    return {
+      userId: user.userId,
+      email: user.email,
+      password,
+    };
+  });
+
+const resetDemoPassword = protectedProcedure
+  .input(
+    z
+      .object({
+        userId: z.string().min(1).optional(),
+        email: z.string().email().optional(),
+      })
+      .refine((value) => Boolean(value.userId || value.email), {
+        message: "userId or email is required",
+      }),
+  )
+  .handler(async ({ context, input }) => {
+    await requireAdmin(context);
+
+    const existingUser = input.userId
+      ? await findAuthUserById(input.userId)
+      : await findAuthUserByEmail(normalizeApprovedLoginEmail(input.email ?? ""));
+
+    if (!existingUser) {
+      throw new ORPCError("NOT_FOUND", { message: "User not found" });
+    }
+
+    const normalizedEmail = normalizeApprovedLoginEmail(existingUser.email);
+    await ensureApprovedLoginEntry(context, normalizedEmail);
+
+    const password = generateDemoPassword();
+    await setCredentialPassword({
+      userId: existingUser.id,
+      password,
+    });
+
+    return {
+      userId: existingUser.id,
+      email: normalizedEmail,
+      password,
+    };
   });
 
 const generationDurationMsSql = sql<number>`
@@ -815,11 +936,158 @@ const getPerformanceDashboard = protectedProcedure
     };
   });
 
+// ---------------------------------------------------------------------------
+// Sandbox admin procedures
+// ---------------------------------------------------------------------------
+
+type EnrichmentRow = {
+  sandboxId: string;
+  conversationId: string | null;
+  conversationTitle: string | null;
+  conversationType: string | null;
+  model: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userName: string | null;
+  coworkerName: string | null;
+  coworkerUsername: string | null;
+  coworkerTriggerType: string | null;
+  coworkerId: string | null;
+};
+
+const ENRICHMENT_QUERY = `
+  select distinct on (cr.sandbox_id)
+    cr.sandbox_id as "sandboxId",
+    cr.conversation_id as "conversationId",
+    c.title as "conversationTitle",
+    c.type as "conversationType",
+    c.model,
+    c.user_id as "userId",
+    u.email as "userEmail",
+    u.name as "userName",
+    cw.name as "coworkerName",
+    cw.username as "coworkerUsername",
+    cw.trigger_type as "coworkerTriggerType",
+    cw.id as "coworkerId"
+  from conversation_runtime cr
+  join conversation c on c.id = cr.conversation_id
+  left join "user" u on u.id = c.user_id
+  left join generation g on g.conversation_id = c.id
+  left join coworker_run cwr on cwr.generation_id = g.id
+  left join coworker cw on cw.id = cwr.coworker_id
+  where cr.sandbox_id = any($1)
+  order by cr.sandbox_id, cw.id nulls last, cr.updated_at desc
+`;
+
+async function queryEnrichmentFromUrl(
+  connectionString: string,
+  sandboxIds: string[],
+): Promise<EnrichmentRow[]> {
+  const pool = new Pool({ connectionString, connectionTimeoutMillis: 5000 });
+  try {
+    const result = await pool.query(ENRICHMENT_QUERY, [sandboxIds]);
+    return result.rows as EnrichmentRow[];
+  } catch {
+    return [];
+  } finally {
+    await pool.end();
+  }
+}
+
+const listSandboxes = protectedProcedure.handler(async ({ context }) => {
+  await requireAdmin(context);
+
+  const sandboxes = await listAllE2BSandboxes();
+
+  if (sandboxes.length === 0) {
+    return { sandboxes: [], totalCount: 0 };
+  }
+
+  const sandboxIds = sandboxes.map((s) => s.sandboxId);
+
+  // Query all available databases for enrichment
+  const dbSources: Array<{ env: string; url: string }> = [
+    { env: "dev", url: process.env.DATABASE_URL! },
+  ];
+  if (process.env.DATABASE_URL_STAGING) {
+    dbSources.push({ env: "staging", url: process.env.DATABASE_URL_STAGING });
+  }
+  if (process.env.DATABASE_URL_PROD) {
+    dbSources.push({ env: "prod", url: process.env.DATABASE_URL_PROD });
+  }
+
+  const enrichmentMap = new Map<string, EnrichmentRow & { environment: string }>();
+
+  const enrichmentResults = await Promise.all(
+    dbSources.map(async ({ env: envName, url }) => {
+      const rows = await queryEnrichmentFromUrl(url, sandboxIds);
+      return { envName, rows };
+    }),
+  );
+
+  for (const { envName, rows } of enrichmentResults) {
+    for (const row of rows) {
+      if (!enrichmentMap.has(row.sandboxId)) {
+        enrichmentMap.set(row.sandboxId, { ...row, environment: envName });
+      }
+    }
+  }
+
+  const merged = sandboxes.map((s) => {
+    const enrichment = enrichmentMap.get(s.sandboxId);
+    return {
+      sandboxId: s.sandboxId,
+      templateId: s.templateId,
+      state: s.state,
+      startedAt: s.startedAt,
+      endAt: s.endAt,
+      cpuCount: s.cpuCount,
+      memoryMB: s.memoryMB,
+      metadata: s.metadata,
+      environment: enrichment?.environment ?? null,
+      conversationId: enrichment?.conversationId ?? s.metadata.conversationId ?? null,
+      conversationTitle: enrichment?.conversationTitle ?? null,
+      conversationType: enrichment?.conversationType ?? null,
+      model: enrichment?.model ?? null,
+      userId: enrichment?.userId ?? s.metadata.userId ?? null,
+      userEmail: enrichment?.userEmail ?? null,
+      userName: enrichment?.userName ?? null,
+      coworkerName: enrichment?.coworkerName ?? null,
+      coworkerUsername: enrichment?.coworkerUsername ?? null,
+      coworkerTriggerType: enrichment?.coworkerTriggerType ?? null,
+      coworkerId: enrichment?.coworkerId ?? null,
+    };
+  });
+
+  return { sandboxes: merged, totalCount: merged.length };
+});
+
+const adminKillSandbox = protectedProcedure
+  .input(z.object({ sandboxId: z.string().min(1) }))
+  .handler(async ({ context, input }) => {
+    await requireAdmin(context);
+
+    await killE2BSandboxById(input.sandboxId);
+
+    const runtime = await context.db.query.conversationRuntime.findFirst({
+      where: eq(conversationRuntime.sandboxId, input.sandboxId),
+    });
+    if (runtime) {
+      await conversationRuntimeService.markRuntimeDead(runtime.id);
+    }
+
+    return { success: true, sandboxId: input.sandboxId };
+  });
+
 export const adminRouter = {
+  createDemoPasswordAccount,
+  resetDemoPassword,
   getChatOverview,
   getUsageDashboard,
   getCoworkerOverview,
   getPerformanceDashboard,
   getOpsScheduledCoworkers,
   enqueueScheduledCoworkersNow,
+  listSandboxes,
+  killSandbox: adminKillSandbox,
 };

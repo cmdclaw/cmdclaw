@@ -25,6 +25,7 @@ import {
   Toolbox,
   Trash2,
   Gauge,
+  Container,
   UserCog,
   WandSparkles,
   LayoutTemplate,
@@ -105,18 +106,15 @@ type WorkspaceCoworkerRunsData = {
   }>;
 };
 
-const RUNNING_CONVERSATION_STATUSES = new Set([
-  "generating",
-  "awaiting_approval",
-  "awaiting_auth",
-  "paused",
-]);
+const RUNNING_CONVERSATION_STATUSES = new Set(["generating"]);
 const ACTIVE_COWORKER_RUN_STATUSES = new Set([
   "running",
   "awaiting_approval",
   "awaiting_auth",
   "paused",
 ]);
+const HUMAN_INPUT_CONVERSATION_STATUSES = new Set(["awaiting_approval", "awaiting_auth", "paused"]);
+const HUMAN_INPUT_COWORKER_RUN_STATUSES = new Set(["awaiting_approval", "awaiting_auth", "paused"]);
 const EMPTY_CONVERSATIONS: ConversationListData["conversations"] = [];
 const EMPTY_COWORKER_RUNS: WorkspaceCoworkerRunsData["runs"] = [];
 const RECENT_LIST_LOAD_MORE_THRESHOLD_PX = 24;
@@ -188,6 +186,15 @@ function formatRelativeShortNullable(value?: Date | string | null) {
 
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? formatRelativeShort(date) : "—";
+}
+
+function HumanInputDot() {
+  return (
+    <span
+      className="h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500"
+      aria-label="Needs human input"
+    />
+  );
 }
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
@@ -458,6 +465,7 @@ export function AppSidebar() {
     { icon: Activity, label: "Chat Health", href: "/admin/chat-overview" },
     { icon: Cuboid, label: "Coworker Overview", href: "/admin/coworker-overview" },
     { icon: Gauge, label: "Performance", href: "/admin/performance" },
+    { icon: Container, label: "Sandboxes", href: "/admin/sandboxes" },
     { icon: Bug, label: "Ops", href: "/admin/ops" },
   ];
 
@@ -938,6 +946,9 @@ export function AppSidebar() {
                             const isConversationRunning = RUNNING_CONVERSATION_STATUSES.has(
                               conversation.generationStatus,
                             );
+                            const needsHumanInput = HUMAN_INPUT_CONVERSATION_STATUSES.has(
+                              conversation.generationStatus,
+                            );
                             const hasUnreadResults = hasUnreadConversationResults({
                               isConversationActive,
                               isConversationRunning,
@@ -946,7 +957,7 @@ export function AppSidebar() {
                               optimisticSeenCount: latestSeenRef.current[conversation.id],
                             });
                             const showConversationIndicator =
-                              isConversationRunning || hasUnreadResults;
+                              isConversationRunning || needsHumanInput || hasUnreadResults;
 
                             return (
                               <div
@@ -965,6 +976,8 @@ export function AppSidebar() {
                                 >
                                   {isConversationRunning ? (
                                     <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                  ) : needsHumanInput ? (
+                                    <HumanInputDot />
                                   ) : hasUnreadResults ? (
                                     <span
                                       className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"
@@ -1074,6 +1087,8 @@ export function AppSidebar() {
                       <>
                         {recentCoworkerRuns.map((run) => {
                           const runPath = `/coworkers/runs/${run.id}`;
+                          const isRunning = run.status === "running";
+                          const needsHumanInput = HUMAN_INPUT_COWORKER_RUN_STATUSES.has(run.status);
 
                           return (
                             <div
@@ -1091,6 +1106,11 @@ export function AppSidebar() {
                                 className="flex min-h-10 flex-col justify-center px-2.5 py-1.5 pr-8"
                               >
                                 <span className="flex items-center gap-2">
+                                  {isRunning ? (
+                                    <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                  ) : needsHumanInput ? (
+                                    <HumanInputDot />
+                                  ) : null}
                                   <span className="min-w-0 flex-1 truncate">
                                     {run.coworkerName}
                                   </span>
