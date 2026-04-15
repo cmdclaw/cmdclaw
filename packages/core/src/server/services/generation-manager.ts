@@ -567,6 +567,8 @@ const OPENCODE_PROMPT_TIMEOUT_MS = generationLifecyclePolicy.runDeadlineMs;
 const OPENCODE_PROMPT_TIMEOUT_LABEL = `${Math.ceil(OPENCODE_PROMPT_TIMEOUT_MS / 60_000)}m`;
 // Save debounce interval for text chunks
 const SAVE_DEBOUNCE_MS = 2000;
+const RUN_DEADLINE_ABORT_TIMEOUT_MS = 5_000;
+const RUN_DEADLINE_SNAPSHOT_TIMEOUT_MS = 15_000;
 const SESSION_RESET_COMMANDS = new Set(["/new"]);
 type GenerationTimeoutKind = "approval" | "auth";
 const STALE_REAPER_RUNNING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
@@ -1004,6 +1006,18 @@ function getGenerationDiagnosticMessage(
 ): string | undefined {
   const message = debugInfo?.originalErrorMessage?.trim();
   return message && message.length > 0 ? message : undefined;
+}
+
+function formatGenerationErrorMessage(message: string, diagnosticMessage?: string): string {
+  const normalizedMessage = message.trim();
+  const normalizedDiagnostic = diagnosticMessage?.trim();
+  if (!normalizedDiagnostic) {
+    return normalizedMessage;
+  }
+  if (normalizedMessage.includes(normalizedDiagnostic)) {
+    return normalizedMessage;
+  }
+  return `${normalizedMessage}\nUnderlying error: ${normalizedDiagnostic}`;
 }
 
 type ExportedAssistantPart = {
@@ -4581,6 +4595,26 @@ class GenerationManager {
     return true;
   }
 
+  async submitApprovalByInterrupt(
+    interruptId: string,
+    decision: "approve" | "deny",
+    userId: string,
+    questionAnswers?: string[][],
+  ): Promise<boolean> {
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
+    if (!interrupt || interrupt.kind === "auth" || interrupt.status !== "pending") {
+      return false;
+    }
+
+    return this.submitApproval(
+      interrupt.generationId,
+      interrupt.providerToolUseId,
+      decision,
+      userId,
+      questionAnswers,
+    );
+  }
+
   async getAllowedIntegrationsForGeneration(
     generationId: string,
   ): Promise<IntegrationType[] | null> {
@@ -5459,7 +5493,7 @@ class GenerationManager {
 
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
       if (remainingRunTimeMs <= 0) {
-        await this.parkGenerationForRunDeadline(ctx);
+        await this.parkGenerationForRunDeadline(ctx, runtimeClient);
         return;
       }
 
@@ -5580,15 +5614,18 @@ class GenerationManager {
         }
       }
 
+      const continuationPromptOutcome = await this.awaitPromiseUntilRunDeadline(
+        ctx,
+        continuationPromptPromise,
+      );
       clearReattachTimeout?.();
-      const continuationPromptResult = await continuationPromptPromise;
+      if (reattachTimeoutTriggered || continuationPromptOutcome.type === "timed_out") {
+        await this.parkGenerationForRunDeadline(ctx, runtimeClient);
+        return;
+      }
+      const continuationPromptResult = continuationPromptOutcome.value;
       if (!continuationPromptResult.ok) {
         throw continuationPromptResult.error;
-      }
-
-      if (reattachTimeoutTriggered) {
-        await this.parkGenerationForRunDeadline(ctx);
-        return;
       }
 
       if (!sawSessionIdle && !ctx.abortController.signal.aborted) {
@@ -5620,7 +5657,7 @@ class GenerationManager {
     } catch (error) {
       clearReattachTimeout?.();
       if (reattachTimeoutTriggered) {
-        await this.parkGenerationForRunDeadline(ctx);
+        await this.parkGenerationForRunDeadline(ctx, runtimeClient);
         return;
       }
       if (error instanceof GenerationSuspendedError) {
@@ -6618,7 +6655,7 @@ class GenerationManager {
       const promptSentAtMs = Date.now();
       const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
       if (remainingRunTimeMs <= 0) {
-        await this.parkGenerationForRunDeadline(ctx);
+        await this.parkGenerationForRunDeadline(ctx, runtimeClient);
         return;
       }
       const promptTimeoutId = setTimeout(() => {
@@ -6780,9 +6817,14 @@ class GenerationManager {
         }
       }
 
-      const promptResult = await promptResultPromise;
+      const promptResultOutcome = await this.awaitPromiseUntilRunDeadline(ctx, promptResultPromise);
       this.stopExternalInterruptPolling(ctx);
       clearPromptTimeout?.();
+      if (promptResultOutcome.type === "timed_out" || promptTimeoutTriggered) {
+        await this.parkGenerationForRunDeadline(ctx, runtimeClient);
+        return;
+      }
+      const promptResult = promptResultOutcome.value;
       if (!promptResult.ok) {
         throw promptResult.error;
       }
@@ -6790,8 +6832,8 @@ class GenerationManager {
         throw new Error(sessionErrorMessage);
       }
       const promptElapsedMs = Date.now() - promptSentAtMs;
-      if (promptTimeoutTriggered || promptElapsedMs >= remainingRunTimeMs) {
-        await this.parkGenerationForRunDeadline(ctx);
+      if (promptElapsedMs >= remainingRunTimeMs) {
+        await this.parkGenerationForRunDeadline(ctx, runtimeClient);
         return;
       }
       this.markPhase(ctx, "prompt_completed");
@@ -6958,7 +7000,7 @@ class GenerationManager {
         return;
       }
       if (promptTimeoutTriggered) {
-        await this.parkGenerationForRunDeadline(ctx);
+        await this.parkGenerationForRunDeadline(ctx, client);
         return;
       }
       console.error("[GenerationManager] Error:", error);
@@ -8267,6 +8309,20 @@ class GenerationManager {
     return true;
   }
 
+  async submitAuthResultByInterrupt(
+    interruptId: string,
+    integration: string,
+    success: boolean,
+    userId: string,
+  ): Promise<boolean> {
+    const interrupt = await generationInterruptService.getInterrupt(interruptId);
+    if (!interrupt || interrupt.kind !== "auth" || interrupt.status !== "pending") {
+      return false;
+    }
+
+    return this.submitAuthResult(interrupt.generationId, integration, success, userId);
+  }
+
   /**
    * Wait for user approval on a write operation (called by internal router from plugin).
    * This creates a pending approval request and waits for the user to respond.
@@ -8689,7 +8745,106 @@ class GenerationManager {
     });
   }
 
-  private async parkGenerationForRunDeadline(ctx: GenerationContext): Promise<void> {
+  private async awaitPromiseUntilRunDeadline<T>(
+    ctx: Pick<GenerationContext, "deadlineAt">,
+    promise: Promise<T>,
+  ): Promise<{ type: "resolved"; value: T } | { type: "timed_out" }> {
+    const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
+    if (remainingRunTimeMs <= 0) {
+      return { type: "timed_out" };
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise.then((value) => ({ type: "resolved" as const, value })),
+        new Promise<{ type: "timed_out" }>((resolve) => {
+          timeoutId = setTimeout(() => resolve({ type: "timed_out" }), remainingRunTimeMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
+  private async awaitWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+  ): Promise<{ type: "resolved"; value: T } | { type: "timed_out" }> {
+    if (timeoutMs <= 0) {
+      return { type: "timed_out" };
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise.then((value) => ({ type: "resolved" as const, value })),
+        new Promise<{ type: "timed_out" }>((resolve) => {
+          timeoutId = setTimeout(() => resolve({ type: "timed_out" }), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
+  private async abortRuntimeForRunDeadlinePark(
+    ctx: Pick<GenerationContext, "id" | "conversationId" | "sessionId">,
+    runtimeClient?: RuntimeHarnessClient,
+  ): Promise<void> {
+    if (!runtimeClient || !ctx.sessionId) {
+      return;
+    }
+
+    try {
+      const abortOutcome = await this.awaitWithTimeout(
+        runtimeClient.abort({ sessionID: ctx.sessionId }),
+        RUN_DEADLINE_ABORT_TIMEOUT_MS,
+      );
+      if (abortOutcome.type === "timed_out") {
+        console.warn(
+          `[GenerationManager] Timed out aborting session ${ctx.sessionId} before deadline park for generation ${ctx.id}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[GenerationManager] Failed to abort session ${ctx.sessionId} before deadline park for conversation ${ctx.conversationId}:`,
+        error,
+      );
+    }
+  }
+
+  private async saveSessionSnapshotForRunDeadlinePark(ctx: GenerationContext): Promise<void> {
+    if (!ctx.sessionId || !ctx.sandbox) {
+      return;
+    }
+
+    try {
+      const snapshotOutcome = await this.awaitWithTimeout(
+        this.saveSessionSnapshot(ctx),
+        RUN_DEADLINE_SNAPSHOT_TIMEOUT_MS,
+      );
+      if (snapshotOutcome.type === "timed_out") {
+        console.error(
+          `[GenerationManager] Timed out saving session snapshot before deadline park for conversation ${ctx.conversationId}`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[GenerationManager] Failed to save session snapshot before deadline park for conversation ${ctx.conversationId}:`,
+        error,
+      );
+    }
+  }
+
+  private async parkGenerationForRunDeadline(
+    ctx: GenerationContext,
+    runtimeClient?: RuntimeHarnessClient,
+  ): Promise<void> {
     const now = new Date();
     const releasedSandboxId = ctx.sandboxId;
     const remainingRunMs = this.refreshRemainingRunBudget(ctx, now);
@@ -8706,7 +8861,8 @@ class GenerationManager {
     }
     this.stopExternalInterruptPolling(ctx);
 
-    await this.saveSessionSnapshot(ctx);
+    await this.abortRuntimeForRunDeadlinePark(ctx, runtimeClient);
+    await this.saveSessionSnapshotForRunDeadlinePark(ctx);
     await this.saveProgress(ctx);
 
     await db
@@ -9173,7 +9329,10 @@ class GenerationManager {
         const diagnosticMessage = getGenerationDiagnosticMessage(ctx.debugInfo);
         this.broadcast(ctx, {
           type: "error",
-          message: ctx.errorMessage || "Unknown error",
+          message: formatGenerationErrorMessage(
+            ctx.errorMessage || "Unknown error",
+            diagnosticMessage,
+          ),
           ...(diagnosticMessage ? { diagnosticMessage } : {}),
         });
       }

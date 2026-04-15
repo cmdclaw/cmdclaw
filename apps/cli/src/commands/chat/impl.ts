@@ -1008,7 +1008,6 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
         kind: "start",
         content: "continue",
         conversationId: flags.attach,
-        debugRunDeadlineMsOverride: active.debugRunDeadlineMs ?? state.debugRunDeadlineMs,
         resumePausedGenerationId: active.generationId,
       });
       return;

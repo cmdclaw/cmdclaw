@@ -2569,324 +2569,325 @@ export function ChatArea({
         (key) => !key.startsWith(CUSTOM_SKILL_PREFIX),
       );
       const effectiveConversationId = currentConversationIdRef.current ?? conversationId;
-      void startGeneration(
-        {
-          conversationId: effectiveConversationId,
-          content,
-          model: normalizedSelectedModel,
-          authSource: selectedAuthSource,
-          autoApprove: autoApproveEnabled,
-          resumePausedGenerationId: options?.resumePausedGenerationId,
-          debugRunDeadlineMs: options?.debugRunDeadlineMs,
-          debugApprovalHotWaitMs: options?.debugApprovalHotWaitMs,
-          selectedPlatformSkillSlugs,
-          fileAttachments: attachments,
+      const startInput = {
+        conversationId: effectiveConversationId,
+        content,
+        model: normalizedSelectedModel,
+        authSource: selectedAuthSource,
+        autoApprove: autoApproveEnabled,
+        resumePausedGenerationId: options?.resumePausedGenerationId,
+        ...(options?.debugRunDeadlineMs !== undefined
+          ? { debugRunDeadlineMs: options.debugRunDeadlineMs }
+          : {}),
+        ...(options?.debugApprovalHotWaitMs !== undefined
+          ? { debugApprovalHotWaitMs: options.debugApprovalHotWaitMs }
+          : {}),
+        selectedPlatformSkillSlugs,
+        fileAttachments: attachments,
+      };
+      void startGeneration(startInput, {
+        onStarted: (generationId, newConversationId) => {
+          if (streamScopeRef.current !== streamScope) {
+            return;
+          }
+          streamGenerationId = generationId;
+          currentGenerationIdRef.current = generationId;
+          updateChatDebugSnapshot({
+            conversationId: newConversationId,
+            generationId,
+            status: "generating",
+            pauseReason: null,
+          });
+          if (forceCoworkerQuerySync && coworkerIdForSync) {
+            triggerCoworkerSync({ coworkerId: coworkerIdForSync });
+          }
+          console.info(
+            `[AgentInit][Client] generation_started generationId=${generationId} conversationId=${newConversationId}`,
+          );
+          if (!conversationId && newConversationId) {
+            syncConversationForNewChat(newConversationId);
+          }
         },
-        {
-          onStarted: (generationId, newConversationId) => {
-            if (streamScopeRef.current !== streamScope) {
-              return;
-            }
-            streamGenerationId = generationId;
-            currentGenerationIdRef.current = generationId;
-            updateChatDebugSnapshot({
-              conversationId: newConversationId,
-              generationId,
-              status: "generating",
-              pauseReason: null,
-            });
-            if (forceCoworkerQuerySync && coworkerIdForSync) {
-              triggerCoworkerSync({ coworkerId: coworkerIdForSync });
-            }
-            console.info(
-              `[AgentInit][Client] generation_started generationId=${generationId} conversationId=${newConversationId}`,
-            );
-            if (!conversationId && newConversationId) {
-              syncConversationForNewChat(newConversationId);
-            }
-          },
-          onText: (text) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            markInitSignal("text");
-            runtime.handleText(text);
-            syncFromRuntime(runtime);
-          },
-          onSystem: (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            runtime.handleSystem(data.content);
-            syncFromRuntime(runtime);
-            if (forceCoworkerQuerySync && data.coworkerId) {
-              triggerCoworkerSync({ coworkerId: data.coworkerId });
-            }
-          },
-          onThinking: (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            markInitSignal("thinking");
-            runtime.handleThinking(data);
-            syncFromRuntime(runtime);
-          },
-          onToolUse: (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            markInitSignal("tool_use", { toolName: data.toolName });
-            trackCoworkerEditToolUse(data);
-            runtime.handleToolUse(data);
-            syncFromRuntime(runtime);
-          },
-          onToolResult: (toolName, result, toolUseId) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            markInitSignal("tool_result", { toolName });
-            runtime.handleToolResult(toolName, result, toolUseId);
-            syncCoworkerAfterToolResult(toolUseId, result);
-            syncFromRuntime(runtime);
-          },
-          onPendingApproval: async (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({
-                scope: streamScope,
-                streamGenerationId,
-                eventGenerationId: data.generationId,
-                eventConversationId: data.conversationId,
-              })
-            ) {
-              return;
-            }
-            markInitSignal("pending_approval", { toolName: data.toolName });
-            currentGenerationIdRef.current = data.generationId;
-            if (data.conversationId) {
-              syncConversationForNewChat(data.conversationId);
-            }
-            runtime.handlePendingApproval(data);
-            syncFromRuntime(runtime);
-            if (
-              autoApproveEnabled &&
-              !isQuestionApprovalRequest({
-                toolName: data.toolName,
-                integration: data.integration,
-                operation: data.operation,
-              })
-            ) {
-              try {
-                await submitApproval({
-                  interruptId: data.interruptId,
-                  decision: "approve",
-                });
-              } catch (err) {
-                console.error("Failed to auto-approve tool use:", err);
-              }
-            }
-          },
-          onApprovalResult: (toolUseId, decision) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            runtime.handleApprovalResult(toolUseId, decision);
-            syncFromRuntime(runtime);
-          },
-          onApproval: (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            runtime.handleApproval(data);
-            syncFromRuntime(runtime);
-          },
-          onAuthNeeded: (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({
-                scope: streamScope,
-                streamGenerationId,
-                eventGenerationId: data.generationId,
-                eventConversationId: data.conversationId,
-              })
-            ) {
-              return;
-            }
-            markInitSignal("auth_needed", { integrations: data.integrations });
-            currentGenerationIdRef.current = data.generationId;
-            if (data.conversationId) {
-              syncConversationForNewChat(data.conversationId);
-            }
-            runtime.handleAuthNeeded(data);
-            if (
-              authCompletionRef.current &&
-              authCompletionRef.current.interruptId === data.interruptId &&
-              data.integrations.includes(authCompletionRef.current.integration)
-            ) {
-              runtime.resolveAuthSuccess(authCompletionRef.current.integration);
-            }
-            syncFromRuntime(runtime);
-          },
-          onAuthProgress: (connected, remaining) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            runtime.handleAuthProgress(connected, remaining);
-            syncFromRuntime(runtime);
-          },
-          onAuthResult: (success) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            runtime.handleAuthResult(success);
-            syncFromRuntime(runtime);
-          },
-          onSandboxFile: (file) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            markInitSignal("sandbox_file", { filename: file.filename });
-            runtime.handleSandboxFile(file);
-            syncFromRuntime(runtime);
-          },
-          onStatusChange: (status, metadata) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            handleInitStatusChange(status, metadata);
-          },
-          onDone: async (generationId, newConversationId, messageId, _usage, artifacts) => {
-            if (
-              !isStreamEventForActiveScope({
-                scope: streamScope,
-                streamGenerationId,
-                eventGenerationId: generationId,
-                eventConversationId: newConversationId,
-              })
-            ) {
-              return;
-            }
-            acceptFurtherEvents = false;
-            const doneAtMs = Date.now();
-            const timing = withActivityDurations(
-              withEndToEndDuration(artifacts?.timing, generationRequestStartedAtMs, doneAtMs),
-              runtime.getActivityStats(),
-            );
-            markInitSignal("done");
-            runtime.handleDone({
-              generationId,
-              conversationId: newConversationId,
-              messageId,
-            });
-            const assistant = runtime.buildAssistantMessage();
-            const fallbackAssistant: Message = {
-              id: messageId,
-              role: "assistant",
-              content: assistant.content,
-              parts: assistant.parts as MessagePart[],
-              integrationsUsed: assistant.integrationsUsed,
-              attachments: artifacts?.attachments?.map((attachment) => ({
-                id: attachment.id,
-                name: attachment.filename,
-                mimeType: attachment.mimeType,
-                dataUrl: "",
-              })),
-              sandboxFiles:
-                artifacts?.sandboxFiles ??
-                (assistant.sandboxFiles as SandboxFileData[] | undefined),
-              timing,
-            };
-            upsertMessageById(fallbackAssistant);
-            handleGenerationDoneUi();
-            const hydratedAssistant = await hydrateAssistantMessage(
-              newConversationId,
-              messageId,
-              fallbackAssistant,
-            );
-            if (
-              !isStreamEventForActiveScope({
-                scope: streamScope,
-                streamGenerationId,
-                eventGenerationId: generationId,
-                eventConversationId: newConversationId,
-              })
-            ) {
-              return;
-            }
-            upsertMessageById(hydratedAssistant);
-
-            // Invalidate conversation queries to refresh sidebar
-            queryClient.invalidateQueries({ queryKey: ["conversation"] });
-
-            // Update URL for new conversations without remounting
-            if (!conversationId && newConversationId) {
-              syncConversationForNewChat(newConversationId);
-            }
-          },
-          onError: (message) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
-            ) {
-              return;
-            }
-            acceptFurtherEvents = false;
-            handleVisibleGenerationError(message, runtime);
-          },
-          onCancelled: (data) => {
-            if (
-              !acceptFurtherEvents ||
-              !isStreamEventForActiveScope({
-                scope: streamScope,
-                streamGenerationId,
-                eventGenerationId: data.generationId,
-                eventConversationId: data.conversationId,
-              })
-            ) {
-              return;
-            }
-            acceptFurtherEvents = false;
-            if (runtimeRef.current === runtime) {
-              persistInterruptedRuntimeMessage(runtime, data.messageId);
-            }
-            markInitMissingAtEnd("cancelled");
-            handleGenerationCancelledUi();
-          },
+        onText: (text) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          markInitSignal("text");
+          runtime.handleText(text);
+          syncFromRuntime(runtime);
         },
-      );
+        onSystem: (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          runtime.handleSystem(data.content);
+          syncFromRuntime(runtime);
+          if (forceCoworkerQuerySync && data.coworkerId) {
+            triggerCoworkerSync({ coworkerId: data.coworkerId });
+          }
+        },
+        onThinking: (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          markInitSignal("thinking");
+          runtime.handleThinking(data);
+          syncFromRuntime(runtime);
+        },
+        onToolUse: (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          markInitSignal("tool_use", { toolName: data.toolName });
+          trackCoworkerEditToolUse(data);
+          runtime.handleToolUse(data);
+          syncFromRuntime(runtime);
+        },
+        onToolResult: (toolName, result, toolUseId) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          markInitSignal("tool_result", { toolName });
+          runtime.handleToolResult(toolName, result, toolUseId);
+          syncCoworkerAfterToolResult(toolUseId, result);
+          syncFromRuntime(runtime);
+        },
+        onPendingApproval: async (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({
+              scope: streamScope,
+              streamGenerationId,
+              eventGenerationId: data.generationId,
+              eventConversationId: data.conversationId,
+            })
+          ) {
+            return;
+          }
+          markInitSignal("pending_approval", { toolName: data.toolName });
+          currentGenerationIdRef.current = data.generationId;
+          if (data.conversationId) {
+            syncConversationForNewChat(data.conversationId);
+          }
+          runtime.handlePendingApproval(data);
+          syncFromRuntime(runtime);
+          if (
+            autoApproveEnabled &&
+            !isQuestionApprovalRequest({
+              toolName: data.toolName,
+              integration: data.integration,
+              operation: data.operation,
+            })
+          ) {
+            try {
+              await submitApproval({
+                interruptId: data.interruptId,
+                decision: "approve",
+              });
+            } catch (err) {
+              console.error("Failed to auto-approve tool use:", err);
+            }
+          }
+        },
+        onApprovalResult: (toolUseId, decision) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          runtime.handleApprovalResult(toolUseId, decision);
+          syncFromRuntime(runtime);
+        },
+        onApproval: (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          runtime.handleApproval(data);
+          syncFromRuntime(runtime);
+        },
+        onAuthNeeded: (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({
+              scope: streamScope,
+              streamGenerationId,
+              eventGenerationId: data.generationId,
+              eventConversationId: data.conversationId,
+            })
+          ) {
+            return;
+          }
+          markInitSignal("auth_needed", { integrations: data.integrations });
+          currentGenerationIdRef.current = data.generationId;
+          if (data.conversationId) {
+            syncConversationForNewChat(data.conversationId);
+          }
+          runtime.handleAuthNeeded(data);
+          if (
+            authCompletionRef.current &&
+            authCompletionRef.current.interruptId === data.interruptId &&
+            data.integrations.includes(authCompletionRef.current.integration)
+          ) {
+            runtime.resolveAuthSuccess(authCompletionRef.current.integration);
+          }
+          syncFromRuntime(runtime);
+        },
+        onAuthProgress: (connected, remaining) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          runtime.handleAuthProgress(connected, remaining);
+          syncFromRuntime(runtime);
+        },
+        onAuthResult: (success) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          runtime.handleAuthResult(success);
+          syncFromRuntime(runtime);
+        },
+        onSandboxFile: (file) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          markInitSignal("sandbox_file", { filename: file.filename });
+          runtime.handleSandboxFile(file);
+          syncFromRuntime(runtime);
+        },
+        onStatusChange: (status, metadata) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          handleInitStatusChange(status, metadata);
+        },
+        onDone: async (generationId, newConversationId, messageId, _usage, artifacts) => {
+          if (
+            !isStreamEventForActiveScope({
+              scope: streamScope,
+              streamGenerationId,
+              eventGenerationId: generationId,
+              eventConversationId: newConversationId,
+            })
+          ) {
+            return;
+          }
+          acceptFurtherEvents = false;
+          const doneAtMs = Date.now();
+          const timing = withActivityDurations(
+            withEndToEndDuration(artifacts?.timing, generationRequestStartedAtMs, doneAtMs),
+            runtime.getActivityStats(),
+          );
+          markInitSignal("done");
+          runtime.handleDone({
+            generationId,
+            conversationId: newConversationId,
+            messageId,
+          });
+          const assistant = runtime.buildAssistantMessage();
+          const fallbackAssistant: Message = {
+            id: messageId,
+            role: "assistant",
+            content: assistant.content,
+            parts: assistant.parts as MessagePart[],
+            integrationsUsed: assistant.integrationsUsed,
+            attachments: artifacts?.attachments?.map((attachment) => ({
+              id: attachment.id,
+              name: attachment.filename,
+              mimeType: attachment.mimeType,
+              dataUrl: "",
+            })),
+            sandboxFiles:
+              artifacts?.sandboxFiles ?? (assistant.sandboxFiles as SandboxFileData[] | undefined),
+            timing,
+          };
+          upsertMessageById(fallbackAssistant);
+          handleGenerationDoneUi();
+          const hydratedAssistant = await hydrateAssistantMessage(
+            newConversationId,
+            messageId,
+            fallbackAssistant,
+          );
+          if (
+            !isStreamEventForActiveScope({
+              scope: streamScope,
+              streamGenerationId,
+              eventGenerationId: generationId,
+              eventConversationId: newConversationId,
+            })
+          ) {
+            return;
+          }
+          upsertMessageById(hydratedAssistant);
+
+          // Invalidate conversation queries to refresh sidebar
+          queryClient.invalidateQueries({ queryKey: ["conversation"] });
+
+          // Update URL for new conversations without remounting
+          if (!conversationId && newConversationId) {
+            syncConversationForNewChat(newConversationId);
+          }
+        },
+        onError: (message) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({ scope: streamScope, streamGenerationId })
+          ) {
+            return;
+          }
+          acceptFurtherEvents = false;
+          handleVisibleGenerationError(message, runtime);
+        },
+        onCancelled: (data) => {
+          if (
+            !acceptFurtherEvents ||
+            !isStreamEventForActiveScope({
+              scope: streamScope,
+              streamGenerationId,
+              eventGenerationId: data.generationId,
+              eventConversationId: data.conversationId,
+            })
+          ) {
+            return;
+          }
+          acceptFurtherEvents = false;
+          if (runtimeRef.current === runtime) {
+            persistInterruptedRuntimeMessage(runtime, data.messageId);
+          }
+          markInitMissingAtEnd("cancelled");
+          handleGenerationCancelledUi();
+        },
+      });
     },
     [
       beginInitTracking,
@@ -2978,18 +2979,12 @@ export function ChatArea({
     try {
       await runGeneration("continue", undefined, {
         resumePausedGenerationId: pausedGenerationId,
-        debugRunDeadlineMs:
-          pendingRunDeadlineResume?.debugRunDeadlineMs ??
-          activeGeneration?.debugRunDeadlineMs ??
-          undefined,
       });
     } finally {
       setIsResumingPausedRunDeadline(false);
     }
   }, [
-    pendingRunDeadlineResume?.debugRunDeadlineMs,
     pendingRunDeadlineResume?.generationId,
-    activeGeneration?.debugRunDeadlineMs,
     activeGeneration?.generationId,
     activeGeneration?.pauseReason,
     activeGeneration?.status,

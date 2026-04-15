@@ -775,7 +775,6 @@ describe("ChatArea generation errors", () => {
           conversationId: "conv-1",
           content: "continue",
           resumePausedGenerationId: "gen-paused",
-          debugRunDeadlineMs: 30_000,
         }),
         expect.any(Object),
       );
@@ -826,6 +825,7 @@ describe("ChatArea generation errors", () => {
         expect.any(Object),
       );
     });
+    expect(mockStartGeneration.mock.calls[1]?.[0]).not.toHaveProperty("debugRunDeadlineMs");
     expect(screen.getByText(/Resumed below\./i)).toBeInTheDocument();
     expect(screen.getByText("continue")).toBeInTheDocument();
 

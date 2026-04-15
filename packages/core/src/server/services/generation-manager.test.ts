@@ -3275,7 +3275,8 @@ describe("generationManager transitions", () => {
     expect(publishedPayloads).toContainEqual(
       expect.objectContaining({
         type: "error",
-        message: "The sandbox stopped while this run was still active.",
+        message:
+          "The sandbox stopped while this run was still active.\nUnderlying error: SandboxError: 403: blocked: team is blocked",
         diagnosticMessage: "SandboxError: 403: blocked: team is blocked",
       }),
     );
@@ -4832,6 +4833,52 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("parks a generation for run deadline even if snapshot export hangs", async () => {
+    vi.useFakeTimers();
+    const teardownMock = vi.fn().mockResolvedValue(undefined);
+    const runtime = createConversationRuntimeMock({
+      promptMock: vi.fn(),
+      subscribeMock: vi.fn().mockResolvedValue({ stream: asAsyncIterable([]) }),
+    });
+    const abortMock = runtime.harnessClient.abort as ReturnType<typeof vi.fn>;
+    saveConversationSessionSnapshotMock.mockImplementation(
+      () => new Promise<never>(() => undefined),
+    );
+
+    const mgr = asTestManager();
+    const ctx = createCtx({
+      id: "gen-deadline-park-timeout",
+      conversationId: "conv-deadline-park-timeout",
+      runtimeId: "runtime-deadline-park-timeout",
+      sessionId: "session-deadline-park-timeout",
+      sandboxId: "sandbox-deadline-park-timeout",
+      deadlineAt: new Date(Date.now() - 1_000),
+      sandbox: {
+        execute: vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        teardown: teardownMock,
+      },
+    });
+    mgr.activeGenerations.set(ctx.id, ctx);
+
+    const parkPromise = (mgr as any).parkGenerationForRunDeadline(ctx, runtime.harnessClient);
+
+    await vi.advanceTimersByTimeAsync(20_100);
+    await parkPromise;
+
+    expect(abortMock).toHaveBeenCalledWith({ sessionID: "session-deadline-park-timeout" });
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "paused",
+        isPaused: true,
+        completionReason: "run_deadline",
+        sandboxId: null,
+      }),
+    );
+    expect(teardownMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
   it("parks runOpenCodeGeneration when the run deadline has already elapsed", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
@@ -4872,6 +4919,55 @@ describe("generationManager transitions", () => {
 
     expect(parkSpy).toHaveBeenCalledTimes(1);
     expect(finishSpy).not.toHaveBeenCalled();
+  });
+
+  it("parks runOpenCodeGeneration when the prompt promise hangs past the run deadline", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(createExecutorPreparationMock());
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptDeferred = createDeferred<void>();
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock: vi.fn(() => promptDeferred.promise),
+        subscribeMock: vi.fn().mockResolvedValue({
+          stream: asAsyncIterable([]),
+        }),
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const parkSpy = vi.spyOn(mgr as never, "parkGenerationForRunDeadline").mockResolvedValue(undefined);
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+
+    const runPromise = mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-deadline-hung-prompt",
+        conversationId: "conv-deadline-hung-prompt",
+        model: "anthropic/claude-sonnet-4-6",
+        deadlineAt: new Date(Date.now() + 50),
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(60);
+    await runPromise;
+
+    expect(parkSpy).toHaveBeenCalledTimes(1);
+    expect(finishSpy).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("reattaches to a live session without resending the prompt", async () => {
@@ -4997,6 +5093,48 @@ describe("generationManager transitions", () => {
 
     expect(parkSpy).toHaveBeenCalledTimes(1);
     expect(finishSpy).not.toHaveBeenCalled();
+  });
+
+  it("parks recovery reattach when the continuation prompt hangs past the run deadline", async () => {
+    vi.useFakeTimers();
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-recovery-hung-prompt",
+      title: "Conversation",
+    });
+
+    const promptDeferred = createDeferred<void>();
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock: vi.fn(() => promptDeferred.promise),
+        subscribeMock: vi.fn().mockResolvedValue({
+          stream: asAsyncIterable([]),
+        }),
+        sessionSource: "live_session",
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const parkSpy = vi.spyOn(mgr as never, "parkGenerationForRunDeadline").mockResolvedValue(undefined);
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+
+    const runPromise = mgr.runRecoveryReattach(
+      createCtx({
+        id: "gen-recovery-hung-prompt",
+        conversationId: "conv-recovery-hung-prompt",
+        sessionId: "session-1",
+        deadlineAt: new Date(Date.now() + 50),
+      }),
+      {
+        onRuntimeAttached: async () => [{ type: "text", text: "continue" }],
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(60);
+    await runPromise;
+
+    expect(parkSpy).toHaveBeenCalledTimes(1);
+    expect(finishSpy).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("routes coworker builder prompts to the builder agent and keeps builder context in system", async () => {
