@@ -1,23 +1,23 @@
 # Daytona OSS Self-Hosted Stack
 
-This stack vendors Daytona's documented OSS Docker Compose setup and adds a smoke test that creates two sandboxes against the local deployment.
+This stack vendors Daytona's documented OSS Docker Compose setup inside the shared development compose file and adds a smoke test that creates two sandboxes against the local deployment.
 
 ## Start Daytona OSS
 
 From the repo root:
 
 ```bash
-docker compose -f docker/compose/daytona/compose.yml up -d
+docker compose --env-file .env -f docker/compose/dev.yml --profile daytona up -d
 ```
 
-The experiment only exposes the host ports needed for local use:
+The shared stack exposes the host ports needed for local use:
 
 - `3300` for the Daytona dashboard/API
 - `4000` for the Daytona proxy
 - `2222` for the SSH gateway
 - `5556` for Dex login
 
-Support services such as MinIO, Jaeger, MailDev, PgAdmin, the registry UI, the internal registry, and the runner stay on the internal Docker network only, which avoids unnecessary host-port collisions.
+Support services such as MinIO, Jaeger, MailDev, PgAdmin, the registry UI, the internal registry, and the runner stay on the internal Docker network only, which avoids unnecessary host-port collisions with the base local CmdClaw services.
 
 Access the local dashboard at [http://localhost:3300](http://localhost:3300).
 
@@ -61,7 +61,7 @@ The smoke test:
 ## Validate The Compose File
 
 ```bash
-docker compose -f docker/compose/daytona/compose.yml config
+docker compose --env-file .env -f docker/compose/dev.yml --profile daytona config
 ```
 
 ## Optional Proxy DNS Setup
