@@ -1,7 +1,25 @@
 name: Create Release Tag
 
 on:
+  workflow_call:
+    inputs:
+      commit_sha:
+        description: "Commit SHA to tag"
+        required: true
+        type: string
+    outputs:
+      commit_sha:
+        description: "Resolved commit SHA"
+        value: ${{ jobs.create-tag.outputs.commit_sha }}
+      tag:
+        description: "Created release tag"
+        value: ${{ jobs.create-tag.outputs.tag }}
   workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Commit SHA to tag"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -23,7 +41,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Resolve latest main commit
+      - name: Resolve commit on main
         id: resolve
         shell: bash
         run: |
@@ -31,7 +49,8 @@ jobs:
 
           git fetch origin main --tags --force
 
-          commit_sha="$(git rev-parse "origin/main^{commit}")"
+          commit_sha="$(git rev-parse "${{ inputs.commit_sha }}^{commit}")"
+          git merge-base --is-ancestor "${commit_sha}" origin/main
 
           echo "commit_sha=${commit_sha}" >> "$GITHUB_OUTPUT"
 
