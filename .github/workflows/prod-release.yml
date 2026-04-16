@@ -102,6 +102,14 @@ jobs:
 
           echo "tag=${next_tag}" >> "$GITHUB_OUTPUT"
 
+      - name: Configure git identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Create and push release tag
         shell: bash
         run: |
