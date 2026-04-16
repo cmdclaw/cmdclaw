@@ -3,9 +3,9 @@
   "compilerOptions": {
     "types": ["bun", "node"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./*"]
     }
   },
-  "include": ["src/**/*.ts", "xmcp.config.ts"],
-  "exclude": ["src/test/**/*"]
+  "include": ["shared/**/*.ts", "gateway/src/**/*.ts"],
+  "exclude": ["**/dist/**/*", "**/.xmcp/**/*"]
 }

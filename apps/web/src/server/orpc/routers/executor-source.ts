@@ -186,6 +186,27 @@ async function getAdminSource(
   return source;
 }
 
+function assertMutableExecutorSource(
+  source: Pick<typeof workspaceExecutorSource.$inferSelect, "internalKey">,
+) {
+  if (source.internalKey) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Managed executor sources cannot be edited or deleted manually.",
+    });
+  }
+}
+
+function assertManualCredentialSource(
+  source: Pick<typeof workspaceExecutorSource.$inferSelect, "internalKey">,
+) {
+  if (source.internalKey) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Managed executor sources use the integration connection flow, not manual credentials.",
+    });
+  }
+}
+
 const list = protectedProcedure.handler(async ({ context }) => {
   const access = await requireActiveWorkspaceAccess(context.user.id);
   const sources = await listWorkspaceExecutorSources({
@@ -423,6 +444,7 @@ const update = protectedProcedure
         message: "Executor source not found.",
       });
     }
+    assertMutableExecutorSource(current);
 
     const namespace = normalizeExecutorNamespace(input.namespace);
     const duplicate = await context.db.query.workspaceExecutorSource.findFirst({
@@ -498,6 +520,7 @@ const adminUpdate = protectedProcedure
         message: "Executor source not found.",
       });
     }
+    assertMutableExecutorSource(current);
 
     const namespace = normalizeExecutorNamespace(input.namespace);
     const duplicate = await context.db.query.workspaceExecutorSource.findFirst({
@@ -561,6 +584,18 @@ const remove = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAdmin(context.user.id);
+    const current = await context.db.query.workspaceExecutorSource.findFirst({
+      where: and(
+        eq(workspaceExecutorSource.id, input.id),
+        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+      ),
+    });
+    if (!current) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Executor source not found.",
+      });
+    }
+    assertMutableExecutorSource(current);
     const deleted = await context.db
       .delete(workspaceExecutorSource)
       .where(
@@ -590,6 +625,18 @@ const adminDelete = protectedProcedure
   .input(z.object({ workspaceId: z.string(), id: z.string() }))
   .handler(async ({ input, context }) => {
     const selectedWorkspace = await getAdminWorkspace(context, input.workspaceId);
+    const current = await context.db.query.workspaceExecutorSource.findFirst({
+      where: and(
+        eq(workspaceExecutorSource.id, input.id),
+        eq(workspaceExecutorSource.workspaceId, selectedWorkspace.id),
+      ),
+    });
+    if (!current) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Executor source not found.",
+      });
+    }
+    assertMutableExecutorSource(current);
     const deleted = await context.db
       .delete(workspaceExecutorSource)
       .where(
@@ -638,6 +685,7 @@ const setCredential = protectedProcedure
         message: "Executor source not found.",
       });
     }
+    assertManualCredentialSource(source);
 
     if (source.authType === "oauth2") {
       throw new ORPCError("BAD_REQUEST", {
@@ -673,6 +721,7 @@ const adminSetCredential = protectedProcedure
       input.workspaceId,
       input.workspaceExecutorSourceId,
     );
+    assertManualCredentialSource(source);
 
     if (source.authType === "oauth2") {
       throw new ORPCError("BAD_REQUEST", {
@@ -708,6 +757,7 @@ const disconnectCredential = protectedProcedure
         message: "Executor source not found.",
       });
     }
+    assertManualCredentialSource(source);
 
     await context.db
       .delete(workspaceExecutorSourceCredential)
@@ -734,6 +784,7 @@ const adminDisconnectCredential = protectedProcedure
       input.workspaceId,
       input.workspaceExecutorSourceId,
     );
+    assertManualCredentialSource(source);
 
     await context.db
       .delete(workspaceExecutorSourceCredential)
@@ -768,6 +819,7 @@ const toggleCredential = protectedProcedure
         message: "Executor source not found.",
       });
     }
+    assertManualCredentialSource(source);
 
     const updated = await context.db
       .update(workspaceExecutorSourceCredential)
@@ -806,6 +858,7 @@ const adminToggleCredential = protectedProcedure
       input.workspaceId,
       input.workspaceExecutorSourceId,
     );
+    assertManualCredentialSource(source);
 
     const updated = await context.db
       .update(workspaceExecutorSourceCredential)

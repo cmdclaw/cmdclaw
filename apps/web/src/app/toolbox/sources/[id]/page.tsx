@@ -49,6 +49,7 @@ function SourceDetailContent() {
   const [editForm, setEditForm] = useState<ExecutorSourceFormState | null>(null);
   const [secret, setSecret] = useState("");
   const [credDisplayName, setCredDisplayName] = useState("");
+  const isManagedSource = Boolean(source?.internalKey);
 
   const handleSecretChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setSecret(e.target.value);
@@ -303,7 +304,7 @@ function SourceDetailContent() {
                 <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
                   Cancel
                 </Button>
-              ) : (
+              ) : !isManagedSource ? (
                 <>
                   <Button variant="outline" size="sm" onClick={handleStartEdit}>
                     Edit
@@ -319,6 +320,8 @@ function SourceDetailContent() {
                     Delete
                   </Button>
                 </>
+              ) : (
+                <span className="text-muted-foreground text-xs">Managed by CmdClaw</span>
               )}
             </div>
           </div>
@@ -329,6 +332,7 @@ function SourceDetailContent() {
                 form={editForm}
                 formIdPrefix={`source-edit-${source.id}`}
                 onFieldChange={handleEditFieldChange}
+                disabled={isManagedSource}
               />
               <div className="flex justify-end gap-2 md:col-span-2">
                 <Button type="submit" disabled={updateSource.isPending}>
@@ -344,6 +348,7 @@ function SourceDetailContent() {
             <div className="text-muted-foreground mt-3 space-y-1 text-sm">
               <p>Kind: {source.kind === "openapi" ? "OpenAPI" : "Remote MCP"}</p>
               <p>Endpoint: {source.endpoint}</p>
+              {source.internalKey && <p>Managed source: {source.internalKey}</p>}
               {source.specUrl && <p>Spec URL: {source.specUrl}</p>}
               {source.transport && <p>Transport: {source.transport}</p>}
               <p>
@@ -365,14 +370,26 @@ function SourceDetailContent() {
       <section className="bg-card rounded-lg border p-6">
         <h2 className="text-sm font-semibold">Your Credential</h2>
         <p className="text-muted-foreground mt-1 text-xs">
-          {source.authType === "none"
-            ? "This source does not require authentication."
-            : source.connected
-              ? "Your credential is connected. You can update or disconnect it."
-              : "Connect your personal credential to use this source."}
+          {source.internalKey
+            ? source.connected
+              ? "This source uses your existing Gmail integration connection."
+              : "Connect Gmail in Integrations to use this managed source."
+            : source.authType === "none"
+              ? "This source does not require authentication."
+              : source.connected
+                ? "Your credential is connected. You can update or disconnect it."
+                : "Connect your personal credential to use this source."}
         </p>
 
-        {source.authType === "oauth2" ? (
+        {source.internalKey ? (
+          <div className="mt-4 flex items-center gap-3">
+            <Button asChild variant="outline">
+              <Link href="/integrations">
+                {source.connected ? "Manage Gmail connection" : "Connect Gmail"}
+              </Link>
+            </Button>
+          </div>
+        ) : source.authType === "oauth2" ? (
           <div className="mt-4 space-y-4">
             <div className="flex items-center gap-3">
               <Button variant="outline" onClick={handleStartOAuth} disabled={startOAuth.isPending}>

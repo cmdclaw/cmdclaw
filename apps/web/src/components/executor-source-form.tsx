@@ -36,6 +36,7 @@ export type ExecutorSourceListItem = {
   name: string;
   namespace: string;
   kind: "mcp" | "openapi";
+  internalKey?: string | null;
   endpoint: string;
   enabled: boolean;
   connected: boolean;
@@ -217,10 +218,12 @@ export function ExecutorSourceFields({
   form,
   formIdPrefix,
   onFieldChange,
+  disabled = false,
 }: {
   form: ExecutorSourceFormState;
   formIdPrefix: string;
   onFieldChange: (field: keyof ExecutorSourceFormState, value: string) => void;
+  disabled?: boolean;
 }) {
   const handleFieldInputChange = useCallback(
     (field: keyof ExecutorSourceFormState) =>
@@ -254,7 +257,7 @@ export function ExecutorSourceFields({
           Kind
         </label>
         <Select value={form.kind} onValueChange={handleKindChange}>
-          <SelectTrigger id={`${formIdPrefix}-kind`}>
+          <SelectTrigger id={`${formIdPrefix}-kind`} disabled={disabled}>
             <SelectValue placeholder="Select source type" />
           </SelectTrigger>
           <SelectContent>
@@ -269,7 +272,7 @@ export function ExecutorSourceFields({
           Auth
         </label>
         <Select value={form.authType} onValueChange={handleAuthTypeChange}>
-          <SelectTrigger id={`${formIdPrefix}-auth-type`}>
+          <SelectTrigger id={`${formIdPrefix}-auth-type`} disabled={disabled}>
             <SelectValue placeholder="Select auth" />
           </SelectTrigger>
           <SelectContent>
@@ -290,6 +293,7 @@ export function ExecutorSourceFields({
           value={form.name}
           onChange={handleFieldInputChange("name")}
           placeholder="Display name"
+          disabled={disabled}
         />
       </div>
 
@@ -302,6 +306,7 @@ export function ExecutorSourceFields({
           value={form.namespace}
           onChange={handleFieldInputChange("namespace")}
           placeholder="Namespace (for example salesforce-prod)"
+          disabled={disabled}
         />
       </div>
 
@@ -314,6 +319,7 @@ export function ExecutorSourceFields({
           value={form.endpoint}
           onChange={handleFieldInputChange("endpoint")}
           placeholder="Endpoint URL"
+          disabled={disabled}
         />
       </div>
 
@@ -328,6 +334,7 @@ export function ExecutorSourceFields({
               value={form.specUrl}
               onChange={handleFieldInputChange("specUrl")}
               placeholder="OpenAPI spec URL"
+              disabled={disabled}
             />
           </div>
           <JsonMapField
@@ -350,6 +357,7 @@ export function ExecutorSourceFields({
               value={form.transport}
               onChange={handleFieldInputChange("transport")}
               placeholder="Transport (for example streamable-http)"
+              disabled={disabled}
             />
           </div>
           <JsonMapField
@@ -380,6 +388,7 @@ export function ExecutorSourceFields({
               value={form.authHeaderName}
               onChange={handleFieldInputChange("authHeaderName")}
               placeholder="Auth header name"
+              disabled={disabled}
             />
           </div>
 
@@ -393,6 +402,7 @@ export function ExecutorSourceFields({
                 value={form.authQueryParam}
                 onChange={handleFieldInputChange("authQueryParam")}
                 placeholder="Optional query param name"
+                disabled={disabled}
               />
             </div>
           ) : (
@@ -408,7 +418,7 @@ export function ExecutorSourceFields({
               value={form.authType === "bearer" ? form.authPrefix : ""}
               onChange={handleFieldInputChange("authPrefix")}
               placeholder="Auth prefix"
-              disabled={form.authType !== "bearer"}
+              disabled={disabled || form.authType !== "bearer"}
             />
           </div>
         </>

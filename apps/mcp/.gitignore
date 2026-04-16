@@ -1,3 +1,7 @@
 .xmcp/
 dist/
 xmcp-env.d.ts
+gateway/dist/
+servers/*/dist/
+servers/*/.xmcp/
+servers/*/xmcp-env.d.ts

@@ -47,6 +47,7 @@ export type DelegatedRuntimeCredentialsResponse = {
       name: string;
       namespace: string;
       kind: string;
+      internalKey?: string | null;
       enabled: boolean;
       connected: boolean;
     }>;

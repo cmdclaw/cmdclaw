@@ -2277,6 +2277,7 @@ export const workspaceExecutorSource = pgTable(
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
     kind: executorSourceKindEnum("kind").notNull(),
+    internalKey: text("internal_key"),
     name: text("name").notNull(),
     namespace: text("namespace").notNull(),
     endpoint: text("endpoint").notNull(),

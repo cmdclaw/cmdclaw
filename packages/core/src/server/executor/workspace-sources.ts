@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
 import {
   workspaceExecutorPackage,
@@ -6,6 +7,8 @@ import {
   workspaceExecutorSourceCredential,
 } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { getValidTokensForUser } from "../integrations/token-refresh";
+import { signManagedMcpToken } from "../managed-mcp-auth";
 import { decrypt, encrypt } from "../utils/encryption";
 import {
   type McpOAuthMetadata,
@@ -53,6 +56,7 @@ type LocalWorkspaceState = {
 };
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+const MANAGED_MCP_TOKEN_TTL_SECONDS = 10 * 60;
 const WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION = 3;
 const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
   /re-authorization is required/i,
@@ -81,6 +85,7 @@ export function normalizeExecutorNamespace(value: string): string {
 
 export function computeWorkspaceExecutorSourceRevisionHash(input: {
   kind: ExecutorSourceKind;
+  internalKey?: string | null;
   name: string;
   namespace: string;
   endpoint: string;
@@ -99,6 +104,7 @@ export function computeWorkspaceExecutorSourceRevisionHash(input: {
     .update(
       JSON.stringify({
         kind: input.kind,
+        internalKey: input.internalKey?.trim() || null,
         name: input.name.trim(),
         namespace: normalizeExecutorNamespace(input.namespace),
         endpoint: input.endpoint.trim(),
@@ -187,6 +193,136 @@ function hasStoredCredentialSecret(
   }
 
   return Boolean(credential.secret);
+}
+
+function resolveManagedMcpBaseUrl(): string | null {
+  const value = env.CMDCLAW_MCP_BASE_URL?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
+function getManagedSourceDefinition(internalKey: string) {
+  if (internalKey !== "gmail") {
+    return null;
+  }
+
+  const baseUrl = resolveManagedMcpBaseUrl();
+  if (!baseUrl) {
+    return null;
+  }
+
+  return {
+    internalKey: "gmail" as const,
+    kind: "mcp" as const,
+    name: "Gmail MCP",
+    namespace: "gmail",
+    endpoint: new URL("/gmail/mcp", baseUrl).toString(),
+    transport: "http",
+    authType: "none" as const,
+  };
+}
+
+async function ensureManagedExecutorSources(input: {
+  database?: DatabaseLike;
+  workspaceId: string;
+  userId: string;
+}) {
+  const database = input.database ?? db;
+  const definition = getManagedSourceDefinition("gmail");
+  if (!definition) {
+    return;
+  }
+
+  const existing = await database.query.workspaceExecutorSource.findMany({
+    where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
+  });
+  const current = existing.find(
+    (source) =>
+      source.internalKey === definition.internalKey || source.namespace === definition.namespace,
+  );
+
+  const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
+    kind: definition.kind,
+    internalKey: definition.internalKey,
+    name: definition.name,
+    namespace: definition.namespace,
+    endpoint: definition.endpoint,
+    specUrl: null,
+    transport: definition.transport,
+    headers: null,
+    queryParams: null,
+    defaultHeaders: null,
+    authType: definition.authType,
+    authHeaderName: null,
+    authQueryParam: null,
+    authPrefix: null,
+    enabled: current?.enabled ?? true,
+  });
+
+  if (!current) {
+    await database.insert(workspaceExecutorSource).values({
+      workspaceId: input.workspaceId,
+      kind: definition.kind,
+      internalKey: definition.internalKey,
+      name: definition.name,
+      namespace: definition.namespace,
+      endpoint: definition.endpoint,
+      specUrl: null,
+      transport: definition.transport,
+      headers: null,
+      queryParams: null,
+      defaultHeaders: null,
+      authType: definition.authType,
+      authHeaderName: null,
+      authQueryParam: null,
+      authPrefix: null,
+      enabled: true,
+      revisionHash,
+      createdByUserId: input.userId,
+      updatedByUserId: input.userId,
+    });
+    return;
+  }
+
+  if (
+    current.internalKey !== definition.internalKey ||
+    current.name !== definition.name ||
+    current.namespace !== definition.namespace ||
+    current.endpoint !== definition.endpoint ||
+    current.transport !== definition.transport ||
+    current.authType !== definition.authType ||
+    current.revisionHash !== revisionHash
+  ) {
+    await database
+      .update(workspaceExecutorSource)
+      .set({
+        internalKey: definition.internalKey,
+        kind: definition.kind,
+        name: definition.name,
+        namespace: definition.namespace,
+        endpoint: definition.endpoint,
+        specUrl: null,
+        transport: definition.transport,
+        headers: null,
+        queryParams: null,
+        defaultHeaders: null,
+        authType: definition.authType,
+        authHeaderName: null,
+        authQueryParam: null,
+        authPrefix: null,
+        revisionHash,
+        updatedByUserId: input.userId,
+      })
+      .where(eq(workspaceExecutorSource.id, current.id));
+  }
+}
+
+async function isManagedSourceConnected(source: WorkspaceExecutorSourceRecord, userId?: string) {
+  if (!userId || source.internalKey !== "gmail") {
+    return false;
+  }
+
+  const tokens = await getValidTokensForUser(userId, ["google_gmail"]);
+  return Boolean(tokens.get("google_gmail"));
 }
 
 function shouldRefreshOauthCredential(expiresAt: Date | null): boolean {
@@ -408,9 +544,33 @@ function mergeAuthIntoSourceConfig(input: {
   database?: DatabaseLike;
   source: WorkspaceExecutorSourceRecord;
   credential: WorkspaceExecutorSourceCredentialRecord | null | undefined;
+  userId: string;
   config: LocalExecutorConfigSource;
 }): Promise<LocalExecutorConfigSource> {
   const next = JSON.parse(JSON.stringify(input.config)) as LocalExecutorConfigSource;
+  if (input.source.internalKey === "gmail") {
+    if (!env.CMDCLAW_SERVER_SECRET) {
+      throw new Error("CMDCLAW_SERVER_SECRET is required for managed MCP sources.");
+    }
+
+    const config = (next.config ?? {}) as Record<string, unknown>;
+    const headers = {
+      ...((config.headers as Record<string, string> | null | undefined) ?? {}),
+    };
+    headers.Authorization = `Bearer ${signManagedMcpToken(
+      {
+        userId: input.userId,
+        workspaceId: input.source.workspaceId,
+        internalKey: "gmail",
+        exp: Math.floor(Date.now() / 1000) + MANAGED_MCP_TOKEN_TTL_SECONDS,
+      },
+      env.CMDCLAW_SERVER_SECRET,
+    )}`;
+    config.headers = headers;
+    next.config = config;
+    return Promise.resolve(next);
+  }
+
   if (input.source.authType === "none" || !input.credential?.enabled) {
     return Promise.resolve(next);
   }
@@ -472,6 +632,13 @@ export async function listWorkspaceExecutorSources(input: {
   userId?: string;
 }) {
   const database = input.database ?? db;
+  if (input.userId) {
+    await ensureManagedExecutorSources({
+      database,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+    });
+  }
   const [sources, credentials] = await Promise.all([
     database.query.workspaceExecutorSource.findMany({
       where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
@@ -488,16 +655,19 @@ export async function listWorkspaceExecutorSources(input: {
     credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
   );
 
-  return sources.map((source) => {
+  return Promise.all(sources.map(async (source) => {
     const credential = credentialBySourceId.get(source.id);
+    const connected = source.internalKey
+      ? await isManagedSourceConnected(source, input.userId)
+      : hasStoredCredentialSecret(source, credential);
     return {
       ...source,
-      connected: hasStoredCredentialSecret(source, credential),
+      connected,
       credentialEnabled: credential?.enabled ?? false,
       credentialDisplayName: credential?.displayName ?? null,
       credentialUpdatedAt: credential?.updatedAt ?? null,
     };
-  });
+  }));
 }
 
 export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: {
@@ -700,6 +870,11 @@ export async function getWorkspaceExecutorBootstrap(input: {
   allowedSourceIds?: string[] | null;
 }) {
   const database = input.database ?? db;
+  await ensureManagedExecutorSources({
+    database,
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+  });
   const [packageRow, sources, credentials] = await Promise.all([
     ensureWorkspaceExecutorPackage({
       database,
@@ -735,6 +910,7 @@ export async function getWorkspaceExecutorBootstrap(input: {
         database,
         source,
         credential,
+        userId: input.userId,
         config: baseConfig,
       });
       const refreshedCredential = source.authType === "oauth2"
@@ -745,11 +921,13 @@ export async function getWorkspaceExecutorBootstrap(input: {
             ),
           })
         : credential;
-      const connected = Boolean(
-        source.authType === "oauth2"
-          ? refreshedCredential?.accessToken && refreshedCredential.enabled
-          : credential?.secret && credential.enabled,
-      );
+      const connected = source.internalKey
+        ? await isManagedSourceConnected(source, input.userId)
+        : Boolean(
+            source.authType === "oauth2"
+              ? refreshedCredential?.accessToken && refreshedCredential.enabled
+              : credential?.secret && credential.enabled,
+          );
 
       return {
         sourceId: source.id,
@@ -785,6 +963,7 @@ export async function getWorkspaceExecutorBootstrap(input: {
       name: source.name,
       namespace: source.namespace,
       kind: source.kind,
+      internalKey: source.internalKey,
       enabled: source.enabled,
       connected:
         hydratedSourceEntries.find((entry) => entry.sourceId === source.id)?.connected ?? false,
