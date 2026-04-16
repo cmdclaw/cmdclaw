@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeMcpRequest } from "./router";
+import { matchProtectedResourceMetadataRequest, routeMcpRequest } from "./router";
 
 describe("routeMcpRequest", () => {
   const env = {
@@ -13,14 +13,20 @@ describe("routeMcpRequest", () => {
     expect(routed?.target.toString()).toBe("http://127.0.0.1:4101/mcp");
   });
 
-  it("routes gmail well-known requests", () => {
-    const routed = routeMcpRequest(
-      new URL("https://mcp.cmdclaw.ai/gmail/.well-known/oauth-protected-resource"),
-      env,
-    );
-    expect(routed?.target.toString()).toBe(
-      "http://127.0.0.1:4102/.well-known/oauth-protected-resource",
-    );
+  it("matches the spec protected-resource metadata path", () => {
+    expect(
+      matchProtectedResourceMetadataRequest(
+        new URL("https://mcp.cmdclaw.ai/.well-known/oauth-protected-resource/gmail/mcp"),
+      ),
+    ).toEqual({ slug: "gmail" });
+  });
+
+  it("matches the legacy protected-resource metadata path", () => {
+    expect(
+      matchProtectedResourceMetadataRequest(
+        new URL("https://mcp.cmdclaw.ai/gmail/.well-known/oauth-protected-resource"),
+      ),
+    ).toEqual({ slug: "gmail" });
   });
 
   it("returns null for unknown slugs", () => {

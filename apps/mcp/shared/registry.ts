@@ -5,7 +5,7 @@ export type McpServerDefinition = {
   name: string;
   publicBasePath: `/${string}`;
   internalTargetEnvVar: string;
-  authStrategy: "none" | "managed_bearer";
+  authStrategy: "oauth" | "managed_bearer";
   childRoot: string;
   installMetadata: {
     title: string;
@@ -19,7 +19,7 @@ export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
     name: "CmdClaw Internal MCP",
     publicBasePath: "/internal",
     internalTargetEnvVar: "CMDCLAW_INTERNAL_MCP_TARGET",
-    authStrategy: "none",
+    authStrategy: "oauth",
     childRoot: "servers/internal",
     installMetadata: {
       title: "Internal MCP",
@@ -31,7 +31,7 @@ export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
     name: "Gmail MCP",
     publicBasePath: "/gmail",
     internalTargetEnvVar: "CMDCLAW_GMAIL_MCP_TARGET",
-    authStrategy: "managed_bearer",
+    authStrategy: "oauth",
     childRoot: "servers/gmail",
     installMetadata: {
       title: "Gmail MCP Server",
@@ -46,4 +46,8 @@ export function getMcpServerDefinition(slug: string): McpServerDefinition | null
 
 export function buildMcpPublicUrl(baseUrl: string, slug: McpServerSlug, path = "/mcp"): string {
   return new URL(`${MCP_SERVER_REGISTRY[slug].publicBasePath}${path}`, baseUrl).toString();
+}
+
+export function buildProtectedResourceMetadataPath(slug: McpServerSlug): `/.well-known/oauth-protected-resource/${string}/mcp` {
+  return `/.well-known/oauth-protected-resource/${slug}/mcp`;
 }

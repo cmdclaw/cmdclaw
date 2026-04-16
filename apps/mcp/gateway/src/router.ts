@@ -7,12 +7,32 @@ export type RoutedMcpRequest = {
 
 const WELL_KNOWN_PREFIX = "/.well-known/oauth-protected-resource";
 
+export function matchProtectedResourceMetadataRequest(requestUrl: URL): { slug: string } | null {
+  const specMatch = requestUrl.pathname.match(
+    /^\/\.well-known\/oauth-protected-resource\/([^/]+)\/mcp\/?$/,
+  );
+  if (specMatch?.[1]) {
+    const slug = specMatch[1];
+    return getMcpServerDefinition(slug) ? { slug } : null;
+  }
+
+  const legacyMatch = requestUrl.pathname.match(
+    /^\/([^/]+)\/\.well-known\/oauth-protected-resource\/?$/,
+  );
+  if (legacyMatch?.[1]) {
+    const slug = legacyMatch[1];
+    return getMcpServerDefinition(slug) ? { slug } : null;
+  }
+
+  return null;
+}
+
 function normalizeProxyPath(pathname: string): string {
-  if (pathname === "/mcp" || pathname === WELL_KNOWN_PREFIX || pathname.startsWith("/auth/")) {
+  if (pathname === "/mcp" || pathname.startsWith("/auth/")) {
     return pathname;
   }
 
-  if (pathname.startsWith("/mcp/")) {
+  if (pathname.startsWith("/mcp/") || pathname.startsWith(`${WELL_KNOWN_PREFIX}/`)) {
     return pathname;
   }
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type InferSchema, type ToolMetadata } from "xmcp";
+import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
 import { createMcpClient } from "../lib/client";
 import { handleCoworkerGet } from "../lib/handlers";
 
@@ -18,8 +18,11 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function coworkerGet(params: InferSchema<typeof schema>) {
-  const clientState = createMcpClient(params.serverUrl);
+export default async function coworkerGet(
+  params: InferSchema<typeof schema>,
+  extra?: ToolExtraArguments,
+) {
+  const clientState = createMcpClient(extra, params.serverUrl);
   if (clientState.status !== "ready") {
     return clientState;
   }

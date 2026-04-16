@@ -5,12 +5,12 @@ import { createGmailClient } from "./gmail";
 type ManagedGmailClaims = {
   userId: string;
   workspaceId: string;
-  internalKey: string;
+  audience: string;
 };
 
 export async function createManagedGmailClient(extra?: ToolExtraArguments) {
   const claims = extra?.authInfo?.extra as ManagedGmailClaims | undefined;
-  if (!claims?.userId || !claims.workspaceId || claims.internalKey !== "gmail") {
+  if (!claims?.userId || !claims.workspaceId || claims.audience !== "gmail") {
     throw new Error("Managed Gmail MCP authentication is required.");
   }
 

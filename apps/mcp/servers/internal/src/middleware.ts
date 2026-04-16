@@ -3,19 +3,18 @@ import {
   sendUnauthorizedMcpResponse,
 } from "../../../shared/auth";
 
-export default async function gmailMiddleware(req: any, res: any, next: () => void) {
+export default async function internalMiddleware(req: any, res: any, next: () => void) {
   try {
     req.auth = await authenticateHostedMcpRequest({
       req,
-      requiredAudience: "gmail",
-      allowManagedToken: true,
+      requiredAudience: "internal",
     });
     next();
   } catch (error) {
     sendUnauthorizedMcpResponse({
       req,
       res,
-      slug: "gmail",
+      slug: "internal",
       message: error instanceof Error ? error.message : "Unauthorized",
     });
   }

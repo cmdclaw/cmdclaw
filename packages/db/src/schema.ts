@@ -106,6 +106,112 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const hostedMcpOauthClient = pgTable(
+  "hosted_mcp_oauth_client",
+  {
+    clientId: text("client_id").primaryKey(),
+    tokenEndpointAuthMethod: text("token_endpoint_auth_method").default("none").notNull(),
+    redirectUris: text("redirect_uris").array().notNull(),
+    grantTypes: text("grant_types").array().notNull().default(["authorization_code", "refresh_token"]),
+    responseTypes: text("response_types").array().notNull().default(["code"]),
+    clientName: text("client_name"),
+    clientUri: text("client_uri"),
+    logoUri: text("logo_uri"),
+    contacts: text("contacts").array(),
+    policyUri: text("policy_uri"),
+    tosUri: text("tos_uri"),
+    scope: text("scope"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("hosted_mcp_oauth_client_created_at_idx").on(table.createdAt)],
+);
+
+export const hostedMcpOauthGrant = pgTable(
+  "hosted_mcp_oauth_grant",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => hostedMcpOauthClient.clientId, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    audience: text("audience").notNull(),
+    resource: text("resource").notNull(),
+    scopes: text("scopes").array().notNull(),
+    revokedAt: timestamp("revoked_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("hosted_mcp_oauth_grant_client_idx").on(table.clientId),
+    index("hosted_mcp_oauth_grant_user_workspace_idx").on(table.userId, table.workspaceId),
+    index("hosted_mcp_oauth_grant_revoked_at_idx").on(table.revokedAt),
+  ],
+);
+
+export const hostedMcpOauthAuthorizationCode = pgTable(
+  "hosted_mcp_oauth_authorization_code",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    codeHash: text("code_hash").notNull().unique(),
+    grantId: text("grant_id")
+      .notNull()
+      .references(() => hostedMcpOauthGrant.id, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    consumedAt: timestamp("consumed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("hosted_mcp_oauth_authorization_code_grant_idx").on(table.grantId),
+    index("hosted_mcp_oauth_authorization_code_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export const hostedMcpOauthRefreshToken = pgTable(
+  "hosted_mcp_oauth_refresh_token",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    tokenHash: text("token_hash").notNull().unique(),
+    grantId: text("grant_id")
+      .notNull()
+      .references(() => hostedMcpOauthGrant.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => hostedMcpOauthClient.clientId, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at").notNull(),
+    revokedAt: timestamp("revoked_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("hosted_mcp_oauth_refresh_token_grant_idx").on(table.grantId),
+    index("hosted_mcp_oauth_refresh_token_expires_at_idx").on(table.expiresAt),
+    index("hosted_mcp_oauth_refresh_token_revoked_at_idx").on(table.revokedAt),
+  ],
+);
+
 export const magicLinkRequestStatusEnum = pgEnum("magic_link_request_status", [
   "pending",
   "consumed",

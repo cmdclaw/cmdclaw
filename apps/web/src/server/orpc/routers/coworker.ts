@@ -517,10 +517,11 @@ async function requireOwnedCoworkerInActiveWorkspace(
   context: {
     user: { id: string };
     db: typeof import("@cmdclaw/db/client").db;
+    workspaceId?: string | null;
   },
   coworkerId: string,
 ) {
-  const access = await requireActiveWorkspaceAccess(context.user.id);
+  const access = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
   const workspaceId = access.workspace.id;
   const coworkerRow = await context.db.query.coworker.findFirst({
     where: and(
@@ -758,7 +759,7 @@ async function ensureBuilderCoworkerMetadata(params: {
 const list = protectedProcedure.handler(async ({ context }) => {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(context.user.id);
+  } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
   const coworkers = await context.db.query.coworker.findMany({
     where: and(eq(coworker.ownerId, context.user.id), eq(coworker.workspaceId, workspaceId)),
     orderBy: (wf, { desc }) => [desc(wf.updatedAt)],
@@ -953,7 +954,7 @@ const create = protectedProcedure
     const coworkerId = crypto.randomUUID();
     const {
       workspace: { id: workspaceId },
-    } = await requireActiveWorkspaceAccess(context.user.id);
+    } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
       columns: { role: true },
@@ -1402,7 +1403,7 @@ const getRun = protectedProcedure
   .handler(async ({ input, context }) => {
     const {
       workspace: { id: workspaceId },
-    } = await requireActiveWorkspaceAccess(context.user.id);
+    } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
     const runFilter = and(
       eq(coworkerRun.id, input.id),
       eq(coworkerRun.ownerId, context.user.id),
@@ -1524,7 +1525,7 @@ const listWorkspaceRuns = protectedProcedure
   .handler(async ({ input, context }) => {
     const {
       workspace: { id: workspaceId },
-    } = await requireActiveWorkspaceAccess(context.user.id);
+    } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
     const cursor = decodeHistoryCursor(input.cursor);
     const runs = await context.db.query.coworkerRun.findMany({
       where: and(
@@ -1599,7 +1600,7 @@ const getHistory = protectedProcedure
   .handler(async ({ input, context }) => {
     const {
       workspace: { id: workspaceId },
-    } = await requireActiveWorkspaceAccess(context.user.id);
+    } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
     const cursor = decodeHistoryCursor(input?.cursor);
 
     const dateFilters = [
@@ -2074,7 +2075,7 @@ const unshare = protectedProcedure
 const listShared = protectedProcedure.handler(async ({ context }) => {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(context.user.id);
+  } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
   const coworkers = await context.db.query.coworker.findMany({
     where: and(eq(coworker.workspaceId, workspaceId)),
     with: {
@@ -2180,7 +2181,7 @@ const importShared = protectedProcedure
   .handler(async ({ input, context }) => {
     const {
       workspace: { id: workspaceId },
-    } = await requireActiveWorkspaceAccess(context.user.id);
+    } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
       columns: { role: true },
@@ -2273,7 +2274,7 @@ const importDefinition = protectedProcedure
     const definition = coworkerDefinitionSchema.parse(parsedDefinition);
     const {
       workspace: { id: workspaceId },
-    } = await requireActiveWorkspaceAccess(context.user.id);
+    } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
     const dbUser = await context.db.query.user.findFirst({
       where: eq(user.id, context.user.id),
       columns: { role: true },
@@ -2540,7 +2541,7 @@ const getOrCreateBuilderConversation = protectedProcedure
 const getOverview = protectedProcedure.handler(async ({ context }) => {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(context.user.id);
+  } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
   return queryCoworkerOverview(context.db, {
     workspaceId,
     ownerId: context.user.id,
@@ -2550,7 +2551,7 @@ const getOverview = protectedProcedure.handler(async ({ context }) => {
 const getUsageDashboard = protectedProcedure.handler(async ({ context }) => {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(context.user.id);
+  } = await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
   return queryUsageDashboard(context.db, workspaceId);
 });
 

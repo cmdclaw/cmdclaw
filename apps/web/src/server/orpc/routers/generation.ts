@@ -250,10 +250,14 @@ const generationEventSchema = z.intersection(
   generationEventPayloadSchema,
 );
 
-async function requireConversationAccessInActiveWorkspace(userId: string, conversationId: string) {
+async function requireConversationAccessInActiveWorkspace(
+  userId: string,
+  conversationId: string,
+  workspaceIdOverride?: string | null,
+) {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(userId);
+  } = await requireActiveWorkspaceAccess(userId, workspaceIdOverride);
   const conv = await db.query.conversation.findFirst({
     where: eq(conversation.id, conversationId),
   });
@@ -265,10 +269,14 @@ async function requireConversationAccessInActiveWorkspace(userId: string, conver
   return { conversation: conv, workspaceId };
 }
 
-async function requireGenerationAccessInActiveWorkspace(userId: string, generationId: string) {
+async function requireGenerationAccessInActiveWorkspace(
+  userId: string,
+  generationId: string,
+  workspaceIdOverride?: string | null,
+) {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(userId);
+  } = await requireActiveWorkspaceAccess(userId, workspaceIdOverride);
   const genRecord = await db.query.generation.findFirst({
     where: eq(generation.id, generationId),
     with: { conversation: true },
@@ -285,10 +293,14 @@ async function requireGenerationAccessInActiveWorkspace(userId: string, generati
   return { generation: genRecord, workspaceId };
 }
 
-async function requireInterruptAccessInActiveWorkspace(userId: string, interruptId: string) {
+async function requireInterruptAccessInActiveWorkspace(
+  userId: string,
+  interruptId: string,
+  workspaceIdOverride?: string | null,
+) {
   const {
     workspace: { id: workspaceId },
-  } = await requireActiveWorkspaceAccess(userId);
+  } = await requireActiveWorkspaceAccess(userId, workspaceIdOverride);
   const interrupt = await db.query.generationInterrupt.findFirst({
     where: eq(generationInterrupt.id, interruptId),
     columns: {
@@ -382,9 +394,13 @@ const startGeneration = protectedProcedure
 
     try {
       if (input.conversationId) {
-        await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+        await requireConversationAccessInActiveWorkspace(
+          context.user.id,
+          input.conversationId,
+          context.workspaceId,
+        );
       } else {
-        await requireActiveWorkspaceAccess(context.user.id);
+        await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
       }
       const result = await generationManager.startGeneration({
         conversationId: input.conversationId,
@@ -465,7 +481,11 @@ const enqueueConversationMessage = protectedProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+    await requireConversationAccessInActiveWorkspace(
+      context.user.id,
+      input.conversationId,
+      context.workspaceId,
+    );
     return generationManager.enqueueConversationMessage({
       conversationId: input.conversationId,
       userId: context.user.id,
@@ -503,7 +523,11 @@ const listConversationQueuedMessages = protectedProcedure
     ),
   )
   .handler(async ({ input, context }) => {
-    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+    await requireConversationAccessInActiveWorkspace(
+      context.user.id,
+      input.conversationId,
+      context.workspaceId,
+    );
     let queued;
     try {
       queued = await generationManager.listConversationQueuedMessages(
@@ -535,7 +559,11 @@ const removeConversationQueuedMessage = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
-    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+    await requireConversationAccessInActiveWorkspace(
+      context.user.id,
+      input.conversationId,
+      context.workspaceId,
+    );
     const success = await generationManager.removeConversationQueuedMessage(
       input.queuedMessageId,
       input.conversationId,
@@ -564,7 +592,11 @@ const updateConversationQueuedMessage = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
-    await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId);
+    await requireConversationAccessInActiveWorkspace(
+      context.user.id,
+      input.conversationId,
+      context.workspaceId,
+    );
     const success = await generationManager.updateConversationQueuedMessage({
       queuedMessageId: input.queuedMessageId,
       conversationId: input.conversationId,
@@ -616,7 +648,11 @@ const subscribeGeneration = protectedProcedure
   )
   .output(eventIterator(generationEventSchema))
   .handler(async function* ({ input, context }) {
-    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+    await requireGenerationAccessInActiveWorkspace(
+      context.user.id,
+      input.generationId,
+      context.workspaceId,
+    );
     const streamId = createTraceId();
     const openedAt = Date.now();
     const logContext = {
@@ -664,7 +700,11 @@ const cancelGeneration = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
-    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+    await requireGenerationAccessInActiveWorkspace(
+      context.user.id,
+      input.generationId,
+      context.workspaceId,
+    );
     const success = await generationManager.cancelGeneration(input.generationId, context.user.id);
     return { success };
   });
@@ -678,7 +718,11 @@ const resumeGeneration = protectedProcedure
   )
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
-    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+    await requireGenerationAccessInActiveWorkspace(
+      context.user.id,
+      input.generationId,
+      context.workspaceId,
+    );
     const success = await generationManager.resumeGeneration(input.generationId, context.user.id);
     return { success };
   });
@@ -703,7 +747,11 @@ const submitApproval = protectedProcedure
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
     if ("interruptId" in input) {
-      await requireInterruptAccessInActiveWorkspace(context.user.id, input.interruptId);
+      await requireInterruptAccessInActiveWorkspace(
+        context.user.id,
+        input.interruptId,
+        context.workspaceId,
+      );
       const success = await generationManager.submitApprovalByInterrupt(
         input.interruptId,
         input.decision,
@@ -713,7 +761,11 @@ const submitApproval = protectedProcedure
       return { success };
     }
 
-    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+    await requireGenerationAccessInActiveWorkspace(
+      context.user.id,
+      input.generationId,
+      context.workspaceId,
+    );
     const success = await generationManager.submitApproval(
       input.generationId,
       input.toolUseId,
@@ -743,7 +795,11 @@ const submitAuthResult = protectedProcedure
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
     if ("interruptId" in input) {
-      await requireInterruptAccessInActiveWorkspace(context.user.id, input.interruptId);
+      await requireInterruptAccessInActiveWorkspace(
+        context.user.id,
+        input.interruptId,
+        context.workspaceId,
+      );
       const success = await generationManager.submitAuthResultByInterrupt(
         input.interruptId,
         input.integration,
@@ -753,7 +809,11 @@ const submitAuthResult = protectedProcedure
       return { success };
     }
 
-    await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+    await requireGenerationAccessInActiveWorkspace(
+      context.user.id,
+      input.generationId,
+      context.workspaceId,
+    );
     const success = await generationManager.submitAuthResult(
       input.generationId,
       input.integration,
@@ -800,7 +860,11 @@ const getGenerationStatus = protectedProcedure
   )
   .handler(async ({ input, context }) => {
     try {
-      await requireGenerationAccessInActiveWorkspace(context.user.id, input.generationId);
+      await requireGenerationAccessInActiveWorkspace(
+        context.user.id,
+        input.generationId,
+        context.workspaceId,
+      );
     } catch (error) {
       if (error instanceof ORPCError && error.code === "NOT_FOUND") {
         return null;
@@ -844,7 +908,11 @@ const getActiveGeneration = protectedProcedure
     let conv;
     try {
       conv = (
-        await requireConversationAccessInActiveWorkspace(context.user.id, input.conversationId)
+        await requireConversationAccessInActiveWorkspace(
+          context.user.id,
+          input.conversationId,
+          context.workspaceId,
+        )
       ).conversation;
     } catch (error) {
       if (error instanceof ORPCError && error.code === "NOT_FOUND") {

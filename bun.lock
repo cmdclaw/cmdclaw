@@ -49,6 +49,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cmdclaw/client": "workspace:*",
+        "@cmdclaw/core": "workspace:*",
         "xmcp": "0.6.5",
         "zod": "^4.1.13",
       },
@@ -263,6 +264,7 @@
         "drizzle-orm": "^0.45.1",
         "e2b": "^2.12.1",
         "ioredis": "^5.8.2",
+        "jose": "^6.1.3",
         "mime-types": "^3.0.1",
         "openai": "^6.15.0",
         "resend": "^6.7.0",
