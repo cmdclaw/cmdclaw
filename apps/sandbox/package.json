@@ -14,6 +14,7 @@
     "daytona:build:dev": "bun --env-file=../../.env src/daytona/build.dev.ts",
     "daytona:build:prod": "bun --env-file=../../.env src/daytona/build.prod.ts",
     "daytona:cleanup": "bun --env-file=../../.env scripts/daytona-cleanup.ts",
+    "daytona:selfhost:smoke": "bun --env-file=../../.env scripts/daytona-selfhost-smoke.ts",
     "daytona:sandbox": "bun --env-file=../../.env scripts/test-daytona-sandbox.ts",
     "e2b:build:dev": "bun --env-file=../../.env src/e2b/build.dev.ts",
     "e2b:build:prod": "bun --env-file=../../.env src/e2b/build.prod.ts",

@@ -28,19 +28,11 @@ Sign in with:
 
 ## Create Local API Credentials
 
-Create an API key from the local Daytona dashboard, then create `docker/compose/daytona/.env` from the example file:
-
-```bash
-cp docker/compose/daytona/.env.example docker/compose/daytona/.env
-```
-
-Set:
+Create an API key from the local Daytona dashboard, then add these values to the repo-root `/.env`:
 
 - `DAYTONA_API_KEY` to the API key you created locally
 - `DAYTONA_API_URL` to `http://localhost:3300/api` unless your local API is exposed elsewhere
 - `DAYTONA_TARGET` to `us` unless you changed the default runner region in the compose stack
-
-The smoke script reads `docker/compose/daytona/.env` directly so it stays isolated from the shared repo-root `/.env`.
 
 ## Run The Smoke Test
 
