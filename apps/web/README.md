@@ -9,7 +9,7 @@ bun run dev
 
 ### Self-Hosting
 
-See [SELF_HOSTING.md](./SELF_HOSTING.md) for the Docker Compose deployment.
+See [docker/compose/README.md](../../docker/compose/README.md) for the Docker Compose deployment.
 
 Sandbox runtime is selected automatically from the chosen model:
 

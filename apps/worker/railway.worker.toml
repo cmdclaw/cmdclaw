@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "apps/worker/Dockerfile"
+dockerfilePath = "docker/images/worker/Dockerfile"
 
 [deploy]
 startCommand = "bun dist/index.js"

@@ -2,7 +2,7 @@ import { config } from "dotenv";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { mswServer } from "@/test/msw/server";
 
-for (const envFile of [".env.test.local", ".env.test", ".env"]) {
+for (const envFile of [".env.test.local", ".env.test", "../../.env"]) {
   config({ path: envFile, override: false });
 }
 

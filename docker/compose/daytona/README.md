@@ -1,13 +1,13 @@
-# Daytona OSS Self-Hosted Experiment
+# Daytona OSS Self-Hosted Stack
 
-This experiment vendors Daytona's documented OSS Docker Compose stack and adds a smoke test that creates two sandboxes against the local deployment.
+This stack vendors Daytona's documented OSS Docker Compose setup and adds a smoke test that creates two sandboxes against the local deployment.
 
 ## Start Daytona OSS
 
 From the repo root:
 
 ```bash
-docker compose -f experiments/daytona/docker-compose.yaml up -d
+docker compose -f docker/compose/daytona/compose.yml up -d
 ```
 
 The experiment only exposes the host ports needed for local use:
@@ -28,10 +28,10 @@ Sign in with:
 
 ## Create Local API Credentials
 
-Create an API key from the local Daytona dashboard, then create `experiments/daytona/.env` from the example file:
+Create an API key from the local Daytona dashboard, then create `docker/compose/daytona/.env` from the example file:
 
 ```bash
-cp experiments/daytona/.env.example experiments/daytona/.env
+cp docker/compose/daytona/.env.example docker/compose/daytona/.env
 ```
 
 Set:
@@ -40,7 +40,7 @@ Set:
 - `DAYTONA_API_URL` to `http://localhost:3300/api` unless your local API is exposed elsewhere
 - `DAYTONA_TARGET` to `us` unless you changed the default runner region in the compose stack
 
-The smoke script reads `experiments/daytona/.env` directly so it stays isolated from `apps/web/.env`.
+The smoke script reads `docker/compose/daytona/.env` directly so it stays isolated from the shared repo-root `/.env`.
 
 ## Run The Smoke Test
 
@@ -61,7 +61,7 @@ The smoke test:
 ## Validate The Compose File
 
 ```bash
-docker compose -f experiments/daytona/docker-compose.yaml config
+docker compose -f docker/compose/daytona/compose.yml config
 ```
 
 ## Optional Proxy DNS Setup

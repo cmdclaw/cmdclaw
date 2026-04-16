@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "bun --watch --env-file=../web/.env index.ts",
-    "dev:selfhost": "bun --watch --env-file=../web/.env.selfhost index.ts",
-    "start": "bun --env-file=../web/.env index.ts",
+    "dev": "bun --watch --env-file=../../.env index.ts",
+    "dev:selfhost": "bun --watch --env-file=../../.env.selfhost index.ts",
+    "start": "bun --env-file=../../.env index.ts",
     "bundle": "rm -rf dist && bun build index.ts --target bun --outdir dist --external cpu-features",
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json"

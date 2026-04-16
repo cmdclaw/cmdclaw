@@ -3,7 +3,7 @@ import { Template, defaultBuildLogger } from "e2b";
 import path from "path";
 import { template } from "./template";
 
-config({ path: path.join(process.cwd(), ".env") });
+config({ path: path.join(process.cwd(), "../../.env") });
 
 async function main() {
   console.log("Building staging template...");

@@ -6,6 +6,7 @@ on:
       - "apps/web/**"
       - "apps/worker/**"
       - "packages/**"
+      - "docker/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
@@ -18,6 +19,7 @@ on:
       - "apps/web/**"
       - "apps/worker/**"
       - "packages/**"
+      - "docker/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
@@ -41,9 +43,9 @@ jobs:
       matrix:
         include:
           - image_name: cmdclaw-web
-            dockerfile: apps/web/Dockerfile.app
+            dockerfile: docker/images/web/Dockerfile
           - image_name: cmdclaw-worker
-            dockerfile: apps/worker/Dockerfile
+            dockerfile: docker/images/worker/Dockerfile
 
     steps:
       - name: Checkout repository

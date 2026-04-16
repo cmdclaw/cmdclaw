@@ -71,8 +71,8 @@ bun run cmdclaw -- --help
 
 ```bash
 bun install
-docker compose -f apps/web/docker-compose.yml up -d
-cp apps/web/.env.selfhost.example apps/web/.env
+docker compose -f docker/compose/dev.yml up -d
+cp .env.example .env
 bun db:push
 bun dev
 ```

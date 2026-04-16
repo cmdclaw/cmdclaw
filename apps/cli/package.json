@@ -7,8 +7,8 @@
     "cmdclaw": "src/bin/cmdclaw.ts"
   },
   "scripts": {
-    "dev": "bun --watch --env-file=../web/.env src/bin/cmdclaw.ts",
-    "start": "bun --env-file=../web/.env src/bin/cmdclaw.ts",
+    "dev": "bun --watch --env-file=../../.env src/bin/cmdclaw.ts",
+    "start": "bun --env-file=../../.env src/bin/cmdclaw.ts",
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json",
     "test": "vitest run"

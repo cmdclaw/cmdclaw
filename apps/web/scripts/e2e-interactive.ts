@@ -347,13 +347,16 @@ async function main(): Promise<void> {
 
     if (hasLiveTests) {
       console.log("\nBootstrapping e2e auth state for live tests...");
-      const authExit = await runCommand(["bun", "--env-file=.env", "scripts/e2e-auth.ts"], env);
+      const authExit = await runCommand(
+        ["bun", "--env-file=../../.env", "scripts/e2e-auth.ts"],
+        env,
+      );
       if (authExit !== 0) {
         process.exit(authExit);
       }
     }
 
-    const playwrightArgs = ["bun", "--env-file=.env", "playwright", "test", ...selectedPaths];
+    const playwrightArgs = ["bun", "--env-file=../../.env", "playwright", "test", ...selectedPaths];
     if (timeoutMs !== null) {
       playwrightArgs.push(`--timeout=${timeoutMs}`);
     }

@@ -3,8 +3,8 @@ import { Template, defaultBuildLogger } from "e2b";
 import path from "path";
 import { template } from "./template";
 
-// Load .env from parent directory
-config({ path: path.join(process.cwd(), ".env") });
+// Load the shared repo-root .env file.
+config({ path: path.join(process.cwd(), "../../.env") });
 
 async function main() {
   console.log("Building development template...");

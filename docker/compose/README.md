@@ -1,5 +1,7 @@
 # Self-Hosting CmdClaw with Docker Compose
 
+Run these commands from the repo root.
+
 This setup is the recommended first self-hosted deployment shape for CmdClaw:
 
 - `app` for the Next.js UI and API
@@ -41,19 +43,19 @@ If you omit them, the compose file uses those same tags by default.
 4. Pull the published images:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost pull
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost pull
 ```
 
 5. Apply the database schema:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost run --rm migrate
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost run --rm migrate
 ```
 
 6. Start the stack:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost up -d
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost up -d
 ```
 
 7. Open:
@@ -106,7 +108,7 @@ They are no longer required for end-user login when cloud-managed authentication
 Check logs with:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost logs -f app
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost logs -f app
 ```
 
 ## Sandboxing
@@ -131,7 +133,7 @@ If you do not want local Docker sandbox execution:
 - the default published images are built by `.github/workflows/ghcr-images.yml` on pushes to `main`
 - published images also get a daily `YYYYMMDD-N` tag such as `20260310-1`
 - use a `sha-...` image tag if you want to pin a specific published build for testing
-- browser-side PostHog config is baked into the published `app` image at build time; build `apps/web/Dockerfile.app` yourself if you need custom `NEXT_PUBLIC_POSTHOG_*` values
+- browser-side PostHog config is baked into the published `app` image at build time; build `docker/images/web/Dockerfile` yourself if you need custom `NEXT_PUBLIC_POSTHOG_*` values
 - `database`, `redis`, and `minio` are not published externally by default
 - MinIO stores uploaded files and generated artifacts
 - `worker` is required in production; chat and coworker generations execute there, so the web app alone is not enough

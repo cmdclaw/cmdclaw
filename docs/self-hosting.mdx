@@ -27,15 +27,15 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
     This starts PostgreSQL, Redis, and MinIO (S3-compatible storage):
 
     ```bash
-    docker compose -f apps/web/docker-compose.yml up -d
+    docker compose -f docker/compose/dev.yml up -d
     ```
   </Step>
   <Step title="Configure environment variables">
     ```bash
-    cp apps/web/.env.selfhost.example apps/web/.env
+    cp .env.example .env
     ```
 
-    Edit `apps/web/.env` and fill in your API keys and configuration. At minimum you need:
+    Edit `/.env` and fill in your API keys and configuration. At minimum you need:
 
     - `DATABASE_URL` -- PostgreSQL connection string
     - `REDIS_URL` -- Redis connection string
@@ -70,10 +70,10 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
 ## Docker Compose (all-in-one)
 
 For a fully containerized setup backed by published GHCR images (app + worker + DB + Redis + MinIO),
-use the bundled compose file at `apps/web/docker-compose.selfhost.yml`:
+use the bundled compose file at `docker/compose/selfhost.yml`:
 
 ```bash
-cp apps/web/.env.selfhost.example apps/web/.env.selfhost
+cp .env.selfhost.example .env.selfhost
 ```
 
 Fill in at least:
@@ -87,7 +87,7 @@ Fill in at least:
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
-Optionally pin the image tags in `apps/web/.env.selfhost`:
+Optionally pin the image tags in `/.env.selfhost`:
 
 ```env
 CMDCLAW_APP_IMAGE=ghcr.io/baptistecolle/cmdclaw-web:main
@@ -97,9 +97,9 @@ CMDCLAW_WORKER_IMAGE=ghcr.io/baptistecolle/cmdclaw-worker:main
 Then pull, migrate, and start:
 
 ```bash
-docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.selfhost pull
-docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.selfhost run --rm migrate
-docker compose -f apps/web/docker-compose.selfhost.yml --env-file apps/web/.env.selfhost up -d
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost pull
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost run --rm migrate
+docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost up -d
 ```
 
 Then open `http://localhost:8114`.
@@ -113,7 +113,7 @@ that should trust it.
 - Or set `SANDBOX_DEFAULT=docker` to use local Docker-based sandboxes.
 - Published images also get a daily `YYYYMMDD-N` tag such as `20260310-1`.
 - Use a `sha-...` tag instead of `main` if you want to test a specific published build.
-- The published `app` image does not include custom browser-side `NEXT_PUBLIC_POSTHOG_*` values; build `apps/web/Dockerfile.app` yourself if you need them.
+- The published `app` image does not include custom browser-side `NEXT_PUBLIC_POSTHOG_*` values; build `docker/images/web/Dockerfile` yourself if you need them.
 
 ## Background worker
 
@@ -124,7 +124,7 @@ executed by the worker, so start it in a separate terminal:
 bun start:worker
 ```
 
-This command loads `apps/web/.env` so the worker uses the same local environment as `bun dev`.
+This command loads `/.env` so the worker uses the same local environment as `bun dev`.
 
 ## WebSocket server
 
@@ -134,7 +134,7 @@ The WebSocket server still runs separately from the web app:
 bun start:ws
 ```
 
-This command also loads `apps/web/.env`.
+This command also loads `/.env`.
 
 ## Useful commands
 
@@ -147,8 +147,8 @@ This command also loads `apps/web/.env`.
 | `bun build` | Production build |
 | `bun check` | Run workspace checks |
 | `bun test` | Run workspace tests |
-| `bun start:worker` | Start the background job worker using `apps/web/.env` |
-| `bun start:ws` | Start the WebSocket server using `apps/web/.env` |
+| `bun start:worker` | Start the background job worker using `/.env` |
+| `bun start:ws` | Start the WebSocket server using `/.env` |
 | `bun db:push` | Push schema changes to the database |
 | `bun db:studio` | Open Drizzle Studio (database browser) |
 | `bun db:seed` | Seed the database |

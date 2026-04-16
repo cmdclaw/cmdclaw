@@ -12,4 +12,4 @@ bun run --cwd apps/sandbox daytona:build:dev
 bun run --cwd apps/sandbox daytona:build:prod
 ```
 
-These commands load `apps/web/.env` so sandbox builders keep using the same local environment as the web app.
+These commands load `/.env` from the repo root so sandbox builders keep using the same shared local environment as the web app.

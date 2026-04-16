@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ENV_PATH = path.resolve(__dirname, "../../../experiments/daytona/.env");
+const ENV_PATH = path.resolve(__dirname, "../../../docker/compose/daytona/.env");
 const DEFAULT_API_URL = "http://localhost:3300/api";
 const DEFAULT_TARGET = "us";
 const WORKDIR = "/";

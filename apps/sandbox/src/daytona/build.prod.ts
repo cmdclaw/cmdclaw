@@ -3,7 +3,7 @@ import { config } from "dotenv";
 import path from "path";
 import { image } from "./image";
 
-config({ path: path.join(process.cwd(), ".env") });
+config({ path: path.join(process.cwd(), "../../.env") });
 
 function getDaytonaConfig(): {
   apiKey?: string;
