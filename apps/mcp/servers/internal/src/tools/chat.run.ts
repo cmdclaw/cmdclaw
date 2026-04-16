@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
+import { toMcpToolResult } from "../../../../shared/tool-result";
 import { createMcpClient } from "../lib/client";
 import { handleChatRun } from "../lib/handlers";
 
@@ -29,9 +30,9 @@ export default async function chatRun(
 ) {
   const clientState = createMcpClient(extra, params.serverUrl);
   if (clientState.status !== "ready") {
-    return clientState;
+    return toMcpToolResult(clientState);
   }
-  return handleChatRun({
+  const result = await handleChatRun({
     client: clientState.client,
     message: params.message,
     conversationId: params.conversationId,
@@ -40,4 +41,6 @@ export default async function chatRun(
     sandbox: params.sandbox,
     autoApprove: params.autoApprove,
   });
+
+  return toMcpToolResult(result);
 }

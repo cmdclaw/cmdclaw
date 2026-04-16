@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
+import { toMcpToolResult } from "../../../../shared/tool-result";
 import { createMcpClient } from "../lib/client";
 import { handleCoworkerRun } from "../lib/handlers";
 
@@ -25,11 +26,12 @@ export default async function coworkerRun(
 ) {
   const clientState = createMcpClient(extra, params.serverUrl);
   if (clientState.status !== "ready") {
-    return clientState;
+    return toMcpToolResult(clientState);
   }
-  return handleCoworkerRun({
+  const result = await handleCoworkerRun({
     client: clientState.client,
     reference: params.reference,
     payload: params.payload,
   });
+  return toMcpToolResult(result);
 }

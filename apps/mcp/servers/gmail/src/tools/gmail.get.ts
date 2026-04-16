@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
+import { toMcpToolResult } from "../../../../shared/tool-result";
 import { createManagedGmailClient } from "../lib/gmail-auth";
 
 export const schema = {
@@ -21,5 +22,6 @@ export default async function gmailGet(
   extra?: ToolExtraArguments,
 ) {
   const client = await createManagedGmailClient(extra);
-  return client.getMessage(params.messageId);
+  const result = await client.getMessage(params.messageId);
+  return toMcpToolResult(result);
 }
