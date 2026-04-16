@@ -18,7 +18,7 @@ exporters:
     namespace: otel
 
   otlp/jaeger:
-    endpoint: daytona-jaeger:4317
+    endpoint: jaeger:4317
     tls:
       insecure: true
 
