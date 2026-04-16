@@ -3,6 +3,7 @@
 import { Daytona } from "@daytonaio/sdk";
 import { config as loadEnv } from "dotenv";
 import path from "path";
+import { createInterface } from "readline";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,6 +43,12 @@ type DaytonaSandboxHandle = {
   fs: {
     downloadFile: (remotePath: string, timeout?: number) => Promise<Buffer | string | Uint8Array>;
   };
+};
+
+type DaytonaSandboxStateSnapshot = {
+  id: string;
+  name: string;
+  state?: string | null;
 };
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -104,6 +111,109 @@ async function deleteSandbox(sandbox: DaytonaSandboxHandle): Promise<void> {
 async function listByRunLabel(daytona: Daytona, runId: string) {
   const result = await daytona.list({ "cmdclaw-run-id": runId }, 1, 100);
   return result.items ?? [];
+}
+
+function formatSandboxStates(sandboxes: DaytonaSandboxStateSnapshot[]): string {
+  return sandboxes.map((sandbox) => `${sandbox.name}:${sandbox.state ?? "unknown"}`).join(", ");
+}
+
+async function logAndAssertSandboxStates(
+  daytona: Daytona,
+  runId: string,
+  stage: string,
+  sandboxIds?: string[],
+) {
+  const sandboxes = (await listByRunLabel(daytona, runId)) as DaytonaSandboxStateSnapshot[];
+  const scopedSandboxes =
+    sandboxIds && sandboxIds.length > 0
+      ? sandboxes.filter((sandbox) => sandboxIds.includes(sandbox.id))
+      : sandboxes;
+
+  if (scopedSandboxes.length === 0) {
+    console.log(`[daytona-selfhost] No sandboxes found while checking states after ${stage}.`);
+    return;
+  }
+
+  console.log(
+    `[daytona-selfhost] Sandbox states after ${stage}: ${formatSandboxStates(scopedSandboxes)}`,
+  );
+
+  const failedSandboxes = scopedSandboxes.filter(
+    (sandbox) => (sandbox.state ?? "").toLowerCase() === "error",
+  );
+  assert(
+    failedSandboxes.length === 0,
+    `Sandbox entered error state after ${stage}: ${formatSandboxStates(failedSandboxes)}`,
+  );
+}
+
+async function waitForUserCleanupConfirmation(
+  runId: string,
+  sandboxes: DaytonaSandboxStateSnapshot[],
+) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.log("[daytona-selfhost] No TTY detected; cleaning up sandboxes automatically.");
+    return;
+  }
+
+  console.log("[daytona-selfhost] Sandboxes are paused for inspection.");
+  console.log(`[daytona-selfhost] Run id: ${runId}`);
+  for (const sandbox of sandboxes) {
+    console.log(`- ${sandbox.name}: ${sandbox.id} (${sandbox.state ?? "unknown"})`);
+  }
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    while (true) {
+      const answer = await new Promise<string>((resolve) => {
+        rl.question('[daytona-selfhost] Type "y" to delete the sandboxes and exit: ', resolve);
+      });
+      const normalized = answer.trim().toLowerCase();
+      if (normalized === "y" || normalized === "yes") {
+        return;
+      }
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+async function cleanupRunSandboxes(
+  daytona: Daytona,
+  sandboxes: DaytonaSandboxHandle[],
+  runId: string,
+): Promise<void> {
+  if (sandboxes.length > 0) {
+    console.log("[daytona-selfhost] Cleaning up created sandboxes...");
+    const cleanupResults = await Promise.allSettled(sandboxes.map(deleteSandbox));
+    const failed = cleanupResults.filter((result) => result.status === "rejected");
+    if (failed.length > 0) {
+      console.warn(`[daytona-selfhost] Cleanup failed for ${failed.length} created sandbox(es).`);
+    }
+  }
+
+  const leftovers = await listByRunLabel(daytona, runId);
+  if (leftovers.length === 0) {
+    return;
+  }
+
+  console.log(
+    `[daytona-selfhost] Retrying cleanup for ${leftovers.length} sandbox(es) discovered by run label...`,
+  );
+  const retryResults = await Promise.allSettled(
+    leftovers.map(async (sandbox) => {
+      const full = (await daytona.get(sandbox.id)) as DaytonaSandboxHandle;
+      await full.delete();
+    }),
+  );
+  const failed = retryResults.filter((result) => result.status === "rejected");
+  if (failed.length > 0) {
+    console.warn(`[daytona-selfhost] Retry cleanup failed for ${failed.length} sandbox(es).`);
+  }
 }
 
 async function waitForCleanup(daytona: Daytona, runId: string) {
@@ -171,6 +281,12 @@ async function main() {
     for (const sandbox of sandboxes) {
       console.log(`- ${sandbox.name}: ${sandbox.id}`);
     }
+    await logAndAssertSandboxStates(
+      daytona,
+      runId,
+      "creation",
+      sandboxes.map((sandbox) => sandbox.id),
+    );
 
     const scriptCommand =
       "sh -lc 'echo \"#!/bin/sh\" > /tmp/daytona-selfhost-smoke.sh && " +
@@ -217,21 +333,24 @@ async function main() {
       `Unexpected downloaded file content from ${sandboxes[1].name}: ${downloadedContent || "<empty>"}`,
     );
     summary.push(`${sandboxes[1].name}: file write/read OK`);
+    await logAndAssertSandboxStates(
+      daytona,
+      runId,
+      "runtime checks",
+      sandboxes.map((sandbox) => sandbox.id),
+    );
 
     console.log("[daytona-selfhost] PASS");
     for (const line of summary) {
       console.log(`- ${line}`);
     }
   } finally {
-    if (sandboxes.length > 0) {
-      console.log("[daytona-selfhost] Cleaning up sandboxes...");
-      const cleanupResults = await Promise.allSettled(sandboxes.map(deleteSandbox));
-      const failed = cleanupResults.filter((result) => result.status === "rejected");
-      if (failed.length > 0) {
-        console.warn(`[daytona-selfhost] Cleanup failed for ${failed.length} sandbox(es).`);
-      }
+    const sandboxesForCleanup = await listByRunLabel(daytona, runId);
+    if (sandboxesForCleanup.length > 0) {
+      await waitForUserCleanupConfirmation(runId, sandboxesForCleanup);
     }
 
+    await cleanupRunSandboxes(daytona, sandboxes, runId);
     await waitForCleanup(daytona, runId);
   }
 }
