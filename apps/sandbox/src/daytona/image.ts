@@ -12,6 +12,7 @@ export const image = Image.debianSlim()
   .addLocalDir(`${COMMON_ROOT}/skills`, "/app/.claude/skills")
   .addLocalDir(`${COMMON_ROOT}/lib`, "/app/.claude/lib")
   .addLocalFile(`${COMMON_ROOT}/setup.sh`, "/app/setup.sh")
+  .addLocalFile(`${COMMON_ROOT}/daytona-start.sh`, "/app/daytona-start.sh")
   .runCommands("apt-get update")
   .runCommands("apt-get install -y curl git ripgrep ca-certificates gnupg unzip")
   .runCommands("apt-get install -y python3 python3-venv python3-pip python-is-python3")
@@ -30,6 +31,8 @@ export const image = Image.debianSlim()
   .runCommands("ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
   .runCommands("ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
   .runCommands("ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
+  .runCommands("npm install -g @sandbox-agent/cli@0.2.x")
+  .runCommands("sandbox-agent install-agent opencode")
   // Install TypeScript tool runtime deps resolved from /app/.opencode/tools/*.ts
   .runCommands(
     'bash -lc \'cd /app && printf "{\\"name\\":\\"sandbox-runtime\\",\\"private\\":true}\\n" > package.json && bun install @opencode-ai/plugin\'',
@@ -37,5 +40,7 @@ export const image = Image.debianSlim()
   .runCommands("mkdir -p $HOME/.config/opencode /app/.opencode $HOME/.cache/opencode")
   .runCommands("cp /app/opencode.json /app/.opencode/opencode.json")
   .runCommands("chmod +x /app/setup.sh")
+  .runCommands("chmod +x /app/daytona-start.sh")
   .runCommands("/app/setup.sh")
-  .workdir("/app");
+  .workdir("/app")
+  .entrypoint(["/bin/bash", "/app/daytona-start.sh"]);

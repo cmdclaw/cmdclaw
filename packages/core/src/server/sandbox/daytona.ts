@@ -3,6 +3,12 @@ import type { ExecuteResult, SandboxBackend } from "./types";
 const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
 const DEFAULT_WORKDIR = "/app";
 
+export type DaytonaClientConfig = {
+  apiKey?: string;
+  apiUrl?: string;
+  target?: string;
+};
+
 type DaytonaProcessResult = {
   exitCode?: number;
   result?: string;
@@ -26,16 +32,20 @@ type DaytonaSandboxHandle = {
   delete: () => Promise<void>;
 };
 
+export function getDaytonaClientConfig(): DaytonaClientConfig {
+  return {
+    ...(process.env.DAYTONA_API_KEY ? { apiKey: process.env.DAYTONA_API_KEY } : {}),
+    ...(process.env.DAYTONA_API_URL ? { apiUrl: process.env.DAYTONA_API_URL } : {}),
+    ...(process.env.DAYTONA_TARGET ? { target: process.env.DAYTONA_TARGET } : {}),
+  };
+}
+
 export class DaytonaSandboxBackend implements SandboxBackend {
   private sandbox: DaytonaSandboxHandle | null = null;
 
   async setup(_conversationId: string, _workDir?: string): Promise<void> {
     const { Daytona } = await import("@daytonaio/sdk");
-    const daytona = new Daytona({
-      ...(process.env.DAYTONA_API_KEY ? { apiKey: process.env.DAYTONA_API_KEY } : {}),
-      ...(process.env.DAYTONA_SERVER_URL ? { serverUrl: process.env.DAYTONA_SERVER_URL } : {}),
-      ...(process.env.DAYTONA_TARGET ? { target: process.env.DAYTONA_TARGET } : {}),
-    });
+    const daytona = new Daytona(getDaytonaClientConfig());
 
     const snapshot = process.env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT;
     this.sandbox = (await daytona.create({

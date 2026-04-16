@@ -22,6 +22,7 @@ import {
   getOrCreateSession as getOrCreateE2BSession,
   injectProviderAuth,
 } from "./e2b";
+import { getDaytonaClientConfig } from "./daytona";
 import { getPreferredCloudSandboxProvider } from "./factory";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import { listAccessibleEnabledSkillsForUser } from "../services/workspace-skill-service";
@@ -459,11 +460,7 @@ async function getOrCreateDockerSandbox(
 
 async function createDaytonaClient() {
   const { Daytona } = await import("@daytonaio/sdk");
-  return new Daytona({
-    ...(process.env.DAYTONA_API_KEY ? { apiKey: process.env.DAYTONA_API_KEY } : {}),
-    ...(process.env.DAYTONA_SERVER_URL ? { serverUrl: process.env.DAYTONA_SERVER_URL } : {}),
-    ...(process.env.DAYTONA_TARGET ? { target: process.env.DAYTONA_TARGET } : {}),
-  });
+  return new Daytona(getDaytonaClientConfig());
 }
 
 async function connectDaytonaSandboxById(sandboxId: string): Promise<DaytonaSandboxLike | null> {
@@ -542,18 +539,6 @@ async function getOrCreateDaytonaSandbox(
     sandboxId: created.id,
     port: getSandboxServerPort(config.model),
   });
-
-  await created.process.executeCommand(
-    `sh -lc ${escapeShell(
-      getSandboxServerBackgroundStartCommand({
-        sandboxId: created.id,
-        model: config.model,
-      }),
-    )}`,
-    "/app",
-    undefined,
-    10,
-  );
 
   const preview = await created.getPreviewLink(getSandboxServerPort(config.model));
   const baseUrl = preview.url;
@@ -704,17 +689,6 @@ async function ensureDaytonaAgentReady(
       sandboxId: sandbox.id,
       port: getSandboxServerPort(config.model),
     });
-    await sandbox.process.executeCommand(
-      `sh -lc ${escapeShell(
-        getSandboxServerBackgroundStartCommand({
-          sandboxId: sandbox.id,
-          model: config.model,
-        }),
-      )}`,
-      "/app",
-      undefined,
-      10,
-    );
     onLifecycle?.("opencode_waiting_ready", {
       conversationId: config.conversationId,
       sandboxId: sandbox.id,

@@ -9,6 +9,7 @@ export const env = createEnv({
   server: {
     BETTER_AUTH_SECRET: z.string(),
     APP_URL: z.url().optional(),
+    CMDCLAW_MCP_BASE_URL: z.url().optional(),
     CMDCLAW_EDITION: z.enum(["cloud", "selfhost"]).default("cloud"),
     CMDCLAW_CLOUD_API_BASE_URL: z.url().optional(),
     CMDCLAW_CLOUD_INSTANCE_API_KEY: z.string().optional(),
@@ -31,6 +32,8 @@ export const env = createEnv({
     E2B_DAYTONA_SANDBOX_NAME: z.string().optional(),
     SANDBOX_DEFAULT: z.enum(["daytona", "e2b", "docker"]),
     DAYTONA_API_KEY: z.string().optional(),
+    DAYTONA_API_URL: z.url().optional(),
+    DAYTONA_TARGET: z.string().optional(),
     ANVIL_API_KEY: z.string().optional(),
     // OAuth credentials
     GOOGLE_CLIENT_ID: z.string().optional(),
@@ -123,6 +126,7 @@ export const env = createEnv({
   runtimeEnv: {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     APP_URL: process.env.APP_URL,
+    CMDCLAW_MCP_BASE_URL: process.env.CMDCLAW_MCP_BASE_URL,
     CMDCLAW_EDITION: process.env.CMDCLAW_EDITION,
     CMDCLAW_CLOUD_API_BASE_URL: process.env.CMDCLAW_CLOUD_API_BASE_URL,
     CMDCLAW_CLOUD_INSTANCE_API_KEY: process.env.CMDCLAW_CLOUD_INSTANCE_API_KEY,
@@ -143,6 +147,8 @@ export const env = createEnv({
     E2B_DAYTONA_SANDBOX_NAME: process.env.E2B_DAYTONA_SANDBOX_NAME,
     SANDBOX_DEFAULT: process.env.SANDBOX_DEFAULT,
     DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
+    DAYTONA_API_URL: process.env.DAYTONA_API_URL,
+    DAYTONA_TARGET: process.env.DAYTONA_TARGET,
     ANVIL_API_KEY: process.env.ANVIL_API_KEY,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
