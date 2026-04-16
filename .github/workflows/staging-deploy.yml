@@ -1,0 +1,58 @@
+name: Staging Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit SHA to prepare for staging"
+        required: true
+        default: "main"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_sha: ${{ steps.resolve.outputs.commit_sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve commit on main
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --force
+
+          commit_sha="$(git rev-parse "${{ inputs.ref }}^{commit}")"
+          git merge-base --is-ancestor "${commit_sha}" origin/main
+
+          echo "commit_sha=${commit_sha}" >> "$GITHUB_OUTPUT"
+
+  db-push:
+    needs: resolve
+    uses: ./.github/workflows/db-push.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit_sha }}
+      environment: staging
+    secrets: inherit
+
+  e2b-sandbox:
+    needs: resolve
+    uses: ./.github/workflows/e2b-sandbox.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit_sha }}
+      environment: staging
+    secrets: inherit

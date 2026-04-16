@@ -1,6 +1,16 @@
 name: Build E2B Sandbox
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit SHA to deploy"
+        required: true
+        type: string
+      environment:
+        description: "Environment to target"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       ref:

@@ -1,6 +1,16 @@
 name: Push DB Schema
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit SHA to deploy"
+        required: true
+        type: string
+      environment:
+        description: "Environment to target"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       ref:
@@ -54,7 +64,14 @@ jobs:
           esac
 
           if [ -z "${DATABASE_URL}" ]; then
-            echo "Missing DATABASE_URL_${{ inputs.environment == 'prod' && 'PROD' || 'STAGING' }} secret" >&2
+            case "${{ inputs.environment }}" in
+              staging)
+                echo "Missing DATABASE_URL_STAGING secret" >&2
+                ;;
+              prod)
+                echo "Missing DATABASE_URL_PROD secret" >&2
+                ;;
+            esac
             exit 1
           fi
 

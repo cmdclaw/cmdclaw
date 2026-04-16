@@ -1,0 +1,116 @@
+name: Railway Deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to deploy (for example v2026.4.8 or v2026.4.8-2)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: railway-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG_REGEX: '^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(-[0-9]+)?$'
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "${tag}" =~ ${RELEASE_TAG_REGEX} ]]; then
+            echo "Invalid release tag: ${tag}" >&2
+            echo "Expected format: vYYYY.M.D or vYYYY.M.D-N" >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=${tag}"
+            echo "ref=refs/tags/${tag}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tagged commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Verify tag points at checked out commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --points-at HEAD | grep -Fx "${{ steps.release.outputs.tag }}" >/dev/null
+
+      - name: Verify tagged commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --force
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Verify Railway release secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_vars=(
+            RAILWAY_TOKEN
+            RAILWAY_PROJECT_ID
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name:-}" ]]; then
+              echo "Missing required secret: ${var_name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Deploy production web
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -f railway.toml' EXIT
+          cp apps/web/railway.web.toml railway.toml
+          railway up --ci --service "cmdclaw web" --environment production --project "$RAILWAY_PROJECT_ID"
+
+      - name: Deploy production worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -f railway.toml' EXIT
+          cp apps/worker/railway.worker.toml railway.toml
+          railway up --ci --service "cmdclaw worker" --environment production --project "$RAILWAY_PROJECT_ID"

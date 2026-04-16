@@ -1,13 +1,7 @@
-name: Production Release
+name: Create Release Tag
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "Branch, tag, or commit SHA to release"
-        required: true
-        default: "main"
-        type: string
 
 permissions:
   contents: write
@@ -17,68 +11,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  resolve:
+  create-tag:
     runs-on: ubuntu-latest
     outputs:
       commit_sha: ${{ steps.resolve.outputs.commit_sha }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Resolve commit on main
-        id: resolve
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git fetch origin main --force
-
-          commit_sha="$(git rev-parse "${{ inputs.ref }}^{commit}")"
-          git merge-base --is-ancestor "${commit_sha}" origin/main
-
-          echo "commit_sha=${commit_sha}" >> "$GITHUB_OUTPUT"
-
-  db-push:
-    needs: resolve
-    uses: ./.github/workflows/db-push.yml
-    with:
-      ref: ${{ needs.resolve.outputs.commit_sha }}
-      environment: prod
-    secrets: inherit
-
-  e2b-sandbox:
-    needs: resolve
-    uses: ./.github/workflows/e2b-sandbox.yml
-    with:
-      ref: ${{ needs.resolve.outputs.commit_sha }}
-      environment: prod
-    secrets: inherit
-
-  create-tag:
-    needs:
-      - resolve
-      - db-push
-      - e2b-sandbox
-    runs-on: ubuntu-latest
-    outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve.outputs.commit_sha }}
+          ref: main
           fetch-depth: 0
+
+      - name: Resolve latest main commit
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --tags --force
+
+          commit_sha="$(git rev-parse "origin/main^{commit}")"
+
+          echo "commit_sha=${commit_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Compute next release tag
         id: tag
         shell: bash
         run: |
           set -euo pipefail
-
-          git fetch origin --tags --force
 
           base_tag="v$(TZ=Europe/Dublin date +%Y.%-m.%-d)"
           next_tag="${base_tag}"
@@ -108,10 +69,7 @@ jobs:
           set -euo pipefail
 
           tag="${{ steps.tag.outputs.tag }}"
-          commit_sha="${{ needs.resolve.outputs.commit_sha }}"
+          commit_sha="${{ steps.resolve.outputs.commit_sha }}"
 
           git tag -a "${tag}" "${commit_sha}" -m "Release ${tag}"
           git push origin "refs/tags/${tag}"
-
-      - name: Summarize release
-        run: echo "Created release tag ${{ steps.tag.outputs.tag }} for ${{ needs.resolve.outputs.commit_sha }}" >> "$GITHUB_STEP_SUMMARY"
