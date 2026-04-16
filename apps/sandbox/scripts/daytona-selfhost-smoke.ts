@@ -15,6 +15,9 @@ const WORKDIR = "/";
 const EXEC_TIMEOUT_SECONDS = 60;
 const CLEANUP_WAIT_TIMEOUT_MS = 30_000;
 const CLEANUP_POLL_INTERVAL_MS = 1_000;
+const DEFAULT_SANDBOX_COUNT = 100;
+const MIN_RUNTIME_SANDBOX_COUNT = 2;
+const LIST_PAGE_SIZE = 200;
 
 loadEnv({ path: ENV_PATH });
 
@@ -59,6 +62,32 @@ function assert(condition: unknown, message: string): asserts condition {
 
 function normalizeOutput(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
+}
+
+function getRequestedSandboxCount(): number {
+  const raw = process.env.DAYTONA_SELFHOST_SMOKE_SANDBOX_COUNT;
+  if (!raw) {
+    return DEFAULT_SANDBOX_COUNT;
+  }
+
+  const count = Number.parseInt(raw, 10);
+  assert(
+    Number.isInteger(count) && count >= MIN_RUNTIME_SANDBOX_COUNT,
+    `DAYTONA_SELFHOST_SMOKE_SANDBOX_COUNT must be an integer >= ${MIN_RUNTIME_SANDBOX_COUNT}. Received: ${raw}`,
+  );
+  return count;
+}
+
+function summarizeErrorMessages(messages: string[]): string {
+  const counts = new Map<string, number>();
+  for (const message of messages) {
+    counts.set(message, (counts.get(message) ?? 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .map(([message, count]) => `${count}x ${message}`)
+    .join(" | ");
 }
 
 function getDaytonaConfig(): {
@@ -108,9 +137,21 @@ async function deleteSandbox(sandbox: DaytonaSandboxHandle): Promise<void> {
   await sandbox.delete();
 }
 
-async function listByRunLabel(daytona: Daytona, runId: string) {
-  const result = await daytona.list({ "cmdclaw-run-id": runId }, 1, 100);
-  return result.items ?? [];
+async function listByRunLabel(
+  daytona: Daytona,
+  runId: string,
+  page = 1,
+  acc: DaytonaSandboxStateSnapshot[] = [],
+): Promise<DaytonaSandboxStateSnapshot[]> {
+  const result = await daytona.list({ "cmdclaw-run-id": runId }, page, LIST_PAGE_SIZE);
+  const items = (result.items ?? []) as DaytonaSandboxStateSnapshot[];
+  const next = [...acc, ...items];
+
+  if (!result.totalPages || page >= result.totalPages) {
+    return next;
+  }
+
+  return listByRunLabel(daytona, runId, page + 1, next);
 }
 
 function formatSandboxStates(sandboxes: DaytonaSandboxStateSnapshot[]): string {
@@ -123,7 +164,7 @@ async function logAndAssertSandboxStates(
   stage: string,
   sandboxIds?: string[],
 ) {
-  const sandboxes = (await listByRunLabel(daytona, runId)) as DaytonaSandboxStateSnapshot[];
+  const sandboxes = await listByRunLabel(daytona, runId);
   const scopedSandboxes =
     sandboxIds && sandboxIds.length > 0
       ? sandboxes.filter((sandbox) => sandboxIds.includes(sandbox.id))
@@ -239,6 +280,7 @@ async function waitForCleanup(daytona: Daytona, runId: string) {
 
 async function main() {
   console.log(`[daytona-selfhost] Loading env from ${ENV_PATH}`);
+  const sandboxCount = getRequestedSandboxCount();
   const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const labels = {
     "cmdclaw-experiment": "daytona-selfhost-smoke",
@@ -250,17 +292,17 @@ async function main() {
   const summary: string[] = [];
 
   try {
-    console.log("[daytona-selfhost] Creating two sandboxes using the deployment default snapshot...");
-    const creationResults = await Promise.allSettled([
-      daytona.create({
-        name: `cmdclaw-daytona-smoke-a-${runId}`,
-        labels,
-      }),
-      daytona.create({
-        name: `cmdclaw-daytona-smoke-b-${runId}`,
-        labels,
-      }),
-    ]);
+    console.log(
+      `[daytona-selfhost] Creating ${sandboxCount} sandboxes using the deployment default snapshot...`,
+    );
+    const creationResults = await Promise.allSettled(
+      Array.from({ length: sandboxCount }, (_, index) =>
+        daytona.create({
+          name: `cmdclaw-daytona-smoke-${String(index + 1).padStart(3, "0")}-${runId}`,
+          labels,
+        }),
+      ),
+    );
 
     const creationFailures: string[] = [];
     for (const result of creationResults) {
@@ -273,8 +315,26 @@ async function main() {
       );
     }
 
+    console.log(
+      `[daytona-selfhost] Creation summary: ${sandboxes.length}/${sandboxCount} sandboxes created successfully.`,
+    );
     if (creationFailures.length > 0) {
-      throw new Error(`Failed to create all sandboxes: ${creationFailures.join(" | ")}`);
+      console.warn(
+        `[daytona-selfhost] Creation failures (${creationFailures.length}): ${summarizeErrorMessages(creationFailures)}`,
+      );
+    }
+
+    await logAndAssertSandboxStates(
+      daytona,
+      runId,
+      "creation attempt",
+      sandboxes.map((sandbox) => sandbox.id),
+    );
+
+    if (creationFailures.length > 0) {
+      throw new Error(
+        `Failed to create ${creationFailures.length}/${sandboxCount} sandboxes: ${summarizeErrorMessages(creationFailures)}`,
+      );
     }
 
     console.log("[daytona-selfhost] Created sandboxes:");
@@ -298,41 +358,48 @@ async function main() {
     const fileContent = `daytona-selfhost-smoke:${runId}`;
     const fileCommand = `sh -lc 'printf "%s" "${fileContent}" > /tmp/daytona-selfhost-smoke.txt && cat /tmp/daytona-selfhost-smoke.txt'`;
 
+    const primarySandbox = sandboxes[0];
+    const secondarySandbox = sandboxes[1];
+    assert(
+      primarySandbox && secondarySandbox,
+      `Expected at least ${MIN_RUNTIME_SANDBOX_COUNT} sandboxes for runtime checks, created ${sandboxes.length}.`,
+    );
+
     const [scriptResult, networkResult, fileResult] = await Promise.all([
-      executeChecked(sandboxes[0], scriptCommand),
-      executeChecked(sandboxes[0], networkCommand),
-      executeChecked(sandboxes[1], fileCommand),
+      executeChecked(primarySandbox, scriptCommand),
+      executeChecked(primarySandbox, networkCommand),
+      executeChecked(secondarySandbox, fileCommand),
     ]);
 
     const normalizedScriptOutput = normalizeOutput(scriptResult.stdout);
     assert(
       normalizedScriptOutput.includes("sandbox-script:"),
-      `Unexpected script output from ${sandboxes[0].name}: ${normalizedScriptOutput || "<empty>"}`,
+      `Unexpected script output from ${primarySandbox.name}: ${normalizedScriptOutput || "<empty>"}`,
     );
-    summary.push(`${sandboxes[0].name}: script execution OK`);
+    summary.push(`${primarySandbox.name}: script execution OK`);
 
     const normalizedNetworkOutput = normalizeOutput(networkResult.stdout);
     assert(
       normalizedNetworkOutput.includes("HTTP/"),
-      `Unexpected network output from ${sandboxes[0].name}: ${normalizedNetworkOutput || "<empty>"}`,
+      `Unexpected network output from ${primarySandbox.name}: ${normalizedNetworkOutput || "<empty>"}`,
     );
-    summary.push(`${sandboxes[0].name}: outbound internet access OK`);
+    summary.push(`${primarySandbox.name}: outbound internet access OK`);
 
     const normalizedFileOutput = normalizeOutput(fileResult.stdout);
     assert(
       normalizedFileOutput.includes(fileContent),
-      `Unexpected file command output from ${sandboxes[1].name}: ${normalizedFileOutput || "<empty>"}`,
+      `Unexpected file command output from ${secondarySandbox.name}: ${normalizedFileOutput || "<empty>"}`,
     );
 
-    const downloaded = await sandboxes[1].fs.downloadFile("/tmp/daytona-selfhost-smoke.txt");
+    const downloaded = await secondarySandbox.fs.downloadFile("/tmp/daytona-selfhost-smoke.txt");
     const downloadedContent =
       typeof downloaded === "string" ? downloaded : Buffer.from(downloaded).toString("utf8");
 
     assert(
       downloadedContent === fileContent,
-      `Unexpected downloaded file content from ${sandboxes[1].name}: ${downloadedContent || "<empty>"}`,
+      `Unexpected downloaded file content from ${secondarySandbox.name}: ${downloadedContent || "<empty>"}`,
     );
-    summary.push(`${sandboxes[1].name}: file write/read OK`);
+    summary.push(`${secondarySandbox.name}: file write/read OK`);
     await logAndAssertSandboxStates(
       daytona,
       runId,
