@@ -23,7 +23,7 @@ jobs:
       commit_sha: ${{ steps.resolve.outputs.commit_sha }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
@@ -67,7 +67,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.resolve.outputs.commit_sha }}
           fetch-depth: 0
