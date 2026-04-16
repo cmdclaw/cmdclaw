@@ -18,6 +18,12 @@ const CLEANUP_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_SANDBOX_COUNT = 100;
 const MIN_RUNTIME_SANDBOX_COUNT = 2;
 const LIST_PAGE_SIZE = 200;
+const DEFAULT_SMOKE_MODE = "basic";
+const DEFAULT_RUNTIME_MODEL = "openai/gpt-5.4-mini";
+const DEFAULT_RUNTIME_BATCHES = 4;
+const DEFAULT_RUNTIME_CONCURRENCY = 4;
+const DEFAULT_RUNTIME_HOLD_MS = 5_000;
+const DEFAULT_RUNTIME_READY_TIMEOUT_MS = 30_000;
 
 loadEnv({ path: ENV_PATH });
 
@@ -35,6 +41,7 @@ type DaytonaSandboxHandle = {
   id: string;
   name: string;
   delete: () => Promise<void>;
+  getPreviewLink?: (port: number) => Promise<{ url: string; token?: string }>;
   process: {
     executeCommand: (
       command: string,
@@ -53,6 +60,8 @@ type DaytonaSandboxStateSnapshot = {
   name: string;
   state?: string | null;
 };
+
+type SmokeMode = "basic" | "runtime";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -76,6 +85,131 @@ function getRequestedSandboxCount(): number {
     `DAYTONA_SELFHOST_SMOKE_SANDBOX_COUNT must be an integer >= ${MIN_RUNTIME_SANDBOX_COUNT}. Received: ${raw}`,
   );
   return count;
+}
+
+function getSmokeMode(): SmokeMode {
+  const mode = (process.env.DAYTONA_SELFHOST_SMOKE_MODE ?? DEFAULT_SMOKE_MODE).trim().toLowerCase();
+  assert(
+    mode === "basic" || mode === "runtime",
+    `DAYTONA_SELFHOST_SMOKE_MODE must be "basic" or "runtime". Received: ${mode}`,
+  );
+  return mode;
+}
+
+function getRuntimeBatches(): number {
+  const raw = process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_BATCHES;
+  if (!raw) {
+    return DEFAULT_RUNTIME_BATCHES;
+  }
+
+  const count = Number.parseInt(raw, 10);
+  assert(
+    Number.isInteger(count) && count >= 1,
+    `DAYTONA_SELFHOST_SMOKE_RUNTIME_BATCHES must be an integer >= 1. Received: ${raw}`,
+  );
+  return count;
+}
+
+function getRuntimeConcurrency(): number {
+  const raw = process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_CONCURRENCY;
+  if (!raw) {
+    return DEFAULT_RUNTIME_CONCURRENCY;
+  }
+
+  const count = Number.parseInt(raw, 10);
+  assert(
+    Number.isInteger(count) && count >= 1,
+    `DAYTONA_SELFHOST_SMOKE_RUNTIME_CONCURRENCY must be an integer >= 1. Received: ${raw}`,
+  );
+  return count;
+}
+
+function getRuntimeHoldMs(): number {
+  const raw = process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_HOLD_MS;
+  if (!raw) {
+    return DEFAULT_RUNTIME_HOLD_MS;
+  }
+
+  const count = Number.parseInt(raw, 10);
+  assert(
+    Number.isInteger(count) && count >= 0,
+    `DAYTONA_SELFHOST_SMOKE_RUNTIME_HOLD_MS must be an integer >= 0. Received: ${raw}`,
+  );
+  return count;
+}
+
+function getRuntimeReadyTimeoutMs(): number {
+  const raw = process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_READY_TIMEOUT_MS;
+  if (!raw) {
+    return DEFAULT_RUNTIME_READY_TIMEOUT_MS;
+  }
+
+  const count = Number.parseInt(raw, 10);
+  assert(
+    Number.isInteger(count) && count >= 1_000,
+    `DAYTONA_SELFHOST_SMOKE_RUNTIME_READY_TIMEOUT_MS must be an integer >= 1000. Received: ${raw}`,
+  );
+  return count;
+}
+
+function getRuntimeModel(): string {
+  const model = (process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_MODEL ?? DEFAULT_RUNTIME_MODEL).trim();
+  assert(model.length > 0, "DAYTONA_SELFHOST_SMOKE_RUNTIME_MODEL must not be empty.");
+  return model;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function appendDaytonaAuth(url: string, token?: string): string {
+  if (!token) {
+    return url;
+  }
+
+  const parsed = new URL(url);
+  if (!parsed.searchParams.has("DAYTONA_SANDBOX_AUTH_KEY")) {
+    parsed.searchParams.set("DAYTONA_SANDBOX_AUTH_KEY", token);
+  }
+  return parsed.toString();
+}
+
+function getRuntimeServerPort(model: string): number {
+  return model.startsWith("anthropic/") ? 2468 : 4096;
+}
+
+function getRuntimeReadinessUrl(baseUrl: string, model: string, token?: string): string {
+  const parsed = new URL(baseUrl);
+  const path = model.startsWith("anthropic/") ? "/v1/health" : "/health";
+  parsed.pathname = `${parsed.pathname.replace(/\/$/, "")}${path}`;
+  return appendDaytonaAuth(parsed.toString(), token);
+}
+
+async function waitForRuntimeServer(
+  baseUrl: string,
+  model: string,
+  token?: string,
+  maxWaitMs = DEFAULT_RUNTIME_READY_TIMEOUT_MS,
+): Promise<void> {
+  const readinessUrl = getRuntimeReadinessUrl(baseUrl, model, token);
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    try {
+      const response = await fetch(readinessUrl, { method: "GET" });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Runtime is still starting.
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error(
+    `Runtime readiness check failed (url=${readinessUrl}, waitedMs=${maxWaitMs})`,
+  );
 }
 
 function summarizeErrorMessages(messages: string[]): string {
@@ -278,12 +412,250 @@ async function waitForCleanup(daytona: Daytona, runId: string) {
   );
 }
 
+async function runBasicSmoke(args: {
+  daytona: Daytona;
+  runId: string;
+  labels: Record<string, string>;
+  sandboxes: DaytonaSandboxHandle[];
+  summary: string[];
+}) {
+  const { daytona, runId, labels, sandboxes, summary } = args;
+  const sandboxCount = getRequestedSandboxCount();
+
+  console.log(
+    `[daytona-selfhost] Creating ${sandboxCount} sandboxes using the deployment default snapshot...`,
+  );
+  const creationResults = await Promise.allSettled(
+    Array.from({ length: sandboxCount }, (_, index) =>
+      daytona.create({
+        name: `cmdclaw-daytona-smoke-${String(index + 1).padStart(3, "0")}-${runId}`,
+        labels,
+      }),
+    ),
+  );
+
+  const creationFailures: string[] = [];
+  for (const result of creationResults) {
+    if (result.status === "fulfilled") {
+      sandboxes.push(result.value as DaytonaSandboxHandle);
+      continue;
+    }
+    creationFailures.push(
+      result.reason instanceof Error ? result.reason.message : String(result.reason),
+    );
+  }
+
+  console.log(
+    `[daytona-selfhost] Creation summary: ${sandboxes.length}/${sandboxCount} sandboxes created successfully.`,
+  );
+  if (creationFailures.length > 0) {
+    console.warn(
+      `[daytona-selfhost] Creation failures (${creationFailures.length}): ${summarizeErrorMessages(creationFailures)}`,
+    );
+  }
+
+  await logAndAssertSandboxStates(
+    daytona,
+    runId,
+    "creation attempt",
+    sandboxes.map((sandbox) => sandbox.id),
+  );
+
+  if (creationFailures.length > 0) {
+    throw new Error(
+      `Failed to create ${creationFailures.length}/${sandboxCount} sandboxes: ${summarizeErrorMessages(creationFailures)}`,
+    );
+  }
+
+  console.log("[daytona-selfhost] Created sandboxes:");
+  for (const sandbox of sandboxes) {
+    console.log(`- ${sandbox.name}: ${sandbox.id}`);
+  }
+  await logAndAssertSandboxStates(
+    daytona,
+    runId,
+    "creation",
+    sandboxes.map((sandbox) => sandbox.id),
+  );
+
+  const scriptCommand =
+    "sh -lc 'echo \"#!/bin/sh\" > /tmp/daytona-selfhost-smoke.sh && " +
+    "echo \"echo sandbox-script:\\$HOSTNAME\" >> /tmp/daytona-selfhost-smoke.sh && " +
+    "chmod +x /tmp/daytona-selfhost-smoke.sh && " +
+    "/tmp/daytona-selfhost-smoke.sh'";
+  const networkCommand = "sh -lc 'curl -fsSI https://example.com | head -n 1'";
+
+  const fileContent = `daytona-selfhost-smoke:${runId}`;
+  const fileCommand = `sh -lc 'printf "%s" "${fileContent}" > /tmp/daytona-selfhost-smoke.txt && cat /tmp/daytona-selfhost-smoke.txt'`;
+
+  const primarySandbox = sandboxes[0];
+  const secondarySandbox = sandboxes[1];
+  assert(
+    primarySandbox && secondarySandbox,
+    `Expected at least ${MIN_RUNTIME_SANDBOX_COUNT} sandboxes for runtime checks, created ${sandboxes.length}.`,
+  );
+
+  const [scriptResult, networkResult, fileResult] = await Promise.all([
+    executeChecked(primarySandbox, scriptCommand),
+    executeChecked(primarySandbox, networkCommand),
+    executeChecked(secondarySandbox, fileCommand),
+  ]);
+
+  const normalizedScriptOutput = normalizeOutput(scriptResult.stdout);
+  assert(
+    normalizedScriptOutput.includes("sandbox-script:"),
+    `Unexpected script output from ${primarySandbox.name}: ${normalizedScriptOutput || "<empty>"}`,
+  );
+  summary.push(`${primarySandbox.name}: script execution OK`);
+
+  const normalizedNetworkOutput = normalizeOutput(networkResult.stdout);
+  assert(
+    normalizedNetworkOutput.includes("HTTP/"),
+    `Unexpected network output from ${primarySandbox.name}: ${normalizedNetworkOutput || "<empty>"}`,
+  );
+  summary.push(`${primarySandbox.name}: outbound internet access OK`);
+
+  const normalizedFileOutput = normalizeOutput(fileResult.stdout);
+  assert(
+    normalizedFileOutput.includes(fileContent),
+    `Unexpected file command output from ${secondarySandbox.name}: ${normalizedFileOutput || "<empty>"}`,
+  );
+
+  const downloaded = await secondarySandbox.fs.downloadFile("/tmp/daytona-selfhost-smoke.txt");
+  const downloadedContent =
+    typeof downloaded === "string" ? downloaded : Buffer.from(downloaded).toString("utf8");
+
+  assert(
+    downloadedContent === fileContent,
+    `Unexpected downloaded file content from ${secondarySandbox.name}: ${downloadedContent || "<empty>"}`,
+  );
+  summary.push(`${secondarySandbox.name}: file write/read OK`);
+  await logAndAssertSandboxStates(
+    daytona,
+    runId,
+    "runtime checks",
+    sandboxes.map((sandbox) => sandbox.id),
+  );
+}
+
+async function runRuntimeSmoke(args: {
+  daytona: Daytona;
+  runId: string;
+  labels: Record<string, string>;
+  sandboxes: DaytonaSandboxHandle[];
+  summary: string[];
+}) {
+  const { daytona, runId, labels, sandboxes, summary } = args;
+  const model = getRuntimeModel();
+  const batches = getRuntimeBatches();
+  const concurrency = getRuntimeConcurrency();
+  const holdMs = getRuntimeHoldMs();
+  const readyTimeoutMs = getRuntimeReadyTimeoutMs();
+  const serverPort = getRuntimeServerPort(model);
+
+  console.log(
+    `[daytona-selfhost] Runtime mode: model=${model} batches=${batches} concurrency=${concurrency} holdMs=${holdMs} readyTimeoutMs=${readyTimeoutMs}`,
+  );
+
+  for (let batchIndex = 0; batchIndex < batches; batchIndex += 1) {
+    const batchNumber = batchIndex + 1;
+    console.log(
+      `[daytona-selfhost] Starting runtime batch ${batchNumber}/${batches} with ${concurrency} sandbox(es)...`,
+    );
+
+    const batchResults = await Promise.allSettled(
+      Array.from({ length: concurrency }, async (_, slotIndex) => {
+        const sandboxName = `cmdclaw-daytona-runtime-${String(batchNumber).padStart(2, "0")}-${String(slotIndex + 1).padStart(2, "0")}-${runId}`;
+        let sandbox: DaytonaSandboxHandle;
+        try {
+          sandbox = (await daytona.create({
+            name: sandboxName,
+            labels,
+          })) as DaytonaSandboxHandle;
+        } catch (error) {
+          throw new Error(
+            `create failed for ${sandboxName}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        sandboxes.push(sandbox);
+
+        if (!sandbox.getPreviewLink) {
+          throw new Error(`Sandbox ${sandbox.name} does not expose getPreviewLink().`);
+        }
+
+        let preview: { url: string; token?: string };
+        try {
+          preview = await sandbox.getPreviewLink(serverPort);
+        } catch (error) {
+          throw new Error(
+            `preview failed for ${sandbox.name}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        try {
+          await waitForRuntimeServer(preview.url, model, preview.token, readyTimeoutMs);
+        } catch (error) {
+          throw new Error(
+            `readiness failed for ${sandbox.name}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        if (holdMs > 0) {
+          await sleep(holdMs);
+        }
+
+        return {
+          id: sandbox.id,
+          name: sandbox.name,
+          url: preview.url,
+        };
+      }),
+    );
+
+    const succeeded = batchResults
+      .filter(
+        (result): result is PromiseFulfilledResult<{ id: string; name: string; url: string }> =>
+          result.status === "fulfilled",
+      )
+      .map((result) => result.value);
+    const failures = batchResults
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+
+    console.log(
+      `[daytona-selfhost] Runtime batch ${batchNumber} summary: ${succeeded.length}/${concurrency} ready.`,
+    );
+    if (succeeded.length > 0) {
+      for (const sandbox of succeeded) {
+        console.log(`- ready ${sandbox.name}: ${sandbox.id}`);
+      }
+    }
+    if (failures.length > 0) {
+      console.warn(
+        `[daytona-selfhost] Runtime batch ${batchNumber} failures (${failures.length}): ${summarizeErrorMessages(failures)}`,
+      );
+      throw new Error(
+        `Runtime batch ${batchNumber}/${batches} failed: ${summarizeErrorMessages(failures)}`,
+      );
+    }
+
+    summary.push(`runtime batch ${batchNumber}/${batches}: ${succeeded.length} sandbox(es) reached health`);
+    await logAndAssertSandboxStates(
+      daytona,
+      runId,
+      `runtime batch ${batchNumber}`,
+      succeeded.map((sandbox) => sandbox.id),
+    );
+  }
+}
+
 async function main() {
   console.log(`[daytona-selfhost] Loading env from ${ENV_PATH}`);
-  const sandboxCount = getRequestedSandboxCount();
+  const mode = getSmokeMode();
   const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const labels = {
     "cmdclaw-experiment": "daytona-selfhost-smoke",
+    "cmdclaw-smoke-mode": mode,
     "cmdclaw-run-id": runId,
   };
 
@@ -292,120 +664,11 @@ async function main() {
   const summary: string[] = [];
 
   try {
-    console.log(
-      `[daytona-selfhost] Creating ${sandboxCount} sandboxes using the deployment default snapshot...`,
-    );
-    const creationResults = await Promise.allSettled(
-      Array.from({ length: sandboxCount }, (_, index) =>
-        daytona.create({
-          name: `cmdclaw-daytona-smoke-${String(index + 1).padStart(3, "0")}-${runId}`,
-          labels,
-        }),
-      ),
-    );
-
-    const creationFailures: string[] = [];
-    for (const result of creationResults) {
-      if (result.status === "fulfilled") {
-        sandboxes.push(result.value as DaytonaSandboxHandle);
-        continue;
-      }
-      creationFailures.push(
-        result.reason instanceof Error ? result.reason.message : String(result.reason),
-      );
+    if (mode === "runtime") {
+      await runRuntimeSmoke({ daytona, runId, labels, sandboxes, summary });
+    } else {
+      await runBasicSmoke({ daytona, runId, labels, sandboxes, summary });
     }
-
-    console.log(
-      `[daytona-selfhost] Creation summary: ${sandboxes.length}/${sandboxCount} sandboxes created successfully.`,
-    );
-    if (creationFailures.length > 0) {
-      console.warn(
-        `[daytona-selfhost] Creation failures (${creationFailures.length}): ${summarizeErrorMessages(creationFailures)}`,
-      );
-    }
-
-    await logAndAssertSandboxStates(
-      daytona,
-      runId,
-      "creation attempt",
-      sandboxes.map((sandbox) => sandbox.id),
-    );
-
-    if (creationFailures.length > 0) {
-      throw new Error(
-        `Failed to create ${creationFailures.length}/${sandboxCount} sandboxes: ${summarizeErrorMessages(creationFailures)}`,
-      );
-    }
-
-    console.log("[daytona-selfhost] Created sandboxes:");
-    for (const sandbox of sandboxes) {
-      console.log(`- ${sandbox.name}: ${sandbox.id}`);
-    }
-    await logAndAssertSandboxStates(
-      daytona,
-      runId,
-      "creation",
-      sandboxes.map((sandbox) => sandbox.id),
-    );
-
-    const scriptCommand =
-      "sh -lc 'echo \"#!/bin/sh\" > /tmp/daytona-selfhost-smoke.sh && " +
-      "echo \"echo sandbox-script:\\$HOSTNAME\" >> /tmp/daytona-selfhost-smoke.sh && " +
-      "chmod +x /tmp/daytona-selfhost-smoke.sh && " +
-      "/tmp/daytona-selfhost-smoke.sh'";
-    const networkCommand = "sh -lc 'curl -fsSI https://example.com | head -n 1'";
-
-    const fileContent = `daytona-selfhost-smoke:${runId}`;
-    const fileCommand = `sh -lc 'printf "%s" "${fileContent}" > /tmp/daytona-selfhost-smoke.txt && cat /tmp/daytona-selfhost-smoke.txt'`;
-
-    const primarySandbox = sandboxes[0];
-    const secondarySandbox = sandboxes[1];
-    assert(
-      primarySandbox && secondarySandbox,
-      `Expected at least ${MIN_RUNTIME_SANDBOX_COUNT} sandboxes for runtime checks, created ${sandboxes.length}.`,
-    );
-
-    const [scriptResult, networkResult, fileResult] = await Promise.all([
-      executeChecked(primarySandbox, scriptCommand),
-      executeChecked(primarySandbox, networkCommand),
-      executeChecked(secondarySandbox, fileCommand),
-    ]);
-
-    const normalizedScriptOutput = normalizeOutput(scriptResult.stdout);
-    assert(
-      normalizedScriptOutput.includes("sandbox-script:"),
-      `Unexpected script output from ${primarySandbox.name}: ${normalizedScriptOutput || "<empty>"}`,
-    );
-    summary.push(`${primarySandbox.name}: script execution OK`);
-
-    const normalizedNetworkOutput = normalizeOutput(networkResult.stdout);
-    assert(
-      normalizedNetworkOutput.includes("HTTP/"),
-      `Unexpected network output from ${primarySandbox.name}: ${normalizedNetworkOutput || "<empty>"}`,
-    );
-    summary.push(`${primarySandbox.name}: outbound internet access OK`);
-
-    const normalizedFileOutput = normalizeOutput(fileResult.stdout);
-    assert(
-      normalizedFileOutput.includes(fileContent),
-      `Unexpected file command output from ${secondarySandbox.name}: ${normalizedFileOutput || "<empty>"}`,
-    );
-
-    const downloaded = await secondarySandbox.fs.downloadFile("/tmp/daytona-selfhost-smoke.txt");
-    const downloadedContent =
-      typeof downloaded === "string" ? downloaded : Buffer.from(downloaded).toString("utf8");
-
-    assert(
-      downloadedContent === fileContent,
-      `Unexpected downloaded file content from ${secondarySandbox.name}: ${downloadedContent || "<empty>"}`,
-    );
-    summary.push(`${secondarySandbox.name}: file write/read OK`);
-    await logAndAssertSandboxStates(
-      daytona,
-      runId,
-      "runtime checks",
-      sandboxes.map((sandbox) => sandbox.id),
-    );
 
     console.log("[daytona-selfhost] PASS");
     for (const line of summary) {

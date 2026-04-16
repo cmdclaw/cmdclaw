@@ -11,7 +11,7 @@ type SandboxGenerationRow = {
   sandboxProvider: string | null;
 };
 
-const DEFAULT_SANDBOX_PROVIDER: SandboxProvider = "docker";
+const DEFAULT_SANDBOX_PROVIDER: SandboxProvider = "daytona";
 const SANDBOX_POLL_INTERVAL_MS = 1_000;
 const SANDBOX_WAIT_TIMEOUT_MS = Number(process.env.E2E_SANDBOX_WAIT_TIMEOUT_MS ?? "15000");
 
