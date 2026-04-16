@@ -49,7 +49,10 @@ jobs:
           DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
           DATABASE_URL_STAGING: ${{ secrets.DATABASE_URL_STAGING }}
           SKIP_ENV_VALIDATION: "1"
+        shell: bash
         run: |
+          set -euo pipefail
+
           case "${{ inputs.environment }}" in
             staging)
               export DATABASE_URL="${DATABASE_URL_STAGING}"
@@ -75,4 +78,23 @@ jobs:
             exit 1
           fi
 
-          bun run db:push --strict
+          log_file="$(mktemp)"
+          trap 'rm -f "$log_file"' EXIT
+
+          if bun run db:push 2>&1 | tee "$log_file"; then
+            exit 0
+          fi
+
+          if grep -Fq "Interactive prompts require a TTY terminal" "$log_file"; then
+            prompt_context="$(grep -iE "you're about to|do you want to truncate|truncate the table|add unique|add constraint" "$log_file" || true)"
+            echo >&2
+            echo "db:push needs manual approval for a schema change and cannot continue in CI." >&2
+            echo "Drizzle prompted for confirmation because the push may require a risky operation, such as truncating data or applying a constraint on existing rows." >&2
+            if [ -n "$prompt_context" ]; then
+              echo "Prompt context from Drizzle:" >&2
+              echo "$prompt_context" >&2
+            fi
+            echo "Run the same db:push command manually in a TTY and decide how to handle the prompt." >&2
+          fi
+
+          exit 1
