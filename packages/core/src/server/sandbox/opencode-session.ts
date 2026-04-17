@@ -463,6 +463,30 @@ async function createDaytonaClient() {
   return new Daytona(getDaytonaClientConfig());
 }
 
+async function cleanupStaleDaytonaRuntime(args: {
+  runtimeId: string;
+  sandboxId: string;
+  conversationId: string;
+  reason: string;
+}) {
+  try {
+    const daytona = await createDaytonaClient();
+    const sandbox = (await daytona.get(args.sandboxId)) as DaytonaSandboxLike;
+    await sandbox.delete?.();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[opencode-session] Failed to delete stale Daytona sandbox", {
+      conversationId: args.conversationId,
+      runtimeId: args.runtimeId,
+      sandboxId: args.sandboxId,
+      reason: args.reason,
+      error: message,
+    });
+  }
+
+  await conversationRuntimeService.markRuntimeDead(args.runtimeId);
+}
+
 async function connectDaytonaSandboxById(sandboxId: string): Promise<DaytonaSandboxLike | null> {
   try {
     const daytona = await createDaytonaClient();
@@ -515,7 +539,12 @@ async function getOrCreateDaytonaSandbox(
   }
 
   if (runtimeState?.sandboxId) {
-    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
+    await cleanupStaleDaytonaRuntime({
+      runtimeId: runtimeState.runtimeId,
+      sandboxId: runtimeState.sandboxId,
+      conversationId: config.conversationId,
+      reason: "reused_runtime_failed_healthcheck",
+    });
   }
 
   onLifecycle?.("sandbox_creating", {
@@ -731,7 +760,12 @@ async function getOrCreateDaytonaSandboxInit(
   }
 
   if (runtimeState?.sandboxId) {
-    await conversationRuntimeService.markRuntimeDead(runtimeState.runtimeId);
+    await cleanupStaleDaytonaRuntime({
+      runtimeId: runtimeState.runtimeId,
+      sandboxId: runtimeState.sandboxId,
+      conversationId: config.conversationId,
+      reason: "reused_runtime_missing_for_init",
+    });
   }
 
   onLifecycle?.("sandbox_creating", {

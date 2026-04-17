@@ -10,6 +10,7 @@ import {
   responseTimeoutMs,
   resolveLiveModel,
   runChatMessage,
+  trackCliOutput,
   transientRetryCount,
   transientRetryDelayMs,
 } from "../../../tests/e2e-cli/live-fixtures";
@@ -154,9 +155,11 @@ async function runInteractiveQuestionChat(args: {
 
     child.stdout.on("data", (chunk: Buffer | string) => {
       stdout += chunk.toString();
+      trackCliOutput(stdout);
     });
     child.stderr.on("data", (chunk: Buffer | string) => {
       stderr += chunk.toString();
+      trackCliOutput(stderr);
     });
 
     child.on("close", (code) => {

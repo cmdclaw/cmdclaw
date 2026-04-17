@@ -21,6 +21,7 @@ import {
   resolveLiveModel,
   slackPostVerifyTimeoutMs,
   targetChannelName,
+  trackCliOutput,
   withIntegrationTokensTemporarilyRemoved,
 } from "../../../tests/e2e-cli/live-fixtures";
 
@@ -77,9 +78,11 @@ async function runChatCommand(args: string[], timeoutMs: number): Promise<Comman
 
     child.stdout.on("data", (chunk: Buffer | string) => {
       stdout += chunk.toString();
+      trackCliOutput(stdout);
     });
     child.stderr.on("data", (chunk: Buffer | string) => {
       stderr += chunk.toString();
+      trackCliOutput(stderr);
     });
 
     child.on("close", (code) => {
@@ -166,9 +169,11 @@ function startInteractiveChatCommand(args: string[], options?: { pty?: boolean }
 
   child.stdout.on("data", (chunk: Buffer | string) => {
     stdout += chunk.toString();
+    trackCliOutput(stdout);
   });
   child.stderr.on("data", (chunk: Buffer | string) => {
     stderr += chunk.toString();
+    trackCliOutput(stderr);
   });
   child.on("close", (code) => {
     closed = true;

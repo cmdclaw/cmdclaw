@@ -5,12 +5,20 @@ import { closePool, db } from "@cmdclaw/db/client";
 import { integration, integrationToken, user } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
+import { afterEach, beforeEach } from "vitest";
 import { resolveLiveE2EModel } from "../e2e/live-chat-model";
 import {
   assertSandboxRowsUseProvider,
   liveSandboxProvider,
   type SandboxProvider,
 } from "../e2e/live-sandbox";
+import {
+  assertNoStartedDaytonaSandboxesRemain,
+  cleanupCliLiveSandboxes,
+  createCliLiveCleanupState,
+  trackCliIdentifiersFromText,
+  type CliLiveCleanupState,
+} from "./live-sandbox-cleanup";
 
 export const liveEnabled = process.env.E2E_LIVE === "1";
 export const defaultServerUrl = process.env.CMDCLAW_SERVER_URL ?? "http://localhost:3000";
@@ -44,8 +52,36 @@ export type CommandResult = {
   timedOut: boolean;
 };
 
+let activeCliLiveCleanupState: CliLiveCleanupState | null = null;
+
+beforeEach(() => {
+  activeCliLiveCleanupState = createCliLiveCleanupState();
+});
+
+afterEach(async () => {
+  const state = activeCliLiveCleanupState;
+  activeCliLiveCleanupState = null;
+
+  if (!state) {
+    return;
+  }
+
+  await cleanupCliLiveSandboxes({
+    state,
+    expectedProvider: liveSandboxProvider,
+  });
+  await assertNoStartedDaytonaSandboxesRemain({
+    state,
+    expectedProvider: liveSandboxProvider,
+  });
+});
+
 export function buildCliCommandArgs(...args: string[]): string[] {
   return ["run", "--cwd", "../cli", "start", "--", ...args];
+}
+
+export function trackCliOutput(text: string): void {
+  trackCliIdentifiersFromText(activeCliLiveCleanupState, text);
 }
 
 type SlackMessage = {
@@ -146,9 +182,11 @@ export function runBunCommand(
 
     child.stdout.on("data", (chunk: Buffer | string) => {
       stdout += chunk.toString();
+      trackCliOutput(stdout);
     });
     child.stderr.on("data", (chunk: Buffer | string) => {
       stderr += chunk.toString();
+      trackCliOutput(stderr);
     });
 
     child.on("close", (code) => {

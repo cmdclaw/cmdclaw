@@ -8933,6 +8933,15 @@ class GenerationManager {
 
     try {
       await ctx.sandbox?.teardown();
+    } catch (error) {
+      console.warn("[GenerationManager] Failed to teardown sandbox during run deadline park", {
+        generationId: ctx.id,
+        conversationId: ctx.conversationId,
+        runtimeId: ctx.runtimeId,
+        sandboxId: ctx.sandboxId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       if (ctx.runtimeId) {
         await conversationRuntimeService.suspendRuntime(ctx.runtimeId);
@@ -8998,6 +9007,16 @@ class GenerationManager {
 
     try {
       await ctx.sandbox?.teardown();
+    } catch (error) {
+      console.warn("[GenerationManager] Failed to teardown sandbox during interrupt park", {
+        generationId: ctx.id,
+        conversationId: ctx.conversationId,
+        runtimeId: ctx.runtimeId,
+        sandboxId: ctx.sandboxId,
+        interruptId: interrupt.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       if (ctx.runtimeId) {
         await conversationRuntimeService.suspendRuntime(ctx.runtimeId);
