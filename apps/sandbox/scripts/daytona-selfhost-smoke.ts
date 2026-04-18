@@ -24,6 +24,7 @@ const DEFAULT_RUNTIME_BATCHES = 4;
 const DEFAULT_RUNTIME_CONCURRENCY = 4;
 const DEFAULT_RUNTIME_HOLD_MS = 5_000;
 const DEFAULT_RUNTIME_READY_TIMEOUT_MS = 30_000;
+const DEFAULT_CMDCLAW_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
 
 loadEnv({ path: ENV_PATH });
 
@@ -156,6 +157,16 @@ function getRuntimeModel(): string {
   const model = (process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_MODEL ?? DEFAULT_RUNTIME_MODEL).trim();
   assert(model.length > 0, "DAYTONA_SELFHOST_SMOKE_RUNTIME_MODEL must not be empty.");
   return model;
+}
+
+function getRuntimeSnapshot(): string {
+  const snapshot = (
+    process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_SNAPSHOT ??
+    process.env.E2B_DAYTONA_SANDBOX_NAME ??
+    DEFAULT_CMDCLAW_DAYTONA_SNAPSHOT
+  ).trim();
+  assert(snapshot.length > 0, "DAYTONA_SELFHOST_SMOKE_RUNTIME_SNAPSHOT must not be empty.");
+  return snapshot;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -552,9 +563,10 @@ async function runRuntimeSmoke(args: {
   const holdMs = getRuntimeHoldMs();
   const readyTimeoutMs = getRuntimeReadyTimeoutMs();
   const serverPort = getRuntimeServerPort(model);
+  const snapshot = getRuntimeSnapshot();
 
   console.log(
-    `[daytona-selfhost] Runtime mode: model=${model} batches=${batches} concurrency=${concurrency} holdMs=${holdMs} readyTimeoutMs=${readyTimeoutMs}`,
+    `[daytona-selfhost] Runtime mode: model=${model} snapshot=${snapshot} batches=${batches} concurrency=${concurrency} holdMs=${holdMs} readyTimeoutMs=${readyTimeoutMs}`,
   );
 
   for (let batchIndex = 0; batchIndex < batches; batchIndex += 1) {
@@ -570,6 +582,7 @@ async function runRuntimeSmoke(args: {
         try {
           sandbox = (await daytona.create({
             name: sandboxName,
+            snapshot,
             labels,
           })) as DaytonaSandboxHandle;
         } catch (error) {
