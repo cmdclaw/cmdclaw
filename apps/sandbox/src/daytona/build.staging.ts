@@ -1,7 +1,7 @@
 import { buildSnapshot } from "./build";
 
 async function main() {
-  await buildSnapshot("dev");
+  await buildSnapshot("staging");
 }
 
 main().catch((error) => {

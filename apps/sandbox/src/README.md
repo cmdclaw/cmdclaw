@@ -13,5 +13,6 @@ bun run e2b:build:dev
 bun run e2b:build:prod
 bun run e2b:build:staging
 bun run daytona:build:dev
+bun run daytona:build:staging
 bun run daytona:build:prod
 ```
