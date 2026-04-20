@@ -1119,8 +1119,9 @@ async function stopInstance(metadata: InstanceMetadata): Promise<void> {
 }
 
 async function startInstance(): Promise<void> {
-  const metadata = await createInstance();
+  const metadata = await resolveMetadata();
   await stopInstance(metadata);
+  await createInstance();
 
   const env = buildDerivedEnv(metadata);
 
