@@ -471,7 +471,15 @@ function resolveSourceDatabaseUrl(targetRepoRoot: string): string | null {
     return process.env.DATABASE_URL?.trim() || null;
   }
 
-  return loadMetadataForRepoRoot(sourceRepoRoot)?.databaseUrl ?? process.env.DATABASE_URL?.trim() ?? null;
+  if (!isRecognizedWorktreeRepo(sourceRepoRoot)) {
+    return process.env.DATABASE_URL?.trim() || null;
+  }
+
+  return (
+    loadMetadataForRepoRoot(sourceRepoRoot)?.databaseUrl ??
+    process.env.DATABASE_URL?.trim() ??
+    null
+  );
 }
 
 function buildJsonStorageState(params: {
