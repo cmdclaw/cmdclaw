@@ -6,8 +6,6 @@
 .env*.local
 *.tsbuildinfo
 
-.agents
-
 .turbo*
 .turbo-prune-web
 
@@ -25,3 +23,7 @@ experiments/**/*.pdf
 experiments/**/*.json
 experiments/**/*.txt
 experiments/**/__pycache__/
+
+
+.agent-browser-profiles
+.tmp
