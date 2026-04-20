@@ -32,7 +32,7 @@ Create an API key from the local Daytona dashboard, then add these values to the
 
 - `DAYTONA_API_KEY` to the API key you created locally
 - `DAYTONA_API_URL` to `http://localhost:3300/api` unless your local API is exposed elsewhere
-- `DAYTONA_TARGET` to `us` unless you changed the default runner region in the compose stack
+- `DAYTONA_TARGET` to `eu` unless you changed the default runner region in the compose stack
 
 ## Run The Smoke Test
 

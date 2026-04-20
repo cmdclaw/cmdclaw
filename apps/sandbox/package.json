@@ -12,10 +12,11 @@
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json",
     "daytona:build:dev": "bun --env-file=../../.env src/daytona/build.dev.ts",
+    "daytona:build:staging": "bun --env-file=../../.env src/daytona/build.staging.ts",
     "daytona:build:prod": "bun --env-file=../../.env src/daytona/build.prod.ts",
     "daytona:cleanup": "bun --env-file=../../.env scripts/daytona-cleanup.ts",
     "daytona:selfhost:smoke": "bun --env-file=../../.env scripts/daytona-selfhost-smoke.ts",
-    "daytona:sandbox": "bun --env-file=../../.env scripts/test-daytona-sandbox.ts",
+    "daytona:sandbox": "bun --env-file=../../.env scripts/daytona-sandbox.ts",
     "daytona:sandbox:kill": "bun --env-file=../../.env scripts/daytona-sandboxes.ts kill",
     "daytona:sandbox:kill-all": "bun --env-file=../../.env scripts/daytona-sandboxes.ts kill-all",
     "daytona:sandbox:list": "bun --env-file=../../.env scripts/daytona-sandboxes.ts list",
@@ -26,7 +27,7 @@
     "e2b:sandbox:kill": "bun --env-file=../../.env scripts/e2b-sandboxes.ts kill",
     "e2b:sandbox:kill-all": "bun --env-file=../../.env scripts/e2b-sandboxes.ts kill-all",
     "e2b:sandbox:list": "bun --env-file=../../.env scripts/e2b-sandboxes.ts list",
-    "test:unit": "vitest run --config vitest.config.ts scripts/test-sandbox.test.ts",
+    "test:unit": "vitest run --config vitest.config.ts scripts/test-sandbox.test.ts scripts/daytona-sandbox.test.ts src/daytona/build.test.ts",
     "test:live": "bun --env-file=../../.env vitest run src/common/opencode-agents.live.test.ts"
   },
   "dependencies": {

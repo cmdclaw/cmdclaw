@@ -5,9 +5,13 @@ mkdir -p ~/.local/bin
 
 for tool in /app/cli/*.ts; do
   name=$(basename "$tool" .ts)
-  cat > ~/.local/bin/"$name" << EOF
+  wrapper=~/.local/bin/"$name"
+  cat > "$wrapper" << EOF
 #!/bin/bash
 exec tsx $tool "\$@"
 EOF
-  chmod +x ~/.local/bin/"$name"
+  chmod +x "$wrapper"
+  if [ -w /usr/local/bin ]; then
+    ln -sfn "$wrapper" /usr/local/bin/"$name"
+  fi
 done
