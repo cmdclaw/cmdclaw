@@ -50,6 +50,7 @@
     "worktree:env": "bun scripts/worktree.ts env",
     "worktree:bootstrap-user": "bun scripts/worktree.ts bootstrap-user",
     "check:cli": "turbo check --filter=@cmdclaw/cli",
+    "cli:e2e:live:record": "bun run --cwd apps/web test:e2e:live:record",
     "check:web": "turbo check --filter=@cmdclaw/web",
     "check:docs": "turbo check --filter=@cmdclaw/docs",
     "check:mcp": "turbo check --filter=@cmdclaw/mcp",
