@@ -1,11 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   openSync,
-  readdirSync,
   readFileSync,
   rmSync,
   unlinkSync,
@@ -205,16 +203,12 @@ function authArtifactsDir(instanceRoot: string): string {
   return join(runtimeDir(instanceRoot), "auth");
 }
 
-function agentBrowserDir(instanceRoot: string): string {
-  return join(runtimeDir(instanceRoot), "agent-browser");
-}
-
-function agentBrowserProfileDir(instanceRoot: string): string {
-  return join(agentBrowserDir(instanceRoot), "profile");
-}
-
 function agentBrowserStatePath(instanceRoot: string): string {
   return join(authArtifactsDir(instanceRoot), "dev-user.storage-state.json");
+}
+
+function agentBrowserSessionName(instanceId: string): string {
+  return instanceId;
 }
 
 function expandPath(value: string, repoRoot: string): string {
@@ -231,20 +225,6 @@ function expandPath(value: string, repoRoot: string): string {
   }
 
   return resolvePath(repoRoot, value);
-}
-
-function resolveAgentBrowserSeedProfile(repoRoot: string): string {
-  const configured = process.env.CMDCLAW_AGENT_BROWSER_SEED_PROFILE?.trim();
-  if (configured) {
-    return expandPath(configured, repoRoot);
-  }
-
-  const home = process.env.HOME;
-  if (!home) {
-    fail("HOME is required to derive the default agent-browser seed profile path");
-  }
-
-  return join(home, ".codex", "agent-browser", "cmdclaw-seed");
 }
 
 function resolveRecognizedWorktreeRoots(): string[] {
@@ -269,14 +249,6 @@ function isRecognizedWorktreeRepo(repoRoot: string): boolean {
   return resolveRecognizedWorktreeRoots().some(
     (root) => repoRoot === root || repoRoot.startsWith(`${root}/`),
   );
-}
-
-function isDirectoryEmpty(path: string): boolean {
-  if (!existsSync(path)) {
-    return true;
-  }
-
-  return readdirSync(path).length === 0;
 }
 
 function loadMetadata(instanceRoot: string): InstanceMetadata | null {
@@ -425,9 +397,7 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_INSTANCE_ID: metadata.instanceId,
     CMDCLAW_INSTANCE_ROOT: metadata.instanceRoot,
     CMDCLAW_REDIS_NAMESPACE: metadata.redisNamespace,
-    AGENT_BROWSER_SESSION: metadata.instanceId,
-    AGENT_BROWSER_SESSION_NAME: metadata.instanceId,
-    AGENT_BROWSER_PROFILE: agentBrowserProfileDir(metadata.instanceRoot),
+    AGENT_BROWSER_SESSION: agentBrowserSessionName(metadata.instanceId),
   };
 }
 
@@ -650,31 +620,6 @@ function remapSharedProviderAuthRows(
   }));
 }
 
-function ensureAgentBrowserProfile(metadata: InstanceMetadata): void {
-  const targetProfileDir = agentBrowserProfileDir(metadata.instanceRoot);
-  const seedProfileDir = resolveAgentBrowserSeedProfile(metadata.repoRoot);
-
-  ensureDir(agentBrowserDir(metadata.instanceRoot));
-
-  if (!isDirectoryEmpty(targetProfileDir)) {
-    return;
-  }
-
-  if (!existsSync(seedProfileDir) || isDirectoryEmpty(seedProfileDir)) {
-    ensureDir(targetProfileDir);
-    console.log(
-      `[worktree] agent-browser seed missing; initialized empty profile ${targetProfileDir}`,
-    );
-    return;
-  }
-
-  rmSync(targetProfileDir, { recursive: true, force: true });
-  cpSync(seedProfileDir, targetProfileDir, { recursive: true });
-  console.log(
-    `[worktree] copied agent-browser profile ${seedProfileDir} -> ${targetProfileDir}`,
-  );
-}
-
 function writeDerivedEnvFile(metadata: InstanceMetadata): void {
   const env = buildDerivedEnv(metadata);
   const shellLines = Object.entries(env).map(([key, value]) => `${key}=${JSON.stringify(value)}`);
@@ -687,8 +632,72 @@ function loadAgentBrowserAuthState(metadata: InstanceMetadata): void {
     return;
   }
 
+  const state = JSON.parse(readFileSync(statePath, "utf8")) as {
+    cookies?: Array<{
+      name: string;
+      value: string;
+      expires?: number;
+      httpOnly?: boolean;
+      secure?: boolean;
+      sameSite?: "Lax" | "Strict" | "None";
+    }>;
+  };
+  const cookies = Array.isArray(state.cookies) ? state.cookies : [];
+  if (cookies.length === 0) {
+    return;
+  }
+
   const env = buildDerivedEnv(metadata);
-  const result = spawnSync("agent-browser", ["state", "load", statePath], {
+  for (const cookie of cookies) {
+    const args = [
+      "cookies",
+      "set",
+      cookie.name,
+      cookie.value,
+      "--url",
+      metadata.appUrl,
+    ];
+
+    if (cookie.httpOnly) {
+      args.push("--httpOnly");
+    }
+    if (cookie.secure) {
+      args.push("--secure");
+    }
+    if (cookie.sameSite) {
+      args.push("--sameSite", cookie.sameSite);
+    }
+    if (typeof cookie.expires === "number") {
+      args.push("--expires", String(cookie.expires));
+    }
+
+    const result = spawnSync("agent-browser", args, {
+      cwd: metadata.repoRoot,
+      env: {
+        ...process.env,
+        ...env,
+      },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (result.status !== 0) {
+      const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
+      console.warn(
+        `[worktree] failed to hydrate agent-browser cookie ${cookie.name}: ${output}`,
+      );
+      return;
+    }
+  }
+
+  console.log(
+    `[worktree] hydrated agent-browser session ${agentBrowserSessionName(metadata.instanceId)}`,
+  );
+}
+
+function closeAgentBrowserSession(metadata: InstanceMetadata): void {
+  const env = buildDerivedEnv(metadata);
+  const result = spawnSync("agent-browser", ["close"], {
     cwd: metadata.repoRoot,
     env: {
       ...process.env,
@@ -700,13 +709,7 @@ function loadAgentBrowserAuthState(metadata: InstanceMetadata): void {
 
   if (result.status !== 0) {
     const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
-    console.warn(`[worktree] failed to hydrate agent-browser auth state: ${output}`);
-    return;
-  }
-
-  const output = result.stdout?.trim();
-  if (output) {
-    console.log(`[worktree] ${output}`);
+    console.warn(`[worktree] failed to close agent-browser session: ${output}`);
   }
 }
 
@@ -1047,7 +1050,6 @@ async function createInstance(): Promise<InstanceMetadata> {
   const metadata = await resolveMetadata();
   ensureDir(logsDir(metadata.instanceRoot));
   ensureDir(runtimeDir(metadata.instanceRoot));
-  ensureAgentBrowserProfile(metadata);
   await ensureDatabase(metadata);
   await runDbPush(metadata);
   await bootstrapDeveloperUser(metadata);
@@ -1056,7 +1058,7 @@ async function createInstance(): Promise<InstanceMetadata> {
   console.log(`[worktree] instance ${metadata.instanceId}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
-  console.log(`[worktree] agent-browser ${agentBrowserProfileDir(metadata.instanceRoot)}`);
+  console.log(`[worktree] agent-browser session ${agentBrowserSessionName(metadata.instanceId)}`);
   return metadata;
 }
 
@@ -1092,6 +1094,7 @@ function getProcessEntries(metadata: InstanceMetadata): Array<{ name: (typeof PR
 async function stopInstance(metadata: InstanceMetadata): Promise<void> {
   const entries = getProcessEntries(metadata);
   if (entries.length === 0) {
+    closeAgentBrowserSession(metadata);
     console.log("[worktree] no running background processes");
     return;
   }
@@ -1111,6 +1114,7 @@ async function stopInstance(metadata: InstanceMetadata): Promise<void> {
   }
 
   removeProcessesFile(metadata.instanceRoot);
+  closeAgentBrowserSession(metadata);
   console.log("[worktree] stopped background processes");
 }
 
@@ -1251,7 +1255,7 @@ async function showStatus(): Promise<void> {
   console.log(`[worktree] port ${metadata.appPort}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
   console.log(`[worktree] root ${metadata.instanceRoot}`);
-  console.log(`[worktree] agent-browser ${agentBrowserProfileDir(metadata.instanceRoot)}`);
+  console.log(`[worktree] agent-browser session ${agentBrowserSessionName(metadata.instanceId)}`);
 
   if (entries.length === 0) {
     console.log("[worktree] processes none");
