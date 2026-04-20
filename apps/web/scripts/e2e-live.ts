@@ -2,11 +2,12 @@ import { parse } from "dotenv";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Mode = "auth" | "smoke" | "live" | "record" | "prod" | "prod-monitor" | "cli-live";
 
-const appRoot = resolve(import.meta.dir, "..");
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(appRoot, "../..");
 
 function fail(message: string): never {
@@ -116,46 +117,45 @@ function resolveWorktreeEnvFile(): string | null {
   return null;
 }
 
-function buildBaseEnv(): NodeJS.ProcessEnv {
+function buildBaseEnv(): { env: NodeJS.ProcessEnv; worktreeEnvFile: string | null } {
+  const worktreeEnvFile = resolveWorktreeEnvFile();
+
   return {
-    ...loadEnvFile(resolveSharedEnvFile()),
-    ...loadEnvFile(resolveWorktreeEnvFile()),
-    ...process.env,
+    worktreeEnvFile,
+    env: {
+      ...loadEnvFile(resolveSharedEnvFile()),
+      ...loadEnvFile(worktreeEnvFile),
+      ...process.env,
+    },
   };
 }
 
-function runAuth(env: NodeJS.ProcessEnv): void {
-  run("bun", ["scripts/e2e-auth.ts"], env);
+export function buildRecordModeEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  options: { hasWorktreeEnv: boolean },
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    E2E_LIVE: "1",
+    PLAYWRIGHT_REUSE_SERVER: "1",
+    PLAYWRIGHT_VIDEO: "on",
+  };
+
+  if (options.hasWorktreeEnv) {
+    env.PLAYWRIGHT_SKIP_WEBSERVER ??= "1";
+    env.CMDCLAW_SERVER_URL ??= env.PLAYWRIGHT_BASE_URL;
+  }
+
+  return env;
 }
 
-function runPlaywright(env: NodeJS.ProcessEnv, extraArgs: string[] = []): void {
-  run("bun", ["playwright", "test", ...extraArgs], env);
-}
+function logRecordMode(worktreeEnvFile: string | null, env: NodeJS.ProcessEnv): void {
+  if (!worktreeEnvFile) {
+    return;
+  }
 
-function runCliLive(env: NodeJS.ProcessEnv): void {
-  run("bun", ["run", "chat:auth"], env);
-  run(
-    "bun",
-    [
-      "vitest",
-      "run",
-      "tests/e2e-cli/auth.cli.live.e2e.test.ts",
-      "src/app/chat/chat.cli.live.test.ts",
-      "src/app/chat/chat.interrupt.cli.live.test.ts",
-      "src/app/chat/chat.performance.cli.live.test.ts",
-      "src/app/chat/chat.question.cli.live.test.ts",
-      "src/app/chat/chat.file-upload.cli.live.test.ts",
-      "src/app/chat/chat.fill-pdf.cli.live.test.ts",
-      "src/app/chat/chat.slack.cli.live.test.ts",
-      "src/app/chat/chat.gmail.cli.live.test.ts",
-      "src/app/chat/chat.linkedin.cli.live.test.ts",
-      "src/app/chat/chat.google-calendar.cli.live.test.ts",
-      "src/app/chat/chat.google-drive.cli.live.test.ts",
-      "src/app/coworkers/coworkers.cli.live.test.ts",
-    ],
-    env,
-  );
-  run("bun", ["run", "--cwd", "../sandbox", "test:live"], env);
+  const target = env.PLAYWRIGHT_BASE_URL ?? env.CMDCLAW_SERVER_URL ?? "unknown";
+  console.log(`[e2e-live] using worktree server ${target}`);
 }
 
 function main(): void {
@@ -164,7 +164,7 @@ function main(): void {
     fail("Usage: bun scripts/e2e-live.ts <auth|smoke|live|record|prod|prod-monitor|cli-live>");
   }
 
-  const baseEnv = buildBaseEnv();
+  const { env: baseEnv, worktreeEnvFile } = buildBaseEnv();
 
   switch (mode) {
     case "auth":
@@ -186,12 +186,13 @@ function main(): void {
       return;
     case "record":
       runAuth(baseEnv);
-      runPlaywright({
-        ...baseEnv,
-        E2E_LIVE: "1",
-        PLAYWRIGHT_REUSE_SERVER: "1",
-        PLAYWRIGHT_VIDEO: "on",
-      });
+      {
+        const recordEnv = buildRecordModeEnv(baseEnv, {
+          hasWorktreeEnv: worktreeEnvFile !== null,
+        });
+        logRecordMode(worktreeEnvFile, recordEnv);
+        runPlaywright(recordEnv);
+      }
       return;
     case "prod":
       runAuth({
@@ -237,4 +238,40 @@ function main(): void {
   }
 }
 
-main();
+function runAuth(env: NodeJS.ProcessEnv): void {
+  run("bun", ["scripts/e2e-auth.ts"], env);
+}
+
+function runPlaywright(env: NodeJS.ProcessEnv, extraArgs: string[] = []): void {
+  run("bun", ["playwright", "test", ...extraArgs], env);
+}
+
+function runCliLive(env: NodeJS.ProcessEnv): void {
+  run("bun", ["run", "chat:auth"], env);
+  run(
+    "bun",
+    [
+      "vitest",
+      "run",
+      "tests/e2e-cli/auth.cli.live.e2e.test.ts",
+      "src/app/chat/chat.cli.live.test.ts",
+      "src/app/chat/chat.interrupt.cli.live.test.ts",
+      "src/app/chat/chat.performance.cli.live.test.ts",
+      "src/app/chat/chat.question.cli.live.test.ts",
+      "src/app/chat/chat.file-upload.cli.live.test.ts",
+      "src/app/chat/chat.fill-pdf.cli.live.test.ts",
+      "src/app/chat/chat.slack.cli.live.test.ts",
+      "src/app/chat/chat.gmail.cli.live.test.ts",
+      "src/app/chat/chat.linkedin.cli.live.test.ts",
+      "src/app/chat/chat.google-calendar.cli.live.test.ts",
+      "src/app/chat/chat.google-drive.cli.live.test.ts",
+      "src/app/coworkers/coworkers.cli.live.test.ts",
+    ],
+    env,
+  );
+  run("bun", ["run", "--cwd", "../sandbox", "test:live"], env);
+}
+
+if (import.meta.main) {
+  main();
+}
