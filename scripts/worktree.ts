@@ -607,6 +607,17 @@ function remapWorkspaceExecutorSourceRows(
   }));
 }
 
+function remapCoworkerRows(
+  rows: Array<Record<string, unknown>>,
+  targetUserId: string,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => ({
+    ...row,
+    owner_id: targetUserId,
+    builder_conversation_id: null,
+  }));
+}
+
 function remapSharedProviderAuthRows(
   rows: Array<Record<string, unknown>>,
   targetUserId: string,
@@ -924,6 +935,73 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
             )
           : { rows: [] };
 
+      const coworkerRows =
+        workspaceIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from coworker where owner_id = $1 and workspace_id = any($2::text[])`,
+              [sourceUser.id, workspaceIds],
+            )
+          : { rows: [] };
+      const coworkerIds = coworkerRows.rows
+        .map((row) => row.id)
+        .filter((value): value is string => typeof value === "string");
+
+      const coworkerDocumentRows =
+        coworkerIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from coworker_document where coworker_id = any($1::text[])`,
+              [coworkerIds],
+            )
+          : { rows: [] };
+
+      const coworkerEmailAliasRows =
+        coworkerIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from coworker_email_alias where coworker_id = any($1::text[])`,
+              [coworkerIds],
+            )
+          : { rows: [] };
+
+      const coworkerTagAssignmentRows =
+        coworkerIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from coworker_tag_assignment where coworker_id = any($1::text[])`,
+              [coworkerIds],
+            )
+          : { rows: [] };
+      const coworkerTagIds = coworkerTagAssignmentRows.rows
+        .map((row) => row.tag_id)
+        .filter((value): value is string => typeof value === "string");
+
+      const coworkerTagRows =
+        coworkerTagIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from coworker_tag where id = any($1::text[])`,
+              [coworkerTagIds],
+            )
+          : { rows: [] };
+
+      const orgChartNodeRows =
+        workspaceIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `
+                select *
+                from org_chart_node
+                where workspace_id = any($1::text[])
+                  and (coworker_id is null or coworker_id = any($2::text[]))
+              `,
+              [workspaceIds, coworkerIds],
+            )
+          : { rows: [] };
+
+      const coworkerViewRows =
+        workspaceIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from coworker_view where workspace_id = any($1::text[])`,
+              [workspaceIds],
+            )
+          : { rows: [] };
+
       const sharedProviderAuthRows = (
         await sourceClient.query<Record<string, unknown>>(`select * from shared_provider_auth`)
       ).rows;
@@ -973,6 +1051,23 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
           executorSourceCredentialRows,
           ["id"],
         );
+        await upsertRows(
+          targetClient,
+          "coworker",
+          remapCoworkerRows(coworkerRows.rows, sourceUser.id),
+          ["id"],
+        );
+        await upsertRows(targetClient, "coworker_document", coworkerDocumentRows.rows, ["id"]);
+        await upsertRows(targetClient, "coworker_email_alias", coworkerEmailAliasRows.rows, ["id"]);
+        await upsertRows(targetClient, "coworker_tag", coworkerTagRows.rows, ["id"]);
+        await upsertRows(
+          targetClient,
+          "coworker_tag_assignment",
+          coworkerTagAssignmentRows.rows,
+          ["id"],
+        );
+        await upsertRows(targetClient, "org_chart_node", orgChartNodeRows.rows, ["id"]);
+        await upsertRows(targetClient, "coworker_view", coworkerViewRows.rows, ["id"]);
 
         const sessionToken = randomBytes(48).toString("hex");
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -1036,6 +1131,7 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
         );
 
         console.log(`[worktree] bootstrapped developer user ${sourceUser.email}`);
+        console.log(`[worktree] imported coworkers ${coworkerRows.rows.length}`);
         console.log(`[worktree] auth storage ${storageStatePath}`);
         loadAgentBrowserAuthState(metadata);
       } catch (error) {
