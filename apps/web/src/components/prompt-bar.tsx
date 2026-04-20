@@ -567,6 +567,9 @@ export function PromptBar({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             placeholder={shouldAnimateRich ? undefined : activePlaceholder}
+            aria-label={isHero ? "Automation prompt" : "Message"}
+            aria-keyshortcuts="Meta+Enter Control+Enter"
+            data-testid="prompt-input"
             disabled={disabled}
             rows={2}
             className={cn(
@@ -595,6 +598,9 @@ export function PromptBar({
               <PopoverTrigger asChild>
                 <button
                   type="button"
+                  aria-label="Add attachment"
+                  title="Add attachment"
+                  data-testid="prompt-attach"
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
                     isHero
@@ -687,6 +693,9 @@ export function PromptBar({
               type="button"
               onClick={handleSendClick}
               disabled={!canSend}
+              aria-label={isSubmitting ? "Sending message" : "Send message"}
+              title={isSubmitting ? "Sending message" : "Send message"}
+              data-testid="prompt-send"
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
                 canSend

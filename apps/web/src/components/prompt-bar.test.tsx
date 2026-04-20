@@ -87,6 +87,26 @@ describe("PromptBar", () => {
     expect(input).toHaveValue("Keep this draft");
   });
 
+  it("exposes a labeled send button that submits on click", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+
+    render(<PromptBar onSubmit={onSubmit} />);
+
+    const input = screen.getByRole("textbox", { name: "Message" });
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+
+    expect(sendButton).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: "hi" } });
+    expect(sendButton).toBeEnabled();
+
+    fireEvent.click(sendButton);
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith("hi", undefined);
+    });
+  });
+
   it("reserves two lines of height for the hero rich placeholder", () => {
     const { container } = render(
       <PromptBar
