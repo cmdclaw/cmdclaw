@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { readRuntimeContext } from "../../../lib/runtime-context";
+import { loadRuntimeEnv } from "../../../lib/runtime-env";
 
 type AttachmentPayload = {
   name: string;
@@ -131,6 +132,8 @@ async function readJsonArgument(filePath: string | undefined): Promise<unknown> 
 }
 
 async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
+  loadRuntimeEnv();
+
   const appUrl = getRequiredEnv("APP_URL");
   const runtimeContext = await readRuntimeContext();
 
