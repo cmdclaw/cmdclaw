@@ -213,6 +213,10 @@ function agentBrowserProfileDir(instanceRoot: string): string {
   return join(agentBrowserDir(instanceRoot), "profile");
 }
 
+function agentBrowserStatePath(instanceRoot: string): string {
+  return join(authArtifactsDir(instanceRoot), "dev-user.storage-state.json");
+}
+
 function expandPath(value: string, repoRoot: string): string {
   if (value.startsWith("~/")) {
     const home = process.env.HOME;
@@ -677,6 +681,35 @@ function writeDerivedEnvFile(metadata: InstanceMetadata): void {
   writeFileSync(join(metadata.instanceRoot, "instance.env"), `${shellLines.join("\n")}\n`, "utf8");
 }
 
+function loadAgentBrowserAuthState(metadata: InstanceMetadata): void {
+  const statePath = agentBrowserStatePath(metadata.instanceRoot);
+  if (!existsSync(statePath)) {
+    return;
+  }
+
+  const env = buildDerivedEnv(metadata);
+  const result = spawnSync("agent-browser", ["state", "load", statePath], {
+    cwd: metadata.repoRoot,
+    env: {
+      ...process.env,
+      ...env,
+    },
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (result.status !== 0) {
+    const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
+    console.warn(`[worktree] failed to hydrate agent-browser auth state: ${output}`);
+    return;
+  }
+
+  const output = result.stdout?.trim();
+  if (output) {
+    console.log(`[worktree] ${output}`);
+  }
+}
+
 function createMetadata(repoRoot: string, appPort: number, wsPort: number): InstanceMetadata {
   const instanceId = buildInstanceId(repoRoot);
   const instanceRoot = join(resolveStateRoot(repoRoot), instanceId);
@@ -971,10 +1004,7 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
         );
 
         ensureDir(authArtifactsDir(metadata.instanceRoot));
-        const storageStatePath = join(
-          authArtifactsDir(metadata.instanceRoot),
-          "dev-user.storage-state.json",
-        );
+        const storageStatePath = agentBrowserStatePath(metadata.instanceRoot);
         const sessionInfoPath = join(authArtifactsDir(metadata.instanceRoot), "dev-user.session.json");
 
         writeFileSync(
@@ -1004,6 +1034,7 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
 
         console.log(`[worktree] bootstrapped developer user ${sourceUser.email}`);
         console.log(`[worktree] auth storage ${storageStatePath}`);
+        loadAgentBrowserAuthState(metadata);
       } catch (error) {
         await targetClient.query("rollback");
         throw error;
