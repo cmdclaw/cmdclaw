@@ -1,5 +1,6 @@
 import IORedis from "ioredis";
 import type { GenerationEvent } from "../services/generation-manager";
+import { prefixRedisKey } from "../instance";
 import { buildRedisOptions } from "./connection-options";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
@@ -33,7 +34,7 @@ type RedisStreamItem = [id: string, fields: string[]];
 type RedisStreamResponse = Array<[stream: string, entries: RedisStreamItem[]]>;
 
 function streamKey(generationId: string): string {
-  return `${GEN_STREAM_PREFIX}${generationId}`;
+  return prefixRedisKey(`${GEN_STREAM_PREFIX}${generationId}`);
 }
 
 function getRedisClient(): IORedis {

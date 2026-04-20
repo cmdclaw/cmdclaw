@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import IORedis from "ioredis";
+import { prefixRedisKey } from "../instance";
 import { buildRedisOptions } from "../redis/connection-options";
 
 const DEFAULT_MAX_ACTIVE_SLOTS = 20;
@@ -178,19 +179,19 @@ export class SandboxSlotManager {
   }
 
   private getWaitingQueueKey(): string {
-    return "sandbox-slot:waiting";
+    return prefixRedisKey("sandbox-slot:waiting");
   }
 
   private getActiveLeasesKey(): string {
-    return "sandbox-slot:leases";
+    return prefixRedisKey("sandbox-slot:leases");
   }
 
   private getLeaseTokenKey(generationId: string): string {
-    return `sandbox-slot:lease-token:${generationId}`;
+    return prefixRedisKey(`sandbox-slot:lease-token:${generationId}`);
   }
 
   private getLockKey(): string {
-    return "sandbox-slot:lock";
+    return prefixRedisKey("sandbox-slot:lock");
   }
 }
 

@@ -1,3 +1,4 @@
+import { prefixRedisKey } from "@cmdclaw/core/server/instance";
 import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { db } from "@cmdclaw/db/client";
@@ -42,7 +43,7 @@ let socket: ReturnType<typeof createWASocket> | null = null;
 let isConnecting = false;
 let lockRenewTimer: ReturnType<typeof setInterval> | null = null;
 
-const WHATSAPP_LOCK_KEY = "locks:whatsapp-bot:owner";
+const WHATSAPP_LOCK_KEY = prefixRedisKey("locks:whatsapp-bot:owner");
 const WHATSAPP_LOCK_TTL_MS = 60_000;
 const whatsappInstanceId = crypto.randomUUID();
 let redisClient: IORedis | null = null;
