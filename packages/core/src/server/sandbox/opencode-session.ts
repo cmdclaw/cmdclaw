@@ -28,6 +28,7 @@ import { listAccessibleEnabledSkillsForUser } from "../services/workspace-skill-
 import { restoreConversationSessionSnapshot } from "../services/opencode-session-snapshot-service";
 import { COMPACTION_SUMMARY_PREFIX, SESSION_BOUNDARY_PREFIX } from "../services/session-constants";
 import { downloadFromS3 } from "../storage/s3-client";
+import { resolveSandboxRuntimeAppUrl } from "./prep/runtime-env-prep";
 import {
   createSandboxRuntimeClient,
   getSandboxReadinessUrl,
@@ -120,6 +121,17 @@ interface OpenCodeSessionProvider {
     config: OpenCodeSessionConfig,
     options?: OpenCodeSessionOptions,
   ): Promise<OpenCodeSessionResult>;
+}
+
+function buildSandboxBootstrapEnv(config: OpenCodeSessionConfig): Record<string, string> {
+  return {
+    ANTHROPIC_API_KEY: config.anthropicApiKey,
+    ANVIL_API_KEY: env.ANVIL_API_KEY || "",
+    APP_URL: resolveSandboxRuntimeAppUrl(),
+    CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+    CONVERSATION_ID: config.conversationId,
+    ...config.integrationEnvs,
+  };
 }
 
 async function getConversationRuntimeState(conversationId: string): Promise<{
@@ -392,14 +404,7 @@ async function getOrCreateDockerSandbox(
     docker,
     imageTag,
     runtimePort,
-    env: {
-      ANTHROPIC_API_KEY: config.anthropicApiKey,
-      ANVIL_API_KEY: env.ANVIL_API_KEY || "",
-      APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
-      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
-      CONVERSATION_ID: config.conversationId,
-      ...config.integrationEnvs,
-    },
+    env: buildSandboxBootstrapEnv(config),
   });
 
   onLifecycle?.("sandbox_created", {
@@ -516,14 +521,7 @@ async function getOrCreateDaytonaSandbox(
   const daytona = await createDaytonaClient();
   const created = (await daytona.create({
     snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
-    envVars: {
-      ANTHROPIC_API_KEY: config.anthropicApiKey,
-      ANVIL_API_KEY: env.ANVIL_API_KEY || "",
-      APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
-      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
-      CONVERSATION_ID: config.conversationId,
-      ...config.integrationEnvs,
-    },
+    envVars: buildSandboxBootstrapEnv(config),
   })) as DaytonaSandboxLike;
 
   onLifecycle?.("sandbox_created", {
@@ -662,14 +660,7 @@ async function getOrCreateDockerSandboxInit(
     docker,
     imageTag,
     runtimePort,
-    env: {
-      ANTHROPIC_API_KEY: config.anthropicApiKey,
-      ANVIL_API_KEY: env.ANVIL_API_KEY || "",
-      APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
-      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
-      CONVERSATION_ID: config.conversationId,
-      ...config.integrationEnvs,
-    },
+    env: buildSandboxBootstrapEnv(config),
   });
 
   onLifecycle?.("sandbox_created", {
@@ -769,14 +760,7 @@ async function getOrCreateDaytonaSandboxInit(
   const daytona = await createDaytonaClient();
   const created = (await daytona.create({
     snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
-    envVars: {
-      ANTHROPIC_API_KEY: config.anthropicApiKey,
-      ANVIL_API_KEY: env.ANVIL_API_KEY || "",
-      APP_URL: env.APP_URL || env.NEXT_PUBLIC_APP_URL || "",
-      CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
-      CONVERSATION_ID: config.conversationId,
-      ...config.integrationEnvs,
-    },
+    envVars: buildSandboxBootstrapEnv(config),
   })) as DaytonaSandboxLike;
 
   onLifecycle?.("sandbox_created", {
