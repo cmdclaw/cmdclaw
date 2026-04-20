@@ -20,7 +20,7 @@ function buildLoginRedirect(request: Request) {
     `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
     request,
   );
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.redirect(loginUrl, { status: 303 });
 }
 
 function buildErrorRedirect(
@@ -33,7 +33,7 @@ function buildErrorRedirect(
   if (params.state) {
     target.searchParams.set("state", params.state);
   }
-  return NextResponse.redirect(target);
+  return NextResponse.redirect(target, { status: 303 });
 }
 
 export async function GET(request: Request) {
@@ -133,6 +133,7 @@ export async function POST(request: Request) {
       redirectUrl.searchParams.set("state", parsed.state);
     }
     return NextResponse.redirect(redirectUrl, {
+      status: 303,
       headers: {
         "Cache-Control": "no-store",
       },
