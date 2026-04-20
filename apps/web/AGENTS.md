@@ -20,9 +20,6 @@
 
 -  My infra is BullMQ queues and Next.js is on Railway
 
-## Tmux
-Both the worker and the server are always on in tmux; you can use tmux to look at the logs. They are hot reloaded, so no need to restart them; they will pick the latest changes.
-
 ## Pitfalls
 -  Do not add unnecessary environment variables to control behavior; ask the user if you want to add a variable to be sure it is really needed.
 

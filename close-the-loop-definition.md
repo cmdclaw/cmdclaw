@@ -19,7 +19,7 @@ Closing the loop reduces idle handoffs and repetitive manual steps, making softw
 ## CmdClaw example
 
 In this codebase, an example of"closing the loop" is:
-1. Keep the web, worker, and WS runtimes running (`bun run dev`, with worker/server visible in tmux logs).
+1. Keep the web, worker, and WS runtimes running
 2. Make a change.
 3. Read the workflow guide directly from the repo when needed: `bun run cat close-the-loop-definition.md`.
 4. Validate behavior via `bun run cmdclaw -- chat` (real prompt, real execution path).
@@ -30,7 +30,7 @@ In this codebase, an example of"closing the loop" is:
    Park an ignored real-integration write after 5s: `bun run cmdclaw -- chat --chaos-approval defer --chaos-approval-park-after 5s --message "send a message on slack #experiment-cmdclaw-testing saying hi" --model openai/gpt-5.4-mini`
    Attach to the active run in a conversation: `bun run cmdclaw -- chat --attach <conversation-id>`
    Low-level stream attach example: `bun run cmdclaw -- chat --attach-generation <generation-id>`
-5. Read tmux logs to confirm server + worker behavior and catch regressions.
+5. Read logs to confirm server + worker behavior and catch regressions.
 6. Iterate immediately until the prompt result matches expected behavior.
 
 That is a closed loop because implementation, runtime execution, and verification happen continuously in one workflow.
