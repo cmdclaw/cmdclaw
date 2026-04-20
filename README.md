@@ -54,15 +54,13 @@ Agents can handle one-off tasks or recurring workflows, then escalate through ap
 - **Templates**: start from prebuilt workflows instead of configuring every agent from scratch.
 - **Inbox and approvals**: sensitive actions pause for approval or auth and surface in one place.
 - **Connected tools**: agents run across the 16 currently available integrations in the repo, including Gmail, Slack, Notion, GitHub, HubSpot, Salesforce, and more.
-- **Multiple interfaces**: use the web app, CLI, desktop shell, or MCP server depending on how you want to operate agents.
+- **Multiple interfaces**: use the web app, CLI, or MCP server depending on how you want to operate agents.
 
 ## Interfaces
 
 - **Web app**: build, run, and monitor agents from the main product surface.
 - **CLI**: work with `chat`, `auth`, and `coworker` command groups from the terminal.
 - **MCP server**: expose CmdClaw capabilities to external agent and tool workflows.
-- **Desktop app**: use the Electron shell around the web app for a native desktop entrypoint.
-
 ```bash
 bun run cmdclaw -- --help
 ```
@@ -95,8 +93,7 @@ cmdclaw/
 │   ├── ws/        # WebSocket runtime
 │   ├── cli/       # Terminal interface
 │   ├── mcp/       # MCP server
-│   ├── sandbox/   # Sandbox runtime assets and build tooling
-│   └── desktop/   # Electron desktop shell
+│   └── sandbox/   # Sandbox runtime assets and build tooling
 ├── packages/
 │   ├── core/      # Shared runtime logic
 │   ├── db/        # Drizzle schema and database client

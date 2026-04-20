@@ -21,15 +21,6 @@
         "app-bundle/**"
       ]
     },
-    "@cmdclaw/desktop#build": {
-      "dependsOn": [
-        "@cmdclaw/web#build"
-      ],
-      "outputs": [
-        "dist/**",
-        "app-bundle/**"
-      ]
-    },
     "@cmdclaw/docs#build": {
       "outputs": []
     },
