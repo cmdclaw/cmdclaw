@@ -40,6 +40,14 @@ function normalizeSameSite(value: string | undefined): "lax" | "strict" | "none"
   }
 }
 
+function normalizeCookieValue(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function loadWorktreeSessionCookie(): WorktreeSessionCookie | null {
   const statePath = getStorageStatePath();
   if (!statePath || !existsSync(statePath)) {
@@ -62,7 +70,7 @@ export function loadWorktreeSessionCookie(): WorktreeSessionCookie | null {
     }
 
     return {
-      value: rawCookie.value,
+      value: normalizeCookieValue(rawCookie.value),
       httpOnly: rawCookie.httpOnly !== false,
       sameSite: normalizeSameSite(rawCookie.sameSite),
       expires:

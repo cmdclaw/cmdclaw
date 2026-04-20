@@ -26,4 +26,12 @@ describe("proxy", () => {
       "http://localhost:3626/api/dev/worktree-auth?callbackUrl=%2Fchat%3Ftab%3Dlatest",
     );
   });
+
+  it("allows the dev health route without auth", () => {
+    process.env.CMDCLAW_INSTANCE_ROOT = "/tmp/cmdclaw-worktree";
+
+    const response = proxy(new NextRequest("http://127.0.0.1:3626/api/dev/health"));
+
+    expect(response.status).toBe(200);
+  });
 });

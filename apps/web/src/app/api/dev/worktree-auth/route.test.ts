@@ -46,7 +46,7 @@ describe("GET /api/dev/worktree-auth", () => {
         cookies: [
           {
             name: "better-auth.session_token",
-            value: "signed-cookie-value",
+            value: "signed-cookie%2Fvalue%3D",
             expires: 1_900_000_000,
             httpOnly: true,
             sameSite: "Lax",
@@ -62,7 +62,7 @@ describe("GET /api/dev/worktree-auth", () => {
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe("http://127.0.0.1:3626/chat");
     expect(response.headers.get("set-cookie")).toContain(
-      "better-auth.session_token=signed-cookie-value",
+      "better-auth.session_token=signed-cookie%2Fvalue%3D",
     );
   });
 });

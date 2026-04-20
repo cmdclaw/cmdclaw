@@ -20,6 +20,14 @@ function getDefaultName(email: string, fallbackName: string | null) {
   return localPart?.trim() || "CmdClaw User";
 }
 
+function normalizeCookieValue(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function getSessionCookieName(requestUrl: string) {
   const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? requestUrl;
   return new URL(appUrl).protocol === "https:"
@@ -160,7 +168,7 @@ export async function createLocalSessionRedirectResponse(args: {
   );
 
   const cookieName = getSessionCookieName(args.requestUrl);
-  response.cookies.set(cookieName, signedToken, {
+  response.cookies.set(cookieName, normalizeCookieValue(signedToken), {
     httpOnly: true,
     sameSite: "lax",
     secure: cookieName.startsWith("__Secure-"),

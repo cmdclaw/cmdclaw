@@ -171,6 +171,10 @@ function buildAppUrl(appPort: number): string {
   return `http://127.0.0.1:${appPort}`;
 }
 
+function buildHealthCheckUrl(appUrl: string): string {
+  return new URL("/api/dev/health", appUrl).toString();
+}
+
 function buildQueueName(instanceId: string): string {
   return `cmdclaw-${slugify(instanceId)}`;
 }
@@ -1260,7 +1264,7 @@ async function startInstance(): Promise<void> {
     ws: ws.pid,
   });
 
-  await waitForHttp(metadata.appUrl, DEV_START_TIMEOUT_MS);
+  await waitForHttp(buildHealthCheckUrl(metadata.appUrl), DEV_START_TIMEOUT_MS);
   console.log(`[worktree] started ${metadata.appUrl}`);
   console.log(`[worktree] logs ${logsDir(metadata.instanceRoot)}`);
 }
@@ -1310,7 +1314,7 @@ async function devInstance(): Promise<void> {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
 
-  await waitForHttp(metadata.appUrl, DEV_START_TIMEOUT_MS);
+  await waitForHttp(buildHealthCheckUrl(metadata.appUrl), DEV_START_TIMEOUT_MS);
   console.log(`[worktree] dev ready at ${metadata.appUrl}`);
 
   await Promise.race(
