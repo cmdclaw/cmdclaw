@@ -12,11 +12,13 @@ This repository is organized into several top-level folders. Each folder can hav
 
 ## Remarks
 - For any work inside a folder, check that folder for its own `AGENTS.md` and follow those instructions.
+- Before doing anything else, first check whether you are in a worktree by running `bun run worktree:status`.
 
 ## Testing
 
-Avoid mocks as much as possible, Test actual implementation, do not duplicate logic into tests
-try to colocated tests with the code they test when relevant. for collacting use this format `*.test.ts` or `*.e2e.test.ts`
+- Avoid mocks as much as possible, Test actual implementation, do not duplicate logic into tests
+- try to colocated tests with the code they test when relevant. for collacting use this format `*.test.ts` or `*.e2e.test.ts`
+- After fixing an error with a CLI tool, alawys verify by rerunning the given command and continue until the underlyisng issue is fix and command start working as expected
 
 ## Lint policy
 - Every lint setting modification requires explicit user approval.

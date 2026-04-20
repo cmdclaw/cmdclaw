@@ -1,15 +1,34 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import net from "node:net";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { Client } = require("pg") as typeof import("pg");
+const { serializeSignedCookie } = require("better-call") as typeof import("better-call");
 const dotenv = require("dotenv") as typeof import("dotenv");
 
-type CommandName = "create" | "start" | "stop" | "destroy" | "dev" | "status" | "env";
+type CommandName =
+  | "create"
+  | "start"
+  | "stop"
+  | "destroy"
+  | "dev"
+  | "status"
+  | "env"
+  | "bootstrap-user";
 
 type InstanceMetadata = {
   instanceId: string;
@@ -30,6 +49,11 @@ type InstanceProcesses = Partial<Record<"web" | "worker" | "ws", number>>;
 
 type DerivedEnv = Record<string, string>;
 
+type SourceUserRecord = {
+  id: string;
+  email: string;
+};
+
 const DEFAULT_BASE_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres";
 const PROCESS_NAMES = ["web", "worker", "ws"] as const;
 const DEV_START_TIMEOUT_MS = 120_000;
@@ -45,6 +69,7 @@ function printHelp(): void {
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
   console.log("  env      Print derived environment variables for this worktree");
+  console.log("  bootstrap-user  Copy source developer identity and integrations");
 }
 
 function fail(message: string): never {
@@ -176,6 +201,80 @@ function runtimeDir(instanceRoot: string): string {
   return join(instanceRoot, "runtime");
 }
 
+function authArtifactsDir(instanceRoot: string): string {
+  return join(runtimeDir(instanceRoot), "auth");
+}
+
+function agentBrowserDir(instanceRoot: string): string {
+  return join(runtimeDir(instanceRoot), "agent-browser");
+}
+
+function agentBrowserProfileDir(instanceRoot: string): string {
+  return join(agentBrowserDir(instanceRoot), "profile");
+}
+
+function expandPath(value: string, repoRoot: string): string {
+  if (value.startsWith("~/")) {
+    const home = process.env.HOME;
+    if (!home) {
+      fail(`Unable to expand ${value}: HOME is not set`);
+    }
+    return join(home, value.slice(2));
+  }
+
+  if (isAbsolute(value)) {
+    return value;
+  }
+
+  return resolvePath(repoRoot, value);
+}
+
+function resolveAgentBrowserSeedProfile(repoRoot: string): string {
+  const configured = process.env.CMDCLAW_AGENT_BROWSER_SEED_PROFILE?.trim();
+  if (configured) {
+    return expandPath(configured, repoRoot);
+  }
+
+  const home = process.env.HOME;
+  if (!home) {
+    fail("HOME is required to derive the default agent-browser seed profile path");
+  }
+
+  return join(home, ".codex", "agent-browser", "cmdclaw-seed");
+}
+
+function resolveRecognizedWorktreeRoots(): string[] {
+  const configured = process.env.CMDCLAW_WORKTREE_STATUS_PATHS?.trim();
+  if (configured) {
+    return configured
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((value) => expandPath(value, process.cwd()));
+  }
+
+  const home = process.env.HOME;
+  if (!home) {
+    return [];
+  }
+
+  return [join(home, ".codex", "worktrees")];
+}
+
+function isRecognizedWorktreeRepo(repoRoot: string): boolean {
+  return resolveRecognizedWorktreeRoots().some(
+    (root) => repoRoot === root || repoRoot.startsWith(`${root}/`),
+  );
+}
+
+function isDirectoryEmpty(path: string): boolean {
+  if (!existsSync(path)) {
+    return true;
+  }
+
+  return readdirSync(path).length === 0;
+}
+
 function loadMetadata(instanceRoot: string): InstanceMetadata | null {
   const path = metadataPath(instanceRoot);
   if (!existsSync(path)) {
@@ -259,6 +358,16 @@ async function withAdminClient<T>(connectionString: string, fn: (client: Client)
   }
 }
 
+async function withClient<T>(connectionString: string, fn: (client: Client) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
 function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
@@ -312,7 +421,244 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_INSTANCE_ID: metadata.instanceId,
     CMDCLAW_INSTANCE_ROOT: metadata.instanceRoot,
     CMDCLAW_REDIS_NAMESPACE: metadata.redisNamespace,
+    AGENT_BROWSER_PROFILE: agentBrowserProfileDir(metadata.instanceRoot),
   };
+}
+
+function resolveSourceRepoRoot(targetRepoRoot: string): string | null {
+  const explicit =
+    process.env.CMDCLAW_WORKTREE_SOURCE_TREE_PATH?.trim() || process.env.CODEX_SOURCE_TREE_PATH?.trim();
+  if (explicit && explicit !== targetRepoRoot) {
+    return explicit;
+  }
+
+  const worktreeList = runCommand("git", ["worktree", "list", "--porcelain"], targetRepoRoot);
+  const blocks = worktreeList
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  let fallback: string | null = null;
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/).map((line) => line.trim());
+    const worktree = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
+    const branch = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
+    if (!worktree || worktree === targetRepoRoot) {
+      continue;
+    }
+    if (branch === "refs/heads/main") {
+      return worktree;
+    }
+    fallback ??= worktree;
+  }
+
+  return fallback;
+}
+
+function loadMetadataForRepoRoot(repoRoot: string): InstanceMetadata | null {
+  const instanceRoot = join(resolveStateRoot(repoRoot), buildInstanceId(repoRoot));
+  return loadMetadata(instanceRoot);
+}
+
+function resolveSourceDatabaseUrl(targetRepoRoot: string): string | null {
+  const explicit = process.env.CMDCLAW_WORKTREE_SOURCE_DATABASE_URL?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const sourceRepoRoot = resolveSourceRepoRoot(targetRepoRoot);
+  if (!sourceRepoRoot) {
+    return process.env.DATABASE_URL?.trim() || null;
+  }
+
+  return loadMetadataForRepoRoot(sourceRepoRoot)?.databaseUrl ?? process.env.DATABASE_URL?.trim() ?? null;
+}
+
+function buildJsonStorageState(params: {
+  appUrl: string;
+  signedSessionToken: string;
+  expiresAtEpochSeconds: number;
+}): string {
+  const origin = new URL(params.appUrl);
+  const storageState = {
+    cookies: [
+      {
+        name: "better-auth.session_token",
+        value: params.signedSessionToken,
+        domain: origin.hostname,
+        path: "/",
+        expires: params.expiresAtEpochSeconds,
+        httpOnly: true,
+        secure: origin.protocol === "https:",
+        sameSite: "Lax",
+      },
+    ],
+    origins: [],
+  };
+
+  return `${JSON.stringify(storageState, null, 2)}\n`;
+}
+
+function toIdentifierList(columns: string[]): string {
+  return columns.map((column) => quoteIdentifier(column)).join(", ");
+}
+
+async function upsertRows(
+  client: Client,
+  tableName: string,
+  rows: Array<Record<string, unknown>>,
+  conflictColumns: string[],
+): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const columns = Object.keys(rows[0] ?? {});
+  if (columns.length === 0) {
+    return;
+  }
+
+  const placeholders: string[] = [];
+  const values: unknown[] = [];
+  let parameterIndex = 1;
+
+  for (const row of rows) {
+    const rowPlaceholders = columns.map(() => `$${parameterIndex++}`);
+    placeholders.push(`(${rowPlaceholders.join(", ")})`);
+    for (const column of columns) {
+      values.push(row[column]);
+    }
+  }
+
+  const updateColumns = columns.filter((column) => !conflictColumns.includes(column));
+  const updateClause =
+    updateColumns.length > 0
+      ? `do update set ${updateColumns
+          .map((column) => `${quoteIdentifier(column)} = excluded.${quoteIdentifier(column)}`)
+          .join(", ")}`
+      : "do nothing";
+
+  await client.query(
+    `insert into ${quoteIdentifier(tableName)} (${toIdentifierList(columns)}) values ${placeholders.join(
+      ", ",
+    )} on conflict (${toIdentifierList(conflictColumns)}) ${updateClause}`,
+    values,
+  );
+}
+
+async function selectRows(
+  client: Client,
+  tableName: string,
+  whereClause: string,
+  params: unknown[],
+): Promise<Array<Record<string, unknown>>> {
+  const result = await client.query<Record<string, unknown>>(
+    `select * from ${quoteIdentifier(tableName)} where ${whereClause}`,
+    params,
+  );
+  return result.rows;
+}
+
+async function resolveBootstrapSourceUser(sourceClient: Client): Promise<SourceUserRecord | null> {
+  const explicitEmail = process.env.CMDCLAW_WORKTREE_DEV_USER_EMAIL?.trim();
+  if (explicitEmail) {
+    const result = await sourceClient.query<SourceUserRecord>(
+      `select id, email from "user" where lower(email) = lower($1) limit 1`,
+      [explicitEmail],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  const recentSession = await sourceClient.query<SourceUserRecord>(
+    `
+      select u.id, u.email
+      from "session" s
+      join "user" u on u.id = s.user_id
+      order by s.updated_at desc nulls last, s.created_at desc
+      limit 1
+    `,
+  );
+  if (recentSession.rows[0]) {
+    return recentSession.rows[0];
+  }
+
+  const users = await sourceClient.query<SourceUserRecord>(
+    `select id, email from "user" order by updated_at desc, created_at desc`,
+  );
+  if (users.rows.length === 1) {
+    return users.rows[0] ?? null;
+  }
+
+  return null;
+}
+
+function remapWorkspaceRows(
+  rows: Array<Record<string, unknown>>,
+  targetUserId: string,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => ({
+    ...row,
+    created_by_user_id: targetUserId,
+  }));
+}
+
+function remapCustomIntegrationRows(
+  rows: Array<Record<string, unknown>>,
+  targetUserId: string,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => ({
+    ...row,
+    created_by_user_id: targetUserId,
+  }));
+}
+
+function remapWorkspaceExecutorSourceRows(
+  rows: Array<Record<string, unknown>>,
+  targetUserId: string,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => ({
+    ...row,
+    created_by_user_id: targetUserId,
+    updated_by_user_id: targetUserId,
+  }));
+}
+
+function remapSharedProviderAuthRows(
+  rows: Array<Record<string, unknown>>,
+  targetUserId: string,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => ({
+    ...row,
+    managed_by_user_id:
+      row.managed_by_user_id == null || row.managed_by_user_id === targetUserId
+        ? row.managed_by_user_id
+        : targetUserId,
+  }));
+}
+
+function ensureAgentBrowserProfile(metadata: InstanceMetadata): void {
+  const targetProfileDir = agentBrowserProfileDir(metadata.instanceRoot);
+  const seedProfileDir = resolveAgentBrowserSeedProfile(metadata.repoRoot);
+
+  ensureDir(agentBrowserDir(metadata.instanceRoot));
+
+  if (!isDirectoryEmpty(targetProfileDir)) {
+    return;
+  }
+
+  if (!existsSync(seedProfileDir) || isDirectoryEmpty(seedProfileDir)) {
+    ensureDir(targetProfileDir);
+    console.log(
+      `[worktree] agent-browser seed missing; initialized empty profile ${targetProfileDir}`,
+    );
+    return;
+  }
+
+  rmSync(targetProfileDir, { recursive: true, force: true });
+  cpSync(seedProfileDir, targetProfileDir, { recursive: true });
+  console.log(
+    `[worktree] copied agent-browser profile ${seedProfileDir} -> ${targetProfileDir}`,
+  );
 }
 
 function writeDerivedEnvFile(metadata: InstanceMetadata): void {
@@ -438,17 +784,238 @@ async function runDbPush(metadata: InstanceMetadata): Promise<void> {
   }
 }
 
+async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void> {
+  const sourceDatabaseUrl = resolveSourceDatabaseUrl(metadata.repoRoot);
+  if (!sourceDatabaseUrl || sourceDatabaseUrl === metadata.databaseUrl) {
+    return;
+  }
+
+  await withClient(sourceDatabaseUrl, async (sourceClient) => {
+    const sourceUser = await resolveBootstrapSourceUser(sourceClient);
+    if (!sourceUser) {
+      fail(
+        "Unable to resolve a source developer user. Set CMDCLAW_WORKTREE_DEV_USER_EMAIL or make sure the source worktree has a recent session.",
+      );
+    }
+
+    await withClient(metadata.databaseUrl, async (targetClient) => {
+      const userRows = await selectRows(sourceClient, "user", "id = $1", [sourceUser.id]);
+      if (userRows.length === 0) {
+        fail(`Source user ${sourceUser.email} was not found in the source database.`);
+      }
+
+      const workspaceRows = await sourceClient.query<Record<string, unknown>>(
+        `
+          select distinct w.*
+          from workspace_member wm
+          join workspace w on w.id = wm.workspace_id
+          where wm.user_id = $1
+             or w.id = (select active_workspace_id from "user" where id = $1)
+        `,
+        [sourceUser.id],
+      );
+      const workspaceIds = workspaceRows.rows
+        .map((row) => row.id)
+        .filter((value): value is string => typeof value === "string");
+
+      const workspaceMemberRows =
+        workspaceIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from workspace_member where user_id = $1 and workspace_id = any($2::text[])`,
+              [sourceUser.id, workspaceIds],
+            )
+          : { rows: [] };
+
+      const accountRows = await selectRows(sourceClient, "account", "user_id = $1", [sourceUser.id]);
+      const integrationRows = await selectRows(sourceClient, "integration", "user_id = $1", [sourceUser.id]);
+      const integrationIds = integrationRows
+        .map((row) => row.id)
+        .filter((value): value is string => typeof value === "string");
+
+      const integrationTokenRows =
+        integrationIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from integration_token where integration_id = any($1::text[])`,
+              [integrationIds],
+            )
+          : { rows: [] };
+
+      const providerAuthRows = await selectRows(sourceClient, "provider_auth", "user_id = $1", [sourceUser.id]);
+      const cloudAccountLinkRows = await selectRows(sourceClient, "cloud_account_link", "user_id = $1", [sourceUser.id]);
+      const customIntegrationCredentialRows = await selectRows(
+        sourceClient,
+        "custom_integration_credential",
+        "user_id = $1",
+        [sourceUser.id],
+      );
+      const customIntegrationIds = customIntegrationCredentialRows
+        .map((row) => row.custom_integration_id)
+        .filter((value): value is string => typeof value === "string");
+
+      const customIntegrationRows =
+        customIntegrationIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from custom_integration where id = any($1::text[])`,
+              [customIntegrationIds],
+            )
+          : { rows: [] };
+
+      const executorSourceCredentialRows = await selectRows(
+        sourceClient,
+        "workspace_executor_source_credential",
+        "user_id = $1",
+        [sourceUser.id],
+      );
+      const executorSourceIds = executorSourceCredentialRows
+        .map((row) => row.workspace_executor_source_id)
+        .filter((value): value is string => typeof value === "string");
+
+      const executorSourceRows =
+        executorSourceIds.length > 0
+          ? await sourceClient.query<Record<string, unknown>>(
+              `select * from workspace_executor_source where id = any($1::text[])`,
+              [executorSourceIds],
+            )
+          : { rows: [] };
+
+      const sharedProviderAuthRows = (
+        await sourceClient.query<Record<string, unknown>>(`select * from shared_provider_auth`)
+      ).rows;
+
+      await targetClient.query("begin");
+      try {
+        await upsertRows(targetClient, "user", userRows, ["id"]);
+        await upsertRows(
+          targetClient,
+          "workspace",
+          remapWorkspaceRows(workspaceRows.rows, sourceUser.id),
+          ["id"],
+        );
+        await upsertRows(targetClient, "workspace_member", workspaceMemberRows.rows, ["id"]);
+        await upsertRows(targetClient, "account", accountRows, ["id"]);
+        await upsertRows(targetClient, "integration", integrationRows, ["id"]);
+        await upsertRows(targetClient, "integration_token", integrationTokenRows.rows, ["id"]);
+        await upsertRows(targetClient, "provider_auth", providerAuthRows, ["id"]);
+        await upsertRows(
+          targetClient,
+          "shared_provider_auth",
+          remapSharedProviderAuthRows(sharedProviderAuthRows, sourceUser.id),
+          ["id"],
+        );
+        await upsertRows(targetClient, "cloud_account_link", cloudAccountLinkRows, ["id"]);
+        await upsertRows(
+          targetClient,
+          "custom_integration",
+          remapCustomIntegrationRows(customIntegrationRows.rows, sourceUser.id),
+          ["id"],
+        );
+        await upsertRows(
+          targetClient,
+          "custom_integration_credential",
+          customIntegrationCredentialRows,
+          ["id"],
+        );
+        await upsertRows(
+          targetClient,
+          "workspace_executor_source",
+          remapWorkspaceExecutorSourceRows(executorSourceRows.rows, sourceUser.id),
+          ["id"],
+        );
+        await upsertRows(
+          targetClient,
+          "workspace_executor_source_credential",
+          executorSourceCredentialRows,
+          ["id"],
+        );
+
+        const sessionToken = randomBytes(48).toString("hex");
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await upsertRows(
+          targetClient,
+          "session",
+          [
+            {
+              id: randomUUID(),
+              expires_at: expiresAt,
+              token: sessionToken,
+              created_at: new Date(),
+              updated_at: new Date(),
+              ip_address: "127.0.0.1",
+              user_agent: "cmdclaw-worktree-bootstrap",
+              user_id: sourceUser.id,
+              impersonated_by: null,
+            },
+          ],
+          ["id"],
+        );
+
+        await targetClient.query("commit");
+
+        const secret = process.env.BETTER_AUTH_SECRET;
+        if (!secret) {
+          fail("BETTER_AUTH_SECRET is required to generate a developer session cookie.");
+        }
+        const signedCookie = (await serializeSignedCookie("", sessionToken, secret)).replace(
+          "=",
+          "",
+        );
+
+        ensureDir(authArtifactsDir(metadata.instanceRoot));
+        const storageStatePath = join(
+          authArtifactsDir(metadata.instanceRoot),
+          "dev-user.storage-state.json",
+        );
+        const sessionInfoPath = join(authArtifactsDir(metadata.instanceRoot), "dev-user.session.json");
+
+        writeFileSync(
+          storageStatePath,
+          buildJsonStorageState({
+            appUrl: metadata.appUrl,
+            signedSessionToken: signedCookie,
+            expiresAtEpochSeconds: Math.floor(expiresAt.getTime() / 1000),
+          }),
+          "utf8",
+        );
+        writeFileSync(
+          sessionInfoPath,
+          `${JSON.stringify(
+            {
+              appUrl: metadata.appUrl,
+              email: sourceUser.email,
+              userId: sourceUser.id,
+              cookieHeader: `better-auth.session_token=${signedCookie}`,
+              createdAt: new Date().toISOString(),
+            },
+            null,
+            2,
+          )}\n`,
+          "utf8",
+        );
+
+        console.log(`[worktree] bootstrapped developer user ${sourceUser.email}`);
+        console.log(`[worktree] auth storage ${storageStatePath}`);
+      } catch (error) {
+        await targetClient.query("rollback");
+        throw error;
+      }
+    });
+  });
+}
+
 async function createInstance(): Promise<InstanceMetadata> {
   const metadata = await resolveMetadata();
   ensureDir(logsDir(metadata.instanceRoot));
   ensureDir(runtimeDir(metadata.instanceRoot));
+  ensureAgentBrowserProfile(metadata);
   await ensureDatabase(metadata);
   await runDbPush(metadata);
+  await bootstrapDeveloperUser(metadata);
   saveMetadata({ ...metadata, updatedAt: new Date().toISOString() });
   writeDerivedEnvFile(metadata);
   console.log(`[worktree] instance ${metadata.instanceId}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
+  console.log(`[worktree] agent-browser ${agentBrowserProfileDir(metadata.instanceRoot)}`);
   return metadata;
 }
 
@@ -629,12 +1196,21 @@ async function destroyInstance(): Promise<void> {
 }
 
 async function showStatus(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  if (!isRecognizedWorktreeRepo(repoRoot)) {
+    console.log("[worktree] you are not in a worktree");
+    return;
+  }
+
   const metadata = await resolveMetadata();
   const entries = getProcessEntries(metadata);
+  console.log(`[worktree] worktree ${metadata.repoRoot}`);
   console.log(`[worktree] instance ${metadata.instanceId}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
+  console.log(`[worktree] port ${metadata.appPort}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
   console.log(`[worktree] root ${metadata.instanceRoot}`);
+  console.log(`[worktree] agent-browser ${agentBrowserProfileDir(metadata.instanceRoot)}`);
 
   if (entries.length === 0) {
     console.log("[worktree] processes none");
@@ -687,6 +1263,13 @@ async function main(): Promise<void> {
     case "env":
       await showEnv();
       return;
+    case "bootstrap-user": {
+      const metadata = await resolveMetadata();
+      await ensureDatabase(metadata);
+      await runDbPush(metadata);
+      await bootstrapDeveloperUser(metadata);
+      return;
+    }
     default:
       printHelp();
       fail(`Unknown command "${command}"`);

@@ -48,6 +48,7 @@
     "worktree:destroy": "bun scripts/worktree.ts destroy",
     "worktree:status": "bun scripts/worktree.ts status",
     "worktree:env": "bun scripts/worktree.ts env",
+    "worktree:bootstrap-user": "bun scripts/worktree.ts bootstrap-user",
     "check:cli": "turbo check --filter=@cmdclaw/cli",
     "check:web": "turbo check --filter=@cmdclaw/web",
     "check:docs": "turbo check --filter=@cmdclaw/docs",
