@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { CoworkerLanding } from "@/components/landing/coworker-landing";
 import { env } from "@/env";
 import { auth } from "@/lib/auth";
+import {
+  buildWorktreeAutoLoginPath,
+  isWorktreeAutoLoginConfigured,
+} from "@/lib/worktree-auto-login";
 import { listFeaturedTemplateCatalogEntries } from "@/server/services/template-catalog";
 
 const isSelfHostedEdition = env.CMDCLAW_EDITION === "selfhost";
@@ -44,6 +49,9 @@ export default async function Home() {
   const sessionData = await auth.api.getSession({
     headers: requestHeaders,
   });
+  if (!sessionData?.session && !sessionData?.user && isWorktreeAutoLoginConfigured()) {
+    redirect(buildWorktreeAutoLoginPath(requestHeaders.get("x-cmdclaw-return-path") ?? "/", "/"));
+  }
   const featuredTemplates = await listFeaturedTemplateCatalogEntries({ limit: 8 });
   const initialHasSession = Boolean(sessionData?.session && sessionData?.user);
   const initialFirstName = sessionData?.user?.name?.trim().split(/\s+/, 1).find(Boolean) ?? null;

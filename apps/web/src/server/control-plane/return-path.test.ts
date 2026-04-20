@@ -16,6 +16,7 @@ describe("sanitizeReturnPath", () => {
       "/chat",
     );
     expect(sanitizeReturnPath("/api/auth/sign-in/social", "/chat")).toBe("/chat");
+    expect(sanitizeReturnPath("/api/dev/worktree-auth?callbackUrl=%2Fchat", "/chat")).toBe("/chat");
   });
 
   it("rejects external and protocol-relative paths", () => {

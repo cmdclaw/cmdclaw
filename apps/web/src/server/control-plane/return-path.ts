@@ -14,6 +14,7 @@ export function sanitizeReturnPath(value: string | null | undefined, fallback = 
     if (
       normalizedPath === "/login" ||
       normalizedPath.startsWith("/api/auth") ||
+      normalizedPath.startsWith("/api/dev/worktree-auth") ||
       normalizedPath.startsWith("/api/control-plane/auth") ||
       normalizedPath.startsWith("/api/instance/auth")
     ) {

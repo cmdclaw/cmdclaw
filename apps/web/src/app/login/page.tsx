@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { env } from "@/env";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { auth } from "@/lib/auth";
+import {
+  buildWorktreeAutoLoginPath,
+  isWorktreeAutoLoginConfigured,
+} from "@/lib/worktree-auto-login";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
 
 type LoginPageProps = {
@@ -95,6 +99,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   if (sessionData?.user?.id) {
     redirect(callbackUrl);
+  }
+
+  if (!params.error && isWorktreeAutoLoginConfigured()) {
+    redirect(buildWorktreeAutoLoginPath(callbackUrl));
   }
 
   if (!isSelfHostedEdition()) {
