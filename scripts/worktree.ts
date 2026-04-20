@@ -421,6 +421,8 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_INSTANCE_ID: metadata.instanceId,
     CMDCLAW_INSTANCE_ROOT: metadata.instanceRoot,
     CMDCLAW_REDIS_NAMESPACE: metadata.redisNamespace,
+    AGENT_BROWSER_SESSION: metadata.instanceId,
+    AGENT_BROWSER_SESSION_NAME: metadata.instanceId,
     AGENT_BROWSER_PROFILE: agentBrowserProfileDir(metadata.instanceRoot),
   };
 }
