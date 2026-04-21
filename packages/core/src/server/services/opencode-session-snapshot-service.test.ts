@@ -4,6 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+import {
+  normalizeOpencodeSessionSnapshotPayload,
+  parseOpencodeSessionSnapshotPayload,
+} from "./opencode-session-snapshot-service";
 
 const execFile = promisify(execFileCb);
 const hasOpencode = spawnSync("which", ["opencode"], { encoding: "utf8" }).status === 0;
@@ -36,6 +40,38 @@ async function runOpencode(
 }
 
 describe("opencode session snapshot service", () => {
+  it("parses snapshot payloads from mixed export output", () => {
+    const snapshot = {
+      info: {
+        id: "ses_snapshot_mixed",
+        directory: "/tmp/workspace",
+      },
+      messages: [],
+    };
+
+    expect(
+      parseOpencodeSessionSnapshotPayload(`Exporting session ses_snapshot_mixed\n${JSON.stringify(snapshot)}\n`),
+    ).toEqual(snapshot);
+  });
+
+  it("normalizes extracted snapshot payloads to pure JSON", () => {
+    const snapshot = {
+      info: {
+        id: "ses_snapshot_normalized",
+      },
+      messages: [{ info: { id: "msg_1" }, parts: [] }],
+    };
+
+    expect(
+      normalizeOpencodeSessionSnapshotPayload(
+        `Exporting session ses_snapshot_normalized\n${JSON.stringify(snapshot)}\nExport complete\n`,
+      ),
+    ).toEqual({
+      payload: snapshot,
+      raw: JSON.stringify(snapshot),
+    });
+  });
+
   it.skipIf(!hasOpencode)(
     "round-trips OpenCode export/import and keeps duplicate imports idempotent",
     async () => {

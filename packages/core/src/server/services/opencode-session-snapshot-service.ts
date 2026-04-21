@@ -52,8 +52,85 @@ export function buildOpencodeImportCommand(filePath: string): string {
   return `opencode import ${shellEscape(filePath)}`;
 }
 
+function extractEmbeddedJsonObject(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new SyntaxError("OpenCode session snapshot payload is empty");
+  }
+
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch {
+    // Fall back to extracting the first valid JSON object from mixed CLI output.
+  }
+
+  for (let start = trimmed.indexOf("{"); start !== -1; start = trimmed.indexOf("{", start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let isEscaped = false;
+
+    for (let index = start; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+
+      if (inString) {
+        if (isEscaped) {
+          isEscaped = false;
+          continue;
+        }
+        if (char === "\\") {
+          isEscaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === "{" || char === "[") {
+        depth += 1;
+        continue;
+      }
+
+      if (char === "}" || char === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          const candidate = trimmed.slice(start, index + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  throw new SyntaxError("OpenCode session snapshot payload does not contain valid JSON");
+}
+
+export function normalizeOpencodeSessionSnapshotPayload(raw: string): {
+  payload: OpencodeSessionSnapshotPayload;
+  raw: string;
+} {
+  const payload = opencodeSessionSnapshotSchema.parse(
+    JSON.parse(extractEmbeddedJsonObject(raw)),
+  );
+  return {
+    payload,
+    raw: JSON.stringify(payload),
+  };
+}
+
 export function parseOpencodeSessionSnapshotPayload(raw: string): OpencodeSessionSnapshotPayload {
-  return opencodeSessionSnapshotSchema.parse(JSON.parse(raw));
+  return normalizeOpencodeSessionSnapshotPayload(raw).payload;
 }
 
 export async function getConversationSessionSnapshot(conversationId: string) {
@@ -83,25 +160,29 @@ export async function saveConversationSessionSnapshot(input: {
     );
   }
 
-  const payload = parseOpencodeSessionSnapshotPayload(exportResult.stdout);
+  const normalizedSnapshot = normalizeOpencodeSessionSnapshotPayload(exportResult.stdout);
   const storageKey = buildConversationSessionSnapshotStorageKey(input.conversationId);
   const exportedAt = input.exportedAt ?? new Date();
 
   await ensureBucket();
-  await uploadToS3(storageKey, Buffer.from(exportResult.stdout, "utf8"), SNAPSHOT_CONTENT_TYPE);
+  await uploadToS3(
+    storageKey,
+    Buffer.from(normalizedSnapshot.raw, "utf8"),
+    SNAPSHOT_CONTENT_TYPE,
+  );
 
   await db
     .insert(conversationSessionSnapshot)
     .values({
       conversationId: input.conversationId,
-      sessionId: payload.info.id,
+      sessionId: normalizedSnapshot.payload.info.id,
       storageKey,
       exportedAt,
     })
     .onConflictDoUpdate({
       target: conversationSessionSnapshot.conversationId,
       set: {
-        sessionId: payload.info.id,
+        sessionId: normalizedSnapshot.payload.info.id,
         storageKey,
         exportedAt,
         updatedAt: new Date(),
@@ -109,7 +190,7 @@ export async function saveConversationSessionSnapshot(input: {
     });
 
   return {
-    sessionId: payload.info.id,
+    sessionId: normalizedSnapshot.payload.info.id,
     storageKey,
     exportedAt,
   };
@@ -140,12 +221,11 @@ export async function restoreConversationSessionSnapshot(input: {
   }
 
   const buffer = await downloadFromS3(snapshot.storageKey);
-  const raw = buffer.toString("utf8");
-  const payload = parseOpencodeSessionSnapshotPayload(raw);
+  const normalizedSnapshot = normalizeOpencodeSessionSnapshotPayload(buffer.toString("utf8"));
   const tempFilePath =
     input.tempFilePath ?? `/tmp/cmdclaw-opencode-session-${input.conversationId}.json`;
 
-  await input.sandbox.writeFile(tempFilePath, raw);
+  await input.sandbox.writeFile(tempFilePath, normalizedSnapshot.raw);
 
   const importResult = await input.sandbox.exec(buildOpencodeImportCommand(tempFilePath), {
     timeoutMs: 60_000,
@@ -156,10 +236,12 @@ export async function restoreConversationSessionSnapshot(input: {
     );
   }
 
-  const restored = await input.client.session.get({ sessionID: payload.info.id });
+  const restored = await input.client.session.get({ sessionID: normalizedSnapshot.payload.info.id });
   if (restored.error || !restored.data) {
-    throw new Error(`Imported session ${payload.info.id} could not be retrieved`);
+    throw new Error(
+      `Imported session ${normalizedSnapshot.payload.info.id} could not be retrieved`,
+    );
   }
 
-  return { sessionId: payload.info.id };
+  return { sessionId: normalizedSnapshot.payload.info.id };
 }
