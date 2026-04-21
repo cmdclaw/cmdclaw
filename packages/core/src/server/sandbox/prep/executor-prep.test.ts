@@ -404,6 +404,103 @@ describe("prepareExecutorInSandbox", () => {
     await result?.finalize;
   });
 
+  it("serializes native MCP config updates across multiple oauth sources", async () => {
+    const sandbox = makeSandboxHandle();
+    let activeUpdateCount = 0;
+    let maxConcurrentUpdates = 0;
+
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      {
+        sourceId: "source-1",
+        name: "Linear",
+        endpoint: "https://mcp.linear.app/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "oauth-access-1",
+          refreshToken: null,
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "read",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://mcp.linear.app",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+      {
+        sourceId: "source-2",
+        name: "GitHub",
+        endpoint: "https://api.githubcopilot.com/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "oauth-access-2",
+          refreshToken: null,
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "repo",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://github.com",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+    ]);
+
+    vi.mocked(sandbox.exec).mockImplementation(async (command) => {
+      if (command.includes("/v1/local/secrets")) {
+        return {
+          exitCode: 0,
+          stdout: `{"id":"sec-${command.includes("source-2") ? "source-2" : "source-1"}"}`,
+          stderr: "",
+        };
+      }
+      if (command.includes("tools.executor.mcp.updateSource")) {
+        activeUpdateCount += 1;
+        maxConcurrentUpdates = Math.max(maxConcurrentUpdates, activeUpdateCount);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeUpdateCount -= 1;
+        return { exitCode: 0, stdout: '{"id":"updated"}', stderr: "" };
+      }
+      if (command.includes("tools.executor.sources.refresh")) {
+        return {
+          exitCode: 0,
+          stdout: '{"id":"source","status":"connected"}',
+          stderr: "",
+        };
+      }
+      if (command.includes('return "ok"')) {
+        return { exitCode: 0, stdout: '"ok"\n', stderr: "" };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+
+    const result = await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    await result?.finalize;
+
+    expect(maxConcurrentUpdates).toBe(1);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) =>
+        command.includes("tools.executor.mcp.updateSource"),
+      ).length,
+    ).toBe(2);
+  });
+
   it("returns prompt-ready executor bootstrap before oauth reconcile finishes", async () => {
     const sandbox = makeSandboxHandle();
     const accessSecretDeferred = createDeferred<{ exitCode: number; stdout: string; stderr: string }>();

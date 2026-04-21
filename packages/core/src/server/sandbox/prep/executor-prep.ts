@@ -11,7 +11,11 @@ const EXECUTOR_WORKSPACE_ROOT = "/app";
 const EXECUTOR_SERVER_LOG_PATH = "/tmp/cmdclaw-executor-server.log";
 const DEFAULT_EXECUTOR_TRACE_SERVICE_NAME = "cmdclaw-sandbox-executor";
 const EXECUTOR_OAUTH_CACHE_PATH = "oauth-reconcile-cache.json";
-const EXECUTOR_OAUTH_CONCURRENCY = 3;
+const EXECUTOR_OAUTH_SECRET_CONCURRENCY = 3;
+// `updateSource` mutates the shared executor.jsonc file under a single EXECUTOR_HOME.
+// Running those updates concurrently can leave the config truncated or otherwise corrupted.
+const EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY = 1;
+const EXECUTOR_OAUTH_REFRESH_CONCURRENCY = 3;
 
 function escapeShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -329,84 +333,96 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
   };
   const preparedSources: PreparedSource[] = new Array(sourcesToReconcile.length);
 
-  await mapWithConcurrency(sourcesToReconcile, EXECUTOR_OAUTH_CONCURRENCY, async (entry, index) => {
-    const accessSecretPromise = createExecutorLocalSecret({
-      sandbox: input.sandbox,
-      env: input.env,
-      name: `${entry.source.name} access token`,
-      value: entry.source.credential!.accessToken,
-    });
-    const refreshSecretPromise = entry.source.credential!.refreshToken
-      ? createExecutorLocalSecret({
-          sandbox: input.sandbox,
+  await mapWithConcurrency(
+    sourcesToReconcile,
+    EXECUTOR_OAUTH_SECRET_CONCURRENCY,
+    async (entry, index) => {
+      const accessSecretPromise = createExecutorLocalSecret({
+        sandbox: input.sandbox,
+        env: input.env,
+        name: `${entry.source.name} access token`,
+        value: entry.source.credential!.accessToken,
+      });
+      const refreshSecretPromise = entry.source.credential!.refreshToken
+        ? createExecutorLocalSecret({
+            sandbox: input.sandbox,
+            env: input.env,
+            name: `${entry.source.name} refresh token`,
+            value: entry.source.credential!.refreshToken,
+          })
+        : Promise.resolve(null);
+
+      const [accessTokenSecretId, refreshTokenSecretId] = await Promise.all([
+        accessSecretPromise,
+        refreshSecretPromise,
+      ]);
+
+      preparedSources[index] = {
+        source: entry.source,
+        fingerprint: entry.fingerprint,
+        accessTokenSecretId,
+        refreshTokenSecretId,
+      };
+    },
+  );
+
+  await mapWithConcurrency(
+    preparedSources,
+    EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY,
+    async (entry) => {
+      const updateCode = `return await tools.executor.mcp.updateSource(${JSON.stringify({
+        sourceId: entry.source.sourceId,
+        config: buildNativeMcpOauthSourceConfig(
+          entry.source,
+          entry.accessTokenSecretId,
+          entry.refreshTokenSecretId,
+        ),
+      })})`;
+      const updateResult = await execNoThrow(
+        input.sandbox,
+        `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(updateCode)}`,
+        {
+          timeoutMs: 30_000,
           env: input.env,
-          name: `${entry.source.name} refresh token`,
-          value: entry.source.credential!.refreshToken,
-        })
-      : Promise.resolve(null);
-
-    const [accessTokenSecretId, refreshTokenSecretId] = await Promise.all([
-      accessSecretPromise,
-      refreshSecretPromise,
-    ]);
-
-    preparedSources[index] = {
-      source: entry.source,
-      fingerprint: entry.fingerprint,
-      accessTokenSecretId,
-      refreshTokenSecretId,
-    };
-  });
-
-  await mapWithConcurrency(preparedSources, EXECUTOR_OAUTH_CONCURRENCY, async (entry) => {
-    const updateCode = `return await tools.executor.mcp.updateSource(${JSON.stringify({
-      sourceId: entry.source.sourceId,
-      config: buildNativeMcpOauthSourceConfig(
-        entry.source,
-        entry.accessTokenSecretId,
-        entry.refreshTokenSecretId,
-      ),
-    })})`;
-    const updateResult = await execNoThrow(
-      input.sandbox,
-      `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(updateCode)}`,
-      {
-        timeoutMs: 30_000,
-        env: input.env,
-      },
-    );
-
-    if (updateResult.exitCode !== 0) {
-      throw new Error(
-        `Executor MCP native update failed for ${entry.source.sourceId} (exit=${updateResult.exitCode}): ${
-          updateResult.stderr || updateResult.stdout || "unknown error"
-        }`,
+        },
       );
-    }
-  });
 
-  await mapWithConcurrency(preparedSources, EXECUTOR_OAUTH_CONCURRENCY, async (entry) => {
-    const refreshCode = `return await tools.executor.sources.refresh(${JSON.stringify({
-      sourceId: entry.source.sourceId,
-    })})`;
-    const refreshResult = await execNoThrow(
-      input.sandbox,
-      `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(refreshCode)}`,
-      {
-        timeoutMs: 30_000,
-        env: input.env,
-      },
-    );
+      if (updateResult.exitCode !== 0) {
+        throw new Error(
+          `Executor MCP native update failed for ${entry.source.sourceId} (exit=${updateResult.exitCode}): ${
+            updateResult.stderr || updateResult.stdout || "unknown error"
+          }`,
+        );
+      }
+    },
+  );
 
-    if (refreshResult.exitCode !== 0) {
-      throw new Error(
-        `Executor source refresh failed for ${entry.source.sourceId} (exit=${refreshResult.exitCode}): ${
-          refreshResult.stderr || refreshResult.stdout || "unknown error"
-        }`,
+  await mapWithConcurrency(
+    preparedSources,
+    EXECUTOR_OAUTH_REFRESH_CONCURRENCY,
+    async (entry) => {
+      const refreshCode = `return await tools.executor.sources.refresh(${JSON.stringify({
+        sourceId: entry.source.sourceId,
+      })})`;
+      const refreshResult = await execNoThrow(
+        input.sandbox,
+        `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(refreshCode)}`,
+        {
+          timeoutMs: 30_000,
+          env: input.env,
+        },
       );
-    }
-    nextCache.sources[entry.source.sourceId] = entry.fingerprint;
-  });
+
+      if (refreshResult.exitCode !== 0) {
+        throw new Error(
+          `Executor source refresh failed for ${entry.source.sourceId} (exit=${refreshResult.exitCode}): ${
+            refreshResult.stderr || refreshResult.stdout || "unknown error"
+          }`,
+        );
+      }
+      nextCache.sources[entry.source.sourceId] = entry.fingerprint;
+    },
+  );
 
   if (Object.keys(nextCache.sources).length > 0) {
     await writeExecutorOauthCache({
