@@ -362,7 +362,7 @@ export function AppSidebar() {
     try {
       const result = await authClient.admin.stopImpersonating();
       if (!result.error) {
-        window.location.assign("/admin/impersonation");
+        window.location.assign("/admin");
       }
     } finally {
       setStoppingImpersonation(false);
