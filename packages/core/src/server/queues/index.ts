@@ -14,6 +14,7 @@ const redisOptions = {
 } as const;
 
 export const SCHEDULED_COWORKER_JOB_NAME = "coworker:scheduled-trigger";
+export const LEGACY_SCHEDULED_COWORKER_JOB_NAME = "workflow:scheduled-trigger";
 export const GMAIL_COWORKER_JOB_NAME = "coworker:gmail-trigger";
 export const X_DM_COWORKER_JOB_NAME = "coworker:x-dm-trigger";
 export const EMAIL_FORWARDED_COWORKER_JOB_NAME = "coworker:email-forwarded-trigger";
@@ -65,25 +66,8 @@ function isActiveCoworkerRunConflict(error: unknown): boolean {
 }
 
 const handlers: Record<string, JobHandler> = {
-  [SCHEDULED_COWORKER_JOB_NAME]: async (job) => {
-    const coworkerId = job.data?.coworkerId;
-    if (!coworkerId || typeof coworkerId !== "string") {
-      throw new Error(`Missing coworkerId in scheduled job "${job.id}"`);
-    }
-
-    const scheduleType =
-      typeof job.data?.scheduleType === "string" ? job.data.scheduleType : "unknown";
-
-    return triggerCoworkerRun({
-      coworkerId,
-      triggerPayload: {
-        source: "schedule",
-        coworkerId,
-        scheduleType,
-        scheduledFor: new Date().toISOString(),
-      },
-    });
-  },
+  [SCHEDULED_COWORKER_JOB_NAME]: handleScheduledCoworkerJob,
+  [LEGACY_SCHEDULED_COWORKER_JOB_NAME]: handleScheduledCoworkerJob,
   [GMAIL_COWORKER_JOB_NAME]: async (job) => {
     const coworkerId = job.data?.coworkerId;
     if (!coworkerId || typeof coworkerId !== "string") {
@@ -251,6 +235,25 @@ const handlers: Record<string, JobHandler> = {
     console.info("[worker] posted daily telemetry digest", summary);
   },
 };
+
+async function handleScheduledCoworkerJob(job: Parameters<JobHandler>[0]) {
+  const coworkerId = job.data?.coworkerId;
+  if (!coworkerId || typeof coworkerId !== "string") {
+    throw new Error(`Missing coworkerId in scheduled job "${job.id}"`);
+  }
+
+  const scheduleType = typeof job.data?.scheduleType === "string" ? job.data.scheduleType : "unknown";
+
+  return triggerCoworkerRun({
+    coworkerId,
+    triggerPayload: {
+      source: "schedule",
+      coworkerId,
+      scheduleType,
+      scheduledFor: new Date().toISOString(),
+    },
+  });
+}
 
 const processor: Processor<JobPayload, unknown, string> = async (job) => {
   const handler = handlers[job.name];

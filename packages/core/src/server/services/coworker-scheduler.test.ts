@@ -45,6 +45,7 @@ vi.mock("../queues", () => ({
 
 import {
   getCoworkerSchedulerId,
+  getLegacyCoworkerSchedulerId,
   isCoworkerSchedulable,
   reconcileScheduledCoworkerJobs,
   removeCoworkerScheduleJob,
@@ -75,6 +76,7 @@ describe("coworker-scheduler", () => {
 
   it("builds scheduler ids from coworker ids", () => {
     expect(getCoworkerSchedulerId("wf-123")).toBe("coworker:wf-123");
+    expect(getLegacyCoworkerSchedulerId("wf-123")).toBe("workflow:wf-123");
   });
 
   it("detects whether a coworker row is schedulable", () => {
@@ -88,7 +90,9 @@ describe("coworker-scheduler", () => {
     await removeCoworkerScheduleJob("wf-remove");
 
     expect(getQueueMock).toHaveBeenCalledOnce();
-    expect(removeJobSchedulerMock).toHaveBeenCalledWith("coworker:wf-remove");
+    expect(removeJobSchedulerMock).toHaveBeenCalledTimes(2);
+    expect(removeJobSchedulerMock).toHaveBeenNthCalledWith(1, "coworker:wf-remove");
+    expect(removeJobSchedulerMock).toHaveBeenNthCalledWith(2, "workflow:wf-remove");
   });
 
   it("upserts interval schedules with millisecond repeat intervals", async () => {
@@ -111,6 +115,7 @@ describe("coworker-scheduler", () => {
         },
       },
     );
+    expect(removeJobSchedulerMock).toHaveBeenCalledWith("workflow:wf-interval");
   });
 
   it("upserts daily schedules with UTC timezone by default", async () => {
@@ -133,6 +138,7 @@ describe("coworker-scheduler", () => {
         },
       },
     );
+    expect(removeJobSchedulerMock).toHaveBeenCalledWith("workflow:wf-daily");
   });
 
   it("upserts weekly schedules with sorted unique weekdays", async () => {
@@ -160,6 +166,7 @@ describe("coworker-scheduler", () => {
         },
       },
     );
+    expect(removeJobSchedulerMock).toHaveBeenCalledWith("workflow:wf-weekly");
   });
 
   it("upserts monthly schedules with explicit day-of-month", async () => {
@@ -187,6 +194,7 @@ describe("coworker-scheduler", () => {
         },
       },
     );
+    expect(removeJobSchedulerMock).toHaveBeenCalledWith("workflow:wf-monthly");
   });
 
   it("throws when schedule payload is invalid", async () => {
@@ -233,7 +241,8 @@ describe("coworker-scheduler", () => {
     );
 
     expect(upsertJobSchedulerMock).toHaveBeenCalledOnce();
-    expect(removeJobSchedulerMock).not.toHaveBeenCalled();
+    expect(removeJobSchedulerMock).toHaveBeenCalledOnce();
+    expect(removeJobSchedulerMock).toHaveBeenCalledWith("workflow:wf-sync");
   });
 
   it("syncs unschedulable rows by removing jobs", async () => {
@@ -245,6 +254,7 @@ describe("coworker-scheduler", () => {
     );
 
     expect(removeJobSchedulerMock).toHaveBeenCalledWith("coworker:wf-sync-off");
+    expect(removeJobSchedulerMock).toHaveBeenCalledWith("workflow:wf-sync-off");
     expect(upsertJobSchedulerMock).not.toHaveBeenCalled();
   });
 

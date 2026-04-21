@@ -2,7 +2,10 @@ import type { RepeatOptions } from "bullmq";
 import { and, eq } from "drizzle-orm";
 import { db } from "@cmdclaw/db/client";
 import { coworker } from "@cmdclaw/db/schema";
-import { SCHEDULED_COWORKER_JOB_NAME, getQueue } from "../queues";
+import {
+  SCHEDULED_COWORKER_JOB_NAME,
+  getQueue,
+} from "../queues";
 
 type CoworkerSchedule =
   | { type: "interval"; intervalMinutes: number }
@@ -85,6 +88,10 @@ export function getCoworkerSchedulerId(coworkerId: string): string {
   return `coworker:${coworkerId}`;
 }
 
+export function getLegacyCoworkerSchedulerId(coworkerId: string): string {
+  return `workflow:${coworkerId}`;
+}
+
 export function isCoworkerSchedulable(row: CoworkerScheduleRow): boolean {
   return (
     row.triggerType === "schedule" &&
@@ -115,7 +122,10 @@ function buildRepeatOptions(schedule: CoworkerSchedule): Omit<RepeatOptions, "ke
 
 export async function removeCoworkerScheduleJob(coworkerId: string): Promise<void> {
   const queue = getQueue();
-  await queue.removeJobScheduler(getCoworkerSchedulerId(coworkerId));
+  await Promise.all([
+    queue.removeJobScheduler(getCoworkerSchedulerId(coworkerId)),
+    queue.removeJobScheduler(getLegacyCoworkerSchedulerId(coworkerId)),
+  ]);
 }
 
 export async function upsertCoworkerScheduleJob(row: CoworkerScheduleRow): Promise<void> {
@@ -125,6 +135,7 @@ export async function upsertCoworkerScheduleJob(row: CoworkerScheduleRow): Promi
   }
 
   const queue = getQueue();
+  await queue.removeJobScheduler(getLegacyCoworkerSchedulerId(row.id));
   await queue.upsertJobScheduler(getCoworkerSchedulerId(row.id), buildRepeatOptions(schedule), {
     name: SCHEDULED_COWORKER_JOB_NAME,
     data: {
