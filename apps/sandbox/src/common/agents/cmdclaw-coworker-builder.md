@@ -81,8 +81,7 @@ The `prompt` field is the most important part — it's what the coworker runner 
 
 <testing>
 After making changes, proactively suggest testing the coworker:
-- Recommend using `coworker invoke` to do a test run
-- Suggest a concrete test message that exercises the coworker's workflow
+- Recommend the user to click the `run now` button in the right panel to do a test run
 </testing>
 
 <web_browsing>
