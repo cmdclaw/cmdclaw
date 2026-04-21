@@ -1424,6 +1424,98 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("enqueues durable interrupt resume even when runtime metadata still looks active", async () => {
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-hot-runtime-approval",
+      conversationId: "conv-hot-runtime-approval",
+      status: "running",
+      runtimeId: "runtime-hot-approval",
+      sandboxId: "sandbox-hot-approval",
+      contentParts: null,
+      remainingRunMs: 180_000,
+      conversation: {
+        id: "conv-hot-runtime-approval",
+        userId: "user-1",
+      },
+    });
+    getRuntimeMock.mockResolvedValueOnce({
+      id: "runtime-hot-approval",
+      conversationId: "conv-hot-runtime-approval",
+      callbackToken: "runtime-token",
+      sandboxProvider: "e2b",
+      runtimeHarness: "opencode",
+      runtimeProtocolVersion: "opencode-v2",
+      sandboxId: "sandbox-hot-approval",
+      sessionId: "session-hot-approval",
+      status: "active",
+      activeGenerationId: "gen-hot-runtime-approval",
+      activeTurnSeq: 1,
+      lastBoundAt: new Date("2026-03-11T15:00:00.000Z"),
+      createdAt: new Date("2026-03-11T15:00:00.000Z"),
+      updatedAt: new Date("2026-03-11T15:00:00.000Z"),
+    });
+    interruptStore.set("interrupt-hot-runtime-approval", {
+      id: "interrupt-hot-runtime-approval",
+      generationId: "gen-hot-runtime-approval",
+      runtimeId: "runtime-hot-approval",
+      conversationId: "conv-hot-runtime-approval",
+      turnSeq: 1,
+      kind: "runtime_question",
+      status: "pending",
+      display: {
+        title: "Question",
+        integration: "cmdclaw",
+        operation: "question",
+        command: "Choose one",
+        toolInput: { questions: [{ header: "Pick", question: "Choose one", options: [] }] },
+      },
+      provider: "opencode",
+      providerRequestId: "question-request-hot-runtime",
+      providerToolUseId: "tool-hot-runtime-approval",
+      responsePayload: undefined,
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: null,
+      requestedByUserId: null,
+      resolvedByUserId: null,
+    });
+
+    const result = await generationManager.submitApproval(
+      "gen-hot-runtime-approval",
+      "tool-hot-runtime-approval",
+      "approve",
+      "user-1",
+      [["Work project"]],
+    );
+
+    expect(result).toBe(true);
+    expect(resolveInterruptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interruptId: "interrupt-hot-runtime-approval",
+        status: "accepted",
+        responsePayload: { questionAnswers: [["Work project"]] },
+      }),
+    );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "running",
+        resumeInterruptId: "interrupt-hot-runtime-approval",
+        deadlineAt: expect.any(Date),
+        suspendedAt: null,
+        isPaused: false,
+        pendingApproval: null,
+        pendingAuth: null,
+      }),
+    );
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-hot-runtime-approval", runMode: "normal_run" },
+      expect.objectContaining({
+        jobId: expect.stringContaining("resume-interrupt-interrupt-hot-runtime-approval"),
+      }),
+    );
+  });
+
   it("submits question approval and persists decision for worker reconciliation", async () => {
     const ctx = createCtx({
       status: "awaiting_approval",

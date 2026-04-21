@@ -1729,6 +1729,56 @@ class GenerationManager {
     return ctx.coworkerRunId ? "coworker" : "chat";
   }
 
+  private async enqueueResolvedInterruptResume(params: {
+    generationId: string;
+    conversationId: string;
+    interrupt: GenerationInterruptRecord;
+    runType: "chat" | "coworker";
+    coworkerRunId?: string | null;
+    remainingRunMs?: number | null;
+  }): Promise<void> {
+    if (params.interrupt.appliedAt) {
+      return;
+    }
+
+    const remainingRunMs =
+      params.remainingRunMs && params.remainingRunMs > 0
+        ? params.remainingRunMs
+        : generationLifecyclePolicy.runDeadlineMs;
+    const deadlineAt = new Date(Date.now() + remainingRunMs);
+
+    await db
+      .update(generation)
+      .set({
+        status: "running",
+        resumeInterruptId: params.interrupt.id,
+        deadlineAt,
+        suspendedAt: null,
+        isPaused: false,
+        pendingApproval: null,
+        pendingAuth: null,
+      })
+      .where(eq(generation.id, params.generationId));
+    await db
+      .update(conversation)
+      .set({
+        generationStatus: "generating",
+        sandboxLastUserVisibleActionAt: new Date(),
+      })
+      .where(eq(conversation.id, params.conversationId));
+
+    if (params.coworkerRunId) {
+      await db
+        .update(coworkerRun)
+        .set({ status: "running" })
+        .where(eq(coworkerRun.id, params.coworkerRunId));
+    }
+
+    await this.enqueueGenerationRun(params.generationId, params.runType, {
+      dedupeKey: `resume-interrupt-${params.interrupt.id}`,
+    });
+  }
+
   private async touchConversationLastUserVisibleAction(conversationId: string): Promise<void> {
     await db
       .update(conversation)
@@ -4692,6 +4742,11 @@ class GenerationManager {
       resolvedByUserId: userId,
     });
 
+    const linkedRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
+      columns: { id: true },
+    });
+
     const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx) {
       activeCtx.contentParts = nextContentParts;
@@ -4712,47 +4767,36 @@ class GenerationManager {
       return this.resumeGeneration(generationId, userId);
     }
 
-    const activeRuntime =
-      !activeCtx && genRecord.runtimeId
-        ? await conversationRuntimeService.getRuntime(genRecord.runtimeId)
-        : null;
-    const hasHotDetachedRuntime =
-      activeRuntime?.status === "active" && Boolean(activeRuntime.sandboxId);
-    const shouldResumeDetachedGeneration =
-      !activeCtx && !hasHotDetachedRuntime && (!genRecord.sandboxId || genRecord.suspendedAt);
-    if (shouldResumeDetachedGeneration) {
-      const linkedRun = await db.query.coworkerRun.findFirst({
-        where: eq(coworkerRun.generationId, generationId),
-        columns: { id: true },
+    if (!activeCtx && resolvedInterrupt) {
+      await this.enqueueResolvedInterruptResume({
+        generationId,
+        conversationId: genRecord.conversationId,
+        interrupt: resolvedInterrupt,
+        runType: linkedRun?.id ? "coworker" : "chat",
+        coworkerRunId: linkedRun?.id,
+        remainingRunMs: genRecord.remainingRunMs,
       });
-      const remainingRunMs =
-        genRecord.remainingRunMs && genRecord.remainingRunMs > 0
-          ? genRecord.remainingRunMs
-          : generationLifecyclePolicy.runDeadlineMs;
-      const deadlineAt = new Date(Date.now() + remainingRunMs);
-      await db
-        .update(generation)
-        .set({
-          status: "running",
-          resumeInterruptId: interrupt.id,
-          deadlineAt,
-          suspendedAt: null,
-          isPaused: false,
-        })
-        .where(eq(generation.id, generationId));
-      await db
-        .update(conversation)
-        .set({
-          generationStatus: "generating",
-          sandboxLastUserVisibleActionAt: new Date(),
-        })
-        .where(eq(conversation.id, genRecord.conversationId));
-      if (linkedRun?.id) {
-        await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedRun.id));
-      }
-      await this.enqueueGenerationRun(generationId, linkedRun ? "coworker" : "chat", {
-        dedupeKey: `resume-interrupt-${interrupt.id}`,
-      });
+      return true;
+    }
+
+    await db
+      .update(generation)
+      .set({
+        status: "running",
+        pendingApproval: null,
+        pendingAuth: null,
+        isPaused: false,
+      })
+      .where(eq(generation.id, generationId));
+    await db
+      .update(conversation)
+      .set({
+        generationStatus: "generating",
+        sandboxLastUserVisibleActionAt: new Date(),
+      })
+      .where(eq(conversation.id, genRecord.conversationId));
+    if (linkedRun?.id) {
+      await db.update(coworkerRun).set({ status: "running" }).where(eq(coworkerRun.id, linkedRun.id));
     }
 
     return true;
@@ -8451,6 +8495,19 @@ class GenerationManager {
       return this.resumeGeneration(generationId, userId);
     }
 
+    const activeCtx = this.activeGenerations.get(generationId);
+    if (!activeCtx && resolvedInterrupt) {
+      await this.enqueueResolvedInterruptResume({
+        generationId,
+        conversationId,
+        interrupt: resolvedInterrupt,
+        runType: linkedCoworkerRun?.id ? "coworker" : "chat",
+        coworkerRunId: linkedCoworkerRun?.id,
+        remainingRunMs: genRecord.remainingRunMs,
+      });
+      return true;
+    }
+
     await db
       .update(generation)
       .set({
@@ -8475,7 +8532,6 @@ class GenerationManager {
         .where(eq(coworkerRun.id, linkedCoworkerRun.id));
     }
 
-    const activeCtx = this.activeGenerations.get(generationId);
     if (activeCtx && resolvedInterrupt) {
       activeCtx.status = "running";
       if (activeCtx.currentInterruptId === resolvedInterrupt.id) {
@@ -8486,24 +8542,6 @@ class GenerationManager {
         activeCtx.approvalParkTimeoutId = undefined;
       }
       this.broadcast(activeCtx, this.projectInterruptResolvedEvent(resolvedInterrupt));
-    }
-
-    if (!activeCtx && resolvedInterrupt) {
-      const remainingRunMs =
-        genRecord.remainingRunMs && genRecord.remainingRunMs > 0
-          ? genRecord.remainingRunMs
-          : generationLifecyclePolicy.runDeadlineMs;
-      await db
-        .update(generation)
-        .set({
-          resumeInterruptId: resolvedInterrupt.id,
-          deadlineAt: new Date(Date.now() + remainingRunMs),
-          suspendedAt: null,
-        })
-        .where(eq(generation.id, generationId));
-      await this.enqueueGenerationRun(generationId, linkedCoworkerRun ? "coworker" : "chat", {
-        dedupeKey: `resume-interrupt-${resolvedInterrupt.id}`,
-      });
     }
 
     return true;
