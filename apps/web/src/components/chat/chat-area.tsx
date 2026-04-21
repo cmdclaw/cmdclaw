@@ -98,6 +98,7 @@ import {
   collectQuestionApprovalToolUseIds,
   isQuestionApprovalRequest,
 } from "./question-approval-utils";
+import { ToolApprovalCard } from "./tool-approval-card";
 import { VoiceIndicator } from "./voice-indicator";
 
 type TraceStatus = RuntimeSnapshot["traceStatus"];
@@ -196,6 +197,28 @@ function markResolvedAuthInterruptInSegments(
         ...segment.auth,
         connectedIntegrations,
         status: remainingIntegrations.length === 0 ? "completed" : "connecting",
+      },
+    };
+  });
+}
+
+function markResolvedApprovalInterruptInSegments(
+  segments: ActivitySegment[],
+  interruptId: string,
+  questionAnswers?: string[][],
+): ActivitySegment[] {
+  return segments.map((segment) => {
+    if (segment.approval?.interruptId !== interruptId) {
+      return segment;
+    }
+
+    return {
+      ...segment,
+      approval: {
+        ...segment.approval,
+        interruptId: undefined,
+        status: "approved",
+        questionAnswers,
       },
     };
   });
@@ -329,6 +352,8 @@ const RUN_DEADLINE_DEFAULT_MS = 15 * 60 * 1000;
 const RUN_DEADLINE_RESUME_SEGMENT_ID = "runtime-deadline-resume";
 const RUN_DEADLINE_RESUME_TOOL_USE_ID = "runtime-deadline-resume-tool";
 const NOOP_ACTIVITY_TOGGLE = () => {};
+const NOOP_APPROVAL = () => {};
+const NOOP_APPROVAL_WITH_ANSWERS = (() => {}) as (questionAnswers?: string[][]) => void;
 
 function buildRunDeadlineResumeSegment(
   pendingRunDeadline: PendingRunDeadlineResumeState,
@@ -1687,10 +1712,17 @@ export function ChatArea({
     (
       interruptId: string,
       kind: "approval" | "auth",
-      options?: { connectedIntegration?: string },
+      options?: { connectedIntegration?: string; questionAnswers?: string[][] },
     ) => {
       setStreamError(null);
       setSegments((current) => {
+        if (kind === "approval") {
+          return markResolvedApprovalInterruptInSegments(
+            current,
+            interruptId,
+            options?.questionAnswers,
+          );
+        }
         if (kind === "auth" && options?.connectedIntegration) {
           return markResolvedAuthInterruptInSegments(
             current,
@@ -2099,7 +2131,9 @@ export function ChatArea({
             ? "waiting_auth"
             : "streaming",
       );
-      syncFromRuntime(runtime);
+      if (segments.length === 0) {
+        syncFromRuntime(runtime);
+      }
       const streamScope = streamScopeRef.current;
       const streamGenerationId = activeGeneration.generationId;
       let acceptFurtherEvents = true;
@@ -2401,6 +2435,7 @@ export function ChatArea({
     onCoworkerSync,
     persistInterruptedRuntimeMessage,
     resetInitTracking,
+    segments.length,
     syncCoworkerAfterToolResult,
     submitApproval,
     subscribeToGeneration,
@@ -3297,7 +3332,9 @@ export function ChatArea({
           runtime.setApprovalStatus(toolUseId, "approved");
           syncFromRuntime(runtime);
         } else {
-          optimisticallyResumeInterruptedGeneration(interruptId, "approval");
+          optimisticallyResumeInterruptedGeneration(interruptId, "approval", {
+            questionAnswers,
+          });
         }
       } catch (err) {
         console.error("Failed to approve tool use:", err);
@@ -3984,6 +4021,24 @@ export function ChatArea({
                               integrationsUsed={nextSegmentIntegrations}
                               elapsedMs={streamElapsedMs ?? undefined}
                             />
+                            {deferredApproval.status !== "pending" && (
+                              <ToolApprovalCard
+                                toolUseId={deferredApproval.toolUseId}
+                                toolName={deferredApproval.toolName}
+                                toolInput={deferredApproval.toolInput}
+                                integration={deferredApproval.integration}
+                                operation={deferredApproval.operation}
+                                command={deferredApproval.command}
+                                status={deferredApproval.status}
+                                questionAnswers={deferredApproval.questionAnswers}
+                                onApprove={
+                                  segmentApproveHandlers.get(segment.id) ??
+                                  NOOP_APPROVAL_WITH_ANSWERS
+                                }
+                                onDeny={segmentDenyHandlers.get(segment.id) ?? NOOP_APPROVAL}
+                                readonly
+                              />
+                            )}
                           </div>,
                         );
                         index += 1;
@@ -4025,6 +4080,23 @@ export function ChatArea({
                               isLoading={isSubmittingAuth}
                               onConnect={handleAuthConnect}
                               onCancel={handleAuthCancel}
+                            />
+                          )}
+                          {segment.approval && segment.approval.status !== "pending" && (
+                            <ToolApprovalCard
+                              toolUseId={segment.approval.toolUseId}
+                              toolName={segment.approval.toolName}
+                              toolInput={segment.approval.toolInput}
+                              integration={segment.approval.integration}
+                              operation={segment.approval.operation}
+                              command={segment.approval.command}
+                              status={segment.approval.status}
+                              questionAnswers={segment.approval.questionAnswers}
+                              onApprove={
+                                segmentApproveHandlers.get(segment.id) ?? NOOP_APPROVAL_WITH_ANSWERS
+                              }
+                              onDeny={segmentDenyHandlers.get(segment.id) ?? NOOP_APPROVAL}
+                              readonly
                             />
                           )}
                         </div>,

@@ -446,7 +446,9 @@ vi.mock("./question-approval-utils", () => ({
 }));
 
 vi.mock("./tool-approval-card", () => ({
-  ToolApprovalCard: () => <div>Tool Approval</div>,
+  ToolApprovalCard: ({ status }: { status: "pending" | "approved" | "denied" }) => (
+    <div>{`Tool Approval ${status}`}</div>
+  ),
 }));
 
 vi.mock("./voice-indicator", () => ({
@@ -952,7 +954,7 @@ describe("ChatArea generation errors", () => {
     rerender(<ChatArea conversationId="conv-1" />);
 
     await waitFor(() => {
-      expect(screen.queryByText("Continue")).not.toBeInTheDocument();
+      expect(screen.getByText("Tool Approval approved")).toBeInTheDocument();
     });
 
     await waitFor(() => {
