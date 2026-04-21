@@ -87,6 +87,7 @@ import {
   COWORKER_GENERATION_JOB_NAME,
   getQueue,
 } from "../queues";
+import { prefixRedisKey } from "../instance";
 import { buildRedisOptions } from "../redis/connection-options";
 import {
   generationStreamExists,
@@ -584,6 +585,10 @@ const GEN_STREAM_SUBSCRIBE_MAX_WAIT_MS = Number.parseInt(
 );
 const GEN_STREAM_DB_RECOVERY_POLL_MS = Number.parseInt(
   process.env.GEN_STREAM_DB_RECOVERY_POLL_MS ?? "1500",
+  10,
+);
+const GEN_QUEUE_SELF_HEAL_DELAY_MS = Number.parseInt(
+  process.env.GEN_QUEUE_SELF_HEAL_DELAY_MS ?? "5000",
   10,
 );
 
@@ -1135,6 +1140,7 @@ const QUEUEABLE_CONVERSATION_TYPES = ["chat", "coworker"] as const;
 class GenerationManager {
   private activeGenerations = new Map<string, GenerationContext>();
   private activeSubscriptionCounts = new Map<string, number>();
+  private queuedGenerationSelfHealTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private streamCounters = {
     opened: 0,
     closed: 0,
