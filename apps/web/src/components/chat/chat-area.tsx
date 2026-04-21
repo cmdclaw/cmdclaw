@@ -3986,64 +3986,8 @@ export function ChatArea({
 
                     for (let index = 0; index < displaySegments.length; index += 1) {
                       const segment = displaySegments[index];
-                      const nextSegment = displaySegments[index + 1];
-                      const deferredApproval = segment.approval;
                       const visibleSegmentItems =
                         visibleActivityItemsBySegmentId.get(segment.id) ?? EMPTY_ACTIVITY_ITEMS;
-                      const visibleNextSegmentItems = nextSegment
-                        ? (visibleActivityItemsBySegmentId.get(nextSegment.id) ??
-                          EMPTY_ACTIVITY_ITEMS)
-                        : EMPTY_ACTIVITY_ITEMS;
-                      const shouldDeferApprovalAfterNextActivity =
-                        !!deferredApproval &&
-                        segment.items.length === 0 &&
-                        !!nextSegment &&
-                        visibleNextSegmentItems.length > 0 &&
-                        !nextSegment.approval &&
-                        !nextSegment.auth;
-
-                      if (shouldDeferApprovalAfterNextActivity && nextSegment && deferredApproval) {
-                        const nextSegmentIntegrations = Array.from(
-                          new Set(
-                            visibleNextSegmentItems
-                              .filter((item) => item.integration)
-                              .map((item) => item.integration as DisplayIntegrationType),
-                          ),
-                        );
-
-                        renderedSegments.push(
-                          <div key={`${segment.id}-${nextSegment.id}`} className="space-y-4">
-                            <ActivityFeed
-                              items={visibleNextSegmentItems}
-                              isStreaming={isStreaming && index + 1 === displaySegments.length - 1}
-                              isExpanded={nextSegment.isExpanded}
-                              onToggleExpand={segmentToggleHandlers.get(nextSegment.id)!}
-                              integrationsUsed={nextSegmentIntegrations}
-                              elapsedMs={streamElapsedMs ?? undefined}
-                            />
-                            {deferredApproval.status !== "pending" && (
-                              <ToolApprovalCard
-                                toolUseId={deferredApproval.toolUseId}
-                                toolName={deferredApproval.toolName}
-                                toolInput={deferredApproval.toolInput}
-                                integration={deferredApproval.integration}
-                                operation={deferredApproval.operation}
-                                command={deferredApproval.command}
-                                status={deferredApproval.status}
-                                questionAnswers={deferredApproval.questionAnswers}
-                                onApprove={
-                                  segmentApproveHandlers.get(segment.id) ??
-                                  NOOP_APPROVAL_WITH_ANSWERS
-                                }
-                                onDeny={segmentDenyHandlers.get(segment.id) ?? NOOP_APPROVAL}
-                                readonly
-                              />
-                            )}
-                          </div>,
-                        );
-                        index += 1;
-                        continue;
-                      }
 
                       const segmentIntegrations = Array.from(
                         new Set(

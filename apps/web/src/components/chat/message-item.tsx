@@ -514,55 +514,6 @@ export function MessageItem({
 
               for (let index = 0; index < segments.length; index += 1) {
                 const segment = segments[index];
-                const nextSegment = segments[index + 1];
-                const deferredApproval = segment.approval;
-                const shouldDeferApprovalAfterNextActivity =
-                  !!deferredApproval &&
-                  segment.items.length === 0 &&
-                  !!nextSegment &&
-                  nextSegment.items.length > 0 &&
-                  !nextSegment.approval;
-
-                if (shouldDeferApprovalAfterNextActivity && nextSegment && deferredApproval) {
-                  const nextSegmentIntegrations = Array.from(
-                    new Set(
-                      nextSegment.items
-                        .filter((item) => item.integration)
-                        .map((item) => item.integration as DisplayIntegrationType),
-                    ),
-                  );
-                  const isNextExpanded = expandedSegments.has(nextSegment.id);
-
-                  renderedSegments.push(
-                    <div key={`${segment.id}-${nextSegment.id}`} className="space-y-3">
-                      <CollapsedTrace
-                        messageId={`${id}-${nextSegment.id}`}
-                        integrationsUsed={nextSegmentIntegrations}
-                        hasError={hasError && index + 1 === segments.length - 1}
-                        activityItems={nextSegment.items}
-                        timing={timing}
-                        defaultExpanded={isNextExpanded}
-                        onToggleExpand={segmentToggleHandlers.get(nextSegment.id) ?? NOOP}
-                      />
-                      <ToolApprovalCard
-                        toolUseId={deferredApproval.toolUseId}
-                        toolName={deferredApproval.toolName}
-                        toolInput={deferredApproval.toolInput}
-                        integration={deferredApproval.integration}
-                        operation={deferredApproval.operation}
-                        command={deferredApproval.command}
-                        status={deferredApproval.status}
-                        questionAnswers={deferredApproval.questionAnswers}
-                        onApprove={NOOP}
-                        onDeny={NOOP}
-                        readonly
-                      />
-                    </div>,
-                  );
-                  index += 1;
-                  continue;
-                }
-
                 const segmentIntegrations = Array.from(
                   new Set(
                     segment.items
