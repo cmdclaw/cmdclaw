@@ -1,5 +1,5 @@
 export const generationLifecyclePolicy = {
-  bootstrapTimeoutMs: 45_000,
+  bootstrapTimeoutMs: 90_000,
   runDeadlineMs: 15 * 60 * 1000,
   activeSandboxTimeoutMs: 20 * 60 * 1000,
   approvalHotWaitMs: 60_000,
