@@ -33,6 +33,10 @@
         "zod": "^4.1.13",
       },
     },
+    "apps/docs": {
+      "name": "@cmdclaw/docs",
+      "version": "0.1.0",
+    },
     "apps/mcp": {
       "name": "@cmdclaw/mcp",
       "version": "0.1.0",
@@ -207,10 +211,6 @@
       "dependencies": {
         "@cmdclaw/core": "workspace:*",
       },
-    },
-    "docs": {
-      "name": "@cmdclaw/docs",
-      "version": "0.1.0",
     },
     "packages/client": {
       "name": "@cmdclaw/client",
@@ -499,7 +499,7 @@
 
     "@cmdclaw/db": ["@cmdclaw/db@workspace:packages/db"],
 
-    "@cmdclaw/docs": ["@cmdclaw/docs@workspace:docs"],
+    "@cmdclaw/docs": ["@cmdclaw/docs@workspace:apps/docs"],
 
     "@cmdclaw/mcp": ["@cmdclaw/mcp@workspace:apps/mcp"],
 
