@@ -8,7 +8,16 @@ import {
   startQueues,
   stopQueues,
 } from "./server/queues";
+import {
+  DAYTONA_RUNAWAY_CLEANUP_JOB_NAME,
+  DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME,
+  getDaytonaRunawayCleanupQueue,
+  startDaytonaRunawayCleanupQueue,
+  stopDaytonaRunawayCleanupQueue,
+} from "./server/queues/daytona-runaway-cleanup";
 import { syncConversationLoadingCleanupJob } from "./server/services/conversation-loading-cleanup";
+import { syncDaytonaRunawayCleanupJob } from "./server/services/daytona-runaway-cleanup";
+import { syncStoppedDaytonaSandboxDeleteJob } from "./server/services/daytona-stopped-sandbox-delete";
 import { startGmailCoworkerWatcher } from "./server/services/coworker-gmail-watcher";
 import { reconcileScheduledCoworkerJobs } from "./server/services/coworker-scheduler";
 import { syncDailyTelemetryDigestJob } from "./server/services/telemetry-digest";
@@ -23,6 +32,14 @@ export async function startWorkerRuntime(): Promise<void> {
     queueName,
     redisUrl,
   } = startQueues();
+  const {
+    worker: daytonaCleanupWorker,
+    queueEvents: daytonaCleanupQueueEvents,
+    workerConnection: daytonaCleanupWorkerConnection,
+    queueEventsConnection: daytonaCleanupQueueEventsConnection,
+    queueName: daytonaCleanupQueueName,
+    redisUrl: daytonaCleanupRedisUrl,
+  } = startDaytonaRunawayCleanupQueue();
   const stopGmailWatcher = startGmailCoworkerWatcher();
   const stopXDmWatcher = startXDmCoworkerWatcher();
   const staleReaperIntervalMs = 10 * 60 * 1000;
@@ -70,6 +87,32 @@ export async function startWorkerRuntime(): Promise<void> {
     );
   }
 
+  async function enqueueDaytonaRunawayCleanupJob(): Promise<void> {
+    const queue = getDaytonaRunawayCleanupQueue();
+    await queue.add(
+      DAYTONA_RUNAWAY_CLEANUP_JOB_NAME,
+      {},
+      {
+        jobId: buildQueueJobId([DAYTONA_RUNAWAY_CLEANUP_JOB_NAME, Date.now()]),
+        removeOnComplete: true,
+        removeOnFail: 200,
+      },
+    );
+  }
+
+  async function enqueueStoppedDaytonaSandboxDeleteJob(): Promise<void> {
+    const queue = getDaytonaRunawayCleanupQueue();
+    await queue.add(
+      DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME,
+      {},
+      {
+        jobId: buildQueueJobId([DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME, Date.now()]),
+        removeOnComplete: true,
+        removeOnFail: 200,
+      },
+    );
+  }
+
   const shutdown = async () => {
     if (shutdownPromise) {
       return shutdownPromise;
@@ -90,6 +133,12 @@ export async function startWorkerRuntime(): Promise<void> {
       }
       await Promise.allSettled([
         stopQueues(worker, queueEvents, workerConnection, queueEventsConnection),
+        stopDaytonaRunawayCleanupQueue(
+          daytonaCleanupWorker,
+          daytonaCleanupQueueEvents,
+          daytonaCleanupWorkerConnection,
+          daytonaCleanupQueueEventsConnection,
+        ),
         closePool(),
       ]);
     })();
@@ -106,6 +155,9 @@ export async function startWorkerRuntime(): Promise<void> {
   });
 
   console.log(`[worker] listening on "${queueName}" with redis "${redisUrl}"`);
+  console.log(
+    `[worker] Daytona cleanup listening on "${daytonaCleanupQueueName}" with redis "${daytonaCleanupRedisUrl}"`,
+  );
 
   try {
     const { synced, failed } = await reconcileScheduledCoworkerJobs();
@@ -126,6 +178,20 @@ export async function startWorkerRuntime(): Promise<void> {
     console.log("[worker] synced conversation loading cleanup schedule");
   } catch (error) {
     console.error("[worker] failed to sync conversation loading cleanup schedule", error);
+  }
+
+  try {
+    await syncDaytonaRunawayCleanupJob();
+    console.log("[worker] synced Daytona runaway cleanup schedule");
+  } catch (error) {
+    console.error("[worker] failed to sync Daytona runaway cleanup schedule", error);
+  }
+
+  try {
+    await syncStoppedDaytonaSandboxDeleteJob();
+    console.log("[worker] synced Daytona stopped sandbox delete schedule");
+  } catch (error) {
+    console.error("[worker] failed to sync Daytona stopped sandbox delete schedule", error);
   }
 
   try {
@@ -156,5 +222,17 @@ export async function startWorkerRuntime(): Promise<void> {
     await enqueueConversationLoadingCleanupJob();
   } catch (error) {
     console.error("[worker] failed to enqueue conversation loading cleanup job", error);
+  }
+
+  try {
+    await enqueueDaytonaRunawayCleanupJob();
+  } catch (error) {
+    console.error("[worker] failed to enqueue Daytona runaway cleanup job", error);
+  }
+
+  try {
+    await enqueueStoppedDaytonaSandboxDeleteJob();
+  } catch (error) {
+    console.error("[worker] failed to enqueue Daytona stopped sandbox delete job", error);
   }
 }
