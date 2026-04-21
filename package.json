@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "cat": "bun scripts/cat.ts",
-    "cmdclaw": "bun run --cwd apps/cli start --",
+    "cli": "bun run --cwd apps/cli start",
+    "cmdclaw": "bun run --cwd apps/cli start",
     "env": "infisical export --output-file=.env",
     "dev": "bun --env-file=.env turbo dev --filter=@cmdclaw/web --filter=@cmdclaw/worker --filter=@cmdclaw/ws --ui=tui",
     "dev:worktree": "bun scripts/worktree.ts dev",
