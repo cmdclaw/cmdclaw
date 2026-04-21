@@ -7450,9 +7450,41 @@ class GenerationManager {
     request: RuntimeQuestionRequest,
   ): Promise<void> {
     const defaultAnswers = buildDefaultQuestionAnswers(request);
-
-    const toolUseId = `opencode-question-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const linkedToolUseId =
+      typeof request.tool?.callID === "string" && request.tool.callID.length > 0
+        ? request.tool.callID
+        : typeof request.tool?.callId === "string" && request.tool.callId.length > 0
+          ? request.tool.callId
+          : undefined;
+    const toolUseId =
+      linkedToolUseId ?? `opencode-question-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const command = buildQuestionCommand(request);
+    const toolInput = request as unknown as Record<string, unknown>;
+
+    const existingToolUse = ctx.contentParts.find(
+      (part): part is ContentPart & { type: "tool_use" } =>
+        part.type === "tool_use" && part.id === toolUseId,
+    );
+    if (!existingToolUse) {
+      this.broadcast(ctx, {
+        type: "tool_use",
+        toolName: "question",
+        toolInput,
+        toolUseId,
+        integration: "cmdclaw",
+        operation: "question",
+      });
+
+      ctx.contentParts.push({
+        type: "tool_use",
+        id: toolUseId,
+        name: "question",
+        input: toolInput,
+        integration: "cmdclaw",
+        operation: "question",
+      });
+      await this.saveProgress(ctx);
+    }
 
     await this.queueOpenCodeApprovalRequest(
       ctx,
@@ -7464,8 +7496,8 @@ class GenerationManager {
       },
       {
         toolUseId,
-        toolName: "Question",
-        toolInput: request as unknown as Record<string, unknown>,
+        toolName: "question",
+        toolInput,
         requestedAt: new Date().toISOString(),
         integration: "cmdclaw",
         operation: "question",

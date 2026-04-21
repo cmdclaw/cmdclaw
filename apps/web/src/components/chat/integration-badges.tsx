@@ -16,13 +16,15 @@ type Props = {
 };
 
 export function IntegrationBadges({ integrations, size = "sm", className }: Props) {
-  if (integrations.length === 0) {
+  const visibleIntegrations = integrations.filter((integration) => String(integration) !== "cmdclaw");
+
+  if (visibleIntegrations.length === 0) {
     return null;
   }
 
   return (
     <div className={cn("flex items-center gap-1 flex-wrap", className)}>
-      {integrations.map((integration) => (
+      {visibleIntegrations.map((integration) => (
         <IntegrationBadge key={integration} integration={integration} size={size} />
       ))}
     </div>

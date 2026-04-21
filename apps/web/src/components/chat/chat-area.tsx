@@ -94,10 +94,7 @@ import { formatDuration } from "./chat-performance-metrics";
 import { useChatSkillStore } from "./chat-skill-store";
 import { MessageList, type Message, type MessagePart, type AttachmentData } from "./message-list";
 import { ModelSelector } from "./model-selector";
-import {
-  collectQuestionApprovalToolUseIds,
-  isQuestionApprovalRequest,
-} from "./question-approval-utils";
+import { isQuestionApprovalRequest } from "./question-approval-utils";
 import { ToolApprovalCard } from "./tool-approval-card";
 import { VoiceIndicator } from "./voice-indicator";
 
@@ -1112,42 +1109,13 @@ export function ChatArea({
         : segments,
     [runDeadlineResumeState, segments],
   );
-  const suppressedQuestionToolUseIds = useMemo(
+  const visibleActivityItemsBySegmentId = useMemo(
     () =>
-      collectQuestionApprovalToolUseIds(
-        displaySegments.flatMap((segment) =>
-          segment.approval
-            ? [
-                {
-                  toolUseId: segment.approval.toolUseId,
-                  toolInput: segment.approval.toolInput,
-                  toolName: segment.approval.toolName,
-                  integration: segment.approval.integration,
-                  operation: segment.approval.operation,
-                },
-              ]
-            : [],
-        ),
+      new Map<string, ActivityItemData[]>(
+        displaySegments.map((segment) => [segment.id, segment.items]),
       ),
     [displaySegments],
   );
-  const visibleActivityItemsBySegmentId = useMemo(() => {
-    const visibleItems = new Map<string, ActivityItemData[]>();
-
-    for (const segment of displaySegments) {
-      visibleItems.set(
-        segment.id,
-        segment.items.filter(
-          (item) =>
-            item.type !== "tool_call" ||
-            !item.toolUseId ||
-            !suppressedQuestionToolUseIds.has(item.toolUseId),
-        ),
-      );
-    }
-
-    return visibleItems;
-  }, [displaySegments, suppressedQuestionToolUseIds]);
   const resolvedDefaultModel = useMemo(
     () =>
       isOpenAIConnected

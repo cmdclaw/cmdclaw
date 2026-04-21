@@ -195,9 +195,9 @@ export function ToolApprovalCard({
   }, [command]);
   const displayIntegration = parsedCommand?.integration ?? integration;
   const displayOperation = parsedCommand?.operation ?? operation;
-  const logo = getIntegrationLogo(displayIntegration);
-  const IntegrationIcon = getIntegrationIcon(displayIntegration);
-  const displayName = getIntegrationDisplayName(displayIntegration);
+  const logo = isQuestionRequest ? null : getIntegrationLogo(displayIntegration);
+  const IntegrationIcon = isQuestionRequest ? null : getIntegrationIcon(displayIntegration);
+  const displayName = isQuestionRequest ? null : getIntegrationDisplayName(displayIntegration);
 
   // Build preview props
   const previewProps = useMemo(() => {
@@ -668,7 +668,7 @@ export function ToolApprovalCard({
     >
       <div className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm">
         {logo ? (
-          <Image src={logo} alt={displayName} width={16} height={16} className="h-4 w-auto" />
+          <Image src={logo} alt={displayName ?? ""} width={16} height={16} className="h-4 w-auto" />
         ) : IntegrationIcon ? (
           <IntegrationIcon className="text-muted-foreground h-4 w-4" />
         ) : (

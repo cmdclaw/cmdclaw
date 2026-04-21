@@ -211,10 +211,6 @@ export function MessageItem({
           approval: null,
         };
       } else if (part.type === "tool_call") {
-        if (explicitApprovalToolUseIds.has(part.id)) {
-          continue;
-        }
-
         // Add tool call to current segment's items
         currentSegment.items.push({
           id: `activity-${part.id}`,
