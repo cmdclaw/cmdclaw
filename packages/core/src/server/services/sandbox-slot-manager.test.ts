@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { SandboxSlotManager } from "./sandbox-slot-manager";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resolveDefaultMaxActiveSlots, SandboxSlotManager } from "./sandbox-slot-manager";
 
 class FakeRedis {
   private readonly zsets = new Map<string, Map<string, number>>();
@@ -128,6 +128,20 @@ class FakeRedis {
 }
 
 describe("SandboxSlotManager", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("uses a lower default slot cap for live e2e runs", () => {
+    vi.stubEnv("E2E_LIVE", "1");
+    expect(resolveDefaultMaxActiveSlots()).toBe(4);
+  });
+
+  it("uses the standard slot cap outside live e2e runs", () => {
+    vi.stubEnv("E2E_LIVE", "0");
+    expect(resolveDefaultMaxActiveSlots()).toBe(20);
+  });
+
   it("preserves FIFO order for waiting generations", async () => {
     let now = 1_000;
     const manager = new SandboxSlotManager({

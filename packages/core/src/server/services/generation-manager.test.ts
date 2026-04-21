@@ -2481,6 +2481,84 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("self-heals queued generations that never leave their pristine running state", async () => {
+    const mgr = asTestManager();
+    const runQueuedGenerationSpy = vi
+      .spyOn(mgr as never, "runQueuedGeneration")
+      .mockResolvedValue(undefined);
+
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-self-heal",
+      conversationId: "conv-self-heal",
+      status: "running",
+      messageId: null,
+      sandboxId: null,
+      runtimeHarness: null,
+      runtimeProtocolVersion: null,
+      completedAt: null,
+    });
+    generationStreamExistsMock.mockResolvedValueOnce(false);
+
+    await (mgr as any).runQueuedGenerationSelfHealIfStalled({
+      generationId: "gen-self-heal",
+      runMode: "normal_run",
+    });
+
+    expect(runQueuedGenerationSpy).toHaveBeenCalledWith("gen-self-heal", "normal_run");
+  });
+
+  it("skips queued generation self-heal when another process already holds the lease", async () => {
+    const mgr = asTestManager();
+    const runQueuedGenerationSpy = vi
+      .spyOn(mgr as never, "runQueuedGeneration")
+      .mockResolvedValue(undefined);
+    vi.spyOn(mgr as any, "isGenerationLeaseHeld").mockResolvedValueOnce(true);
+
+    generationFindFirstMock.mockResolvedValueOnce({
+      id: "gen-self-heal",
+      conversationId: "conv-self-heal",
+      status: "running",
+      messageId: null,
+      sandboxId: null,
+      runtimeHarness: null,
+      runtimeProtocolVersion: null,
+      completedAt: null,
+    });
+
+    await (mgr as any).runQueuedGenerationSelfHealIfStalled({
+      generationId: "gen-self-heal",
+      runMode: "normal_run",
+    });
+
+    expect(runQueuedGenerationSpy).not.toHaveBeenCalled();
+  });
+
+  it("schedules queued generation self-heal after the queue grace period", async () => {
+    vi.useFakeTimers();
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    try {
+      const mgr = asTestManager();
+      const selfHealSpy = vi
+        .spyOn(mgr as never, "runQueuedGenerationSelfHealIfStalled")
+        .mockResolvedValue(undefined);
+
+      (mgr as any).scheduleQueuedGenerationSelfHeal("gen-timer", "normal_run", 1_000);
+
+      await vi.advanceTimersByTimeAsync(3_499);
+      expect(selfHealSpy).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(selfHealSpy).toHaveBeenCalledWith({
+        generationId: "gen-timer",
+        runMode: "normal_run",
+      });
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      vi.useRealTimers();
+    }
+  });
   it("rehydrates queued file attachments into generation context", async () => {
     const mgr = asTestManager();
     const runSpy = vi.spyOn(mgr, "runGeneration").mockResolvedValue(undefined);
@@ -2524,6 +2602,7 @@ describe("generationManager transitions", () => {
         attachments: [queuedAttachment],
       }),
       "normal_run",
+      "local-gen-queued",
     );
   });
 
@@ -2584,6 +2663,7 @@ describe("generationManager transitions", () => {
         coworkerRunId: "wf-run-1",
       }),
       "normal_run",
+      "local-gen-coworker-queued",
     );
   });
 
@@ -4522,6 +4602,79 @@ describe("generationManager transitions", () => {
     );
     expect(promptMock).toHaveBeenCalledTimes(1);
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
+  it("persists the runtime session as soon as agent init completes before pre-prompt work finishes", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    const memoryDeferred = createDeferred<[]>();
+    vi.mocked(syncMemoryFilesToSandbox).mockImplementation(() => memoryDeferred.promise);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(createExecutorPreparationMock());
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-session-persist-early",
+      title: "Conversation",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const runPromise = mgr.runOpenCodeGeneration(
+      createCtx({
+        id: "gen-session-persist-early",
+        conversationId: "conv-session-persist-early",
+        model: "anthropic/claude-sonnet-4-6",
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(promptMock).not.toHaveBeenCalled();
+      expect(updateRuntimeSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runtimeId: "runtime-1",
+          sandboxId: "sandbox-1",
+          sessionId: "session-1",
+          sandboxProvider: "e2b",
+          runtimeHarness: "opencode",
+          runtimeProtocolVersion: "opencode-v2",
+          status: "active",
+        }),
+      );
+    });
+
+    memoryDeferred.resolve([]);
+    await runPromise;
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(finishSpy).toHaveBeenCalledWith(expect.anything(), "completed");
   });
 
   it("still requires an anthropic api key for anthropic runs", async () => {

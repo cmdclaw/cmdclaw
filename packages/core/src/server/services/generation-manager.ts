@@ -1572,6 +1572,18 @@ class GenerationManager {
     }
   }
 
+  private async isGenerationLeaseHeld(generationId: string): Promise<boolean> {
+    if (process.env.NODE_ENV === "test") {
+      return this.activeGenerations.has(generationId);
+    }
+    if (!process.env.REDIS_URL) {
+      return false;
+    }
+    const leaseKey = prefixRedisKey(`locks:generation:${generationId}`);
+    const owner = await this.getLockRedis().get(leaseKey);
+    return Boolean(owner);
+  }
+
   private async enqueueGenerationRun(
     generationId: string,
     type: "chat" | "coworker",
@@ -1593,6 +1605,118 @@ class GenerationManager {
         removeOnFail: 500,
       },
     );
+    this.scheduleQueuedGenerationSelfHeal(
+      generationId,
+      options?.runMode ?? "normal_run",
+      options?.delayMs ?? 0,
+    );
+  }
+
+  private clearQueuedGenerationSelfHeal(generationId: string): void {
+    const existing = this.queuedGenerationSelfHealTimers.get(generationId);
+    if (!existing) {
+      return;
+    }
+
+    clearTimeout(existing);
+    this.queuedGenerationSelfHealTimers.delete(generationId);
+  }
+
+  private scheduleQueuedGenerationSelfHeal(
+    generationId: string,
+    runMode: GenerationRunMode,
+    queueDelayMs = 0,
+  ): void {
+    if (process.env.NODE_ENV === "test") {
+      return;
+    }
+
+    this.clearQueuedGenerationSelfHeal(generationId);
+    const delayMs = Math.max(0, queueDelayMs) + Math.max(0, GEN_QUEUE_SELF_HEAL_DELAY_MS);
+    const timer = setTimeout(() => {
+      this.queuedGenerationSelfHealTimers.delete(generationId);
+      void this.runQueuedGenerationSelfHealIfStalled({
+        generationId,
+        runMode,
+      });
+    }, delayMs);
+    this.queuedGenerationSelfHealTimers.set(generationId, timer);
+  }
+
+  private async runQueuedGenerationSelfHealIfStalled(input: {
+    generationId: string;
+    runMode: GenerationRunMode;
+  }): Promise<void> {
+    if (this.activeGenerations.has(input.generationId)) {
+      return;
+    }
+
+    const genRecord = await db.query.generation.findFirst({
+      where: eq(generation.id, input.generationId),
+      columns: {
+        id: true,
+        conversationId: true,
+        status: true,
+        messageId: true,
+        sandboxId: true,
+        runtimeHarness: true,
+        runtimeProtocolVersion: true,
+        completedAt: true,
+      },
+    });
+
+    if (!genRecord || genRecord.status !== "running") {
+      return;
+    }
+
+    if (
+      genRecord.completedAt ||
+      genRecord.messageId ||
+      genRecord.sandboxId ||
+      genRecord.runtimeHarness ||
+      genRecord.runtimeProtocolVersion
+    ) {
+      return;
+    }
+
+    if (await this.isGenerationLeaseHeld(input.generationId)) {
+      return;
+    }
+
+    const streamPresent = await generationStreamExists(input.generationId).catch((error) => {
+      logServerEvent(
+        "warn",
+        "GENERATION_QUEUE_SELF_HEAL_STREAM_CHECK_FAILED",
+        {
+          error: formatErrorMessage(error),
+        },
+        {
+          source: "generation-manager",
+          generationId: input.generationId,
+          conversationId: genRecord.conversationId,
+        },
+      );
+      return false;
+    });
+
+    if (streamPresent) {
+      return;
+    }
+
+    logServerEvent(
+      "warn",
+      "GENERATION_QUEUE_SELF_HEAL_TRIGGERED",
+      {
+        runMode: input.runMode,
+      },
+      {
+        source: "generation-manager",
+        generationId: input.generationId,
+        conversationId: genRecord.conversationId,
+      },
+    );
+
+    await this.runQueuedGeneration(input.generationId, input.runMode);
   }
 
   private getGenerationRunType(ctx: Pick<GenerationContext, "coworkerRunId">): "chat" | "coworker" {
@@ -3307,254 +3431,287 @@ class GenerationManager {
       return;
     }
 
-    const latestUserMessage = await db.query.message.findFirst({
-      where: and(eq(message.conversationId, genRecord.conversationId), eq(message.role, "user")),
-      orderBy: (fields, { desc }) => [desc(fields.createdAt)],
-      columns: { content: true },
-    });
-    const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
-      where: eq(coworkerRun.generationId, generationId),
-      columns: { id: true, coworkerId: true, triggerPayload: true },
-    });
-    const linkedCoworker = linkedCoworkerRun
-      ? await db.query.coworker.findFirst({
-          where: eq(coworker.id, linkedCoworkerRun.coworkerId),
-          columns: {
-            allowedIntegrations: true,
-            allowedCustomIntegrations: true,
-            allowedExecutorSourceIds: true,
-            allowedSkillSlugs: true,
-            prompt: true,
-            promptDo: true,
-            promptDont: true,
-            autoApprove: true,
-          },
+    let leaseToken: string | null = null;
+    try {
+      leaseToken = await this.acquireGenerationLease(generationId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await db
+        .update(generation)
+        .set({
+          status: "error",
+          errorMessage: message,
+          completionReason: "runtime_error",
+          completedAt: new Date(),
         })
-      : null;
-    const executionPolicy = this.getExecutionPolicyFromRecord(
-      genRecord,
-      linkedCoworker?.autoApprove ?? genRecord.conversation.autoApprove,
-    );
-    const linkedCoworkerAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(
-      linkedCoworker?.allowedSkillSlugs,
-    );
-    const linkedCoworkerPlatformSkillSlugs = linkedCoworkerAllowedSkillSlugs.filter(
-      (entry) => !entry.startsWith(CUSTOM_SKILL_PREFIX),
-    );
-    const builderCoworkerContext =
-      genRecord.conversation.type === "coworker"
-        ? await resolveCoworkerBuilderContextByConversation({
-            database: db,
-            userId: genRecord.conversation.userId,
-            conversationId: genRecord.conversationId,
+        .where(eq(generation.id, generationId));
+      return;
+    }
+    if (!leaseToken) {
+      return;
+    }
+
+    try {
+      const latestUserMessage = await db.query.message.findFirst({
+        where: and(eq(message.conversationId, genRecord.conversationId), eq(message.role, "user")),
+        orderBy: (fields, { desc }) => [desc(fields.createdAt)],
+        columns: { content: true },
+      });
+      const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
+        where: eq(coworkerRun.generationId, generationId),
+        columns: { id: true, coworkerId: true, triggerPayload: true },
+      });
+      const linkedCoworker = linkedCoworkerRun
+        ? await db.query.coworker.findFirst({
+            where: eq(coworker.id, linkedCoworkerRun.coworkerId),
+            columns: {
+              allowedIntegrations: true,
+              allowedCustomIntegrations: true,
+              allowedExecutorSourceIds: true,
+              allowedSkillSlugs: true,
+              prompt: true,
+              promptDo: true,
+              promptDont: true,
+              autoApprove: true,
+            },
           })
         : null;
-    const pendingInterrupt =
-      await generationInterruptService.getPendingInterruptForGeneration(generationId);
-    const runtimeRecord = genRecord.runtimeId
-      ? await conversationRuntimeService.getRuntime(genRecord.runtimeId)
-      : await conversationRuntimeService.getRuntimeForConversation(genRecord.conversationId);
+      const executionPolicy = this.getExecutionPolicyFromRecord(
+        genRecord,
+        linkedCoworker?.autoApprove ?? genRecord.conversation.autoApprove,
+      );
+      const linkedCoworkerAllowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(
+        linkedCoworker?.allowedSkillSlugs,
+      );
+      const linkedCoworkerPlatformSkillSlugs = linkedCoworkerAllowedSkillSlugs.filter(
+        (entry) => !entry.startsWith(CUSTOM_SKILL_PREFIX),
+      );
+      const builderCoworkerContext =
+        genRecord.conversation.type === "coworker"
+          ? await resolveCoworkerBuilderContextByConversation({
+              database: db,
+              userId: genRecord.conversation.userId,
+              conversationId: genRecord.conversationId,
+            })
+          : null;
+      const pendingInterrupt =
+        await generationInterruptService.getPendingInterruptForGeneration(generationId);
+      const runtimeRecord = genRecord.runtimeId
+        ? await conversationRuntimeService.getRuntime(genRecord.runtimeId)
+        : await conversationRuntimeService.getRuntimeForConversation(genRecord.conversationId);
 
-    if (
-      genRecord.runtimeId &&
-      (!runtimeRecord ||
-        runtimeRecord.status !== "active" ||
-        runtimeRecord.activeGenerationId !== genRecord.id)
-    ) {
+      if (
+        genRecord.runtimeId &&
+        (!runtimeRecord ||
+          runtimeRecord.status !== "active" ||
+          runtimeRecord.activeGenerationId !== genRecord.id)
+      ) {
+        logServerEvent(
+          "warn",
+          "QUEUED_GENERATION_RUNTIME_STALE",
+          {
+            generationId: genRecord.id,
+            runtimeId: genRecord.runtimeId,
+            runtimeStatus: runtimeRecord?.status ?? null,
+            runtimeActiveGenerationId: runtimeRecord?.activeGenerationId ?? null,
+          },
+          {
+            source: "generation-manager",
+            generationId: genRecord.id,
+            conversationId: genRecord.conversationId,
+            userId: genRecord.conversation.userId,
+          },
+        );
+        return;
+      }
+
+      const ctx: GenerationContext = {
+        id: genRecord.id,
+        traceId: createTraceId(),
+        conversationId: genRecord.conversationId,
+        userId: genRecord.conversation.userId,
+        workspaceId: genRecord.conversation.workspaceId ?? null,
+        status: genRecord.status,
+        executionPolicy,
+        deadlineAt: resolveGenerationDeadlineAt({
+          startedAt: genRecord.startedAt,
+          deadlineAt: genRecord.deadlineAt,
+        }),
+        remainingRunMs:
+          genRecord.remainingRunMs && genRecord.remainingRunMs > 0
+            ? genRecord.remainingRunMs
+            : generationLifecyclePolicy.runDeadlineMs,
+        approvalHotWaitMs: resolveApprovalHotWaitMs(executionPolicy.debugApprovalHotWaitMs),
+        suspendedAt: genRecord.suspendedAt ?? null,
+        resumeInterruptId: genRecord.resumeInterruptId ?? null,
+        lastRuntimeEventAt: genRecord.lastRuntimeEventAt ?? genRecord.startedAt,
+        recoveryAttempts: genRecord.recoveryAttempts ?? 0,
+        completionReason: (genRecord.completionReason as GenerationCompletionReason | null) ?? null,
+        debugInfo: (genRecord.debugInfo as GenerationDebugInfo | null) ?? undefined,
+        contentParts: (genRecord.contentParts as ContentPart[] | null) ?? [],
+        assistantContent: "",
+        abortController: new AbortController(),
+        pendingApproval: null,
+        pendingAuth: null,
+        usage: {
+          inputTokens: genRecord.inputTokens,
+          outputTokens: genRecord.outputTokens,
+          totalCostUsd: 0,
+        },
+        startedAt: genRecord.startedAt,
+        lastSaveAt: new Date(),
+        isNewConversation: false,
+        model: genRecord.conversation.model ?? DEFAULT_MODEL_REFERENCE,
+        authSource: resolveModelAuthSource({
+          model: genRecord.conversation.model ?? DEFAULT_MODEL_REFERENCE,
+          authSource: genRecord.conversation.authSource,
+        }),
+        userMessageContent: latestUserMessage?.content ?? "",
+        attachments: executionPolicy.queuedFileAttachments,
+        assistantMessageIds: new Set(),
+        messageRoles: new Map(),
+        pendingMessageParts: new Map(),
+        openCodeRuntimeTools: new Map(),
+        backendType: "opencode",
+        sandboxProviderOverride: executionPolicy.sandboxProvider,
+        coworkerId: linkedCoworkerRun?.coworkerId,
+        coworkerRunId: linkedCoworkerRun?.id,
+        allowedIntegrations:
+          executionPolicy.allowedIntegrations ??
+          (linkedCoworker?.allowedIntegrations as IntegrationType[] | null | undefined) ??
+          undefined,
+        autoApprove:
+          executionPolicy.autoApprove ??
+          linkedCoworker?.autoApprove ??
+          genRecord.conversation.autoApprove,
+        allowedCustomIntegrations:
+          executionPolicy.allowedCustomIntegrations ??
+          linkedCoworker?.allowedCustomIntegrations ??
+          undefined,
+        remoteIntegrationSource: executionPolicy.remoteIntegrationSource,
+        allowedExecutorSourceIds:
+          executionPolicy.allowedExecutorSourceIds ??
+          linkedCoworker?.allowedExecutorSourceIds ??
+          undefined,
+        allowedSkillSlugs:
+          executionPolicy.allowedSkillSlugs ?? linkedCoworkerAllowedSkillSlugs ?? undefined,
+        coworkerPrompt: undefined,
+        coworkerPromptDo: undefined,
+        coworkerPromptDont: undefined,
+        triggerPayload: undefined,
+        builderCoworkerContext,
+        selectedPlatformSkillSlugs:
+          executionPolicy.selectedPlatformSkillSlugs ??
+          (linkedCoworkerPlatformSkillSlugs.length > 0
+            ? linkedCoworkerPlatformSkillSlugs
+            : undefined),
+        userStagedFilePaths: new Set(),
+        uploadedSandboxFileIds: new Set(),
+        runtimeCallbackToken: runtimeRecord?.callbackToken ?? undefined,
+        runtimeId: runtimeRecord?.id ?? genRecord.runtimeId ?? undefined,
+        runtimeTurnSeq: pendingInterrupt?.turnSeq ?? runtimeRecord?.activeTurnSeq,
+        agentInitStartedAt: undefined,
+        agentInitReadyAt: undefined,
+        agentInitFailedAt: undefined,
+        phaseMarks: {},
+        phaseTimeline: [],
+        streamSequence: 0,
+        streamPublishedCount: 0,
+        streamDeliveredCount: 0,
+      };
+      ctx.currentInterruptId = pendingInterrupt?.id;
+
       logServerEvent(
-        "warn",
-        "QUEUED_GENERATION_RUNTIME_STALE",
+        "info",
+        "QUEUED_GENERATION_CONTEXT_REHYDRATED",
         {
-          generationId: genRecord.id,
-          runtimeId: genRecord.runtimeId,
-          runtimeStatus: runtimeRecord?.status ?? null,
-          runtimeActiveGenerationId: runtimeRecord?.activeGenerationId ?? null,
+          rehydratedAttachmentsCount: ctx.attachments?.length ?? 0,
         },
         {
           source: "generation-manager",
-          generationId: genRecord.id,
-          conversationId: genRecord.conversationId,
-          userId: genRecord.conversation.userId,
+          traceId: ctx.traceId,
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
         },
       );
-      return;
-    }
 
-    const ctx: GenerationContext = {
-      id: genRecord.id,
-      traceId: createTraceId(),
-      conversationId: genRecord.conversationId,
-      userId: genRecord.conversation.userId,
-      workspaceId: genRecord.conversation.workspaceId ?? null,
-      status: genRecord.status,
-      executionPolicy,
-      deadlineAt: resolveGenerationDeadlineAt({
-        startedAt: genRecord.startedAt,
-        deadlineAt: genRecord.deadlineAt,
-      }),
-      remainingRunMs:
-        genRecord.remainingRunMs && genRecord.remainingRunMs > 0
-          ? genRecord.remainingRunMs
-          : generationLifecyclePolicy.runDeadlineMs,
-      approvalHotWaitMs: resolveApprovalHotWaitMs(executionPolicy.debugApprovalHotWaitMs),
-      suspendedAt: genRecord.suspendedAt ?? null,
-      resumeInterruptId: genRecord.resumeInterruptId ?? null,
-      lastRuntimeEventAt: genRecord.lastRuntimeEventAt ?? genRecord.startedAt,
-      recoveryAttempts: genRecord.recoveryAttempts ?? 0,
-      completionReason: (genRecord.completionReason as GenerationCompletionReason | null) ?? null,
-      debugInfo: (genRecord.debugInfo as GenerationDebugInfo | null) ?? undefined,
-      contentParts: (genRecord.contentParts as ContentPart[] | null) ?? [],
-      assistantContent: "",
-      abortController: new AbortController(),
-      pendingApproval: null,
-      pendingAuth: null,
-      usage: {
-        inputTokens: genRecord.inputTokens,
-        outputTokens: genRecord.outputTokens,
-        totalCostUsd: 0,
-      },
-      startedAt: genRecord.startedAt,
-      lastSaveAt: new Date(),
-      isNewConversation: false,
-      model: genRecord.conversation.model ?? DEFAULT_MODEL_REFERENCE,
-      authSource: resolveModelAuthSource({
-        model: genRecord.conversation.model ?? DEFAULT_MODEL_REFERENCE,
-        authSource: genRecord.conversation.authSource,
-      }),
-      userMessageContent: latestUserMessage?.content ?? "",
-      attachments: executionPolicy.queuedFileAttachments,
-      assistantMessageIds: new Set(),
-      messageRoles: new Map(),
-      pendingMessageParts: new Map(),
-      openCodeRuntimeTools: new Map(),
-      backendType: "opencode",
-      sandboxProviderOverride: executionPolicy.sandboxProvider,
-      coworkerId: linkedCoworkerRun?.coworkerId,
-      coworkerRunId: linkedCoworkerRun?.id,
-      allowedIntegrations:
-        executionPolicy.allowedIntegrations ??
-        (linkedCoworker?.allowedIntegrations as IntegrationType[] | null | undefined) ??
-        undefined,
-      autoApprove:
-        executionPolicy.autoApprove ??
-        linkedCoworker?.autoApprove ??
-        genRecord.conversation.autoApprove,
-      allowedCustomIntegrations:
-        executionPolicy.allowedCustomIntegrations ??
-        linkedCoworker?.allowedCustomIntegrations ??
-        undefined,
-      remoteIntegrationSource: executionPolicy.remoteIntegrationSource,
-      allowedExecutorSourceIds:
-        executionPolicy.allowedExecutorSourceIds ??
-        linkedCoworker?.allowedExecutorSourceIds ??
-        undefined,
-      allowedSkillSlugs:
-        executionPolicy.allowedSkillSlugs ?? linkedCoworkerAllowedSkillSlugs ?? undefined,
-      coworkerPrompt: undefined,
-      coworkerPromptDo: undefined,
-      coworkerPromptDont: undefined,
-      triggerPayload: undefined,
-      builderCoworkerContext,
-      selectedPlatformSkillSlugs:
-        executionPolicy.selectedPlatformSkillSlugs ??
-        (linkedCoworkerPlatformSkillSlugs.length > 0
-          ? linkedCoworkerPlatformSkillSlugs
-          : undefined),
-      userStagedFilePaths: new Set(),
-      uploadedSandboxFileIds: new Set(),
-      runtimeCallbackToken: runtimeRecord?.callbackToken ?? undefined,
-      runtimeId: runtimeRecord?.id ?? genRecord.runtimeId ?? undefined,
-      runtimeTurnSeq: pendingInterrupt?.turnSeq ?? runtimeRecord?.activeTurnSeq,
-      agentInitStartedAt: undefined,
-      agentInitReadyAt: undefined,
-      agentInitFailedAt: undefined,
-      phaseMarks: {},
-      phaseTimeline: [],
-      streamSequence: 0,
-      streamPublishedCount: 0,
-      streamDeliveredCount: 0,
-    };
-    ctx.currentInterruptId = pendingInterrupt?.id;
+      if (
+        (ctx.status === "awaiting_approval" || ctx.status === "awaiting_auth") &&
+        pendingInterrupt &&
+        !ctx.resumeInterruptId
+      ) {
+        return;
+      }
 
-    logServerEvent(
-      "info",
-      "QUEUED_GENERATION_CONTEXT_REHYDRATED",
-      {
-        rehydratedAttachmentsCount: ctx.attachments?.length ?? 0,
-      },
-      {
-        source: "generation-manager",
-        traceId: ctx.traceId,
-        generationId: ctx.id,
-        conversationId: ctx.conversationId,
-        userId: ctx.userId,
-      },
-    );
+      this.activeGenerations.set(genRecord.id, ctx);
+      this.markPhase(ctx, "generation_started");
+      if (
+        isRunExpired(
+          {
+            startedAt: ctx.startedAt,
+            deadlineAt: ctx.deadlineAt,
+          },
+          new Date(),
+        )
+      ) {
+        this.setCompletionReason(ctx, "run_deadline");
+        ctx.errorMessage = "We stopped this run because it exceeded the 15 minute wall-clock limit.";
+        await this.finishGeneration(ctx, "error");
+        return;
+      }
+      if (ctx.status === "awaiting_approval" && pendingInterrupt?.expiresAt) {
+        await this.enqueueGenerationTimeout(
+          ctx.id,
+          "approval",
+          pendingInterrupt.expiresAt.toISOString(),
+        );
+      }
+      if (ctx.status === "awaiting_auth" && pendingInterrupt?.expiresAt) {
+        await this.enqueueGenerationTimeout(
+          ctx.id,
+          "auth",
+          pendingInterrupt.expiresAt.toISOString(),
+        );
+      }
+      if (
+        ctx.status === "awaiting_approval" &&
+        pendingInterrupt &&
+        isApprovalExpired(
+          {
+            requestedAt: pendingInterrupt.requestedAt,
+            expiresAt: pendingInterrupt.expiresAt,
+          },
+          new Date(),
+        )
+      ) {
+        await this.processGenerationTimeout(ctx.id, "approval");
+        return;
+      }
+      if (
+        ctx.status === "awaiting_auth" &&
+        pendingInterrupt &&
+        isAuthExpired(
+          {
+            requestedAt: pendingInterrupt.requestedAt,
+            expiresAt: pendingInterrupt.expiresAt,
+          },
+          new Date(),
+        )
+      ) {
+        await this.processGenerationTimeout(ctx.id, "auth");
+        return;
+      }
 
-    if (
-      (ctx.status === "awaiting_approval" || ctx.status === "awaiting_auth") &&
-      pendingInterrupt &&
-      !ctx.resumeInterruptId
-    ) {
-      return;
+      await this.runGeneration(ctx, runMode, leaseToken);
+    } finally {
+      await this.releaseGenerationLease(generationId, leaseToken).catch((err) => {
+        console.error(
+          `[GenerationManager] Failed to release queued-generation lease for ${generationId}:`,
+          err,
+        );
+      });
     }
-
-    this.activeGenerations.set(genRecord.id, ctx);
-    this.markPhase(ctx, "generation_started");
-    if (
-      isRunExpired(
-        {
-          startedAt: ctx.startedAt,
-          deadlineAt: ctx.deadlineAt,
-        },
-        new Date(),
-      )
-    ) {
-      this.setCompletionReason(ctx, "run_deadline");
-      ctx.errorMessage = "We stopped this run because it exceeded the 15 minute wall-clock limit.";
-      await this.finishGeneration(ctx, "error");
-      return;
-    }
-    if (ctx.status === "awaiting_approval" && pendingInterrupt?.expiresAt) {
-      await this.enqueueGenerationTimeout(
-        ctx.id,
-        "approval",
-        pendingInterrupt.expiresAt.toISOString(),
-      );
-    }
-    if (ctx.status === "awaiting_auth" && pendingInterrupt?.expiresAt) {
-      await this.enqueueGenerationTimeout(ctx.id, "auth", pendingInterrupt.expiresAt.toISOString());
-    }
-    if (
-      ctx.status === "awaiting_approval" &&
-      pendingInterrupt &&
-      isApprovalExpired(
-        {
-          requestedAt: pendingInterrupt.requestedAt,
-          expiresAt: pendingInterrupt.expiresAt,
-        },
-        new Date(),
-      )
-    ) {
-      await this.processGenerationTimeout(ctx.id, "approval");
-      return;
-    }
-    if (
-      ctx.status === "awaiting_auth" &&
-      pendingInterrupt &&
-      isAuthExpired(
-        {
-          requestedAt: pendingInterrupt.requestedAt,
-          expiresAt: pendingInterrupt.expiresAt,
-        },
-        new Date(),
-      )
-    ) {
-      await this.processGenerationTimeout(ctx.id, "auth");
-      return;
-    }
-
-    await this.runGeneration(ctx, runMode);
   }
 
   /**
@@ -4837,17 +4994,21 @@ class GenerationManager {
   private async runGeneration(
     ctx: GenerationContext,
     runMode: GenerationRunMode = "normal_run",
+    leaseTokenOverride?: string | null,
   ): Promise<void> {
-    let leaseToken: string | null = null;
-    try {
-      leaseToken = await this.acquireGenerationLease(ctx.id);
-    } catch (error) {
-      ctx.errorMessage = error instanceof Error ? error.message : String(error);
-      await this.finishGeneration(ctx, "error");
-      return;
-    }
+    const ownsLease = !leaseTokenOverride;
+    let leaseToken: string | null = leaseTokenOverride ?? null;
     if (!leaseToken) {
-      return;
+      try {
+        leaseToken = await this.acquireGenerationLease(ctx.id);
+      } catch (error) {
+        ctx.errorMessage = error instanceof Error ? error.message : String(error);
+        await this.finishGeneration(ctx, "error");
+        return;
+      }
+      if (!leaseToken) {
+        return;
+      }
     }
 
     const leaseRenewTimer = setInterval(() => {
@@ -4923,9 +5084,14 @@ class GenerationManager {
           err,
         );
       });
-      await this.releaseGenerationLease(ctx.id, leaseToken).catch((err) => {
-        console.error(`[GenerationManager] Failed to release lease for generation ${ctx.id}:`, err);
-      });
+      if (ownsLease && leaseToken) {
+        await this.releaseGenerationLease(ctx.id, leaseToken).catch((err) => {
+          console.error(
+            `[GenerationManager] Failed to release lease for generation ${ctx.id}:`,
+            err,
+          );
+        });
+      }
     }
   }
 
@@ -5073,6 +5239,30 @@ class GenerationManager {
   ): Promise<void> {
     ctx.sessionId = params.sessionId;
     await this.bindRuntimeSandboxToContext(ctx, params);
+  }
+
+  private async persistRuntimeSessionBinding(
+    ctx: GenerationContext,
+    params: {
+      runtimeMetadata?: Awaited<ReturnType<typeof getOrCreateConversationRuntime>>["metadata"];
+      sessionId: string;
+    },
+  ): Promise<void> {
+    ctx.sessionId = params.sessionId;
+
+    if (!ctx.runtimeId) {
+      return;
+    }
+
+    await conversationRuntimeService.updateRuntimeSession({
+      runtimeId: ctx.runtimeId,
+      sandboxId: ctx.sandboxId ?? null,
+      sessionId: params.sessionId,
+      sandboxProvider: params.runtimeMetadata?.sandboxProvider,
+      runtimeHarness: params.runtimeMetadata?.runtimeHarness,
+      runtimeProtocolVersion: params.runtimeMetadata?.runtimeProtocolVersion,
+      status: "active",
+    });
   }
 
   private appendInjectedToolResult(
@@ -5988,6 +6178,10 @@ class GenerationManager {
           );
           client = session.harnessClient;
           sessionId = session.session.id;
+          await this.persistRuntimeSessionBinding(ctx, {
+            runtimeMetadata,
+            sessionId,
+          });
           ctx.agentInitReadyAt = Date.now();
           this.markPhase(ctx, "agent_init_ready");
           this.broadcast(ctx, {

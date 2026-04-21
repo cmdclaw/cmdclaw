@@ -35,8 +35,11 @@ import time
 command = [
     "bun",
     "run",
-    "chat",
+    "--cwd",
+    "../..",
+    "cmdclaw",
     "--",
+    "chat",
     "--message",
     os.environ["CHAT_PROMPT"],
     "--model",

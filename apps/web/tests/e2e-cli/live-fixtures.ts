@@ -77,7 +77,7 @@ afterEach(async () => {
 });
 
 export function buildCliCommandArgs(...args: string[]): string[] {
-  return ["run", "--cwd", "../cli", "start", "--", ...args];
+  return ["run", "--cwd", "../..", "cmdclaw", "--", ...args];
 }
 
 export function trackCliOutput(text: string): void {
@@ -222,7 +222,7 @@ export function assertExitOk(result: CommandResult, label: string): void {
 
 export async function ensureCliAuth(): Promise<void> {
   const authResult = await runBunCommand(buildCliCommandArgs("auth", "login"), 120_000);
-  assertExitOk(authResult, "bun run --cwd ../cli start -- auth login");
+  assertExitOk(authResult, "bun run --cwd ../.. cmdclaw -- auth login");
 }
 
 export async function withIntegrationTokensTemporarilyRemoved<T>(args: {
@@ -285,7 +285,7 @@ export function getCliClient() {
   const config = defaultProfileStore.load(serverUrl);
   if (!config?.token) {
     throw new Error(
-      `Missing CLI auth token for ${serverUrl}. Run: bun run --cwd ../cli start -- auth login --server ${serverUrl}`,
+      `Missing CLI auth token for ${serverUrl}. Run: bun run --cwd ../.. cmdclaw -- auth login --server ${serverUrl}`,
     );
   }
   return createRpcClient(serverUrl, config.token);

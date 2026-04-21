@@ -3,7 +3,16 @@ import IORedis from "ioredis";
 import { prefixRedisKey } from "../instance";
 import { buildRedisOptions } from "../redis/connection-options";
 
-const DEFAULT_MAX_ACTIVE_SLOTS = 20;
+export function resolveDefaultMaxActiveSlots(): number {
+  // Live CLI suites fan out many generations at once, but the local Daytona pool is much smaller.
+  // Keep those runs queued instead of flooding Daytona and failing with "No available runners".
+  if (process.env.E2E_LIVE === "1") {
+    return 4;
+  }
+
+  return 20;
+}
+
 const DEFAULT_LEASE_TTL_MS = 2 * 60 * 1000;
 const DEFAULT_LOCK_TTL_MS = 5_000;
 const DEFAULT_LOCK_WAIT_MS = 50;
@@ -55,7 +64,7 @@ export class SandboxSlotManager {
     disableLock?: boolean;
   }) {
     this.redis = options?.redis ?? (getSandboxSlotRedis() as unknown as RedisLike);
-    this.maxActiveSlots = options?.maxActiveSlots ?? DEFAULT_MAX_ACTIVE_SLOTS;
+    this.maxActiveSlots = options?.maxActiveSlots ?? resolveDefaultMaxActiveSlots();
     this.leaseTtlMs = options?.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
     this.lockTtlMs = options?.lockTtlMs ?? DEFAULT_LOCK_TTL_MS;
     this.lockWaitMs = options?.lockWaitMs ?? DEFAULT_LOCK_WAIT_MS;
