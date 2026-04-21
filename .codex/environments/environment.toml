@@ -9,6 +9,9 @@ cd "$CODEX_WORKTREE_PATH"
 
 bun install
 bun run worktree:start
+
+export APP_URL="$(bun run worktree:env | awk -F= '/^APP_URL=/{print $2}')"
+export AGENT_BROWSER_SESSION="$(bun run worktree:env | awk -F= '/^AGENT_BROWSER_SESSION=/{print $2}')"
 '''
 
 [cleanup]
