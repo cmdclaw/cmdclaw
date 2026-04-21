@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(ls:*)",
+      "Bash(node:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nreplace Mintlify starter kit with Bap documentation\n\nRemove all template content \\(essentials, api-reference, ai-tools, snippets,\nimages\\) and create new docs from scratch: landing page, quickstart, self-hosting\nguide, integrations overview \\(all 13 services\\), and custom skills. Update\nbranding to Bap with greyscale colors and app logos.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
