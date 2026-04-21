@@ -11,6 +11,7 @@ import type { MessagePart, AttachmentData, SandboxFileData } from "./message-lis
 import { CollapsedTrace } from "./collapsed-trace";
 import { CoworkerInvocationCard } from "./coworker-invocation-card";
 import { MessageBubble } from "./message-bubble";
+import { dedupeApprovalSegments } from "./message-item-approval-dedupe";
 import { collectQuestionApprovalToolUseIds } from "./question-approval-utils";
 import { ToolApprovalCard } from "./tool-approval-card";
 
@@ -292,7 +293,7 @@ export function MessageItem({
       result.push(currentSegment);
     }
 
-    return result;
+    return dedupeApprovalSegments(result);
   }, [hasInterruptedMarker, parts, timing]);
 
   // Check if there were any text, tool calls or thinking (need to show trace)
