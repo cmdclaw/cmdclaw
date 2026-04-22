@@ -721,6 +721,7 @@ function createConversationRuntimeMock(params: {
   promptMock: ReturnType<typeof vi.fn>;
   subscribeMock: ReturnType<typeof vi.fn>;
   messagesMock?: ReturnType<typeof vi.fn>;
+  getSessionMock?: ReturnType<typeof vi.fn>;
   readFile?: ReturnType<typeof vi.fn>;
   writeFile?: ReturnType<typeof vi.fn>;
   ensureDir?: ReturnType<typeof vi.fn>;
@@ -733,7 +734,7 @@ function createConversationRuntimeMock(params: {
       prompt: params.promptMock,
       abort: vi.fn().mockResolvedValue({ data: null, error: null }),
       messages: params.messagesMock ?? vi.fn().mockResolvedValue({ data: [], error: null }),
-      getSession: vi.fn().mockResolvedValue({ data: null, error: null }),
+      getSession: params.getSessionMock ?? vi.fn().mockResolvedValue({ data: null, error: null }),
       createSession: vi.fn().mockResolvedValue({ data: { id: "session-1" }, error: null }),
       updatePart: vi.fn().mockResolvedValue({ data: null, error: null }),
       replyPermission: vi.fn().mockResolvedValue(undefined),
@@ -2472,7 +2473,7 @@ describe("generationManager transitions", () => {
         userId: "user-1",
         content: "Steer the runner toward the urgent issue first.",
         fileAttachments: null,
-        selectedPlatformSkillSlugs: ["linear"],
+        selectedPlatformSkillSlugs: ["fill-pdf"],
       },
     ]);
 
@@ -2483,7 +2484,7 @@ describe("generationManager transitions", () => {
       userId: "user-1",
       content: "Steer the runner toward the urgent issue first.",
       fileAttachments: undefined,
-      selectedPlatformSkillSlugs: ["linear"],
+      selectedPlatformSkillSlugs: ["fill-pdf"],
     });
   });
 
@@ -4572,6 +4573,84 @@ describe("generationManager transitions", () => {
       expect.objectContaining({
         generationId: "gen-opencode-empty-completion",
         conversationId: "conv-opencode-empty-completion",
+      }),
+    );
+  });
+
+  it("captures session state and runtime log tail for opaque empty opencode completions", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(null);
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue({ data: null, error: {} });
+    const messagesMock = vi.fn().mockResolvedValue({
+      data: null,
+      error: {},
+    });
+    const getSessionMock = vi.fn().mockResolvedValue({
+      data: { id: "session-1", state: "running" },
+      error: null,
+    });
+    const readFileMock = vi
+      .fn()
+      .mockResolvedValue("booting runtime\nconnected to provider\nfatal: runner exited unexpectedly");
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([{ type: "server.connected", properties: {} }]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        messagesMock,
+        getSessionMock,
+        readFile: readFileMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const ctx = createCtx({
+      id: "gen-opencode-empty-completion-opaque",
+      conversationId: "conv-opencode-empty-completion-opaque",
+      model: "openai/gpt-5.4",
+      backendType: "opencode",
+      userMessageContent: "hi",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(ctx.errorMessage).toContain("no usable error details");
+    expect(readFileMock).toHaveBeenCalledWith("/tmp/opencode.log");
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+    expect(vi.mocked(logServerEvent)).toHaveBeenCalledWith(
+      "error",
+      "OPENCODE_EMPTY_COMPLETION",
+      expect.objectContaining({
+        fallbackMessagesError: "{}",
+        sessionGetDataShape: "object(id,state)",
+        sessionGetDataDetail: expect.stringContaining("\"state\":\"running\""),
+        opencodeLogTail: expect.stringContaining("fatal: runner exited unexpectedly"),
+        promptResultDataShape: "object(data,error)",
+      }),
+      expect.objectContaining({
+        generationId: "gen-opencode-empty-completion-opaque",
+        conversationId: "conv-opencode-empty-completion-opaque",
       }),
     );
   });

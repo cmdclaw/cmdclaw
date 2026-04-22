@@ -1007,6 +1007,17 @@ function describePromptResultData(data: unknown): string | null {
   return typeof data;
 }
 
+function isOpaqueDiagnosticMessage(message: string | null | undefined): boolean {
+  const normalized = message?.trim();
+  return !normalized || normalized === "{}" || normalized === "[]" || normalized === "null";
+}
+
+function tailLogText(text: string, maxLines = 80, maxChars = 4_000): string {
+  const lines = text.split("\n");
+  const tail = lines.slice(-maxLines).join("\n");
+  return tail.length > maxChars ? `...${tail.slice(-maxChars)}` : tail;
+}
+
 function isBootstrapTimeoutError(error: unknown): boolean {
   return formatErrorMessage(error).startsWith("Error: Agent preparation timed out after ");
 }
@@ -2006,6 +2017,61 @@ class GenerationManager {
         userId: ctx.userId,
       },
     );
+  }
+
+  private async collectEmptyCompletionDiagnostics(
+    ctx: GenerationContext,
+    runtimeClient: RuntimeHarnessClient,
+    sessionId: string,
+  ): Promise<{
+    sessionGetError: string | null;
+    sessionGetErrorDetail: string | null;
+    sessionGetDataShape: string | null;
+    sessionGetDataDetail: string | null;
+    opencodeLogTail: string | null;
+    opencodeLogReadError: string | null;
+  }> {
+    let sessionGetError: string | null = null;
+    let sessionGetErrorDetail: string | null = null;
+    let sessionGetDataShape: string | null = null;
+    let sessionGetDataDetail: string | null = null;
+    let opencodeLogTail: string | null = null;
+    let opencodeLogReadError: string | null = null;
+
+    try {
+      const sessionResult = await runtimeClient.getSession({ sessionID: sessionId });
+      if (sessionResult.error) {
+        sessionGetError = formatErrorMessage(sessionResult.error);
+        sessionGetErrorDetail = summarizeUnknownValue(sessionResult.error, 1_500);
+      } else {
+        sessionGetDataShape = describePromptResultData(sessionResult.data);
+        sessionGetDataDetail =
+          sessionResult.data === null || sessionResult.data === undefined
+            ? null
+            : summarizeUnknownValue(sessionResult.data, 1_500);
+      }
+    } catch (error) {
+      sessionGetError = formatErrorMessage(error);
+      sessionGetErrorDetail = summarizeUnknownValue(error, 1_500);
+    }
+
+    if (ctx.sandbox) {
+      try {
+        const rawLog = await ctx.sandbox.readFile("/tmp/opencode.log");
+        opencodeLogTail = rawLog.trim() ? tailLogText(rawLog) : null;
+      } catch (error) {
+        opencodeLogReadError = formatErrorMessage(error);
+      }
+    }
+
+    return {
+      sessionGetError,
+      sessionGetErrorDetail,
+      sessionGetDataShape,
+      sessionGetDataDetail,
+      opencodeLogTail,
+      opencodeLogReadError,
+    };
   }
 
   private getRemainingRunTimeMs(ctx: Pick<GenerationContext, "deadlineAt">): number {
@@ -7215,15 +7281,23 @@ class GenerationManager {
 
         const observedTerminalIdle = Boolean(ctx.phaseMarks?.session_idle);
         if (!ctx.assistantContent.trim() && !observedTerminalIdle) {
+          const emptyCompletionDiagnostics = await this.collectEmptyCompletionDiagnostics(
+            ctx,
+            runtimeClient,
+            activeSessionId,
+          );
+          const bestTranscriptError = isOpaqueDiagnosticMessage(fallbackMessagesError)
+            ? emptyCompletionDiagnostics.sessionGetError
+            : fallbackMessagesError;
           this.setCompletionReason(ctx, "runtime_error");
-          ctx.errorMessage = fallbackMessagesError
-            ? `The sandbox run finished without producing any assistant output. Loading the runtime transcript also failed: ${fallbackMessagesError}`
-            : "The sandbox run finished without producing any assistant output. The prompt resolved, but the runtime returned no assistant text or transcript.";
+          ctx.errorMessage = !isOpaqueDiagnosticMessage(bestTranscriptError)
+            ? `The sandbox run finished without producing any assistant output. Loading the runtime transcript also failed: ${bestTranscriptError}`
+            : "The sandbox run finished without producing any assistant output. The runtime produced no assistant text, no terminal event, and the transcript endpoint returned no usable error details.";
           this.captureOriginalError(
             ctx,
             new Error(
-              fallbackMessagesError
-                ? `OpenCode transcript fetch failed after empty completion: ${fallbackMessagesError}`
+              !isOpaqueDiagnosticMessage(bestTranscriptError)
+                ? `OpenCode transcript fetch failed after empty completion: ${bestTranscriptError}`
                 : "OpenCode returned no assistant text or transcript after prompt completion.",
             ),
             {
@@ -7239,6 +7313,12 @@ class GenerationManager {
               fallbackMessagesErrorDetail,
               fallbackMessagesPayloadShape,
               promptResultDataShape: promptResult.ok ? describePromptResultData(promptResult.data) : null,
+              sessionGetError: emptyCompletionDiagnostics.sessionGetError,
+              sessionGetErrorDetail: emptyCompletionDiagnostics.sessionGetErrorDetail,
+              sessionGetDataShape: emptyCompletionDiagnostics.sessionGetDataShape,
+              sessionGetDataDetail: emptyCompletionDiagnostics.sessionGetDataDetail,
+              opencodeLogTail: emptyCompletionDiagnostics.opencodeLogTail,
+              opencodeLogReadError: emptyCompletionDiagnostics.opencodeLogReadError,
             },
             {
               source: "generation-manager",

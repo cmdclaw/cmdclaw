@@ -4,11 +4,180 @@ import {
 } from "@opencode-ai/sdk/v2/client";
 import type { SandboxRuntimeAdapterOptions, SandboxRuntimeClientImplementation } from "../types";
 
+const OPENCODE_HTTP_PREVIEW_LIMIT = 2_000;
+const REDACTED_HEADER_NAMES = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "x-api-key",
+  "proxy-authorization",
+]);
+
+function truncatePreview(value: string, maxLength = OPENCODE_HTTP_PREVIEW_LIMIT): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function summarizeUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+  try {
+    const serialized = JSON.stringify(error);
+    return typeof serialized === "string" ? serialized : String(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function getHeadersObject(headers?: HeadersInit | Headers): Record<string, string> | null {
+  if (!headers) {
+    return null;
+  }
+  const out: Record<string, string> = {};
+  for (const [key, value] of new Headers(headers).entries()) {
+    out[key] = REDACTED_HEADER_NAMES.has(key.toLowerCase()) ? "[REDACTED]" : value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function resolveFetchUrl(input: Parameters<typeof fetch>[0]): URL | null {
+  try {
+    if (input instanceof Request) {
+      return new URL(input.url);
+    }
+    if (input instanceof URL) {
+      return input;
+    }
+    if (typeof input === "string") {
+      return new URL(input);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function shouldTraceOpencodeFetch(url: URL | null): boolean {
+  if (!url) {
+    return false;
+  }
+  return (
+    url.pathname.endsWith("/session/prompt") ||
+    url.pathname.endsWith("/session/messages") ||
+    url.pathname.endsWith("/session/get") ||
+    url.pathname.endsWith("/event/subscribe")
+  );
+}
+
+async function getRequestBodySummary(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+): Promise<string | null> {
+  const body = init?.body;
+  if (typeof body === "string") {
+    return `string(${body.length})`;
+  }
+  if (body instanceof URLSearchParams) {
+    return `urlsearchparams(${body.toString().length})`;
+  }
+  if (body instanceof Uint8Array) {
+    return `uint8array(${body.byteLength})`;
+  }
+  if (body instanceof ArrayBuffer) {
+    return `arraybuffer(${body.byteLength})`;
+  }
+
+  if (input instanceof Request && !init?.body) {
+    try {
+      const text = await input.clone().text();
+      return `request(${text.length})`;
+    } catch {
+      return "request(unreadable)";
+    }
+  }
+
+  return body ? "unknown" : null;
+}
+
+async function getResponseBodyPreview(response: Response, url: URL | null): Promise<string | null> {
+  if (!url || url.pathname.endsWith("/event/subscribe")) {
+    return null;
+  }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("text/event-stream")) {
+    return null;
+  }
+  try {
+    const text = await response.clone().text();
+    return truncatePreview(text);
+  } catch {
+    return null;
+  }
+}
+
+function createLoggingFetch(fetchImpl: typeof fetch): typeof fetch {
+  const wrappedFetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const url = resolveFetchUrl(input);
+      const shouldTrace = shouldTraceOpencodeFetch(url);
+      const startedAt = Date.now();
+      const method =
+        init?.method ??
+        (input instanceof Request ? input.method : undefined) ??
+        "GET";
+      const requestHeaders =
+        getHeadersObject(init?.headers) ??
+        (input instanceof Request ? getHeadersObject(input.headers) : null);
+      const requestBodySummary = shouldTrace ? await getRequestBodySummary(input, init) : null;
+
+      try {
+        const response = await fetchImpl(input, init);
+        if (shouldTrace) {
+          console.info("[SandboxRuntime][fetch]", {
+            method,
+            url: url?.toString() ?? "unknown",
+            status: response.status,
+            durationMs: Date.now() - startedAt,
+            requestHeaders,
+            requestBodySummary,
+            responseHeaders: getHeadersObject(response.headers),
+            responseBodyPreview: await getResponseBodyPreview(response, url),
+          });
+        }
+        return response;
+      } catch (error) {
+        if (shouldTrace) {
+          console.error("[SandboxRuntime][fetch] request failed", {
+            method,
+            url: url?.toString() ?? "unknown",
+            durationMs: Date.now() - startedAt,
+            requestHeaders,
+            requestBodySummary,
+            error: summarizeUnknownError(error),
+          });
+        }
+        throw error;
+      }
+    },
+    {
+      preconnect:
+        "preconnect" in fetchImpl && typeof fetchImpl.preconnect === "function"
+          ? fetchImpl.preconnect.bind(fetchImpl)
+          : fetch.preconnect.bind(fetch),
+    },
+  );
+
+  return wrappedFetch as typeof fetch;
+}
+
 export function createSandboxOpencodeClient(options: {
   baseUrl: string;
   fetch?: typeof fetch;
 }): OpencodeClient {
-  return createOpencodeV2Client(options);
+  return createOpencodeV2Client({
+    ...options,
+    fetch: createLoggingFetch(options.fetch ?? fetch),
+  });
 }
 
 export const opencodeRuntimeClientImplementation: SandboxRuntimeClientImplementation = {
