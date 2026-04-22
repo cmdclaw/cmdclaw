@@ -922,7 +922,89 @@ function formatErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
   }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    const message = extractStructuredErrorMessage(error);
+    if (message) {
+      return message;
+    }
+    const json = safeJsonStringify(error);
+    if (json) {
+      return json;
+    }
+  }
   return String(error);
+}
+
+function extractStructuredErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const record = error as Record<string, unknown>;
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+  if (typeof record.error === "string" && record.error.trim()) {
+    return record.error;
+  }
+
+  const nestedCandidates = [record.error, record.data, record.details];
+  for (const candidate of nestedCandidates) {
+    const nested = extractStructuredErrorMessage(candidate);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function safeJsonStringify(value: unknown): string | null {
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string" ? serialized : null;
+  } catch {
+    return null;
+  }
+}
+
+function summarizeUnknownValue(value: unknown, maxLength = 500): string {
+  const raw =
+    typeof value === "string" ? value : safeJsonStringify(value) ?? formatErrorMessage(value);
+  return raw.length > maxLength ? `${raw.slice(0, maxLength)}...` : raw;
+}
+
+function describeSessionMessagesPayload(payload: unknown): string {
+  if (Array.isArray(payload)) {
+    return `array(${payload.length})`;
+  }
+  if (payload === null) {
+    return "null";
+  }
+  if (payload && typeof payload === "object") {
+    return `object(${Object.keys(payload as Record<string, unknown>)
+      .slice(0, 8)
+      .join(",")})`;
+  }
+  return typeof payload;
+}
+
+function describePromptResultData(data: unknown): string | null {
+  if (data === null || data === undefined) {
+    return null;
+  }
+  if (Array.isArray(data)) {
+    return `array(${data.length})`;
+  }
+  if (typeof data === "object") {
+    return `object(${Object.keys(data as Record<string, unknown>)
+      .slice(0, 8)
+      .join(",")})`;
+  }
+  return typeof data;
 }
 
 function isBootstrapTimeoutError(error: unknown): boolean {
@@ -6936,7 +7018,7 @@ class GenerationManager {
           model: modelConfig,
         })
         .then(
-          () => ({ ok: true as const }),
+          (data) => ({ ok: true as const, data }),
           (error) => ({ ok: false as const, error }),
         );
       this.startExternalInterruptPolling(ctx);
@@ -7084,12 +7166,15 @@ class GenerationManager {
 
       if (!ctx.assistantContent.trim()) {
         let fallbackMessagesError: string | null = null;
+        let fallbackMessagesErrorDetail: string | null = null;
+        let fallbackMessagesPayloadShape: string | null = null;
         try {
           const messagesResult = await runtimeClient.messages({
             sessionID: activeSessionId,
             limit: 20,
           });
           if (!messagesResult.error) {
+            fallbackMessagesPayloadShape = describeSessionMessagesPayload(messagesResult.data);
             const fallbackText = extractAssistantTextFromSessionMessagesPayload(
               messagesResult.data,
             );
@@ -7120,9 +7205,11 @@ class GenerationManager {
             }
           } else {
             fallbackMessagesError = formatErrorMessage(messagesResult.error);
+            fallbackMessagesErrorDetail = summarizeUnknownValue(messagesResult.error);
           }
         } catch (error) {
           fallbackMessagesError = formatErrorMessage(error);
+          fallbackMessagesErrorDetail = summarizeUnknownValue(error);
           console.warn("[GenerationManager] Failed fallback session.messages fetch:", error);
         }
 
@@ -7132,12 +7219,26 @@ class GenerationManager {
           ctx.errorMessage = fallbackMessagesError
             ? `The sandbox run finished without producing any assistant output. Loading the runtime transcript also failed: ${fallbackMessagesError}`
             : "The sandbox run finished without producing any assistant output. The prompt resolved, but the runtime returned no assistant text or transcript.";
+          this.captureOriginalError(
+            ctx,
+            new Error(
+              fallbackMessagesError
+                ? `OpenCode transcript fetch failed after empty completion: ${fallbackMessagesError}`
+                : "OpenCode returned no assistant text or transcript after prompt completion.",
+            ),
+            {
+              phase: "prompt_completed",
+            },
+          );
           logServerEvent(
             "error",
             "OPENCODE_EMPTY_COMPLETION",
             {
               sessionIdleObserved: observedTerminalIdle,
               fallbackMessagesError,
+              fallbackMessagesErrorDetail,
+              fallbackMessagesPayloadShape,
+              promptResultDataShape: promptResult.ok ? describePromptResultData(promptResult.data) : null,
             },
             {
               source: "generation-manager",

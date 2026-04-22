@@ -4502,6 +4502,80 @@ describe("generationManager transitions", () => {
     });
   });
 
+  it("surfaces structured transcript fetch errors for empty opencode completions", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(null);
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue({ id: "prompt-result-1" });
+    const messagesMock = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        status: 404,
+        data: {
+          message: "session.messages returned 404",
+        },
+      },
+    });
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([{ type: "server.connected", properties: {} }]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        messagesMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const ctx = createCtx({
+      id: "gen-opencode-empty-completion",
+      conversationId: "conv-opencode-empty-completion",
+      model: "openai/gpt-5.4",
+      backendType: "opencode",
+      userMessageContent: "hi",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(ctx.errorMessage).toContain("session.messages returned 404");
+    expect(ctx.debugInfo?.originalErrorMessage).toContain("session.messages returned 404");
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+    expect(vi.mocked(logServerEvent)).toHaveBeenCalledWith(
+      "error",
+      "OPENCODE_EMPTY_COMPLETION",
+      expect.objectContaining({
+        fallbackMessagesError: "session.messages returned 404",
+        fallbackMessagesErrorDetail: expect.stringContaining(
+          "\"message\":\"session.messages returned 404\"",
+        ),
+        promptResultDataShape: "object(id)",
+      }),
+      expect.objectContaining({
+        generationId: "gen-opencode-empty-completion",
+        conversationId: "conv-opencode-empty-completion",
+      }),
+    );
+  });
+
   it("does not block prompt send on post-prompt cache writes", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
