@@ -185,6 +185,23 @@ describe("prepareExecutorInSandbox", () => {
     ).rejects.toThrow("Executor status check failed");
   });
 
+  it("skips executor prep when an explicit empty source allowlist is provided", async () => {
+    const sandbox = makeSandboxHandle();
+
+    const result = await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+      allowedSourceIds: [],
+    });
+
+    expect(result).toBeNull();
+    expect(getWorkspaceExecutorBootstrapMock).not.toHaveBeenCalled();
+    expect(getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock).not.toHaveBeenCalled();
+    expect(sandbox.exec).not.toHaveBeenCalled();
+  });
+
   it("passes tracing env through to the sandboxed executor when enabled", async () => {
     process.env.EXECUTOR_TRACE_ENABLED = "1";
     process.env.EXECUTOR_TRACE_SERVICE_NAME = "executor-e2b";

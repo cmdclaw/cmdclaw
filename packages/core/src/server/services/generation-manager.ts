@@ -3851,6 +3851,8 @@ class GenerationManager {
         runtimeCallbackToken: runtimeRecord?.callbackToken ?? undefined,
         runtimeId: runtimeRecord?.id ?? genRecord.runtimeId ?? undefined,
         runtimeTurnSeq: pendingInterrupt?.turnSeq ?? runtimeRecord?.activeTurnSeq,
+        sandboxId: runtimeRecord?.sandboxId ?? undefined,
+        sessionId: runtimeRecord?.sessionId ?? undefined,
         agentInitStartedAt: undefined,
         agentInitReadyAt: undefined,
         agentInitFailedAt: undefined,
@@ -6926,6 +6928,7 @@ class GenerationManager {
       let stagedUploadCount = 0;
       let stagedUploadFailureCount = 0;
       let lastExternalInterruptPollAt = 0;
+      let observedTerminalIdle = false;
 
       // Subscribe to SSE events BEFORE sending the prompt
       const promptTimeoutController = new AbortController();
@@ -7195,6 +7198,7 @@ class GenerationManager {
 
         // Check for session idle (generation complete)
         if (event.type === "session.idle") {
+          observedTerminalIdle = true;
           this.markPhase(ctx, "session_idle");
           console.log("[GenerationManager] Session idle - generation complete");
           break;
@@ -7257,11 +7261,31 @@ class GenerationManager {
       }
       const promptResultEnvelope = promptResultOutcome.value;
       if (!promptResultEnvelope.ok) {
-        throw promptResultEnvelope.error;
+        if (!observedTerminalIdle) {
+          throw promptResultEnvelope.error;
+        }
+        console.warn(
+          "[GenerationManager] Ignoring prompt transport error after session idle:",
+          promptResultEnvelope.error,
+        );
       }
-      const promptResult = promptResultEnvelope.data;
+      const rawPromptResult = promptResultEnvelope.ok
+        ? promptResultEnvelope.data
+        : { data: null, error: null };
+      const promptResult =
+        rawPromptResult && typeof rawPromptResult === "object"
+          ? ("data" in rawPromptResult || "error" in rawPromptResult
+              ? rawPromptResult
+              : { data: rawPromptResult, error: null })
+          : { data: rawPromptResult ?? null, error: null };
       if (promptResult.error) {
-        throw new Error(formatErrorMessage(promptResult.error));
+        if (!observedTerminalIdle) {
+          throw new Error(formatErrorMessage(promptResult.error));
+        }
+        console.warn(
+          "[GenerationManager] Ignoring prompt result error after session idle:",
+          promptResult.error,
+        );
       }
       if (sessionErrorMessage) {
         throw new Error(sessionErrorMessage);
@@ -7351,7 +7375,6 @@ class GenerationManager {
           console.warn("[GenerationManager] Failed fallback session.messages fetch:", error);
         }
 
-        const observedTerminalIdle = Boolean(ctx.phaseMarks?.session_idle);
         if (!ctx.assistantContent.trim() && !observedTerminalIdle) {
           const emptyCompletionDiagnostics = await this.collectEmptyCompletionDiagnostics(
             ctx,

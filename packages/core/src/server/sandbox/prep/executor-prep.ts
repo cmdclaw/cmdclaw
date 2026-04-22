@@ -552,6 +552,9 @@ export async function prepareExecutorInSandbox(input: {
   if (!input.workspaceId) {
     return null;
   }
+  if (Array.isArray(input.allowedSourceIds) && input.allowedSourceIds.length === 0) {
+    return null;
+  }
   const workspaceId = input.workspaceId;
 
   const [bootstrap, nativeMcpOauthSources] = await loadExecutorBootstrap({

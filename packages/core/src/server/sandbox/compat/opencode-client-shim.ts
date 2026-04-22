@@ -11,7 +11,11 @@ export function createRuntimeHarnessClientFromOpencodeClient(
       return { stream: mapRuntimeEventStream(result.stream) };
     },
     prompt: async (input) => {
-      const result = await client.session.prompt({
+      const promptMethod =
+        "promptAsync" in client.session && typeof client.session.promptAsync === "function"
+          ? client.session.promptAsync.bind(client.session)
+          : client.session.prompt.bind(client.session);
+      const result = await promptMethod({
         sessionID: input.sessionID,
         parts: input.parts as never,
         ...(input.agent ? { agent: input.agent } : {}),
