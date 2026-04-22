@@ -7083,6 +7083,7 @@ class GenerationManager {
       this.markPhase(ctx, "prompt_completed");
 
       if (!ctx.assistantContent.trim()) {
+        let fallbackMessagesError: string | null = null;
         try {
           const messagesResult = await runtimeClient.messages({
             sessionID: activeSessionId,
@@ -7117,9 +7118,38 @@ class GenerationManager {
                 },
               );
             }
+          } else {
+            fallbackMessagesError = formatErrorMessage(messagesResult.error);
           }
         } catch (error) {
+          fallbackMessagesError = formatErrorMessage(error);
           console.warn("[GenerationManager] Failed fallback session.messages fetch:", error);
+        }
+
+        const observedTerminalIdle = Boolean(ctx.phaseMarks?.session_idle);
+        if (!ctx.assistantContent.trim() && !observedTerminalIdle) {
+          this.setCompletionReason(ctx, "runtime_error");
+          ctx.errorMessage = fallbackMessagesError
+            ? `The sandbox run finished without producing any assistant output. Loading the runtime transcript also failed: ${fallbackMessagesError}`
+            : "The sandbox run finished without producing any assistant output. The prompt resolved, but the runtime returned no assistant text or transcript.";
+          logServerEvent(
+            "error",
+            "OPENCODE_EMPTY_COMPLETION",
+            {
+              sessionIdleObserved: observedTerminalIdle,
+              fallbackMessagesError,
+            },
+            {
+              source: "generation-manager",
+              traceId: ctx.traceId,
+              generationId: ctx.id,
+              conversationId: ctx.conversationId,
+              userId: ctx.userId,
+              sessionId: activeSessionId,
+            },
+          );
+          await this.finishGeneration(ctx, "error");
+          return;
         }
       }
 
@@ -9468,7 +9498,9 @@ class GenerationManager {
                 ? ctx.assistantContent || interruptionText
                 : ctx.assistantContent ||
                   ctx.errorMessage ||
-                  "I apologize, but I couldn't generate a response.",
+                  (status === "completed"
+                    ? "The run completed without producing any assistant output."
+                    : "The run failed before producing any assistant output."),
             contentParts: cancelledParts.length > 0 ? cancelledParts : null,
             inputTokens: ctx.usage.inputTokens,
             outputTokens: ctx.usage.outputTokens,

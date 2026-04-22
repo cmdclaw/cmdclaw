@@ -4696,6 +4696,62 @@ describe("generationManager transitions", () => {
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
+  it("surfaces an explicit error when OpenCode resolves without output or transcript", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(writeCoworkerDocumentsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const messagesMock = vi.fn().mockResolvedValue({ data: [], error: null });
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([{ type: "server.connected", properties: {} }]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        messagesMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({
+      type: "none",
+    });
+
+    const ctx = createCtx({
+      id: "gen-openai-empty-output",
+      conversationId: "conv-openai-empty-output",
+      backendType: "opencode",
+      model: "openai/gpt-5.4",
+      userMessageContent: "hi",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(messagesMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      limit: 20,
+    });
+    expect(ctx.completionReason).toBe("runtime_error");
+    expect(ctx.errorMessage).toContain("without producing any assistant output");
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
+  });
+
   it("persists the runtime session as soon as agent init completes before pre-prompt work finishes", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
