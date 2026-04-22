@@ -1,7 +1,10 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
+import type {
+  TemplateCatalogTemplate,
+  TemplateIntegrationType,
+} from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";

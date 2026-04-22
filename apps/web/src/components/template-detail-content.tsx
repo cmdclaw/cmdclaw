@@ -1,6 +1,9 @@
 "use client";
 
-import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
+import type {
+  TemplateCatalogTemplate,
+  TemplateIntegrationType,
+} from "@cmdclaw/db/template-catalog";
 import { ArrowRight, Check, Link2, Play, Share2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";

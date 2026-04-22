@@ -1,6 +1,9 @@
 "use client";
 
-import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
+import type {
+  TemplateCatalogTemplate,
+  TemplateIntegrationType,
+} from "@cmdclaw/db/template-catalog";
 import type { ChangeEvent } from "react";
 import { Download, Loader2, Star, Trash2, Upload } from "lucide-react";
 import Image from "next/image";

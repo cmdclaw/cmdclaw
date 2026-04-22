@@ -1,6 +1,9 @@
 "use client";
 
-import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
+import type {
+  TemplateCatalogTemplate,
+  TemplateIntegrationType,
+} from "@cmdclaw/db/template-catalog";
 import { ArrowUp, Search, SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
