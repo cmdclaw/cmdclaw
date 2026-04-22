@@ -1,8 +1,4 @@
-import {
-  ALL_INTEGRATION_TYPES,
-  type DisplayIntegrationType,
-  type IntegrationType,
-} from "@/lib/integration-icons";
+import { ALL_INTEGRATION_TYPES, type DisplayIntegrationType } from "@/lib/integration-icons";
 
 export type ExecutorSourceLike = {
   namespace: string;
@@ -28,8 +24,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isDisplayIntegrationType(value: string): value is IntegrationType {
-  return (ALL_INTEGRATION_TYPES as readonly string[]).includes(value);
+function isDisplayIntegrationType(value: string): value is DisplayIntegrationType {
+  return value === "linear" || (ALL_INTEGRATION_TYPES as readonly string[]).includes(value);
 }
 
 function humanizeOperation(value: string): string {
@@ -114,7 +110,7 @@ function detectIntegrationFromSource(
     }
   }
 
-  for (const integration of ALL_INTEGRATION_TYPES) {
+  for (const integration of [...ALL_INTEGRATION_TYPES, "linear"] as const) {
     const normalized = normalizeExecutorMatchKey(integration);
     if (candidates.has(normalized)) {
       return integration;

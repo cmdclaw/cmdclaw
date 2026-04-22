@@ -95,7 +95,7 @@ const DEPARTMENTS: Department[] = [
         description: "Flags P0 tickets and pings on-call in Slack",
         trigger: "On new ticket",
         status: "on",
-        integrations: ["slack", "linear"],
+        integrations: ["slack", "github"],
         x: 830,
         y: 50,
       },

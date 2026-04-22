@@ -3,7 +3,7 @@ import { getBrandfetchDomainFromEndpoint, getBrandfetchLogoUrl } from "@/lib/bra
 
 describe("brandfetch", () => {
   test("derives the brand domain from common MCP subdomains", () => {
-    expect(getBrandfetchDomainFromEndpoint("https://mcp.linear.app/mcp")).toBe("linear.app");
+    expect(getBrandfetchDomainFromEndpoint("https://api.github.com/mcp")).toBe("github.com");
     expect(getBrandfetchDomainFromEndpoint("https://api.notion.so/v1")).toBe("notion.so");
   });
 
@@ -17,8 +17,8 @@ describe("brandfetch", () => {
   });
 
   test("builds a Brandfetch CDN icon URL", () => {
-    expect(getBrandfetchLogoUrl("https://mcp.linear.app/mcp")).toBe(
-      "https://cdn.brandfetch.io/linear.app/w/80/h/80/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
+    expect(getBrandfetchLogoUrl("https://api.github.com/mcp")).toBe(
+      "https://cdn.brandfetch.io/github.com/w/80/h/80/icon.png?c=1bxslgajlsi6kg3c82drbf3z0eaQApbQkPa",
     );
   });
 });

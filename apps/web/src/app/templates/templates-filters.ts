@@ -1,11 +1,11 @@
-import type { IntegrationType } from "@/lib/integration-icons";
+import type { TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
 
 export type TemplateItem = {
   id: string;
   title: string;
   description: string;
   triggerType: "manual" | "schedule" | "email" | "webhook";
-  integrations: IntegrationType[];
+  integrations: TemplateIntegrationType[];
   industry: string;
   useCase: string;
 };
@@ -14,7 +14,7 @@ export type TemplateFilters = {
   search: string;
   industries: string[];
   useCases: string[];
-  integrations: IntegrationType[];
+  integrations: TemplateIntegrationType[];
 };
 
 export function toggleMultiSelect<T extends string>(values: T[], value: T) {

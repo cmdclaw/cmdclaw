@@ -21,7 +21,6 @@ vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
     "google_sheets",
     "google_drive",
     "notion",
-    "linear",
     "github",
     "airtable",
     "slack",

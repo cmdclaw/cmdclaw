@@ -260,40 +260,6 @@ export const PREVIEW_MOCK_DATA: Record<string, PreviewMockData[]> = {
     },
   ],
 
-  linear: [
-    {
-      operation: "create",
-      label: "Create Issue (Urgent)",
-      args: {
-        team: "ENG",
-        title: "Fix production bug in authentication flow",
-        description:
-          "Users are experiencing intermittent 500 errors when logging in. This needs immediate attention.",
-        priority: "1",
-      },
-    },
-    {
-      operation: "create",
-      label: "Create Issue (Normal)",
-      args: {
-        team: "PRODUCT",
-        title: "Add dark mode support",
-        description: "Implement dark mode theme across all pages to improve user experience.",
-        priority: "3",
-      },
-    },
-    {
-      operation: "update",
-      label: "Update Issue",
-      args: {
-        title: "Updated title",
-        state: "In Progress",
-        priority: "2",
-      },
-      positionalArgs: ["ENG-123"],
-    },
-  ],
-
   github: [
     {
       operation: "create-issue",

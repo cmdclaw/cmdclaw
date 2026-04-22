@@ -1,13 +1,12 @@
 "use client";
 
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
 import { ArrowUp, Search, SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { IntegrationType } from "@/lib/integration-icons";
 import { Sheet, SheetContent, SheetClose } from "@/components/animate-ui/components/radix/sheet";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
 import { Button } from "@/components/ui/button";
@@ -36,7 +35,17 @@ const USE_CASES = [
   "Notifications",
 ] as const;
 
-const INTEGRATIONS_FILTER: IntegrationType[] = [
+const TEMPLATE_INTEGRATION_DISPLAY_NAMES: Record<TemplateIntegrationType, string> = {
+  ...INTEGRATION_DISPLAY_NAMES,
+  linear: "Linear",
+};
+
+const TEMPLATE_INTEGRATION_LOGOS: Record<TemplateIntegrationType, string> = {
+  ...INTEGRATION_LOGOS,
+  linear: "/integrations/linear.svg",
+};
+
+const INTEGRATIONS_FILTER: TemplateIntegrationType[] = [
   "google_gmail",
   "hubspot",
   "slack",
@@ -47,6 +56,7 @@ const INTEGRATIONS_FILTER: IntegrationType[] = [
   "notion",
   "github",
   "linear",
+  "airtable",
 ] as const;
 
 const FILTER_PILL_TRANSITION = { type: "spring", duration: 0.4, bounce: 0.15 } as const;
@@ -87,7 +97,7 @@ function IntegrationLogos({
   return (
     <div className="flex items-center gap-1">
       {integrations.map((key) => {
-        const logo = INTEGRATION_LOGOS[key];
+        const logo = TEMPLATE_INTEGRATION_LOGOS[key];
         if (!logo) {
           return null;
         }
@@ -172,7 +182,7 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeIndustries, setActiveIndustries] = useState<string[]>([]);
   const [activeUseCases, setActiveUseCases] = useState<string[]>([]);
-  const [activeIntegrations, setActiveIntegrations] = useState<IntegrationType[]>([]);
+  const [activeIntegrations, setActiveIntegrations] = useState<TemplateIntegrationType[]>([]);
 
   const activeFilterCount =
     activeIndustries.length + activeUseCases.length + activeIntegrations.length;
@@ -191,7 +201,7 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
     setActiveUseCases((prev) => toggleMultiSelect(prev, useCase));
   }, []);
 
-  const toggleIntegration = useCallback((integration: IntegrationType) => {
+  const toggleIntegration = useCallback((integration: TemplateIntegrationType) => {
     setActiveIntegrations((prev) => toggleMultiSelect(prev, integration));
   }, []);
 
@@ -304,10 +314,10 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
                       <FilterPill
                         key={integration}
                         value={integration}
-                        label={INTEGRATION_DISPLAY_NAMES[integration]}
+                        label={TEMPLATE_INTEGRATION_DISPLAY_NAMES[integration]}
                         active={activeIntegrations.includes(integration)}
                         onSelect={toggleIntegration}
-                        iconSrc={INTEGRATION_LOGOS[integration]}
+                        iconSrc={TEMPLATE_INTEGRATION_LOGOS[integration]}
                       />
                     ))}
                   </div>
@@ -388,10 +398,10 @@ export function TemplatesPageClient({ templates }: { templates: TemplateCatalogT
                         <FilterPill
                           key={integration}
                           value={integration}
-                          label={INTEGRATION_DISPLAY_NAMES[integration]}
+                          label={TEMPLATE_INTEGRATION_DISPLAY_NAMES[integration]}
                           active={activeIntegrations.includes(integration)}
                           onSelect={toggleIntegration}
-                          iconSrc={INTEGRATION_LOGOS[integration]}
+                          iconSrc={TEMPLATE_INTEGRATION_LOGOS[integration]}
                         />
                       ))}
                     </div>

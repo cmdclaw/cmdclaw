@@ -17,7 +17,6 @@ const ALLOWED_TOOL_INTEGRATION_MAP: Record<string, string> = {
   "google-sheets": "google_sheets",
   "google-drive": "google_drive",
   notion: "notion",
-  linear: "linear",
   github: "github",
   airtable: "airtable",
   hubspot: "hubspot",

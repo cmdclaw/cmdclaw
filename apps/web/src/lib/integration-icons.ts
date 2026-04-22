@@ -34,7 +34,6 @@ export type IntegrationType =
   | "google_sheets"
   | "google_drive"
   | "notion"
-  | "linear"
   | "github"
   | "airtable"
   | "slack"
@@ -45,7 +44,13 @@ export type IntegrationType =
   | "reddit"
   | "twitter";
 
-export type DisplayIntegrationType = IntegrationType | "coworker" | "agent-browser";
+type ExecutorDisplayOnlyIntegrationType = "linear";
+
+export type DisplayIntegrationType =
+  | IntegrationType
+  | ExecutorDisplayOnlyIntegrationType
+  | "coworker"
+  | "agent-browser";
 
 export const ALL_INTEGRATION_TYPES: IntegrationType[] = [
   "google_gmail",
@@ -56,7 +61,6 @@ export const ALL_INTEGRATION_TYPES: IntegrationType[] = [
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",
@@ -90,7 +94,6 @@ export const INTEGRATION_ICONS: Record<IntegrationType, LucideIcon> = {
   google_sheets: Table2,
   google_drive: HardDrive,
   notion: BookOpen,
-  linear: TicketCheck,
   github: Github,
   airtable: Grid3X3,
   slack: MessageSquare,
@@ -111,7 +114,6 @@ export const INTEGRATION_DISPLAY_NAMES: Record<IntegrationType, string> = {
   google_sheets: "Google Sheets",
   google_drive: "Google Drive",
   notion: "Notion",
-  linear: "Linear",
   github: "GitHub",
   airtable: "Airtable",
   slack: "Slack",
@@ -132,7 +134,6 @@ export const INTEGRATION_COLORS: Record<IntegrationType, string> = {
   google_sheets: "text-green-500",
   google_drive: "text-yellow-500",
   notion: "text-gray-800 dark:text-gray-200",
-  linear: "text-purple-500",
   github: "text-gray-900 dark:text-gray-100",
   airtable: "text-blue-400",
   slack: "text-[#4A154B]",
@@ -153,7 +154,6 @@ export const INTEGRATION_LOGOS: Record<IntegrationType, string> = {
   google_sheets: "/integrations/google-sheets.svg",
   google_drive: "/integrations/google-drive.svg",
   notion: "/integrations/notion.svg",
-  linear: "/integrations/linear.svg",
   github: "/integrations/github.svg",
   airtable: "/integrations/airtable.svg",
   slack: "/integrations/slack.svg",
@@ -242,14 +242,6 @@ export const INTEGRATION_OPERATION_LABELS: Record<IntegrationType, Record<string
     query: "Querying database",
     create: "Creating page",
     append: "Appending content",
-  },
-  linear: {
-    list: "Listing issues",
-    get: "Getting issue",
-    teams: "Listing teams",
-    mine: "Getting my issues",
-    create: "Creating issue",
-    update: "Updating issue",
   },
   github: {
     repos: "Listing repositories",
@@ -385,18 +377,21 @@ export const INTEGRATION_OPERATION_LABELS: Record<IntegrationType, Record<string
 
 const DISPLAY_INTEGRATION_ICONS: Record<DisplayIntegrationType, LucideIcon> = {
   ...INTEGRATION_ICONS,
+  linear: TicketCheck,
   coworker: Bot,
   "agent-browser": Globe,
 };
 
 const DISPLAY_INTEGRATION_NAMES: Record<DisplayIntegrationType, string> = {
   ...INTEGRATION_DISPLAY_NAMES,
+  linear: "Linear",
   coworker: "Coworker",
   "agent-browser": "Browser",
 };
 
 const DISPLAY_INTEGRATION_LOGOS: Partial<Record<DisplayIntegrationType, string>> = {
   ...INTEGRATION_LOGOS,
+  linear: "/integrations/linear.svg",
   coworker: "/tools/lobster.svg",
   "agent-browser": "/tools/browser.svg",
 };
@@ -405,6 +400,14 @@ const DISPLAY_INTEGRATION_OPERATION_LABELS: Partial<
   Record<DisplayIntegrationType, Record<string, string>>
 > = {
   ...INTEGRATION_OPERATION_LABELS,
+  linear: {
+    list: "Listing issues",
+    get: "Getting issue",
+    teams: "Listing teams",
+    mine: "Getting my issues",
+    create: "Creating issue",
+    update: "Updating issue",
+  },
   coworker: {
     list: "Listing coworkers",
     invoke: "Invoking coworker",
@@ -453,6 +456,10 @@ export function getIntegrationDisplayName(integration: string): string {
  * Get the color class for an integration icon (with custom fallback)
  */
 export function getIntegrationColor(integration: string): string {
+  if (integration === "linear") {
+    return "text-purple-500";
+  }
+
   return INTEGRATION_COLORS[integration as IntegrationType] || "text-muted-foreground";
 }
 

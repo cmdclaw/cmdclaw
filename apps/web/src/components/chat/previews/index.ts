@@ -7,7 +7,6 @@ import { DrivePreview } from "./drive-preview";
 import { GithubPreview } from "./github-preview";
 import { GmailPreview } from "./gmail-preview";
 import { HubspotPreview } from "./hubspot-preview";
-import { LinearPreview } from "./linear-preview";
 import { NotionPreview } from "./notion-preview";
 import { SheetsPreview } from "./sheets-preview";
 import { SlackPreview } from "./slack-preview";
@@ -39,7 +38,6 @@ export const INTEGRATION_PREVIEWS: Record<string, IntegrationPreviewConfig> = {
   google_sheets: { component: SheetsPreview, displayName: "Google Sheets" },
   google_drive: { component: DrivePreview, displayName: "Google Drive" },
   notion: { component: NotionPreview, displayName: "Notion" },
-  linear: { component: LinearPreview, displayName: "Linear" },
   github: { component: GithubPreview, displayName: "GitHub" },
   airtable: { component: AirtablePreview, displayName: "Airtable" },
   hubspot: { component: HubspotPreview, displayName: "HubSpot" },

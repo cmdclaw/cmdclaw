@@ -42,7 +42,6 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   "google-sheets": "google_sheets",
   "google-drive": "google_drive",
   notion: "notion",
-  linear: "linear",
   github: "github",
   airtable: "airtable",
   hubspot: "hubspot",

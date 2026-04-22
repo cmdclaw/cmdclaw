@@ -32,7 +32,7 @@ export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
 const EXECUTOR_WEB_PORT = 8788;
 const EXECUTOR_WEB_LOG_PATH = "/tmp/executor-web.log";
 
-type IntegrationType = "google_gmail" | "slack" | "notion" | "linear" | "github" | "airtable";
+type IntegrationType = "google_gmail" | "slack" | "notion" | "github" | "airtable";
 
 export type ParsedArgs = {
   sandboxId?: string;
@@ -75,7 +75,6 @@ const ENV_VAR_MAP: Record<IntegrationType, string> = {
   google_gmail: "GMAIL_ACCESS_TOKEN",
   slack: "SLACK_ACCESS_TOKEN",
   notion: "NOTION_ACCESS_TOKEN",
-  linear: "LINEAR_ACCESS_TOKEN",
   github: "GITHUB_ACCESS_TOKEN",
   airtable: "AIRTABLE_ACCESS_TOKEN",
 };
@@ -940,10 +939,6 @@ async function main(): Promise<void> {
 
   if (userContext.integrationEnvs.NOTION_ACCESS_TOKEN) {
     console.log("✓ Notion integration enabled");
-  }
-
-  if (userContext.integrationEnvs.LINEAR_ACCESS_TOKEN) {
-    console.log("✓ Linear integration enabled");
   }
 
   if (userContext.integrationEnvs.GITHUB_ACCESS_TOKEN) {

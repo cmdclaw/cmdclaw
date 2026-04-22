@@ -258,7 +258,7 @@ const FEATURED_INTEGRATIONS: IntegrationType[] = [
   "hubspot",
   "salesforce",
   "notion",
-  "linear",
+  "outlook",
   "github",
   "airtable",
   "google_calendar",

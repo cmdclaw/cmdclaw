@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { ArrowUp } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -11,7 +11,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AttachmentData } from "@/components/prompt-bar";
-import type { IntegrationType } from "@/lib/integration-icons";
 import type { PromptSegment } from "@/lib/prompt-segments";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
@@ -42,6 +41,11 @@ type HeroPromptExample = {
   color: string;
   segments: PromptSegment[];
   prompt: string;
+};
+
+const TEMPLATE_INTEGRATION_LOGOS: Record<TemplateIntegrationType, string> = {
+  ...INTEGRATION_LOGOS,
+  linear: "/integrations/linear.svg",
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -177,11 +181,11 @@ function getTriggerLabel(triggerType: string) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function IntegrationLogos({ integrations }: { integrations: IntegrationType[] }) {
+function IntegrationLogos({ integrations }: { integrations: TemplateIntegrationType[] }) {
   return (
     <div className="flex items-center gap-1">
       {integrations.map((key) => {
-        const logo = INTEGRATION_LOGOS[key];
+        const logo = TEMPLATE_INTEGRATION_LOGOS[key];
         if (!logo) {
           return null;
         }

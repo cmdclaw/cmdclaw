@@ -62,7 +62,6 @@ const PROVIDER_DEFINITIVE_PATTERNS: Partial<Record<IntegrationType, RegExp[]>> =
   google_sheets: [/expired or revoked/i],
   github: [/bad_refresh_token/i],
   hubspot: [/refresh token.*invalid/i],
-  linear: [/invalid_grant/i],
   notion: [/revoked/i],
   reddit: [/invalid_grant/i],
   salesforce: [/invalid_grant/i],

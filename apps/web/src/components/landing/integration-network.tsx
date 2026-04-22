@@ -25,7 +25,6 @@ const NODES: IntegrationNode[] = [
   { key: "hubspot", action: "Manage deals & contacts" },
   { key: "salesforce", action: "Query & update records" },
   { key: "notion", action: "Create & search pages" },
-  { key: "linear", action: "Create & manage issues" },
   { key: "github", action: "List PRs & search code" },
   { key: "google_calendar", action: "Create & list events" },
   { key: "google_sheets", action: "Read & update cells" },

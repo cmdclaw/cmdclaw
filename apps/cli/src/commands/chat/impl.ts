@@ -97,7 +97,6 @@ const AUTH_INTEGRATION_TYPES = [
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",

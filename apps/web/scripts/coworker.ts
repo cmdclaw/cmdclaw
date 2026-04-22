@@ -63,7 +63,6 @@ type CoworkerIntegrationType =
   | "google_sheets"
   | "google_drive"
   | "notion"
-  | "linear"
   | "github"
   | "airtable"
   | "slack"
@@ -81,7 +80,6 @@ const integrationTypes = new Set<CoworkerIntegrationType>([
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",

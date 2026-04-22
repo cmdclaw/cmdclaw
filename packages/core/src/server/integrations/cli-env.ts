@@ -21,7 +21,6 @@ export const TOKEN_ENV_VAR_MAP: Record<Exclude<IntegrationType, "linkedin">, str
   google_sheets: "GOOGLE_SHEETS_ACCESS_TOKEN",
   google_drive: "GOOGLE_DRIVE_ACCESS_TOKEN",
   notion: "NOTION_ACCESS_TOKEN",
-  linear: "LINEAR_ACCESS_TOKEN",
   github: "GITHUB_ACCESS_TOKEN",
   airtable: "AIRTABLE_ACCESS_TOKEN",
   slack: "SLACK_ACCESS_TOKEN",
@@ -319,14 +318,6 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 - notion append <pageId> --content <text> - Append to page
 - notion databases - List all databases
 - notion query <databaseId> - Query database entries
-
-## Linear CLI [${statusTag("linear")}]
-- linear list [-t team] [-s state] [-l limit] - List issues
-- linear get <identifier> - Get issue (e.g., ENG-123)
-- linear create --team <key> --title <title> [-d description] [-p priority]
-- linear update <identifier> [--title] [--state] [--priority]
-- linear teams - List teams
-- linear mine - My assigned issues
 
 ## GitHub CLI [${statusTag("github")}]
 - github repos - List my repositories

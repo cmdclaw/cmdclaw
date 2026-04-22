@@ -89,7 +89,6 @@ describe("parseCliCommand", () => {
         integration: "notion",
         operation: "search",
       },
-      { command: "linear mine", integration: "linear", operation: "mine" },
       {
         command: "github prs --owner acme --repo app",
         integration: "github",

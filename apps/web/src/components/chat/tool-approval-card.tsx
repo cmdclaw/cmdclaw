@@ -21,7 +21,6 @@ import { DrivePreview } from "./previews/drive-preview";
 import { GithubPreview } from "./previews/github-preview";
 import { GmailPreview } from "./previews/gmail-preview";
 import { HubspotPreview } from "./previews/hubspot-preview";
-import { LinearPreview } from "./previews/linear-preview";
 import { NotionPreview } from "./previews/notion-preview";
 import { SheetsPreview } from "./previews/sheets-preview";
 import { SlackPreview } from "./previews/slack-preview";
@@ -61,8 +60,6 @@ function renderPreview(integration: string, previewProps: PreviewProps) {
       return <DrivePreview {...previewProps} />;
     case "notion":
       return <NotionPreview {...previewProps} />;
-    case "linear":
-      return <LinearPreview {...previewProps} />;
     case "github":
       return <GithubPreview {...previewProps} />;
     case "airtable":

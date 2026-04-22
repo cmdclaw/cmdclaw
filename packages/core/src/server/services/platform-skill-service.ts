@@ -16,7 +16,6 @@ const INTEGRATION_SKILL_DIRS = new Set([
   "google-gmail",
   "google-sheets",
   "hubspot",
-  "linear",
   "linkedin",
   "notion",
   "outlook-calendar",

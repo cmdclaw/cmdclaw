@@ -14,7 +14,6 @@ export const COWORKER_AVAILABLE_INTEGRATION_TYPES: IntegrationType[] = [
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",

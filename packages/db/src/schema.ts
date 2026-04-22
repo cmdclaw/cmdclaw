@@ -1074,7 +1074,6 @@ export const integrationTypeEnum = pgEnum("integration_type", [
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",

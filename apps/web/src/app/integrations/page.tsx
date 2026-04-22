@@ -105,12 +105,6 @@ const integrationConfig = {
     icon: "/integrations/notion.svg",
     bgColor: "bg-white dark:bg-gray-800",
   },
-  // linear: {
-  //   name: "Linear",
-  //   description: "Manage issues and projects",
-  //   icon: "/integrations/linear.svg",
-  //   bgColor: "bg-white dark:bg-gray-800",
-  // },
   // github: {
   //   name: "GitHub",
   //   description: "Access repositories and PRs",

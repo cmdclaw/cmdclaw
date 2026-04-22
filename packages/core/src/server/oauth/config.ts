@@ -9,7 +9,6 @@ export type IntegrationType =
   | "google_sheets"
   | "google_drive"
   | "notion"
-  | "linear"
   | "github"
   | "airtable"
   | "slack"
@@ -243,30 +242,6 @@ const configs: Record<IntegrationType, () => OAuthConfig> = {
         id: data.bot?.owner?.user?.id ?? data.id,
         displayName: data.bot?.owner?.user?.name ?? data.name ?? "Notion User",
         metadata: { workspaceName: data.bot?.workspace_name },
-      };
-    },
-  }),
-
-  linear: () => ({
-    clientId: env.LINEAR_CLIENT_ID ?? "",
-    clientSecret: env.LINEAR_CLIENT_SECRET ?? "",
-    authUrl: "https://linear.app/oauth/authorize",
-    tokenUrl: "https://api.linear.app/oauth/token",
-    redirectUri: `${getAppUrl()}/api/oauth/callback`,
-    scopes: ["read", "write", "issues:create"],
-    getUserInfo: async (accessToken) => {
-      const res = await fetch("https://api.linear.app/graphql", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: "{ viewer { id name email } }" }),
-      });
-      const data = await res.json();
-      return {
-        id: data.data?.viewer?.id ?? "",
-        displayName: data.data?.viewer?.name ?? data.data?.viewer?.email ?? "",
       };
     },
   }),

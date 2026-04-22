@@ -13,7 +13,6 @@ const SUPPORTED_TYPES = new Set<IntegrationType>([
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",

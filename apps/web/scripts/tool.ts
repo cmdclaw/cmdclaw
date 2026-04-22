@@ -28,7 +28,6 @@ const TOOL_ENV_REQUIREMENTS: Record<string, string[]> = {
   "google-gmail": ["GMAIL_ACCESS_TOKEN"],
   "google-sheets": ["GOOGLE_SHEETS_ACCESS_TOKEN"],
   hubspot: ["HUBSPOT_ACCESS_TOKEN"],
-  linear: ["LINEAR_ACCESS_TOKEN"],
   linkedin: ["UNIPILE_API_KEY", "UNIPILE_DSN", "LINKEDIN_ACCOUNT_ID"],
   notion: ["NOTION_ACCESS_TOKEN"],
   "outlook-calendar": ["OUTLOOK_CALENDAR_ACCESS_TOKEN"],

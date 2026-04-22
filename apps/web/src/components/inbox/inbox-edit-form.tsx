@@ -34,20 +34,6 @@ function getEditableFields(integration: string, operation: string): EditableFiel
         { key: "body", label: "Body", type: "textarea" },
       ];
 
-    case "linear":
-      if (operation === "create") {
-        return [
-          { key: "team", label: "Team", type: "text" },
-          { key: "title", label: "Title", type: "text" },
-          { key: "description", label: "Description", type: "textarea" },
-          { key: "priority", label: "Priority", type: "text" },
-        ];
-      }
-      return [
-        { key: "title", label: "Title", type: "text" },
-        { key: "description", label: "Description", type: "textarea" },
-      ];
-
     case "github":
       if (operation === "create-issue") {
         return [

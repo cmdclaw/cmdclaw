@@ -1,6 +1,6 @@
 "use client";
 
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
 import { ArrowRight, Check, Link2, Play, Share2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,6 +8,11 @@ import { useCallback, useEffect, useState } from "react";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { INTEGRATION_LOGOS } from "@/lib/integration-icons";
+
+const TEMPLATE_INTEGRATION_LOGOS: Record<TemplateIntegrationType, string> = {
+  ...INTEGRATION_LOGOS,
+  linear: "/integrations/linear.svg",
+};
 
 function base64Url(input: string) {
   return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -71,7 +76,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
                 className="bg-muted inline-flex size-9 items-center justify-center rounded-lg"
               >
                 <Image
-                  src={INTEGRATION_LOGOS[key]}
+                  src={TEMPLATE_INTEGRATION_LOGOS[key]}
                   alt={key}
                   width={16}
                   height={16}
@@ -171,7 +176,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
                         className="bg-muted inline-flex size-7 items-center justify-center rounded-lg"
                       >
                         <Image
-                          src={INTEGRATION_LOGOS[integration]}
+                          src={TEMPLATE_INTEGRATION_LOGOS[integration]}
                           alt={integration}
                           width={14}
                           height={14}
@@ -260,7 +265,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
                   <span className="bg-muted inline-flex size-9 items-center justify-center rounded-lg">
                     {app.integration ? (
                       <Image
-                        src={INTEGRATION_LOGOS[app.integration]}
+                        src={TEMPLATE_INTEGRATION_LOGOS[app.integration]}
                         alt={app.name}
                         width={16}
                         height={16}

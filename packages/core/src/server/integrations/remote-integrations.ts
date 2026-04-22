@@ -18,7 +18,6 @@ export const REMOTE_INTEGRATION_SUPPORTED_TYPES = [
   "google_sheets",
   "google_drive",
   "notion",
-  "linear",
   "github",
   "airtable",
   "slack",

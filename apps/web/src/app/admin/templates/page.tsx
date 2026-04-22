@@ -1,6 +1,6 @@
 "use client";
 
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
 import type { ChangeEvent } from "react";
 import { Download, Loader2, Star, Trash2, Upload } from "lucide-react";
 import Image from "next/image";
@@ -16,6 +16,16 @@ import {
   useAdminSetTemplateCatalogFeatured,
   useAdminTemplateCatalogList,
 } from "@/orpc/hooks";
+
+const TEMPLATE_INTEGRATION_DISPLAY_NAMES: Record<TemplateIntegrationType, string> = {
+  ...INTEGRATION_DISPLAY_NAMES,
+  linear: "Linear",
+};
+
+const TEMPLATE_INTEGRATION_LOGOS: Record<TemplateIntegrationType, string> = {
+  ...INTEGRATION_LOGOS,
+  linear: "/integrations/linear.svg",
+};
 
 function downloadTemplateCatalog(filename: string, json: string) {
   const blob = new Blob([json], { type: "application/json" });
@@ -95,13 +105,13 @@ function TemplateRow({
             className="border-border/50 bg-background inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
           >
             <Image
-              src={INTEGRATION_LOGOS[integration]}
-              alt={INTEGRATION_DISPLAY_NAMES[integration] ?? integration}
+              src={TEMPLATE_INTEGRATION_LOGOS[integration]}
+              alt={TEMPLATE_INTEGRATION_DISPLAY_NAMES[integration]}
               width={14}
               height={14}
               className="size-3.5"
             />
-            {INTEGRATION_DISPLAY_NAMES[integration] ?? integration}
+            {TEMPLATE_INTEGRATION_DISPLAY_NAMES[integration]}
           </span>
         ))}
       </div>

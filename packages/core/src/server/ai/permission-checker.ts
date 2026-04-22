@@ -17,7 +17,6 @@ const CLI_TO_INTEGRATION: Record<string, string> = {
   "google-sheets": "google_sheets",
   "google-drive": "google_drive",
   notion: "notion",
-  linear: "linear",
   github: "github",
   airtable: "airtable",
   hubspot: "hubspot",
@@ -66,10 +65,6 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
   notion: {
     read: ["search", "get", "databases", "query"],
     write: ["create", "append"],
-  },
-  linear: {
-    read: ["list", "get", "teams", "mine"],
-    write: ["create", "update"],
   },
   github: {
     read: ["repos", "prs", "pr", "my-prs", "issues", "search"],
@@ -202,7 +197,6 @@ const INTEGRATION_NAMES: Record<string, string> = {
   google_sheets: "Google Sheets",
   google_drive: "Google Drive",
   notion: "Notion",
-  linear: "Linear",
   github: "GitHub",
   airtable: "Airtable",
   hubspot: "HubSpot",
