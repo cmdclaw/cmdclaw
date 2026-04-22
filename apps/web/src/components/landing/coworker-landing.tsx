@@ -172,6 +172,14 @@ const HERO_PROMPT_EXAMPLES: HeroPromptExample[] = [
   },
 ];
 
+const HERO_BACKGROUND_PLACEHOLDER =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABcQERQRDhcUEhQaGBcbIjklIh8fIkYyNSk5UkhXVVFIUE5bZoNvW2F8Yk5QcptzfIeLkpSSWG2grJ+OqoOPko3/2wBDARgaGiIeIkMlJUONXlBejY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY3/wAARCAAbADADASIAAhEBAxEB/8QAGQAAAgMBAAAAAAAAAAAAAAAAAwQBAgUG/8QAJxAAAgICAQIFBQEAAAAAAAAAAQIAEQMhEjFBBBMiUcEFIzJhcfH/xAAYAQADAQEAAAAAAAAAAAAAAAABAwUCBP/EAB8RAAICAgIDAQAAAAAAAAAAAAECABEDBBIhIjJBYf/aAAwDAQACEQMRAD8AQCywWXCywWU5J5QYWTxh1wse1f2Ex4AxAFte7A0B7xL7GNftx6a2V/lD9inCRxsajIAGY4iLBU7MyvDNlxekHmgv0ntXtFLtAnsUI99MqPE2ZpjiBfWFUqCfUABfQRc6ahoajKovlMa3x+JwvlZvYyjjwInqKkqRqgNpRs2Yti+q48jDlkONwOJta1HMZ2y6oIO36nNMoLZrHQfIgU3C44zeUo+ZeJDgj8gZlY0dPEsqkV5hFHtf+QQ+3iyOhKstUQem4XAxbOxJs8lmgKguz3P/2Q==";
+const HERO_BACKGROUND_PLACEHOLDER_STYLE = {
+  backgroundImage: `url("${HERO_BACKGROUND_PLACEHOLDER}")`,
+  backgroundPosition: "center",
+  backgroundSize: "cover",
+} as const;
+
 function getTriggerLabel(triggerType: string) {
   const map: Record<string, string> = {
     manual: "Manual",
@@ -581,24 +589,23 @@ export function CoworkerLanding({
           className={`pointer-events-none absolute inset-0 overflow-hidden ${isAnonymous ? "[mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_75%,transparent_100%)]" : ""}`}
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.2),transparent_45%),linear-gradient(180deg,rgba(2,6,23,0.5)_0%,rgba(2,6,23,0.82)_100%)]" />
-          <Image
-            src="/landing/brick-building-mobile.avif"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            aria-hidden
-            className="animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover object-center opacity-80 saturate-110 md:hidden"
-          />
-          <Image
-            src="/landing/brick-building.avif"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            aria-hidden
-            className="hidden animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover object-[74%_60%] opacity-80 saturate-110 md:block lg:object-center"
-          />
+          <picture
+            className="absolute inset-0 block overflow-hidden"
+            style={HERO_BACKGROUND_PLACEHOLDER_STYLE}
+          >
+            <source media="(max-width: 767px)" srcSet="/landing/brick-building-mobile.avif" />
+            <img
+              src="/landing/brick-building.avif"
+              alt=""
+              aria-hidden
+              width={2600}
+              height={1463}
+              fetchPriority="high"
+              loading="eager"
+              decoding="async"
+              className="size-full animate-[landing-ocean-drift_28s_ease-in-out_infinite_alternate] object-cover object-center opacity-80 saturate-110 md:object-[74%_60%] lg:object-center"
+            />
+          </picture>
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,8,23,0.24)_0%,rgba(3,8,23,0.5)_45%,rgba(3,8,23,0.76)_100%)]" />
         </div>
 
