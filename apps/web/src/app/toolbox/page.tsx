@@ -532,6 +532,8 @@ function CustomToolCard({
   onUnshare: (id: string, displayName: string) => Promise<void>;
   onSaveShared: (id: string, displayName: string) => Promise<void>;
 }) {
+  const router = useRouter();
+
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
@@ -566,6 +568,15 @@ function CustomToolCard({
       void onSaveShared(skill.id, skill.displayName);
     },
     [onSaveShared, skill.displayName, skill.id],
+  );
+
+  const handleEdit = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void router.push(`/skills/${skill.id}`);
+    },
+    [router, skill.id],
   );
 
   const handleCardActionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -636,10 +647,8 @@ function CustomToolCard({
           <div className="flex items-center gap-0.5" onClick={handleCardActionClick}>
             {skill.canEdit ? (
               <>
-                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                  <Link href={`/skills/${skill.id}`}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Link>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleEdit}>
+                  <Pencil className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
