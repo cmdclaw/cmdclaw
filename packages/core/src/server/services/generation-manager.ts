@@ -6512,7 +6512,6 @@ class GenerationManager {
       let writtenSkills: string[] = [];
       let writtenIntegrationSkills: string[] = [];
       let prePromptCacheHit = false;
-      let runExecutorPrepareFinalize: (() => Promise<void>) | null = null;
       let startPostPromptCacheWrite: (() => Promise<void>) | null = null;
 
       const memorySyncPromise = (async () => {
@@ -6549,7 +6548,7 @@ class GenerationManager {
         }
       })();
 
-      const executorPreparePromise = (async () => {
+      const executorPreparePromise = (async (): Promise<() => Promise<void>> => {
         markPrePromptPhase("executor_prepare", "started");
         const executorPrepareStartedAt = Date.now();
         let executorPrepareCompleted = false;
@@ -6584,7 +6583,7 @@ class GenerationManager {
             },
           });
           executorInstructions = executorBootstrap?.instructions ?? null;
-          runExecutorPrepareFinalize = async () => {
+          return async () => {
             try {
               const result = executorBootstrap?.finalize
                 ? await executorBootstrap.finalize()
@@ -6841,13 +6840,15 @@ class GenerationManager {
         }
       })();
 
-      await Promise.all([
+      const [, , runExecutorPrepareFinalize] = await Promise.all([
         memorySyncPromise,
         runtimeContextWritePromise,
-          executorPreparePromise,
-          skillAssetPreparePromise,
-          runtimeSessionPromise,
-        ]);
+        executorPreparePromise,
+        skillAssetPreparePromise,
+        runtimeSessionPromise,
+      ]);
+
+      await runExecutorPrepareFinalize();
 
       if (!sessionId) {
         throw new Error("Runtime session ID is unavailable.");
@@ -7271,9 +7272,6 @@ class GenerationManager {
         return;
       }
       this.markPhase(ctx, "prompt_completed");
-      if (runExecutorPrepareFinalize) {
-        await runExecutorPrepareFinalize();
-      }
 
       if (!ctx.assistantContent.trim()) {
         const promptResultText = extractAssistantTextFromPromptResultData(promptResult.data);
