@@ -71,7 +71,7 @@ export type ExecutorSandboxBootstrap = {
 };
 
 export type ExecutorSandboxPreparation = ExecutorSandboxBootstrap & {
-  finalize: Promise<{ oauthCacheHits: number }>;
+  finalize: () => Promise<{ oauthCacheHits: number }>;
 };
 
 export type ExecutorPreparePhase =
@@ -597,19 +597,20 @@ export async function prepareExecutorInSandbox(input: {
     ),
   ];
 
-  const finalize = runPhase("oauth_reconcile", async () => {
-    const oauthReconcile = await reconcileNativeMcpOAuthSourcesInSandbox({
-      sandbox: input.sandbox,
-      env: executorCommandEnv,
-      sources: nativeMcpOauthSources,
-      homeDirectory,
-      reuseExistingState: input.reuseExistingState,
-    });
+  const finalize = async () =>
+    await runPhase("oauth_reconcile", async () => {
+      const oauthReconcile = await reconcileNativeMcpOAuthSourcesInSandbox({
+        sandbox: input.sandbox,
+        env: executorCommandEnv,
+        sources: nativeMcpOauthSources,
+        homeDirectory,
+        reuseExistingState: input.reuseExistingState,
+      });
 
-    return {
-      oauthCacheHits: oauthReconcile.cacheHits,
-    };
-  });
+      return {
+        oauthCacheHits: oauthReconcile.cacheHits,
+      };
+    });
 
   return {
     revisionHash: bootstrap.revisionHash,

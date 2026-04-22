@@ -132,6 +132,7 @@ import { writeSessionTranscriptFromConversation } from "./memory-service";
 import {
   buildOpencodeExportCommand,
   clearConversationSessionSnapshot,
+  extractEmbeddedJsonObject,
   saveConversationSessionSnapshot,
 } from "./opencode-session-snapshot-service";
 import { resolveSelectedPlatformSkillSlugs } from "./platform-skill-service";
@@ -678,6 +679,39 @@ function extractAssistantTextFromSessionMessagesPayload(payload: unknown): strin
   return null;
 }
 
+function extractAssistantTextFromPromptResultData(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const info = record.info as Record<string, unknown> | undefined;
+  if (info?.role && info.role !== "assistant") {
+    return null;
+  }
+
+  const parts = record.parts;
+  if (!Array.isArray(parts)) {
+    return null;
+  }
+
+  const text = parts
+    .map((part) => {
+      if (!part || typeof part !== "object") {
+        return "";
+      }
+      const entry = part as Record<string, unknown>;
+      if (entry.type === "text" && typeof entry.text === "string") {
+        return entry.text;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("");
+
+  return text.trim() ? text : null;
+}
+
 function buildExecutionPolicy(params: {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
@@ -1163,9 +1197,9 @@ function isExportedToolInFlight(part: ExportedAssistantPart): boolean {
   return status === "pending" || status === "running";
 }
 
-export function extractRuntimeExportState(payload: unknown): RuntimeExportState {
+function getLastExportedAssistantParts(payload: unknown): ExportedAssistantPart[] {
   if (!payload || typeof payload !== "object") {
-    return "broken";
+    return [];
   }
 
   const record = payload as {
@@ -1177,8 +1211,11 @@ export function extractRuntimeExportState(payload: unknown): RuntimeExportState 
   const assistantMessages = (record.messages ?? []).filter(
     (messageRecord) => messageRecord?.info?.role === "assistant",
   );
-  const lastAssistantMessage = assistantMessages.at(-1);
-  const parts = lastAssistantMessage?.parts ?? [];
+  return assistantMessages.at(-1)?.parts ?? [];
+}
+
+export function extractRuntimeExportState(payload: unknown): RuntimeExportState {
+  const parts = getLastExportedAssistantParts(payload);
 
   if (parts.some((part) => part?.type === "step-finish" && part.reason === "complete")) {
     return "terminal_completed";
@@ -2398,7 +2435,7 @@ class GenerationManager {
           timeout: 15_000,
         });
         if (exportResult.exitCode === 0) {
-          exportedPayload = JSON.parse(exportResult.stdout);
+          exportedPayload = JSON.parse(extractEmbeddedJsonObject(exportResult.stdout));
           exportState = extractRuntimeExportState(exportedPayload);
           sandboxState = "live";
         } else if (isMissingSandboxError(exportResult.stderr || exportResult.stdout)) {
@@ -6475,7 +6512,7 @@ class GenerationManager {
       let writtenSkills: string[] = [];
       let writtenIntegrationSkills: string[] = [];
       let prePromptCacheHit = false;
-      let executorPrepareFinalizePromise: Promise<void> = Promise.resolve();
+      let runExecutorPrepareFinalize: (() => Promise<void>) | null = null;
       let startPostPromptCacheWrite: (() => Promise<void>) | null = null;
 
       const memorySyncPromise = (async () => {
@@ -6547,8 +6584,11 @@ class GenerationManager {
             },
           });
           executorInstructions = executorBootstrap?.instructions ?? null;
-          executorPrepareFinalizePromise = (executorBootstrap?.finalize ?? Promise.resolve({ oauthCacheHits: 0 }))
-            .then((result) => {
+          runExecutorPrepareFinalize = async () => {
+            try {
+              const result = executorBootstrap?.finalize
+                ? await executorBootstrap.finalize()
+                : { oauthCacheHits: 0 };
               logServerEvent(
                 "info",
                 "EXECUTOR_PREP_COMPLETED",
@@ -6557,8 +6597,7 @@ class GenerationManager {
                 },
                 executorLogContext(),
               );
-            })
-            .catch((error) => {
+            } catch (error) {
               console.error(
                 "[GenerationManager] Executor OAuth reconcile failed after prompt-ready bootstrap:",
                 error,
@@ -6571,10 +6610,10 @@ class GenerationManager {
                 },
                 executorLogContext(),
               );
-            })
-            .finally(() => {
+            } finally {
               completeExecutorPrepare();
-            });
+            }
+          };
         } catch (error) {
           console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
           completeExecutorPrepare();
@@ -7002,7 +7041,6 @@ class GenerationManager {
         );
       }
 
-      void executorPrepareFinalizePromise;
       markPrePromptStep("prePromptSetupTotalMs", prePromptStartedAt);
       logServerEvent(
         "info",
@@ -7216,9 +7254,13 @@ class GenerationManager {
         await this.parkGenerationForRunDeadline(ctx, runtimeClient);
         return;
       }
-      const promptResult = promptResultOutcome.value;
-      if (!promptResult.ok) {
-        throw promptResult.error;
+      const promptResultEnvelope = promptResultOutcome.value;
+      if (!promptResultEnvelope.ok) {
+        throw promptResultEnvelope.error;
+      }
+      const promptResult = promptResultEnvelope.data;
+      if (promptResult.error) {
+        throw new Error(formatErrorMessage(promptResult.error));
       }
       if (sessionErrorMessage) {
         throw new Error(sessionErrorMessage);
@@ -7229,6 +7271,38 @@ class GenerationManager {
         return;
       }
       this.markPhase(ctx, "prompt_completed");
+      if (runExecutorPrepareFinalize) {
+        await runExecutorPrepareFinalize();
+      }
+
+      if (!ctx.assistantContent.trim()) {
+        const promptResultText = extractAssistantTextFromPromptResultData(promptResult.data);
+        if (promptResultText) {
+          if (!ctx.phaseMarks?.first_visible_output_emitted) {
+            this.markPhase(ctx, "first_visible_output_emitted");
+          }
+          if (!ctx.phaseMarks?.first_token_emitted) {
+            this.markPhase(ctx, "first_token_emitted");
+          }
+          ctx.assistantContent = promptResultText;
+          ctx.contentParts.push({ type: "text", text: promptResultText });
+          this.broadcast(ctx, { type: "text", content: promptResultText });
+          this.scheduleSave(ctx);
+          logServerEvent(
+            "info",
+            "OPENCODE_PROMPT_RESULT_ASSISTANT_APPLIED",
+            { chars: promptResultText.length },
+            {
+              source: "generation-manager",
+              traceId: ctx.traceId,
+              generationId: ctx.id,
+              conversationId: ctx.conversationId,
+              userId: ctx.userId,
+              sessionId: activeSessionId,
+            },
+          );
+        }
+      }
 
       if (!ctx.assistantContent.trim()) {
         let fallbackMessagesError: string | null = null;
@@ -7312,7 +7386,7 @@ class GenerationManager {
               fallbackMessagesError,
               fallbackMessagesErrorDetail,
               fallbackMessagesPayloadShape,
-              promptResultDataShape: promptResult.ok ? describePromptResultData(promptResult.data) : null,
+              promptResultDataShape: describePromptResultData(promptResult.data),
               sessionGetError: emptyCompletionDiagnostics.sessionGetError,
               sessionGetErrorDetail: emptyCompletionDiagnostics.sessionGetErrorDetail,
               sessionGetDataShape: emptyCompletionDiagnostics.sessionGetDataShape,

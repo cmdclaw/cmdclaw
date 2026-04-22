@@ -52,7 +52,7 @@ export function buildOpencodeImportCommand(filePath: string): string {
   return `opencode import ${shellEscape(filePath)}`;
 }
 
-function extractEmbeddedJsonObject(raw: string): string {
+export function extractEmbeddedJsonObject(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) {
     throw new SyntaxError("OpenCode session snapshot payload is empty");
