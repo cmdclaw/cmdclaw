@@ -236,6 +236,70 @@ const resetDemoPassword = protectedProcedure
     };
   });
 
+const setUserAdminRole = protectedProcedure
+  .input(
+    z.object({
+      userId: z.string().min(1),
+      isAdmin: z.boolean(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    await requireAdmin(context);
+
+    if (context.user.id === input.userId && !input.isAdmin) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "You cannot remove your own admin access.",
+      });
+    }
+
+    const [updatedUser] = await context.db
+      .update(user)
+      .set({ role: input.isAdmin ? "admin" : "user" })
+      .where(eq(user.id, input.userId))
+      .returning({
+        id: user.id,
+        role: user.role,
+      });
+
+    if (!updatedUser) {
+      throw new ORPCError("NOT_FOUND", { message: "User not found" });
+    }
+
+    return updatedUser;
+  });
+
+const grantAdminAccessByEmail = protectedProcedure
+  .input(
+    z.object({
+      email: z.string().email(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    await requireAdmin(context);
+
+    const createdUser = await resolveOrCreateDemoUser({
+      context,
+      email: input.email,
+    });
+
+    const [updatedUser] = await context.db
+      .update(user)
+      .set({ role: "admin" })
+      .where(eq(user.id, createdUser.userId))
+      .returning({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      });
+
+    if (!updatedUser) {
+      throw new ORPCError("NOT_FOUND", { message: "User not found" });
+    }
+
+    return updatedUser;
+  });
+
 const generationDurationMsSql = sql<number>`
   coalesce(
     (m.timing->>'generationDurationMs')::numeric,
@@ -1082,6 +1146,8 @@ const adminKillSandbox = protectedProcedure
 export const adminRouter = {
   createDemoPasswordAccount,
   resetDemoPassword,
+  setUserAdminRole,
+  grantAdminAccessByEmail,
   getChatOverview,
   getUsageDashboard,
   getCoworkerOverview,

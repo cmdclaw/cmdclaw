@@ -12,7 +12,9 @@ import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import {
   useAddApprovedLoginEmailAllowlistEntry,
+  useGrantAdminAccessByEmail,
   useAddGoogleAccessAllowlistEntry,
+  useSetUserAdminRole,
   useApprovedLoginEmailAllowlist,
   useGoogleAccessAllowlist,
   useRemoveApprovedLoginEmailAllowlistEntry,
@@ -146,6 +148,43 @@ function GoogleAccessCell({
   return <Switch checked={hasGoogleAccess} disabled={pending} onCheckedChange={handleChange} />;
 }
 
+function AdminRoleCell({
+  email,
+  userId,
+  isAdmin,
+  disabled,
+  onChange,
+}: {
+  email: string;
+  userId: string;
+  isAdmin: boolean;
+  disabled: boolean;
+  onChange: (userId: string, isAdmin: boolean) => Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+
+  const handleChange = useCallback(
+    async (checked: boolean) => {
+      setPending(true);
+      try {
+        await onChange(userId, checked);
+      } finally {
+        setPending(false);
+      }
+    },
+    [onChange, userId],
+  );
+
+  return (
+    <Switch
+      checked={isAdmin}
+      disabled={disabled || pending}
+      onCheckedChange={handleChange}
+      aria-label={`Admin access for ${email}`}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Impersonate button cell
 // ---------------------------------------------------------------------------
@@ -185,6 +224,8 @@ export default function AdminPage() {
   const removeApprovedLoginEntry = useRemoveApprovedLoginEmailAllowlistEntry();
   const addGoogleAccessEntry = useAddGoogleAccessAllowlistEntry();
   const removeGoogleAccessEntry = useRemoveGoogleAccessAllowlistEntry();
+  const grantAdminAccessByEmail = useGrantAdminAccessByEmail();
+  const setUserAdminRole = useSetUserAdminRole();
 
   const [users, setUsers] = useState<AdminListUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -202,6 +243,7 @@ export default function AdminPage() {
   const [newEmail, setNewEmail] = useState("");
   const [addLoginApproved, setAddLoginApproved] = useState(true);
   const [addGoogleAccess, setAddGoogleAccess] = useState(false);
+  const [addAdminAccess, setAddAdminAccess] = useState(false);
   const [addPending, setAddPending] = useState(false);
 
   // -- Filter --
@@ -289,6 +331,29 @@ export default function AdminPage() {
     }
   }, []);
 
+  const handleAdminRoleChange = useCallback(
+    async (userId: string, isAdmin: boolean) => {
+      setActionError(null);
+      setActionMessage(null);
+      try {
+        const updatedUser = await setUserAdminRole.mutateAsync({ userId, isAdmin });
+        setUsers((currentUsers) =>
+          currentUsers.map((currentUser) =>
+            currentUser.id === userId ? { ...currentUser, role: updatedUser.role } : currentUser,
+          ),
+        );
+        const targetUser = users.find((currentUser) => currentUser.id === userId);
+        const email = targetUser?.email ?? "User";
+        setActionMessage(
+          isAdmin ? `${email} now has admin access.` : `${email} no longer has admin access.`,
+        );
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Failed to update admin access.");
+      }
+    },
+    [setUserAdminRole, users],
+  );
+
   // -- Column defs --
   const columns = useMemo<ColumnDef<UnifiedUserRow, unknown>[]>(
     () => [
@@ -300,12 +365,7 @@ export default function AdminPage() {
       {
         accessorKey: "userName",
         header: "Name",
-        cell: ({ row }) =>
-          row.original.userName ? (
-            row.original.userName
-          ) : (
-            <span className="text-muted-foreground">--</span>
-          ),
+        cell: ({ row }) => row.original.userName ?? null,
       },
       {
         accessorKey: "hasAccount",
@@ -354,6 +414,25 @@ export default function AdminPage() {
         },
       },
       {
+        accessorKey: "userRole",
+        header: "Admin",
+        cell: ({ row }) => {
+          const r = row.original;
+          if (!r.hasAccount || !r.userId) {
+            return null;
+          }
+          return (
+            <AdminRoleCell
+              email={r.email}
+              userId={r.userId}
+              isAdmin={r.userRole === "admin"}
+              disabled={r.userId === currentUserId}
+              onChange={handleAdminRoleChange}
+            />
+          );
+        },
+      },
+      {
         id: "actions",
         header: "Impersonate",
         meta: { align: "right" as const },
@@ -380,6 +459,7 @@ export default function AdminPage() {
       impersonatingUserId,
       isCurrentlyImpersonating,
       handleImpersonate,
+      handleAdminRoleChange,
       addApprovedLoginEntry,
       removeApprovedLoginEntry,
       addGoogleAccessEntry,
@@ -395,7 +475,7 @@ export default function AdminPage() {
       if (!normalized) {
         return;
       }
-      if (!addLoginApproved && !addGoogleAccess) {
+      if (!addLoginApproved && !addGoogleAccess && !addAdminAccess) {
         setActionError("Select at least one access type.");
         return;
       }
@@ -403,23 +483,61 @@ export default function AdminPage() {
       setActionMessage(null);
       setAddPending(true);
       try {
-        const promises: Promise<unknown>[] = [];
-        if (addLoginApproved) {
-          promises.push(addApprovedLoginEntry.mutateAsync({ email: normalized }));
+        if (addLoginApproved && !addAdminAccess) {
+          await addApprovedLoginEntry.mutateAsync({ email: normalized });
         }
         if (addGoogleAccess) {
-          promises.push(addGoogleAccessEntry.mutateAsync({ email: normalized }));
+          await addGoogleAccessEntry.mutateAsync({ email: normalized });
         }
-        await Promise.all(promises);
+        if (addAdminAccess) {
+          const adminUser = await grantAdminAccessByEmail.mutateAsync({ email: normalized });
+          setUsers((currentUsers) => {
+            const existingUserIndex = currentUsers.findIndex(
+              (currentUser) => currentUser.id === adminUser.id,
+            );
+            if (existingUserIndex >= 0) {
+              return currentUsers.map((currentUser) =>
+                currentUser.id === adminUser.id
+                  ? {
+                      ...currentUser,
+                      email: adminUser.email,
+                      name: adminUser.name,
+                      role: adminUser.role,
+                    }
+                  : currentUser,
+              );
+            }
+            return [
+              ...currentUsers,
+              {
+                id: adminUser.id,
+                email: adminUser.email,
+                name: adminUser.name,
+                role: adminUser.role,
+              },
+            ];
+          });
+        }
         setActionMessage(`Added ${normalized}.`);
         setNewEmail("");
+        setAddAdminAccess(false);
+        setAddGoogleAccess(false);
+        setAddLoginApproved(true);
       } catch (err) {
         setActionError(err instanceof Error ? err.message : "Failed to add email.");
       } finally {
         setAddPending(false);
       }
     },
-    [newEmail, addLoginApproved, addGoogleAccess, addApprovedLoginEntry, addGoogleAccessEntry],
+    [
+      newEmail,
+      addLoginApproved,
+      addGoogleAccess,
+      addAdminAccess,
+      addApprovedLoginEntry,
+      addGoogleAccessEntry,
+      grantAdminAccessByEmail,
+    ],
   );
 
   // -- Stop impersonation --
@@ -446,13 +564,25 @@ export default function AdminPage() {
     [],
   );
   const handleLoginApprovedChange = useCallback(
-    (v: boolean | "indeterminate") => setAddLoginApproved(v === true),
-    [],
+    (v: boolean | "indeterminate") => {
+      if (addAdminAccess && v !== true) {
+        return;
+      }
+      setAddLoginApproved(v === true);
+    },
+    [addAdminAccess],
   );
   const handleGoogleAccessChange = useCallback(
     (v: boolean | "indeterminate") => setAddGoogleAccess(v === true),
     [],
   );
+  const handleAdminAccessChange = useCallback((v: boolean | "indeterminate") => {
+    const checked = v === true;
+    setAddAdminAccess(checked);
+    if (checked) {
+      setAddLoginApproved(true);
+    }
+  }, []);
   const handleFilterChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => setGlobalFilter(e.target.value),
     [],
@@ -463,7 +593,7 @@ export default function AdminPage() {
       <div className="mb-6">
         <h2 className="text-xl font-semibold">User Management</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Manage login access, Google integration access, and impersonate users.
+          Manage login access, Google integration access, admin access, and impersonate users.
         </p>
       </div>
 
@@ -518,12 +648,20 @@ export default function AdminPage() {
             className="sm:max-w-xs"
           />
           <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={addLoginApproved} onCheckedChange={handleLoginApprovedChange} />
+            <Checkbox
+              checked={addLoginApproved}
+              onCheckedChange={handleLoginApprovedChange}
+              disabled={addAdminAccess}
+            />
             Login
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={addGoogleAccess} onCheckedChange={handleGoogleAccessChange} />
             Google
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={addAdminAccess} onCheckedChange={handleAdminAccessChange} />
+            Admin
           </label>
           <Button type="submit" size="sm" disabled={addPending}>
             {addPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}

@@ -12,6 +12,8 @@ const {
   removeApprovedLoginEntryMutateAsyncMock,
   addAllowlistEntryMutateAsyncMock,
   removeAllowlistEntryMutateAsyncMock,
+  setUserAdminRoleMutateAsyncMock,
+  grantAdminAccessByEmailMutateAsyncMock,
   getSessionMock,
   listUsersMock,
 } = vi.hoisted(() => ({
@@ -19,6 +21,8 @@ const {
   removeApprovedLoginEntryMutateAsyncMock: vi.fn(),
   addAllowlistEntryMutateAsyncMock: vi.fn(),
   removeAllowlistEntryMutateAsyncMock: vi.fn(),
+  setUserAdminRoleMutateAsyncMock: vi.fn(),
+  grantAdminAccessByEmailMutateAsyncMock: vi.fn(),
   getSessionMock: vi.fn(),
   listUsersMock: vi.fn(),
 }));
@@ -42,12 +46,32 @@ vi.mock("@/components/ui/input", () => ({
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
-  DataTable: ({ data }: { data: Array<{ email: string }> }) => (
-    <div>
-      {data.map((row) => (
-        <div key={row.email}>{row.email}</div>
-      ))}
-    </div>
+  DataTable: ({
+    columns,
+    data,
+  }: {
+    columns: Array<{
+      accessorKey?: string;
+      id?: string;
+      cell?: (props: { row: { original: Record<string, unknown> } }) => React.ReactNode;
+    }>;
+    data: Array<Record<string, unknown>>;
+  }) => (
+    <table>
+      <tbody>
+        {data.map((row) => (
+          <tr key={String(row.email)}>
+            {columns.map((column) => (
+              <td key={String(column.id ?? column.accessorKey)}>
+                {column.cell
+                  ? column.cell({ row: { original: row } })
+                  : String(row[column.accessorKey ?? ""] ?? "")}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   ),
 }));
 
@@ -97,6 +121,14 @@ vi.mock("@/orpc/hooks", () => ({
     mutateAsync: removeAllowlistEntryMutateAsyncMock,
     isPending: false,
   }),
+  useSetUserAdminRole: () => ({
+    mutateAsync: setUserAdminRoleMutateAsyncMock,
+    isPending: false,
+  }),
+  useGrantAdminAccessByEmail: () => ({
+    mutateAsync: grantAdminAccessByEmailMutateAsyncMock,
+    isPending: false,
+  }),
 }));
 
 import AdminPage from "./page";
@@ -108,7 +140,7 @@ describe("AdminPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    getSessionMock.mockResolvedValue({ data: null });
+    getSessionMock.mockResolvedValue({ data: { user: { id: "admin-1" } } });
     listUsersMock.mockResolvedValue({ data: { users: [] } });
   });
 
@@ -140,6 +172,60 @@ describe("AdminPage", () => {
     await waitFor(() => {
       expect(addApprovedLoginEntryMutateAsyncMock).toHaveBeenCalledWith({
         email: "user@example.com",
+      });
+    });
+  });
+
+  it("toggles admin access for another user", async () => {
+    listUsersMock.mockResolvedValueOnce({
+      data: {
+        users: [
+          {
+            id: "user-2",
+            email: "member@example.com",
+            name: "Member",
+            role: "user",
+          },
+        ],
+      },
+    });
+    setUserAdminRoleMutateAsyncMock.mockResolvedValueOnce({
+      id: "user-2",
+      role: "admin",
+    });
+
+    render(<AdminPage />);
+
+    const adminSwitch = await screen.findByLabelText("Admin access for member@example.com");
+    fireEvent.click(adminSwitch);
+
+    await waitFor(() => {
+      expect(setUserAdminRoleMutateAsyncMock).toHaveBeenCalledWith({
+        userId: "user-2",
+        isAdmin: true,
+      });
+    });
+  });
+
+  it("adds admin access from the add form", async () => {
+    grantAdminAccessByEmailMutateAsyncMock.mockResolvedValueOnce({
+      id: "user-3",
+      email: "admin@example.com",
+      name: "Admin",
+      role: "admin",
+    });
+
+    render(<AdminPage />);
+
+    fireEvent.change(screen.getByPlaceholderText("user@company.com"), {
+      target: { value: "Admin@Example.com " },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(grantAdminAccessByEmailMutateAsyncMock).toHaveBeenCalledWith({
+        email: "admin@example.com",
       });
     });
   });

@@ -2761,6 +2761,19 @@ export function useEnqueueAdminScheduledCoworkersNow() {
   });
 }
 
+export function useSetUserAdminRole() {
+  return useMutation({
+    mutationFn: (input: { userId: string; isAdmin: boolean }) =>
+      client.admin.setUserAdminRole(input),
+  });
+}
+
+export function useGrantAdminAccessByEmail() {
+  return useMutation({
+    mutationFn: (input: { email: string }) => client.admin.grantAdminAccessByEmail(input),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Org Chart
 // ---------------------------------------------------------------------------

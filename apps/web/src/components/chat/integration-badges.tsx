@@ -16,7 +16,9 @@ type Props = {
 };
 
 export function IntegrationBadges({ integrations, size = "sm", className }: Props) {
-  const visibleIntegrations = integrations.filter((integration) => String(integration) !== "cmdclaw");
+  const visibleIntegrations = integrations.filter(
+    (integration) => String(integration) !== "cmdclaw",
+  );
 
   if (visibleIntegrations.length === 0) {
     return null;

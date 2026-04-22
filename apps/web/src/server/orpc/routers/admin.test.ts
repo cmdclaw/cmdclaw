@@ -11,9 +11,30 @@ function createProcedureStub() {
   return stub;
 }
 
-const { queueAddMock, getQueueMock } = vi.hoisted(() => ({
+const {
+  queueAddMock,
+  getQueueMock,
+  updateSetMock,
+  updateWhereMock,
+  updateReturningMock,
+  insertValuesMock,
+  insertOnConflictDoNothingMock,
+  findAuthUserByEmailMock,
+  findAuthUserByIdMock,
+  resolveOrCreateAuthUserByEmailMock,
+  setCredentialPasswordMock,
+} = vi.hoisted(() => ({
   queueAddMock: vi.fn(),
   getQueueMock: vi.fn(),
+  updateSetMock: vi.fn(),
+  updateWhereMock: vi.fn(),
+  updateReturningMock: vi.fn(),
+  insertValuesMock: vi.fn(),
+  insertOnConflictDoNothingMock: vi.fn(),
+  findAuthUserByEmailMock: vi.fn(),
+  findAuthUserByIdMock: vi.fn(),
+  resolveOrCreateAuthUserByEmailMock: vi.fn(),
+  setCredentialPasswordMock: vi.fn(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -24,6 +45,13 @@ vi.mock("@cmdclaw/core/server/queues", () => ({
   SCHEDULED_COWORKER_JOB_NAME: "coworker:scheduled-trigger",
   buildQueueJobId: vi.fn((parts: Array<string | number>) => parts.join("-")),
   getQueue: getQueueMock,
+}));
+
+vi.mock("@/server/lib/credential-accounts", () => ({
+  findAuthUserByEmail: findAuthUserByEmailMock,
+  findAuthUserById: findAuthUserByIdMock,
+  resolveOrCreateAuthUserByEmail: resolveOrCreateAuthUserByEmailMock,
+  setCredentialPassword: setCredentialPasswordMock,
 }));
 
 import { adminRouter } from "./admin";
@@ -45,6 +73,12 @@ function createContext() {
           findMany: vi.fn(),
         },
       },
+      insert: vi.fn(() => ({
+        values: insertValuesMock,
+      })),
+      update: vi.fn(() => ({
+        set: updateSetMock,
+      })),
       execute: vi.fn(),
     },
   };
@@ -73,6 +107,82 @@ describe("adminRouter", () => {
     queueAddMock.mockResolvedValue(undefined);
     getQueueMock.mockReturnValue({
       add: queueAddMock,
+    });
+    updateSetMock.mockReturnValue({
+      where: updateWhereMock,
+    });
+    updateWhereMock.mockReturnValue({
+      returning: updateReturningMock,
+    });
+    insertValuesMock.mockReturnValue({
+      onConflictDoNothing: insertOnConflictDoNothingMock,
+    });
+    insertOnConflictDoNothingMock.mockResolvedValue(undefined);
+    resolveOrCreateAuthUserByEmailMock.mockResolvedValue({
+      id: "user-2",
+      email: "member@example.com",
+      name: "Member",
+    });
+  });
+
+  it("updates a user's admin role", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
+    updateReturningMock.mockResolvedValue([{ id: "user-2", role: "admin" }]);
+
+    const result = await adminRouterAny.setUserAdminRole({
+      input: { userId: "user-2", isAdmin: true },
+      context,
+    });
+
+    expect(context.db.update).toHaveBeenCalledTimes(1);
+    expect(updateSetMock).toHaveBeenCalledWith({ role: "admin" });
+    expect(result).toEqual({ id: "user-2", role: "admin" });
+  });
+
+  it("rejects removing your own admin access", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
+
+    await expect(
+      adminRouterAny.setUserAdminRole({
+        input: { userId: "admin-user-1", isAdmin: false },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      message: "You cannot remove your own admin access.",
+    });
+
+    expect(context.db.update).not.toHaveBeenCalled();
+  });
+
+  it("grants admin access by email", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
+    updateReturningMock.mockResolvedValue([
+      {
+        id: "user-2",
+        email: "member@example.com",
+        name: "Member",
+        role: "admin",
+      },
+    ]);
+
+    const result = await adminRouterAny.grantAdminAccessByEmail({
+      input: { email: "member@example.com" },
+      context,
+    });
+
+    expect(resolveOrCreateAuthUserByEmailMock).toHaveBeenCalledWith({
+      email: "member@example.com",
+      name: undefined,
+    });
+    expect(updateSetMock).toHaveBeenCalledWith({ role: "admin" });
+    expect(result).toEqual({
+      id: "user-2",
+      email: "member@example.com",
+      name: "Member",
+      role: "admin",
     });
   });
 
