@@ -115,7 +115,13 @@ async function getResponseBodyPreview(response: Response, url: URL | null): Prom
   }
 }
 
+function getFetchPreconnect(fetchImpl: typeof fetch): ((...args: unknown[]) => unknown) | undefined {
+  const preconnect = Reflect.get(fetchImpl as object, "preconnect");
+  return typeof preconnect === "function" ? preconnect.bind(fetchImpl) : undefined;
+}
+
 function createLoggingFetch(fetchImpl: typeof fetch): typeof fetch {
+  const preconnect = getFetchPreconnect(fetchImpl) ?? getFetchPreconnect(fetch);
   const wrappedFetch = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const url = resolveFetchUrl(input);
@@ -159,12 +165,7 @@ function createLoggingFetch(fetchImpl: typeof fetch): typeof fetch {
         throw error;
       }
     },
-    {
-      preconnect:
-        "preconnect" in fetchImpl && typeof fetchImpl.preconnect === "function"
-          ? fetchImpl.preconnect.bind(fetchImpl)
-          : fetch.preconnect.bind(fetch),
-    },
+    preconnect ? { preconnect } : {},
   );
 
   return wrappedFetch as typeof fetch;
