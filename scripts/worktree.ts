@@ -11,7 +11,6 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
-import net from "node:net";
 
 import { buildWorktreeStackConfig, formatWorktreeStackSlot } from "./worktree-stack";
 
@@ -25,6 +24,8 @@ type CommandName =
   | "start"
   | "stop"
   | "destroy"
+  | "docker-up"
+  | "docker-down"
   | "dev"
   | "status"
   | "env"
@@ -55,9 +56,29 @@ type SourceUserRecord = {
   email: string;
 };
 
+type SessionProfileRecord = {
+  token: string;
+  email: string;
+  expiresAt: Date;
+};
+
+const COMMENTED_WORKTREE_ENV_KEYS = [
+  "DAYTONA_API_PORT",
+  "DAYTONA_PROXY_PORT",
+  "DAYTONA_SSH_GATEWAY_PORT",
+  "DAYTONA_DEX_PORT",
+  "DAYTONA_API_URL",
+  "DAYTONA_DB_VOLUME",
+  "DAYTONA_DEX_VOLUME",
+  "DAYTONA_REGISTRY_VOLUME",
+] as const;
+
 const DEFAULT_BASE_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres";
 const PROCESS_NAMES = ["web", "worker", "ws"] as const;
 const DEV_START_TIMEOUT_MS = 120_000;
+const GENERATED_WORKTREE_ENV_HEADER = "# Auto-generated for worktree by scripts/worktree.ts.";
+const GENERATED_WORKTREE_ENV_NOTICE = "# Do not edit manually; re-run a worktree command to refresh it.";
+type ProcessName = (typeof PROCESS_NAMES)[number];
 
 function printHelp(): void {
   console.log("Usage: bun run worktree <command>");
@@ -67,6 +88,8 @@ function printHelp(): void {
   console.log("  start    Start web, worker, and ws in the background");
   console.log("  stop     Stop background processes for this worktree");
   console.log("  destroy  Stop processes, drop the worktree DB, and remove local state");
+  console.log("  docker-up    Start the worktree-scoped Docker stack");
+  console.log("  docker-down  Stop the worktree-scoped Docker stack");
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
   console.log("  env      Print derived environment variables for this worktree");
@@ -104,14 +127,27 @@ function resolveStateRoot(repoRoot: string): string {
   return join(repoRoot, ".worktrees");
 }
 
+function resolveWorktreeEnvFile(repoRoot: string): string {
+  return join(repoRoot, ".env");
+}
+
+function isGeneratedWorktreeEnvFile(path: string): boolean {
+  if (!existsSync(path)) {
+    return false;
+  }
+
+  const content = readFileSync(path, "utf8");
+  return content.startsWith(GENERATED_WORKTREE_ENV_HEADER);
+}
+
 function resolveSharedEnvFile(repoRoot: string): string {
   const explicit = process.env.CMDCLAW_ENV_FILE?.trim();
-  if (explicit && existsSync(explicit)) {
+  if (explicit && existsSync(explicit) && !isGeneratedWorktreeEnvFile(explicit)) {
     return explicit;
   }
 
   const directCandidate = join(repoRoot, ".env");
-  if (existsSync(directCandidate)) {
+  if (existsSync(directCandidate) && !isGeneratedWorktreeEnvFile(directCandidate)) {
     return directCandidate;
   }
 
@@ -124,13 +160,13 @@ function resolveSharedEnvFile(repoRoot: string): string {
 
   for (const worktreePath of worktreePaths) {
     const candidate = join(worktreePath, ".env");
-    if (existsSync(candidate)) {
+    if (existsSync(candidate) && !isGeneratedWorktreeEnvFile(candidate)) {
       return candidate;
     }
   }
 
   fail(
-    "Unable to find a shared .env file. Put one in the current worktree or another linked worktree.",
+    "Unable to find a shared .env file. Put one in the main checkout or another linked checkout, or set CMDCLAW_ENV_FILE to a non-generated env file.",
   );
 }
 
@@ -145,6 +181,14 @@ function loadSharedEnv(repoRoot: string): string {
   }
 
   return envFile;
+}
+
+function readSharedEnvValues(repoRoot: string): Record<string, string> {
+  const envFile = resolveSharedEnvFile(repoRoot);
+  const parsed = dotenv.parse(readFileSync(envFile, "utf8"));
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, value]) => [key, process.env[key] ?? String(value)]),
+  );
 }
 
 function slugify(value: string, separator: "-" | "_" = "-"): string {
@@ -176,6 +220,32 @@ function buildAppUrl(appPort: number): string {
 
 function buildHealthCheckUrl(appUrl: string): string {
   return new URL("/api/dev/health", appUrl).toString();
+}
+
+function buildLoopbackUrl(port: number, path = ""): string {
+  const suffix = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `http://127.0.0.1:${port}${suffix}`;
+}
+
+function redactConnectionString(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    if (url.password) {
+      url.password = "***";
+    }
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
+function isDatabaseConnectionError(error: unknown): error is Error & { code: string } {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND")
+  );
 }
 
 function buildQueueName(instanceId: string): string {
@@ -238,6 +308,37 @@ function agentBrowserStatePath(instanceRoot: string): string {
 
 function agentBrowserSessionName(instanceId: string): string {
   return instanceId;
+}
+
+function ensureParentDir(path: string): void {
+  ensureDir(join(path, ".."));
+}
+
+function profileSlugForServerUrl(serverUrl: string): string {
+  try {
+    const url = new URL(serverUrl);
+    const protocol = url.protocol.replace(":", "");
+    const host = url.hostname.toLowerCase();
+    const port = url.port ? `-${url.port}` : "";
+    return `${protocol}--${host}${port}`.replace(/[^a-z0-9.-]/g, "-");
+  } catch {
+    return serverUrl.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
+  }
+}
+
+function resolveCliProfilePath(serverUrl: string): string {
+  const home = process.env.HOME;
+  if (!home) {
+    fail("HOME is not set, unable to persist CLI auth profile.");
+  }
+
+  return join(home, ".cmdclaw", "profiles", `chat-config.${profileSlugForServerUrl(serverUrl)}.json`);
+}
+
+function saveCliProfile(serverUrl: string, token: string): void {
+  const profilePath = resolveCliProfilePath(serverUrl);
+  ensureParentDir(profilePath);
+  writeFileSync(profilePath, `${JSON.stringify({ serverUrl, token }, null, 2)}\n`, "utf8");
 }
 
 function expandPath(value: string, repoRoot: string): string {
@@ -315,36 +416,11 @@ function removeProcessesFile(instanceRoot: string): void {
   }
 }
 
-function isPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-
-    server.once("error", () => resolve(false));
-    server.once("listening", () => {
-      server.close(() => resolve(true));
-    });
-
-    server.listen(port, "127.0.0.1");
-  });
-}
-
-async function allocatePorts(instanceId: string): Promise<{ appPort: number; wsPort: number }> {
-  const hashNumber = Number.parseInt(
-    createHash("sha1").update(instanceId).digest("hex").slice(0, 6),
-    16,
-  );
-  const baseOffset = hashNumber % 700;
-
-  for (let offset = 0; offset < 700; offset += 1) {
-    const appPort = 3200 + ((baseOffset + offset) % 700);
-    const wsPort = 4200 + ((baseOffset + offset) % 700);
-
-    if ((await isPortFree(appPort)) && (await isPortFree(wsPort))) {
-      return { appPort, wsPort };
-    }
-  }
-
-  fail("Unable to allocate free ports for this worktree instance");
+function buildAppPorts(stackSlot: number): { appPort: number; wsPort: number } {
+  return {
+    appPort: 3700 + stackSlot,
+    wsPort: 4700 + stackSlot,
+  };
 }
 
 function allocateStackSlot(repoRoot: string): number {
@@ -397,7 +473,16 @@ function buildPostgresAdminUrl(metadata: InstanceMetadata): string {
 
 async function withAdminClient<T>(connectionString: string, fn: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({ connectionString });
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      fail(
+        `database is unavailable at ${redactConnectionString(connectionString)}. Start the worktree Docker stack with 'bun run worktree:docker-up' and retry.`,
+      );
+    }
+    throw error;
+  }
   try {
     return await fn(client);
   } finally {
@@ -461,6 +546,7 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     process.env.AWS_SECRET_ACCESS_KEY?.trim() ||
     process.env.S3_SECRET_ACCESS_KEY?.trim() ||
     "minioadmin";
+  const databasePassword = resolvePostgresPassword();
 
   return {
     PORT: String(metadata.appPort),
@@ -472,6 +558,8 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     PLAYWRIGHT_BASE_URL: instanceAppUrl,
     E2E_AUTH_STATE_PATH: join(instanceRuntimeDir, "playwright", "user.json"),
     DATABASE_URL: metadata.databaseUrl,
+    DATABASE_PASSWORD: databasePassword,
+    DB_PASSWORD: databasePassword,
     REDIS_URL: `redis://127.0.0.1:${stack.redisPort}`,
     AWS_ENDPOINT_URL: `http://127.0.0.1:${stack.minioApiPort}`,
     AWS_DEFAULT_REGION: process.env.AWS_DEFAULT_REGION ?? "us-east-1",
@@ -493,9 +581,36 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_JAEGER_UI_PORT: String(stack.jaegerUiPort),
     CMDCLAW_OTEL_GRPC_PORT: String(stack.otelGrpcPort),
     CMDCLAW_OTEL_HTTP_PORT: String(stack.otelHttpPort),
+    CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(stack.otelGrpcPort),
+    CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(stack.otelHttpPort),
+    CMDCLAW_VECTOR_LOG_PORT: String(stack.vectorLogPort),
+    CMDCLAW_VICTORIA_METRICS_PORT: String(stack.victoriaMetricsPort),
+    CMDCLAW_VICTORIA_LOGS_PORT: String(stack.victoriaLogsPort),
+    CMDCLAW_VICTORIA_TRACES_PORT: String(stack.victoriaTracesPort),
+    CMDCLAW_ALERTMANAGER_PORT: String(stack.alertmanagerPort),
+    CMDCLAW_VMALERT_PORT: String(stack.vmalertPort),
+    CMDCLAW_GRAFANA_PORT: String(stack.grafanaPort),
     CMDCLAW_POSTGRES_VOLUME: stack.postgresVolume,
     CMDCLAW_REDIS_VOLUME: stack.redisVolume,
     CMDCLAW_MINIO_VOLUME: stack.minioVolume,
+    CMDCLAW_VICTORIA_METRICS_VOLUME: stack.victoriaMetricsVolume,
+    CMDCLAW_VICTORIA_LOGS_VOLUME: stack.victoriaLogsVolume,
+    CMDCLAW_VICTORIA_TRACES_VOLUME: stack.victoriaTracesVolume,
+    CMDCLAW_ALERTMANAGER_VOLUME: stack.alertmanagerVolume,
+    CMDCLAW_GRAFANA_VOLUME: stack.grafanaVolume,
+    PGHOST: databaseUrl.hostname,
+    PGPORT: databaseUrl.port,
+    PGDATABASE: databaseUrl.pathname.replace(/^\//, ""),
+    PGUSER: decodeURIComponent(databaseUrl.username),
+    PGPASSWORD: decodeURIComponent(databaseUrl.password),
+    AGENT_BROWSER_SESSION: agentBrowserSessionName(metadata.instanceId),
+  };
+}
+
+function buildCommentedWorktreeEnv(metadata: InstanceMetadata): Record<(typeof COMMENTED_WORKTREE_ENV_KEYS)[number], string> {
+  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+
+  return {
     DAYTONA_API_PORT: String(stack.daytonaApiPort),
     DAYTONA_PROXY_PORT: String(stack.daytonaProxyPort),
     DAYTONA_SSH_GATEWAY_PORT: String(stack.daytonaSshGatewayPort),
@@ -504,13 +619,72 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     DAYTONA_DB_VOLUME: stack.daytonaDbVolume,
     DAYTONA_DEX_VOLUME: stack.daytonaDexVolume,
     DAYTONA_REGISTRY_VOLUME: stack.daytonaRegistryVolume,
-    PGHOST: databaseUrl.hostname,
-    PGPORT: databaseUrl.port,
-    PGDATABASE: databaseUrl.pathname.replace(/^\//, ""),
-    PGUSER: decodeURIComponent(databaseUrl.username),
-    PGPASSWORD: decodeURIComponent(databaseUrl.password),
-    AGENT_BROWSER_SESSION: agentBrowserSessionName(metadata.instanceId),
   };
+}
+
+function buildWorktreeRuntimeEnv(metadata: InstanceMetadata): DerivedEnv {
+  return {
+    ...readSharedEnvValues(metadata.repoRoot),
+    ...buildDerivedEnv(metadata),
+  };
+}
+
+function runInheritedCommand(command: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): void {
+  const result = spawnSync(command, args, {
+    cwd,
+    env,
+    stdio: "inherit",
+  });
+
+  if (result.status !== 0) {
+    fail(`${command} ${args.join(" ")} failed with exit ${result.status ?? 1}`);
+  }
+}
+
+function printStatusEndpoints(metadata: InstanceMetadata): void {
+  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const databaseUrl = new URL(metadata.databaseUrl);
+
+  console.log(`[worktree] docker project ${stack.composeProjectName}`);
+  console.log(`[worktree] app ${metadata.appUrl}`);
+  console.log(`[worktree] health ${buildHealthCheckUrl(metadata.appUrl)}`);
+  console.log(
+    `[worktree] postgres ${databaseUrl.hostname}:${databaseUrl.port}/${databaseUrl.pathname.replace(/^\//, "")}`,
+  );
+  console.log(`[worktree] redis redis://127.0.0.1:${stack.redisPort}`);
+  console.log(`[worktree] minio api ${buildLoopbackUrl(stack.minioApiPort)}`);
+  console.log(`[worktree] minio console ${buildLoopbackUrl(stack.minioConsolePort)}`);
+  console.log(`[worktree] metrics ${buildLoopbackUrl(stack.victoriaMetricsPort)}`);
+  console.log(`[worktree] logs ${buildLoopbackUrl(stack.victoriaLogsPort)}`);
+  console.log(`[worktree] traces ${buildLoopbackUrl(stack.victoriaTracesPort)}`);
+  console.log(`[worktree] grafana ${buildLoopbackUrl(stack.grafanaPort)}`);
+  console.log(`[worktree] alertmanager ${buildLoopbackUrl(stack.alertmanagerPort)}`);
+  console.log(`[worktree] vmalert ${buildLoopbackUrl(stack.vmalertPort)}`);
+  console.log(`[worktree] otel grpc 127.0.0.1:${stack.otelGrpcPort}`);
+  console.log(`[worktree] otel http ${buildLoopbackUrl(stack.otelHttpPort)}`);
+  console.log(`[worktree] vector logs ${buildLoopbackUrl(stack.vectorLogPort, "/logs")}`);
+  console.log(`[worktree] env file ${resolveWorktreeEnvFile(metadata.repoRoot)}`);
+}
+
+function runDockerCompose(metadata: InstanceMetadata, args: string[]): void {
+  runInheritedCommand(
+    "docker",
+    ["compose", "--env-file", resolveWorktreeEnvFile(metadata.repoRoot), "-f", "docker/compose/dev.yml", ...args],
+    metadata.repoRoot,
+  );
+}
+
+async function dockerUpInstance(): Promise<void> {
+  const metadata = await resolveMetadata();
+  runDockerCompose(metadata, ["up", "-d"]);
+  console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
+  printStatusEndpoints(metadata);
+}
+
+async function dockerDownInstance(): Promise<void> {
+  const metadata = await resolveMetadata();
+  runDockerCompose(metadata, ["down"]);
+  console.log(`[worktree] docker stack stopped for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
 }
 
 function resolveSourceRepoRoot(targetRepoRoot: string): string | null {
@@ -655,6 +829,51 @@ async function selectRows(
   return result.rows;
 }
 
+async function resolveLatestLocalSessionProfile(
+  metadata: InstanceMetadata,
+): Promise<SessionProfileRecord | null> {
+  return withClient(metadata.databaseUrl, async (client) => {
+    const result = await client.query<{
+      token: string;
+      email: string;
+      expires_at: Date;
+    }>(
+      `
+        select s.token, u.email, s.expires_at
+        from "session" s
+        join "user" u on u.id = s.user_id
+        where s.expires_at > now()
+        order by s.updated_at desc nulls last, s.created_at desc
+        limit 1
+      `,
+    );
+
+    const row = result.rows[0];
+    if (!row?.token || !row.email || !(row.expires_at instanceof Date)) {
+      return null;
+    }
+
+    return {
+      token: row.token,
+      email: row.email,
+      expiresAt: row.expires_at,
+    };
+  });
+}
+
+async function syncCliProfileFromLocalSession(metadata: InstanceMetadata): Promise<boolean> {
+  const sessionProfile = await resolveLatestLocalSessionProfile(metadata);
+  if (!sessionProfile) {
+    return false;
+  }
+
+  saveCliProfile(metadata.appUrl, sessionProfile.token);
+  console.log(`[worktree] cli profile ${resolveCliProfilePath(metadata.appUrl)}`);
+  console.log(`[worktree] cli auth user ${sessionProfile.email}`);
+  console.log(`[worktree] cli auth expires ${sessionProfile.expiresAt.toISOString()}`);
+  return true;
+}
+
 async function resolveBootstrapSourceUser(sourceClient: Client): Promise<SourceUserRecord | null> {
   const explicitEmail = process.env.CMDCLAW_WORKTREE_DEV_USER_EMAIL?.trim();
   if (explicitEmail) {
@@ -744,9 +963,16 @@ function remapSharedProviderAuthRows(
 }
 
 function writeDerivedEnvFile(metadata: InstanceMetadata): void {
-  const env = buildDerivedEnv(metadata);
+  const env = buildWorktreeRuntimeEnv(metadata);
   const shellLines = Object.entries(env).map(([key, value]) => `${key}=${JSON.stringify(value)}`);
-  writeFileSync(join(metadata.instanceRoot, "instance.env"), `${shellLines.join("\n")}\n`, "utf8");
+  const commentedLines = Object.entries(buildCommentedWorktreeEnv(metadata)).map(
+    ([key, value]) => `# ${key}=${JSON.stringify(value)}`,
+  );
+  writeFileSync(
+    resolveWorktreeEnvFile(metadata.repoRoot),
+    `${GENERATED_WORKTREE_ENV_HEADER}\n${GENERATED_WORKTREE_ENV_NOTICE}\n\n${shellLines.join("\n")}\n\n${commentedLines.join("\n")}\n`,
+    "utf8",
+  );
 }
 
 function loadAgentBrowserAuthState(metadata: InstanceMetadata): void {
@@ -876,11 +1102,15 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   if (existing) {
     const stackSlot = parseStackSlot(existing.stackSlot) ?? allocateStackSlot(repoRoot);
     const stack = buildWorktreeStackConfig(instanceId, stackSlot);
+    const ports = buildAppPorts(stackSlot);
     const updated: InstanceMetadata = {
       ...existing,
       repoRoot,
       instanceRoot,
       stackSlot,
+      appPort: ports.appPort,
+      wsPort: ports.wsPort,
+      appUrl: buildAppUrl(ports.appPort),
       databaseUrl: deriveDatabaseUrl(buildPostgresBaseUrl(stack.postgresPort), existing.databaseName),
       updatedAt: new Date().toISOString(),
     };
@@ -893,14 +1123,15 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   ensureDir(logsDir(instanceRoot));
   ensureDir(runtimeDir(instanceRoot));
 
-  const ports = await allocatePorts(instanceId);
-  const metadata = createMetadata(repoRoot, ports.appPort, ports.wsPort, allocateStackSlot(repoRoot));
+  const stackSlot = allocateStackSlot(repoRoot);
+  const ports = buildAppPorts(stackSlot);
+  const metadata = createMetadata(repoRoot, ports.appPort, ports.wsPort, stackSlot);
   saveMetadata(metadata);
   writeDerivedEnvFile(metadata);
   return metadata;
 }
 
-function spawnWithEnv(command: string, args: string[], cwd: string, env: DerivedEnv, mode: "foreground" | "background", name: string, instanceRoot: string) {
+function spawnWithEnv(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, mode: "foreground" | "background", name: ProcessName, instanceRoot: string) {
   const processEnv = {
     ...process.env,
     ...env,
@@ -926,6 +1157,45 @@ function spawnWithEnv(command: string, args: string[], cwd: string, env: Derived
   });
 }
 
+function buildProcessCommand(
+  metadata: InstanceMetadata,
+  name: ProcessName,
+  options?: { watch?: boolean },
+): { command: string; args: string[]; cwd: string } {
+  const envFile = resolveWorktreeEnvFile(metadata.repoRoot);
+
+  switch (name) {
+    case "web":
+      return {
+        command: "bun",
+        args: ["--env-file", envFile, "next", "dev", "--port", String(metadata.appPort)],
+        cwd: join(metadata.repoRoot, "apps/web"),
+      };
+    case "worker":
+      return {
+        command: "bun",
+        args: [
+          ...(options?.watch ? ["--watch"] : []),
+          "--env-file",
+          envFile,
+          "index.ts",
+        ],
+        cwd: join(metadata.repoRoot, "apps/worker"),
+      };
+    case "ws":
+      return {
+        command: "bun",
+        args: [
+          ...(options?.watch ? ["--watch"] : []),
+          "--env-file",
+          envFile,
+          "index.ts",
+        ],
+        cwd: join(metadata.repoRoot, "apps/ws"),
+      };
+  }
+}
+
 async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
   const startedAt = Date.now();
 
@@ -946,12 +1216,11 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
 }
 
 async function runDbPush(metadata: InstanceMetadata): Promise<void> {
-  const env = buildDerivedEnv(metadata);
-  const result = spawnSync("bun", ["run", "--cwd", "packages/db", "db:push"], {
+  const result = spawnSync("bun", ["run", "--shell", "system", "--cwd", "apps/web", "db:push"], {
     cwd: metadata.repoRoot,
     env: {
       ...process.env,
-      ...env,
+      ...buildWorktreeRuntimeEnv(metadata),
     },
     stdio: "inherit",
   });
@@ -967,19 +1236,20 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
     return;
   }
 
-  await withClient(sourceDatabaseUrl, async (sourceClient) => {
-    const sourceUser = await resolveBootstrapSourceUser(sourceClient);
-    if (!sourceUser) {
-      fail(
-        "Unable to resolve a source developer user. Set CMDCLAW_WORKTREE_DEV_USER_EMAIL or make sure the source worktree has a recent session.",
-      );
-    }
-
-    await withClient(metadata.databaseUrl, async (targetClient) => {
-      const userRows = await selectRows(sourceClient, "user", "id = $1", [sourceUser.id]);
-      if (userRows.length === 0) {
-        fail(`Source user ${sourceUser.email} was not found in the source database.`);
+  try {
+    await withClient(sourceDatabaseUrl, async (sourceClient) => {
+      const sourceUser = await resolveBootstrapSourceUser(sourceClient);
+      if (!sourceUser) {
+        fail(
+          "Unable to resolve a source developer user. Set CMDCLAW_WORKTREE_DEV_USER_EMAIL or make sure the source worktree has a recent session.",
+        );
       }
+
+      await withClient(metadata.databaseUrl, async (targetClient) => {
+        const userRows = await selectRows(sourceClient, "user", "id = $1", [sourceUser.id]);
+        if (userRows.length === 0) {
+          fail(`Source user ${sourceUser.email} was not found in the source database.`);
+        }
 
       const workspaceRows = await sourceClient.query<Record<string, unknown>>(
         `
@@ -1249,7 +1519,6 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
           )}\n`,
           "utf8",
         );
-
         console.log(`[worktree] bootstrapped developer user ${sourceUser.email}`);
         console.log(`[worktree] imported coworkers ${coworkerRows.rows.length}`);
         console.log(`[worktree] auth storage ${storageStatePath}`);
@@ -1258,8 +1527,16 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
         await targetClient.query("rollback");
         throw error;
       }
+      });
     });
-  });
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      fail(
+        `there was an issue during worktree setup: the source database is unavailable at ${redactConnectionString(sourceDatabaseUrl)}. The main docker stack is likely not up, so developer data could not be copied. Report this state and wait for instructions before continuing.`,
+      );
+    }
+    throw error;
+  }
 }
 
 async function createInstance(): Promise<InstanceMetadata> {
@@ -1269,6 +1546,9 @@ async function createInstance(): Promise<InstanceMetadata> {
   await ensureDatabase(metadata);
   await runDbPush(metadata);
   await bootstrapDeveloperUser(metadata);
+  if (!(await syncCliProfileFromLocalSession(metadata))) {
+    console.warn("[worktree] no local session available to seed CLI auth");
+  }
   saveMetadata({ ...metadata, updatedAt: new Date().toISOString() });
   writeDerivedEnvFile(metadata);
   console.log(`[worktree] instance ${metadata.instanceId}`);
@@ -1300,7 +1580,7 @@ function killProcessGroup(pid: number): void {
   }
 }
 
-function getProcessEntries(metadata: InstanceMetadata): Array<{ name: (typeof PROCESS_NAMES)[number]; pid: number }> {
+function getProcessEntries(metadata: InstanceMetadata): Array<{ name: ProcessName; pid: number }> {
   const stored = loadProcesses(metadata.instanceRoot);
   return PROCESS_NAMES.flatMap((name) => {
     const pid = stored[name];
@@ -1338,86 +1618,94 @@ async function stopInstance(metadata: InstanceMetadata): Promise<void> {
 async function startInstance(): Promise<void> {
   const metadata = await resolveMetadata();
   await stopInstance(metadata);
-  await createInstance();
-
-  const env = buildDerivedEnv(metadata);
-
+  const createdMetadata = await createInstance();
+  const env = buildWorktreeRuntimeEnv(createdMetadata);
+  const webCommand = buildProcessCommand(createdMetadata, "web");
   const web = spawnWithEnv(
-    "bun",
-    ["x", "next", "dev", "--port", String(metadata.appPort)],
-    join(metadata.repoRoot, "apps/web"),
+    webCommand.command,
+    webCommand.args,
+    webCommand.cwd,
     env,
     "background",
     "web",
-    metadata.instanceRoot,
+    createdMetadata.instanceRoot,
   );
   web.unref();
-
+  const workerCommand = buildProcessCommand(createdMetadata, "worker");
   const worker = spawnWithEnv(
-    "bun",
-    ["--watch", "index.ts"],
-    join(metadata.repoRoot, "apps/worker"),
+    workerCommand.command,
+    workerCommand.args,
+    workerCommand.cwd,
     env,
     "background",
     "worker",
-    metadata.instanceRoot,
+    createdMetadata.instanceRoot,
   );
   worker.unref();
-
+  const wsCommand = buildProcessCommand(createdMetadata, "ws");
   const ws = spawnWithEnv(
-    "bun",
-    ["--watch", "index.ts"],
-    join(metadata.repoRoot, "apps/ws"),
+    wsCommand.command,
+    wsCommand.args,
+    wsCommand.cwd,
     env,
     "background",
     "ws",
-    metadata.instanceRoot,
+    createdMetadata.instanceRoot,
   );
   ws.unref();
 
-  saveProcesses(metadata.instanceRoot, {
+  saveProcesses(createdMetadata.instanceRoot, {
     web: web.pid,
     worker: worker.pid,
     ws: ws.pid,
   });
 
-  await waitForHttp(buildHealthCheckUrl(metadata.appUrl), DEV_START_TIMEOUT_MS);
-  console.log(`[worktree] started ${metadata.appUrl}`);
-  console.log(`[worktree] logs ${logsDir(metadata.instanceRoot)}`);
+  await waitForHttp(buildHealthCheckUrl(createdMetadata.appUrl), DEV_START_TIMEOUT_MS);
+  console.log(`[worktree] started ${createdMetadata.appUrl}`);
+  console.log(`[worktree] logs ${logsDir(createdMetadata.instanceRoot)}`);
 }
 
 async function devInstance(): Promise<void> {
   const metadata = await createInstance();
-  const env = buildDerivedEnv(metadata);
+  const env = buildWorktreeRuntimeEnv(metadata);
 
   const children = [
-    spawnWithEnv(
-      "bun",
-      ["x", "next", "dev", "--port", String(metadata.appPort)],
-      join(metadata.repoRoot, "apps/web"),
-      env,
-      "foreground",
-      "web",
-      metadata.instanceRoot,
-    ),
-    spawnWithEnv(
-      "bun",
-      ["--watch", "index.ts"],
-      join(metadata.repoRoot, "apps/worker"),
-      env,
-      "foreground",
-      "worker",
-      metadata.instanceRoot,
-    ),
-    spawnWithEnv(
-      "bun",
-      ["--watch", "index.ts"],
-      join(metadata.repoRoot, "apps/ws"),
-      env,
-      "foreground",
-      "ws",
-      metadata.instanceRoot,
-    ),
+    (() => {
+      const command = buildProcessCommand(metadata, "web");
+      return spawnWithEnv(
+        command.command,
+        command.args,
+        command.cwd,
+        env,
+        "foreground",
+        "web",
+        metadata.instanceRoot,
+      );
+    })(),
+    (() => {
+      const command = buildProcessCommand(metadata, "worker", { watch: true });
+      return spawnWithEnv(
+        command.command,
+        command.args,
+        command.cwd,
+        env,
+        "foreground",
+        "worker",
+        metadata.instanceRoot,
+      );
+    })(),
+    (() => {
+      const command = buildProcessCommand(metadata, "ws", { watch: true });
+      return spawnWithEnv(
+        command.command,
+        command.args,
+        command.cwd,
+        env,
+        "foreground",
+        "ws",
+        metadata.instanceRoot,
+      );
+    })(),
   ];
 
   const shutdown = () => {
@@ -1470,11 +1758,11 @@ async function showStatus(): Promise<void> {
   console.log(`[worktree] worktree ${metadata.repoRoot}`);
   console.log(`[worktree] instance ${metadata.instanceId}`);
   console.log(`[worktree] stack slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
-  console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] port ${metadata.appPort}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
   console.log(`[worktree] root ${metadata.instanceRoot}`);
   console.log(`[worktree] agent-browser session ${agentBrowserSessionName(metadata.instanceId)}`);
+  printStatusEndpoints(metadata);
 
   if (entries.length === 0) {
     console.log("[worktree] processes none");
@@ -1490,7 +1778,7 @@ async function showStatus(): Promise<void> {
 
 async function showEnv(): Promise<void> {
   const metadata = await resolveMetadata();
-  const env = buildDerivedEnv(metadata);
+  const env = buildWorktreeRuntimeEnv(metadata);
   for (const [key, value] of Object.entries(env)) {
     console.log(`${key}=${JSON.stringify(value)}`);
   }
@@ -1509,6 +1797,12 @@ async function main(): Promise<void> {
       return;
     case "start":
       await startInstance();
+      return;
+    case "docker-up":
+      await dockerUpInstance();
+      return;
+    case "docker-down":
+      await dockerDownInstance();
       return;
     case "stop": {
       const metadata = await resolveMetadata();
@@ -1532,6 +1826,9 @@ async function main(): Promise<void> {
       await ensureDatabase(metadata);
       await runDbPush(metadata);
       await bootstrapDeveloperUser(metadata);
+      if (!(await syncCliProfileFromLocalSession(metadata))) {
+        console.warn("[worktree] no local session available to seed CLI auth");
+      }
       return;
     }
     default:

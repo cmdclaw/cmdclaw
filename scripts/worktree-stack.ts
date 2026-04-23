@@ -9,6 +9,13 @@ export type WorktreeStackConfig = {
   jaegerUiPort: number;
   otelGrpcPort: number;
   otelHttpPort: number;
+  vectorLogPort: number;
+  victoriaMetricsPort: number;
+  victoriaLogsPort: number;
+  victoriaTracesPort: number;
+  alertmanagerPort: number;
+  vmalertPort: number;
+  grafanaPort: number;
   daytonaApiPort: number;
   daytonaProxyPort: number;
   daytonaSshGatewayPort: number;
@@ -16,6 +23,11 @@ export type WorktreeStackConfig = {
   postgresVolume: string;
   redisVolume: string;
   minioVolume: string;
+  victoriaMetricsVolume: string;
+  victoriaLogsVolume: string;
+  victoriaTracesVolume: string;
+  alertmanagerVolume: string;
+  grafanaVolume: string;
   daytonaDbVolume: string;
   daytonaDexVolume: string;
   daytonaRegistryVolume: string;
@@ -52,6 +64,13 @@ export function buildWorktreeStackConfig(instanceId: string, slot: number): Work
     jaegerUiPort: port(166, slot),
     otelGrpcPort: port(431, slot),
     otelHttpPort: port(432, slot),
+    vectorLogPort: port(86, slot),
+    victoriaMetricsPort: port(84, slot),
+    victoriaLogsPort: port(94, slot),
+    victoriaTracesPort: port(104, slot),
+    alertmanagerPort: port(90, slot),
+    vmalertPort: port(88, slot),
+    grafanaPort: port(74, slot),
     daytonaApiPort: port(33, slot),
     daytonaProxyPort: port(40, slot),
     daytonaSshGatewayPort: port(22, slot),
@@ -59,6 +78,11 @@ export function buildWorktreeStackConfig(instanceId: string, slot: number): Work
     postgresVolume: `${composeProjectName}_cmdclaw_postgres_data`,
     redisVolume: `${composeProjectName}_cmdclaw_redis_data`,
     minioVolume: `${composeProjectName}_cmdclaw_minio_data`,
+    victoriaMetricsVolume: `${composeProjectName}_cmdclaw_victoria_metrics_data`,
+    victoriaLogsVolume: `${composeProjectName}_cmdclaw_victoria_logs_data`,
+    victoriaTracesVolume: `${composeProjectName}_cmdclaw_victoria_traces_data`,
+    alertmanagerVolume: `${composeProjectName}_cmdclaw_alertmanager_data`,
+    grafanaVolume: `${composeProjectName}_cmdclaw_grafana_data`,
     daytonaDbVolume: `${composeProjectName}_daytona_db_data`,
     daytonaDexVolume: `${composeProjectName}_daytona_dex_data`,
     daytonaRegistryVolume: `${composeProjectName}_daytona_registry_data`,

@@ -49,8 +49,8 @@
     "worktree:destroy": "bun scripts/worktree.ts destroy",
     "worktree:status": "bun scripts/worktree.ts status",
     "worktree:env": "bun scripts/worktree.ts env",
-    "worktree:docker-up": "bash -lc 'eval \"$(bun run worktree env)\" && docker compose -f docker/compose/dev.yml up -d'",
-    "worktree:docker-down": "bash -lc 'eval \"$(bun run worktree env)\" && docker compose -f docker/compose/dev.yml down'",
+    "worktree:docker-up": "bun scripts/worktree.ts docker-up",
+    "worktree:docker-down": "bun scripts/worktree.ts docker-down",
     "worktree:bootstrap-user": "bun scripts/worktree.ts bootstrap-user",
     "check:cli": "turbo check --filter=@cmdclaw/cli",
     "cli:e2e:live:record": "bun run --cwd apps/web test:e2e:live:record",
@@ -82,6 +82,16 @@
     "drizzle-kit@0.31.10": "patches/drizzle-kit@0.31.10.patch"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.2.0",
+    "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "^0.207.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.207.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@opentelemetry/semantic-conventions": "^1.37.0"
   }
 }

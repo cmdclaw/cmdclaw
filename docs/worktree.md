@@ -38,21 +38,24 @@ Example:
 From inside the worktree:
 
 ```bash
+bun run worktree:docker-up
 bun run worktree:create
 bun run worktree:start
 ```
 
-This creates the isolated worktree metadata, database, env file, and starts the web, worker, and WS processes for that worktree.
+This starts the worktree-scoped Docker services first, then creates the isolated worktree metadata, database, env file, and starts the web, worker, and WS processes for that worktree.
+
+Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including Docker Compose, `worktree:start`, `worktree:dev`, and `bun run cli ...`.
 
 ## Start a worktree Docker stack
 
-If the worktree also needs its own local Postgres, Redis, and MinIO, use the worktree-aware Docker command instead of plain `docker compose up`:
+If the worktree also needs its own local Postgres, Redis, MinIO, and observability services, use the worktree-aware Docker command instead of plain `docker compose up`:
 
 ```bash
 bun run worktree:docker-up
 ```
 
-That command evaluates `bun run worktree env` first, then starts Compose with the worktree-specific ports, project name, and volumes.
+That command resolves the worktree slot first, then starts Compose with the worktree-specific ports, project name, passwords, and volumes.
 
 To stop that stack:
 
@@ -69,7 +72,9 @@ bun run worktree:status
 bun run worktree:env
 ```
 
-`worktree:status` shows the instance id, stack slot, app URL, and database name.
+`worktree:status` shows the instance id, stack slot, app URL, database name, Docker project, and all derived local addresses for Postgres, Redis, MinIO, metrics, logs, traces, Grafana, Alertmanager, and OTEL.
+
+It also shows the exact `.env` path currently backing the worktree.
 
 `worktree:env` prints the full derived environment for the worktree, including:
 
@@ -97,3 +102,16 @@ bun run worktree:docker-up
 ```
 
 Otherwise Compose will use the shared root `.env` values and you can still get port collisions.
+
+## Run the CLI in a worktree
+
+When you run the root CLI script from inside a worktree, the generated root `.env` makes the normal CLI path point at the worktree app URL and local database without manual exports or a wrapper.
+
+Example:
+
+```bash
+bun run worktree:docker-up
+bun run worktree:create
+bun run worktree:start
+bun run cli chat --message "hi" --model openai/gpt-5.4-mini
+```
