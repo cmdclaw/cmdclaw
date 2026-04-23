@@ -357,6 +357,7 @@ export type StoredExecutorSourceOauthCredential = {
 export type WorkspaceExecutorNativeMcpOauthBootstrapSource = {
   sourceId: string;
   name: string;
+  namespace: string;
   endpoint: string;
   transport: string | null;
   queryParams: Record<string, string> | null;
@@ -708,6 +709,7 @@ export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: 
       return {
         sourceId: source.id,
         name: source.name,
+        namespace: source.namespace,
         endpoint: source.endpoint,
         transport: source.transport ?? null,
         queryParams: source.queryParams ?? null,

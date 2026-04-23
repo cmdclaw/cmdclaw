@@ -1,5 +1,5 @@
 import { Image } from "@daytonaio/sdk";
-import { OPENCODE_PLUGIN_VERSION, OPENCODE_VERSION } from "../common/versions";
+import { EXECUTOR_VERSION, OPENCODE_PLUGIN_VERSION, OPENCODE_VERSION } from "../common/versions";
 
 const COMMON_ROOT = "src/common";
 
@@ -25,8 +25,10 @@ export const image = Image.debianSlim()
   .runCommands("agent-browser install")
   .runCommands("curl -fsSL https://bun.sh/install | bash")
   .runCommands("ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
-  .runCommands(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx`)
+  .runCommands(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx executor@${EXECUTOR_VERSION}`)
+  .runCommands("$HOME/.bun/bin/bun pm -g trust executor")
   .runCommands("ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
+  .runCommands("ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
   .runCommands("ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
   .runCommands("npm install -g @sandbox-agent/cli@0.2.x")
   .runCommands("sandbox-agent install-agent opencode")

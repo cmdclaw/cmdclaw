@@ -4,8 +4,9 @@ import { OPENCODE_VERSION, EXECUTOR_VERSION } from "../common/versions";
 const COMMON_ROOT = "common";
 const OPENCODE_PORT = 4096;
 const SANDBOX_AGENT_PORT = 2468;
-const EXECUTOR_PORT = 8788;
 const EXECUTOR_HOME = "/tmp/cmdclaw-executor/default";
+const EXECUTOR_SCOPE_DIR = `${EXECUTOR_HOME}/scope`;
+const EXECUTOR_DATA_DIR = `${EXECUTOR_HOME}/data`;
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -14,21 +15,21 @@ function shellQuote(value: string): string {
 const templateStartScript = [
   "set -euo pipefail",
   "cd /app",
-  `mkdir -p /app/.executor/state ${EXECUTOR_HOME} /app/.cmdclaw`,
+  `mkdir -p ${EXECUTOR_SCOPE_DIR} ${EXECUTOR_DATA_DIR} /app/.cmdclaw`,
   "export OPENCODE_CONFIG=/app/opencode.json",
   `export EXECUTOR_HOME=${EXECUTOR_HOME}`,
+  `export EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIR}`,
+  `export EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIR}`,
   `opencode serve --hostname 0.0.0.0 --port ${OPENCODE_PORT} >/tmp/opencode.log 2>&1 &`,
   "opencode_pid=$!",
   `sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT} >/tmp/sandbox-agent.log 2>&1 &`,
   "sandbox_agent_pid=$!",
-  `executor server start --port ${EXECUTOR_PORT} >/tmp/cmdclaw-executor-server.log 2>&1 &`,
-  "executor_pid=$!",
-  'cleanup() { kill "$opencode_pid" "$sandbox_agent_pid" "$executor_pid" 2>/dev/null || true; }',
+  'cleanup() { kill "$opencode_pid" "$sandbox_agent_pid" 2>/dev/null || true; }',
   "trap cleanup EXIT INT TERM",
-  'wait -n "$opencode_pid" "$sandbox_agent_pid" "$executor_pid"',
+  'wait -n "$opencode_pid" "$sandbox_agent_pid"',
   "status=$?",
   "cleanup",
-  'wait "$opencode_pid" "$sandbox_agent_pid" "$executor_pid" 2>/dev/null || true',
+  'wait "$opencode_pid" "$sandbox_agent_pid" 2>/dev/null || true',
   "exit $status",
 ].join("\n");
 
@@ -39,7 +40,6 @@ const templateReadyScript = [
     [
       `curl -fsS http://127.0.0.1:${OPENCODE_PORT}/health >/dev/null 2>&1`,
       `curl -fsS http://127.0.0.1:${SANDBOX_AGENT_PORT}/v1/health >/dev/null 2>&1`,
-      `curl -fsS http://127.0.0.1:${EXECUTOR_PORT}/ >/dev/null 2>&1`,
     ].join(" && ") +
     "; then exit 0; fi",
   "sleep 0.25",
@@ -48,8 +48,6 @@ const templateReadyScript = [
   "tail -n 50 /tmp/opencode.log >&2 || true",
   "echo 'Sandbox Agent log:' >&2",
   "tail -n 50 /tmp/sandbox-agent.log >&2 || true",
-  "echo 'Executor log:' >&2",
-  "tail -n 50 /tmp/cmdclaw-executor-server.log >&2 || true",
   "exit 1",
 ].join("\n");
 
@@ -78,6 +76,7 @@ export const template = Template({
   .runCmd(
     `$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx executor@${EXECUTOR_VERSION}`,
   )
+  .runCmd("$HOME/.bun/bin/bun pm -g trust executor")
   .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
   .runCmd("sudo ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
   .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")

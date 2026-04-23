@@ -6,16 +6,43 @@ import {
 import { createHash } from "node:crypto";
 import type { SandboxHandle } from "../core/types";
 
-const EXECUTOR_BASE_URL = "http://127.0.0.1:8788";
+const EXECUTOR_HOSTNAME = "127.0.0.1";
+const EXECUTOR_PORT = 8788;
+const EXECUTOR_BASE_URL = `http://${EXECUTOR_HOSTNAME}:${EXECUTOR_PORT}`;
 const EXECUTOR_WORKSPACE_ROOT = "/app";
+const EXECUTOR_HOME_DIRECTORY = "/tmp/cmdclaw-executor/default";
+const EXECUTOR_SCOPE_DIRECTORY = `${EXECUTOR_HOME_DIRECTORY}/scope`;
+const EXECUTOR_DATA_DIRECTORY = `${EXECUTOR_HOME_DIRECTORY}/data`;
+const EXECUTOR_CONFIG_PATH = `${EXECUTOR_SCOPE_DIRECTORY}/executor.jsonc`;
 const EXECUTOR_SERVER_LOG_PATH = "/tmp/cmdclaw-executor-server.log";
 const DEFAULT_EXECUTOR_TRACE_SERVICE_NAME = "cmdclaw-sandbox-executor";
 const EXECUTOR_OAUTH_CACHE_PATH = "oauth-reconcile-cache.json";
 const EXECUTOR_OAUTH_SECRET_CONCURRENCY = 3;
-// `updateSource` mutates the shared executor.jsonc file under a single EXECUTOR_HOME.
-// Running those updates concurrently can leave the config truncated or otherwise corrupted.
 const EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY = 1;
 const EXECUTOR_OAUTH_REFRESH_CONCURRENCY = 3;
+
+type LegacyExecutorSourceKind = "mcp" | "openapi";
+
+type LegacyExecutorConfigSource = Record<string, unknown> & {
+  kind: LegacyExecutorSourceKind;
+  name?: string;
+  namespace?: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+};
+
+type LegacyExecutorConfig = {
+  workspace?: {
+    name?: string;
+  };
+  sources?: Record<string, LegacyExecutorConfigSource> | unknown[];
+};
+
+type ExecutorScopeInfo = {
+  id: string;
+  name: string;
+  dir: string;
+};
 
 function escapeShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -31,9 +58,21 @@ function envFlag(value: string | undefined): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
+function isStringRecord(
+  value: Record<string, unknown> | null | undefined,
+): value is Record<string, string> {
+  if (!value) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => typeof entry === "string");
+}
+
 function buildExecutorCommandEnv(homeDirectory: string): Record<string, string> {
   const commandEnv: Record<string, string> = {
     EXECUTOR_HOME: homeDirectory,
+    EXECUTOR_SCOPE_DIR: EXECUTOR_SCOPE_DIRECTORY,
+    EXECUTOR_DATA_DIR: EXECUTOR_DATA_DIRECTORY,
   };
 
   if (!envFlag(process.env.EXECUTOR_TRACE_ENABLED)) {
@@ -60,6 +99,101 @@ function buildExecutorCommandEnv(homeDirectory: string): Record<string, string> 
   }
 
   return commandEnv;
+}
+
+function normalizeMcpRemoteTransport(value: unknown): "streamable-http" | "sse" | "auto" | undefined {
+  if (value === "streamable-http" || value === "sse" || value === "auto") {
+    return value;
+  }
+
+  if (value === "http") {
+    return "streamable-http";
+  }
+
+  return undefined;
+}
+
+function translateLegacyExecutorConfig(configJson: string): string {
+  const parsed = parseJsonResult<LegacyExecutorConfig>(configJson, "Executor bootstrap config");
+  if (Array.isArray(parsed.sources)) {
+    return `${JSON.stringify(parsed, null, 2)}\n`;
+  }
+
+  const translatedSources = Object.values(parsed.sources ?? {})
+    .filter((source) => source.enabled !== false)
+    .map((source) => {
+      const name = source.name?.trim() || source.namespace?.trim() || "source";
+      const namespace = source.namespace?.trim() || undefined;
+      const config = source.config ?? {};
+
+      if (source.kind === "openapi") {
+        const spec =
+          typeof config.spec === "string"
+            ? config.spec
+            : typeof config.specUrl === "string"
+              ? config.specUrl
+              : null;
+        if (!spec) {
+          throw new Error(`Executor bootstrap source "${name}" is missing an OpenAPI spec URL.`);
+        }
+
+        return {
+          kind: "openapi" as const,
+          spec,
+          baseUrl: typeof config.baseUrl === "string" ? config.baseUrl : undefined,
+          namespace,
+          headers: isStringRecord(config.defaultHeaders as Record<string, unknown> | null | undefined)
+            ? config.defaultHeaders
+            : undefined,
+        };
+      }
+
+      if (typeof config.command === "string" && config.command.trim().length > 0) {
+        return {
+          kind: "mcp" as const,
+          transport: "stdio" as const,
+          name,
+          command: config.command,
+          args: Array.isArray(config.args)
+            ? config.args.filter((entry): entry is string => typeof entry === "string")
+            : undefined,
+          env: isStringRecord(config.env as Record<string, unknown> | null | undefined)
+            ? config.env
+            : undefined,
+          cwd: typeof config.cwd === "string" ? config.cwd : undefined,
+          namespace,
+        };
+      }
+
+      const endpoint = typeof config.endpoint === "string" ? config.endpoint : null;
+      if (!endpoint) {
+        throw new Error(`Executor bootstrap source "${name}" is missing an MCP endpoint.`);
+      }
+
+      return {
+        kind: "mcp" as const,
+        transport: "remote" as const,
+        name,
+        endpoint,
+        remoteTransport: normalizeMcpRemoteTransport(config.transport),
+        namespace,
+        queryParams: isStringRecord(config.queryParams as Record<string, unknown> | null | undefined)
+          ? config.queryParams
+          : undefined,
+        headers: isStringRecord(config.headers as Record<string, unknown> | null | undefined)
+          ? config.headers
+          : undefined,
+      };
+    });
+
+  return `${JSON.stringify(
+    {
+      name: parsed.workspace?.name?.trim() || undefined,
+      sources: translatedSources,
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export type ExecutorSandboxBootstrap = {
@@ -103,8 +237,24 @@ async function execNoThrow(
     onStderr?: (chunk: string) => void;
   },
 ) {
+  const inlineEnv = opts?.env;
+  const shouldInlineEnv =
+    sandbox.provider === "daytona" && inlineEnv !== undefined && Object.keys(inlineEnv).length > 0;
+  const commandWithEnv = shouldInlineEnv
+    ? `env ${Object.entries(inlineEnv)
+        .map(([key, value]) => `${key}=${escapeShell(value)}`)
+        .join(" ")} ${command}`
+    : command;
+  const execOptions =
+    shouldInlineEnv && opts
+      ? {
+          ...opts,
+          env: undefined,
+        }
+      : opts;
+
   try {
-    return await sandbox.exec(command, opts);
+    return await sandbox.exec(commandWithEnv, execOptions);
   } catch (error) {
     if (!isCommandExitErrorLike(error)) {
       throw error;
@@ -141,6 +291,7 @@ function fingerprintOauthSource(source: WorkspaceExecutorNativeMcpOauthBootstrap
     .update(
       JSON.stringify({
         sourceId: source.sourceId,
+        namespace: source.namespace,
         endpoint: source.endpoint,
         transport: source.transport,
         queryParams: source.queryParams,
@@ -210,87 +361,139 @@ async function writeExecutorOauthCache(input: {
   );
 }
 
-async function createExecutorLocalSecret(input: {
+async function executorApiRequestJson<T>(input: {
   sandbox: SandboxHandle;
   env: Record<string, string>;
-  name: string;
-  value: string;
-}): Promise<string> {
-  const payload = JSON.stringify({
-    name: input.name,
-    value: input.value,
+  method: "GET" | "POST" | "PATCH";
+  path: string;
+  payload?: unknown;
+  timeoutMs?: number;
+  label: string;
+}): Promise<T> {
+  const commandParts = [
+    "curl -fsS",
+    `-X ${input.method}`,
+    escapeShell(`${EXECUTOR_BASE_URL}${input.path}`),
+  ];
+
+  if (input.payload !== undefined) {
+    commandParts.push("-H 'content-type: application/json'");
+    commandParts.push(`--data ${escapeShell(JSON.stringify(input.payload))}`);
+  }
+
+  const result = await execNoThrow(input.sandbox, commandParts.join(" "), {
+    timeoutMs: input.timeoutMs ?? 15_000,
+    env: input.env,
   });
-  const result = await execNoThrow(
-    input.sandbox,
-    [
-      "curl -fsS -X POST",
-      `${escapeShell(`${EXECUTOR_BASE_URL}/v1/local/secrets`)}`,
-      "-H 'content-type: application/json'",
-      `--data ${escapeShell(payload)}`,
-    ].join(" "),
-    {
-      timeoutMs: 15_000,
-      env: input.env,
-    },
-  );
 
   if (result.exitCode !== 0) {
     throw new Error(
-      `Executor secret creation failed (exit=${result.exitCode}): ${
+      `${input.label} failed (exit=${result.exitCode}): ${
         result.stderr || result.stdout || "unknown error"
       }`,
     );
   }
 
-  const secret = parseJsonResult<{ id?: string }>(result.stdout, "Executor secret creation");
+  return parseJsonResult<T>(result.stdout, input.label);
+}
+
+async function getExecutorScopeInfo(input: {
+  sandbox: SandboxHandle;
+  env: Record<string, string>;
+}): Promise<ExecutorScopeInfo> {
+  const scopeInfo = await executorApiRequestJson<Partial<ExecutorScopeInfo>>({
+    sandbox: input.sandbox,
+    env: input.env,
+    method: "GET",
+    path: "/api/scope",
+    timeoutMs: 15_000,
+    label: "Executor scope info",
+  });
+
+  if (
+    !scopeInfo ||
+    typeof scopeInfo.id !== "string" ||
+    typeof scopeInfo.name !== "string" ||
+    typeof scopeInfo.dir !== "string"
+  ) {
+    throw new Error("Executor scope info response was missing required fields.");
+  }
+
+  return {
+    id: scopeInfo.id,
+    name: scopeInfo.name,
+    dir: scopeInfo.dir,
+  };
+}
+
+function buildExecutorOauthSecretId(
+  source: WorkspaceExecutorNativeMcpOauthBootstrapSource,
+  kind: "access-token" | "refresh-token",
+): string {
+  const digest = createHash("sha256")
+    .update(`${source.sourceId}:${kind}`)
+    .digest("hex")
+    .slice(0, 24);
+
+  return `cmdclaw-${kind}-${digest}`;
+}
+
+async function upsertExecutorScopedSecret(input: {
+  sandbox: SandboxHandle;
+  env: Record<string, string>;
+  scopeId: string;
+  secretId: string;
+  name: string;
+  value: string;
+}): Promise<string> {
+  const secret = await executorApiRequestJson<{ id?: string }>({
+    sandbox: input.sandbox,
+    env: input.env,
+    method: "POST",
+    path: `/api/scopes/${encodeURIComponent(input.scopeId)}/secrets`,
+    payload: {
+      id: input.secretId,
+      name: input.name,
+      value: input.value,
+    },
+    timeoutMs: 15_000,
+    label: `Executor secret upsert (${input.secretId})`,
+  });
+
   if (!secret.id) {
-    throw new Error("Executor secret creation did not return a secret id.");
+    throw new Error(`Executor secret upsert did not return an id for ${input.secretId}.`);
   }
 
   return secret.id;
 }
 
-function buildNativeMcpOauthSourceConfig(
+function buildNativeMcpOauthHeaderAuth(
   source: WorkspaceExecutorNativeMcpOauthBootstrapSource,
   accessTokenSecretId: string,
-  refreshTokenSecretId: string | null,
 ) {
   if (!source.credential) {
     throw new Error(`Missing OAuth credential for source ${source.sourceId}`);
   }
 
+  const tokenType = source.credential.metadata.tokenType?.trim();
+  const normalizedPrefix =
+    tokenType && tokenType.length > 0
+      ? tokenType.toLowerCase() === "bearer"
+        ? "Bearer "
+        : `${tokenType} `
+      : "Bearer ";
   return {
-    name: source.name,
-    endpoint: source.endpoint,
-    transport: source.transport,
-    queryParams: source.queryParams,
-    headers: null,
-    command: null,
-    args: null,
-    env: null,
-    cwd: null,
-    auth: {
-      kind: "oauth2" as const,
-      redirectUri: source.credential.metadata.redirectUri,
-      accessTokenRef: {
-        secretId: accessTokenSecretId,
-      },
-      refreshTokenRef: refreshTokenSecretId ? { secretId: refreshTokenSecretId } : null,
-      tokenType: source.credential.metadata.tokenType.toLowerCase(),
-      expiresAt: source.credential.expiresAt?.getTime() ?? null,
-      scope: source.credential.metadata.scope,
-      resourceMetadataUrl: source.credential.metadata.resourceMetadataUrl,
-      authorizationServerUrl: source.credential.metadata.authorizationServerUrl,
-      resourceMetadata: source.credential.metadata.resourceMetadata,
-      authorizationServerMetadata: source.credential.metadata.authorizationServerMetadata,
-      clientInformation: source.credential.metadata.clientInformation,
-    },
+    kind: "header" as const,
+    headerName: "Authorization",
+    secretId: accessTokenSecretId,
+    prefix: normalizedPrefix,
   };
 }
 
 async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
   sandbox: SandboxHandle;
   env: Record<string, string>;
+  scopeId: string;
   sources: WorkspaceExecutorNativeMcpOauthBootstrapSource[];
   homeDirectory: string;
   reuseExistingState?: boolean;
@@ -337,22 +540,31 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     sourcesToReconcile,
     EXECUTOR_OAUTH_SECRET_CONCURRENCY,
     async (entry, index) => {
-      const accessSecretPromise = createExecutorLocalSecret({
+      const accessTokenSecretId = buildExecutorOauthSecretId(entry.source, "access-token");
+      const refreshTokenSecretId = entry.source.credential?.refreshToken
+        ? buildExecutorOauthSecretId(entry.source, "refresh-token")
+        : null;
+
+      const accessSecretPromise = upsertExecutorScopedSecret({
         sandbox: input.sandbox,
         env: input.env,
+        scopeId: input.scopeId,
+        secretId: accessTokenSecretId,
         name: `${entry.source.name} access token`,
         value: entry.source.credential!.accessToken,
       });
-      const refreshSecretPromise = entry.source.credential!.refreshToken
-        ? createExecutorLocalSecret({
+      const refreshSecretPromise = refreshTokenSecretId
+        ? upsertExecutorScopedSecret({
             sandbox: input.sandbox,
             env: input.env,
+            scopeId: input.scopeId,
+            secretId: refreshTokenSecretId,
             name: `${entry.source.name} refresh token`,
-            value: entry.source.credential!.refreshToken,
+            value: entry.source.credential!.refreshToken!,
           })
         : Promise.resolve(null);
 
-      const [accessTokenSecretId, refreshTokenSecretId] = await Promise.all([
+      const [resolvedAccessTokenSecretId, resolvedRefreshTokenSecretId] = await Promise.all([
         accessSecretPromise,
         refreshSecretPromise,
       ]);
@@ -360,8 +572,8 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
       preparedSources[index] = {
         source: entry.source,
         fingerprint: entry.fingerprint,
-        accessTokenSecretId,
-        refreshTokenSecretId,
+        accessTokenSecretId: resolvedAccessTokenSecretId,
+        refreshTokenSecretId: resolvedRefreshTokenSecretId,
       };
     },
   );
@@ -370,30 +582,17 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     preparedSources,
     EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY,
     async (entry) => {
-      const updateCode = `return await tools.executor.mcp.updateSource(${JSON.stringify({
-        sourceId: entry.source.sourceId,
-        config: buildNativeMcpOauthSourceConfig(
-          entry.source,
-          entry.accessTokenSecretId,
-          entry.refreshTokenSecretId,
-        ),
-      })})`;
-      const updateResult = await execNoThrow(
-        input.sandbox,
-        `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(updateCode)}`,
-        {
-          timeoutMs: 30_000,
-          env: input.env,
+      await executorApiRequestJson<{ updated?: boolean }>({
+        sandbox: input.sandbox,
+        env: input.env,
+        method: "PATCH",
+        path: `/api/scopes/${encodeURIComponent(input.scopeId)}/mcp/sources/${encodeURIComponent(entry.source.namespace)}`,
+        payload: {
+          auth: buildNativeMcpOauthHeaderAuth(entry.source, entry.accessTokenSecretId),
         },
-      );
-
-      if (updateResult.exitCode !== 0) {
-        throw new Error(
-          `Executor MCP native update failed for ${entry.source.sourceId} (exit=${updateResult.exitCode}): ${
-            updateResult.stderr || updateResult.stdout || "unknown error"
-          }`,
-        );
-      }
+        timeoutMs: 30_000,
+        label: `Executor MCP source update (${entry.source.namespace})`,
+      });
     },
   );
 
@@ -401,25 +600,17 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     preparedSources,
     EXECUTOR_OAUTH_REFRESH_CONCURRENCY,
     async (entry) => {
-      const refreshCode = `return await tools.executor.sources.refresh(${JSON.stringify({
-        sourceId: entry.source.sourceId,
-      })})`;
-      const refreshResult = await execNoThrow(
-        input.sandbox,
-        `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(refreshCode)}`,
-        {
-          timeoutMs: 30_000,
-          env: input.env,
+      await executorApiRequestJson<{ toolCount?: number }>({
+        sandbox: input.sandbox,
+        env: input.env,
+        method: "POST",
+        path: `/api/scopes/${encodeURIComponent(input.scopeId)}/mcp/sources/refresh`,
+        payload: {
+          namespace: entry.source.namespace,
         },
-      );
-
-      if (refreshResult.exitCode !== 0) {
-        throw new Error(
-          `Executor source refresh failed for ${entry.source.sourceId} (exit=${refreshResult.exitCode}): ${
-            refreshResult.stderr || refreshResult.stdout || "unknown error"
-          }`,
-        );
-      }
+        timeoutMs: 30_000,
+        label: `Executor MCP source refresh (${entry.source.namespace})`,
+      });
       nextCache.sources[entry.source.sourceId] = entry.fingerprint;
     },
   );
@@ -465,17 +656,24 @@ async function ensureExecutorServerReady(input: {
   workspaceStateJson: string;
   env: Record<string, string>;
   runPhase: <T>(phase: ExecutorPreparePhase, action: () => Promise<T>) => Promise<T>;
-}) {
+}): Promise<ExecutorScopeInfo> {
+  const translatedConfigJson = translateLegacyExecutorConfig(input.configJson);
+
   await input.runPhase("config_write", async () => {
-    await input.sandbox.ensureDir("/app/.executor/state");
-    await input.sandbox.writeFile("/app/.executor/executor.jsonc", input.configJson);
-    await input.sandbox.writeFile("/app/.executor/state/workspace-state.json", input.workspaceStateJson);
+    await input.sandbox.ensureDir(EXECUTOR_HOME_DIRECTORY);
+    await input.sandbox.ensureDir(EXECUTOR_SCOPE_DIRECTORY);
+    await input.sandbox.ensureDir(EXECUTOR_DATA_DIRECTORY);
+    await input.sandbox.writeFile(EXECUTOR_CONFIG_PATH, translatedConfigJson);
+    await input.sandbox.writeFile(
+      `${EXECUTOR_HOME_DIRECTORY}/workspace-state.json`,
+      input.workspaceStateJson,
+    );
   });
 
   const serverReadyResult = await input.runPhase("server_probe", async () =>
     await execNoThrow(
       input.sandbox,
-      `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null`,
+      `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/api/scope`)} >/dev/null`,
       {
         timeoutMs: 5_000,
         env: input.env,
@@ -483,51 +681,77 @@ async function ensureExecutorServerReady(input: {
     ),
   );
 
-  const waitCommand = [
-    "for _ in $(seq 1 30); do",
-    `curl -fsS ${escapeShell(`${EXECUTOR_BASE_URL}/`)} >/dev/null 2>&1 && exit 0;`,
-    "sleep 1;",
-    "done;",
-    `echo ${escapeShell(`executor server did not become ready; see ${EXECUTOR_SERVER_LOG_PATH}`)} >&2;`,
-    `tail -n 40 ${escapeShell(EXECUTOR_SERVER_LOG_PATH)} >&2 || true;`,
-    "exit 1",
-  ].join(" ");
+  const restartCommand = [
+    `executor daemon stop --base-url ${EXECUTOR_BASE_URL} >/dev/null 2>&1 || true`,
+    `rm -f ${EXECUTOR_SERVER_LOG_PATH}`,
+    `nohup executor daemon run --hostname ${EXECUTOR_HOSTNAME} --port ${EXECUTOR_PORT} >${EXECUTOR_SERVER_LOG_PATH} 2>&1 </dev/null &`,
+  ].join("; ");
 
-  const waitResult = await input.runPhase("server_wait_ready", async () =>
-    await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
-      timeoutMs: 45_000,
+  const restartResult = await input.runPhase("server_wait_ready", async () =>
+    await execNoThrow(input.sandbox, `bash -lc ${escapeShell(restartCommand)}`, {
+      timeoutMs: 15_000,
       env: input.env,
     }),
   );
 
+  if (restartResult.exitCode !== 0) {
+    throw new Error(
+      `Executor daemon restart failed (exit=${restartResult.exitCode}): ${
+        restartResult.stderr || restartResult.stdout || "unknown error"
+      }`,
+    );
+  }
+
+  const waitCommand = [
+    "for _ in $(seq 1 30); do",
+    `curl -fsS ${EXECUTOR_BASE_URL}/api/scope >/dev/null 2>&1 && exit 0;`,
+    "sleep 1;",
+    "done;",
+    `echo "executor daemon did not become ready; see ${EXECUTOR_SERVER_LOG_PATH}" >&2;`,
+    `tail -n 40 ${EXECUTOR_SERVER_LOG_PATH} >&2 || true;`,
+    "exit 1",
+  ].join(" ");
+
+  const waitResult = await execNoThrow(input.sandbox, `bash -lc ${escapeShell(waitCommand)}`, {
+    timeoutMs: 45_000,
+    env: input.env,
+  });
+
   if (waitResult.exitCode !== 0) {
-    const details =
-      serverReadyResult.stderr || serverReadyResult.stdout || waitResult.stderr || waitResult.stdout;
+    const diagnosticResult = await execNoThrow(
+      input.sandbox,
+      `bash -lc ${escapeShell(
+        [
+          "echo '--- executor-command ---'",
+          "command -v executor || true",
+          "echo '--- executor-env ---'",
+          "env | sort | grep -E '^(HOME|PATH|USER|EXECUTOR_HOME|EXECUTOR_SCOPE_DIR|EXECUTOR_DATA_DIR)=' || true",
+          "echo '--- executor-log ---'",
+          `cat ${EXECUTOR_SERVER_LOG_PATH} 2>/dev/null || true`,
+        ].join("; "),
+      )}`,
+      {
+        timeoutMs: 5_000,
+        env: input.env,
+      },
+    );
+    const details = [
+      waitResult.stderr || waitResult.stdout || serverReadyResult.stderr || serverReadyResult.stdout,
+      diagnosticResult.stderr || diagnosticResult.stdout,
+    ]
+      .filter((value) => Boolean(value))
+      .join("\n");
     throw new Error(
       `Executor bootstrap failed (exit=${waitResult.exitCode}): ${details || "unknown error"}`,
     );
   }
 
-  const statusResult = await input.runPhase("status_check", async () =>
-    await execNoThrow(
-      input.sandbox,
-      `executor call --base-url ${escapeShell(EXECUTOR_BASE_URL)} --no-open ${escapeShell(
-        'return "ok"',
-      )}`,
-      {
-        timeoutMs: 15_000,
-        env: input.env,
-      },
-    ),
+  return await input.runPhase("status_check", async () =>
+    await getExecutorScopeInfo({
+      sandbox: input.sandbox,
+      env: input.env,
+    }),
   );
-
-  if (statusResult.exitCode !== 0) {
-    throw new Error(
-      `Executor status check failed (exit=${statusResult.exitCode}): ${
-        statusResult.stderr || statusResult.stdout || "unknown error"
-      }`,
-    );
-  }
 }
 
 export async function prepareExecutorInSandbox(input: {
@@ -569,12 +793,9 @@ export async function prepareExecutorInSandbox(input: {
     return null;
   }
 
-  const homeDirectory = input.runtimeId
-    ? `/tmp/cmdclaw-executor/${input.runtimeId}`
-    : "/tmp/cmdclaw-executor/default";
+  const homeDirectory = EXECUTOR_HOME_DIRECTORY;
   const executorCommandEnv = buildExecutorCommandEnv(homeDirectory);
-
-  await ensureExecutorServerReady({
+  const scopeInfo = await ensureExecutorServerReady({
     sandbox: input.sandbox,
     configJson: bootstrap.configJson,
     workspaceStateJson: bootstrap.workspaceStateJson,
@@ -584,15 +805,18 @@ export async function prepareExecutorInSandbox(input: {
 
   const lines = [
     "## Executor Runtime",
-    "CmdClaw prepared a sandbox-local executor workspace for shared workspace sources.",
+    "CmdClaw prepared a sandbox-local Executor daemon for shared workspace sources.",
     `Executor workspace root: \`${EXECUTOR_WORKSPACE_ROOT}\``,
     `Executor base URL: \`${EXECUTOR_BASE_URL}\``,
     `Executor home: \`${homeDirectory}\``,
-    "Use executor through the local server instead of editing `.executor` files manually.",
+    `Executor scope dir: \`${EXECUTOR_SCOPE_DIRECTORY}\``,
+    `Executor scope id: \`${scopeInfo.id}\``,
+    "CmdClaw owns `executor.jsonc`; do not hand-edit it while the daemon is running.",
     "Useful commands:",
-    `- \`curl -fsS ${EXECUTOR_BASE_URL}/ >/dev/null && echo 'executor ready'\``,
-    `- \`EXECUTOR_HOME=${homeDirectory} executor call --base-url ${EXECUTOR_BASE_URL} --no-open 'return await tools.discover({ query: \"available tools\", limit: 20 });'\``,
-    "Inside executor code, use the discovery workflow and call `tools.*` APIs rather than raw fetch.",
+    `- \`curl -fsS ${EXECUTOR_BASE_URL}/api/scope\``,
+    `- \`EXECUTOR_HOME=${homeDirectory} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIRECTORY} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIRECTORY} executor tools sources --base-url ${EXECUTOR_BASE_URL}\``,
+    `- \`EXECUTOR_HOME=${homeDirectory} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIRECTORY} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIRECTORY} executor tools search "latest linear issues" --base-url ${EXECUTOR_BASE_URL}\``,
+    "OpenCode still reaches Executor through the local MCP command `executor mcp --stdio`.",
     "Connected workspace sources in this sandbox:",
     ...bootstrap.sources.map(
       (source) =>
@@ -605,6 +829,7 @@ export async function prepareExecutorInSandbox(input: {
       const oauthReconcile = await reconcileNativeMcpOAuthSourcesInSandbox({
         sandbox: input.sandbox,
         env: executorCommandEnv,
+        scopeId: scopeInfo.id,
         sources: nativeMcpOauthSources,
         homeDirectory,
         reuseExistingState: input.reuseExistingState,

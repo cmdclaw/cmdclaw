@@ -2195,6 +2195,9 @@ describe("generationManager transitions", () => {
       { generationId: "gen-new" },
       expect.objectContaining({
         delay: generationLifecyclePolicy.bootstrapTimeoutMs,
+        jobId: "generation:preparing-stuck-check-gen-new",
+        removeOnComplete: true,
+        removeOnFail: 500,
       }),
     );
     expect(queueAddMock).toHaveBeenNthCalledWith(
@@ -2555,6 +2558,9 @@ describe("generationManager transitions", () => {
       { generationId: "gen-new" },
       expect.objectContaining({
         delay: generationLifecyclePolicy.bootstrapTimeoutMs,
+        jobId: "generation:preparing-stuck-check-gen-new",
+        removeOnComplete: true,
+        removeOnFail: 500,
       }),
     );
     expect(queueAddMock).toHaveBeenNthCalledWith(
@@ -4652,7 +4658,7 @@ describe("generationManager transitions", () => {
         sessionGetDataShape: "object(id,state)",
         sessionGetDataDetail: expect.stringContaining("\"state\":\"running\""),
         opencodeLogTail: expect.stringContaining("fatal: runner exited unexpectedly"),
-        promptResultDataShape: "object(data,error)",
+        promptResultDataShape: null,
       }),
       expect.objectContaining({
         generationId: "gen-opencode-empty-completion-opaque",

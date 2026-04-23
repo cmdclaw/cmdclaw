@@ -29,9 +29,19 @@ vi.mock("../../executor/workspace-sources", () => ({
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock,
 }));
 
-function makeSandboxHandle(): SandboxHandle {
+const EXECUTOR_HOME = "/tmp/cmdclaw-executor/default";
+const EXECUTOR_SCOPE_DIR = `${EXECUTOR_HOME}/scope`;
+const EXECUTOR_DATA_DIR = `${EXECUTOR_HOME}/data`;
+const EXECUTOR_CONFIG_PATH = `${EXECUTOR_SCOPE_DIR}/executor.jsonc`;
+const EXECUTOR_SCOPE_INFO = {
+  id: "scope-1",
+  name: EXECUTOR_SCOPE_DIR,
+  dir: EXECUTOR_SCOPE_DIR,
+};
+
+function makeSandboxHandle(provider: SandboxHandle["provider"] = "e2b"): SandboxHandle {
   return {
-    provider: "e2b",
+    provider,
     sandboxId: "sandbox-1",
     exec: vi.fn(),
     writeFile: vi.fn(),
@@ -52,6 +62,7 @@ function createDeferred<T>() {
 
 function fingerprintSource(source: {
   sourceId: string;
+  namespace: string;
   endpoint: string;
   transport: string;
   queryParams: unknown;
@@ -66,6 +77,7 @@ function fingerprintSource(source: {
     .update(
       JSON.stringify({
         sourceId: source.sourceId,
+        namespace: source.namespace,
         endpoint: source.endpoint,
         transport: source.transport,
         queryParams: source.queryParams,
@@ -78,6 +90,10 @@ function fingerprintSource(source: {
     .digest("hex");
 }
 
+function matchCommand(command: string, needle: string): boolean {
+  return command.includes(needle);
+}
+
 describe("prepareExecutorInSandbox", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,7 +104,28 @@ describe("prepareExecutorInSandbox", () => {
     delete process.env.EXECUTOR_TRACE_QUERY_BASE_URL;
     getWorkspaceExecutorBootstrapMock.mockResolvedValue({
       revisionHash: "rev-1",
-      configJson: "{\n  \"sources\": {}\n}\n",
+      configJson: `${JSON.stringify(
+        {
+          workspace: { name: "Workspace" },
+          sources: {
+            "source-1": {
+              kind: "openapi",
+              name: "CRM",
+              namespace: "crm",
+              enabled: true,
+              config: {
+                specUrl: "https://example.com/openapi.json",
+                baseUrl: "https://example.com",
+                defaultHeaders: {
+                  Authorization: "Bearer test",
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
       workspaceStateJson: "{\n  \"workspace\": true\n}\n",
       sources: [
         {
@@ -104,22 +141,15 @@ describe("prepareExecutorInSandbox", () => {
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([]);
   });
 
-  it("waits for the template-managed executor server and validates the local server", async () => {
+  it("writes translated executor config, restarts the daemon, and validates scope info", async () => {
     const sandbox = makeSandboxHandle();
     vi.mocked(sandbox.exec)
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: "",
-        stderr: "",
-      })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '"ok"\n',
+        stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
         stderr: "",
       });
 
@@ -131,49 +161,62 @@ describe("prepareExecutorInSandbox", () => {
     });
 
     expect(result?.sourceCount).toBe(1);
-    await result?.finalize();
-    expect(sandbox.ensureDir).toHaveBeenCalledWith("/app/.executor/state");
+    expect(await result?.finalize()).toEqual({ oauthCacheHits: 0 });
+
+    expect(sandbox.ensureDir).toHaveBeenCalledWith(EXECUTOR_HOME);
+    expect(sandbox.ensureDir).toHaveBeenCalledWith(EXECUTOR_SCOPE_DIR);
+    expect(sandbox.ensureDir).toHaveBeenCalledWith(EXECUTOR_DATA_DIR);
+    expect(sandbox.writeFile).toHaveBeenCalledWith(
+      EXECUTOR_CONFIG_PATH,
+      expect.stringContaining('"kind": "openapi"'),
+    );
+    expect(sandbox.writeFile).toHaveBeenCalledWith(
+      EXECUTOR_CONFIG_PATH,
+      expect.stringContaining('"spec": "https://example.com/openapi.json"'),
+    );
+    expect(sandbox.writeFile).toHaveBeenCalledWith(
+      EXECUTOR_CONFIG_PATH,
+      expect.not.stringContaining('"specUrl"'),
+    );
     expect(vi.mocked(sandbox.exec).mock.calls[0]?.[0]).toBe(
-      "curl -fsS 'http://127.0.0.1:8788/' >/dev/null",
+      "curl -fsS 'http://127.0.0.1:8788/api/scope' >/dev/null",
     );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("executor server did not become ready"),
+      expect.stringContaining("executor daemon stop"),
       expect.objectContaining({
         env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+          EXECUTOR_HOME,
+          EXECUTOR_SCOPE_DIR,
+          EXECUTOR_DATA_DIR,
         },
       }),
     );
     expect(sandbox.exec).toHaveBeenNthCalledWith(
-      3,
-      `executor call --base-url 'http://127.0.0.1:8788' --no-open 'return "ok"'`,
+      2,
+      expect.stringContaining("nohup executor daemon run --hostname 127.0.0.1 --port 8788"),
+      expect.any(Object),
+    );
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      4,
+      "curl -fsS -X GET 'http://127.0.0.1:8788/api/scope'",
       expect.objectContaining({
         env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+          EXECUTOR_HOME,
+          EXECUTOR_SCOPE_DIR,
+          EXECUTOR_DATA_DIR,
         },
       }),
     );
   });
 
-  it("throws when executor status is not reachable even if the command exits zero", async () => {
+  it("throws when executor scope info is not reachable after daemon startup", async () => {
     const sandbox = makeSandboxHandle();
     vi.mocked(sandbox.exec)
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: "",
-        stderr: "server unreachable",
-      });
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "server unreachable" });
 
     await expect(
       prepareExecutorInSandbox({
@@ -182,7 +225,44 @@ describe("prepareExecutorInSandbox", () => {
         workspaceName: "Workspace",
         userId: "user-1",
       }),
-    ).rejects.toThrow("Executor status check failed");
+    ).rejects.toThrow("Executor scope info failed");
+  });
+
+  it("inlines executor env into daytona commands instead of relying on SDK env injection", async () => {
+    const sandbox = makeSandboxHandle("daytona");
+    vi.mocked(sandbox.exec)
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
+        stderr: "",
+      });
+
+    await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        "env EXECUTOR_HOME='/tmp/cmdclaw-executor/default' EXECUTOR_SCOPE_DIR='/tmp/cmdclaw-executor/default/scope' EXECUTOR_DATA_DIR='/tmp/cmdclaw-executor/default/data' bash -lc",
+      ),
+      expect.objectContaining({
+        env: undefined,
+      }),
+    );
+    expect(sandbox.exec).toHaveBeenNthCalledWith(
+      4,
+      "env EXECUTOR_HOME='/tmp/cmdclaw-executor/default' EXECUTOR_SCOPE_DIR='/tmp/cmdclaw-executor/default/scope' EXECUTOR_DATA_DIR='/tmp/cmdclaw-executor/default/data' curl -fsS -X GET 'http://127.0.0.1:8788/api/scope'",
+      expect.objectContaining({
+        env: undefined,
+      }),
+    );
   });
 
   it("skips executor prep when an explicit empty source allowlist is provided", async () => {
@@ -202,7 +282,7 @@ describe("prepareExecutorInSandbox", () => {
     expect(sandbox.exec).not.toHaveBeenCalled();
   });
 
-  it("passes tracing env through to the sandboxed executor when enabled", async () => {
+  it("passes tracing env through to the sandboxed executor daemon when enabled", async () => {
     process.env.EXECUTOR_TRACE_ENABLED = "1";
     process.env.EXECUTOR_TRACE_SERVICE_NAME = "executor-e2b";
     process.env.EXECUTOR_TRACE_OTLP_ENDPOINT = "http://trace.example:4317";
@@ -210,19 +290,12 @@ describe("prepareExecutorInSandbox", () => {
 
     const sandbox = makeSandboxHandle();
     vi.mocked(sandbox.exec)
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: "",
-        stderr: "",
-      })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '"ok"\n',
+        stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
         stderr: "",
       });
 
@@ -236,10 +309,12 @@ describe("prepareExecutorInSandbox", () => {
 
     expect(sandbox.exec).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("executor server did not become ready"),
+      expect.stringContaining("executor daemon stop"),
       expect.objectContaining({
         env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
+          EXECUTOR_HOME,
+          EXECUTOR_SCOPE_DIR,
+          EXECUTOR_DATA_DIR,
           EXECUTOR_TRACE_ENABLED: "1",
           EXECUTOR_TRACE_SERVICE_NAME: "executor-e2b",
           EXECUTOR_TRACE_OTLP_ENDPOINT: "http://trace.example:4317",
@@ -249,11 +324,12 @@ describe("prepareExecutorInSandbox", () => {
     );
   });
 
-  it("reconciles native MCP OAuth sources by creating secrets, updating config, and refreshing", async () => {
+  it("reconciles native MCP OAuth sources through scoped secrets and MCP patch/refresh endpoints", async () => {
     const sandbox = makeSandboxHandle();
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
       {
         sourceId: "source-1",
+        namespace: "linear",
         name: "Linear",
         endpoint: "https://mcp.linear.app/mcp",
         transport: "streamable-http",
@@ -275,42 +351,31 @@ describe("prepareExecutorInSandbox", () => {
         },
       },
     ]);
-    vi.mocked(sandbox.exec)
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '"ok"\n',
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '{"id":"sec-access"}',
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '{"id":"sec-refresh"}',
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '{"id":"source-1"}',
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '{"id":"source-1","status":"connected"}',
-        stderr: "",
-      });
+
+    vi.mocked(sandbox.exec).mockImplementation(async (command) => {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
+        const secretIdMatch = command.match(/"id":"([^"]+)"/);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ id: secretIdMatch?.[1] ?? "secret-id" }),
+          stderr: "",
+        };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/linear") && matchCommand(command, "-X PATCH")) {
+        return { exitCode: 0, stdout: JSON.stringify({ updated: true }), stderr: "" };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return { exitCode: 0, stdout: JSON.stringify({ toolCount: 3 }), stderr: "" };
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
 
     const result = await prepareExecutorInSandbox({
       sandbox,
@@ -320,33 +385,27 @@ describe("prepareExecutorInSandbox", () => {
     });
     await result?.finalize();
 
-    expect(sandbox.exec).toHaveBeenNthCalledWith(
-      4,
-      expect.stringContaining("/v1/local/secrets"),
-      expect.objectContaining({
-        env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
-        },
-      }),
-    );
-    expect(sandbox.exec).toHaveBeenNthCalledWith(
-      6,
-      expect.stringContaining("tools.executor.mcp.updateSource"),
-      expect.objectContaining({
-        env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
-        },
-      }),
-    );
-    expect(sandbox.exec).toHaveBeenNthCalledWith(
-      7,
-      expect.stringContaining("tools.executor.sources.refresh"),
-      expect.objectContaining({
-        env: {
-          EXECUTOR_HOME: "/tmp/cmdclaw-executor/default",
-        },
-      }),
-    );
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes("/api/scopes/scope-1/secrets"),
+      ),
+    ).toBe(true);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes("/api/scopes/scope-1/mcp/sources/linear"),
+      ),
+    ).toBe(true);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes("/api/scopes/scope-1/mcp/sources/refresh"),
+      ),
+    ).toBe(true);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes('"headerName":"Authorization"') &&
+        command.includes('"kind":"header"'),
+      ),
+    ).toBe(true);
   });
 
   it("starts access and refresh secret creation in parallel for the same source", async () => {
@@ -358,6 +417,7 @@ describe("prepareExecutorInSandbox", () => {
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
       {
         sourceId: "source-1",
+        namespace: "linear",
         name: "Linear",
         endpoint: "https://mcp.linear.app/mcp",
         transport: "streamable-http",
@@ -381,24 +441,22 @@ describe("prepareExecutorInSandbox", () => {
     ]);
 
     vi.mocked(sandbox.exec).mockImplementation((command) => {
-      if (command.includes("/v1/local/secrets")) {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
         secretRequestCount += 1;
-        return secretRequestCount === 1
-          ? accessSecretDeferred.promise
-          : refreshSecretDeferred.promise;
+        return secretRequestCount === 1 ? accessSecretDeferred.promise : refreshSecretDeferred.promise;
       }
-      if (command.includes("tools.executor.mcp.updateSource")) {
-        return Promise.resolve({ exitCode: 0, stdout: '{"id":"source-1"}', stderr: "" });
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/linear") && matchCommand(command, "-X PATCH")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"updated":true}', stderr: "" });
       }
-      if (command.includes("tools.executor.sources.refresh")) {
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"toolCount":1}', stderr: "" });
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"id":"source-1","status":"connected"}',
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
           stderr: "",
         });
-      }
-      if (command.includes('return "ok"')) {
-        return Promise.resolve({ exitCode: 0, stdout: '"ok"\n', stderr: "" });
       }
       return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
     });
@@ -423,7 +481,7 @@ describe("prepareExecutorInSandbox", () => {
     await finalizePromise;
   });
 
-  it("serializes native MCP config updates across multiple oauth sources", async () => {
+  it("serializes MCP source patch requests across multiple oauth sources", async () => {
     const sandbox = makeSandboxHandle();
     let activeUpdateCount = 0;
     let maxConcurrentUpdates = 0;
@@ -431,6 +489,7 @@ describe("prepareExecutorInSandbox", () => {
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
       {
         sourceId: "source-1",
+        namespace: "linear",
         name: "Linear",
         endpoint: "https://mcp.linear.app/mcp",
         transport: "streamable-http",
@@ -453,6 +512,7 @@ describe("prepareExecutorInSandbox", () => {
       },
       {
         sourceId: "source-2",
+        namespace: "github",
         name: "GitHub",
         endpoint: "https://api.githubcopilot.com/mcp",
         transport: "streamable-http",
@@ -476,29 +536,30 @@ describe("prepareExecutorInSandbox", () => {
     ]);
 
     vi.mocked(sandbox.exec).mockImplementation(async (command) => {
-      if (command.includes("/v1/local/secrets")) {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
+        const secretIdMatch = command.match(/"id":"([^"]+)"/);
         return {
           exitCode: 0,
-          stdout: `{"id":"sec-${command.includes("source-2") ? "source-2" : "source-1"}"}`,
+          stdout: JSON.stringify({ id: secretIdMatch?.[1] ?? "secret-id" }),
           stderr: "",
         };
       }
-      if (command.includes("tools.executor.mcp.updateSource")) {
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/") && matchCommand(command, "-X PATCH")) {
         activeUpdateCount += 1;
         maxConcurrentUpdates = Math.max(maxConcurrentUpdates, activeUpdateCount);
         await new Promise((resolve) => setTimeout(resolve, 10));
         activeUpdateCount -= 1;
-        return { exitCode: 0, stdout: '{"id":"updated"}', stderr: "" };
+        return { exitCode: 0, stdout: '{"updated":true}', stderr: "" };
       }
-      if (command.includes("tools.executor.sources.refresh")) {
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return { exitCode: 0, stdout: '{"toolCount":1}', stderr: "" };
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
         return {
           exitCode: 0,
-          stdout: '{"id":"source","status":"connected"}',
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
           stderr: "",
         };
-      }
-      if (command.includes('return "ok"')) {
-        return { exitCode: 0, stdout: '"ok"\n', stderr: "" };
       }
       return { exitCode: 0, stdout: "", stderr: "" };
     });
@@ -514,8 +575,9 @@ describe("prepareExecutorInSandbox", () => {
 
     expect(maxConcurrentUpdates).toBe(1);
     expect(
-      vi.mocked(sandbox.exec).mock.calls.filter(([command]) =>
-        command.includes("tools.executor.mcp.updateSource"),
+      vi.mocked(sandbox.exec).mock.calls.filter(
+        ([command]) =>
+          command.includes("/api/scopes/scope-1/mcp/sources/") && command.includes("-X PATCH"),
       ).length,
     ).toBe(2);
   });
@@ -529,6 +591,7 @@ describe("prepareExecutorInSandbox", () => {
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
       {
         sourceId: "source-1",
+        namespace: "linear",
         name: "Linear",
         endpoint: "https://mcp.linear.app/mcp",
         transport: "streamable-http",
@@ -552,24 +615,22 @@ describe("prepareExecutorInSandbox", () => {
     ]);
 
     vi.mocked(sandbox.exec).mockImplementation((command) => {
-      if (command.includes("/v1/local/secrets")) {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
         secretRequestCount += 1;
-        return secretRequestCount === 1
-          ? accessSecretDeferred.promise
-          : refreshSecretDeferred.promise;
+        return secretRequestCount === 1 ? accessSecretDeferred.promise : refreshSecretDeferred.promise;
       }
-      if (command.includes("tools.executor.mcp.updateSource")) {
-        return Promise.resolve({ exitCode: 0, stdout: '{"id":"source-1"}', stderr: "" });
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/linear") && matchCommand(command, "-X PATCH")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"updated":true}', stderr: "" });
       }
-      if (command.includes("tools.executor.sources.refresh")) {
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"toolCount":1}', stderr: "" });
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"id":"source-1","status":"connected"}',
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
           stderr: "",
         });
-      }
-      if (command.includes('return "ok"')) {
-        return Promise.resolve({ exitCode: 0, stdout: '"ok"\n', stderr: "" });
       }
       return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
     });
@@ -601,6 +662,7 @@ describe("prepareExecutorInSandbox", () => {
     const sandbox = makeSandboxHandle();
     const unchangedSource = {
       sourceId: "source-1",
+      namespace: "linear",
       name: "Linear",
       endpoint: "https://mcp.linear.app/mcp",
       transport: "streamable-http",
@@ -631,11 +693,16 @@ describe("prepareExecutorInSandbox", () => {
     });
 
     vi.mocked(sandbox.readFile).mockResolvedValue(cacheContents);
-    vi.mocked(sandbox.exec)
-      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '"ok"\n', stderr: "" });
+    vi.mocked(sandbox.exec).mockImplementation(async (command) => {
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
 
     const result = await prepareExecutorInSandbox({
       sandbox,
@@ -650,17 +717,13 @@ describe("prepareExecutorInSandbox", () => {
       "/tmp/cmdclaw-executor/default/oauth-reconcile-cache.json",
     );
     expect(
-      vi.mocked(sandbox.exec).mock.calls.some(([command]) => command.includes("/v1/local/secrets")),
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) => command.includes("/api/scopes/scope-1/secrets")),
     ).toBe(false);
     expect(
-      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
-        command.includes("tools.executor.mcp.updateSource"),
-      ),
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) => command.includes("/mcp/sources/") && command.includes("-X PATCH")),
     ).toBe(false);
     expect(
-      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
-        command.includes("tools.executor.sources.refresh"),
-      ),
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) => command.includes("/mcp/sources/refresh")),
     ).toBe(false);
   });
 
@@ -668,6 +731,7 @@ describe("prepareExecutorInSandbox", () => {
     const sandbox = makeSandboxHandle();
     const unchangedSource = {
       sourceId: "source-1",
+      namespace: "linear",
       name: "Linear",
       endpoint: "https://mcp.linear.app/mcp",
       transport: "streamable-http",
@@ -690,6 +754,7 @@ describe("prepareExecutorInSandbox", () => {
     };
     const changedSource = {
       sourceId: "source-2",
+      namespace: "github",
       name: "GitHub",
       endpoint: "https://api.githubcopilot.com/mcp",
       transport: "streamable-http",
@@ -724,17 +789,30 @@ describe("prepareExecutorInSandbox", () => {
         },
       }),
     );
-    vi.mocked(sandbox.exec)
-      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '"ok"\n', stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '{"id":"sec-source-2"}', stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '{"id":"source-2"}', stderr: "" })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '{"id":"source-2","status":"connected"}',
-        stderr: "",
-      });
+    vi.mocked(sandbox.exec).mockImplementation(async (command) => {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
+        const secretIdMatch = command.match(/"id":"([^"]+)"/);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ id: secretIdMatch?.[1] ?? "secret-id" }),
+          stderr: "",
+        };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/github") && matchCommand(command, "-X PATCH")) {
+        return { exitCode: 0, stdout: '{"updated":true}', stderr: "" };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return { exitCode: 0, stdout: '{"toolCount":1}', stderr: "" };
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
 
     const result = await prepareExecutorInSandbox({
       sandbox,
@@ -746,18 +824,16 @@ describe("prepareExecutorInSandbox", () => {
 
     expect(await result?.finalize()).toEqual({ oauthCacheHits: 1 });
     expect(
-      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/v1/local/secrets"))
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/api/scopes/scope-1/secrets"))
         .length,
     ).toBe(1);
     expect(
-      vi.mocked(sandbox.exec).mock.calls.filter(([command]) =>
-        command.includes("tools.executor.mcp.updateSource"),
-      ).length,
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/mcp/sources/github") && command.includes("-X PATCH"))
+        .length,
     ).toBe(1);
     expect(
-      vi.mocked(sandbox.exec).mock.calls.filter(([command]) =>
-        command.includes("tools.executor.sources.refresh"),
-      ).length,
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/mcp/sources/refresh"))
+        .length,
     ).toBe(1);
   });
 
@@ -786,7 +862,12 @@ describe("prepareExecutorInSandbox", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '"ok"\n',
+        stdout: "",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
         stderr: "",
       });
 
@@ -796,9 +877,9 @@ describe("prepareExecutorInSandbox", () => {
       workspaceName: "Workspace",
       userId: "user-1",
     });
-    await result?.finalize();
+    expect(await result?.finalize()).toEqual({ oauthCacheHits: 0 });
 
-    expect(sandbox.exec).toHaveBeenCalledTimes(3);
+    expect(sandbox.exec).toHaveBeenCalledTimes(4);
   });
 
   it("emits detailed executor bootstrap phases", async () => {
@@ -822,7 +903,7 @@ describe("prepareExecutorInSandbox", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '"ok"\n',
+        stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
         stderr: "",
       });
 
@@ -835,7 +916,7 @@ describe("prepareExecutorInSandbox", () => {
         phases.push(`${phase}:${status}`);
       },
     });
-    await result?.finalize();
+    expect(await result?.finalize()).toEqual({ oauthCacheHits: 0 });
 
     expect(phases).toEqual([
       "bootstrap_load:started",

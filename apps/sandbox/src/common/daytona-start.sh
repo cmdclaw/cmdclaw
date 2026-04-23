@@ -3,10 +3,16 @@ set -euo pipefail
 
 OPENCODE_PORT=4096
 SANDBOX_AGENT_PORT=2468
+EXECUTOR_HOME=/tmp/cmdclaw-executor/default
+EXECUTOR_SCOPE_DIR="${EXECUTOR_HOME}/scope"
+EXECUTOR_DATA_DIR="${EXECUTOR_HOME}/data"
 
 cd /app
-mkdir -p /app/.cmdclaw
+mkdir -p /app/.cmdclaw "${EXECUTOR_SCOPE_DIR}" "${EXECUTOR_DATA_DIR}"
 export OPENCODE_CONFIG=/app/opencode.json
+export EXECUTOR_HOME
+export EXECUTOR_SCOPE_DIR
+export EXECUTOR_DATA_DIR
 
 opencode serve --hostname 0.0.0.0 --port "${OPENCODE_PORT}" >/tmp/opencode.log 2>&1 &
 opencode_pid=$!
