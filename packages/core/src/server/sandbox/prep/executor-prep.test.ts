@@ -131,7 +131,7 @@ describe("prepareExecutorInSandbox", () => {
     });
 
     expect(result?.sourceCount).toBe(1);
-    await result?.finalize;
+    await result?.finalize();
     expect(sandbox.ensureDir).toHaveBeenCalledWith("/app/.executor/state");
     expect(vi.mocked(sandbox.exec).mock.calls[0]?.[0]).toBe(
       "curl -fsS 'http://127.0.0.1:8788/' >/dev/null",
@@ -232,7 +232,7 @@ describe("prepareExecutorInSandbox", () => {
       workspaceName: "Workspace",
       userId: "user-1",
     });
-    await result?.finalize;
+    await result?.finalize();
 
     expect(sandbox.exec).toHaveBeenNthCalledWith(
       2,
@@ -318,7 +318,7 @@ describe("prepareExecutorInSandbox", () => {
       workspaceName: "Workspace",
       userId: "user-1",
     });
-    await result?.finalize;
+    await result?.finalize();
 
     expect(sandbox.exec).toHaveBeenNthCalledWith(
       4,
@@ -410,15 +410,17 @@ describe("prepareExecutorInSandbox", () => {
       userId: "user-1",
     });
 
+    const result = await preparePromise;
+    const finalizePromise = result?.finalize();
+
     await vi.waitFor(() => {
       expect(secretRequestCount).toBe(2);
     });
 
-    const result = await preparePromise;
     accessSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-access"}', stderr: "" });
     refreshSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-refresh"}', stderr: "" });
 
-    await result?.finalize;
+    await finalizePromise;
   });
 
   it("serializes native MCP config updates across multiple oauth sources", async () => {
@@ -508,7 +510,7 @@ describe("prepareExecutorInSandbox", () => {
       userId: "user-1",
     });
 
-    await result?.finalize;
+    await result?.finalize();
 
     expect(maxConcurrentUpdates).toBe(1);
     expect(
@@ -580,7 +582,8 @@ describe("prepareExecutorInSandbox", () => {
     });
 
     let finalizeSettled = false;
-    void result?.finalize.finally(() => {
+    const finalizePromise = result?.finalize();
+    void finalizePromise?.finally(() => {
       finalizeSettled = true;
     });
 
@@ -590,7 +593,7 @@ describe("prepareExecutorInSandbox", () => {
     accessSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-access"}', stderr: "" });
     refreshSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-refresh"}', stderr: "" });
 
-    await expect(result?.finalize).resolves.toEqual({ oauthCacheHits: 0 });
+    await expect(finalizePromise).resolves.toEqual({ oauthCacheHits: 0 });
     expect(finalizeSettled).toBe(true);
   });
 
@@ -642,7 +645,7 @@ describe("prepareExecutorInSandbox", () => {
       reuseExistingState: true,
     });
 
-    expect(await result?.finalize).toEqual({ oauthCacheHits: 1 });
+    expect(await result?.finalize()).toEqual({ oauthCacheHits: 1 });
     expect(vi.mocked(sandbox.readFile)).toHaveBeenCalledWith(
       "/tmp/cmdclaw-executor/default/oauth-reconcile-cache.json",
     );
@@ -741,7 +744,7 @@ describe("prepareExecutorInSandbox", () => {
       reuseExistingState: true,
     });
 
-    expect(await result?.finalize).toEqual({ oauthCacheHits: 1 });
+    expect(await result?.finalize()).toEqual({ oauthCacheHits: 1 });
     expect(
       vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/v1/local/secrets"))
         .length,
@@ -793,7 +796,7 @@ describe("prepareExecutorInSandbox", () => {
       workspaceName: "Workspace",
       userId: "user-1",
     });
-    await result?.finalize;
+    await result?.finalize();
 
     expect(sandbox.exec).toHaveBeenCalledTimes(3);
   });
@@ -832,7 +835,7 @@ describe("prepareExecutorInSandbox", () => {
         phases.push(`${phase}:${status}`);
       },
     });
-    await result?.finalize;
+    await result?.finalize();
 
     expect(phases).toEqual([
       "bootstrap_load:started",

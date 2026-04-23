@@ -19,7 +19,8 @@
     "start:gmail": "bun servers/gmail/dist/http.js",
     "start:gateway": "bun gateway/dist/index.js",
     "check": "bunx tsc --noEmit -p tsconfig.json && bunx tsc --noEmit -p servers/internal/tsconfig.json && bunx tsc --noEmit -p servers/gmail/tsconfig.json",
-    "test": "vitest run"
+    "test": "bun run test:unit",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@cmdclaw/client": "workspace:*",

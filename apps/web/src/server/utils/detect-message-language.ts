@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { env } from "@/env";
 
 export type DetectedMessageLanguage = "french" | "other";
 
@@ -9,13 +8,14 @@ export async function detectMessageLanguage(text: string): Promise<DetectedMessa
     return "other";
   }
 
-  if (!env.GEMINI_API_KEY) {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey) {
     console.warn("[LanguageDetection] No GEMINI_API_KEY, defaulting to other");
     return "other";
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = [

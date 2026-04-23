@@ -1,7 +1,10 @@
-import { env } from "../env";
-import { getEditionCapabilities } from "../lib/edition";
+import { getEditionCapabilities, type CmdclawEdition } from "../lib/edition";
 
-export const edition = env.CMDCLAW_EDITION;
+function resolveEdition(): CmdclawEdition {
+  return process.env.CMDCLAW_EDITION === "selfhost" ? "selfhost" : "cloud";
+}
+
+export const edition = resolveEdition();
 export const editionCapabilities = getEditionCapabilities(edition);
 
 export function isSelfHostedEdition(): boolean {

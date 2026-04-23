@@ -47,6 +47,7 @@ function createDbStub() {
 describe("coworker-metadata", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.GEMINI_API_KEY = "test-key";
     getGenerativeModelMock.mockReturnValue({
       generateContent: generateContentMock,
     });

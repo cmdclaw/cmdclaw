@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { and, eq, ne } from "drizzle-orm";
 import { coworker } from "@cmdclaw/db/schema";
-import { env } from "../../env";
 
 const COWORKER_USERNAME_MAX_LENGTH = 64;
 const COWORKER_DESCRIPTION_MAX_LENGTH = 280;
@@ -171,12 +170,13 @@ async function generateCoworkerMetadataWithGemini(params: {
   missingFields: Array<keyof GeneratedCoworkerMetadata>;
 }): Promise<GeneratedCoworkerMetadata | null> {
   try {
-    if (!env.GEMINI_API_KEY) {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
       console.warn("[CoworkerMetadata] No GEMINI_API_KEY, skipping coworker metadata generation");
       return null;
     }
 
-    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash-lite",
       generationConfig: {

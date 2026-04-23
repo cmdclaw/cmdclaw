@@ -1,6 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
 import { Resend } from "resend";
-import { env } from "../../env";
 import {
   EMAIL_FORWARDED_TRIGGER_TYPE,
   extractEmailAddress,
@@ -12,7 +11,10 @@ import { triggerCoworkerRun } from "./coworker-service";
 
 const RESEND_EMAIL_RECEIVED_EVENT = "email.received";
 
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
+function getResendClient(): Resend | null {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  return apiKey ? new Resend(apiKey) : null;
+}
 
 export type ResendEmailReceivedEvent = {
   type: string;
@@ -34,7 +36,7 @@ export type ForwardedEmailQueuePayload = {
 };
 
 function getReceivingDomain(): string | null {
-  const value = env.RESEND_RECEIVING_DOMAIN?.trim().toLowerCase();
+  const value = process.env.RESEND_RECEIVING_DOMAIN?.trim().toLowerCase();
   return value && value.length > 0 ? value : null;
 }
 
@@ -204,6 +206,7 @@ async function getReceivedEmailContent(emailId: string): Promise<{
   headers: Record<string, string>;
   attachmentCount: number;
 }> {
+  const resend = getResendClient();
   if (!resend) {
     throw new Error("Missing RESEND_API_KEY for receiving emails");
   }

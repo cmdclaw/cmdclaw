@@ -5,7 +5,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-type Mode = "auth" | "smoke" | "live" | "record" | "prod" | "prod-monitor" | "cli-live";
+type Mode =
+  | "auth"
+  | "smoke"
+  | "smoke-stable"
+  | "live-stable"
+  | "live"
+  | "record"
+  | "prod-stable"
+  | "prod"
+  | "prod-monitor-stable"
+  | "prod-monitor"
+  | "cli-live-stable"
+  | "cli-live";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(appRoot, "../..");
@@ -158,10 +170,27 @@ function logRecordMode(worktreeEnvFile: string | null, env: NodeJS.ProcessEnv): 
   console.log(`[e2e-live] using worktree server ${target}`);
 }
 
+function buildStableReuseServerEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  worktreeEnvFile: string | null,
+  extraEnv: Partial<NodeJS.ProcessEnv> = {},
+): NodeJS.ProcessEnv {
+  return {
+    ...baseEnv,
+    ...extraEnv,
+    PLAYWRIGHT_REUSE_SERVER: extraEnv.PLAYWRIGHT_REUSE_SERVER ?? "1",
+    PLAYWRIGHT_SKIP_WEBSERVER:
+      extraEnv.PLAYWRIGHT_SKIP_WEBSERVER ??
+      (worktreeEnvFile ? "1" : (baseEnv.PLAYWRIGHT_SKIP_WEBSERVER ?? "0")),
+  };
+}
+
 function main(): void {
   const mode = process.argv[2] as Mode | undefined;
   if (!mode) {
-    fail("Usage: bun scripts/e2e-live.ts <auth|smoke|live|record|prod|prod-monitor|cli-live>");
+    fail(
+      "Usage: bun scripts/e2e-live.ts <auth|smoke|smoke-stable|live-stable|live|record|prod-stable|prod|prod-monitor-stable|prod-monitor|cli-live-stable|cli-live>",
+    );
   }
 
   const { env: baseEnv, worktreeEnvFile } = buildBaseEnv();
@@ -175,6 +204,27 @@ function main(): void {
         ...baseEnv,
         PLAYWRIGHT_REUSE_SERVER: baseEnv.PLAYWRIGHT_REUSE_SERVER ?? "1",
       });
+      return;
+    case "smoke-stable":
+      runPlaywright(buildStableReuseServerEnv(baseEnv, worktreeEnvFile), [
+        "tests/e2e/auth-smoke.e2e.ts",
+        "-g",
+        "allows public legal and support routes|does not redirect /api/rpc to login",
+      ]);
+      return;
+    case "live-stable":
+      runAuth(baseEnv);
+      runPlaywright(
+        buildStableReuseServerEnv(baseEnv, worktreeEnvFile, {
+          E2E_LIVE: "1",
+        }),
+        [
+          "tests/e2e/auth-smoke.e2e.ts",
+          "src/app/chat/chat.live.e2e.test.ts",
+          "-g",
+          "allows public legal and support routes|does not redirect /api/rpc to login|sends hi and receives an answer",
+        ],
+      );
       return;
     case "live":
       runAuth(baseEnv);
@@ -193,6 +243,20 @@ function main(): void {
         logRecordMode(worktreeEnvFile, recordEnv);
         runPlaywright(recordEnv);
       }
+      return;
+    case "prod-stable":
+      runPlaywright(
+        {
+          ...baseEnv,
+          PLAYWRIGHT_SKIP_WEBSERVER: "1",
+          PLAYWRIGHT_BASE_URL: "https://app.cmdclaw.ai",
+        },
+        [
+          "tests/e2e/auth-smoke.e2e.ts",
+          "-g",
+          "allows public legal and support routes|does not redirect /api/rpc to login",
+        ],
+      );
       return;
     case "prod":
       runAuth({
@@ -226,6 +290,31 @@ function main(): void {
         ["-g", "@live", "--reporter=list,json,html"],
       );
       return;
+    case "prod-monitor-stable":
+      runPlaywright(
+        {
+          ...baseEnv,
+          PLAYWRIGHT_SKIP_WEBSERVER: "1",
+          PLAYWRIGHT_BASE_URL: "https://app.cmdclaw.ai",
+          PLAYWRIGHT_HTML_OPEN: "never",
+          PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report/monitor",
+          PLAYWRIGHT_JSON_OUTPUT_NAME: "test-results/monitor/results.json",
+        },
+        [
+          "tests/e2e/auth-smoke.e2e.ts",
+          "-g",
+          "allows public legal and support routes|does not redirect /api/rpc to login",
+          "--reporter=list,json,html",
+        ],
+      );
+      return;
+    case "cli-live-stable":
+      runCliLiveStable({
+        ...baseEnv,
+        E2E_LIVE: "1",
+        CMDCLAW_SERVER_URL: baseEnv.CMDCLAW_SERVER_URL ?? "http://localhost:3000",
+      });
+      return;
     case "cli-live":
       runCliLive({
         ...baseEnv,
@@ -244,6 +333,10 @@ function runAuth(env: NodeJS.ProcessEnv): void {
 
 function runPlaywright(env: NodeJS.ProcessEnv, extraArgs: string[] = []): void {
   run("bun", ["playwright", "test", ...extraArgs], env);
+}
+
+function runCliLiveStable(env: NodeJS.ProcessEnv): void {
+  run("bun", ["vitest", "run", "tests/e2e-cli/auth.cli.live.e2e.test.ts"], env);
 }
 
 function runCliLive(env: NodeJS.ProcessEnv): void {

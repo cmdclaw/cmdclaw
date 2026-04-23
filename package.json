@@ -18,7 +18,7 @@
     "dev:selfhost:web": "bun --env-file=.env.selfhost turbo dev:selfhost --filter=@cmdclaw/web",
     "build": "turbo build",
     "check": "turbo check",
-    "test": "turbo test",
+    "test": "bun run test:ci",
     "dev:web": "bun --env-file=.env turbo dev --filter=@cmdclaw/web",
     "dev:docs": "turbo dev --filter=@cmdclaw/docs",
     "dev:worker": "bun --env-file=.env turbo dev --filter=@cmdclaw/worker",
@@ -55,7 +55,20 @@
     "check:docs": "turbo check --filter=@cmdclaw/docs",
     "check:mcp": "turbo check --filter=@cmdclaw/mcp",
     "check:worker": "turbo check --filter=@cmdclaw/worker",
-    "check:ws": "turbo check --filter=@cmdclaw/ws"
+    "check:ws": "turbo check --filter=@cmdclaw/ws",
+    "test:all": "bun run test:ci && bun run test:live",
+    "test:ci": "bun run test:unit && bun run test:integration && bun run test:e2e",
+    "test:e2e": "turbo run test:e2e --filter=@cmdclaw/web",
+    "test:integration": "turbo run test:integration --filter=@cmdclaw/web",
+    "test:interactive": "turbo run test:interactive --filter=@cmdclaw/web",
+    "test:live": "turbo run test:live --filter=@cmdclaw/web",
+    "test:live:auth": "turbo run test:live:auth --filter=@cmdclaw/web",
+    "test:live:cli": "turbo run test:live:cli --filter=@cmdclaw/web",
+    "test:live:web": "turbo run test:live:web --filter=@cmdclaw/web",
+    "test:monitor": "turbo run test:monitor --filter=@cmdclaw/web",
+    "test:prod": "turbo run test:prod --filter=@cmdclaw/web",
+    "test:record": "turbo run test:record --filter=@cmdclaw/web",
+    "test:unit": "turbo run test:unit --filter=@cmdclaw/cli --filter=@cmdclaw/mcp --filter=@cmdclaw/client --filter=@cmdclaw/core --filter=@cmdclaw/web"
   },
   "devDependencies": {
     "turbo": "^2.8.16"

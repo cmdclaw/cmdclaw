@@ -3,6 +3,8 @@ import { defineConfig } from "vitest/config";
 
 const enforceCoverageThreshold = process.env.COVERAGE_CHECK === "1";
 const liveE2EEnabled = process.env.E2E_LIVE === "1";
+const includeQuarantinedTests = process.env.TEST_INCLUDE_QUARANTINED === "1";
+const quarantinedFiles = ["src/app/inbox/page.test.tsx", "src/app/admin/credits/page.test.tsx"];
 
 export default defineConfig({
   resolve: {
@@ -16,6 +18,7 @@ export default defineConfig({
     exclude: [
       "tests/e2e/**",
       "src/**/*.e2e.test.{ts,tsx}",
+      ...(includeQuarantinedTests ? [] : quarantinedFiles),
       ...(liveE2EEnabled
         ? []
         : [

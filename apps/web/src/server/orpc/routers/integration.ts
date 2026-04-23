@@ -22,7 +22,6 @@ import { ORPCError } from "@orpc/server";
 import { createHash, randomBytes } from "crypto";
 import { and, eq, or } from "drizzle-orm";
 import { z } from "zod";
-import { env } from "@/env";
 import { shouldGrantAdminRole } from "@/lib/admin-emails";
 import {
   isUnipileMissingCredentialsError,
@@ -55,6 +54,11 @@ function normalizeEmail(value: string): string {
 
 function normalizeSlackChannelName(value: string): string {
   return value.trim().replace(/^#/, "").toLowerCase();
+}
+
+function getSlackBotToken(): string | null {
+  const token = process.env.SLACK_BOT_TOKEN?.trim();
+  return token ? token : null;
 }
 
 async function ensureAdmin(context: AuthenticatedContext) {
@@ -95,7 +99,10 @@ async function canUserAccessGoogleIntegrations(context: AuthenticatedContext) {
   return Boolean(allowlisted);
 }
 
-async function lookupSlackChannelIdByName(channelName: string): Promise<string> {
+async function lookupSlackChannelIdByName(
+  channelName: string,
+  slackBotToken: string,
+): Promise<string> {
   const targetName = normalizeSlackChannelName(channelName);
   const lookupPage = async (cursor?: string): Promise<string> => {
     const params = new URLSearchParams({
@@ -110,7 +117,7 @@ async function lookupSlackChannelIdByName(channelName: string): Promise<string> 
     const response = await fetch(`https://slack.com/api/conversations.list?${params.toString()}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
+        Authorization: `Bearer ${slackBotToken}`,
       },
     });
 
@@ -147,11 +154,11 @@ async function lookupSlackChannelIdByName(channelName: string): Promise<string> 
   return lookupPage();
 }
 
-async function postSlackMessage(channelId: string, text: string) {
+async function postSlackMessage(channelId: string, text: string, slackBotToken: string) {
   const response = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
+      Authorization: `Bearer ${slackBotToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -478,7 +485,8 @@ const requestGoogleAccess = protectedProcedure
       return { ok: true as const, alreadyAllowed: true as const };
     }
 
-    if (!env.SLACK_BOT_TOKEN) {
+    const slackBotToken = getSlackBotToken();
+    if (!slackBotToken) {
       throw new ORPCError("BAD_REQUEST", {
         message: "Slack notifications are not configured",
       });
@@ -489,7 +497,10 @@ const requestGoogleAccess = protectedProcedure
       columns: { email: true, name: true },
     });
 
-    const channelId = await lookupSlackChannelIdByName(GOOGLE_ACCESS_REQUEST_SLACK_CHANNEL_NAME);
+    const channelId = await lookupSlackChannelIdByName(
+      GOOGLE_ACCESS_REQUEST_SLACK_CHANNEL_NAME,
+      slackBotToken,
+    );
     const message = [
       ":lock: *Google Access Request*",
       `*User:* ${dbUser?.email ?? context.user.id}`,
@@ -500,7 +511,7 @@ const requestGoogleAccess = protectedProcedure
       `*Requested at:* ${new Date().toISOString()}`,
     ].join("\n");
 
-    const slackResult = await postSlackMessage(channelId, message);
+    const slackResult = await postSlackMessage(channelId, message, slackBotToken);
     if (!slackResult.ok) {
       throw new ORPCError("BAD_GATEWAY", {
         message: slackResult.error ?? "Failed to send Slack notification",

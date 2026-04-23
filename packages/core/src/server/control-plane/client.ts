@@ -1,4 +1,3 @@
-import { env } from "../../env";
 import { isSelfHostedEdition } from "../edition";
 import type {
   CloudAuthExchangePayload,
@@ -14,19 +13,33 @@ import { createCloudAccountLinkState, getCloudAccountLinkForUser } from "./local
 const INSTANCE_API_KEY_HEADER = "x-cmdclaw-instance-api-key";
 
 function requireControlPlaneConfig() {
-  if (!env.CMDCLAW_CLOUD_API_BASE_URL || !env.CMDCLAW_CLOUD_INSTANCE_API_KEY) {
+  const baseUrl = process.env.CMDCLAW_CLOUD_API_BASE_URL;
+  const instanceApiKey = process.env.CMDCLAW_CLOUD_INSTANCE_API_KEY;
+
+  if (!baseUrl || !instanceApiKey) {
     throw new Error("Cloud control plane is not configured");
   }
+
+  return { baseUrl, instanceApiKey };
+}
+
+function requireAppUrl() {
+  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    throw new Error("APP_URL is not configured");
+  }
+
+  return appUrl;
 }
 
 async function callControlPlane<T>(path: string, init?: RequestInit): Promise<T> {
-  requireControlPlaneConfig();
+  const { baseUrl, instanceApiKey } = requireControlPlaneConfig();
 
-  const response = await fetch(new URL(path, env.CMDCLAW_CLOUD_API_BASE_URL).toString(), {
+  const response = await fetch(new URL(path, baseUrl).toString(), {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      [INSTANCE_API_KEY_HEADER]: env.CMDCLAW_CLOUD_INSTANCE_API_KEY!,
+      [INSTANCE_API_KEY_HEADER]: instanceApiKey,
       ...(init?.headers ?? {}),
     },
   });
@@ -147,11 +160,7 @@ export async function startCloudAccountLink(params: {
   returnPath?: string | null;
 }): Promise<string> {
   requireControlPlaneConfig();
-
-  const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
-  if (!appUrl) {
-    throw new Error("APP_URL is not configured");
-  }
+  const appUrl = requireAppUrl();
 
   const localState = await createCloudAccountLinkState({
     userId: params.userId,
@@ -182,11 +191,7 @@ export async function exchangeCloudAccountLink(code: string): Promise<string> {
 
 export async function startCloudAuth(params: { returnPath?: string | null }): Promise<string> {
   requireControlPlaneConfig();
-
-  const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
-  if (!appUrl) {
-    throw new Error("APP_URL is not configured");
-  }
+  const appUrl = requireAppUrl();
 
   const localState = await createControlPlaneAuthState({
     returnPath: params.returnPath ?? null,
@@ -212,14 +217,14 @@ export async function exchangeCloudAuth(code: string): Promise<CloudAuthExchange
 }
 
 export function getCloudManagedIntegrationConnectUrl(type: string): string {
-  requireControlPlaneConfig();
+  const { baseUrl } = requireControlPlaneConfig();
   return new URL(
     `/api/control-plane/integrations/connect?type=${encodeURIComponent(type)}`,
-    env.CMDCLAW_CLOUD_API_BASE_URL,
+    baseUrl,
   ).toString();
 }
 
 export function getCloudManagedSubscriptionsUrl(): string {
-  requireControlPlaneConfig();
-  return new URL("/settings/subscriptions", env.CMDCLAW_CLOUD_API_BASE_URL).toString();
+  const { baseUrl } = requireControlPlaneConfig();
+  return new URL("/settings/subscriptions", baseUrl).toString();
 }

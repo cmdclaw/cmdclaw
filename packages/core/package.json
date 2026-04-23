@@ -15,7 +15,8 @@
   "scripts": {
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "bun run test:unit",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

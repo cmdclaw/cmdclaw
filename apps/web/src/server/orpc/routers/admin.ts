@@ -3,7 +3,6 @@ import {
   buildQueueJobId,
   getQueue,
 } from "@cmdclaw/core/server/queues";
-import { listAllE2BSandboxes, killE2BSandboxById } from "@cmdclaw/core/server/sandbox/e2b";
 import { conversationRuntimeService } from "@cmdclaw/core/server/services/conversation-runtime-service";
 import {
   approvedLoginEmailAllowlist,
@@ -1058,10 +1057,20 @@ async function queryEnrichmentFromUrl(
   }
 }
 
+async function listSandboxesFromProvider() {
+  const { listAllE2BSandboxes } = await import("@cmdclaw/core/server/sandbox/e2b");
+  return listAllE2BSandboxes();
+}
+
+async function killSandboxInProvider(sandboxId: string) {
+  const { killE2BSandboxById } = await import("@cmdclaw/core/server/sandbox/e2b");
+  return killE2BSandboxById(sandboxId);
+}
+
 const listSandboxes = protectedProcedure.handler(async ({ context }) => {
   await requireAdmin(context);
 
-  const sandboxes = await listAllE2BSandboxes();
+  const sandboxes = await listSandboxesFromProvider();
 
   if (sandboxes.length === 0) {
     return { sandboxes: [], totalCount: 0 };
@@ -1131,7 +1140,7 @@ const adminKillSandbox = protectedProcedure
   .handler(async ({ context, input }) => {
     await requireAdmin(context);
 
-    await killE2BSandboxById(input.sandboxId);
+    await killSandboxInProvider(input.sandboxId);
 
     const runtime = await context.db.query.conversationRuntime.findFirst({
       where: eq(conversationRuntime.sandboxId, input.sandboxId),

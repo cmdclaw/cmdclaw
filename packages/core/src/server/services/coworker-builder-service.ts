@@ -10,8 +10,6 @@ import {
   type CoworkerToolAccessMode,
 } from "../../lib/coworker-tool-policy";
 import { coworker } from "@cmdclaw/db/schema";
-import { generateCoworkerMetadataOnFirstPromptFill } from "./coworker-metadata";
-import { syncCoworkerScheduleJob } from "./coworker-scheduler";
 
 const BUILDER_ALLOWED_TRIGGER_TYPES = [
   "manual",
@@ -408,9 +406,10 @@ export async function applyCoworkerEdit(params: {
         ? nextSchedule
         : params.changes.schedule !== undefined
           ? params.changes.schedule
-          : (existing.schedule ?? null),
+        : (existing.schedule ?? null),
     allowedIntegrations: normalizedIntegrations ?? (existing.allowedIntegrations as string[]),
   };
+  const { generateCoworkerMetadataOnFirstPromptFill } = await import("./coworker-metadata");
   const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
     database,
     current: {
@@ -552,6 +551,7 @@ export async function applyCoworkerEdit(params: {
 
   if (changedFields.includes("triggerType") || changedFields.includes("schedule")) {
     try {
+      const { syncCoworkerScheduleJob } = await import("./coworker-scheduler");
       await syncCoworkerScheduleJob({
         id: updated.id,
         status: updated.status,

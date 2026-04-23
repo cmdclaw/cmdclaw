@@ -23,6 +23,8 @@ const {
   findAuthUserByIdMock,
   resolveOrCreateAuthUserByEmailMock,
   setCredentialPasswordMock,
+  isApprovedLoginEmailMock,
+  normalizeApprovedLoginEmailMock,
 } = vi.hoisted(() => ({
   queueAddMock: vi.fn(),
   getQueueMock: vi.fn(),
@@ -35,6 +37,8 @@ const {
   findAuthUserByIdMock: vi.fn(),
   resolveOrCreateAuthUserByEmailMock: vi.fn(),
   setCredentialPasswordMock: vi.fn(),
+  isApprovedLoginEmailMock: vi.fn(),
+  normalizeApprovedLoginEmailMock: vi.fn((email: string) => email.trim().toLowerCase()),
 }));
 
 vi.mock("../middleware", () => ({
@@ -52,6 +56,11 @@ vi.mock("@/server/lib/credential-accounts", () => ({
   findAuthUserById: findAuthUserByIdMock,
   resolveOrCreateAuthUserByEmail: resolveOrCreateAuthUserByEmailMock,
   setCredentialPassword: setCredentialPasswordMock,
+}));
+
+vi.mock("@/server/lib/approved-login-emails", () => ({
+  isApprovedLoginEmail: isApprovedLoginEmailMock,
+  normalizeApprovedLoginEmail: normalizeApprovedLoginEmailMock,
 }));
 
 import { adminRouter } from "./admin";
@@ -118,6 +127,7 @@ describe("adminRouter", () => {
       onConflictDoNothing: insertOnConflictDoNothingMock,
     });
     insertOnConflictDoNothingMock.mockResolvedValue(undefined);
+    isApprovedLoginEmailMock.mockResolvedValue(false);
     resolveOrCreateAuthUserByEmailMock.mockResolvedValue({
       id: "user-2",
       email: "member@example.com",
