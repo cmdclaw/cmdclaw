@@ -13,6 +13,9 @@ This repo uses a small root test surface with explicit buckets.
 - `bun run test:live`
   Curated live subset. Currently this is the auth-backed live bootstrap path.
 
+- `bun run test:ui`
+  Single Vitest UI for the workspace Vitest packages. This is for local debugging, not CI.
+
 ## Current matrix
 
 | Scope | In `test` | In `test:all` | Status |
@@ -44,6 +47,7 @@ From the repo root:
 bun run test
 bun run test:all
 bun run test:live
+bun run test:ui
 ```
 
 For targeted buckets:
@@ -61,4 +65,5 @@ bun run test:interactive
 
 - Use `bun run test` for fast regression protection.
 - Use `bun run test:all` for the current full green baseline.
+- Use `bun run test:ui` when you want one interactive Vitest view across packages.
 - Treat the separate live/prod/manual buckets as diagnostic or recovery work until they are promoted into the guardrail.
