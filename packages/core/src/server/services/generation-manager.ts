@@ -6573,6 +6573,9 @@ class GenerationManager {
         });
 
         try {
+          await runtimeContextWritePromise;
+          await memorySyncPromise;
+
           const executorBootstrap = await prepareExecutorInSandbox({
             sandbox: runtimeSandbox,
             workspaceId: ctx.workspaceId,
@@ -6850,8 +6853,6 @@ class GenerationManager {
         runtimeSessionPromise,
       ]);
 
-      await runExecutorPrepareFinalize();
-
       if (!sessionId) {
         throw new Error("Runtime session ID is unavailable.");
       }
@@ -7083,6 +7084,7 @@ class GenerationManager {
         this.recordRemoteRunPhase(ctx, "prompt_sent");
       }
       this.markPhase(ctx, "prompt_sent");
+      void runExecutorPrepareFinalize();
       if (startPostPromptCacheWrite !== null) {
         void (startPostPromptCacheWrite as () => Promise<void>)();
       }
@@ -7279,11 +7281,14 @@ class GenerationManager {
               : { data: rawPromptResult, error: null })
           : { data: rawPromptResult ?? null, error: null };
       if (promptResult.error) {
-        if (!observedTerminalIdle) {
-          throw new Error(formatErrorMessage(promptResult.error));
+        const promptResultErrorMessage = formatErrorMessage(promptResult.error);
+        if (!observedTerminalIdle && !isOpaqueDiagnosticMessage(promptResultErrorMessage)) {
+          throw new Error(promptResultErrorMessage);
         }
         console.warn(
-          "[GenerationManager] Ignoring prompt result error after session idle:",
+          observedTerminalIdle
+            ? "[GenerationManager] Ignoring prompt result error after session idle:"
+            : "[GenerationManager] Treating opaque prompt result error as empty completion:",
           promptResult.error,
         );
       }
