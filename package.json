@@ -19,6 +19,7 @@
     "build": "turbo build",
     "check": "turbo check",
     "test": "bun run test:ci",
+    "test:ui": "vitest --config vitest.ui.config.ts --ui --open",
     "dev:web": "bun --env-file=.env turbo dev --filter=@cmdclaw/web",
     "dev:docs": "turbo dev --filter=@cmdclaw/docs",
     "dev:worker": "bun --env-file=.env turbo dev --filter=@cmdclaw/worker",
@@ -71,7 +72,9 @@
     "test:unit": "turbo run test:unit --filter=@cmdclaw/cli --filter=@cmdclaw/mcp --filter=@cmdclaw/client --filter=@cmdclaw/core --filter=@cmdclaw/web"
   },
   "devDependencies": {
-    "turbo": "^2.8.16"
+    "@vitest/ui": "4.0.18",
+    "turbo": "^2.8.16",
+    "vitest": "^4.0.18"
   },
   "patchedDependencies": {
     "drizzle-kit@0.31.10": "patches/drizzle-kit@0.31.10.patch"
