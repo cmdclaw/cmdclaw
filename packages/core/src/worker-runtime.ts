@@ -15,9 +15,14 @@ import {
   startDaytonaRunawayCleanupQueue,
   stopDaytonaRunawayCleanupQueue,
 } from "./server/queues/daytona-runaway-cleanup";
+import {
+  startSandboxUsageSnapshotQueue,
+  stopSandboxUsageSnapshotQueue,
+} from "./server/queues/sandbox-usage-snapshot";
 import { syncConversationLoadingCleanupJob } from "./server/services/conversation-loading-cleanup";
 import { syncDaytonaRunawayCleanupJob } from "./server/services/daytona-runaway-cleanup";
 import { syncStoppedDaytonaSandboxDeleteJob } from "./server/services/daytona-stopped-sandbox-delete";
+import { syncSandboxUsageSnapshotJob } from "./server/services/sandbox-usage-snapshot";
 import { startGmailCoworkerWatcher } from "./server/services/coworker-gmail-watcher";
 import { reconcileScheduledCoworkerJobs } from "./server/services/coworker-scheduler";
 import { syncDailyTelemetryDigestJob } from "./server/services/telemetry-digest";
@@ -36,6 +41,12 @@ export async function startWorkerRuntime(): Promise<void> {
     queueName: daytonaCleanupQueueName,
     redisUrl: daytonaCleanupRedisUrl,
   } = startDaytonaRunawayCleanupQueue();
+  const {
+    worker: sandboxSnapshotWorker,
+    queueEvents: sandboxSnapshotQueueEvents,
+    queueName: sandboxSnapshotQueueName,
+    redisUrl: sandboxSnapshotRedisUrl,
+  } = startSandboxUsageSnapshotQueue();
   const stopGmailWatcher = startGmailCoworkerWatcher();
   const stopXDmWatcher = startXDmCoworkerWatcher();
   const staleReaperIntervalMs = 10 * 60 * 1000;
@@ -130,6 +141,7 @@ export async function startWorkerRuntime(): Promise<void> {
       await Promise.allSettled([
         stopQueues(worker, queueEvents),
         stopDaytonaRunawayCleanupQueue(daytonaCleanupWorker, daytonaCleanupQueueEvents),
+        stopSandboxUsageSnapshotQueue(sandboxSnapshotWorker, sandboxSnapshotQueueEvents),
         closePool(),
       ]);
     })();
@@ -148,6 +160,9 @@ export async function startWorkerRuntime(): Promise<void> {
   console.log(`[worker] listening on "${queueName}" with redis "${redisUrl}"`);
   console.log(
     `[worker] Daytona cleanup listening on "${daytonaCleanupQueueName}" with redis "${daytonaCleanupRedisUrl}"`,
+  );
+  console.log(
+    `[worker] Sandbox usage snapshot listening on "${sandboxSnapshotQueueName}" with redis "${sandboxSnapshotRedisUrl}"`,
   );
 
   try {
@@ -183,6 +198,13 @@ export async function startWorkerRuntime(): Promise<void> {
     console.log("[worker] synced Daytona stopped sandbox delete schedule");
   } catch (error) {
     console.error("[worker] failed to sync Daytona stopped sandbox delete schedule", error);
+  }
+
+  try {
+    await syncSandboxUsageSnapshotJob();
+    console.log("[worker] synced sandbox usage snapshot schedule");
+  } catch (error) {
+    console.error("[worker] failed to sync sandbox usage snapshot schedule", error);
   }
 
   try {

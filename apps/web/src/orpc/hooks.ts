@@ -2863,9 +2863,21 @@ export function useAdminListSandboxes() {
 export function useAdminKillSandbox() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { sandboxId: string }) => client.admin.killSandbox(input),
+    mutationFn: (input: { sandboxId: string; provider: "e2b" | "daytona" }) =>
+      client.admin.killSandbox(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "sandboxes"] });
     },
+  });
+}
+
+export function useAdminSandboxUsageHistory(input: {
+  range: "24h" | "7d" | "30d";
+  bucket: "hour" | "day";
+}) {
+  return useQuery({
+    queryKey: ["admin", "sandboxes", "usage", input.range, input.bucket],
+    queryFn: () => client.admin.getSandboxUsageHistory(input),
+    refetchInterval: 60_000,
   });
 }

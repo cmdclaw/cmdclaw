@@ -115,3 +115,100 @@ export class DaytonaSandboxBackend implements SandboxBackend {
 export function isDaytonaConfigured(): boolean {
   return Boolean(process.env.DAYTONA_API_KEY);
 }
+
+// ---------------------------------------------------------------------------
+// Admin utilities for listing and killing Daytona sandboxes
+// ---------------------------------------------------------------------------
+
+export type DaytonaAdminSandbox = {
+  sandboxId: string;
+  state: "running" | "paused" | "stopped" | "unknown";
+  startedAt: Date | null;
+  lastActivityAt: Date | null;
+  metadata: Record<string, string>;
+};
+
+type DaytonaListedSandbox = {
+  id?: string;
+  state?: string;
+  createdAt?: string | Date;
+  lastActivityAt?: string | Date;
+  labels?: Record<string, string>;
+  metadata?: Record<string, string>;
+  delete?: () => Promise<void>;
+  stop?: () => Promise<void>;
+};
+
+function normalizeDaytonaState(raw: string | undefined): DaytonaAdminSandbox["state"] {
+  const value = (raw ?? "").toLowerCase();
+  if (value === "started" || value === "running") {
+    return "running";
+  }
+  if (value === "stopped" || value === "paused") {
+    // Daytona's "stopped" is analogous to E2B's "paused" (sandbox preserved, not running).
+    return "paused";
+  }
+  if (!value) {
+    return "unknown";
+  }
+  return "unknown";
+}
+
+function coerceDate(value: string | Date | undefined | null): Date | null {
+  if (!value) {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export async function listAllDaytonaSandboxes(): Promise<DaytonaAdminSandbox[]> {
+  if (!isDaytonaConfigured()) {
+    return [];
+  }
+
+  const { Daytona } = await import("@daytonaio/sdk");
+  const daytona = new Daytona(getDaytonaClientConfig()) as unknown as {
+    list?: () => Promise<DaytonaListedSandbox[]>;
+  };
+
+  if (typeof daytona.list !== "function") {
+    return [];
+  }
+
+  const raw = await daytona.list();
+  return raw.map((s) => {
+    const metadata = (s.labels ?? s.metadata ?? {}) as Record<string, string>;
+    return {
+      sandboxId: s.id ?? "",
+      state: normalizeDaytonaState(s.state),
+      startedAt: coerceDate(s.createdAt),
+      lastActivityAt: coerceDate(s.lastActivityAt),
+      metadata,
+    } satisfies DaytonaAdminSandbox;
+  });
+}
+
+export async function killDaytonaSandboxById(sandboxId: string): Promise<boolean> {
+  if (!isDaytonaConfigured()) {
+    return false;
+  }
+
+  const { Daytona } = await import("@daytonaio/sdk");
+  const daytona = new Daytona(getDaytonaClientConfig());
+
+  const sandbox = (await daytona.get(sandboxId)) as {
+    delete?: () => Promise<void>;
+    stop?: () => Promise<void>;
+  };
+
+  if (typeof sandbox.delete === "function") {
+    await sandbox.delete();
+    return true;
+  }
+  if (typeof sandbox.stop === "function") {
+    await sandbox.stop();
+    return true;
+  }
+  return false;
+}

@@ -13,6 +13,7 @@ import {
   pgEnum,
   unique,
   uniqueIndex,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 import type {
   TemplateCatalogConnectedApp,
@@ -1533,6 +1534,30 @@ export const sandboxFile = pgTable(
   (table) => [
     index("sandbox_file_message_id_idx").on(table.messageId),
     index("sandbox_file_conversation_id_idx").on(table.conversationId),
+  ],
+);
+
+// Periodic snapshots of live sandboxes across providers (E2B, Daytona).
+// One row per live sandbox per snapshot tick (every ~5min), for usage/leak tracking.
+export const sandboxUsageSnapshot = pgTable(
+  "sandbox_usage_snapshot",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    snapshotAt: timestamp("snapshot_at", { withTimezone: true }).defaultNow().notNull(),
+    provider: text("provider").notNull(), // 'e2b' | 'daytona'
+    sandboxId: text("sandbox_id").notNull(),
+    state: text("state"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    runtimeSeconds: integer("runtime_seconds").notNull().default(0),
+    credits: doublePrecision("credits").notNull().default(0),
+    metadata: jsonb("metadata"),
+  },
+  (table) => [
+    index("sandbox_usage_snapshot_at_idx").on(table.snapshotAt),
+    index("sandbox_usage_snapshot_provider_at_idx").on(table.provider, table.snapshotAt),
+    index("sandbox_usage_snapshot_sandbox_id_at_idx").on(table.sandboxId, table.snapshotAt),
   ],
 );
 

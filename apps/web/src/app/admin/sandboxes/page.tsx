@@ -11,6 +11,16 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -22,10 +32,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useAdminListSandboxes, useAdminKillSandbox } from "@/orpc/hooks";
+import {
+  useAdminKillSandbox,
+  useAdminListSandboxes,
+  useAdminSandboxUsageHistory,
+} from "@/orpc/hooks";
 
-function formatRelativeTime(value: Date | string) {
+type Provider = "e2b" | "daytona";
+
+function formatRelativeTime(value: Date | string | null) {
+  if (!value) {
+    return "--";
+  }
   const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return "--";
+  }
   const now = Date.now();
   const diffMs = now - date.getTime();
   const diffMinutes = Math.floor(diffMs / 60_000);
@@ -47,8 +69,14 @@ function formatRelativeTime(value: Date | string) {
   return date.toLocaleString();
 }
 
-function formatUptime(startedAt: Date | string) {
+function formatUptime(startedAt: Date | string | null) {
+  if (!startedAt) {
+    return "--";
+  }
   const start = startedAt instanceof Date ? startedAt : new Date(startedAt);
+  if (!Number.isFinite(start.getTime())) {
+    return "--";
+  }
   const diffMs = Date.now() - start.getTime();
   const minutes = Math.floor(diffMs / 60_000);
   const hours = Math.floor(minutes / 60);
@@ -62,6 +90,16 @@ function formatUptime(startedAt: Date | string) {
 
 function truncateId(id: string) {
   return id.length > 12 ? `${id.slice(0, 12)}...` : id;
+}
+
+function formatCredits(n: number): string {
+  if (n >= 1000) {
+    return `${(n / 1000).toFixed(1)}k`;
+  }
+  if (n >= 10) {
+    return n.toFixed(0);
+  }
+  return n.toFixed(1);
 }
 
 function getEnvBaseUrl(env: string | null): string {
@@ -81,6 +119,28 @@ const ENV_COLORS: Record<string, string> = {
   prod: "bg-red-500/10 text-red-700 dark:text-red-400",
 };
 
+const PROVIDER_META: Record<
+  Provider,
+  { label: string; dotClass: string; pillClass: string; stroke: string; fill: string }
+> = {
+  e2b: {
+    label: "E2B",
+    dotClass: "bg-violet-500",
+    pillClass:
+      "bg-violet-500/10 text-violet-700 dark:text-violet-300 ring-1 ring-inset ring-violet-500/20",
+    stroke: "var(--color-violet-500, #8b5cf6)",
+    fill: "var(--color-violet-500, #8b5cf6)",
+  },
+  daytona: {
+    label: "Daytona",
+    dotClass: "bg-amber-500",
+    pillClass:
+      "bg-amber-500/10 text-amber-800 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+    stroke: "var(--color-amber-500, #f59e0b)",
+    fill: "var(--color-amber-500, #f59e0b)",
+  },
+};
+
 function EnvironmentBadge({ env }: { env: string | null }) {
   if (!env) {
     return <span className="text-muted-foreground">--</span>;
@@ -97,16 +157,33 @@ function EnvironmentBadge({ env }: { env: string | null }) {
   );
 }
 
+function ProviderPill({ provider }: { provider: Provider }) {
+  const meta = PROVIDER_META[provider];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider tabular-nums",
+        meta.pillClass,
+      )}
+    >
+      <span className={cn("h-1 w-1 rounded-full", meta.dotClass)} />
+      {meta.label}
+    </span>
+  );
+}
+
 function KillButton({
   sandboxId,
+  provider,
   isKilling,
   onKill,
 }: {
   sandboxId: string;
+  provider: Provider;
   isKilling: boolean;
-  onKill: (id: string) => void;
+  onKill: (id: string, provider: Provider) => void;
 }) {
-  const handleClick = useCallback(() => onKill(sandboxId), [sandboxId, onKill]);
+  const handleClick = useCallback(() => onKill(sandboxId, provider), [sandboxId, provider, onKill]);
   return (
     <Button variant="ghost" size="sm" onClick={handleClick} disabled={isKilling}>
       {isKilling ? (
@@ -119,13 +196,14 @@ function KillButton({
 }
 
 type SandboxRow = {
+  provider: Provider;
   sandboxId: string;
-  templateId: string;
-  state: "running" | "paused";
-  startedAt: Date | string;
-  endAt: Date | string;
-  cpuCount: number;
-  memoryMB: number;
+  templateId: string | null;
+  state: "running" | "paused" | "stopped" | "unknown";
+  startedAt: Date | string | null;
+  endAt: Date | string | null;
+  cpuCount: number | null;
+  memoryMB: number | null;
   metadata: Record<string, string>;
   environment: string | null;
   conversationId: string | null;
@@ -141,7 +219,14 @@ type SandboxRow = {
   coworkerId: string | null;
 };
 
-type SortKey = "sandboxId" | "environment" | "state" | "startedAt" | "userEmail" | "details";
+type SortKey =
+  | "provider"
+  | "sandboxId"
+  | "environment"
+  | "state"
+  | "startedAt"
+  | "userEmail"
+  | "details";
 type SortDir = "asc" | "desc";
 
 function getDetailsText(row: SandboxRow): string {
@@ -156,6 +241,8 @@ function getDetailsText(row: SandboxRow): string {
 
 function getSortValue(row: SandboxRow, key: SortKey): string | number {
   switch (key) {
+    case "provider":
+      return row.provider;
     case "sandboxId":
       return row.sandboxId;
     case "environment":
@@ -163,7 +250,7 @@ function getSortValue(row: SandboxRow, key: SortKey): string | number {
     case "state":
       return row.state;
     case "startedAt":
-      return new Date(row.startedAt).getTime();
+      return row.startedAt ? new Date(row.startedAt).getTime() : 0;
     case "userEmail":
       return row.userEmail ?? "";
     case "details":
@@ -218,6 +305,370 @@ type ConfirmState = {
   action: () => Promise<void>;
 } | null;
 
+// ---------------------------------------------------------------------------
+// Usage chart
+// ---------------------------------------------------------------------------
+
+type RangeKey = "24h" | "7d" | "30d";
+const RANGE_OPTIONS: Array<{ key: RangeKey; label: string; bucket: "hour" | "day" }> = [
+  { key: "24h", label: "24h", bucket: "hour" },
+  { key: "7d", label: "7d", bucket: "hour" },
+  { key: "30d", label: "30d", bucket: "day" },
+];
+
+const CHART_MARGIN = { top: 4, right: 12, left: 4, bottom: 0 };
+const CHART_TICK_STYLE = { fontSize: 10 };
+const CHART_TOOLTIP_CONTENT_STYLE = {
+  fontSize: 11,
+  borderRadius: 6,
+  border: "1px solid var(--border)",
+  background: "var(--background)",
+};
+const CHART_TOOLTIP_LABEL_STYLE = { fontWeight: 600 };
+
+function chartTooltipFormatter(value: unknown, name: unknown): [string, string] {
+  const num = typeof value === "number" ? value : Number(value) || 0;
+  if (name === "count") {
+    return [`${num}`, "concurrent"];
+  }
+  return [formatCredits(num), String(name)];
+}
+
+type BucketPoint = {
+  t: number;
+  label: string;
+  e2b: number;
+  daytona: number;
+  count: number;
+};
+
+function buildChartSeries(
+  buckets: Array<{
+    bucketStart: string | Date;
+    provider: Provider;
+    sandboxCount: number;
+    creditsBurned: number;
+  }>,
+  bucket: "hour" | "day",
+): BucketPoint[] {
+  const byTime = new Map<number, BucketPoint>();
+  for (const b of buckets) {
+    const date = b.bucketStart instanceof Date ? b.bucketStart : new Date(b.bucketStart);
+    const t = date.getTime();
+    const existing = byTime.get(t) ?? {
+      t,
+      label:
+        bucket === "hour"
+          ? date.toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric" })
+          : date.toLocaleDateString([], { month: "numeric", day: "numeric" }),
+      e2b: 0,
+      daytona: 0,
+      count: 0,
+    };
+    existing[b.provider] = b.creditsBurned;
+    existing.count += b.sandboxCount;
+    byTime.set(t, existing);
+  }
+  return Array.from(byTime.values()).toSorted((a, b) => a.t - b.t);
+}
+
+type LeakRow = {
+  sandboxId: string;
+  provider: Provider;
+  firstSeen: string | Date;
+  lastSeen: string | Date;
+  runtimeSeconds: number;
+  credits: number;
+  ticks: number;
+};
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h >= 24) {
+    const d = Math.floor(h / 24);
+    return `${d}d ${h % 24}h`;
+  }
+  if (h > 0) {
+    return `${h}h ${m}m`;
+  }
+  return `${m}m`;
+}
+
+function RangeToggleButton({
+  rangeKey,
+  label,
+  active,
+  onSelect,
+}: {
+  rangeKey: RangeKey;
+  label: string;
+  active: boolean;
+  onSelect: (key: RangeKey) => void;
+}) {
+  const handleClick = useCallback(() => onSelect(rangeKey), [rangeKey, onSelect]);
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className={cn(
+        "rounded px-2 py-1 font-medium transition-colors",
+        active
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function UsageChart() {
+  const [range, setRange] = useState<RangeKey>("7d");
+  const rangeDef = RANGE_OPTIONS.find((r) => r.key === range) ?? RANGE_OPTIONS[1];
+  const { data, isLoading } = useAdminSandboxUsageHistory({
+    range,
+    bucket: rangeDef.bucket,
+  });
+
+  const series = useMemo(
+    () => (data?.buckets ? buildChartSeries(data.buckets, rangeDef.bucket) : []),
+    [data, rangeDef.bucket],
+  );
+
+  const totalBurned = useMemo(
+    () => series.reduce((sum, p) => sum + p.e2b + p.daytona, 0),
+    [series],
+  );
+  const peakConcurrent = useMemo(
+    () => (series.length > 0 ? Math.max(...series.map((p) => p.count)) : 0),
+    [series],
+  );
+
+  const leaks = (data?.leaks ?? []) as LeakRow[];
+
+  return (
+    <section className="bg-card mb-6 rounded-lg border">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
+        <div>
+          <div className="flex items-baseline gap-3">
+            <h3 className="text-sm font-semibold tracking-tight">Credit burn through time</h3>
+            <span className="text-muted-foreground text-[11px] tracking-wider uppercase">
+              5 min snapshot · {rangeDef.bucket}ly buckets
+            </span>
+          </div>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            Flat lines that don't drop = sandboxes that never close. Look for rising baselines.
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-muted-foreground text-[10px] tracking-wider uppercase">
+              Burned · {range}
+            </div>
+            <div className="font-mono text-sm font-semibold tabular-nums">
+              {formatCredits(totalBurned)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-muted-foreground text-[10px] tracking-wider uppercase">Peak ∥</div>
+            <div className="font-mono text-sm font-semibold tabular-nums">{peakConcurrent}</div>
+          </div>
+          <div className="bg-muted/60 flex items-center rounded-md p-0.5 text-xs">
+            {RANGE_OPTIONS.map((opt) => (
+              <RangeToggleButton
+                key={opt.key}
+                rangeKey={opt.key}
+                label={opt.label}
+                active={range === opt.key}
+                onSelect={setRange}
+              />
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <div className="h-[220px] px-2 pt-4 pb-1">
+        {isLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+          </div>
+        ) : series.length === 0 ? (
+          <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
+            No snapshots yet — the worker collects one every 5 minutes.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={series} margin={CHART_MARGIN}>
+              <defs>
+                <linearGradient id="fillE2b" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={PROVIDER_META.e2b.fill} stopOpacity={0.55} />
+                  <stop offset="100%" stopColor={PROVIDER_META.e2b.fill} stopOpacity={0.05} />
+                </linearGradient>
+                <linearGradient id="fillDaytona" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={PROVIDER_META.daytona.fill} stopOpacity={0.55} />
+                  <stop offset="100%" stopColor={PROVIDER_META.daytona.fill} stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="2 4" vertical={false} opacity={0.4} />
+              <XAxis
+                dataKey="label"
+                tick={CHART_TICK_STYLE}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
+                minTickGap={40}
+              />
+              <YAxis
+                yAxisId="credits"
+                tick={CHART_TICK_STYLE}
+                tickLine={false}
+                axisLine={false}
+                width={32}
+                tickFormatter={formatCredits}
+              />
+              <YAxis
+                yAxisId="count"
+                orientation="right"
+                tick={CHART_TICK_STYLE}
+                tickLine={false}
+                axisLine={false}
+                width={24}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={CHART_TOOLTIP_CONTENT_STYLE}
+                labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+                formatter={chartTooltipFormatter}
+              />
+              <Area
+                yAxisId="credits"
+                type="monotone"
+                dataKey="e2b"
+                stackId="credits"
+                name="E2B"
+                stroke={PROVIDER_META.e2b.stroke}
+                strokeWidth={1.5}
+                fill="url(#fillE2b)"
+                isAnimationActive={false}
+              />
+              <Area
+                yAxisId="credits"
+                type="monotone"
+                dataKey="daytona"
+                stackId="credits"
+                name="Daytona"
+                stroke={PROVIDER_META.daytona.stroke}
+                strokeWidth={1.5}
+                fill="url(#fillDaytona)"
+                isAnimationActive={false}
+              />
+              <Line
+                yAxisId="count"
+                type="monotone"
+                dataKey="count"
+                name="count"
+                stroke="var(--foreground)"
+                strokeDasharray="3 3"
+                strokeWidth={1}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {leaks.length > 0 && (
+        <details className="border-t" open={false}>
+          <summary className="text-muted-foreground hover:bg-muted/40 cursor-pointer px-4 py-2 text-xs font-medium">
+            Longest-lived sandboxes in range ({leaks.length})
+          </summary>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-muted-foreground">
+                <tr className="border-t">
+                  <th className="px-4 py-2 text-left font-medium">Provider</th>
+                  <th className="px-4 py-2 text-left font-medium">Sandbox</th>
+                  <th className="px-4 py-2 text-right font-medium">Runtime</th>
+                  <th className="px-4 py-2 text-right font-medium">Credits</th>
+                  <th className="px-4 py-2 text-right font-medium">First seen</th>
+                  <th className="px-4 py-2 text-right font-medium">Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaks.map((leak) => (
+                  <tr key={`${leak.provider}-${leak.sandboxId}`} className="border-t">
+                    <td className="px-4 py-2">
+                      <ProviderPill provider={leak.provider} />
+                    </td>
+                    <td className="px-4 py-2 font-mono" title={leak.sandboxId}>
+                      {truncateId(leak.sandboxId)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {formatDuration(leak.runtimeSeconds)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {formatCredits(leak.credits)}
+                    </td>
+                    <td className="text-muted-foreground px-4 py-2 text-right">
+                      {formatRelativeTime(leak.firstSeen)}
+                    </td>
+                    <td className="text-muted-foreground px-4 py-2 text-right">
+                      {formatRelativeTime(leak.lastSeen)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
+const PROVIDER_FILTERS: Array<{ key: "all" | Provider; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "e2b", label: "E2B" },
+  { key: "daytona", label: "Daytona" },
+];
+
+function ProviderFilterButton({
+  filterKey,
+  label,
+  count,
+  active,
+  onSelect,
+}: {
+  filterKey: "all" | Provider;
+  label: string;
+  count: number;
+  active: boolean;
+  onSelect: (key: "all" | Provider) => void;
+}) {
+  const handleClick = useCallback(() => onSelect(filterKey), [filterKey, onSelect]);
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className={cn(
+        "rounded px-2.5 py-1 font-medium transition-colors",
+        active
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+      <span className="text-muted-foreground ml-1.5 tabular-nums">{count}</span>
+    </button>
+  );
+}
+
 export default function AdminSandboxesPage() {
   const { data, isLoading, error, refetch } = useAdminListSandboxes();
   const killMutation = useAdminKillSandbox();
@@ -225,10 +676,19 @@ export default function AdminSandboxesPage() {
   const [killingAll, setKillingAll] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("startedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [providerFilter, setProviderFilter] = useState<"all" | Provider>("all");
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const confirmActionRef = useRef<(() => Promise<void>) | null>(null);
 
   const rawSandboxes = useMemo(() => (data?.sandboxes ?? []) as SandboxRow[], [data]);
+
+  const filteredSandboxes = useMemo(
+    () =>
+      providerFilter === "all"
+        ? rawSandboxes
+        : rawSandboxes.filter((s) => s.provider === providerFilter),
+    [rawSandboxes, providerFilter],
+  );
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -243,7 +703,7 @@ export default function AdminSandboxesPage() {
   );
 
   const sandboxes = useMemo(() => {
-    const sorted = rawSandboxes.toSorted((a, b) => {
+    const sorted = filteredSandboxes.toSorted((a, b) => {
       const aVal = getSortValue(a, sortKey);
       const bVal = getSortValue(b, sortKey);
       if (aVal < bVal) {
@@ -255,18 +715,18 @@ export default function AdminSandboxesPage() {
       return 0;
     });
     return sorted;
-  }, [rawSandboxes, sortKey, sortDir]);
+  }, [filteredSandboxes, sortKey, sortDir]);
 
   const handleRefresh = useCallback(() => {
     void refetch();
   }, [refetch]);
 
   const handleKill = useCallback(
-    (sandboxId: string) => {
+    (sandboxId: string, provider: Provider) => {
       const action = async () => {
         setKillingId(sandboxId);
         try {
-          await killMutation.mutateAsync({ sandboxId });
+          await killMutation.mutateAsync({ sandboxId, provider });
         } finally {
           setKillingId(null);
         }
@@ -274,7 +734,7 @@ export default function AdminSandboxesPage() {
       confirmActionRef.current = action;
       setConfirm({
         title: "Kill sandbox",
-        description: `This will terminate sandbox ${sandboxId}. This action cannot be undone.`,
+        description: `This will terminate ${provider.toUpperCase()} sandbox ${sandboxId}. This action cannot be undone.`,
         action,
       });
     },
@@ -282,12 +742,17 @@ export default function AdminSandboxesPage() {
   );
 
   const handleKillAll = useCallback(() => {
-    const count = rawSandboxes.length;
+    const targets = filteredSandboxes;
+    const count = targets.length;
+    const label =
+      providerFilter === "all" ? "across all providers" : `on ${providerFilter.toUpperCase()}`;
     const action = async () => {
       setKillingAll(true);
       try {
         await Promise.allSettled(
-          rawSandboxes.map((s) => killMutation.mutateAsync({ sandboxId: s.sandboxId })),
+          targets.map((s) =>
+            killMutation.mutateAsync({ sandboxId: s.sandboxId, provider: s.provider }),
+          ),
         );
       } finally {
         setKillingAll(false);
@@ -296,10 +761,10 @@ export default function AdminSandboxesPage() {
     confirmActionRef.current = action;
     setConfirm({
       title: "Kill all sandboxes",
-      description: `This will terminate all ${count} sandboxes across all environments. This action cannot be undone.`,
+      description: `This will terminate all ${count} sandboxes ${label}. This action cannot be undone.`,
       action,
     });
-  }, [rawSandboxes, killMutation]);
+  }, [filteredSandboxes, providerFilter, killMutation]);
 
   const handleConfirm = useCallback(() => {
     const action = confirmActionRef.current;
@@ -317,6 +782,14 @@ export default function AdminSandboxesPage() {
 
   const runningCount = sandboxes.filter((s) => s.state === "running").length;
   const pausedCount = sandboxes.filter((s) => s.state === "paused").length;
+
+  const providerCounts = useMemo(() => {
+    const counts: Record<Provider, number> = { e2b: 0, daytona: 0 };
+    for (const s of rawSandboxes) {
+      counts[s.provider] = (counts[s.provider] ?? 0) + 1;
+    }
+    return counts;
+  }, [rawSandboxes]);
 
   const envCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -353,12 +826,13 @@ export default function AdminSandboxesPage() {
             Sandboxes{" "}
             {!isLoading && (
               <span className="text-muted-foreground text-base font-normal">
-                ({sandboxes.length})
+                ({sandboxes.length}
+                {providerFilter !== "all" ? ` / ${rawSandboxes.length}` : ""})
               </span>
             )}
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Live E2B sandboxes across all environments.
+            Live sandboxes across E2B and Daytona, with rolling credit burn.
           </p>
         </div>
         <div className="flex gap-2">
@@ -373,11 +847,13 @@ export default function AdminSandboxesPage() {
               ) : (
                 <Trash2 className="mr-2 h-4 w-4" />
               )}
-              Kill all
+              Kill {providerFilter === "all" ? "all" : providerFilter.toUpperCase()}
             </Button>
           )}
         </div>
       </div>
+
+      <UsageChart />
 
       {error && (
         <div className="border-destructive/30 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm">
@@ -385,20 +861,41 @@ export default function AdminSandboxesPage() {
         </div>
       )}
 
-      {!isLoading && sandboxes.length > 0 && (
-        <div className="mb-4 flex gap-4 text-sm">
-          <span className="text-green-600 dark:text-green-400">{runningCount} running</span>
-          {pausedCount > 0 && (
-            <span className="text-yellow-600 dark:text-yellow-400">{pausedCount} paused</span>
-          )}
-          <span className="text-muted-foreground">|</span>
-          {Object.entries(envCounts).map(([env, count]) => (
-            <span key={env}>
-              <EnvironmentBadge env={env} /> {count}
-            </span>
-          ))}
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <div className="bg-muted/60 flex items-center rounded-md p-0.5 text-xs">
+          {PROVIDER_FILTERS.map((opt) => {
+            const badgeCount =
+              opt.key === "all" ? rawSandboxes.length : (providerCounts[opt.key] ?? 0);
+            return (
+              <ProviderFilterButton
+                key={opt.key}
+                filterKey={opt.key}
+                label={opt.label}
+                count={badgeCount}
+                active={providerFilter === opt.key}
+                onSelect={setProviderFilter}
+              />
+            );
+          })}
         </div>
-      )}
+
+        {!isLoading && sandboxes.length > 0 && (
+          <>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-green-600 dark:text-green-400">{runningCount} running</span>
+            {pausedCount > 0 && (
+              <span className="text-yellow-600 dark:text-yellow-400">{pausedCount} paused</span>
+            )}
+            <span className="text-muted-foreground">|</span>
+            {Object.entries(envCounts).map(([env, count]) => (
+              <span key={env} className="inline-flex items-center gap-1">
+                <EnvironmentBadge env={env} />
+                <span className="tabular-nums">{count}</span>
+              </span>
+            ))}
+          </>
+        )}
+      </div>
 
       <div className="bg-card rounded-lg border">
         {isLoading ? (
@@ -414,6 +911,13 @@ export default function AdminSandboxesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
+                  <SortableHeader
+                    label="Provider"
+                    sortKey="provider"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                  />
                   <SortableHeader
                     label="Sandbox ID"
                     sortKey="sandboxId"
@@ -462,7 +966,13 @@ export default function AdminSandboxesPage() {
               </thead>
               <tbody>
                 {sandboxes.map((s) => (
-                  <tr key={s.sandboxId} className="hover:bg-muted/50 border-b last:border-b-0">
+                  <tr
+                    key={`${s.provider}:${s.sandboxId}`}
+                    className="hover:bg-muted/50 border-b last:border-b-0"
+                  >
+                    <td className="px-4 py-3">
+                      <ProviderPill provider={s.provider} />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs" title={s.sandboxId}>
                       {truncateId(s.sandboxId)}
                     </td>
@@ -475,20 +985,26 @@ export default function AdminSandboxesPage() {
                           "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
                           s.state === "running"
                             ? "bg-green-500/10 text-green-700 dark:text-green-400"
-                            : "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                            : s.state === "paused"
+                              ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                              : "bg-gray-500/10 text-gray-700 dark:text-gray-400",
                         )}
                       >
                         <span
                           className={cn(
                             "h-1.5 w-1.5 rounded-full",
-                            s.state === "running" ? "bg-green-500" : "bg-yellow-500",
+                            s.state === "running"
+                              ? "bg-green-500"
+                              : s.state === "paused"
+                                ? "bg-yellow-500"
+                                : "bg-gray-500",
                           )}
                         />
                         {s.state}
                       </span>
                     </td>
                     <td className="px-4 py-3">{formatRelativeTime(s.startedAt)}</td>
-                    <td className="px-4 py-3">{formatUptime(s.startedAt)}</td>
+                    <td className="px-4 py-3 tabular-nums">{formatUptime(s.startedAt)}</td>
                     <td className="px-4 py-3">
                       {s.userEmail ? (
                         <span title={s.userName ?? undefined}>{s.userEmail}</span>
@@ -541,6 +1057,7 @@ export default function AdminSandboxesPage() {
                     <td className="px-4 py-3 text-right">
                       <KillButton
                         sandboxId={s.sandboxId}
+                        provider={s.provider}
                         isKilling={killingId === s.sandboxId}
                         onKill={handleKill}
                       />
