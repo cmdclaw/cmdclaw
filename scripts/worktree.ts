@@ -578,7 +578,6 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_REDIS_PORT: String(stack.redisPort),
     CMDCLAW_MINIO_API_PORT: String(stack.minioApiPort),
     CMDCLAW_MINIO_CONSOLE_PORT: String(stack.minioConsolePort),
-    CMDCLAW_JAEGER_UI_PORT: String(stack.jaegerUiPort),
     CMDCLAW_OTEL_GRPC_PORT: String(stack.otelGrpcPort),
     CMDCLAW_OTEL_HTTP_PORT: String(stack.otelHttpPort),
     CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(stack.otelGrpcPort),

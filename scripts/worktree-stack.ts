@@ -6,7 +6,6 @@ export type WorktreeStackConfig = {
   redisPort: number;
   minioApiPort: number;
   minioConsolePort: number;
-  jaegerUiPort: number;
   otelGrpcPort: number;
   otelHttpPort: number;
   vectorLogPort: number;
@@ -61,7 +60,6 @@ export function buildWorktreeStackConfig(instanceId: string, slot: number): Work
     redisPort: port(63, slot),
     minioApiPort: port(91, slot),
     minioConsolePort: port(92, slot),
-    jaegerUiPort: port(166, slot),
     otelGrpcPort: port(431, slot),
     otelHttpPort: port(432, slot),
     vectorLogPort: port(86, slot),

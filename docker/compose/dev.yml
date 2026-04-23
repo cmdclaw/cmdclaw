@@ -49,14 +49,119 @@ services:
       timeout: 5s
       retries: 5
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.65.0
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.140.0
+    command:
+      - "--storageDataPath=/victoria-metrics-data"
+      - "--vmalert.proxyURL=http://vmalert:8880"
     ports:
-      - "${CMDCLAW_JAEGER_UI_PORT:-16686}:16686"
-      - "${CMDCLAW_OTEL_GRPC_PORT:-4317}:4317"
-      - "${CMDCLAW_OTEL_HTTP_PORT:-4318}:4318"
+      - "${CMDCLAW_VICTORIA_METRICS_PORT:-8428}:8428"
+    volumes:
+      - cmdclaw_victoria_metrics_data:/victoria-metrics-data
+    restart: unless-stopped
+
+  victoria-logs:
+    image: victoriametrics/victoria-logs:v1.48.0
+    command:
+      - "--storageDataPath=/victoria-logs-data"
+    ports:
+      - "${CMDCLAW_VICTORIA_LOGS_PORT:-9428}:9428"
+    volumes:
+      - cmdclaw_victoria_logs_data:/victoria-logs-data
+    restart: unless-stopped
+
+  victoria-traces:
+    image: victoriametrics/victoria-traces:v0.8.0
+    command:
+      - "--storageDataPath=/victoria-traces-data"
+    ports:
+      - "${CMDCLAW_VICTORIA_TRACES_PORT:-10428}:10428"
+    volumes:
+      - cmdclaw_victoria_traces_data:/victoria-traces-data
+    restart: unless-stopped
+
+  vector:
+    image: timberio/vector:0.54.0-alpine
+    command:
+      - "--config"
+      - "/etc/vector/vector.yaml"
+    ports:
+      - "${CMDCLAW_VECTOR_OTLP_GRPC_PORT:-4317}:4317"
+      - "${CMDCLAW_VECTOR_OTLP_HTTP_PORT:-4318}:4318"
+      - "${CMDCLAW_VECTOR_LOG_PORT:-8686}:8686"
+    volumes:
+      - ./observability/vector.yaml:/etc/vector/vector.yaml:ro
+    depends_on:
+      - victoria-metrics
+      - victoria-logs
+      - victoria-traces
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.32.0
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          mkdir -p /etc/alertmanager/secrets
+          if [ -n "$${ALERTMANAGER_SLACK_WEBHOOK_URL:-}" ]; then
+            printf '%s' "$${ALERTMANAGER_SLACK_WEBHOOK_URL}" > /etc/alertmanager/secrets/slack_webhook_url
+          else
+            : > /etc/alertmanager/secrets/slack_webhook_url
+          fi
+          exec /bin/alertmanager \
+            --config.file=/etc/alertmanager/alertmanager.yml \
+            --storage.path=/alertmanager \
+            --web.listen-address=:9093
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
+      ALERTMANAGER_SLACK_WEBHOOK_URL: ${ALERTMANAGER_SLACK_WEBHOOK_URL:-}
+    ports:
+      - "${CMDCLAW_ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - cmdclaw_alertmanager_data:/alertmanager
+    restart: unless-stopped
+
+  vmalert:
+    image: victoriametrics/vmalert:v1.140.0
+    command:
+      - "-rule=/etc/vmalert/rules/*.yml"
+      - "-datasource.url=http://victoria-metrics:8428"
+      - "-remoteWrite.url=http://victoria-metrics:8428"
+      - "-remoteRead.url=http://victoria-metrics:8428"
+      - "-notifier.url=http://alertmanager:9093"
+      - "-evaluationInterval=30s"
+      - "-rule.evalDelay=30s"
+      - "-httpListenAddr=:8880"
+    ports:
+      - "${CMDCLAW_VMALERT_PORT:-8880}:8880"
+    volumes:
+      - ./observability/vmalert:/etc/vmalert:ro
+    depends_on:
+      - victoria-metrics
+      - alertmanager
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.7
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_PLUGINS_PREINSTALL_SYNC: victoriametrics-logs-datasource
+    ports:
+      - "${CMDCLAW_GRAFANA_PORT:-3400}:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - cmdclaw_grafana_data:/var/lib/grafana
+    depends_on:
+      - victoria-metrics
+      - victoria-logs
+      - victoria-traces
+      - vmalert
+      - alertmanager
+    restart: unless-stopped
 
   daytona-api:
     profiles: ["daytona"]
@@ -159,6 +264,7 @@ services:
       - daytona-redis
       - daytona-dex
       - daytona-registry
+      - daytona-otel-collector
 
   daytona-proxy:
     profiles: ["daytona"]
@@ -303,6 +409,8 @@ services:
     image: otel/opentelemetry-collector-contrib:0.138.0
     volumes:
       - ./daytona/otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    depends_on:
+      - vector
 
 volumes:
   cmdclaw_postgres_data:
@@ -311,6 +419,16 @@ volumes:
     name: ${CMDCLAW_REDIS_VOLUME:-cmdclaw-local_cmdclaw_redis_data}
   cmdclaw_minio_data:
     name: ${CMDCLAW_MINIO_VOLUME:-cmdclaw-local_cmdclaw_minio_data}
+  cmdclaw_victoria_metrics_data:
+    name: ${CMDCLAW_VICTORIA_METRICS_VOLUME:-cmdclaw-local_cmdclaw_victoria_metrics_data}
+  cmdclaw_victoria_logs_data:
+    name: ${CMDCLAW_VICTORIA_LOGS_VOLUME:-cmdclaw-local_cmdclaw_victoria_logs_data}
+  cmdclaw_victoria_traces_data:
+    name: ${CMDCLAW_VICTORIA_TRACES_VOLUME:-cmdclaw-local_cmdclaw_victoria_traces_data}
+  cmdclaw_alertmanager_data:
+    name: ${CMDCLAW_ALERTMANAGER_VOLUME:-cmdclaw-local_cmdclaw_alertmanager_data}
+  cmdclaw_grafana_data:
+    name: ${CMDCLAW_GRAFANA_VOLUME:-cmdclaw-local_cmdclaw_grafana_data}
   daytona_db_data:
     name: ${DAYTONA_DB_VOLUME:-daytona_db_data}
   daytona_dex_data:

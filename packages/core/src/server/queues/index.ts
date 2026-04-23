@@ -1,9 +1,17 @@
 import { Queue, QueueEvents, Worker, type ConnectionOptions, type Processor } from "bullmq";
-import IORedis from "ioredis";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
 import { buildRedisOptions } from "../redis/connection-options";
 import { processForwardedEmailEvent } from "../services/coworker-email-forwarding";
 import { triggerCoworkerRun } from "../services/coworker-service";
+import {
+  attachTraceContext,
+  extractTraceContextFromPayload,
+  registerObservableGauge,
+  recordCounter,
+  recordHistogram,
+  startActiveServerSpan,
+  withExtractedTraceContext,
+} from "../utils/observability";
 
 const rawQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
 export const queueName = rawQueueName.replaceAll(":", "-");
@@ -41,6 +49,13 @@ export function buildQueueJobId(parts: Array<string | number | null | undefined>
 
 type JobPayload = Record<string, unknown> & { coworkerId?: string };
 type JobHandler = Processor<JobPayload, unknown, string>;
+type QueueMetricSnapshot = {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  oldestWaitingAgeSeconds: number;
+};
 
 function resolveGenerationRunMode(value: unknown): "normal_run" | "recovery_reattach" {
   return value === "recovery_reattach" ? "recovery_reattach" : "normal_run";
@@ -262,38 +277,187 @@ const processor: Processor<JobPayload, unknown, string> = async (job) => {
     throw new Error(`No handler registered for job "${job.name}"`);
   }
 
-  return handler(job);
+  const startedAt = performance.now();
+  const attributes = {
+    queue: queueName,
+    job_name: job.name,
+    job_id: job.id ?? "unknown",
+    attempts_made: job.attemptsMade,
+  };
+
+  return withExtractedTraceContext(extractTraceContextFromPayload(job.data), () =>
+    startActiveServerSpan(
+      `bullmq ${job.name}`,
+      {
+        attributes,
+      },
+      async () => {
+        try {
+          const result = await handler(job);
+          recordCounter(
+            "cmdclaw_worker_jobs_total",
+            1,
+            {
+              ...attributes,
+              status: "ok",
+            },
+            "Count of BullMQ jobs processed by the CmdClaw worker.",
+          );
+          return result;
+        } catch (error) {
+          recordCounter(
+            "cmdclaw_worker_jobs_total",
+            1,
+            {
+              ...attributes,
+              status: "error",
+            },
+            "Count of BullMQ jobs processed by the CmdClaw worker.",
+          );
+          throw error;
+        } finally {
+          recordHistogram(
+            "cmdclaw_worker_job_duration_ms",
+            performance.now() - startedAt,
+            attributes,
+            "Duration of BullMQ jobs processed by the CmdClaw worker.",
+          );
+        }
+      },
+    ),
+  );
 };
 
 let queue: Queue<JobPayload, unknown, string> | null = null;
-let queueConnection: IORedis | null = null;
+let queueMetricPoller: ReturnType<typeof setInterval> | null = null;
+let queueMetricsRegistered = false;
+const queueMetricSnapshot: QueueMetricSnapshot = {
+  waiting: 0,
+  active: 0,
+  delayed: 0,
+  failed: 0,
+  oldestWaitingAgeSeconds: 0,
+};
 
-function createRedisConnection(): IORedis {
-  return new IORedis(buildRedisOptions(redisUrl, redisOptions));
+function createRedisConnectionOptions(): ConnectionOptions {
+  return buildRedisOptions(redisUrl, redisOptions) as ConnectionOptions;
+}
+
+async function refreshQueueMetricSnapshot(): Promise<void> {
+  if (!queue) {
+    return;
+  }
+
+  const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed");
+  const [oldestWaitingJob] = await queue.getJobs(["waiting"], 0, 0, true);
+  const oldestTimestamp =
+    typeof oldestWaitingJob?.timestamp === "number" ? oldestWaitingJob.timestamp : null;
+
+  queueMetricSnapshot.waiting = counts.waiting ?? 0;
+  queueMetricSnapshot.active = counts.active ?? 0;
+  queueMetricSnapshot.delayed = counts.delayed ?? 0;
+  queueMetricSnapshot.failed = counts.failed ?? 0;
+  queueMetricSnapshot.oldestWaitingAgeSeconds = oldestTimestamp
+    ? Math.max(0, (Date.now() - oldestTimestamp) / 1000)
+    : 0;
+}
+
+function registerQueueMetrics(): void {
+  if (queueMetricsRegistered) {
+    return;
+  }
+
+  registerObservableGauge(
+    "cmdclaw_bullmq_jobs",
+    (observe) => {
+      observe(queueMetricSnapshot.waiting, { queue: queueName, state: "waiting" });
+      observe(queueMetricSnapshot.active, { queue: queueName, state: "active" });
+      observe(queueMetricSnapshot.delayed, { queue: queueName, state: "delayed" });
+      observe(queueMetricSnapshot.failed, { queue: queueName, state: "failed" });
+    },
+    "Current BullMQ job counts by state for the primary CmdClaw queue.",
+  );
+
+  registerObservableGauge(
+    "cmdclaw_bullmq_oldest_waiting_job_age_seconds",
+    (observe) => {
+      observe(queueMetricSnapshot.oldestWaitingAgeSeconds, {
+        queue: queueName,
+      });
+    },
+    "Age in seconds of the oldest waiting BullMQ job on the primary CmdClaw queue.",
+  );
+
+  queueMetricsRegistered = true;
+}
+
+function startQueueMetricsPolling(): void {
+  registerQueueMetrics();
+
+  if (queueMetricPoller) {
+    return;
+  }
+
+  void refreshQueueMetricSnapshot().catch(() => {
+    // Queue metric collection is best effort.
+  });
+
+  queueMetricPoller = setInterval(() => {
+    void refreshQueueMetricSnapshot().catch(() => {
+      // Queue metric collection is best effort.
+    });
+  }, 15_000);
+  queueMetricPoller.unref?.();
+}
+
+function stopQueueMetricsPolling(): void {
+  if (!queueMetricPoller) {
+    return;
+  }
+
+  clearInterval(queueMetricPoller);
+  queueMetricPoller = null;
+}
+
+function patchQueueAdd(targetQueue: Queue<JobPayload, unknown, string>): void {
+  const queueWithPatchFlag = targetQueue as Queue<JobPayload, unknown, string> & {
+    __cmdclawTracedAddPatched?: boolean;
+  };
+  if (queueWithPatchFlag.__cmdclawTracedAddPatched) {
+    return;
+  }
+
+  const originalAdd = targetQueue.add.bind(targetQueue);
+  targetQueue.add = ((
+    name,
+    data,
+    opts,
+  ) => originalAdd(name, attachTraceContext(data), opts)) as typeof targetQueue.add;
+  queueWithPatchFlag.__cmdclawTracedAddPatched = true;
 }
 
 export const getQueue = (): Queue<JobPayload, unknown, string> => {
   if (!queue) {
-    queueConnection = createRedisConnection();
     queue = new Queue<JobPayload, unknown, string>(queueName, {
-      connection: queueConnection as unknown as ConnectionOptions,
+      connection: createRedisConnectionOptions(),
     });
+    patchQueueAdd(queue);
   }
 
   return queue!;
 };
 
 export const startQueues = () => {
-  const workerConnection = createRedisConnection();
-  const queueEventsConnection = createRedisConnection();
+  getQueue();
+  startQueueMetricsPolling();
 
   const worker = new Worker(queueName, processor, {
-    connection: workerConnection as unknown as ConnectionOptions,
+    connection: createRedisConnectionOptions(),
     concurrency: Number(process.env.BULLMQ_CONCURRENCY ?? "5"),
   });
 
   const queueEvents = new QueueEvents(queueName, {
-    connection: queueEventsConnection as unknown as ConnectionOptions,
+    connection: createRedisConnectionOptions(),
   });
 
   queueEvents.on("failed", ({ jobId, failedReason }) => {
@@ -316,37 +480,20 @@ export const startQueues = () => {
   return {
     worker,
     queueEvents,
-    workerConnection,
-    queueEventsConnection,
     queueName,
     redisUrl,
   };
 };
 
-async function closeRedisConnection(connection: IORedis): Promise<void> {
-  try {
-    await connection.quit();
-  } catch {
-    connection.disconnect();
-  }
-}
-
 export const stopQueues = async (
   worker: Worker,
   queueEvents: QueueEvents,
-  workerConnection: IORedis,
-  queueEventsConnection: IORedis,
 ) => {
   const closers: Promise<unknown>[] = [worker.close(), queueEvents.close()];
+  stopQueueMetricsPolling();
   if (queue) {
     closers.push(queue.close());
-    if (queueConnection) {
-      closers.push(closeRedisConnection(queueConnection));
-      queueConnection = null;
-    }
     queue = null;
   }
-  closers.push(closeRedisConnection(workerConnection));
-  closers.push(closeRedisConnection(queueEventsConnection));
   await Promise.allSettled(closers);
 };

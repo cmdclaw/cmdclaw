@@ -27,16 +27,12 @@ export async function startWorkerRuntime(): Promise<void> {
   const {
     worker,
     queueEvents,
-    workerConnection,
-    queueEventsConnection,
     queueName,
     redisUrl,
   } = startQueues();
   const {
     worker: daytonaCleanupWorker,
     queueEvents: daytonaCleanupQueueEvents,
-    workerConnection: daytonaCleanupWorkerConnection,
-    queueEventsConnection: daytonaCleanupQueueEventsConnection,
     queueName: daytonaCleanupQueueName,
     redisUrl: daytonaCleanupRedisUrl,
   } = startDaytonaRunawayCleanupQueue();
@@ -132,13 +128,8 @@ export async function startWorkerRuntime(): Promise<void> {
         pausedSandboxCleanupInterval = null;
       }
       await Promise.allSettled([
-        stopQueues(worker, queueEvents, workerConnection, queueEventsConnection),
-        stopDaytonaRunawayCleanupQueue(
-          daytonaCleanupWorker,
-          daytonaCleanupQueueEvents,
-          daytonaCleanupWorkerConnection,
-          daytonaCleanupQueueEventsConnection,
-        ),
+        stopQueues(worker, queueEvents),
+        stopDaytonaRunawayCleanupQueue(daytonaCleanupWorker, daytonaCleanupQueueEvents),
         closePool(),
       ]);
     })();

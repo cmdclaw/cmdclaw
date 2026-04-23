@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: CmdClaw Local
+    orgId: 1
+    folder: CmdClaw Local
+    type: file
+    disableDeletion: false
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

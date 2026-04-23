@@ -1,0 +1,121 @@
+data_dir: /var/lib/vector
+
+sources:
+  app_logs:
+    type: http_server
+    address: 0.0.0.0:8686
+    path: /logs
+    method: POST
+    strict_path: true
+    decoding:
+      codec: json
+    framing:
+      method: bytes
+
+  app_otlp:
+    type: opentelemetry
+    grpc:
+      address: 0.0.0.0:4317
+    http:
+      address: 0.0.0.0:4318
+
+  daytona_otlp_traces:
+    type: opentelemetry
+    use_otlp_decoding: true
+    grpc:
+      address: 0.0.0.0:5317
+    http:
+      address: 0.0.0.0:5318
+
+  vector_internal_metrics:
+    type: internal_metrics
+    scrape_interval_secs: 5
+
+transforms:
+  otlp_logs_for_victoria:
+    type: remap
+    inputs:
+      - app_otlp.logs
+    source: |
+      .ts = if exists(.timestamp) && !is_null(.timestamp) {
+        .timestamp
+      } else if exists(.observed_timestamp) && !is_null(.observed_timestamp) {
+        .observed_timestamp
+      } else {
+        now()
+      }
+      .message = if exists(.message) && !is_null(.message) {
+        to_string(.message) ?? "otlp log record"
+      } else {
+        "otlp log record"
+      }
+      .level = if exists(.severity_text) && !is_null(.severity_text) {
+        downcase(to_string(.severity_text) ?? "info")
+      } else {
+        "info"
+      }
+      .service = if exists(.resources."service.name") && !is_null(.resources."service.name") {
+        .resources."service.name"
+      } else if exists(.service) && !is_null(.service) {
+        .service
+      } else {
+        "unknown-service"
+      }
+      .serviceNamespace = if exists(.resources."service.namespace") {
+        .resources."service.namespace"
+      } else {
+        null
+      }
+      .env = if exists(.resources."deployment.environment") && !is_null(.resources."deployment.environment") {
+        .resources."deployment.environment"
+      } else if exists(.env) && !is_null(.env) {
+        .env
+      } else {
+        "unknown"
+      }
+      .logger = if exists(.scope.name) { .scope.name } else { null }
+      .loggerVersion = if exists(.scope.version) { .scope.version } else { null }
+
+      if exists(.trace_id) && !is_null(.trace_id) {
+        .traceId = .trace_id
+      }
+
+      if exists(.span_id) && !is_null(.span_id) {
+        .spanId = .span_id
+      }
+
+sinks:
+  victoria_logs:
+    type: http
+    inputs:
+      - app_logs
+      - otlp_logs_for_victoria
+    method: post
+    uri: http://victoria-logs:9428/insert/jsonline?_stream_fields=service,env,level&_msg_field=message,event&_time_field=ts
+    request:
+      headers:
+        content-type: application/stream+json
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+
+  victoria_metrics:
+    type: prometheus_remote_write
+    inputs:
+      - app_otlp.metrics
+      - vector_internal_metrics
+    endpoint: http://victoria-metrics:8428/api/v1/write
+    healthcheck:
+      enabled: false
+
+  victoria_traces:
+    type: opentelemetry
+    inputs:
+      - app_otlp.traces
+      - daytona_otlp_traces.traces
+    protocol:
+      type: http
+      uri: http://victoria-traces:10428/insert/opentelemetry/v1/traces
+      encoding:
+        codec: otlp

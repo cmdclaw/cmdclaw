@@ -81,6 +81,7 @@
     "@milkdown/react": "^7.20.0",
     "@opencode-ai/plugin": "^1.2.10",
     "@opencode-ai/sdk": "^1.1.34",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@orpc/client": "^1.13.2",
     "@orpc/openapi": "^1.13.2",
     "@orpc/server": "^1.13.2",

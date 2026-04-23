@@ -10,15 +10,13 @@ processors:
   batch:
 
 exporters:
-  debug:
-    verbosity: detailed
+  otlp/vector:
+    endpoint: vector:4317
+    tls:
+      insecure: true
 
-  prometheus:
-    endpoint: 0.0.0.0:9090
-    namespace: otel
-
-  otlp/jaeger:
-    endpoint: jaeger:4317
+  otlp/vector_traces:
+    endpoint: vector:5317
     tls:
       insecure: true
 
@@ -27,14 +25,14 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/jaeger]
+      exporters: [otlp/vector_traces]
 
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [prometheus]
+      exporters: [otlp/vector]
 
     logs:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug]
+      exporters: [otlp/vector]

@@ -20,6 +20,7 @@
     "@cmdclaw/db": "workspace:*",
     "@orpc/server": "^1.13.2",
     "@stricli/core": "^1.2.6",
+    "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {

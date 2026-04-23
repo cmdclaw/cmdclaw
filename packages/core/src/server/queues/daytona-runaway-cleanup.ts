@@ -1,6 +1,13 @@
 import { Queue, QueueEvents, Worker, type ConnectionOptions } from "bullmq";
-import IORedis from "ioredis";
 import { buildRedisOptions } from "../redis/connection-options";
+import {
+  attachTraceContext,
+  extractTraceContextFromPayload,
+  recordCounter,
+  recordHistogram,
+  startActiveServerSpan,
+  withExtractedTraceContext,
+} from "../utils/observability";
 
 const rawBaseQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
 export const daytonaRunawayCleanupQueueName = `${rawBaseQueueName.replaceAll(":", "-")}-daytona-runaway-cleanup`;
@@ -15,63 +22,115 @@ const redisOptions = {
 export const DAYTONA_RUNAWAY_CLEANUP_JOB_NAME = "daytona:runaway-cleanup";
 export const DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME = "daytona:stopped-sandbox-delete";
 
-type CleanupJobPayload = Record<string, never>;
+type CleanupJobPayload = Record<string, unknown>;
 
 let queue: Queue<CleanupJobPayload, unknown, string> | null = null;
-let queueConnection: IORedis | null = null;
 
-function createRedisConnection(): IORedis {
-  return new IORedis(buildRedisOptions(daytonaRunawayCleanupRedisUrl, redisOptions));
+function createRedisConnectionOptions(): ConnectionOptions {
+  return buildRedisOptions(daytonaRunawayCleanupRedisUrl, redisOptions) as ConnectionOptions;
 }
 
 export function getDaytonaRunawayCleanupQueue(): Queue<CleanupJobPayload, unknown, string> {
   if (!queue) {
-    queueConnection = createRedisConnection();
     queue = new Queue<CleanupJobPayload, unknown, string>(daytonaRunawayCleanupQueueName, {
-      connection: queueConnection as unknown as ConnectionOptions,
+      connection: createRedisConnectionOptions(),
     });
+    patchQueueAdd(queue);
   }
 
   return queue;
 }
 
-export function startDaytonaRunawayCleanupQueue() {
-  const workerConnection = createRedisConnection();
-  const queueEventsConnection = createRedisConnection();
+function patchQueueAdd(targetQueue: Queue<CleanupJobPayload, unknown, string>): void {
+  const queueWithPatchFlag = targetQueue as Queue<CleanupJobPayload, unknown, string> & {
+    __cmdclawTracedAddPatched?: boolean;
+  };
+  if (queueWithPatchFlag.__cmdclawTracedAddPatched) {
+    return;
+  }
 
+  const originalAdd = targetQueue.add.bind(targetQueue);
+  targetQueue.add = ((
+    name,
+    data,
+    opts,
+  ) => originalAdd(name, attachTraceContext(data), opts)) as typeof targetQueue.add;
+  queueWithPatchFlag.__cmdclawTracedAddPatched = true;
+}
+
+export function startDaytonaRunawayCleanupQueue() {
   const worker = new Worker<CleanupJobPayload, unknown, string>(
     daytonaRunawayCleanupQueueName,
     async (job) => {
-      if (job.name === DAYTONA_RUNAWAY_CLEANUP_JOB_NAME) {
-        const { cleanupRunawayDaytonaJobs } = await import("../services/daytona-runaway-cleanup");
-        const summary = await cleanupRunawayDaytonaJobs();
-        if (summary.stale > 0 || summary.stopFailed > 0 || summary.lookupFailed > 0) {
-          console.info("[worker] daytona runaway cleanup summary", summary);
-        }
-        return;
-      }
+      const startedAt = performance.now();
+      const attributes = {
+        queue: daytonaRunawayCleanupQueueName,
+        job_name: job.name,
+        job_id: job.id ?? "unknown",
+      };
 
-      if (job.name === DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME) {
-        const { cleanupStoppedDaytonaSandboxes } = await import(
-          "../services/daytona-stopped-sandbox-delete"
-        );
-        const summary = await cleanupStoppedDaytonaSandboxes();
-        if (summary.stopped > 0 || summary.deleted > 0 || summary.deleteFailed > 0) {
-          console.info("[worker] daytona stopped sandbox delete summary", summary);
-        }
-        return;
-      }
+      return withExtractedTraceContext(extractTraceContextFromPayload(job.data), () =>
+        startActiveServerSpan(
+          `bullmq ${job.name}`,
+          {
+            attributes,
+          },
+          async () => {
+            try {
+              if (job.name === DAYTONA_RUNAWAY_CLEANUP_JOB_NAME) {
+                const { cleanupRunawayDaytonaJobs } = await import("../services/daytona-runaway-cleanup");
+                const summary = await cleanupRunawayDaytonaJobs();
+                if (summary.stale > 0 || summary.stopFailed > 0 || summary.lookupFailed > 0) {
+                  console.info("[worker] daytona runaway cleanup summary", summary);
+                }
+                recordCounter("cmdclaw_worker_jobs_total", 1, {
+                  ...attributes,
+                  status: "ok",
+                });
+                return;
+              }
 
-      throw new Error(`No handler registered for Daytona cleanup job "${job.name}"`);
+              if (job.name === DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME) {
+                const { cleanupStoppedDaytonaSandboxes } = await import(
+                  "../services/daytona-stopped-sandbox-delete"
+                );
+                const summary = await cleanupStoppedDaytonaSandboxes();
+                if (summary.stopped > 0 || summary.deleted > 0 || summary.deleteFailed > 0) {
+                  console.info("[worker] daytona stopped sandbox delete summary", summary);
+                }
+                recordCounter("cmdclaw_worker_jobs_total", 1, {
+                  ...attributes,
+                  status: "ok",
+                });
+                return;
+              }
+
+              throw new Error(`No handler registered for Daytona cleanup job "${job.name}"`);
+            } catch (error) {
+              recordCounter("cmdclaw_worker_jobs_total", 1, {
+                ...attributes,
+                status: "error",
+              });
+              throw error;
+            } finally {
+              recordHistogram(
+                "cmdclaw_worker_job_duration_ms",
+                performance.now() - startedAt,
+                attributes,
+              );
+            }
+          },
+        ),
+      );
     },
     {
-      connection: workerConnection as unknown as ConnectionOptions,
+      connection: createRedisConnectionOptions(),
       concurrency: 1,
     },
   );
 
   const queueEvents = new QueueEvents(daytonaRunawayCleanupQueueName, {
-    connection: queueEventsConnection as unknown as ConnectionOptions,
+    connection: createRedisConnectionOptions(),
   });
 
   queueEvents.on("failed", ({ jobId, failedReason }) => {
@@ -94,37 +153,19 @@ export function startDaytonaRunawayCleanupQueue() {
   return {
     worker,
     queueEvents,
-    workerConnection,
-    queueEventsConnection,
     queueName: daytonaRunawayCleanupQueueName,
     redisUrl: daytonaRunawayCleanupRedisUrl,
   };
 }
 
-async function closeRedisConnection(connection: IORedis): Promise<void> {
-  try {
-    await connection.quit();
-  } catch {
-    connection.disconnect();
-  }
-}
-
 export async function stopDaytonaRunawayCleanupQueue(
   worker: Worker,
   queueEvents: QueueEvents,
-  workerConnection: IORedis,
-  queueEventsConnection: IORedis,
 ): Promise<void> {
   const closers: Promise<unknown>[] = [worker.close(), queueEvents.close()];
   if (queue) {
     closers.push(queue.close());
-    if (queueConnection) {
-      closers.push(closeRedisConnection(queueConnection));
-      queueConnection = null;
-    }
     queue = null;
   }
-  closers.push(closeRedisConnection(workerConnection));
-  closers.push(closeRedisConnection(queueEventsConnection));
   await Promise.allSettled(closers);
 }

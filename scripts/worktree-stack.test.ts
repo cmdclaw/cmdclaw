@@ -18,7 +18,6 @@ describe("worktree stack config", () => {
       redisPort: 6307,
       minioApiPort: 9107,
       minioConsolePort: 9207,
-      jaegerUiPort: 16607,
       otelGrpcPort: 43107,
       otelHttpPort: 43207,
       vectorLogPort: 8607,

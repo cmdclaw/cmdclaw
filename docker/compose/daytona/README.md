@@ -17,7 +17,7 @@ The shared stack exposes the host ports needed for local use:
 - `2222` for the SSH gateway
 - `5556` for Dex login
 
-Daytona reuses the shared local MinIO and Jaeger services from `docker/compose/dev.yml`. MailDev, PgAdmin, the registry UI, the internal registry, and the runner stay internal to the Docker network.
+Daytona reuses the shared local MinIO service from `docker/compose/dev.yml`. Its OTEL collector now forwards traces, metrics, and logs into the shared `Vector -> VictoriaMetrics / VictoriaLogs / VictoriaTraces` stack, so Daytona telemetry lands in the same local observability backend as CmdClaw. VictoriaTraces remains the trace backend, exposed through its Jaeger-compatible query API for Grafana and direct HTTP queries. MailDev, PgAdmin, the registry UI, the internal registry, and the runner stay internal to the Docker network.
 
 Access the local dashboard at [http://localhost:3300](http://localhost:3300).
 

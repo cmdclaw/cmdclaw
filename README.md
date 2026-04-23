@@ -77,6 +77,23 @@ bun dev
 
 `bun dev` starts the web app, worker, and WS runtime together. `bun dev:web` only starts the web app, so it is not enough for end-to-end local runs on its own.
 
+The same local Docker stack now also starts the observability backend. Once the app is running, you can query it directly over HTTP:
+
+```bash
+curl -s http://127.0.0.1:9428/select/logsql/query -d 'query=service:cmdclaw-web OR service:cmdclaw-worker' -d 'limit=10'
+curl -s 'http://127.0.0.1:8428/api/v1/query?query=cmdclaw_rpc_requests_total'
+curl -s http://127.0.0.1:10428/select/jaeger/api/services
+```
+
+Grafana, `vmalert`, and Alertmanager are part of the same local stack as code-managed observability components:
+
+```bash
+open http://127.0.0.1:3400
+curl -s http://127.0.0.1:8428/api/v1/rules
+```
+
+All of those observability ports are overrideable with `CMDCLAW_*_PORT` env vars, so separate worktrees can run their own local stack without host-port collisions.
+
 More setup guides:
 
 - [Quickstart](https://docs.cmdclaw.ai/quickstart)

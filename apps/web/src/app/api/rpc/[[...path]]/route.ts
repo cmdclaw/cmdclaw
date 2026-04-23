@@ -1,3 +1,9 @@
+import {
+  extractHttpTraceContext,
+  recordCounter,
+  recordHistogram,
+  startActiveServerSpan,
+} from "@cmdclaw/core/server/utils/observability";
 import { RPCHandler } from "@orpc/server/fetch";
 import { createHash } from "node:crypto";
 import { appRouter } from "@/server/orpc";
@@ -64,27 +70,83 @@ function withNoStore(response: Response): Response {
 }
 
 async function handleRequest(request: Request) {
-  try {
-    let response: Response | null = null;
+  const requestUrl = new URL(request.url);
+  const startedAt = performance.now();
+  const baseAttributes = {
+    route: requestUrl.pathname,
+    method: request.method,
+  };
 
-    const context = await createORPCContext({ headers: request.headers });
-    const handlerResult = await handler.handle(request, {
-      prefix: "/api/rpc",
-      context,
-    });
+  return startActiveServerSpan(
+    `rpc ${request.method} ${requestUrl.pathname}`,
+    {
+      attributes: baseAttributes,
+      parentContext: extractHttpTraceContext(request.headers),
+    },
+    async () => {
+      try {
+        let response: Response | null = null;
 
-    response = handlerResult.response ?? new Response("Not found", { status: 404 });
-    logUnauthorizedRpcRequest(request, response);
-    return withNoStore(response);
-  } catch (error) {
-    console.error("[RPC Handler Error]", error);
-    return withNoStore(
-      new Response(JSON.stringify({ error: String(error) }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-  }
+        const context = await createORPCContext({ headers: request.headers });
+        const handlerResult = await handler.handle(request, {
+          prefix: "/api/rpc",
+          context,
+        });
+
+        response = handlerResult.response ?? new Response("Not found", { status: 404 });
+        logUnauthorizedRpcRequest(request, response);
+
+        recordCounter(
+          "cmdclaw_rpc_requests_total",
+          1,
+          {
+            ...baseAttributes,
+            status_code: response.status,
+          },
+          "Count of RPC requests handled by the CmdClaw web server.",
+        );
+        recordHistogram(
+          "cmdclaw_rpc_request_duration_ms",
+          performance.now() - startedAt,
+          {
+            ...baseAttributes,
+            status_code: response.status,
+          },
+          "Duration of RPC requests handled by the CmdClaw web server.",
+        );
+
+        return withNoStore(response);
+      } catch (error) {
+        console.error("[RPC Handler Error]", error);
+
+        recordCounter(
+          "cmdclaw_rpc_requests_total",
+          1,
+          {
+            ...baseAttributes,
+            status_code: 500,
+          },
+          "Count of RPC requests handled by the CmdClaw web server.",
+        );
+        recordHistogram(
+          "cmdclaw_rpc_request_duration_ms",
+          performance.now() - startedAt,
+          {
+            ...baseAttributes,
+            status_code: 500,
+          },
+          "Duration of RPC requests handled by the CmdClaw web server.",
+        );
+
+        return withNoStore(
+          new Response(JSON.stringify({ error: String(error) }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+    },
+  );
 }
 
 export {
