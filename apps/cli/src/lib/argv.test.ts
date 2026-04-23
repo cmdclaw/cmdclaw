@@ -40,26 +40,6 @@ describe("normalizeCmdclawArgv", () => {
     ]);
   });
 
-  it("normalizes documented kebab-case coworker flags", () => {
-    expect(
-      normalizeCmdclawArgv([
-        "coworker",
-        "run",
-        "--json-coworker",
-        "{}",
-        "--watch-interval",
-        "2",
-      ]),
-    ).toEqual([
-      "coworker",
-      "run",
-      "--jsonCoworker",
-      "{}",
-      "--watchInterval",
-      "2",
-    ]);
-  });
-
   it("preserves explicit top-level commands", () => {
     expect(normalizeCmdclawArgv(["coworker", "list"])).toEqual(["coworker", "list"]);
   });

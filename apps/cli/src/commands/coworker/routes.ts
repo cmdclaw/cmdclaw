@@ -140,12 +140,6 @@ export const coworkerRunCommand = buildCommand({
         optional: true,
         brief: "JSON payload passed to the run",
       },
-      jsonCoworker: {
-        kind: "parsed",
-        parse: (input: string) => input,
-        optional: true,
-        brief: "Coworker definition JSON to import, enable, and run",
-      },
       watch: {
         kind: "boolean",
         optional: true as const,
@@ -170,7 +164,6 @@ export const coworkerRunCommand = buildCommand({
           brief: "Coworker ID or @username",
           parse: (input: string) => input,
           placeholder: "coworker",
-          optional: true,
         },
       ],
     },
