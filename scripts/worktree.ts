@@ -21,7 +21,7 @@ const dotenv = require("dotenv") as typeof import("dotenv");
 
 type CommandName =
   | "create"
-  | "start"
+  | "setup"
   | "stop"
   | "destroy"
   | "docker-up"
@@ -85,7 +85,7 @@ function printHelp(): void {
   console.log("");
   console.log("Commands:");
   console.log("  create   Create or update the isolated worktree instance");
-  console.log("  start    Start web, worker, and ws in the background");
+  console.log("  setup    Start the Docker stack, prepare the database, and start background processes");
   console.log("  stop     Stop background processes for this worktree");
   console.log("  destroy  Stop processes, drop the worktree DB, and remove local state");
   console.log("  docker-up    Start the worktree-scoped Docker stack");
@@ -478,7 +478,7 @@ async function withAdminClient<T>(connectionString: string, fn: (client: Client)
   } catch (error) {
     if (isDatabaseConnectionError(error)) {
       fail(
-        `database is unavailable at ${redactConnectionString(connectionString)}. Start the worktree Docker stack with 'bun run worktree:docker-up' and retry.`,
+        `database is unavailable at ${redactConnectionString(connectionString)}. Run 'bun run worktree:setup' to start the Docker stack and retry.`,
       );
     }
     throw error;
@@ -640,6 +640,31 @@ function runInheritedCommand(command: string, args: string[], cwd: string, env?:
   }
 }
 
+function ensureDockerDaemonAvailable(): void {
+  const whichResult = spawnSync("docker", ["--version"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (whichResult.status !== 0) {
+    fail("cannot start worktree because Docker is not installed or not on PATH");
+  }
+
+  const infoResult = spawnSync("docker", ["info"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (infoResult.status !== 0) {
+    const output = infoResult.stderr?.trim() || infoResult.stdout?.trim();
+    fail(
+      `cannot start worktree because Docker is not running${
+        output ? `: ${output}` : ""
+      }`,
+    );
+  }
+}
+
 function printStatusEndpoints(metadata: InstanceMetadata): void {
   const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
   const databaseUrl = new URL(metadata.databaseUrl);
@@ -675,6 +700,7 @@ function runDockerCompose(metadata: InstanceMetadata, args: string[]): void {
 
 async function dockerUpInstance(): Promise<void> {
   const metadata = await resolveMetadata();
+  ensureDockerDaemonAvailable();
   runDockerCompose(metadata, ["up", "-d"]);
   console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   printStatusEndpoints(metadata);
@@ -1214,6 +1240,30 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
   fail(`Timed out waiting for ${url}`);
 }
 
+async function waitForDatabaseReady(connectionString: string, timeoutMs: number): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const client = new Client({ connectionString });
+    try {
+      await client.connect();
+      await client.query("select 1");
+      await client.end();
+      return;
+    } catch {
+      try {
+        await client.end();
+      } catch {
+        // Ignore shutdown errors while polling for readiness.
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  fail(`Timed out waiting for database at ${redactConnectionString(connectionString)}`);
+}
+
 async function runDbPush(metadata: InstanceMetadata): Promise<void> {
   const result = spawnSync("bun", ["run", "--shell", "system", "--cwd", "apps/web", "db:push"], {
     cwd: metadata.repoRoot,
@@ -1664,6 +1714,16 @@ async function startInstance(): Promise<void> {
   console.log(`[worktree] logs ${logsDir(createdMetadata.instanceRoot)}`);
 }
 
+async function setupInstance(): Promise<void> {
+  const metadata = await resolveMetadata();
+  ensureDockerDaemonAvailable();
+  runDockerCompose(metadata, ["up", "-d"]);
+  console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
+  printStatusEndpoints(metadata);
+  await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
+  await startInstance();
+}
+
 async function devInstance(): Promise<void> {
   const metadata = await createInstance();
   const env = buildWorktreeRuntimeEnv(metadata);
@@ -1794,8 +1854,8 @@ async function main(): Promise<void> {
     case "create":
       await createInstance();
       return;
-    case "start":
-      await startInstance();
+    case "setup":
+      await setupInstance();
       return;
     case "docker-up":
       await dockerUpInstance();

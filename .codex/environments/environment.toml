@@ -8,14 +8,7 @@ set -euo pipefail
 cd "$CODEX_WORKTREE_PATH"
 
 bun install
-if command -v docker >/dev/null 2>&1; then
-  bun run worktree:docker-up
-fi
-bun run worktree:start
-
-eval "$(bun run worktree:env)"
-export APP_URL
-export AGENT_BROWSER_SESSION
+bun run worktree:setup
 '''
 
 [cleanup]

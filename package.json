@@ -44,7 +44,7 @@
     "db:studio:staging": "bun --env-file=.env run --cwd apps/web db:studio:staging",
     "worktree": "bun scripts/worktree.ts",
     "worktree:create": "bun scripts/worktree.ts create",
-    "worktree:start": "bun scripts/worktree.ts start",
+    "worktree:setup": "bun scripts/worktree.ts setup",
     "worktree:stop": "bun scripts/worktree.ts stop",
     "worktree:destroy": "bun scripts/worktree.ts destroy",
     "worktree:status": "bun scripts/worktree.ts status",

@@ -38,26 +38,24 @@ Example:
 From inside the worktree:
 
 ```bash
-bun run worktree:docker-up
-bun run worktree:create
-bun run worktree:start
+bun run worktree:setup
 ```
 
-This starts the worktree-scoped Docker services first, then creates the isolated worktree metadata, database, env file, and starts the web, worker, and WS processes for that worktree.
+This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it starts the worktree-scoped Docker services, waits for Postgres to become ready, creates the isolated worktree metadata, database, and env file, and starts the web, worker, and WS processes for that worktree.
 
-Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including Docker Compose, `worktree:start`, `worktree:dev`, and `bun run cli ...`.
+Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including `worktree:setup`, `worktree:dev`, and `bun run cli ...`.
 
-## Start a worktree Docker stack
+## Start only the Docker stack
 
-If the worktree also needs its own local Postgres, Redis, MinIO, and observability services, use the worktree-aware Docker command instead of plain `docker compose up`:
+If you only want the worktree-scoped Docker services without starting the app processes:
 
 ```bash
 bun run worktree:docker-up
 ```
 
-That command resolves the worktree slot first, then starts Compose with the worktree-specific ports, project name, passwords, and volumes.
+## Stop the worktree Docker stack
 
-To stop that stack:
+Use the worktree-aware Docker teardown command instead of plain `docker compose down`:
 
 ```bash
 bun run worktree:docker-down
@@ -76,16 +74,7 @@ bun run worktree:env
 
 It also shows the exact `.env` path currently backing the worktree.
 
-`worktree:env` prints the full derived environment for the worktree, including:
-
-- `DATABASE_URL`
-- `REDIS_URL`
-- `AWS_ENDPOINT_URL`
-- `CMDCLAW_POSTGRES_PORT`
-- `CMDCLAW_REDIS_PORT`
-- `CMDCLAW_MINIO_API_PORT`
-- `CMDCLAW_MINIO_CONSOLE_PORT`
-- `CMDCLAW_COMPOSE_PROJECT`
+`worktree:env` prints the full derived environment for the worktree, including `DATABASE_URL`, `REDIS_URL`, `AWS_ENDPOINT_URL`, and the derived worktree ports.
 
 ## Important rule
 
@@ -98,10 +87,10 @@ docker compose -f docker/compose/dev.yml up -d
 For a worktree checkout, use:
 
 ```bash
-bun run worktree:docker-up
+bun run worktree:setup
 ```
 
-Otherwise Compose will use the shared root `.env` values and you can still get port collisions.
+Otherwise the worktree runtime will not be provisioned correctly and you can still get port collisions.
 
 ## Run the CLI in a worktree
 
@@ -110,8 +99,6 @@ When you run the root CLI script from inside a worktree, the generated root `.en
 Example:
 
 ```bash
-bun run worktree:docker-up
-bun run worktree:create
-bun run worktree:start
+bun run worktree:setup
 bun run cli chat --message "hi" --model openai/gpt-5.4-mini
 ```
