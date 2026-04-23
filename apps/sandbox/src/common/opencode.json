@@ -28,8 +28,7 @@
       "type": "local",
       "command": [
         "executor",
-        "mcp",
-        "--stdio"
+        "mcp"
       ],
       "enabled": true
     }

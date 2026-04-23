@@ -4,7 +4,7 @@ import {
   type WorkspaceExecutorNativeMcpOauthBootstrapSource,
 } from "../../executor/workspace-sources";
 import { createHash } from "node:crypto";
-import type { SandboxHandle } from "../core/types";
+import type { RuntimeMcpServer, SandboxHandle } from "../core/types";
 
 const EXECUTOR_HOSTNAME = "127.0.0.1";
 const EXECUTOR_PORT = 8788;
@@ -20,6 +20,7 @@ const EXECUTOR_OAUTH_CACHE_PATH = "oauth-reconcile-cache.json";
 const EXECUTOR_OAUTH_SECRET_CONCURRENCY = 3;
 const EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY = 1;
 const EXECUTOR_OAUTH_REFRESH_CONCURRENCY = 3;
+const EXECUTOR_SANDBOX_SECRET_PROVIDER = "file";
 
 type LegacyExecutorSourceKind = "mcp" | "openapi";
 
@@ -202,6 +203,7 @@ export type ExecutorSandboxBootstrap = {
   baseUrl: string;
   homeDirectory: string;
   instructions: string;
+  sessionMcpServers: RuntimeMcpServer[];
 };
 
 export type ExecutorSandboxPreparation = ExecutorSandboxBootstrap & {
@@ -455,6 +457,7 @@ async function upsertExecutorScopedSecret(input: {
       id: input.secretId,
       name: input.name,
       value: input.value,
+      provider: EXECUTOR_SANDBOX_SECRET_PROVIDER,
     },
     timeoutMs: 15_000,
     label: `Executor secret upsert (${input.secretId})`,
@@ -816,7 +819,7 @@ export async function prepareExecutorInSandbox(input: {
     `- \`curl -fsS ${EXECUTOR_BASE_URL}/api/scope\``,
     `- \`EXECUTOR_HOME=${homeDirectory} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIRECTORY} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIRECTORY} executor tools sources --base-url ${EXECUTOR_BASE_URL}\``,
     `- \`EXECUTOR_HOME=${homeDirectory} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIRECTORY} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIRECTORY} executor tools search "latest linear issues" --base-url ${EXECUTOR_BASE_URL}\``,
-    "OpenCode still reaches Executor through the local MCP command `executor mcp --stdio`.",
+    "OpenCode still reaches Executor through the local MCP command `executor mcp`.",
     "Connected workspace sources in this sandbox:",
     ...bootstrap.sources.map(
       (source) =>
@@ -846,6 +849,18 @@ export async function prepareExecutorInSandbox(input: {
     baseUrl: EXECUTOR_BASE_URL,
     homeDirectory,
     instructions: lines.join("\n"),
+    sessionMcpServers: [
+      {
+        type: "stdio",
+        name: "executor",
+        command: "executor",
+        args: ["mcp"],
+        env: Object.entries(executorCommandEnv).map(([name, value]) => ({
+          name,
+          value,
+        })),
+      },
+    ],
     finalize,
   };
 }

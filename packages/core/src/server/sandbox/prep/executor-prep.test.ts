@@ -392,6 +392,11 @@ describe("prepareExecutorInSandbox", () => {
     ).toBe(true);
     expect(
       vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
+        command.includes('"provider":"file"'),
+      ),
+    ).toBe(true);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
         command.includes("/api/scopes/scope-1/mcp/sources/linear"),
       ),
     ).toBe(true);

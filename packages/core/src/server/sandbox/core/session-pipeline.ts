@@ -41,7 +41,9 @@ export async function runConversationSessionPipeline(input: {
   options?: ConversationRuntimeOptions;
 }): Promise<ConversationRuntimeResult> {
   const sandboxInit = await runConversationSandboxPipeline(input);
-  const agentInit = await sandboxInit.completeAgentInit();
+  const agentInit = await sandboxInit.completeAgentInit({
+    sessionMcpServers: input.options?.sessionMcpServers,
+  });
 
   return {
     sandbox: sandboxInit.sandbox,
@@ -86,7 +88,7 @@ export async function runConversationSandboxPipeline(input: {
       runtimeHarness: input.selection.runtimeHarness,
       runtimeProtocolVersion: input.selection.runtimeProtocolVersion,
     },
-    completeAgentInit: async (): Promise<ConversationRuntimeAgentInitResult> => {
+    completeAgentInit: async (agentInitInput): Promise<ConversationRuntimeAgentInitResult> => {
       const agentResult = await completeSessionInitForCloudProvider(
         input.selection.sandboxProvider,
         result,
@@ -95,6 +97,7 @@ export async function runConversationSandboxPipeline(input: {
           title: input.options?.title,
           replayHistory: input.options?.replayHistory,
           allowSnapshotRestore: input.options?.allowSnapshotRestore,
+          sessionMcpServers: agentInitInput?.sessionMcpServers ?? input.options?.sessionMcpServers,
           onLifecycle: input.options?.onLifecycle,
           telemetry: input.options?.telemetry,
         },

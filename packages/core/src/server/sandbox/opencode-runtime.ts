@@ -9,6 +9,10 @@ import { createSandboxOpencodeClient } from "./runtime/runtime-client/opencode";
 
 export const OPENCODE_PORT = 4096;
 export const SANDBOX_AGENT_PORT = 2468;
+const EXECUTOR_HOME = "/tmp/cmdclaw-executor/default";
+const EXECUTOR_SCOPE_DIR = `${EXECUTOR_HOME}/scope`;
+const EXECUTOR_DATA_DIR = `${EXECUTOR_HOME}/data`;
+const OPENCODE_CONFIG_PATH = "/app/opencode.json";
 
 function joinUrlPath(baseUrl: string, path: string): string {
   const parsed = new URL(baseUrl);
@@ -34,7 +38,7 @@ export function getSandboxServerBackgroundStartCommand(input: {
     return `export SANDBOX_ID=${input.sandboxId} && cd /app && nohup sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT} >/tmp/opencode.log 2>&1 &`;
   }
 
-  return `export SANDBOX_ID=${input.sandboxId} && cd /app && nohup opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0 >/tmp/opencode.log 2>&1 &`;
+  return `export SANDBOX_ID=${input.sandboxId} OPENCODE_CONFIG=${OPENCODE_CONFIG_PATH} EXECUTOR_HOME=${EXECUTOR_HOME} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIR} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIR} && cd /app && nohup opencode serve --port ${OPENCODE_PORT} --hostname 0.0.0.0 >/tmp/opencode.log 2>&1 &`;
 }
 
 export function getSandboxServerPort(model: string): number {

@@ -38,6 +38,27 @@ export type RuntimePromptPart =
   | { type: "text"; text: string }
   | { type: "file"; filename?: string; mime: string; url: string };
 
+export type RuntimeMcpServer =
+  | {
+      type: "stdio";
+      name: string;
+      command: string;
+      args: Array<string>;
+      env: Array<{
+        name: string;
+        value: string;
+      }>;
+    }
+  | {
+      type: "http" | "sse";
+      name: string;
+      url: string;
+      headers: Array<{
+        name: string;
+        value: string;
+      }>;
+    };
+
 export type RuntimeToolState =
   | { status: "pending" }
   | { status: "running"; input?: Record<string, unknown> }
@@ -193,6 +214,7 @@ export interface ConversationRuntimeOptions {
   title?: string;
   replayHistory?: boolean;
   allowSnapshotRestore?: boolean;
+  sessionMcpServers?: RuntimeMcpServer[];
   onLifecycle?: SessionLifecycleCallback;
   telemetry?: Record<string, unknown>;
   sandboxProviderOverride?: "e2b" | "daytona" | "docker";
@@ -216,7 +238,9 @@ export interface ConversationRuntimeAgentInitResult {
 export interface ConversationRuntimeSandboxInitResult {
   sandbox: SandboxHandle;
   metadata: RuntimeSelection;
-  completeAgentInit: () => Promise<ConversationRuntimeAgentInitResult>;
+  completeAgentInit: (input?: {
+    sessionMcpServers?: RuntimeMcpServer[];
+  }) => Promise<ConversationRuntimeAgentInitResult>;
 }
 
 export interface ConversationRuntimeResult {

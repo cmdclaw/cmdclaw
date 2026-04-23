@@ -6406,10 +6406,25 @@ class GenerationManager {
         );
       }, initWarnAfterMs);
 
+      let resolveExecutorSessionMcpServers:
+        | ((value: import("../sandbox/core/types").RuntimeMcpServer[] | undefined) => void)
+        | null = null;
+      let rejectExecutorSessionMcpServers: ((reason?: unknown) => void) | null = null;
+      const executorSessionMcpServersPromise = new Promise<
+        import("../sandbox/core/types").RuntimeMcpServer[] | undefined
+      >((resolve, reject) => {
+        resolveExecutorSessionMcpServers = resolve;
+        rejectExecutorSessionMcpServers = reject;
+      });
+
       const runtimeSessionPromise = (async () => {
         try {
+          const sessionMcpServers =
+            runtimeMetadata?.runtimeHarness === "opencode"
+              ? await executorSessionMcpServersPromise
+              : undefined;
           const session = await withTimeout(
-            runtimeInit.completeAgentInit(),
+            runtimeInit.completeAgentInit({ sessionMcpServers }),
             remainingPreparingTimeoutMs(),
             buildPreparingTimeoutMessage(),
           );
@@ -6588,6 +6603,7 @@ class GenerationManager {
             },
           });
           executorInstructions = executorBootstrap?.instructions ?? null;
+          resolveExecutorSessionMcpServers?.(executorBootstrap?.sessionMcpServers);
           return async () => {
             try {
               const result = executorBootstrap?.finalize
@@ -6620,6 +6636,7 @@ class GenerationManager {
           };
         } catch (error) {
           console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
+          rejectExecutorSessionMcpServers?.(error);
           completeExecutorPrepare();
           throw new ExecutorPromptReadyError(error);
         }
