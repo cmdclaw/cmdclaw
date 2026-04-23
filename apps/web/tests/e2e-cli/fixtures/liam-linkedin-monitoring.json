@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "exportedAt": "2026-04-22T19:23:20.464Z",
+  "coworker": {
+    "name": "liam-linkedin-monitoring",
+    "description": "linkedin question monitoring",
+    "username": "liam-linkedin-monitoring",
+    "status": "on",
+    "triggerType": "schedule",
+    "prompt": "# LinkedIn Creator Content Monitoring\n\n## Mission\nTrack a curated list of LinkedIn creators and produce a weekly content intelligence digest focused on what performed best and what should be replicated in my own content strategy.\n\n## Integrations to use\n- Use **LinkedIn** to review creator posts\n- Use **Notion** to save the weekly digest\n\n## Creators to monitor\n- Eric Djavid — https://www.linkedin.com/in/eric-djavid-2154b991/\n- Louis Adam — https://www.linkedin.com/in/louis-adam1/\n- Brent Dykes — https://www.linkedin.com/in/brentdykes/\n- Sebastian Hewing — https://www.linkedin.com/in/sebastianhewing/\n\n## Workflow\n1. Review the listed LinkedIn creators and inspect their recent posts from the last 7 days when possible.\n2. Identify the **top 5 best-performing posts overall** across the tracked creators for the week.\n3. For each selected post, capture the strongest available performance signals from LinkedIn, such as:\n   - impressions or views\n   - reactions / likes\n   - comments\n   - reposts\n   - posting date\n   - creator name\n   - post URL if available\n4. Analyze **why the post performed well**, covering where possible:\n   - hook quality\n   - topic relevance\n   - post format\n   - writing style and structure\n   - timing\n   - CTA\n   - credibility signals\n   - audience resonance\n5. Turn the analysis into **actionable recommendations** for my own content strategy. Focus on specific patterns I can apply or test next week.\n6. Save the full digest to Notion.\n\n## Output format\nCreate a Notion page titled:\n`LinkedIn Creator Content Monitoring – YYYY-MM-DD`\n\nUse this structure:\n\n### Weekly Summary\n- 3-5 bullets on the main patterns across the top posts\n\n### Top 5 Posts\nFor each post, include:\n- Rank\n- Creator\n- Post link\n- Post date\n- Available metrics (impressions/views, reactions, comments, reposts)\n- 2-4 sentence summary of the post\n- Why it performed well\n- What I should replicate or test\n\n### Recommendations for My Content Strategy\n- 5-10 concrete recommendations\n- Separate recommendations into:\n  - Hooks to test\n  - Formats to use\n  - Topics/themes to explore\n  - CTA ideas\n  - Timing/posting patterns\n\n### Gaps / Caveats\n- Note any creators or posts where metrics were unavailable or incomplete\n- If performance metrics are limited, state that clearly and use visible engagement/activity as a proxy instead\n\n## Rules\n- Prioritize accuracy over speculation\n- Do not invent metrics that are not visible\n- If fewer than 5 strong posts are available, include fewer and explain why\n- If no relevant recent posts are found, write a short Notion page stating that and stop\n- Keep recommendations concrete, non-generic, and tied to observed examples",
+    "model": "openai/gpt-5.4",
+    "authSource": "shared",
+    "promptDo": null,
+    "promptDont": null,
+    "autoApprove": true,
+    "toolAccessMode": "selected",
+    "allowedIntegrations": [
+      "linkedin",
+      "slack",
+      "notion"
+    ],
+    "allowedCustomIntegrations": [],
+    "allowedExecutorSourceIds": [],
+    "allowedSkillSlugs": [],
+    "schedule": {
+      "type": "interval",
+      "intervalMinutes": 60
+    }
+  },
+  "documents": []
+}

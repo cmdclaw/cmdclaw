@@ -330,6 +330,15 @@ export type CoworkerCreateResult = {
   status: string;
 };
 
+export type CoworkerUpdateInput = {
+  id: string;
+  status?: "on" | "off";
+};
+
+export type CoworkerUpdateResult = {
+  success: boolean;
+};
+
 export type CoworkerTriggerResult = {
   coworkerId: string;
   runId: string;
@@ -443,6 +452,8 @@ export interface CmdclawApiClient {
     list(): Promise<CoworkerSummary[]>;
     get(input: { id: string }): Promise<CoworkerDetails>;
     create(input: CoworkerCreateInput): Promise<CoworkerCreateResult>;
+    update(input: CoworkerUpdateInput): Promise<CoworkerUpdateResult>;
+    importDefinition(input: { definitionJson: string }): Promise<CoworkerCreateResult>;
     trigger(input: { id: string; payload?: unknown }): Promise<CoworkerTriggerResult>;
     getRun(input: { id: string }): Promise<CoworkerRun>;
     listRuns(input: { coworkerId: string; limit: number }): Promise<CoworkerRunSummary[]>;
@@ -557,6 +568,8 @@ export interface CoworkerRunner {
   list(): Promise<CoworkerSummary[]>;
   get(reference: string): Promise<CoworkerDetails>;
   create(input: CoworkerCreateInput): Promise<CoworkerCreateResult>;
+  update(input: CoworkerUpdateInput): Promise<CoworkerUpdateResult>;
+  importDefinition(definitionJson: string): Promise<CoworkerCreateResult>;
   run(reference: string, payload?: unknown): Promise<CoworkerTriggerResult>;
   logs(runId: string): Promise<CoworkerRun>;
 }

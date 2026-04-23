@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   assertExitOk,
+  buildCliCommandArgs,
   commandTimeoutMs,
   ensureCliAuth,
   liveEnabled,
@@ -25,39 +26,37 @@ describe.runIf(liveEnabled)("@live CLI coworkers", () => {
       const prompt = `${coworkerInstruction}\nInclude this token somewhere in your final answer: ${marker}`;
 
       const created = await runBunCommand([
-        "run",
-        "cmdclaw",
-        "--",
-        "coworker",
-        "create",
-        "--name",
-        name,
-        "--trigger",
-        "manual",
-        "--prompt",
-        prompt,
-        "--auto-approve",
+        ...buildCliCommandArgs(
+          "coworker",
+          "create",
+          "--name",
+          name,
+          "--trigger",
+          "manual",
+          "--prompt",
+          prompt,
+          "--auto-approve",
+        ),
       ]);
 
       assertExitOk(created, "coworker create");
       const coworkerId = requireMatch(created.stdout, /id:\s+([^\s]+)/, created.stdout);
 
       const triggered = await runBunCommand([
-        "run",
-        "cmdclaw",
-        "--",
-        "coworker",
-        "run",
-        coworkerId,
-        "--payload",
-        '{"source":"cli-live-test"}',
+        ...buildCliCommandArgs(
+          "coworker",
+          "run",
+          coworkerId,
+          "--payload",
+          '{"source":"cli-live-test"}',
+        ),
       ]);
 
       assertExitOk(triggered, "coworker run");
       const runId = requireMatch(triggered.stdout, /run id:\s+([^\s]+)/, triggered.stdout);
 
       const logs = await runBunCommand(
-        ["run", "cmdclaw", "--", "coworker", "logs", runId, "--watch", "--watch-interval", "2"],
+        [...buildCliCommandArgs("coworker", "logs", runId, "--watch", "--watch-interval", "2")],
         Math.max(responseTimeoutMs, commandTimeoutMs),
       );
 

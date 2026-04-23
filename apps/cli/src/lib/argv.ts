@@ -14,6 +14,8 @@ const KEBAB_FLAG_ALIASES = new Map<string, string>([
   ["--chaos-approval-park-after", "--chaosApprovalParkAfter"],
   ["--attach-generation", "--attachGeneration"],
   ["--no-validate", "--noValidate"],
+  ["--watch-interval", "--watchInterval"],
+  ["--json-coworker", "--jsonCoworker"],
 ]);
 
 export function normalizeCmdclawArgv(argv: string[]): string[] {
