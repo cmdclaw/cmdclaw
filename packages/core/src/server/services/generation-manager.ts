@@ -6406,23 +6406,23 @@ class GenerationManager {
         );
       }, initWarnAfterMs);
 
-      let resolveExecutorSessionMcpServers:
-        | ((value: import("../sandbox/core/types").RuntimeMcpServer[] | undefined) => void)
-        | null = null;
-      let rejectExecutorSessionMcpServers: ((reason?: unknown) => void) | null = null;
-      const executorSessionMcpServersPromise = new Promise<
+      let resolveExecutorSessionMcpServers: (
+        value: import("../sandbox/core/types").RuntimeMcpServer[] | undefined,
+      ) => void = () => {};
+      let rejectExecutorSessionMcpServers: (reason?: unknown) => void = () => {};
+      const executorSessionMcpServersPromise: Promise<
         import("../sandbox/core/types").RuntimeMcpServer[] | undefined
-      >((resolve, reject) => {
-        resolveExecutorSessionMcpServers = resolve;
-        rejectExecutorSessionMcpServers = reject;
-      });
+      > =
+        runtimeMetadata?.runtimeHarness === "opencode"
+          ? new Promise((resolve, reject) => {
+              resolveExecutorSessionMcpServers = resolve;
+              rejectExecutorSessionMcpServers = reject;
+            })
+          : Promise.resolve(undefined);
 
       const runtimeSessionPromise = (async () => {
         try {
-          const sessionMcpServers =
-            runtimeMetadata?.runtimeHarness === "opencode"
-              ? await executorSessionMcpServersPromise
-              : undefined;
+          const sessionMcpServers = await executorSessionMcpServersPromise;
           const session = await withTimeout(
             runtimeInit.completeAgentInit({ sessionMcpServers }),
             remainingPreparingTimeoutMs(),
@@ -6603,7 +6603,7 @@ class GenerationManager {
             },
           });
           executorInstructions = executorBootstrap?.instructions ?? null;
-          resolveExecutorSessionMcpServers?.(executorBootstrap?.sessionMcpServers);
+          resolveExecutorSessionMcpServers(executorBootstrap?.sessionMcpServers);
           return async () => {
             try {
               const result = executorBootstrap?.finalize
@@ -6636,7 +6636,7 @@ class GenerationManager {
           };
         } catch (error) {
           console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
-          rejectExecutorSessionMcpServers?.(error);
+          rejectExecutorSessionMcpServers(error);
           completeExecutorPrepare();
           throw new ExecutorPromptReadyError(error);
         }
