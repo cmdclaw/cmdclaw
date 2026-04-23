@@ -13,6 +13,8 @@ import { createRequire } from "node:module";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import net from "node:net";
 
+import { buildWorktreeStackConfig, formatWorktreeStackSlot } from "./worktree-stack";
+
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { Client } = require("pg") as typeof import("pg");
 const { serializeSignedCookie } = require("better-call") as typeof import("better-call");
@@ -32,6 +34,7 @@ type InstanceMetadata = {
   instanceId: string;
   repoRoot: string;
   instanceRoot: string;
+  stackSlot: number;
   appPort: number;
   wsPort: number;
   appUrl: string;
@@ -137,7 +140,7 @@ function loadSharedEnv(repoRoot: string): string {
 
   for (const [key, value] of Object.entries(parsed)) {
     if (process.env[key] === undefined) {
-      process.env[key] = value;
+      process.env[key] = String(value);
     }
   }
 
@@ -181,6 +184,28 @@ function buildQueueName(instanceId: string): string {
 
 function buildRedisNamespace(instanceId: string): string {
   return `instance:${slugify(instanceId)}:`;
+}
+
+function parseStackSlot(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 99) {
+    return null;
+  }
+
+  return value;
+}
+
+function resolveWorktreeRepoRoots(repoRoot: string): string[] {
+  const worktreeList = runCommand("git", ["worktree", "list", "--porcelain"], repoRoot);
+  return Array.from(
+    new Set(
+      worktreeList
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("worktree "))
+        .map((line) => line.slice("worktree ".length))
+        .filter(Boolean),
+    ),
+  );
 }
 
 function ensureDir(path: string): void {
@@ -322,10 +347,52 @@ async function allocatePorts(instanceId: string): Promise<{ appPort: number; wsP
   fail("Unable to allocate free ports for this worktree instance");
 }
 
+function allocateStackSlot(repoRoot: string): number {
+  const occupiedSlots = new Set<number>();
+
+  for (const candidateRepoRoot of resolveWorktreeRepoRoots(repoRoot)) {
+    if (candidateRepoRoot === repoRoot) {
+      continue;
+    }
+
+    const slot = parseStackSlot(loadMetadataForRepoRoot(candidateRepoRoot)?.stackSlot);
+    if (slot !== null) {
+      occupiedSlots.add(slot);
+    }
+  }
+
+  for (let slot = 1; slot <= 99; slot += 1) {
+    if (!occupiedSlots.has(slot)) {
+      return slot;
+    }
+  }
+
+  fail("Unable to allocate a free two-digit worktree stack slot");
+}
+
 function deriveDatabaseUrl(baseDatabaseUrl: string, databaseName: string): string {
   const url = new URL(baseDatabaseUrl);
   url.pathname = `/${databaseName}`;
   return url.toString();
+}
+
+function resolvePostgresPassword(): string {
+  return process.env.DATABASE_PASSWORD?.trim() || process.env.DB_PASSWORD?.trim() || "postgres";
+}
+
+function buildPostgresBaseUrl(port: number, databaseName = "postgres"): string {
+  const url = new URL("postgresql://127.0.0.1");
+  url.username = "postgres";
+  url.password = resolvePostgresPassword();
+  url.port = String(port);
+  url.pathname = `/${databaseName}`;
+  return url.toString();
+}
+
+function buildPostgresAdminUrl(metadata: InstanceMetadata): string {
+  return buildPostgresBaseUrl(
+    buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot).postgresPort,
+  );
 }
 
 async function withAdminClient<T>(connectionString: string, fn: (client: Client) => Promise<T>): Promise<T> {
@@ -353,7 +420,7 @@ function quoteIdentifier(value: string): string {
 }
 
 async function ensureDatabase(metadata: InstanceMetadata): Promise<void> {
-  const adminUrl = process.env.DATABASE_URL ?? DEFAULT_BASE_DATABASE_URL;
+  const adminUrl = buildPostgresAdminUrl(metadata);
   await withAdminClient(adminUrl, async (client) => {
     const existing = await client.query("select 1 from pg_database where datname = $1", [
       metadata.databaseName,
@@ -367,7 +434,7 @@ async function ensureDatabase(metadata: InstanceMetadata): Promise<void> {
 }
 
 async function dropDatabase(metadata: InstanceMetadata): Promise<void> {
-  const adminUrl = process.env.DATABASE_URL ?? DEFAULT_BASE_DATABASE_URL;
+  const adminUrl = buildPostgresAdminUrl(metadata);
   await withAdminClient(adminUrl, async (client) => {
     await client.query(
       `
@@ -386,6 +453,14 @@ async function dropDatabase(metadata: InstanceMetadata): Promise<void> {
 function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
   const instanceRuntimeDir = runtimeDir(metadata.instanceRoot);
   const instanceAppUrl = metadata.appUrl;
+  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const databaseUrl = new URL(metadata.databaseUrl);
+  const bucketName = process.env.AWS_S3_BUCKET_NAME?.trim() || "cmdclaw-documents";
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim() || "minioadmin";
+  const secretAccessKey =
+    process.env.AWS_SECRET_ACCESS_KEY?.trim() ||
+    process.env.S3_SECRET_ACCESS_KEY?.trim() ||
+    "minioadmin";
 
   return {
     PORT: String(metadata.appPort),
@@ -397,10 +472,43 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     PLAYWRIGHT_BASE_URL: instanceAppUrl,
     E2E_AUTH_STATE_PATH: join(instanceRuntimeDir, "playwright", "user.json"),
     DATABASE_URL: metadata.databaseUrl,
+    REDIS_URL: `redis://127.0.0.1:${stack.redisPort}`,
+    AWS_ENDPOINT_URL: `http://127.0.0.1:${stack.minioApiPort}`,
+    AWS_DEFAULT_REGION: process.env.AWS_DEFAULT_REGION ?? "us-east-1",
+    AWS_ACCESS_KEY_ID: accessKeyId,
+    AWS_SECRET_ACCESS_KEY: secretAccessKey,
+    AWS_S3_BUCKET_NAME: bucketName,
+    AWS_S3_FORCE_PATH_STYLE: process.env.AWS_S3_FORCE_PATH_STYLE ?? "true",
     BULLMQ_QUEUE_NAME: metadata.queueName,
     CMDCLAW_INSTANCE_ID: metadata.instanceId,
     CMDCLAW_INSTANCE_ROOT: metadata.instanceRoot,
     CMDCLAW_REDIS_NAMESPACE: metadata.redisNamespace,
+    CMDCLAW_WORKTREE_SLOT: formatWorktreeStackSlot(metadata.stackSlot),
+    CMDCLAW_COMPOSE_PROJECT: stack.composeProjectName,
+    COMPOSE_PROJECT_NAME: stack.composeProjectName,
+    CMDCLAW_POSTGRES_PORT: String(stack.postgresPort),
+    CMDCLAW_REDIS_PORT: String(stack.redisPort),
+    CMDCLAW_MINIO_API_PORT: String(stack.minioApiPort),
+    CMDCLAW_MINIO_CONSOLE_PORT: String(stack.minioConsolePort),
+    CMDCLAW_JAEGER_UI_PORT: String(stack.jaegerUiPort),
+    CMDCLAW_OTEL_GRPC_PORT: String(stack.otelGrpcPort),
+    CMDCLAW_OTEL_HTTP_PORT: String(stack.otelHttpPort),
+    CMDCLAW_POSTGRES_VOLUME: stack.postgresVolume,
+    CMDCLAW_REDIS_VOLUME: stack.redisVolume,
+    CMDCLAW_MINIO_VOLUME: stack.minioVolume,
+    DAYTONA_API_PORT: String(stack.daytonaApiPort),
+    DAYTONA_PROXY_PORT: String(stack.daytonaProxyPort),
+    DAYTONA_SSH_GATEWAY_PORT: String(stack.daytonaSshGatewayPort),
+    DAYTONA_DEX_PORT: String(stack.daytonaDexPort),
+    DAYTONA_API_URL: `http://127.0.0.1:${stack.daytonaApiPort}/api`,
+    DAYTONA_DB_VOLUME: stack.daytonaDbVolume,
+    DAYTONA_DEX_VOLUME: stack.daytonaDexVolume,
+    DAYTONA_REGISTRY_VOLUME: stack.daytonaRegistryVolume,
+    PGHOST: databaseUrl.hostname,
+    PGPORT: databaseUrl.port,
+    PGDATABASE: databaseUrl.pathname.replace(/^\//, ""),
+    PGUSER: decodeURIComponent(databaseUrl.username),
+    PGPASSWORD: decodeURIComponent(databaseUrl.password),
     AGENT_BROWSER_SESSION: agentBrowserSessionName(metadata.instanceId),
   };
 }
@@ -728,20 +836,24 @@ function closeAgentBrowserSession(metadata: InstanceMetadata): void {
   }
 }
 
-function createMetadata(repoRoot: string, appPort: number, wsPort: number): InstanceMetadata {
+function createMetadata(
+  repoRoot: string,
+  appPort: number,
+  wsPort: number,
+  stackSlot: number,
+): InstanceMetadata {
   const instanceId = buildInstanceId(repoRoot);
   const instanceRoot = join(resolveStateRoot(repoRoot), instanceId);
+  const stack = buildWorktreeStackConfig(instanceId, stackSlot);
   const databaseName = buildDatabaseName(instanceId);
-  const databaseUrl = deriveDatabaseUrl(
-    process.env.DATABASE_URL ?? DEFAULT_BASE_DATABASE_URL,
-    databaseName,
-  );
+  const databaseUrl = deriveDatabaseUrl(buildPostgresBaseUrl(stack.postgresPort), databaseName);
   const now = new Date().toISOString();
 
   return {
     instanceId,
     repoRoot,
     instanceRoot,
+    stackSlot,
     appPort,
     wsPort,
     appUrl: buildAppUrl(appPort),
@@ -762,10 +874,14 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   const existing = loadMetadata(instanceRoot);
 
   if (existing) {
+    const stackSlot = parseStackSlot(existing.stackSlot) ?? allocateStackSlot(repoRoot);
+    const stack = buildWorktreeStackConfig(instanceId, stackSlot);
     const updated: InstanceMetadata = {
       ...existing,
       repoRoot,
       instanceRoot,
+      stackSlot,
+      databaseUrl: deriveDatabaseUrl(buildPostgresBaseUrl(stack.postgresPort), existing.databaseName),
       updatedAt: new Date().toISOString(),
     };
     saveMetadata(updated);
@@ -778,7 +894,7 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   ensureDir(runtimeDir(instanceRoot));
 
   const ports = await allocatePorts(instanceId);
-  const metadata = createMetadata(repoRoot, ports.appPort, ports.wsPort);
+  const metadata = createMetadata(repoRoot, ports.appPort, ports.wsPort, allocateStackSlot(repoRoot));
   saveMetadata(metadata);
   writeDerivedEnvFile(metadata);
   return metadata;
@@ -1156,6 +1272,7 @@ async function createInstance(): Promise<InstanceMetadata> {
   saveMetadata({ ...metadata, updatedAt: new Date().toISOString() });
   writeDerivedEnvFile(metadata);
   console.log(`[worktree] instance ${metadata.instanceId}`);
+  console.log(`[worktree] stack slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
   console.log(`[worktree] agent-browser session ${agentBrowserSessionName(metadata.instanceId)}`);
@@ -1352,6 +1469,7 @@ async function showStatus(): Promise<void> {
   const entries = getProcessEntries(metadata);
   console.log(`[worktree] worktree ${metadata.repoRoot}`);
   console.log(`[worktree] instance ${metadata.instanceId}`);
+  console.log(`[worktree] stack slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] port ${metadata.appPort}`);
   console.log(`[worktree] db ${metadata.databaseName}`);
@@ -1374,7 +1492,7 @@ async function showEnv(): Promise<void> {
   const metadata = await resolveMetadata();
   const env = buildDerivedEnv(metadata);
   for (const [key, value] of Object.entries(env)) {
-    console.log(`${key}=${value}`);
+    console.log(`${key}=${JSON.stringify(value)}`);
   }
 }
 

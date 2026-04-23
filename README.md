@@ -82,6 +82,7 @@ More setup guides:
 - [Quickstart](https://docs.cmdclaw.ai/quickstart)
 - [Self-hosting](https://docs.cmdclaw.ai/self-hosting)
 - [Integrations](https://docs.cmdclaw.ai/integrations/overview)
+- [Worktrees](docs/worktree.md)
 
 ## Repo Structure
 

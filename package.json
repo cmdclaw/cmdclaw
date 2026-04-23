@@ -49,6 +49,8 @@
     "worktree:destroy": "bun scripts/worktree.ts destroy",
     "worktree:status": "bun scripts/worktree.ts status",
     "worktree:env": "bun scripts/worktree.ts env",
+    "worktree:docker-up": "bash -lc 'eval \"$(bun run worktree env)\" && docker compose -f docker/compose/dev.yml up -d'",
+    "worktree:docker-down": "bash -lc 'eval \"$(bun run worktree env)\" && docker compose -f docker/compose/dev.yml down'",
     "worktree:bootstrap-user": "bun scripts/worktree.ts bootstrap-user",
     "check:cli": "turbo check --filter=@cmdclaw/cli",
     "cli:e2e:live:record": "bun run --cwd apps/web test:e2e:live:record",
