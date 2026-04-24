@@ -7397,6 +7397,12 @@ class GenerationManager {
           console.warn("[GenerationManager] Failed fallback session.messages fetch:", error);
         }
 
+        await this.refreshCancellationSignal(ctx, { force: true });
+        if (ctx.abortController.signal.aborted) {
+          await this.finishGeneration(ctx, "cancelled");
+          return;
+        }
+
         if (!ctx.assistantContent.trim() && !observedTerminalIdle) {
           const emptyCompletionDiagnostics = await this.collectEmptyCompletionDiagnostics(
             ctx,

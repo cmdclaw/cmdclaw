@@ -8,6 +8,7 @@ import {
   runChatSession,
   DEFAULT_SERVER_URL,
   type CmdclawApiClient,
+  type DoneArtifactsData,
   type StatusChangeMetadata,
 } from "@cmdclaw/client";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
@@ -122,6 +123,57 @@ const MIME_MAP: Record<string, string> = {
   ".json": "application/json",
   ".csv": "text/csv",
 };
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`;
+  }
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function writeTimingSummary(stdout: NodeJS.WriteStream, artifacts?: DoneArtifactsData): void {
+  const timing = artifacts?.timing;
+  if (!timing) {
+    return;
+  }
+
+  stdout.write("[timing] Summary\n");
+  if (timing.generationDurationMs !== undefined) {
+    stdout.write(`  end_to_end_total: ${formatDurationMs(timing.generationDurationMs)}\n`);
+  }
+  if (timing.sandboxStartupDurationMs !== undefined) {
+    stdout.write(
+      `  sandbox_connect_or_create${
+        timing.sandboxStartupMode ? ` (${timing.sandboxStartupMode})` : ""
+      }: ${formatDurationMs(timing.sandboxStartupDurationMs)}\n`,
+    );
+  }
+
+  const phaseDurations = timing.phaseDurationsMs;
+  if (!phaseDurations) {
+    return;
+  }
+
+  const rows: Array<[string, number | undefined]> = [
+    ["sandbox_connect_or_create", phaseDurations.sandboxConnectOrCreateMs],
+    ["opencode_ready", phaseDurations.opencodeReadyMs],
+    ["session_ready", phaseDurations.sessionReadyMs],
+    ["agent_init", phaseDurations.agentInitMs],
+    ["pre_prompt_setup", phaseDurations.prePromptSetupMs],
+    ["wait_for_first_event", phaseDurations.waitForFirstEventMs],
+    ["prompt_to_first_token", phaseDurations.promptToFirstTokenMs],
+    ["generation_to_first_token", phaseDurations.generationToFirstTokenMs],
+    ["prompt_to_first_visible_output", phaseDurations.promptToFirstVisibleOutputMs],
+    ["generation_to_first_visible_output", phaseDurations.generationToFirstVisibleOutputMs],
+  ];
+
+  for (const [label, value] of rows) {
+    if (value === undefined) {
+      continue;
+    }
+    stdout.write(`  ${label}: ${formatDurationMs(value)}\n`);
+  }
+}
 
 type PrintedRuntimeMetadata = {
   runtime?: string;
@@ -775,6 +827,7 @@ async function runOneGeneration(
         }
       }
       if (state.timing) {
+        writeTimingSummary(stdout, result.artifacts);
         for (const line of buildGenerationTimingLines(generationTiming.snapshot())) {
           stdout.write(`${line}\n`);
         }

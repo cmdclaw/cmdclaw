@@ -474,7 +474,7 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
 
       const promptBase =
         process.env.E2E_CHAT_INTERRUPT_PROMPT ??
-        "Print numbers from 1 to 10000, one per line, and do not summarize.";
+        "Use the bash tool to run exactly `sleep 30` and wait for it to finish before replying. Do not summarize early.";
       const prompt = `${promptBase}\nInterrupt token: ${interruptToken}`;
 
       const runPromise = runChatCommand(
@@ -488,6 +488,7 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       });
 
       const client = getCliClient();
+      await sleep(15_000);
       const cancelResult = await client.generation.cancelGeneration({
         generationId: target.generationId,
       });

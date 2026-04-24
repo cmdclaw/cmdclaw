@@ -35,7 +35,7 @@ export const transientRetryDelayMs = Number(process.env.E2E_TRANSIENT_RETRY_DELA
 
 export const expectedUserEmail = "baptiste@heybap.com";
 export const sourceChannelName = "cmdclaw-experiments";
-export const targetChannelName = process.env.E2E_SLACK_TARGET_CHANNEL ?? "e2e-slack-testing";
+export const targetChannelName = process.env.E2E_SLACK_TARGET_CHANNEL ?? "ops-e2e-slack-testing";
 export const echoPrefix = "test message: the previous message is:";
 
 export const questionPrompt =
@@ -319,6 +319,7 @@ export async function runChatMessage(args: {
   questionAnswers?: string[];
   files?: string[];
   sandboxProvider?: SandboxProvider;
+  timing?: boolean;
   timeoutMs?: number;
 }): Promise<CommandResult> {
   const commandArgs = buildCliCommandArgs("chat", "--message", args.message, "--no-validate");
@@ -333,6 +334,10 @@ export async function runChatMessage(args: {
 
   if (args.autoApprove) {
     commandArgs.push("--auto-approve");
+  }
+
+  if (args.timing) {
+    commandArgs.push("--timing");
   }
 
   commandArgs.push("--sandbox", args.sandboxProvider ?? liveSandboxProvider);

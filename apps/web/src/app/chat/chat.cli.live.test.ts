@@ -49,14 +49,14 @@ describe.runIf(liveEnabled)("@live CLI chat", () => {
   );
 
   test(
-    "shows awaiting_auth when asking for latest created Google Sheet",
+    "shows awaiting_auth when asking for latest contact on HubSpot",
     { timeout: Math.max(responseTimeoutMs + 60_000, 240_000) },
     async () => {
       const promptText =
-        process.env.E2E_CHAT_AWAITING_AUTH_PROMPT ?? "what is my latest create google sheet?";
+        process.env.E2E_CHAT_AWAITING_AUTH_PROMPT ?? "what is my latest contact on hubspot?";
       const result = await withIntegrationTokensTemporarilyRemoved({
         email: expectedUserEmail,
-        integrationType: "google_sheets",
+        integrationType: "hubspot",
         run: () =>
           runChatMessage({
             message: promptText,
@@ -65,7 +65,7 @@ describe.runIf(liveEnabled)("@live CLI chat", () => {
           }),
       });
 
-      expect(result.stdout).toContain("[auth_needed] google_sheets");
+      expect(result.stdout).toContain("[auth_needed] hubspot");
       expect(result.stdout).toContain(
         "[auth_action] Browser opened. Complete auth in the browser.",
       );

@@ -92,6 +92,7 @@ describe.runIf(liveEnabled)("@live CLI chat performance", () => {
       const first = await runChatMessage({
         message: `${prompt}\nSeed=${seed}`,
         model: liveModel,
+        timing: true,
         timeoutMs: responseTimeoutMs,
       });
       assertExitOk(first, "chat performance first message");
@@ -108,6 +109,7 @@ describe.runIf(liveEnabled)("@live CLI chat performance", () => {
           conversation: conversationId,
           message: `${prompt}\nFollowupRun=${index + 1}`,
           model: liveModel,
+          timing: true,
           timeoutMs: responseTimeoutMs,
         });
         assertExitOk(followup, `chat performance followup #${index + 1}`);
