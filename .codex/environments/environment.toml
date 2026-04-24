@@ -16,8 +16,5 @@ script = '''
 set -euo pipefail
 cd "$CODEX_WORKTREE_PATH"
 
-if command -v docker >/dev/null 2>&1; then
-  bun run worktree:docker-down || true
-fi
 bun run worktree:destroy || true
 '''

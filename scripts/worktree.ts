@@ -98,7 +98,7 @@ function printHelp(): void {
   console.log("  create   Create or update the isolated worktree instance");
   console.log("  setup    Start the Docker stack, prepare the database, and start background processes");
   console.log("  stop     Stop background processes for this worktree");
-  console.log("  destroy  Stop processes, drop the worktree DB, and remove local state");
+  console.log("  destroy  Stop processes, tear down the Docker stack, and remove local state");
   console.log("  docker-up    Start the worktree-scoped Docker stack");
   console.log("  docker-down  Stop the worktree-scoped Docker stack");
   console.log("  dev      Start web, worker, and ws in the foreground");
@@ -823,6 +823,24 @@ function ensureDockerDaemonAvailable(): void {
   }
 }
 
+function isDockerInstalled(): boolean {
+  const result = spawnSync("docker", ["--version"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return result.status === 0;
+}
+
+function isDockerDaemonReachable(): boolean {
+  const result = spawnSync("docker", ["info"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return result.status === 0;
+}
+
 function printStatusEndpoints(metadata: InstanceMetadata): void {
   const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
   const databaseUrl = new URL(metadata.databaseUrl);
@@ -854,6 +872,87 @@ function runDockerCompose(metadata: InstanceMetadata, args: string[]): void {
     ["compose", "--env-file", resolveWorktreeEnvFile(metadata.repoRoot), "-f", "docker/compose/dev.yml", ...args],
     metadata.repoRoot,
   );
+}
+
+function tryRunDockerCompose(metadata: InstanceMetadata, args: string[]): boolean {
+  const result = spawnSync(
+    "docker",
+    ["compose", "--env-file", resolveWorktreeEnvFile(metadata.repoRoot), "-f", "docker/compose/dev.yml", ...args],
+    {
+      cwd: metadata.repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status === 0) {
+    return true;
+  }
+
+  const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
+  console.warn(
+    `[worktree] docker compose ${args.join(" ")} failed during cleanup: ${output}`,
+  );
+  return false;
+}
+
+function listDockerProjectContainerIds(metadata: InstanceMetadata): string[] {
+  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const result = spawnSync(
+    "docker",
+    ["ps", "-aq", "--filter", `label=com.docker.compose.project=${stack.composeProjectName}`],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function removeDockerProjectContainers(metadata: InstanceMetadata): void {
+  const containerIds = listDockerProjectContainerIds(metadata);
+  if (containerIds.length === 0) {
+    return;
+  }
+
+  const result = spawnSync("docker", ["rm", "-f", ...containerIds], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (result.status !== 0) {
+    const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
+    console.warn(`[worktree] failed to remove leftover Docker containers: ${output}`);
+    return;
+  }
+
+  console.log(
+    `[worktree] removed ${containerIds.length} leftover Docker container${containerIds.length === 1 ? "" : "s"}`,
+  );
+}
+
+function teardownDockerResources(metadata: InstanceMetadata): void {
+  if (!isDockerInstalled()) {
+    console.warn("[worktree] skipping Docker cleanup because docker is not installed");
+    return;
+  }
+
+  if (!isDockerDaemonReachable()) {
+    console.warn("[worktree] skipping Docker cleanup because the Docker daemon is unavailable");
+    return;
+  }
+
+  tryRunDockerCompose(metadata, ["down", "--volumes", "--remove-orphans"]);
+  removeDockerProjectContainers(metadata);
+  console.log(`[worktree] docker stack removed for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
 }
 
 async function dockerUpInstance(): Promise<void> {
@@ -1974,7 +2073,15 @@ async function devInstance(): Promise<void> {
 async function destroyInstance(): Promise<void> {
   const metadata = await resolveMetadata();
   await stopInstance(metadata);
-  await dropDatabase(metadata);
+
+  try {
+    await dropDatabase(metadata);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[worktree] failed to drop database ${metadata.databaseName}: ${message}`);
+  }
+
+  teardownDockerResources(metadata);
   rmSync(metadata.instanceRoot, { recursive: true, force: true });
   console.log("[worktree] removed local state");
 }
