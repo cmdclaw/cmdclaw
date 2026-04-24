@@ -238,6 +238,47 @@ describe("generationRouter", () => {
     });
   });
 
+  it("falls back to the latest active generation when conversation durable state is stale", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      workspaceId: "ws-1",
+      generationStatus: "idle",
+      currentGenerationId: null,
+    });
+    generationFindFirstMock.mockResolvedValue({
+      id: "gen-parked",
+      status: "awaiting_approval",
+      startedAt: new Date("2026-02-25T07:40:22.751Z"),
+      errorMessage: null,
+      completionReason: null,
+      executionPolicy: null,
+      deadlineAt: null,
+      contentParts: null,
+      createdAt: new Date("2026-02-25T07:40:22.751Z"),
+    });
+
+    const result = await generationRouterAny.getActiveGeneration({
+      input: { conversationId: "conv-1" },
+      context,
+    });
+
+    expect(generationFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: expect.any(Array),
+      }),
+    );
+    expect(result).toEqual({
+      generationId: "gen-parked",
+      startedAt: "2026-02-25T07:40:22.751Z",
+      errorMessage: null,
+      pauseReason: null,
+      debugRunDeadlineMs: null,
+      contentParts: null,
+      status: "awaiting_approval",
+    });
+  });
+
   it("returns persisted error message for errored active generation", async () => {
     conversationFindFirstMock.mockResolvedValue({
       id: "conv-1",

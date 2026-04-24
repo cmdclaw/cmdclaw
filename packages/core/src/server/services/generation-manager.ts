@@ -480,6 +480,7 @@ interface GenerationContext {
   isFinalizing?: boolean;
   sandboxSlotLeaseToken?: string;
   sandboxSlotLeaseRenewId?: ReturnType<typeof setInterval>;
+  abortForInterruptPark?: boolean;
 }
 
 type ModelAccessCheckResult =
@@ -2272,6 +2273,7 @@ class GenerationManager {
         if (!latest || latest.status !== "pending") {
           return;
         }
+        activeCtx.abortForInterruptPark = true;
         try {
           await this.parkGenerationForInterrupt(activeCtx, latest);
         } catch (error) {
@@ -2279,6 +2281,7 @@ class GenerationManager {
             activeCtx.abortController.abort();
             return;
           }
+          activeCtx.abortForInterruptPark = false;
           console.error("[GenerationManager] Failed to park approval interrupt:", error);
         }
       })();
@@ -6070,6 +6073,9 @@ class GenerationManager {
       }
 
       if (ctx.abortController.signal.aborted) {
+        if (ctx.abortForInterruptPark) {
+          return;
+        }
         console.info(
           `[GenerationManager][SUMMARY] status=cancelled generationId=${ctx.id} conversationId=${ctx.conversationId} mode=${modeLabel} opencodeEvents=${opencodeEventCount} toolCalls=${opencodeToolCallCount} permissions=${opencodePermissionCount} questions=${opencodeQuestionCount}`,
         );
@@ -7399,6 +7405,9 @@ class GenerationManager {
 
         await this.refreshCancellationSignal(ctx, { force: true });
         if (ctx.abortController.signal.aborted) {
+          if (ctx.abortForInterruptPark) {
+            return;
+          }
           await this.finishGeneration(ctx, "cancelled");
           return;
         }
@@ -7525,6 +7534,9 @@ class GenerationManager {
 
       // Check if aborted
       if (ctx.abortController.signal.aborted) {
+        if (ctx.abortForInterruptPark) {
+          return;
+        }
         console.info(
           `[GenerationManager][SUMMARY] status=cancelled generationId=${ctx.id} conversationId=${ctx.conversationId} durationMs=${Date.now() - ctx.startedAt.getTime()} opencodeEvents=${opencodeEventCount} toolCalls=${opencodeToolCallCount} permissions=${opencodePermissionCount} questions=${opencodeQuestionCount} stagedUploads=${stagedUploadCount} uploadedFiles=${uploadedSandboxFileCount}`,
         );

@@ -9,11 +9,43 @@ import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observ
 import { db } from "@cmdclaw/db/client";
 import { generation, conversation, generationInterrupt } from "@cmdclaw/db/schema";
 import { eventIterator, ORPCError } from "@orpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { detectMessageLanguage } from "@/server/utils/detect-message-language";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess } from "../workspace-access";
+
+const activeGenerationStatuses = [
+  "running",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+] as const;
+
+type ActiveGenerationStatus = (typeof activeGenerationStatuses)[number];
+
+const activeConversationStatuses = new Set([
+  "generating",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+]);
+
+function isActiveGenerationStatus(
+  status: string | null | undefined,
+): status is ActiveGenerationStatus {
+  return (
+    status !== null &&
+    status !== undefined &&
+    (activeGenerationStatuses as readonly string[]).includes(status)
+  );
+}
+
+function mapGenerationStatusToConversationStatus(
+  status: ActiveGenerationStatus,
+): "generating" | "awaiting_approval" | "awaiting_auth" | "paused" {
+  return status === "running" ? "generating" : status;
+}
 
 // Schema for generation events (same structure as GenerationEvent type)
 const generationEventPayloadSchema = z.discriminatedUnion("type", [
@@ -934,10 +966,36 @@ const getActiveGeneration = protectedProcedure
     let pauseReason: string | null = null;
     let debugRunDeadlineMs: number | null = null;
     let contentParts: unknown[] | null = null;
-    if (conv.currentGenerationId) {
-      const currentGeneration = await db.query.generation.findFirst({
-        where: eq(generation.id, conv.currentGenerationId),
+    let activeGenerationId = conv.currentGenerationId;
+    let activeStatus = conv.generationStatus;
+    let currentGeneration = activeGenerationId
+      ? await db.query.generation.findFirst({
+          where: eq(generation.id, activeGenerationId),
+          columns: {
+            id: true,
+            status: true,
+            startedAt: true,
+            errorMessage: true,
+            completionReason: true,
+            executionPolicy: true,
+            deadlineAt: true,
+            contentParts: true,
+          },
+        })
+      : null;
+
+    const durableStateLooksActive =
+      typeof activeStatus === "string" && activeConversationStatuses.has(activeStatus);
+    if (!durableStateLooksActive || !currentGeneration) {
+      const fallbackGeneration = await db.query.generation.findFirst({
+        where: and(
+          eq(generation.conversationId, conv.id),
+          inArray(generation.status, activeGenerationStatuses),
+        ),
+        orderBy: [desc(generation.startedAt), desc(generation.id)],
         columns: {
+          id: true,
+          status: true,
           startedAt: true,
           errorMessage: true,
           completionReason: true,
@@ -946,42 +1004,47 @@ const getActiveGeneration = protectedProcedure
           contentParts: true,
         },
       });
-      startedAt = currentGeneration?.startedAt?.toISOString() ?? null;
-      errorMessage = currentGeneration?.errorMessage ?? null;
-      pauseReason =
-        conv.generationStatus === "paused" ? (currentGeneration?.completionReason ?? null) : null;
-      const executionPolicy = currentGeneration?.executionPolicy as
-        | { debugRunDeadlineMs?: unknown }
-        | null
-        | undefined;
-      debugRunDeadlineMs =
-        typeof executionPolicy?.debugRunDeadlineMs === "number"
-          ? executionPolicy.debugRunDeadlineMs
-          : conv.generationStatus === "paused" &&
-              currentGeneration?.completionReason === "run_deadline" &&
-              currentGeneration.startedAt instanceof Date &&
-              currentGeneration.deadlineAt instanceof Date
-            ? Math.max(
-                0,
-                currentGeneration.deadlineAt.getTime() - currentGeneration.startedAt.getTime(),
-              )
-            : null;
-      contentParts =
-        conv.generationStatus === "paused" &&
-        currentGeneration?.completionReason === "run_deadline" &&
-        Array.isArray(currentGeneration.contentParts)
-          ? currentGeneration.contentParts
-          : null;
+      if (isActiveGenerationStatus(fallbackGeneration?.status)) {
+        activeGenerationId = fallbackGeneration.id ?? activeGenerationId;
+        activeStatus = mapGenerationStatusToConversationStatus(fallbackGeneration.status);
+        currentGeneration = fallbackGeneration;
+      }
     }
 
+    startedAt = currentGeneration?.startedAt?.toISOString() ?? null;
+    errorMessage = currentGeneration?.errorMessage ?? null;
+    pauseReason = activeStatus === "paused" ? (currentGeneration?.completionReason ?? null) : null;
+    const executionPolicy = currentGeneration?.executionPolicy as
+      | { debugRunDeadlineMs?: unknown }
+      | null
+      | undefined;
+    debugRunDeadlineMs =
+      typeof executionPolicy?.debugRunDeadlineMs === "number"
+        ? executionPolicy.debugRunDeadlineMs
+        : activeStatus === "paused" &&
+            currentGeneration?.completionReason === "run_deadline" &&
+            currentGeneration.startedAt instanceof Date &&
+            currentGeneration.deadlineAt instanceof Date
+          ? Math.max(
+              0,
+              currentGeneration.deadlineAt.getTime() - currentGeneration.startedAt.getTime(),
+            )
+          : null;
+    contentParts =
+      activeStatus === "paused" &&
+      currentGeneration?.completionReason === "run_deadline" &&
+      Array.isArray(currentGeneration.contentParts)
+        ? currentGeneration.contentParts
+        : null;
+
     return {
-      generationId: conv.currentGenerationId,
+      generationId: activeGenerationId,
       startedAt,
       errorMessage,
       pauseReason,
       debugRunDeadlineMs,
       contentParts,
-      status: conv.generationStatus,
+      status: activeStatus,
     };
   });
 

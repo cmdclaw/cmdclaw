@@ -4917,7 +4917,7 @@ describe("generationManager transitions", () => {
     expect(finishSpy).toHaveBeenCalledWith(ctx, "error");
   });
 
-  it("persists the runtime session as soon as agent init completes before pre-prompt work finishes", async () => {
+  it("persists the runtime active binding before pre-prompt work finishes and later stores the session id", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
     vi.mocked(getCliEnvForUser).mockResolvedValue({});
@@ -4974,7 +4974,7 @@ describe("generationManager transitions", () => {
         expect.objectContaining({
           runtimeId: "runtime-1",
           sandboxId: "sandbox-1",
-          sessionId: "session-1",
+          sessionId: null,
           sandboxProvider: "e2b",
           runtimeHarness: "opencode",
           runtimeProtocolVersion: "opencode-v2",
@@ -4986,6 +4986,17 @@ describe("generationManager transitions", () => {
     memoryDeferred.resolve([]);
     await runPromise;
 
+    expect(updateRuntimeSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeId: "runtime-1",
+        sandboxId: "sandbox-1",
+        sessionId: "session-1",
+        sandboxProvider: "e2b",
+        runtimeHarness: "opencode",
+        runtimeProtocolVersion: "opencode-v2",
+        status: "active",
+      }),
+    );
     expect(promptMock).toHaveBeenCalledTimes(1);
     expect(finishSpy).toHaveBeenCalledWith(expect.anything(), "completed");
   });
