@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-tagging
+  group: prod-release
   cancel-in-progress: false
 
 jobs:
