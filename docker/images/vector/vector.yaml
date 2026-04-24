@@ -91,7 +91,7 @@ sinks:
       - app_logs
       - otlp_logs_for_victoria
     method: post
-    uri: http://${CMDCLAW_VICTORIA_LOGS_HOSTPORT:?cmdclaw victoria logs hostport is required}/insert/jsonline?_stream_fields=service,env,level&_msg_field=message,event&_time_field=ts
+    uri: http://${CMDCLAW_VICTORIA_LOGS_HOST:?cmdclaw victoria logs host is required}:9428/insert/jsonline?_stream_fields=service,env,level&_msg_field=message,event&_time_field=ts
     request:
       headers:
         content-type: application/stream+json
@@ -105,7 +105,7 @@ sinks:
     inputs:
       - app_otlp.metrics
       - vector_internal_metrics
-    endpoint: http://${CMDCLAW_VICTORIA_METRICS_HOSTPORT:?cmdclaw victoria metrics hostport is required}/api/v1/write
+    endpoint: http://${CMDCLAW_VICTORIA_METRICS_HOST:?cmdclaw victoria metrics host is required}:8428/api/v1/write
     healthcheck:
       enabled: false
 
@@ -116,6 +116,6 @@ sinks:
       - daytona_otlp_traces.traces
     protocol:
       type: http
-      uri: http://${CMDCLAW_VICTORIA_TRACES_HOSTPORT:?cmdclaw victoria traces hostport is required}/insert/opentelemetry/v1/traces
+      uri: http://${CMDCLAW_VICTORIA_TRACES_HOST:?cmdclaw victoria traces host is required}:10428/insert/opentelemetry/v1/traces
       encoding:
         codec: otlp

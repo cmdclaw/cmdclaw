@@ -67,7 +67,7 @@ projects:
             numInstances: 1
             image:
               url: victoriametrics/victoria-metrics:v1.140.0
-            dockerCommand: --storageDataPath=/victoria-metrics-data
+            dockerCommand: /victoria-metrics-prod -storageDataPath=/victoria-metrics-data
             disk:
               name: cmdclaw-victoria-metrics-data
               mountPath: /victoria-metrics-data
@@ -81,7 +81,7 @@ projects:
             numInstances: 1
             image:
               url: victoriametrics/victoria-logs:v1.48.0
-            dockerCommand: --storageDataPath=/victoria-logs-data
+            dockerCommand: /victoria-logs-prod -storageDataPath=/victoria-logs-data
             disk:
               name: cmdclaw-victoria-logs-data
               mountPath: /victoria-logs-data
@@ -95,7 +95,7 @@ projects:
             numInstances: 1
             image:
               url: victoriametrics/victoria-traces:v0.8.0
-            dockerCommand: --storageDataPath=/victoria-traces-data
+            dockerCommand: /victoria-traces-prod -storageDataPath=/victoria-traces-data
             disk:
               name: cmdclaw-victoria-traces-data
               mountPath: /victoria-traces-data
@@ -110,21 +110,21 @@ projects:
             dockerContext: docker/images/vector
             dockerfilePath: docker/images/vector/Dockerfile
             envVars:
-              - key: CMDCLAW_VICTORIA_METRICS_HOSTPORT
+              - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-metrics-staging
-                  property: hostport
-              - key: CMDCLAW_VICTORIA_LOGS_HOSTPORT
+                  property: host
+              - key: CMDCLAW_VICTORIA_LOGS_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-logs-staging
-                  property: hostport
-              - key: CMDCLAW_VICTORIA_TRACES_HOSTPORT
+                  property: host
+              - key: CMDCLAW_VICTORIA_TRACES_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-traces-staging
-                  property: hostport
+                  property: host
 
           - type: pserv
             name: cmdclaw-alertmanager-staging
@@ -148,16 +148,16 @@ projects:
             dockerContext: docker/images/vmalert
             dockerfilePath: docker/images/vmalert/Dockerfile
             envVars:
-              - key: CMDCLAW_VICTORIA_METRICS_HOSTPORT
+              - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-metrics-staging
-                  property: hostport
-              - key: CMDCLAW_ALERTMANAGER_HOSTPORT
+                  property: host
+              - key: CMDCLAW_ALERTMANAGER_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-alertmanager-staging
-                  property: hostport
+                  property: host
 
           - type: web
             name: cmdclaw-grafana-staging
@@ -185,26 +185,26 @@ projects:
                 value: "true"
               - key: GF_PLUGINS_PREINSTALL_SYNC
                 value: victoriametrics-logs-datasource
-              - key: CMDCLAW_VICTORIA_METRICS_HOSTPORT
+              - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-metrics-staging
-                  property: hostport
-              - key: CMDCLAW_VICTORIA_LOGS_HOSTPORT
+                  property: host
+              - key: CMDCLAW_VICTORIA_LOGS_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-logs-staging
-                  property: hostport
-              - key: CMDCLAW_VICTORIA_TRACES_HOSTPORT
+                  property: host
+              - key: CMDCLAW_VICTORIA_TRACES_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-victoria-traces-staging
-                  property: hostport
-              - key: CMDCLAW_ALERTMANAGER_HOSTPORT
+                  property: host
+              - key: CMDCLAW_ALERTMANAGER_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-alertmanager-staging
-                  property: hostport
+                  property: host
 
           - type: web
             name: cmdclaw-web-staging
@@ -239,11 +239,15 @@ projects:
                 value: cmdclaw-documents
               - key: AWS_S3_FORCE_PATH_STYLE
                 value: "true"
-              - key: CMDCLAW_VECTOR_HOSTPORT
+              - key: CMDCLAW_VECTOR_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-vector-staging
-                  property: hostport
+                  property: host
+              - key: CMDCLAW_VECTOR_LOG_PORT
+                value: "8686"
+              - key: CMDCLAW_VECTOR_OTLP_HTTP_PORT
+                value: "4318"
               - key: SANDBOX_AGENT_RUNTIME
                 value: opencode
               - key: SANDBOX_DEFAULT
@@ -281,11 +285,15 @@ projects:
                 value: cmdclaw-documents
               - key: AWS_S3_FORCE_PATH_STYLE
                 value: "true"
-              - key: CMDCLAW_VECTOR_HOSTPORT
+              - key: CMDCLAW_VECTOR_HOST
                 fromService:
                   type: pserv
                   name: cmdclaw-vector-staging
-                  property: hostport
+                  property: host
+              - key: CMDCLAW_VECTOR_LOG_PORT
+                value: "8686"
+              - key: CMDCLAW_VECTOR_OTLP_HTTP_PORT
+                value: "4318"
               - key: SANDBOX_AGENT_RUNTIME
                 value: opencode
               - key: SANDBOX_DEFAULT
