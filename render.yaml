@@ -18,8 +18,10 @@
 # - The MinIO service is public because presigned URLs must be reachable from the
 #   browser. Your other Render services can still reach it over the private network.
 # - Create the `cmdclaw-documents` bucket once after the first deploy.
-# - The observability services stay on the private network except Grafana. Web
-#   and worker export telemetry to Vector via private-network host + port env vars.
+# - The observability services stay on the private network except Grafana, which
+#   remains a public Render web service unless you explicitly recreate it as a
+#   private service. Web and worker export telemetry to Vector via
+#   private-network host + port env vars.
 
 previews:
   generation: "off"
@@ -32,7 +34,7 @@ projects:
           - name: cmdclaw-postgres-staging
             region: frankfurt
             plan: basic-256mb
-            postgresMajorVersion: "16"
+            postgresMajorVersion: "18"
             ipAllowList: []
 
         services:
@@ -181,11 +183,9 @@ projects:
               - key: GF_SERVER_HTTP_PORT
                 value: "10000"
               - key: GF_AUTH_ANONYMOUS_ENABLED
-                value: "true"
-              - key: GF_AUTH_ANONYMOUS_ORG_ROLE
-                value: Admin
+                value: "false"
               - key: GF_AUTH_DISABLE_LOGIN_FORM
-                value: "true"
+                value: "false"
               - key: GF_PLUGINS_PREINSTALL_SYNC
                 value: victoriametrics-logs-datasource
               - key: CMDCLAW_VICTORIA_METRICS_HOST
