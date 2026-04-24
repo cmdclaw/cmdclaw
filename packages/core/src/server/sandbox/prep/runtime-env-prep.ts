@@ -1,4 +1,5 @@
 import { env } from "../../../env";
+import { resolvePublicCallbackBaseUrl } from "../../../lib/worktree-routing";
 import type { SandboxHandle } from "../core/types";
 
 const RUNTIME_ENV_DIR = "/app/.cmdclaw";
@@ -14,20 +15,12 @@ function quoteShellValue(value: string): string {
 }
 
 export function resolveSandboxRuntimeAppUrl(): string {
-  const configuredUrl = env.E2B_CALLBACK_BASE_URL ?? env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
-  if (!configuredUrl) {
-    return process.env.NODE_ENV !== "production" ? "https://localcan.baptistecolle.com" : "";
-  }
-
-  const parsed = new URL(configuredUrl);
-  if (
-    (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") &&
-    process.env.NODE_ENV !== "production"
-  ) {
-    return "https://localcan.baptistecolle.com";
-  }
-
-  return configuredUrl;
+  return resolvePublicCallbackBaseUrl({
+    callbackBaseUrl: env.E2B_CALLBACK_BASE_URL,
+    appUrl: env.APP_URL,
+    nextPublicAppUrl: env.NEXT_PUBLIC_APP_URL,
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
 
 export function buildSandboxRuntimeEnvFiles(

@@ -19,6 +19,7 @@ import {
   formatWorktreeStackSlot,
   type WorktreeHostPort,
 } from "./worktree-stack";
+import { buildWorktreePublicCallbackBaseUrl } from "../packages/core/src/lib/worktree-routing";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { Client } = require("pg") as typeof import("pg");
@@ -703,6 +704,13 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     WS_PORT: String(metadata.wsPort),
     APP_URL: instanceAppUrl,
     NEXT_PUBLIC_APP_URL: instanceAppUrl,
+    E2B_CALLBACK_BASE_URL: buildWorktreePublicCallbackBaseUrl({
+      instanceId: metadata.instanceId,
+      callbackBaseUrl: process.env.E2B_CALLBACK_BASE_URL,
+      appUrl: process.env.APP_URL,
+      nextPublicAppUrl: process.env.NEXT_PUBLIC_APP_URL,
+      nodeEnv: process.env.NODE_ENV,
+    }),
     CMDCLAW_SERVER_URL: instanceAppUrl,
     PLAYWRIGHT_PORT: String(metadata.appPort),
     PLAYWRIGHT_BASE_URL: instanceAppUrl,

@@ -2,6 +2,7 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { eq, asc, isNotNull } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { env } from "../../env";
+import { resolvePublicCallbackBaseUrl } from "../../lib/worktree-routing";
 import { db } from "@cmdclaw/db/client";
 import { message, conversation, conversationRuntime } from "@cmdclaw/db/schema";
 import type { ProviderAuthSource } from "../../lib/provider-auth-source";
@@ -27,21 +28,12 @@ const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
 const SANDBOX_TIMEOUT_MS = generationLifecyclePolicy.activeSandboxTimeoutMs;
 
 function resolveSandboxAppUrl(): string {
-  const configuredUrl = env.E2B_CALLBACK_BASE_URL ?? env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
-  if (!configuredUrl) {
-    if (process.env.NODE_ENV !== "production") {
-      return "https://localcan.baptistecolle.com";
-    }
-    return "";
-  }
-  const parsed = new URL(configuredUrl);
-  if (
-    (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") &&
-    process.env.NODE_ENV !== "production"
-  ) {
-    return "https://localcan.baptistecolle.com";
-  }
-  return configuredUrl;
+  return resolvePublicCallbackBaseUrl({
+    callbackBaseUrl: env.E2B_CALLBACK_BASE_URL,
+    appUrl: env.APP_URL,
+    nextPublicAppUrl: env.NEXT_PUBLIC_APP_URL,
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
 
 interface SandboxState {

@@ -1,6 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import type { IntegrationType } from "../oauth/config";
 import { env } from "../../env";
+import { resolvePublicCallbackBaseUrl } from "../../lib/worktree-routing";
 import { isSelfHostedEdition } from "../edition";
 import { db } from "@cmdclaw/db/client";
 import { integration, customIntegrationCredential } from "@cmdclaw/db/schema";
@@ -65,8 +66,6 @@ export async function getCliEnvForUser(userId: string): Promise<Record<string, s
   }
 
   const cliEnv: Record<string, string> = {};
-  const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
-
   // Get valid tokens, refreshing any that are expired or about to expire
   // This already filters by enabled integrations
   const tokens = await getValidTokensForUser(userId);
@@ -139,11 +138,13 @@ export async function getCliEnvForUser(userId: string): Promise<Record<string, s
   if (slackRelaySecret) {
     cliEnv.SLACK_BOT_RELAY_SECRET = slackRelaySecret;
   }
-  if (appUrl) {
-    const relayBaseUrl =
-      new URL(appUrl).hostname === "localhost" && process.env.NODE_ENV !== "production"
-        ? "https://localcan.baptistecolle.com"
-        : appUrl;
+  const relayBaseUrl = resolvePublicCallbackBaseUrl({
+    callbackBaseUrl: env.E2B_CALLBACK_BASE_URL,
+    appUrl: env.APP_URL,
+    nextPublicAppUrl: env.NEXT_PUBLIC_APP_URL,
+    nodeEnv: process.env.NODE_ENV,
+  });
+  if (relayBaseUrl) {
     cliEnv.SLACK_BOT_RELAY_URL = `${relayBaseUrl}/api/internal/slack/post-as-bot`;
   }
 

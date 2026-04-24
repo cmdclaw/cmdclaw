@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getValidTokensForUserMock, findIntegrationMock } = vi.hoisted(() => ({
+const { getValidTokensForUserMock, getValidCustomTokensMock, findIntegrationMock, findCustomCredsMock } =
+  vi.hoisted(() => ({
   getValidTokensForUserMock: vi.fn(),
+  getValidCustomTokensMock: vi.fn(),
   findIntegrationMock: vi.fn(),
-}));
+  findCustomCredsMock: vi.fn(),
+  }));
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: {
@@ -11,13 +14,16 @@ vi.mock("@cmdclaw/db/client", () => ({
       integration: {
         findFirst: findIntegrationMock,
       },
+      customIntegrationCredential: {
+        findMany: findCustomCredsMock,
+      },
     },
   },
 }));
 
 vi.mock("./token-refresh", () => ({
   getValidTokensForUser: getValidTokensForUserMock,
-  getValidCustomTokens: vi.fn(),
+  getValidCustomTokens: getValidCustomTokensMock,
 }));
 
 import { getTokensForIntegrations } from "./cli-env";
@@ -26,7 +32,15 @@ describe("getTokensForIntegrations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getValidTokensForUserMock.mockResolvedValue(new Map());
+    getValidCustomTokensMock.mockResolvedValue(new Map());
     findIntegrationMock.mockResolvedValue(null);
+    findCustomCredsMock.mockResolvedValue([]);
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("E2B_CALLBACK_BASE_URL", "");
+    vi.stubEnv("APP_URL", "http://127.0.0.1:3000");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.stubEnv("CMDCLAW_SERVER_SECRET", "server-secret");
+    vi.stubEnv("SLACK_BOT_RELAY_SECRET", "");
   });
 
   it("loads only requested token integrations", async () => {
@@ -45,5 +59,20 @@ describe("getTokensForIntegrations", () => {
       AIRTABLE_ACCESS_TOKEN: "airtable-token",
       OUTLOOK_ACCESS_TOKEN: "outlook-token",
     });
+  });
+
+  it("prefers the callback base for Slack relay urls", async () => {
+    vi.resetModules();
+    vi.stubEnv(
+      "E2B_CALLBACK_BASE_URL",
+      "https://localcan.baptistecolle.com/__worktrees/cmdclaw-a07527aa",
+    );
+    const { getCliEnvForUser } = await import("./cli-env");
+
+    const env = await getCliEnvForUser("user-1");
+
+    expect(env.SLACK_BOT_RELAY_URL).toBe(
+      "https://localcan.baptistecolle.com/__worktrees/cmdclaw-a07527aa/api/internal/slack/post-as-bot",
+    );
   });
 });
