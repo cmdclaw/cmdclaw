@@ -10,9 +10,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
+import { createServer } from "node:net";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
 
-import { buildWorktreeStackConfig, formatWorktreeStackSlot } from "./worktree-stack";
+import {
+  buildWorktreeHostPorts,
+  buildWorktreeStackConfig,
+  formatWorktreeStackSlot,
+  type WorktreeHostPort,
+} from "./worktree-stack";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { Client } = require("pg") as typeof import("pg");
@@ -50,6 +56,10 @@ type InstanceMetadata = {
 type InstanceProcesses = Partial<Record<"web" | "worker" | "ws", number>>;
 
 type DerivedEnv = Record<string, string>;
+type SlotPortState = WorktreeHostPort & {
+  available: boolean;
+  owner: string | null;
+};
 
 type SourceUserRecord = {
   id: string;
@@ -423,7 +433,147 @@ function buildAppPorts(stackSlot: number): { appPort: number; wsPort: number } {
   };
 }
 
-function allocateStackSlot(repoRoot: string): number {
+async function isPortAvailable(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const server = createServer();
+    let finished = false;
+
+    const finish = (value: boolean) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      resolve(value);
+    };
+
+    server.unref();
+    server.once("error", () => {
+      finish(false);
+    });
+    server.listen({ host: "127.0.0.1", port, exclusive: true }, () => {
+      server.close((error) => {
+        finish(error == null);
+      });
+    });
+  });
+}
+
+function describeDockerPortOwner(port: number): string | null {
+  const result = spawnSync(
+    "docker",
+    ["ps", "--filter", `publish=${port}`, "--format", "{{.Names}}"],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const owner = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  return owner ? `docker:${owner}` : null;
+}
+
+function describeListeningPortOwner(port: number): string | null {
+  const result = spawnSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const line = result.stdout
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean)[1];
+
+  if (!line) {
+    return null;
+  }
+
+  const [command, pid, user] = line.split(/\s+/);
+  if (!command) {
+    return null;
+  }
+
+  const details = [
+    pid ? `pid=${pid}` : null,
+    user ? `user=${user}` : null,
+  ].filter(Boolean);
+
+  return details.length > 0 ? `${command} ${details.join(" ")}` : command;
+}
+
+function describePortOwner(port: number): string | null {
+  return describeDockerPortOwner(port) ?? describeListeningPortOwner(port);
+}
+
+async function resolveSlotPortState(slot: number): Promise<SlotPortState[]> {
+  const assignments = buildWorktreeHostPorts(slot);
+  return await Promise.all(
+    assignments.map(async (assignment) => {
+      const available = await isPortAvailable(assignment.port);
+      return {
+        ...assignment,
+        available,
+        owner: available ? null : describePortOwner(assignment.port),
+      };
+    }),
+  );
+}
+
+async function resolveSlotConflicts(slot: number): Promise<SlotPortState[]> {
+  return (await resolveSlotPortState(slot)).filter((entry) => !entry.available);
+}
+
+function formatSlotConflict(conflict: SlotPortState): string {
+  return `${conflict.name}:${conflict.port}${conflict.owner ? ` (${conflict.owner})` : ""}`;
+}
+
+function listDockerProjectContainers(metadata: InstanceMetadata): string[] {
+  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const result = spawnSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      `label=com.docker.compose.project=${stack.composeProjectName}`,
+      "--format",
+      "{{.Names}}\t{{.Status}}",
+    ],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function hasRunningTrackedProcesses(metadata: InstanceMetadata): boolean {
+  return getProcessEntries(metadata).some((entry) => isPidRunning(entry.pid));
+}
+
+function isSlotActivelyOwnedByInstance(metadata: InstanceMetadata): boolean {
+  return hasRunningTrackedProcesses(metadata) || listDockerProjectContainers(metadata).length > 0;
+}
+
+async function allocateStackSlot(repoRoot: string): Promise<number> {
   const occupiedSlots = new Set<number>();
 
   for (const candidateRepoRoot of resolveWorktreeRepoRoots(repoRoot)) {
@@ -438,7 +588,7 @@ function allocateStackSlot(repoRoot: string): number {
   }
 
   for (let slot = 1; slot <= 99; slot += 1) {
-    if (!occupiedSlots.has(slot)) {
+    if (!occupiedSlots.has(slot) && (await resolveSlotConflicts(slot)).length === 0) {
       return slot;
     }
   }
@@ -1125,7 +1275,23 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   const existing = loadMetadata(instanceRoot);
 
   if (existing) {
-    const stackSlot = parseStackSlot(existing.stackSlot) ?? allocateStackSlot(repoRoot);
+    const existingStackSlot = parseStackSlot(existing.stackSlot);
+    let stackSlot = existingStackSlot ?? (await allocateStackSlot(repoRoot));
+
+    if (
+      existingStackSlot !== null &&
+      !isSlotActivelyOwnedByInstance(existing) &&
+      (await resolveSlotConflicts(existingStackSlot)).length > 0
+    ) {
+      const conflicts = await resolveSlotConflicts(existingStackSlot);
+      stackSlot = await allocateStackSlot(repoRoot);
+      console.warn(
+        `[worktree] reallocated stack slot ${formatWorktreeStackSlot(existingStackSlot)} -> ${formatWorktreeStackSlot(
+          stackSlot,
+        )} because ${conflicts.map(formatSlotConflict).join(", ")} is already in use`,
+      );
+    }
+
     const stack = buildWorktreeStackConfig(instanceId, stackSlot);
     const ports = buildAppPorts(stackSlot);
     const updated: InstanceMetadata = {
@@ -1148,7 +1314,7 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   ensureDir(logsDir(instanceRoot));
   ensureDir(runtimeDir(instanceRoot));
 
-  const stackSlot = allocateStackSlot(repoRoot);
+  const stackSlot = await allocateStackSlot(repoRoot);
   const ports = buildAppPorts(stackSlot);
   const metadata = createMetadata(repoRoot, ports.appPort, ports.wsPort, stackSlot);
   saveMetadata(metadata);
@@ -1822,6 +1988,30 @@ async function showStatus(): Promise<void> {
   console.log(`[worktree] root ${metadata.instanceRoot}`);
   console.log(`[worktree] agent-browser session ${agentBrowserSessionName(metadata.instanceId)}`);
   printStatusEndpoints(metadata);
+
+  const dockerContainers = listDockerProjectContainers(metadata);
+  if (dockerContainers.length === 0) {
+    console.log("[worktree] docker none");
+  } else {
+    for (const container of dockerContainers) {
+      console.log(`[worktree] docker ${container}`);
+    }
+  }
+
+  const slotConflicts = await resolveSlotConflicts(metadata.stackSlot);
+  if (slotConflicts.length === 0) {
+    console.log("[worktree] slot health free");
+  } else if (isSlotActivelyOwnedByInstance(metadata)) {
+    console.log("[worktree] slot health active");
+    for (const conflict of slotConflicts) {
+      console.log(`[worktree] slot ${formatSlotConflict(conflict)}`);
+    }
+  } else {
+    console.log("[worktree] slot health conflict");
+    for (const conflict of slotConflicts) {
+      console.log(`[worktree] slot ${formatSlotConflict(conflict)}`);
+    }
+  }
 
   if (entries.length === 0) {
     console.log("[worktree] processes none");

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildWorktreeStackConfig, formatWorktreeStackSlot } from "./worktree-stack";
+import { buildWorktreeHostPorts, buildWorktreeStackConfig, formatWorktreeStackSlot } from "./worktree-stack";
 
 describe("worktree stack config", () => {
   test("formats worktree slots as two digits", () => {
@@ -43,6 +43,30 @@ describe("worktree stack config", () => {
       daytonaDexVolume: "cmdclaw-a1b2c3d4_daytona_dex_data",
       daytonaRegistryVolume: "cmdclaw-a1b2c3d4_daytona_registry_data",
     });
+  });
+
+  test("lists every host port reserved by a slot", () => {
+    expect(buildWorktreeHostPorts(7)).toEqual([
+      { name: "app", port: 3707 },
+      { name: "ws", port: 4707 },
+      { name: "postgres", port: 5407 },
+      { name: "redis", port: 6307 },
+      { name: "minio-api", port: 9107 },
+      { name: "minio-console", port: 9207 },
+      { name: "otel-grpc", port: 43107 },
+      { name: "otel-http", port: 43207 },
+      { name: "vector-logs", port: 8607 },
+      { name: "victoria-metrics", port: 8407 },
+      { name: "victoria-logs", port: 9407 },
+      { name: "victoria-traces", port: 10407 },
+      { name: "alertmanager", port: 9007 },
+      { name: "vmalert", port: 8807 },
+      { name: "grafana", port: 7407 },
+      { name: "daytona-api", port: 3307 },
+      { name: "daytona-proxy", port: 4007 },
+      { name: "daytona-ssh", port: 2207 },
+      { name: "daytona-dex", port: 5507 },
+    ]);
   });
 
   test("rejects out-of-range slots", () => {

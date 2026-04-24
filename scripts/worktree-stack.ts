@@ -32,6 +32,11 @@ export type WorktreeStackConfig = {
   daytonaRegistryVolume: string;
 };
 
+export type WorktreeHostPort = {
+  name: string;
+  port: number;
+};
+
 function assertValidSlot(slot: number): void {
   if (!Number.isInteger(slot) || slot < 1 || slot > 99) {
     throw new Error(`Worktree stack slot must be an integer between 1 and 99, received ${slot}`);
@@ -45,6 +50,32 @@ function port(prefix: number, slot: number): number {
 export function formatWorktreeStackSlot(slot: number): string {
   assertValidSlot(slot);
   return String(slot).padStart(2, "0");
+}
+
+export function buildWorktreeHostPorts(slot: number): WorktreeHostPort[] {
+  const stack = buildWorktreeStackConfig("cmdclaw-slot", slot);
+
+  return [
+    { name: "app", port: port(37, slot) },
+    { name: "ws", port: port(47, slot) },
+    { name: "postgres", port: stack.postgresPort },
+    { name: "redis", port: stack.redisPort },
+    { name: "minio-api", port: stack.minioApiPort },
+    { name: "minio-console", port: stack.minioConsolePort },
+    { name: "otel-grpc", port: stack.otelGrpcPort },
+    { name: "otel-http", port: stack.otelHttpPort },
+    { name: "vector-logs", port: stack.vectorLogPort },
+    { name: "victoria-metrics", port: stack.victoriaMetricsPort },
+    { name: "victoria-logs", port: stack.victoriaLogsPort },
+    { name: "victoria-traces", port: stack.victoriaTracesPort },
+    { name: "alertmanager", port: stack.alertmanagerPort },
+    { name: "vmalert", port: stack.vmalertPort },
+    { name: "grafana", port: stack.grafanaPort },
+    { name: "daytona-api", port: stack.daytonaApiPort },
+    { name: "daytona-proxy", port: stack.daytonaProxyPort },
+    { name: "daytona-ssh", port: stack.daytonaSshGatewayPort },
+    { name: "daytona-dex", port: stack.daytonaDexPort },
+  ];
 }
 
 export function buildWorktreeStackConfig(instanceId: string, slot: number): WorktreeStackConfig {
