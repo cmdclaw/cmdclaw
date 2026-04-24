@@ -16,6 +16,11 @@ export const authLoginCommand = buildCommand({
         optional: true,
         brief: "Persist a provided auth token directly",
       },
+      open: {
+        kind: "boolean",
+        optional: true,
+        brief: "Open auth URLs in the browser automatically",
+      },
     },
     aliases: {
       s: "server",

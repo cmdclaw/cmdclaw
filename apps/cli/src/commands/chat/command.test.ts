@@ -10,6 +10,7 @@ describe("chat command flags", () => {
     expect(flags?.chaosRunDeadline).toBeDefined();
     expect(flags?.chaosApproval).toBeDefined();
     expect(flags?.chaosApprovalParkAfter).toBeDefined();
+    expect(flags?.open).toBeDefined();
     expect(flags?.attach).toBeDefined();
     expect(flags?.attachGeneration).toBeDefined();
     expect(flags?.chromeTrace).toBeUndefined();

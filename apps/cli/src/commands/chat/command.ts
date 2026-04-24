@@ -50,6 +50,11 @@ export const chatCommand = buildCommand({
         optional: true,
         brief: "Auto-approve tool calls",
       },
+      open: {
+        kind: "boolean",
+        optional: true,
+        brief: "Open auth URLs in the browser automatically",
+      },
       chaosRunDeadline: {
         kind: "parsed",
         parse: (input: string) => input,

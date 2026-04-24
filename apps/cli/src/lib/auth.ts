@@ -21,6 +21,10 @@ type AuthenticatedClient = {
   client: CmdclawApiClient;
 };
 
+type LoginOptions = {
+  open?: boolean;
+};
+
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -145,7 +149,10 @@ export async function bootstrapLocalProfile(serverUrl: string): Promise<CmdclawP
   return profile;
 }
 
-export async function loginWithDeviceCode(serverUrl: string): Promise<CmdclawProfile> {
+export async function loginWithDeviceCode(
+  serverUrl: string,
+  options: LoginOptions = {},
+): Promise<CmdclawProfile> {
   console.log(`\nAuthenticating with ${serverUrl}\n`);
 
   const res = await fetch(`${serverUrl}/api/auth/device/code`, {
@@ -178,7 +185,7 @@ export async function loginWithDeviceCode(serverUrl: string): Promise<CmdclawPro
   console.log(`  ${verificationUri}\n`);
   console.log(`  Code: ${data.user_code}\n`);
 
-  if (openUrlInBrowser(verificationUri)) {
+  if (options.open && openUrlInBrowser(verificationUri)) {
     console.log("Opened the browser for you.\n");
   }
 
@@ -232,7 +239,11 @@ export async function loginWithDeviceCode(serverUrl: string): Promise<CmdclawPro
   throw new Error("Device code expired. Please try again.");
 }
 
-export async function login(serverUrlInput?: string, token?: string): Promise<CmdclawProfile> {
+export async function login(
+  serverUrlInput?: string,
+  token?: string,
+  options: LoginOptions = {},
+): Promise<CmdclawProfile> {
   const serverUrl = resolveServerUrl(serverUrlInput);
 
   if (token) {
@@ -245,7 +256,7 @@ export async function login(serverUrlInput?: string, token?: string): Promise<Cm
     return bootstrapLocalProfileAndClose(serverUrl);
   }
 
-  return loginWithDeviceCode(serverUrl);
+  return loginWithDeviceCode(serverUrl, options);
 }
 
 export async function ensureAuthenticatedClient(params?: {

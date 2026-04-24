@@ -4,7 +4,7 @@ import { formatConversationTranscript, getCoworkerRunner } from "./shared";
 type LogsFlags = {
   server?: string;
   watch?: boolean;
-  watchInterval?: number;
+  "watch-interval"?: number;
   json?: boolean;
 };
 
@@ -69,6 +69,6 @@ export default async function (
       return;
     }
 
-    await sleep((flags.watchInterval ?? 2) * 1000);
+    await sleep((flags["watch-interval"] ?? 2) * 1000);
   }
 }

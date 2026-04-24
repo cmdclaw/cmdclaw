@@ -5,7 +5,7 @@ type RunFlags = {
   server?: string;
   payload?: string;
   watch?: boolean;
-  watchInterval?: number;
+  "watch-interval"?: number;
   json?: boolean;
 };
 
@@ -97,7 +97,7 @@ export default async function (
       client,
       result.runId,
       true,
-      flags.watchInterval ?? 2,
+      flags["watch-interval"] ?? 2,
     );
   }
 }

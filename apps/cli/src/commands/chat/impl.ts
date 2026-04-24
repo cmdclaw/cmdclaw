@@ -45,6 +45,7 @@ type ChatFlags = {
   sandbox?: "e2b" | "daytona" | "docker";
   listModels?: boolean;
   autoApprove?: boolean;
+  open?: boolean;
   chaosRunDeadline?: string;
   chaosApproval: "ask" | "defer";
   chaosApprovalParkAfter?: string;
@@ -71,6 +72,7 @@ type ChatState = {
   sandbox?: "e2b" | "daytona" | "docker";
   server?: string;
   autoApprove?: boolean;
+  open: boolean;
   chaosApproval: "ask" | "defer";
   debugRunDeadlineMs?: number;
   debugApprovalHotWaitMs?: number;
@@ -768,7 +770,7 @@ async function runOneGeneration(
           redirectUrl,
         });
         stdout.write(`[auth_url] ${integration}: ${authUrl}\n`);
-        const opened = openUrlInBrowser(authUrl);
+        const opened = state.open ? openUrlInBrowser(authUrl) : false;
         stdout.write(
           opened
             ? "[auth_action] Browser opened. Complete auth in the browser.\n"
@@ -1019,6 +1021,7 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     authSource: flags.authSource,
     sandbox: flags.sandbox,
     autoApprove: flags.autoApprove,
+    open: flags.open ?? false,
     chaosApproval: flags.chaosApproval,
     debugRunDeadlineMs,
     debugApprovalHotWaitMs,

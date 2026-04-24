@@ -45,6 +45,7 @@ type Args = {
   listModels: boolean;
   message?: string;
   model?: string;
+  open: boolean;
   questionAnswers: string[];
   sandboxProvider?: "e2b" | "daytona" | "docker";
   serverUrl?: string;
@@ -82,6 +83,7 @@ function parseArgs(argv: string[]): Args {
     authOnly: false,
     resetAuth: false,
     listModels: false,
+    open: false,
     questionAnswers: [],
   };
 
@@ -133,6 +135,9 @@ function parseArgs(argv: string[]): Args {
         break;
       case "--auto-approve":
         args.autoApprove = true;
+        break;
+      case "--open":
+        args.open = true;
         break;
       case "--no-validate":
         args.validatePersistence = false;
@@ -189,6 +194,7 @@ function printHelp(): void {
   console.log("  --sandbox <e2b|daytona|docker> Override sandbox provider for this generation");
   console.log("  --list-models             List chat model options and exit");
   console.log("  --auto-approve            Auto-approve tool calls");
+  console.log("  --open                    Open auth URLs in the browser automatically");
   console.log("  --no-validate             Skip persisted message validation");
   console.log("  -q, --question-answer <v> Pre-answer OpenCode question prompts (repeatable)");
   console.log("  --auth                    Run auth flow and exit");
@@ -268,7 +274,10 @@ function openUrlInBrowser(url: string): boolean {
   }
 }
 
-async function authenticate(serverUrl: string): Promise<ChatConfig | null> {
+async function authenticate(
+  serverUrl: string,
+  options: { open: boolean },
+): Promise<ChatConfig | null> {
   console.log(`\nAuthenticating with ${serverUrl}\n`);
 
   let deviceCode: string;
@@ -305,6 +314,9 @@ async function authenticate(serverUrl: string): Promise<ChatConfig | null> {
   console.log("Visit the following URL and enter the code:\n");
   console.log(`  ${verificationUri}\n`);
   console.log(`  Code: ${userCode}\n`);
+  if (options.open && openUrlInBrowser(verificationUri)) {
+    console.log("Opened the browser for you.\n");
+  }
   console.log("Waiting for approval...\n");
 
   let pollingInterval = interval * 1000;
@@ -751,7 +763,7 @@ async function runGeneration(
               });
               process.stdout.write(`[auth_url] ${integration}: ${authUrl}\n`);
 
-              const opened = openUrlInBrowser(authUrl);
+              const opened = options.open ? openUrlInBrowser(authUrl) : false;
               process.stdout.write(
                 opened
                   ? "[auth_action] Browser opened. Complete auth in the browser.\n"
@@ -996,7 +1008,7 @@ async function main(): Promise<void> {
     args.authOnly ||
     args.resetAuth
   ) {
-    config = await authenticate(serverUrl);
+    config = await authenticate(serverUrl, { open: args.open });
     if (!config) {
       process.exit(1);
     }

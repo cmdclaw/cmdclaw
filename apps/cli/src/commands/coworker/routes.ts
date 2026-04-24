@@ -145,7 +145,7 @@ export const coworkerRunCommand = buildCommand({
         optional: true as const,
         brief: "Watch run logs after triggering",
       },
-      watchInterval: {
+      "watch-interval": {
         kind: "parsed",
         parse: (input: string) => Number(input),
         optional: true,
@@ -183,7 +183,7 @@ export const coworkerLogsCommand = buildCommand({
         optional: true as const,
         brief: "Watch for new run events",
       },
-      watchInterval: {
+      "watch-interval": {
         kind: "parsed",
         parse: (input: string) => Number(input),
         optional: true,
