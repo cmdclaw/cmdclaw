@@ -39,8 +39,10 @@ Grafana is provisioned in code with the VictoriaMetrics, VictoriaLogs, VictoriaT
 To send Slack notifications from local alerts, set:
 
 ```bash
-export ALERTMANAGER_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...'
+export SLACK_BOT_TOKEN='xoxb-...'
 ```
+
+Alertmanager will post directly to `#ops-telemetry-alerts` using Slack's `chat.postMessage` API.
 
 Useful direct queries after `bun run dev` is producing traffic:
 

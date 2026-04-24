@@ -104,17 +104,17 @@ services:
       - -c
       - |
           mkdir -p /etc/alertmanager/secrets
-          if [ -n "$${ALERTMANAGER_SLACK_WEBHOOK_URL:-}" ]; then
-            printf '%s' "$${ALERTMANAGER_SLACK_WEBHOOK_URL}" > /etc/alertmanager/secrets/slack_webhook_url
+          if [ -n "$${SLACK_BOT_TOKEN:-}" ]; then
+            printf '%s' "$${SLACK_BOT_TOKEN}" > /etc/alertmanager/secrets/slack_bot_token
           else
-            : > /etc/alertmanager/secrets/slack_webhook_url
+            : > /etc/alertmanager/secrets/slack_bot_token
           fi
           exec /bin/alertmanager \
             --config.file=/etc/alertmanager/alertmanager.yml \
             --storage.path=/alertmanager \
             --web.listen-address=:9093
     environment:
-      ALERTMANAGER_SLACK_WEBHOOK_URL: ${ALERTMANAGER_SLACK_WEBHOOK_URL:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
     ports:
       - "${CMDCLAW_ALERTMANAGER_PORT:-9093}:9093"
     volumes:
