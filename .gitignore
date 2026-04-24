@@ -27,3 +27,6 @@ experiments/**/__pycache__/
 
 .agent-browser-profiles
 .tmp
+
+plans/*
+!plans/.gitkeep

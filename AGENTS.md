@@ -36,4 +36,4 @@ This repository is organized into several top-level folders. Each folder can hav
 Always prefer Big Bang Rewrite when doing a big refactoring do not get backward compatibility or add fallback logic.
 
 # ExecPlans
-When writing complex features or significant refactors, use an ExecPlan (as described in .agent/PLANS.md) from design to implementation.
+When writing complex features or significant refactors, use an ExecPlan (as described in `.agents/PLANS.md`) from design to implementation. Write each plan as a Markdown file in `plans/`; keep `plans/.gitkeep` tracked and leave other files in that folder ignored unless the user explicitly asks for something else.
