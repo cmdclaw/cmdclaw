@@ -8,7 +8,7 @@
 
 ## Testing workflow
 -  After implementing a feature, test it with `bun run cmdclaw -- chat` when possible.
--  Example chat validation command: `bun run cmdclaw -- chat --message "what's my latest email on gmail?" --model openai/gpt-5.2-codex`
+-  Example chat validation command: `bun run cmdclaw -- chat --message "what's my latest email on gmail?" --model openai/gpt-5.4`
 -  After implementing a coworker feature, or when chat is not enough to cover the user flow, test it with `bun run cmdclaw -- coworker`.
 -  Example coworker validation command: `bun run cmdclaw -- coworker create --name "Email Check" --trigger manual --prompt "check my latest email every hour" --auto-approve`
 -  If `bun run cmdclaw -- chat` is not sufficient to validate the change, clearly report that limitation. If applicable, say how you would change `cmdclaw chat` to support testing this feature.

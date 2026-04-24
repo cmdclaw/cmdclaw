@@ -2501,7 +2501,7 @@ describe("generationManager transitions", () => {
         {
           id: "conv-openai",
           userId: "user-1",
-          model: "openai/gpt-5.2-codex",
+          model: "openai/gpt-5.4",
           autoApprove: false,
           type: "chat",
         },
@@ -2514,7 +2514,7 @@ describe("generationManager transitions", () => {
     await generationManager.startGeneration({
       content: "hi",
       userId: "user-1",
-      model: "openai/gpt-5.2-codex",
+      model: "openai/gpt-5.4",
     });
 
     expect(queueAddMock).toHaveBeenCalledWith(
@@ -2962,7 +2962,7 @@ describe("generationManager transitions", () => {
       {
         id: "conv-new",
         userId: "user-1",
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
         autoApprove: false,
         type: "chat",
       },
@@ -2972,7 +2972,7 @@ describe("generationManager transitions", () => {
       generationManager.startGeneration({
         content: "hello",
         userId: "user-1",
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
       }),
     ).rejects.toThrow(
       "This ChatGPT model requires the shared workspace connection. Ask an admin to reconnect it, then retry.",
@@ -2987,7 +2987,7 @@ describe("generationManager transitions", () => {
         {
           id: "conv-openai-shared",
           userId: "user-1",
-          model: "openai/gpt-5.2-codex",
+          model: "openai/gpt-5.4",
           authSource: "shared",
           autoApprove: false,
           type: "chat",
@@ -2999,7 +2999,7 @@ describe("generationManager transitions", () => {
     await generationManager.startGeneration({
       content: "hello",
       userId: "user-1",
-      model: "openai/gpt-5.2-codex",
+      model: "openai/gpt-5.4",
       authSource: "shared",
     });
 
@@ -3071,7 +3071,7 @@ describe("generationManager transitions", () => {
         userId: "user-1",
         autoApprove: true,
         allowedIntegrations: ["github"],
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
       }),
     ).rejects.toThrow(
       "This ChatGPT model requires the shared workspace connection. Ask an admin to reconnect it, then retry.",
@@ -5892,7 +5892,7 @@ describe("generationManager transitions", () => {
       id: "gen-reasoning",
       conversationId: "conv-reasoning",
       backendType: "opencode",
-      model: "openai/gpt-5.2-codex",
+      model: "openai/gpt-5.4",
     });
 
     await mgr.runOpenCodeGeneration(ctx);
@@ -5946,7 +5946,7 @@ describe("generationManager transitions", () => {
         conversationId: "conv-approval",
         runtimeId: "runtime-1",
         userId: "user-1",
-        model: "openai/gpt-5.2-codex",
+        model: "openai/gpt-5.4",
       }),
       "interrupt-approval",
       "allow",
@@ -6020,7 +6020,7 @@ describe("generationManager transitions", () => {
       suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
       status: "awaiting_approval",
       sessionId: undefined,
-      model: "openai/gpt-5.2-codex",
+      model: "openai/gpt-5.4",
       runtimeTurnSeq: 3,
       runtimeCallbackToken: "runtime-token",
     });
@@ -6133,7 +6133,7 @@ describe("generationManager transitions", () => {
       suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
       status: "awaiting_approval",
       sessionId: "session-1",
-      model: "openai/gpt-5.2-codex",
+      model: "openai/gpt-5.4",
       runtimeTurnSeq: 4,
       runtimeCallbackToken: "runtime-token",
       contentParts: [
@@ -6245,7 +6245,7 @@ describe("generationManager transitions", () => {
       suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
       status: "awaiting_auth",
       sessionId: "session-1",
-      model: "openai/gpt-5.2-codex",
+      model: "openai/gpt-5.4",
       runtimeTurnSeq: 4,
       runtimeCallbackToken: "runtime-token",
     });
