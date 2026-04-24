@@ -59,7 +59,7 @@ projects:
               - key: PORT
                 value: "10000"
 
-          - type: pserv
+          - type: web
             name: cmdclaw-victoria-metrics-staging
             runtime: image
             region: frankfurt
@@ -68,12 +68,13 @@ projects:
             image:
               url: victoriametrics/victoria-metrics:v1.140.0
             dockerCommand: /victoria-metrics-prod -storageDataPath=/victoria-metrics-data
+            healthCheckPath: /health
             disk:
               name: cmdclaw-victoria-metrics-data
               mountPath: /victoria-metrics-data
               sizeGB: 2
 
-          - type: pserv
+          - type: web
             name: cmdclaw-victoria-logs-staging
             runtime: image
             region: frankfurt
@@ -82,12 +83,13 @@ projects:
             image:
               url: victoriametrics/victoria-logs:v1.48.0
             dockerCommand: /victoria-logs-prod -storageDataPath=/victoria-logs-data
+            healthCheckPath: /health
             disk:
               name: cmdclaw-victoria-logs-data
               mountPath: /victoria-logs-data
               sizeGB: 2
 
-          - type: pserv
+          - type: web
             name: cmdclaw-victoria-traces-staging
             runtime: image
             region: frankfurt
@@ -96,6 +98,7 @@ projects:
             image:
               url: victoriametrics/victoria-traces:v0.8.0
             dockerCommand: /victoria-traces-prod -storageDataPath=/victoria-traces-data
+            healthCheckPath: /health
             disk:
               name: cmdclaw-victoria-traces-data
               mountPath: /victoria-traces-data
@@ -112,17 +115,17 @@ projects:
             envVars:
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-metrics-staging
                   property: host
               - key: CMDCLAW_VICTORIA_LOGS_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-logs-staging
                   property: host
               - key: CMDCLAW_VICTORIA_TRACES_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-traces-staging
                   property: host
 
@@ -150,7 +153,7 @@ projects:
             envVars:
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-metrics-staging
                   property: host
               - key: CMDCLAW_ALERTMANAGER_HOST
@@ -187,17 +190,17 @@ projects:
                 value: victoriametrics-logs-datasource
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-metrics-staging
                   property: host
               - key: CMDCLAW_VICTORIA_LOGS_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-logs-staging
                   property: host
               - key: CMDCLAW_VICTORIA_TRACES_HOST
                 fromService:
-                  type: pserv
+                  type: web
                   name: cmdclaw-victoria-traces-staging
                   property: host
               - key: CMDCLAW_ALERTMANAGER_HOST
