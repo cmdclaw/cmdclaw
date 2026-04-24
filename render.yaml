@@ -32,7 +32,7 @@ projects:
           - name: cmdclaw-postgres-staging
             region: frankfurt
             plan: basic-256mb
-            postgresMajorVersion: "18"
+            postgresMajorVersion: "16"
             ipAllowList: []
 
         services:
