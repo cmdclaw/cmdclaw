@@ -15,6 +15,7 @@ import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import readline from "node:readline";
 import type { LocalContext } from "../../context";
+import { ensureAuthenticatedClient } from "../../lib/auth";
 import {
   collectScriptedQuestionAnswers,
   parseQuestionApprovalInput,
@@ -27,7 +28,7 @@ import {
   resolveCliModelSelection,
 } from "../../lib/chat-model-source";
 import { resolveCliToolMetadata } from "../../lib/tool-metadata";
-import { createAuthenticatedClient, resolveServerUrl } from "../../lib/client";
+import { resolveServerUrl } from "../../lib/client";
 import { parseChaosDurationMs } from "./chaos";
 import { exportPerfettoTraceForCompletedRun } from "./perfetto-trace";
 import {
@@ -1005,7 +1006,7 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     });
   }
 
-  const { client } = createAuthenticatedClient({
+  const { client } = await ensureAuthenticatedClient({
     serverUrl,
     token: flags.token,
   });

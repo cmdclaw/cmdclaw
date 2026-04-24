@@ -1,8 +1,8 @@
 import { createCoworkerRunner } from "@cmdclaw/client";
-import { createAuthenticatedClient } from "../../lib/client";
+import { ensureAuthenticatedClient } from "../../lib/auth";
 
-export function getCoworkerRunner(params?: { server?: string; token?: string }) {
-  const { client } = createAuthenticatedClient({
+export async function getCoworkerRunner(params?: { server?: string; token?: string }) {
+  const { client } = await ensureAuthenticatedClient({
     serverUrl: params?.server,
     token: params?.token,
   });

@@ -15,8 +15,8 @@ function sleep(ms: number): Promise<void> {
 
 async function printRunLogs(
   stdout: NodeJS.WriteStream,
-  runner: ReturnType<typeof getCoworkerRunner>["runner"],
-  client: ReturnType<typeof getCoworkerRunner>["client"],
+  runner: Awaited<ReturnType<typeof getCoworkerRunner>>["runner"],
+  client: Awaited<ReturnType<typeof getCoworkerRunner>>["client"],
   runId: string,
   watch: boolean,
   watchIntervalSeconds: number,
@@ -76,7 +76,7 @@ export default async function (
   flags: RunFlags,
   reference: string,
 ): Promise<void> {
-  const { runner, client } = getCoworkerRunner({ server: flags.server });
+  const { runner, client } = await getCoworkerRunner({ server: flags.server });
   const result = await runner.run(reference, parsePayload(flags.payload));
 
   if (flags.json) {

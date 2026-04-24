@@ -17,7 +17,7 @@ type CreateFlags = {
 };
 
 export default async function (this: LocalContext, flags: CreateFlags): Promise<void> {
-  const { runner } = getCoworkerRunner({ server: flags.server });
+  const { runner } = await getCoworkerRunner({ server: flags.server });
   const created = await runner.create({
     name: flags.name,
     triggerType: flags.trigger,

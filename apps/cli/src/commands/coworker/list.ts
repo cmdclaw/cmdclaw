@@ -7,7 +7,7 @@ type ListFlags = {
 };
 
 export default async function (this: LocalContext, flags: ListFlags): Promise<void> {
-  const { runner } = getCoworkerRunner({ server: flags.server });
+  const { runner } = await getCoworkerRunner({ server: flags.server });
   const coworkers = await runner.list();
 
   if (flags.json) {

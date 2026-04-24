@@ -1,4 +1,9 @@
-import { createRpcClient, defaultProfileStore, type CmdclawProfile } from "@cmdclaw/client";
+import {
+  createRpcClient,
+  defaultProfileStore,
+  type CmdclawApiClient,
+  type CmdclawProfile,
+} from "@cmdclaw/client";
 import { closePool, db } from "@cmdclaw/db/client";
 import { session, user } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
@@ -9,6 +14,12 @@ import { resolveServerUrl } from "./client";
 const DEFAULT_CHAT_AUTH_EMAIL = "baptiste@heybap.com";
 const DEFAULT_CHAT_AUTH_NAME = "Baptiste";
 const DEFAULT_CLIENT_ID = "cmdclaw-cli";
+
+type AuthenticatedClient = {
+  serverUrl: string;
+  profile: CmdclawProfile;
+  client: CmdclawApiClient;
+};
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -51,6 +62,32 @@ function openUrlInBrowser(url: string): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  if (typeof code === "string" && code === "UNAUTHORIZED") {
+    return true;
+  }
+
+  const message = "message" in error ? error.message : undefined;
+  return typeof message === "string" && message.includes("You must be logged in");
+}
+
+function getLoginInstruction(serverUrl: string): string {
+  return `Run 'bun run cmdclaw -- auth login --server ${serverUrl}' first.`;
+}
+
+async function bootstrapLocalProfileAndClose(serverUrl: string): Promise<CmdclawProfile> {
+  try {
+    return await bootstrapLocalProfile(serverUrl);
+  } finally {
+    await closePool().catch(() => undefined);
+  }
 }
 
 export async function bootstrapLocalProfile(serverUrl: string): Promise<CmdclawProfile> {
@@ -205,14 +242,63 @@ export async function login(serverUrlInput?: string, token?: string): Promise<Cm
   }
 
   if (isLocalServerUrl(serverUrl)) {
-    try {
-      return await bootstrapLocalProfile(serverUrl);
-    } finally {
-      await closePool().catch(() => undefined);
-    }
+    return bootstrapLocalProfileAndClose(serverUrl);
   }
 
   return loginWithDeviceCode(serverUrl);
+}
+
+export async function ensureAuthenticatedClient(params?: {
+  serverUrl?: string;
+  token?: string;
+}): Promise<AuthenticatedClient> {
+  const serverUrl = resolveServerUrl(params?.serverUrl);
+
+  if (params?.token) {
+    const client = createRpcClient(serverUrl, params.token);
+    try {
+      await client.user.me();
+    } catch (error) {
+      if (isUnauthorizedError(error)) {
+        throw new Error(`Provided token is invalid for ${serverUrl}. ${getLoginInstruction(serverUrl)}`);
+      }
+      throw error;
+    }
+    return {
+      serverUrl,
+      profile: { serverUrl, token: params.token },
+      client,
+    };
+  }
+
+  let profile = defaultProfileStore.load(serverUrl);
+  if (!profile?.token) {
+    if (!isLocalServerUrl(serverUrl)) {
+      throw new Error(`Not authenticated for ${serverUrl}. ${getLoginInstruction(serverUrl)}`);
+    }
+
+    profile = await bootstrapLocalProfileAndClose(serverUrl);
+  }
+
+  let client = createRpcClient(serverUrl, profile.token);
+
+  try {
+    await client.user.me();
+  } catch (error) {
+    if (!isUnauthorizedError(error)) {
+      throw error;
+    }
+
+    if (!isLocalServerUrl(serverUrl)) {
+      throw new Error(`Authentication expired or is invalid for ${serverUrl}. ${getLoginInstruction(serverUrl)}`);
+    }
+
+    profile = await bootstrapLocalProfileAndClose(serverUrl);
+    client = createRpcClient(serverUrl, profile.token);
+    await client.user.me();
+  }
+
+  return { serverUrl, profile, client };
 }
 
 export async function authStatus(serverUrlInput?: string): Promise<{

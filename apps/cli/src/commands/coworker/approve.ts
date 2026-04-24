@@ -16,7 +16,7 @@ export default async function (
     throw new Error("Decision must be 'approve' or 'deny'");
   }
 
-  const { runner, client } = getCoworkerRunner({ server: flags.server });
+  const { runner, client } = await getCoworkerRunner({ server: flags.server });
   const run = await runner.logs(runId);
   if (!run.generationId) {
     throw new Error(`Run ${runId} has no active generation for approval.`);

@@ -17,7 +17,7 @@ export default async function (
   flags: LogsFlags,
   runId: string,
 ): Promise<void> {
-  const { runner, client } = getCoworkerRunner({ server: flags.server });
+  const { runner, client } = await getCoworkerRunner({ server: flags.server });
   const seenEventIds = new Set<string>();
   let lastTranscript = "";
   let previousStatus = "";

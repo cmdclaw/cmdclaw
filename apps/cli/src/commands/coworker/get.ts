@@ -11,7 +11,7 @@ export default async function (
   flags: GetFlags,
   reference: string,
 ): Promise<void> {
-  const { runner } = getCoworkerRunner({ server: flags.server });
+  const { runner } = await getCoworkerRunner({ server: flags.server });
   const coworker = await runner.get(reference);
 
   if (flags.json) {
