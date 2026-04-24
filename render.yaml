@@ -19,7 +19,7 @@
 #   browser. Your other Render services can still reach it over the private network.
 # - Create the `cmdclaw-documents` bucket once after the first deploy.
 # - The observability services stay on the private network except Grafana. Web
-#   and worker export telemetry to Vector via `CMDCLAW_VECTOR_HOSTPORT`.
+#   and worker export telemetry to Vector via private-network host + port env vars.
 
 previews:
   generation: "off"
