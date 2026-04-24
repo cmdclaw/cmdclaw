@@ -1,0 +1,63 @@
+apiVersion: 1
+
+datasources:
+  - name: VictoriaMetrics
+    type: prometheus
+    uid: victoriametrics
+    access: proxy
+    url: http://${CMDCLAW_VICTORIA_METRICS_HOSTPORT}
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      alertmanagerUid: alertmanager
+      prometheusType: Prometheus
+      timeInterval: 15s
+      cacheLevel: Low
+
+  - name: VictoriaLogs
+    type: victoriametrics-logs-datasource
+    uid: victorialogs
+    access: proxy
+    url: http://${CMDCLAW_VICTORIA_LOGS_HOSTPORT}
+    editable: false
+    jsonData:
+      logLevelRules:
+        - field: level
+          operator: regex
+          value: error|fatal
+          level: error
+          enabled: true
+        - field: level
+          operator: regex
+          value: warn|warning
+          level: warning
+          enabled: true
+        - field: level
+          operator: regex
+          value: info
+          level: info
+          enabled: true
+
+  - name: VictoriaTraces
+    type: jaeger
+    uid: victoriatraces
+    access: proxy
+    url: http://${CMDCLAW_VICTORIA_TRACES_HOSTPORT}/select/jaeger
+    editable: false
+    jsonData:
+      nodeGraph:
+        enabled: true
+      spanBar:
+        type: Duration
+
+  - name: Alertmanager
+    type: alertmanager
+    uid: alertmanager
+    access: proxy
+    url: http://${CMDCLAW_ALERTMANAGER_HOSTPORT}
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

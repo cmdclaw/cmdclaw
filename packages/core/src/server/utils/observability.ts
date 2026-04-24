@@ -78,7 +78,7 @@ const SERVICE_NAMESPACE = "cmdclaw";
 const INSTRUMENTATION_SCOPE = "cmdclaw.observability";
 const QUEUE_TRACE_CONTEXT_KEY = "__trace_context";
 const CONSOLE_METHODS: ConsoleMethod[] = ["log", "info", "warn", "error"];
-const OBSERVABILITY_HOST = "127.0.0.1";
+const DEFAULT_OBSERVABILITY_HOST = "127.0.0.1";
 const ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment" as const;
 
 const globalState = globalThis as typeof globalThis & {
@@ -122,7 +122,7 @@ function getPendingLogExports(): Set<Promise<void>> {
   return runtimeState.pendingLogExports;
 }
 
-function getPortFromEnv(...names: string[]): string | undefined {
+function getValueFromEnv(...names: string[]): string | undefined {
   for (const name of names) {
     const value = process.env[name]?.trim();
     if (value) {
@@ -133,37 +133,56 @@ function getPortFromEnv(...names: string[]): string | undefined {
   return undefined;
 }
 
-function buildLocalUrl(path: string, ...portEnvNames: string[]): string {
-  const port = getPortFromEnv(...portEnvNames);
+function buildVectorUrl(
+  path: string,
+  options: { fullUrlEnvNames?: string[]; portEnvNames?: string[] } = {},
+): string {
+  const { fullUrlEnvNames = [], portEnvNames = [] } = options;
+
+  const fullUrl = getValueFromEnv(...fullUrlEnvNames);
+  if (fullUrl) {
+    return fullUrl;
+  }
+
+  const hostport = getValueFromEnv("CMDCLAW_VECTOR_HOSTPORT", "CMDCLAW_OBSERVABILITY_HOSTPORT");
+  if (hostport) {
+    return `http://${hostport}${path}`;
+  }
+
+  const host =
+    getValueFromEnv("CMDCLAW_VECTOR_HOST", "CMDCLAW_OBSERVABILITY_HOST") ??
+    DEFAULT_OBSERVABILITY_HOST;
+  const port = getValueFromEnv(...portEnvNames);
   if (port) {
-    return `http://${OBSERVABILITY_HOST}:${port}${path}`;
+    return `http://${host}:${port}${path}`;
   }
 
   if (path === "/logs") {
-    return `http://${OBSERVABILITY_HOST}:8686${path}`;
+    return `http://${host}:8686${path}`;
   }
 
-  return `http://${OBSERVABILITY_HOST}:4318${path}`;
+  return `http://${host}:4318${path}`;
 }
 
 function getVectorLogUrl(): string {
-  return buildLocalUrl("/logs", "CMDCLAW_VECTOR_LOG_PORT");
+  return buildVectorUrl("/logs", {
+    fullUrlEnvNames: ["CMDCLAW_VECTOR_LOG_URL"],
+    portEnvNames: ["CMDCLAW_VECTOR_LOG_PORT"],
+  });
 }
 
 function getVectorTracesUrl(): string {
-  return buildLocalUrl(
-    "/v1/traces",
-    "CMDCLAW_VECTOR_OTLP_HTTP_PORT",
-    "CMDCLAW_OTEL_HTTP_PORT",
-  );
+  return buildVectorUrl("/v1/traces", {
+    fullUrlEnvNames: ["CMDCLAW_VECTOR_TRACES_URL"],
+    portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
+  });
 }
 
 function getVectorMetricsUrl(): string {
-  return buildLocalUrl(
-    "/v1/metrics",
-    "CMDCLAW_VECTOR_OTLP_HTTP_PORT",
-    "CMDCLAW_OTEL_HTTP_PORT",
-  );
+  return buildVectorUrl("/v1/metrics", {
+    fullUrlEnvNames: ["CMDCLAW_VECTOR_METRICS_URL"],
+    portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
+  });
 }
 
 function trimUndefinedAttributes(attributes?: MetricAttributes): Attributes | undefined {

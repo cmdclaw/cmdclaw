@@ -1,7 +1,9 @@
 # Render Blueprint for a staging copy of the current Railway staging stack.
 #
 # Current mapping:
-# - Render manages: web, worker, Postgres, Key Value, and MinIO-backed S3
+# - Render manages: web, worker, Postgres, Key Value, MinIO-backed S3, and the
+#   staging observability stack (VictoriaMetrics, VictoriaLogs, VictoriaTraces,
+#   Vector, Alertmanager, vmalert, and Grafana)
 #
 # Notes:
 # - Keep secrets out of this blueprint and sync them from Infisical after the
@@ -16,6 +18,8 @@
 # - The MinIO service is public because presigned URLs must be reachable from the
 #   browser. Your other Render services can still reach it over the private network.
 # - Create the `cmdclaw-documents` bucket once after the first deploy.
+# - The observability services stay on the private network except Grafana. Web
+#   and worker export telemetry to Vector via `CMDCLAW_VECTOR_HOSTPORT`.
 
 previews:
   generation: "off"
@@ -55,6 +59,153 @@ projects:
               - key: PORT
                 value: "10000"
 
+          - type: pserv
+            name: cmdclaw-victoria-metrics-staging
+            runtime: image
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            image:
+              url: victoriametrics/victoria-metrics:v1.140.0
+            dockerCommand: --storageDataPath=/victoria-metrics-data
+            disk:
+              name: cmdclaw-victoria-metrics-data
+              mountPath: /victoria-metrics-data
+              sizeGB: 2
+
+          - type: pserv
+            name: cmdclaw-victoria-logs-staging
+            runtime: image
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            image:
+              url: victoriametrics/victoria-logs:v1.48.0
+            dockerCommand: --storageDataPath=/victoria-logs-data
+            disk:
+              name: cmdclaw-victoria-logs-data
+              mountPath: /victoria-logs-data
+              sizeGB: 2
+
+          - type: pserv
+            name: cmdclaw-victoria-traces-staging
+            runtime: image
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            image:
+              url: victoriametrics/victoria-traces:v0.8.0
+            dockerCommand: --storageDataPath=/victoria-traces-data
+            disk:
+              name: cmdclaw-victoria-traces-data
+              mountPath: /victoria-traces-data
+              sizeGB: 2
+
+          - type: pserv
+            name: cmdclaw-vector-staging
+            runtime: docker
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            dockerContext: docker/images/vector
+            dockerfilePath: docker/images/vector/Dockerfile
+            envVars:
+              - key: CMDCLAW_VICTORIA_METRICS_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-metrics-staging
+                  property: hostport
+              - key: CMDCLAW_VICTORIA_LOGS_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-logs-staging
+                  property: hostport
+              - key: CMDCLAW_VICTORIA_TRACES_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-traces-staging
+                  property: hostport
+
+          - type: pserv
+            name: cmdclaw-alertmanager-staging
+            runtime: docker
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            dockerContext: docker/images/alertmanager
+            dockerfilePath: docker/images/alertmanager/Dockerfile
+            disk:
+              name: cmdclaw-alertmanager-data
+              mountPath: /alertmanager
+              sizeGB: 1
+
+          - type: pserv
+            name: cmdclaw-vmalert-staging
+            runtime: docker
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            dockerContext: docker/images/vmalert
+            dockerfilePath: docker/images/vmalert/Dockerfile
+            envVars:
+              - key: CMDCLAW_VICTORIA_METRICS_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-metrics-staging
+                  property: hostport
+              - key: CMDCLAW_ALERTMANAGER_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-alertmanager-staging
+                  property: hostport
+
+          - type: web
+            name: cmdclaw-grafana-staging
+            runtime: docker
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            dockerContext: docker/images/grafana
+            dockerfilePath: docker/images/grafana/Dockerfile
+            healthCheckPath: /api/health
+            disk:
+              name: cmdclaw-grafana-data
+              mountPath: /var/lib/grafana
+              sizeGB: 2
+            envVars:
+              - key: PORT
+                value: "10000"
+              - key: GF_SERVER_HTTP_PORT
+                value: "10000"
+              - key: GF_AUTH_ANONYMOUS_ENABLED
+                value: "true"
+              - key: GF_AUTH_ANONYMOUS_ORG_ROLE
+                value: Admin
+              - key: GF_AUTH_DISABLE_LOGIN_FORM
+                value: "true"
+              - key: GF_PLUGINS_PREINSTALL_SYNC
+                value: victoriametrics-logs-datasource
+              - key: CMDCLAW_VICTORIA_METRICS_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-metrics-staging
+                  property: hostport
+              - key: CMDCLAW_VICTORIA_LOGS_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-logs-staging
+                  property: hostport
+              - key: CMDCLAW_VICTORIA_TRACES_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-victoria-traces-staging
+                  property: hostport
+              - key: CMDCLAW_ALERTMANAGER_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-alertmanager-staging
+                  property: hostport
+
           - type: web
             name: cmdclaw-web-staging
             runtime: image
@@ -88,6 +239,11 @@ projects:
                 value: cmdclaw-documents
               - key: AWS_S3_FORCE_PATH_STYLE
                 value: "true"
+              - key: CMDCLAW_VECTOR_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-vector-staging
+                  property: hostport
               - key: SANDBOX_AGENT_RUNTIME
                 value: opencode
               - key: SANDBOX_DEFAULT
@@ -125,6 +281,11 @@ projects:
                 value: cmdclaw-documents
               - key: AWS_S3_FORCE_PATH_STYLE
                 value: "true"
+              - key: CMDCLAW_VECTOR_HOSTPORT
+                fromService:
+                  type: pserv
+                  name: cmdclaw-vector-staging
+                  property: hostport
               - key: SANDBOX_AGENT_RUNTIME
                 value: opencode
               - key: SANDBOX_DEFAULT
