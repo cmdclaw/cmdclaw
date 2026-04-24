@@ -1,5 +1,5 @@
 import { parse } from "dotenv";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -27,19 +27,26 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
-  const result = spawnSync(command, args, {
+async function run(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
+  const child = spawn(command, args, {
     cwd: appRoot,
     env,
     stdio: "inherit",
   });
 
-  if (result.error) {
-    fail(`${command} ${args.join(" ")} failed: ${result.error.message}`);
-  }
+  const status = await new Promise<number | null>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  }).catch((error) => {
+    fail(
+      `${command} ${args.join(" ")} failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  });
 
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  if (status !== 0) {
+    process.exit(status ?? 1);
   }
 }
 
@@ -142,6 +149,10 @@ function buildBaseEnv(): { env: NodeJS.ProcessEnv; worktreeEnvFile: string | nul
   };
 }
 
+function hasWorktreeContext(baseEnv: NodeJS.ProcessEnv, worktreeEnvFile: string | null): boolean {
+  return worktreeEnvFile !== null || Boolean(baseEnv.CMDCLAW_INSTANCE_ROOT?.trim());
+}
+
 export function buildRecordModeEnv(
   baseEnv: NodeJS.ProcessEnv,
   options: { hasWorktreeEnv: boolean },
@@ -175,17 +186,19 @@ function buildStableReuseServerEnv(
   worktreeEnvFile: string | null,
   extraEnv: Partial<NodeJS.ProcessEnv> = {},
 ): NodeJS.ProcessEnv {
+  const useWorktreeServer = hasWorktreeContext(baseEnv, worktreeEnvFile);
+
   return {
     ...baseEnv,
     ...extraEnv,
     PLAYWRIGHT_REUSE_SERVER: extraEnv.PLAYWRIGHT_REUSE_SERVER ?? "1",
     PLAYWRIGHT_SKIP_WEBSERVER:
       extraEnv.PLAYWRIGHT_SKIP_WEBSERVER ??
-      (worktreeEnvFile ? "1" : (baseEnv.PLAYWRIGHT_SKIP_WEBSERVER ?? "0")),
+      (useWorktreeServer ? "1" : (baseEnv.PLAYWRIGHT_SKIP_WEBSERVER ?? "0")),
   };
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const mode = process.argv[2] as Mode | undefined;
   if (!mode) {
     fail(
@@ -194,27 +207,28 @@ function main(): void {
   }
 
   const { env: baseEnv, worktreeEnvFile } = buildBaseEnv();
+  const useWorktreeServer = hasWorktreeContext(baseEnv, worktreeEnvFile);
 
   switch (mode) {
     case "auth":
-      runAuth(baseEnv);
+      await runAuth(baseEnv);
       return;
     case "smoke":
-      runPlaywright({
+      await runPlaywright({
         ...baseEnv,
         PLAYWRIGHT_REUSE_SERVER: baseEnv.PLAYWRIGHT_REUSE_SERVER ?? "1",
       });
       return;
     case "smoke-stable":
-      runPlaywright(buildStableReuseServerEnv(baseEnv, worktreeEnvFile), [
+      await runPlaywright(buildStableReuseServerEnv(baseEnv, worktreeEnvFile), [
         "tests/e2e/auth-smoke.e2e.ts",
         "-g",
         "allows public legal and support routes|does not redirect /api/rpc to login",
       ]);
       return;
     case "live-stable":
-      runAuth(baseEnv);
-      runPlaywright(
+      await runAuth(baseEnv);
+      await runPlaywright(
         buildStableReuseServerEnv(baseEnv, worktreeEnvFile, {
           E2E_LIVE: "1",
         }),
@@ -227,8 +241,8 @@ function main(): void {
       );
       return;
     case "live":
-      runAuth(baseEnv);
-      runPlaywright({
+      await runAuth(baseEnv);
+      await runPlaywright({
         ...baseEnv,
         E2E_LIVE: "1",
         PLAYWRIGHT_REUSE_SERVER: "1",
@@ -238,14 +252,14 @@ function main(): void {
       runAuth(baseEnv);
       {
         const recordEnv = buildRecordModeEnv(baseEnv, {
-          hasWorktreeEnv: worktreeEnvFile !== null,
+          hasWorktreeEnv: useWorktreeServer,
         });
         logRecordMode(worktreeEnvFile, recordEnv);
-        runPlaywright(recordEnv);
+        await runPlaywright(recordEnv);
       }
       return;
     case "prod-stable":
-      runPlaywright(
+      await runPlaywright(
         {
           ...baseEnv,
           PLAYWRIGHT_SKIP_WEBSERVER: "1",
@@ -259,12 +273,12 @@ function main(): void {
       );
       return;
     case "prod":
-      runAuth({
+      await runAuth({
         ...baseEnv,
         PLAYWRIGHT_SKIP_WEBSERVER: "1",
         PLAYWRIGHT_BASE_URL: "https://app.cmdclaw.ai",
       });
-      runPlaywright({
+      await runPlaywright({
         ...baseEnv,
         E2E_LIVE: "1",
         PLAYWRIGHT_SKIP_WEBSERVER: "1",
@@ -272,12 +286,12 @@ function main(): void {
       });
       return;
     case "prod-monitor":
-      runAuth({
+      await runAuth({
         ...baseEnv,
         PLAYWRIGHT_SKIP_WEBSERVER: "1",
         PLAYWRIGHT_BASE_URL: "https://app.cmdclaw.ai",
       });
-      runPlaywright(
+      await runPlaywright(
         {
           ...baseEnv,
           E2E_LIVE: "1",
@@ -291,7 +305,7 @@ function main(): void {
       );
       return;
     case "prod-monitor-stable":
-      runPlaywright(
+      await runPlaywright(
         {
           ...baseEnv,
           PLAYWRIGHT_SKIP_WEBSERVER: "1",
@@ -309,14 +323,14 @@ function main(): void {
       );
       return;
     case "cli-live-stable":
-      runCliLiveStable({
+      await runCliLiveStable({
         ...baseEnv,
         E2E_LIVE: "1",
         CMDCLAW_SERVER_URL: baseEnv.CMDCLAW_SERVER_URL ?? "http://localhost:3000",
       });
       return;
     case "cli-live":
-      runCliLive({
+      await runCliLive({
         ...baseEnv,
         E2E_LIVE: "1",
         CMDCLAW_SERVER_URL: baseEnv.CMDCLAW_SERVER_URL ?? "http://localhost:3000",
@@ -327,21 +341,21 @@ function main(): void {
   }
 }
 
-function runAuth(env: NodeJS.ProcessEnv): void {
-  run("bun", ["scripts/e2e-auth.ts"], env);
+function runAuth(env: NodeJS.ProcessEnv): Promise<void> {
+  return run("bun", ["scripts/e2e-auth.ts"], env);
 }
 
-function runPlaywright(env: NodeJS.ProcessEnv, extraArgs: string[] = []): void {
-  run("bun", ["playwright", "test", ...extraArgs], env);
+function runPlaywright(env: NodeJS.ProcessEnv, extraArgs: string[] = []): Promise<void> {
+  return run("bun", ["playwright", "test", ...extraArgs], env);
 }
 
-function runCliLiveStable(env: NodeJS.ProcessEnv): void {
-  run("bun", ["vitest", "run", "tests/e2e-cli/auth.cli.live.e2e.test.ts"], env);
+function runCliLiveStable(env: NodeJS.ProcessEnv): Promise<void> {
+  return run("bun", ["vitest", "run", "tests/e2e-cli/auth.cli.live.e2e.test.ts"], env);
 }
 
-function runCliLive(env: NodeJS.ProcessEnv): void {
-  run("bun", ["run", "chat:auth"], env);
-  run(
+async function runCliLive(env: NodeJS.ProcessEnv): Promise<void> {
+  await run("bun", ["run", "chat:auth"], env);
+  await run(
     "bun",
     [
       "vitest",
@@ -362,9 +376,9 @@ function runCliLive(env: NodeJS.ProcessEnv): void {
     ],
     env,
   );
-  run("bun", ["run", "--cwd", "../sandbox", "test:live"], env);
+  await run("bun", ["run", "--cwd", "../sandbox", "test:live"], env);
 }
 
 if (import.meta.main) {
-  main();
+  void main().then(() => process.exit(0));
 }

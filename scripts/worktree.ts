@@ -29,6 +29,7 @@ const dotenv = require("dotenv") as typeof import("dotenv");
 type CommandName =
   | "create"
   | "setup"
+  | "start"
   | "stop"
   | "destroy"
   | "docker-up"
@@ -97,6 +98,7 @@ function printHelp(): void {
   console.log("Commands:");
   console.log("  create   Create or update the isolated worktree instance");
   console.log("  setup    Start the Docker stack, prepare the database, and start background processes");
+  console.log("  start    Start or restart background processes for this worktree");
   console.log("  stop     Stop background processes for this worktree");
   console.log("  destroy  Stop processes, tear down the Docker stack, and remove local state");
   console.log("  docker-up    Start the worktree-scoped Docker stack");
@@ -2161,6 +2163,9 @@ async function main(): Promise<void> {
       return;
     case "setup":
       await setupInstance();
+      return;
+    case "start":
+      await startInstance();
       return;
     case "docker-up":
       await dockerUpInstance();

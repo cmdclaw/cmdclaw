@@ -66,9 +66,7 @@ describe.runIf(liveEnabled)("@live CLI chat", () => {
       });
 
       expect(result.stdout).toContain("[auth_needed] hubspot");
-      expect(result.stdout).toContain(
-        "[auth_action] Browser opened. Complete auth in the browser.",
-      );
+      expect(result.stdout).toContain("[auth_action] Open the URL above and complete auth.");
       expect(result.stdout).toContain(
         "[auth_action] Non-interactive mode: cannot submit auth result automatically.",
       );

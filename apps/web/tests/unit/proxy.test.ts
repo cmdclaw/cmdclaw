@@ -1,5 +1,9 @@
 import { NextRequest } from "next/server";
 import { describe, expect, test } from "vitest";
+import {
+  buildWorktreeAutoLoginPath,
+  isWorktreeAutoLoginConfigured,
+} from "@/lib/worktree-auto-login";
 import { proxy } from "@/proxy";
 
 describe("proxy", () => {
@@ -9,7 +13,9 @@ describe("proxy", () => {
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "http://localhost:3000/login?callbackUrl=%2Fchat",
+      isWorktreeAutoLoginConfigured()
+        ? `http://localhost:3000${buildWorktreeAutoLoginPath("/chat", "/chat")}`
+        : "http://localhost:3000/login?callbackUrl=%2Fchat",
     );
   });
 

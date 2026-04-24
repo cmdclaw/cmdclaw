@@ -5,6 +5,8 @@ import { closePool, db } from "@cmdclaw/db/client";
 import { integration, integrationToken, user } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach } from "vitest";
 import { resolveLiveE2EModel } from "../e2e/live-chat-model";
 import {
@@ -34,7 +36,7 @@ export const transientRetryCount = Number(process.env.E2E_TRANSIENT_RETRY_COUNT 
 export const transientRetryDelayMs = Number(process.env.E2E_TRANSIENT_RETRY_DELAY_MS ?? "2000");
 
 export const expectedUserEmail = "baptiste@heybap.com";
-export const sourceChannelName = "cmdclaw-experiments";
+export const sourceChannelName = "experiment-cmdclaw-testing";
 export const targetChannelName = process.env.E2E_SLACK_TARGET_CHANNEL ?? "ops-e2e-slack-testing";
 export const echoPrefix = "test message: the previous message is:";
 
@@ -53,6 +55,7 @@ export type CommandResult = {
 };
 
 let activeCliLiveCleanupState: CliLiveCleanupState | null = null;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 beforeEach(() => {
   activeCliLiveCleanupState = createCliLiveCleanupState();
@@ -77,7 +80,7 @@ afterEach(async () => {
 });
 
 export function buildCliCommandArgs(...args: string[]): string[] {
-  return ["run", "--cwd", "../..", "cmdclaw", "--", ...args];
+  return ["run", "--cwd", repoRoot, "cmdclaw", "--", ...args];
 }
 
 export function trackCliOutput(text: string): void {
@@ -161,6 +164,7 @@ export function runBunCommand(
 ): Promise<CommandResult> {
   return new Promise((resolveDone) => {
     const child = spawn("bun", args, {
+      cwd: repoRoot,
       env: {
         ...process.env,
         CMDCLAW_SERVER_URL: defaultServerUrl,

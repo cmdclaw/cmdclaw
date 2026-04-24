@@ -8,6 +8,7 @@ describe("proxy", () => {
   });
 
   it("redirects unauthenticated protected routes to login by default", () => {
+    delete process.env.CMDCLAW_INSTANCE_ROOT;
     const response = proxy(new NextRequest("http://127.0.0.1:3626/chat?tab=latest"));
 
     expect(response.status).toBe(307);

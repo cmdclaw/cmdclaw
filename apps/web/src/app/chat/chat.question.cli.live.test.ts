@@ -237,7 +237,7 @@ describe.runIf(liveEnabled)("@live CLI chat question", () => {
     },
   );
 
-  test.runIf(process.platform === "darwin")(
+  test.runIf(process.platform !== "darwin")(
     "keeps the tty session open for a native follow-up after answering a question",
     { timeout: Math.max(responseTimeoutMs * 2 + 90_000, 420_000) },
     async () => {
