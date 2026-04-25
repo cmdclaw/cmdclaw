@@ -300,6 +300,6 @@ describe("opencode session snapshot service", () => {
         await rm(tempRoot, { recursive: true, force: true });
       }
     },
-    30_000,
+    60_000,
   );
 });

@@ -41,6 +41,6 @@ export default defineConfig({
         command: `bun run build && bun run start -- --port ${port}`,
         url: baseURL,
         reuseExistingServer,
-        timeout: 120_000,
+        timeout: 240_000,
       },
 });

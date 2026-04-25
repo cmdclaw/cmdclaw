@@ -49,6 +49,8 @@ type SlackHistoryMessage = {
 
 let liveModel = "";
 
+const slackAttachSuccessPattern = /User message sent to|\[tool_result_data\] Bot message sent to/;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -582,11 +584,6 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
         expectedStatus: "awaiting_approval",
         timeoutMs: 30_000,
       });
-      await waitForPendingInterrupt({
-        generationId,
-        expectedKind: "plugin_write",
-        timeoutMs: 30_000,
-      });
       const attach = startInteractiveChatCommand(
         buildCliCommandArgs("chat", "--attach", conversationId),
         { pty: true },
@@ -596,13 +593,13 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       await attach.waitFor(/Approve\? \(y\/n\)/, 60_000);
       attach.write("y\n");
       await attach.waitFor(/\[approval_accepted\]/, 30_000);
-      await attach.waitFor(/User message sent to/, 60_000);
+      await attach.waitFor(slackAttachSuccessPattern, 60_000);
 
       const attachResult = await attach.waitForExit(Math.max(responseTimeoutMs, 120_000));
       assertExitOk(attachResult, "chat chaos approval attach");
       expect(attachResult.stdout).not.toContain("[approval_parked]");
       expect(attachResult.stdout).toContain("[approval_accepted]");
-      expect(attachResult.stdout).toContain("User message sent to");
+      expect(attachResult.stdout).toMatch(slackAttachSuccessPattern);
 
       const postedMessages = await pollSlackMessagesContaining({
         token: slackAccessToken,

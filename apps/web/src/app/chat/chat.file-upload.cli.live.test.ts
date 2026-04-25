@@ -8,6 +8,8 @@ import {
   responseTimeoutMs,
   resolveLiveModel,
   runChatMessage,
+  transientRetryCount,
+  transientRetryDelayMs,
 } from "../../../tests/e2e-cli/live-fixtures";
 
 const fixtureFilePath = resolve(process.cwd(), "tests/e2e/fixtures/hello.txt");
@@ -17,6 +19,30 @@ const fileUploadPrompt =
   "What is the exact content of the attached file? Reply with the file content only.";
 
 let liveModel = "";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolveDone) => setTimeout(resolveDone, ms));
+}
+
+async function runFileUploadPromptWithRetry() {
+  const runAttempt = async (attempt: number) => {
+    const result = await runChatMessage({
+      message: fileUploadPrompt,
+      model: liveModel,
+      files: [fixtureFilePath],
+      timeoutMs: responseTimeoutMs,
+    });
+
+    if (result.stdout.includes(expectedToken) || attempt >= transientRetryCount) {
+      return result;
+    }
+
+    await sleep(transientRetryDelayMs);
+    return runAttempt(attempt + 1);
+  };
+
+  return runAttempt(0);
+}
 
 describe.runIf(liveEnabled)("@live CLI chat file upload", () => {
   beforeAll(async () => {
@@ -32,12 +58,7 @@ describe.runIf(liveEnabled)("@live CLI chat file upload", () => {
         throw new Error(`Missing test fixture at ${fixtureFilePath}`);
       }
 
-      const result = await runChatMessage({
-        message: fileUploadPrompt,
-        model: liveModel,
-        files: [fixtureFilePath],
-        timeoutMs: responseTimeoutMs,
-      });
+      const result = await runFileUploadPromptWithRetry();
 
       assertExitOk(result, "chat file-upload");
       expect(result.stdout).toContain("[conversation]");

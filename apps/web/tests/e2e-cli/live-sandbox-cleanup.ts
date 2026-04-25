@@ -228,19 +228,51 @@ async function waitForDaytonaSandboxDeletion(
   return poll();
 }
 
-async function deleteDaytonaSandboxById(daytona: Daytona, sandboxId: string): Promise<void> {
-  try {
-    const sandbox = (await daytona.get(sandboxId)) as DaytonaSandboxStatus;
-    await sandbox.delete?.();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/not found/i.test(message)) {
-      return;
-    }
-    throw error;
+function isRetryableDaytonaDeleteError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
   }
 
-  await waitForDaytonaSandboxDeletion(daytona, sandboxId);
+  const statusCode =
+    "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : null;
+  const message = error instanceof Error ? error.message : String(error);
+
+  return statusCode === 409 || /state change in progress/i.test(message);
+}
+
+async function deleteDaytonaSandboxById(daytona: Daytona, sandboxId: string): Promise<void> {
+  const deadline = Date.now() + DAYTONA_DELETE_WAIT_TIMEOUT_MS;
+
+  const attemptDelete = async (): Promise<void> => {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out deleting Daytona sandbox ${sandboxId} while it was changing state.`,
+      );
+    }
+
+    try {
+      const sandbox = (await daytona.get(sandboxId)) as DaytonaSandboxStatus;
+      await sandbox.delete?.();
+      await waitForDaytonaSandboxDeletion(
+        daytona,
+        sandboxId,
+        Math.max(1_000, deadline - Date.now()),
+      );
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/not found/i.test(message)) {
+        return;
+      }
+      if (!isRetryableDaytonaDeleteError(error)) {
+        throw error;
+      }
+      await sleep(DAYTONA_DELETE_POLL_INTERVAL_MS);
+    }
+    return attemptDelete();
+  };
+
+  return attemptDelete();
 }
 
 async function clearConversationRuntimeBindings(runtimeIds: string[]): Promise<void> {

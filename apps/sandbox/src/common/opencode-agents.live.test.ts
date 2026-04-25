@@ -69,7 +69,8 @@ describe.runIf(liveSandboxAgentsEnabled)("@live OpenCode agents", () => {
         expect(builder?.mode).toBe("primary");
         expect(builder?.prompt).toContain("You are CmdClaw's coworker builder agent.");
         expect(runner?.mode).toBe("primary");
-        expect(runner?.prompt).toContain("Do not ask clarifying questions.");
+        expect(runner?.prompt).toContain("You are CmdClaw's coworker runner agent.");
+        expect(runner?.prompt).toContain("without asking clarifying questions.");
 
         const created = await client.session.create({ title: "Agent smoke" });
         expect(created.error).toBeFalsy();

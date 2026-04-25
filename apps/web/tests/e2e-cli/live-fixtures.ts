@@ -312,7 +312,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 function hasTransientOpencodeReadinessFailure(result: CommandResult): boolean {
-  return result.stdout.includes("[error] OpenCode server failed readiness check");
+  return (
+    result.stdout.includes("[error] OpenCode server failed readiness check") ||
+    result.stdout.includes("[error] Agent preparation timed out after ")
+  );
 }
 
 export async function runChatMessage(args: {
