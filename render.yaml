@@ -18,8 +18,9 @@
 # - The MinIO service is public because presigned URLs must be reachable from the
 #   browser. Your other Render services can still reach it over the private network.
 # - Create the `cmdclaw-documents` bucket once after the first deploy.
-# - The observability services stay on the private network except Grafana and
-#   Alertmanager, which remain public Render web services. Web and worker export
+# - The observability services stay on the private network. Operators reach them
+#   through the Tailscale subnet router defined below, which advertises the
+#   Render private `10.0.0.0/8` range to your tailnet. Web and worker export
 #   telemetry to Vector via private-network host + port env vars
 
 previews:
@@ -60,7 +61,28 @@ projects:
               - key: PORT
                 value: "10000"
 
-          - type: web
+          - type: worker
+            name: cmdclaw-tailscale-staging
+            runtime: docker
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            autoDeployTrigger: off
+            dockerContext: docker/images/tailscale
+            dockerfilePath: docker/images/tailscale/Dockerfile
+            disk:
+              name: cmdclaw-tailscale-state
+              mountPath: /var/lib/tailscale
+              sizeGB: 1
+            envVars:
+              - key: TAILSCALE_AUTHKEY
+                sync: false
+              - key: TAILSCALE_VERSION
+                value: 1.96.4
+              - key: ADVERTISE_ROUTES
+                value: 10.0.0.0/8
+
+          - type: pserv
             name: cmdclaw-victoria-metrics-staging
             runtime: image
             region: frankfurt
@@ -69,13 +91,12 @@ projects:
             image:
               url: victoriametrics/victoria-metrics:v1.140.0
             dockerCommand: /victoria-metrics-prod -storageDataPath=/victoria-metrics-data
-            healthCheckPath: /health
             disk:
               name: cmdclaw-victoria-metrics-data
               mountPath: /victoria-metrics-data
               sizeGB: 2
 
-          - type: web
+          - type: pserv
             name: cmdclaw-victoria-logs-staging
             runtime: image
             region: frankfurt
@@ -84,13 +105,12 @@ projects:
             image:
               url: victoriametrics/victoria-logs:v1.48.0
             dockerCommand: /victoria-logs-prod -storageDataPath=/victoria-logs-data
-            healthCheckPath: /health
             disk:
               name: cmdclaw-victoria-logs-data
               mountPath: /victoria-logs-data
               sizeGB: 2
 
-          - type: web
+          - type: pserv
             name: cmdclaw-victoria-traces-staging
             runtime: image
             region: frankfurt
@@ -99,7 +119,6 @@ projects:
             image:
               url: victoriametrics/victoria-traces:v0.8.0
             dockerCommand: /victoria-traces-prod -storageDataPath=/victoria-traces-data
-            healthCheckPath: /health
             disk:
               name: cmdclaw-victoria-traces-data
               mountPath: /victoria-traces-data
@@ -116,21 +135,21 @@ projects:
             envVars:
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-metrics-staging
                   property: host
               - key: CMDCLAW_VICTORIA_LOGS_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-logs-staging
                   property: host
               - key: CMDCLAW_VICTORIA_TRACES_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-traces-staging
                   property: host
 
-          - type: web
+          - type: pserv
             name: cmdclaw-alertmanager-staging
             runtime: docker
             region: frankfurt
@@ -138,14 +157,10 @@ projects:
             numInstances: 1
             dockerContext: docker/images/alertmanager
             dockerfilePath: docker/images/alertmanager/Dockerfile
-            healthCheckPath: /-/healthy
             disk:
               name: cmdclaw-alertmanager-data
               mountPath: /alertmanager
               sizeGB: 1
-            envVars:
-              - key: PORT
-                value: "10000"
 
           - type: pserv
             name: cmdclaw-vmalert-staging
@@ -158,16 +173,16 @@ projects:
             envVars:
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-metrics-staging
                   property: host
               - key: CMDCLAW_ALERTMANAGER_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-alertmanager-staging
                   property: host
 
-          - type: web
+          - type: pserv
             name: cmdclaw-grafana-staging
             runtime: docker
             region: frankfurt
@@ -175,16 +190,11 @@ projects:
             numInstances: 1
             dockerContext: docker/images/grafana
             dockerfilePath: docker/images/grafana/Dockerfile
-            healthCheckPath: /api/health
             disk:
               name: cmdclaw-grafana-data
               mountPath: /var/lib/grafana
               sizeGB: 2
             envVars:
-              - key: PORT
-                value: "10000"
-              - key: GF_SERVER_HTTP_PORT
-                value: "10000"
               - key: GF_AUTH_ANONYMOUS_ENABLED
                 value: "false"
               - key: GF_AUTH_DISABLE_LOGIN_FORM
@@ -193,22 +203,22 @@ projects:
                 value: victoriametrics-logs-datasource
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-metrics-staging
                   property: host
               - key: CMDCLAW_VICTORIA_LOGS_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-logs-staging
                   property: host
               - key: CMDCLAW_VICTORIA_TRACES_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-victoria-traces-staging
                   property: host
               - key: CMDCLAW_ALERTMANAGER_HOST
                 fromService:
-                  type: web
+                  type: pserv
                   name: cmdclaw-alertmanager-staging
                   property: host
 
