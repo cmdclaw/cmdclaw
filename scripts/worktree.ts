@@ -388,9 +388,27 @@ function resolveRecognizedWorktreeRoots(): string[] {
   return [join(home, ".codex", "worktrees")];
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\/+$/, "");
+}
+
+function hasRecognizedWorktreePathSegment(repoRoot: string): boolean {
+  const normalizedRepoRoot = normalizePath(repoRoot);
+  return ["/.claude/worktrees/", "/.codex/worktrees/"].some((segment) =>
+    normalizedRepoRoot.includes(segment),
+  );
+}
+
 function isRecognizedWorktreeRepo(repoRoot: string): boolean {
-  return resolveRecognizedWorktreeRoots().some(
-    (root) => repoRoot === root || repoRoot.startsWith(`${root}/`),
+  const normalizedRepoRoot = normalizePath(repoRoot);
+  return (
+    resolveRecognizedWorktreeRoots().some((root) => {
+      const normalizedRoot = normalizePath(root);
+      return (
+        normalizedRepoRoot === normalizedRoot ||
+        normalizedRepoRoot.startsWith(`${normalizedRoot}/`)
+      );
+    }) || hasRecognizedWorktreePathSegment(normalizedRepoRoot)
   );
 }
 
