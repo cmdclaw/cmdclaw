@@ -1,6 +1,7 @@
 .env
 .env.selfhost
-.claude
+.claude/*
+!.claude/settings.json
 .vercel
 .DS_Store
 .env*.local
