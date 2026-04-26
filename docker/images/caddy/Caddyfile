@@ -9,6 +9,10 @@ observability.cmdclaw.ai {
 	import cloudflare
 }
 
+cmdclaw-observability-staging.tail3b24d0.ts.net {
+	respond "CmdClaw observability stack. Use grafana.observability.cmdclaw.ai, metrics.observability.cmdclaw.ai, logs.observability.cmdclaw.ai, or traces.observability.cmdclaw.ai." 200
+}
+
 grafana.observability.cmdclaw.ai {
 	reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
 	import cloudflare
