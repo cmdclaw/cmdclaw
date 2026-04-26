@@ -1130,6 +1130,7 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_OTEL_HTTP_PORT: String(stack.otelHttpPort),
     CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(stack.otelGrpcPort),
     CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(stack.otelHttpPort),
+    CMDCLAW_VECTOR_TRACES_PORT: String(stack.vectorTracePort),
     CMDCLAW_VECTOR_LOG_PORT: String(stack.vectorLogPort),
     CMDCLAW_VICTORIA_METRICS_PORT: String(stack.victoriaMetricsPort),
     CMDCLAW_VICTORIA_LOGS_PORT: String(stack.victoriaLogsPort),
@@ -1275,6 +1276,7 @@ function printStatusEndpoints(metadata: InstanceMetadata): void {
   console.log(`[worktree] vmalert ${buildLoopbackUrl(stack.vmalertPort)}`);
   console.log(`[worktree] otel grpc 127.0.0.1:${stack.otelGrpcPort}`);
   console.log(`[worktree] otel http ${buildLoopbackUrl(stack.otelHttpPort)}`);
+  console.log(`[worktree] vector traces ${buildLoopbackUrl(stack.vectorTracePort, "/v1/traces")}`);
   console.log(`[worktree] vector logs ${buildLoopbackUrl(stack.vectorLogPort, "/logs")}`);
   console.log(`[worktree] env file ${resolveWorktreeEnvFile(metadata.repoRoot)}`);
 }

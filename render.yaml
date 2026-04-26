@@ -386,6 +386,8 @@ projects:
                 value: "8686"
               - key: CMDCLAW_VECTOR_OTLP_HTTP_PORT
                 value: "4318"
+              - key: CMDCLAW_VECTOR_TRACES_PORT
+                value: "5318"
               - key: SANDBOX_AGENT_RUNTIME
                 value: opencode
               - key: SANDBOX_DEFAULT
@@ -432,6 +434,8 @@ projects:
                 value: "8686"
               - key: CMDCLAW_VECTOR_OTLP_HTTP_PORT
                 value: "4318"
+              - key: CMDCLAW_VECTOR_TRACES_PORT
+                value: "5318"
               - key: SANDBOX_AGENT_RUNTIME
                 value: opencode
               - key: SANDBOX_DEFAULT

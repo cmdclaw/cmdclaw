@@ -88,6 +88,7 @@ services:
     ports:
       - "${CMDCLAW_VECTOR_OTLP_GRPC_PORT:-4317}:4317"
       - "${CMDCLAW_VECTOR_OTLP_HTTP_PORT:-4318}:4318"
+      - "${CMDCLAW_VECTOR_TRACES_PORT:-5318}:5318"
       - "${CMDCLAW_VECTOR_LOG_PORT:-8686}:8686"
     volumes:
       - ./observability/vector.yaml:/etc/vector/vector.yaml:ro

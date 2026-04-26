@@ -197,7 +197,11 @@ export function resolveObservabilityVectorUrls(
     }),
     tracesUrl: buildVectorUrlFromEnv("/v1/traces", env, {
       fullUrlEnvNames: ["CMDCLAW_VECTOR_TRACES_URL"],
-      portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
+      portEnvNames: [
+        "CMDCLAW_VECTOR_TRACES_PORT",
+        "CMDCLAW_VECTOR_OTLP_HTTP_PORT",
+        "CMDCLAW_OTEL_HTTP_PORT",
+      ],
     }),
   };
 }
