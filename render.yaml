@@ -117,7 +117,7 @@ projects:
                   property: host
 
           - type: worker
-            name: cmdclaw-observability-tailnet-staging
+            name: cmdclaw-caddy-tailnet-staging
             runtime: docker
             region: frankfurt
             plan: starter
@@ -126,7 +126,7 @@ projects:
             dockerContext: docker/images/tailscale
             dockerfilePath: docker/images/tailscale/Dockerfile
             disk:
-              name: cmdclaw-observability-tailnet-state
+              name: cmdclaw-caddy-tailnet-state
               mountPath: /var/lib/tailscale
               sizeGB: 1
             envVars:
