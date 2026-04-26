@@ -10,23 +10,19 @@
 		respond "ok" 200
 	}
 
-	handle {
-		respond "unknown observability host" 404
+	handle_path /metrics* {
+		reverse_proxy http://{$CMDCLAW_VICTORIA_METRICS_HOST}:8428
 	}
-}
 
-grafana.staging.cmdclaw.ai:{$PORT} {
-	reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
-}
+	handle_path /logs* {
+		reverse_proxy http://{$CMDCLAW_VICTORIA_LOGS_HOST}:9428
+	}
 
-metrics.staging.cmdclaw.ai:{$PORT} {
-	reverse_proxy http://{$CMDCLAW_VICTORIA_METRICS_HOST}:8428
-}
+	handle_path /traces* {
+		reverse_proxy http://{$CMDCLAW_VICTORIA_TRACES_HOST}:10428
+	}
 
-logs.staging.cmdclaw.ai:{$PORT} {
-	reverse_proxy http://{$CMDCLAW_VICTORIA_LOGS_HOST}:9428
-}
-
-traces.staging.cmdclaw.ai:{$PORT} {
-	reverse_proxy http://{$CMDCLAW_VICTORIA_TRACES_HOST}:10428
+	handle {
+		reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
+	}
 }

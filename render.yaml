@@ -19,11 +19,11 @@
 #   browser. Your other Render services can still reach it over the private network.
 # - Create the `cmdclaw-documents` bucket once after the first deploy.
 # - The observability services stay on the private network. Operators reach them
-#   through a dedicated public Caddy ingress that routes custom staging
-#   subdomains to the private Grafana and Victoria backends, while the Tailscale
-#   subnet router defined below still advertises the Render private `10.0.0.0/8`
-#   range to your tailnet for direct private-network debugging. Web and worker
-#   export telemetry to Vector via private-network host + port env vars
+#   through a dedicated private Caddy ingress that is exposed to the tailnet by
+#   one Tailscale Serve worker, while the Tailscale subnet router defined below
+#   still advertises the Render private `10.0.0.0/8` range for direct
+#   private-network debugging. Web and worker export telemetry to Vector via
+#   private-network host + port env vars
 
 previews:
   generation: "off"
@@ -84,7 +84,7 @@ projects:
               - key: ADVERTISE_ROUTES
                 value: 10.0.0.0/8
 
-          - type: web
+          - type: pserv
             name: cmdclaw-observability-caddy-staging
             runtime: docker
             region: frankfurt
@@ -92,15 +92,9 @@ projects:
             numInstances: 1
             dockerContext: docker/images/caddy
             dockerfilePath: docker/images/caddy/Dockerfile
-            healthCheckPath: /healthz
-            domains:
-              - grafana.staging.cmdclaw.ai
-              - metrics.staging.cmdclaw.ai
-              - logs.staging.cmdclaw.ai
-              - traces.staging.cmdclaw.ai
             envVars:
               - key: PORT
-                value: "10000"
+                value: "8080"
               - key: CMDCLAW_GRAFANA_HOST
                 fromService:
                   type: pserv
@@ -121,6 +115,36 @@ projects:
                   type: pserv
                   name: cmdclaw-victoria-traces-staging
                   property: host
+
+          - type: worker
+            name: cmdclaw-observability-tailnet-staging
+            runtime: docker
+            region: frankfurt
+            plan: starter
+            numInstances: 1
+            autoDeployTrigger: off
+            dockerContext: docker/images/tailscale
+            dockerfilePath: docker/images/tailscale/Dockerfile
+            disk:
+              name: cmdclaw-observability-tailnet-state
+              mountPath: /var/lib/tailscale
+              sizeGB: 1
+            envVars:
+              - key: TAILSCALE_AUTHKEY
+                sync: false
+              - key: TAILSCALE_VERSION
+                value: 1.96.4
+              - key: TAILSCALE_HOSTNAME
+                value: cmdclaw-observability-staging
+              - key: TAILSCALE_SERVE_TARGET_SCHEME
+                value: http
+              - key: TAILSCALE_SERVE_TARGET_HOST
+                fromService:
+                  type: pserv
+                  name: cmdclaw-observability-caddy-staging
+                  property: host
+              - key: TAILSCALE_SERVE_TARGET_PORT
+                value: "8080"
 
           - type: pserv
             name: cmdclaw-victoria-metrics-staging
