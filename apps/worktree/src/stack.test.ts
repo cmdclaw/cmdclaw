@@ -7,6 +7,21 @@ import {
   formatWorktreeStackSlot,
 } from "./stack";
 
+const SHARED_STACK_ENV_KEYS = [
+  "CMDCLAW_COMPOSE_PROJECT",
+  "CMDCLAW_POSTGRES_PORT",
+  "CMDCLAW_REDIS_PORT",
+  "CMDCLAW_MINIO_API_PORT",
+  "CMDCLAW_MINIO_CONSOLE_PORT",
+  "CMDCLAW_GRAFANA_PORT",
+  "CMDCLAW_ALERTMANAGER_PORT",
+  "CMDCLAW_POSTGRES_VOLUME",
+  "CMDCLAW_REDIS_VOLUME",
+  "CMDCLAW_MINIO_VOLUME",
+  "CMDCLAW_ALERTMANAGER_VOLUME",
+  "CMDCLAW_GRAFANA_VOLUME",
+] as const;
+
 describe("worktree stack config", () => {
   test("formats worktree slots as two digits", () => {
     expect(formatWorktreeStackSlot(1)).toBe("01");
@@ -58,20 +73,39 @@ describe("worktree stack config", () => {
   });
 
   test("returns the shared stack ports and volumes", () => {
-    expect(buildSharedStackConfig()).toEqual({
-      composeProjectName: "cmdclaw-shared",
-      postgresPort: 5433,
-      redisPort: 6380,
-      minioApiPort: 9100,
-      minioConsolePort: 9101,
-      grafanaPort: 3400,
-      alertmanagerPort: 9093,
-      postgresVolume: "cmdclaw-shared_postgres_data",
-      redisVolume: "cmdclaw-shared_redis_data",
-      minioVolume: "cmdclaw-shared_minio_data",
-      alertmanagerVolume: "cmdclaw-shared_alertmanager_data",
-      grafanaVolume: "cmdclaw-shared_grafana_data",
-    });
+    const previousEnv = Object.fromEntries(
+      SHARED_STACK_ENV_KEYS.map((key) => [key, process.env[key]]),
+    );
+
+    try {
+      for (const key of SHARED_STACK_ENV_KEYS) {
+        delete process.env[key];
+      }
+
+      expect(buildSharedStackConfig()).toEqual({
+        composeProjectName: "cmdclaw-local",
+        postgresPort: 5433,
+        redisPort: 6380,
+        minioApiPort: 9100,
+        minioConsolePort: 9101,
+        grafanaPort: 3400,
+        alertmanagerPort: 9093,
+        postgresVolume: "cmdclaw-local_cmdclaw_postgres_data",
+        redisVolume: "cmdclaw-local_cmdclaw_redis_data",
+        minioVolume: "cmdclaw-local_cmdclaw_minio_data",
+        alertmanagerVolume: "cmdclaw-local_cmdclaw_alertmanager_data",
+        grafanaVolume: "cmdclaw-local_cmdclaw_grafana_data",
+      });
+    } finally {
+      for (const key of SHARED_STACK_ENV_KEYS) {
+        const value = previousEnv[key];
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   });
 
   test("rejects out-of-range slots", () => {

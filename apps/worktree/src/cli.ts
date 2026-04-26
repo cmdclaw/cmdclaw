@@ -19,6 +19,7 @@ import {
   buildWorktreeHostPorts,
   buildWorktreeStackConfig,
   formatWorktreeStackSlot,
+  type SharedStackConfig,
   type WorktreeHostPort,
 } from "./stack";
 import { buildWorktreePublicCallbackBaseUrl } from "../../../packages/core/src/lib/worktree-routing";
@@ -100,6 +101,8 @@ const DEV_START_TIMEOUT_MS = 120_000;
 const GENERATED_WORKTREE_ENV_HEADER = "# Auto-generated for worktree by apps/worktree/src/cli.ts.";
 const GENERATED_WORKTREE_ENV_NOTICE = "# Do not edit manually; re-run a worktree command to refresh it.";
 type ProcessName = (typeof PROCESS_NAMES)[number];
+
+let sharedStackRuntimeCache: SharedStackConfig | null = null;
 
 function printHelp(): void {
   console.log("Usage: bun run worktree <command>");
@@ -301,11 +304,114 @@ function generateCredentialSecret(bytes = 24): string {
 }
 
 function buildDatabaseUrlForMetadata(metadata: Pick<InstanceMetadata, "databaseName" | "databaseUser" | "databasePassword">): string {
-  const shared = buildSharedStackConfig();
+  const shared = resolveRuntimeSharedStackConfig();
   const url = new URL(buildPostgresBaseUrl(shared.postgresPort, metadata.databaseName));
   url.username = metadata.databaseUser;
   url.password = metadata.databasePassword;
   return url.toString();
+}
+
+function clearSharedStackRuntimeCache(): void {
+  sharedStackRuntimeCache = null;
+}
+
+function resolveDockerComposeServiceContainerId(projectName: string, service: string): string | null {
+  const result = spawnSync(
+    "docker",
+    [
+      "ps",
+      "-q",
+      "--filter",
+      `label=com.docker.compose.project=${projectName}`,
+      "--filter",
+      `label=com.docker.compose.service=${service}`,
+    ],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  return (
+    result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? null
+  );
+}
+
+function resolveDockerPublishedPort(projectName: string, service: string, containerPort: number): number | null {
+  const containerId = resolveDockerComposeServiceContainerId(projectName, service);
+  if (!containerId) {
+    return null;
+  }
+
+  const result = spawnSync(
+    "docker",
+    ["inspect", containerId, "--format", "{{json .NetworkSettings.Ports}}"],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const output = result.stdout.trim();
+  if (!output) {
+    return null;
+  }
+
+  try {
+    const ports = JSON.parse(output) as Record<
+      string,
+      Array<{ HostIp?: string; HostPort?: string }> | null | undefined
+    >;
+    const bindings = ports[`${containerPort}/tcp`];
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      return null;
+    }
+
+    const hostPort = bindings.find((binding) => binding.HostIp === "0.0.0.0")?.HostPort
+      ?? bindings.find((binding) => binding.HostIp === "::")?.HostPort
+      ?? bindings[0]?.HostPort;
+    const parsed = Number.parseInt(hostPort ?? "", 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveRuntimeSharedStackConfig(): SharedStackConfig {
+  const base = buildSharedStackConfig();
+  if (sharedStackRuntimeCache && sharedStackRuntimeCache.composeProjectName === base.composeProjectName) {
+    return sharedStackRuntimeCache;
+  }
+
+  const resolved: SharedStackConfig = {
+    ...base,
+    postgresPort:
+      resolveDockerPublishedPort(base.composeProjectName, "database", 5432) ?? base.postgresPort,
+    redisPort:
+      resolveDockerPublishedPort(base.composeProjectName, "redis", 6379) ?? base.redisPort,
+    minioApiPort:
+      resolveDockerPublishedPort(base.composeProjectName, "minio", 9000) ?? base.minioApiPort,
+    minioConsolePort:
+      resolveDockerPublishedPort(base.composeProjectName, "minio", 9001) ?? base.minioConsolePort,
+    grafanaPort:
+      resolveDockerPublishedPort(base.composeProjectName, "grafana", 3000) ?? base.grafanaPort,
+    alertmanagerPort:
+      resolveDockerPublishedPort(base.composeProjectName, "alertmanager", 9093) ?? base.alertmanagerPort,
+  };
+
+  sharedStackRuntimeCache = resolved;
+  return resolved;
 }
 
 function parseStackSlot(value: unknown): number | null {
@@ -723,7 +829,7 @@ function buildPostgresBaseUrl(port: number, databaseName = "postgres"): string {
 }
 
 function buildPostgresAdminUrl(metadata: InstanceMetadata): string {
-  return buildPostgresBaseUrl(buildSharedStackConfig().postgresPort);
+  return buildPostgresBaseUrl(resolveRuntimeSharedStackConfig().postgresPort);
 }
 
 async function withAdminClient<T>(
@@ -804,7 +910,7 @@ async function ensureDatabaseRole(metadata: InstanceMetadata): Promise<void> {
   });
 
   await withAdminClient(
-    buildPostgresBaseUrl(buildSharedStackConfig().postgresPort, metadata.databaseName),
+    buildPostgresBaseUrl(resolveRuntimeSharedStackConfig().postgresPort, metadata.databaseName),
     async (client) => {
       await client.query(`revoke all on schema public from public`);
       await client.query(
@@ -813,6 +919,15 @@ async function ensureDatabaseRole(metadata: InstanceMetadata): Promise<void> {
       await client.query(
         `alter schema public owner to ${quoteIdentifier(metadata.databaseUser)}`,
       );
+    },
+  );
+}
+
+async function ensureDatabaseExtensions(metadata: InstanceMetadata): Promise<void> {
+  await withAdminClient(
+    buildPostgresBaseUrl(resolveRuntimeSharedStackConfig().postgresPort, metadata.databaseName),
+    async (client) => {
+      await client.query("create extension if not exists vector");
     },
   );
 }
@@ -847,6 +962,7 @@ function buildMinioPolicyName(instanceId: string): string {
 }
 
 async function ensureRedisAclUser(metadata: InstanceMetadata): Promise<void> {
+  const bullQueuePattern = `bull:${metadata.queueName}*`;
   runSharedServiceCommand(metadata.repoRoot, "redis", [
     "redis-cli",
     "-a",
@@ -858,7 +974,9 @@ async function ensureRedisAclUser(metadata: InstanceMetadata): Promise<void> {
     "on",
     `>${metadata.redisPassword}`,
     `~${metadata.redisNamespace}*`,
+    `~${bullQueuePattern}`,
     `&${metadata.redisNamespace}*`,
+    `&${bullQueuePattern}`,
     "+@all",
   ]);
   console.log(`[worktree] ensured redis ACL user ${metadata.redisUser}`);
@@ -984,7 +1102,7 @@ async function grafanaApiRequest(
   path: string,
   init: RequestInit,
 ): Promise<Response> {
-  const shared = buildSharedStackConfig();
+  const shared = resolveRuntimeSharedStackConfig();
   const auth = resolveSharedGrafanaAdminCredentials();
   const headers = new Headers(init.headers);
   headers.set(
@@ -1046,7 +1164,7 @@ async function ensureGrafanaDatasource(
 
 async function ensureGrafanaWorktreeDatasources(metadata: InstanceMetadata): Promise<void> {
   await waitForHttp(
-    `http://127.0.0.1:${buildSharedStackConfig().grafanaPort}/api/health`,
+    `http://127.0.0.1:${resolveRuntimeSharedStackConfig().grafanaPort}/api/health`,
     DEV_START_TIMEOUT_MS,
   );
   for (const datasource of worktreeGrafanaDatasources(metadata)) {
@@ -1086,8 +1204,8 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
   const instanceRuntimeDir = runtimeDir(metadata.instanceRoot);
   const instanceAppUrl = metadata.appUrl;
   const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
-  const sharedStack = buildSharedStackConfig();
-  const databaseUrl = new URL(metadata.databaseUrl);
+  const sharedStack = resolveRuntimeSharedStackConfig();
+  const databaseUrl = new URL(buildDatabaseUrlForMetadata(metadata));
 
   return {
     PORT: String(metadata.appPort),
@@ -1105,7 +1223,7 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     PLAYWRIGHT_PORT: String(metadata.appPort),
     PLAYWRIGHT_BASE_URL: instanceAppUrl,
     E2E_AUTH_STATE_PATH: join(instanceRuntimeDir, "playwright", "user.json"),
-    DATABASE_URL: metadata.databaseUrl,
+    DATABASE_URL: databaseUrl.toString(),
     DATABASE_PASSWORD: metadata.databasePassword,
     DB_PASSWORD: metadata.databasePassword,
     REDIS_URL: `redis://${encodeURIComponent(metadata.redisUser)}:${encodeURIComponent(metadata.redisPassword)}@127.0.0.1:${sharedStack.redisPort}/0`,
@@ -1181,7 +1299,7 @@ function buildSharedComposeEnv(repoRoot: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...readSharedEnvValues(repoRoot),
-    CMDCLAW_SHARED_COMPOSE_PROJECT: shared.composeProjectName,
+    CMDCLAW_COMPOSE_PROJECT: shared.composeProjectName,
     COMPOSE_PROJECT_NAME: shared.composeProjectName,
     CMDCLAW_POSTGRES_PORT: String(shared.postgresPort),
     CMDCLAW_REDIS_PORT: String(shared.redisPort),
@@ -1254,8 +1372,8 @@ function isDockerDaemonReachable(): boolean {
 
 function printStatusEndpoints(metadata: InstanceMetadata): void {
   const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
-  const sharedStack = buildSharedStackConfig();
-  const databaseUrl = new URL(metadata.databaseUrl);
+  const sharedStack = resolveRuntimeSharedStackConfig();
+  const databaseUrl = new URL(buildDatabaseUrlForMetadata(metadata));
 
   console.log(`[worktree] docker project ${stack.composeProjectName}`);
   console.log(`[worktree] shared docker project ${sharedStack.composeProjectName}`);
@@ -1331,25 +1449,6 @@ function tryRunWorktreeDockerCompose(metadata: InstanceMetadata, args: string[])
   return false;
 }
 
-function runSharedDockerCompose(repoRoot: string, args: string[]): void {
-  const env = buildSharedComposeEnv(repoRoot);
-  runInheritedCommand(
-    "docker",
-    [
-      "compose",
-      "--env-file",
-      resolveSharedEnvFile(repoRoot),
-      "-p",
-      env.CMDCLAW_SHARED_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
-      "-f",
-      "docker/compose/worktree-shared.yml",
-      ...args,
-    ],
-    repoRoot,
-    env,
-  );
-}
-
 function runSharedServiceCommand(
   repoRoot: string,
   service: string,
@@ -1364,9 +1463,9 @@ function runSharedServiceCommand(
       "--env-file",
       resolveSharedEnvFile(repoRoot),
       "-p",
-      env.CMDCLAW_SHARED_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
+      env.CMDCLAW_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
       "-f",
-      "docker/compose/worktree-shared.yml",
+      "docker/compose/dev.yml",
       "exec",
       "-T",
       service,
@@ -1390,6 +1489,65 @@ function runSharedServiceCommand(
   }
 
   return result.stdout.trim();
+}
+
+function isDockerComposeServiceRunning(projectName: string, service: string): boolean {
+  const result = spawnSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      `label=com.docker.compose.project=${projectName}`,
+      "--filter",
+      `label=com.docker.compose.service=${service}`,
+      "--format",
+      "{{.Names}}",
+    ],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0) {
+    return false;
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .some(Boolean);
+}
+
+function ensureSharedInfraRunning(repoRoot: string): void {
+  const env = buildSharedComposeEnv(repoRoot);
+  const projectName = env.CMDCLAW_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName;
+  const services = ["database", "redis", "minio", "alertmanager", "grafana"];
+  const missingServices = services.filter((service) => !isDockerComposeServiceRunning(projectName, service));
+
+  if (missingServices.length === 0) {
+    return;
+  }
+
+  runInheritedCommand(
+    "docker",
+    [
+      "compose",
+      "--env-file",
+      resolveSharedEnvFile(repoRoot),
+      "-p",
+      projectName,
+      "-f",
+      "docker/compose/dev.yml",
+      "up",
+      "-d",
+      "--no-deps",
+      ...missingServices,
+    ],
+    repoRoot,
+    env,
+  );
+  clearSharedStackRuntimeCache();
 }
 
 function listDockerProjectContainerIds(metadata: InstanceMetadata): string[] {
@@ -1454,10 +1612,11 @@ function teardownDockerResources(metadata: InstanceMetadata): void {
 async function dockerUpInstance(): Promise<void> {
   const metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
-  runSharedDockerCompose(metadata.repoRoot, ["up", "-d"]);
+  ensureSharedInfraRunning(metadata.repoRoot);
   runWorktreeDockerCompose(metadata, ["up", "-d"]);
   await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
   await ensureDatabase(metadata);
+  await ensureDatabaseExtensions(metadata);
   await ensureDatabaseRole(metadata);
   await ensureRedisAclUser(metadata);
   await ensureMinioTenant(metadata);
@@ -1617,7 +1776,7 @@ async function selectRows(
 async function resolveLatestLocalSessionProfile(
   metadata: InstanceMetadata,
 ): Promise<SessionProfileRecord | null> {
-  return withClient(metadata.databaseUrl, async (client) => {
+  return withClient(buildDatabaseUrlForMetadata(metadata), async (client) => {
     const result = await client.query<{
       token: string;
       email: string;
@@ -2072,7 +2231,8 @@ async function runDbPush(metadata: InstanceMetadata): Promise<void> {
 
 async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void> {
   const sourceDatabaseUrl = resolveSourceDatabaseUrl(metadata.repoRoot);
-  if (!sourceDatabaseUrl || sourceDatabaseUrl === metadata.databaseUrl) {
+  const targetDatabaseUrl = buildDatabaseUrlForMetadata(metadata);
+  if (!sourceDatabaseUrl || sourceDatabaseUrl === targetDatabaseUrl) {
     return;
   }
 
@@ -2085,7 +2245,7 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
         );
       }
 
-      await withClient(metadata.databaseUrl, async (targetClient) => {
+      await withClient(targetDatabaseUrl, async (targetClient) => {
         const userRows = await selectRows(sourceClient, "user", "id = $1", [sourceUser.id]);
         if (userRows.length === 0) {
           fail(`Source user ${sourceUser.email} was not found in the source database.`);
@@ -2384,6 +2544,7 @@ async function createInstance(): Promise<InstanceMetadata> {
   ensureDir(logsDir(metadata.instanceRoot));
   ensureDir(runtimeDir(metadata.instanceRoot));
   await ensureDatabase(metadata);
+  await ensureDatabaseExtensions(metadata);
   await ensureDatabaseRole(metadata);
   await ensureRedisAclUser(metadata);
   await ensureMinioTenant(metadata);
@@ -2512,7 +2673,7 @@ async function startInstance(): Promise<void> {
 async function setupInstance(): Promise<void> {
   const metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
-  runSharedDockerCompose(metadata.repoRoot, ["up", "-d"]);
+  ensureSharedInfraRunning(metadata.repoRoot);
   runWorktreeDockerCompose(metadata, ["up", "-d"]);
   console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   printStatusEndpoints(metadata);
@@ -2742,6 +2903,7 @@ async function main(): Promise<void> {
     case "bootstrap-user": {
       const metadata = await resolveMetadata();
       await ensureDatabase(metadata);
+      await ensureDatabaseExtensions(metadata);
       await ensureDatabaseRole(metadata);
       await runDbPush(metadata);
       await bootstrapDeveloperUser(metadata);

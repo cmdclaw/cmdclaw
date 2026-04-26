@@ -42,7 +42,7 @@ From inside the worktree:
 bun run worktree:setup
 ```
 
-This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it starts or reuses the shared stateful services, starts the worktree-scoped observability services, provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
+This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it reuses the repo-global `cmdclaw-local` shared infrastructure (starting the missing shared services there only when needed), starts the worktree-scoped observability services, provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
 
 Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including `worktree:setup`, `worktree:dev`, and `bun run cli ...`.
 
@@ -54,7 +54,7 @@ If you only want Docker without starting the app processes:
 bun run worktree:docker-up
 ```
 
-This starts or reuses the shared stateful services and starts the worktree-scoped observability services for the current worktree.
+This reuses the repo-global `cmdclaw-local` shared stateful services and starts the worktree-scoped observability services for the current worktree.
 
 ## Stop the worktree Docker stack
 

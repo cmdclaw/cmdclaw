@@ -11,9 +11,10 @@ unique project name, ports, and volumes for that checkout:
 bun run worktree:docker-up
 ```
 
-In the current worktree flow, `worktree:docker-up` starts or reuses the shared
-stateful services from `docker/compose/worktree-shared.yml` and starts the
-worktree-local observability services from `docker/compose/worktree-observability.yml`.
+In the current worktree flow, `worktree:docker-up` reuses the repo-global
+`cmdclaw-local` services from `docker/compose/dev.yml` for Postgres, Redis,
+MinIO, Grafana, and Alertmanager, and starts the worktree-local observability
+services from `docker/compose/worktree-observability.yml`.
 
 The main checkout `docker/compose/dev.yml` remains the full local stack.
 

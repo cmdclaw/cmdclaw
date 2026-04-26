@@ -1681,7 +1681,7 @@ class GenerationManager {
       throw new Error("REDIS_URL is required for durable generation lease locking.");
     }
     const token = crypto.randomUUID();
-    const leaseKey = `locks:generation:${generationId}`;
+    const leaseKey = prefixRedisKey(`locks:generation:${generationId}`);
     const result = await this.getLockRedis().set(leaseKey, token, "PX", 120_000, "NX");
     return result === "OK" ? token : null;
   }
@@ -1690,7 +1690,7 @@ class GenerationManager {
     if (token.startsWith("local-")) {
       return;
     }
-    const leaseKey = `locks:generation:${generationId}`;
+    const leaseKey = prefixRedisKey(`locks:generation:${generationId}`);
     const owner = await this.getLockRedis().get(leaseKey);
     if (owner !== token) {
       return;
@@ -1702,7 +1702,7 @@ class GenerationManager {
     if (token.startsWith("local-")) {
       return;
     }
-    const leaseKey = `locks:generation:${generationId}`;
+    const leaseKey = prefixRedisKey(`locks:generation:${generationId}`);
     const owner = await this.getLockRedis().get(leaseKey);
     if (owner === token) {
       await this.getLockRedis().del(leaseKey);

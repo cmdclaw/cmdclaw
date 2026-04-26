@@ -77,19 +77,32 @@ export function buildWorktreeHostPorts(slot: number): WorktreeHostPort[] {
 }
 
 export function buildSharedStackConfig(): SharedStackConfig {
+  const parsePort = (value: string | undefined, fallback: number): number => {
+    const parsed = Number.parseInt(value ?? "", 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  };
+
+  const composeProjectName = process.env.CMDCLAW_COMPOSE_PROJECT?.trim() || "cmdclaw-local";
+
   return {
-    composeProjectName: "cmdclaw-shared",
-    postgresPort: 5433,
-    redisPort: 6380,
-    minioApiPort: 9100,
-    minioConsolePort: 9101,
-    grafanaPort: 3400,
-    alertmanagerPort: 9093,
-    postgresVolume: "cmdclaw-shared_postgres_data",
-    redisVolume: "cmdclaw-shared_redis_data",
-    minioVolume: "cmdclaw-shared_minio_data",
-    alertmanagerVolume: "cmdclaw-shared_alertmanager_data",
-    grafanaVolume: "cmdclaw-shared_grafana_data",
+    composeProjectName,
+    postgresPort: parsePort(process.env.CMDCLAW_POSTGRES_PORT, 5433),
+    redisPort: parsePort(process.env.CMDCLAW_REDIS_PORT, 6380),
+    minioApiPort: parsePort(process.env.CMDCLAW_MINIO_API_PORT, 9100),
+    minioConsolePort: parsePort(process.env.CMDCLAW_MINIO_CONSOLE_PORT, 9101),
+    grafanaPort: parsePort(process.env.CMDCLAW_GRAFANA_PORT, 3400),
+    alertmanagerPort: parsePort(process.env.CMDCLAW_ALERTMANAGER_PORT, 9093),
+    postgresVolume:
+      process.env.CMDCLAW_POSTGRES_VOLUME || `${composeProjectName}_cmdclaw_postgres_data`,
+    redisVolume:
+      process.env.CMDCLAW_REDIS_VOLUME || `${composeProjectName}_cmdclaw_redis_data`,
+    minioVolume:
+      process.env.CMDCLAW_MINIO_VOLUME || `${composeProjectName}_cmdclaw_minio_data`,
+    alertmanagerVolume:
+      process.env.CMDCLAW_ALERTMANAGER_VOLUME ||
+      `${composeProjectName}_cmdclaw_alertmanager_data`,
+    grafanaVolume:
+      process.env.CMDCLAW_GRAFANA_VOLUME || `${composeProjectName}_cmdclaw_grafana_data`,
   };
 }
 
