@@ -4,6 +4,12 @@
 	admin off
 }
 
+(cloudflare) {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+}
+
 :{$PORT} {
 	@health path /healthz
 	handle @health {
