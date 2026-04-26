@@ -29,7 +29,7 @@ previews:
   generation: "off"
 
 projects:
-  - name: cmdclaw
+  - name: cmdclaw-staging
     environments:
       - name: staging
         databases:
