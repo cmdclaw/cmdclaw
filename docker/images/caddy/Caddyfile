@@ -6,7 +6,7 @@
 
 		observability {
 			auth_key {env.TAILSCALE_AUTHKEY}
-			hostname cmdclaw-observability-staging
+			hostname cmdclaw-observability-caddy-staging
 		}
 	}
 }
