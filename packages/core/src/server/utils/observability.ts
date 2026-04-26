@@ -54,6 +54,14 @@ type TraceCarrier = Record<string, string>;
 
 type ConsoleMethod = "log" | "info" | "warn" | "error";
 
+type EnvLookup = Record<string, string | undefined>;
+
+export type ObservabilityVectorUrls = {
+  logUrl: string;
+  metricsUrl: string;
+  tracesUrl: string;
+};
+
 type InstrumentRegistry = {
   counters: Map<string, Counter>;
   histograms: Map<string, Histogram>;
@@ -64,6 +72,9 @@ type ObservabilityRuntimeState = {
   initialized: boolean;
   serviceName: string;
   env: string;
+  vectorLogUrl: string;
+  vectorMetricsUrl: string;
+  vectorTracesUrl: string;
   tracer: Tracer;
   tracerProvider: NodeTracerProvider | null;
   meterProvider: MeterProvider | null;
@@ -93,6 +104,9 @@ const runtimeState: ObservabilityRuntimeState =
       initialized: false,
       serviceName: "cmdclaw",
       env: process.env.NODE_ENV ?? "development",
+      vectorLogUrl: `http://${DEFAULT_OBSERVABILITY_HOST}:8686/logs`,
+      vectorMetricsUrl: `http://${DEFAULT_OBSERVABILITY_HOST}:4318/v1/metrics`,
+      vectorTracesUrl: `http://${DEFAULT_OBSERVABILITY_HOST}:4318/v1/traces`,
       tracer: trace.getTracer(INSTRUMENTATION_SCOPE),
       tracerProvider: null,
       meterProvider: null,
@@ -122,9 +136,9 @@ function getPendingLogExports(): Set<Promise<void>> {
   return runtimeState.pendingLogExports;
 }
 
-function getValueFromEnv(...names: string[]): string | undefined {
+function getValueFromEnvRecord(env: EnvLookup, ...names: string[]): string | undefined {
   for (const name of names) {
-    const value = process.env[name]?.trim();
+    const value = env[name]?.trim();
     if (value) {
       return value;
     }
@@ -133,26 +147,31 @@ function getValueFromEnv(...names: string[]): string | undefined {
   return undefined;
 }
 
-function buildVectorUrl(
+function buildVectorUrlFromEnv(
   path: string,
+  env: EnvLookup,
   options: { fullUrlEnvNames?: string[]; portEnvNames?: string[] } = {},
 ): string {
   const { fullUrlEnvNames = [], portEnvNames = [] } = options;
 
-  const fullUrl = getValueFromEnv(...fullUrlEnvNames);
+  const fullUrl = getValueFromEnvRecord(env, ...fullUrlEnvNames);
   if (fullUrl) {
     return fullUrl;
   }
 
-  const hostport = getValueFromEnv("CMDCLAW_VECTOR_HOSTPORT", "CMDCLAW_OBSERVABILITY_HOSTPORT");
+  const hostport = getValueFromEnvRecord(
+    env,
+    "CMDCLAW_VECTOR_HOSTPORT",
+    "CMDCLAW_OBSERVABILITY_HOSTPORT",
+  );
   if (hostport) {
     return `http://${hostport}${path}`;
   }
 
   const host =
-    getValueFromEnv("CMDCLAW_VECTOR_HOST", "CMDCLAW_OBSERVABILITY_HOST") ??
+    getValueFromEnvRecord(env, "CMDCLAW_VECTOR_HOST", "CMDCLAW_OBSERVABILITY_HOST") ??
     DEFAULT_OBSERVABILITY_HOST;
-  const port = getValueFromEnv(...portEnvNames);
+  const port = getValueFromEnvRecord(env, ...portEnvNames);
   if (port) {
     return `http://${host}:${port}${path}`;
   }
@@ -164,25 +183,23 @@ function buildVectorUrl(
   return `http://${host}:4318${path}`;
 }
 
-function getVectorLogUrl(): string {
-  return buildVectorUrl("/logs", {
-    fullUrlEnvNames: ["CMDCLAW_VECTOR_LOG_URL"],
-    portEnvNames: ["CMDCLAW_VECTOR_LOG_PORT"],
-  });
-}
-
-function getVectorTracesUrl(): string {
-  return buildVectorUrl("/v1/traces", {
-    fullUrlEnvNames: ["CMDCLAW_VECTOR_TRACES_URL"],
-    portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
-  });
-}
-
-function getVectorMetricsUrl(): string {
-  return buildVectorUrl("/v1/metrics", {
-    fullUrlEnvNames: ["CMDCLAW_VECTOR_METRICS_URL"],
-    portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
-  });
+export function resolveObservabilityVectorUrls(
+  env: EnvLookup = process.env as EnvLookup,
+): ObservabilityVectorUrls {
+  return {
+    logUrl: buildVectorUrlFromEnv("/logs", env, {
+      fullUrlEnvNames: ["CMDCLAW_VECTOR_LOG_URL"],
+      portEnvNames: ["CMDCLAW_VECTOR_LOG_PORT"],
+    }),
+    metricsUrl: buildVectorUrlFromEnv("/v1/metrics", env, {
+      fullUrlEnvNames: ["CMDCLAW_VECTOR_METRICS_URL"],
+      portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
+    }),
+    tracesUrl: buildVectorUrlFromEnv("/v1/traces", env, {
+      fullUrlEnvNames: ["CMDCLAW_VECTOR_TRACES_URL"],
+      portEnvNames: ["CMDCLAW_VECTOR_OTLP_HTTP_PORT", "CMDCLAW_OTEL_HTTP_PORT"],
+    }),
+  };
 }
 
 function trimUndefinedAttributes(attributes?: MetricAttributes): Attributes | undefined {
@@ -319,7 +336,7 @@ function forwardLogPayload(payload: Record<string, unknown>): void {
     return;
   }
 
-  const exportPromise = fetch(getVectorLogUrl(), {
+  const exportPromise = fetch(runtimeState.vectorLogUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -397,6 +414,10 @@ function buildResource(serviceName: string) {
 export function initializeObservabilityRuntime(serviceName: string): void {
   runtimeState.serviceName = serviceName;
   runtimeState.env = process.env.NODE_ENV ?? "development";
+  const vectorUrls = resolveObservabilityVectorUrls();
+  runtimeState.vectorLogUrl = vectorUrls.logUrl;
+  runtimeState.vectorMetricsUrl = vectorUrls.metricsUrl;
+  runtimeState.vectorTracesUrl = vectorUrls.tracesUrl;
 
   if (isObservabilityDisabled()) {
     return;
@@ -411,7 +432,7 @@ export function initializeObservabilityRuntime(serviceName: string): void {
   const resource = buildResource(serviceName);
   const spanProcessor = new BatchSpanProcessor(
     new OTLPTraceExporter({
-      url: getVectorTracesUrl(),
+      url: runtimeState.vectorTracesUrl,
       timeoutMillis: 1000,
     }),
     {
@@ -433,7 +454,7 @@ export function initializeObservabilityRuntime(serviceName: string): void {
 
   const metricReader = new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter({
-      url: getVectorMetricsUrl(),
+      url: runtimeState.vectorMetricsUrl,
       timeoutMillis: 1000,
     }),
     exportIntervalMillis: 5000,
