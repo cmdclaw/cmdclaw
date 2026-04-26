@@ -4,27 +4,27 @@
 	}
 }
 
-observability.cmdclaw.ai:{$PORT} {
+observability.cmdclaw.ai {
 	respond "CmdClaw observability stack. Use grafana.observability.cmdclaw.ai, metrics.observability.cmdclaw.ai, logs.observability.cmdclaw.ai, or traces.observability.cmdclaw.ai." 200
 	import cloudflare
 }
 
-grafana.observability.cmdclaw.ai:{$PORT} {
+grafana.observability.cmdclaw.ai {
 	reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
 	import cloudflare
 }
 
-metrics.observability.cmdclaw.ai:{$PORT} {
+metrics.observability.cmdclaw.ai {
 	reverse_proxy http://{$CMDCLAW_VICTORIA_METRICS_HOST}:8428
 	import cloudflare
 }
 
-logs.observability.cmdclaw.ai:{$PORT} {
+logs.observability.cmdclaw.ai {
 	reverse_proxy http://{$CMDCLAW_VICTORIA_LOGS_HOST}:9428
 	import cloudflare
 }
 
-traces.observability.cmdclaw.ai:{$PORT} {
+traces.observability.cmdclaw.ai {
 	reverse_proxy http://{$CMDCLAW_VICTORIA_TRACES_HOST}:10428
 	import cloudflare
 }
