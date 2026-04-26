@@ -29,7 +29,7 @@ export const commandTimeoutMs = Number(process.env.E2E_CLI_TIMEOUT_MS ?? String(
 export const artifactTimeoutMs = Number(process.env.E2E_ARTIFACT_TIMEOUT_MS ?? "45000");
 export const slackPollIntervalMs = Number(process.env.E2E_SLACK_POLL_INTERVAL_MS ?? "2500");
 export const slackPostVerifyTimeoutMs = Number(
-  process.env.E2E_SLACK_POST_VERIFY_TIMEOUT_MS ?? "30000",
+  process.env.E2E_SLACK_POST_VERIFY_TIMEOUT_MS ?? "90000",
 );
 export const gmailPollIntervalMs = Number(process.env.E2E_GMAIL_POLL_INTERVAL_MS ?? "2500");
 export const transientRetryCount = Number(process.env.E2E_TRANSIENT_RETRY_COUNT ?? "1");
@@ -598,12 +598,21 @@ export async function pollSlackEchoMessage(args: {
   return pollSlackEchoMessage(args);
 }
 
-export function buildSlackPrompt(marker: string): string {
+export function buildSlackPrompt(args: { marker: string; sourceText?: string }): string {
+  const readInstruction = args.sourceText
+    ? [
+        `Use Slack tools to read recent messages in #${sourceChannelName}.`,
+        `Find the message whose text is exactly: ${args.sourceText}`,
+        "If newer messages exist, ignore them and use that exact Slack message text.",
+      ].join("\n")
+    : `Use Slack tools to read the latest message in #${sourceChannelName}.`;
+
   return [
     `You are authenticated as ${expectedUserEmail}.`,
-    `Use Slack tools to read the latest message in #${sourceChannelName}.`,
+    readInstruction,
     `Then send a new message in #${targetChannelName} with exactly this format:`,
-    `[${marker}] ${echoPrefix} <previous message>`,
+    `[${args.marker}] ${echoPrefix} <previous message>`,
+    "Copy the previous message text from Slack exactly as written.",
     "Do not post in any other channel.",
     "Return only the final posted message text.",
   ].join("\n");

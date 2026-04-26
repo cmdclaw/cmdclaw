@@ -53,7 +53,10 @@ describe.runIf(liveEnabled)("@live CLI chat slack", () => {
 
       const marker = `slack-e2e-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
       const result = await runChatMessage({
-        message: buildSlackPrompt(marker),
+        message: buildSlackPrompt({
+          marker,
+          sourceText: seedMessage.text,
+        }),
         model: liveModel,
         autoApprove: true,
         timeoutMs: responseTimeoutMs,
@@ -82,9 +85,19 @@ describe.runIf(liveEnabled)("@live CLI chat slack", () => {
     "with auto-approve enabled, posts without approval prompts in CLI output",
     { timeout: Math.max(responseTimeoutMs + 90_000, 300_000) },
     async () => {
+      const slackAccessToken = await getSlackAccessTokenForExpectedUser();
+      const sourceChannelId = await resolveChannelId(slackAccessToken, sourceChannelName);
+      const seedMessage = await postSlackMessage(
+        slackAccessToken,
+        sourceChannelId,
+        `slack-source-auto-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+      );
       const marker = `slack-e2e-auto-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
       const result = await runChatMessage({
-        message: buildSlackPrompt(marker),
+        message: buildSlackPrompt({
+          marker,
+          sourceText: seedMessage.text,
+        }),
         model: liveModel,
         autoApprove: true,
         timeoutMs: responseTimeoutMs,
