@@ -27,7 +27,7 @@ observability.cmdclaw.ai {
 	import cloudflare
 }
 
-cmdclaw-observability-caddy-staging.tail3b24d0.ts.net {
+https://cmdclaw-observability-caddy-staging.tail3b24d0.ts.net {
 	bind tailscale/observability
 	respond "CmdClaw observability stack at cmdclaw-observability-caddy-staging.tail3b24d0.ts.net. Use observability.cmdclaw.ai or the observability subdomains." 200
 }
