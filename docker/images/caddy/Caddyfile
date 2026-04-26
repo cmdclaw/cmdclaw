@@ -17,6 +17,10 @@
 	}
 }
 
+:{$PORT} {
+	respond "ok" 200
+}
+
 observability.cmdclaw.ai {
 	bind tailscale/observability
 	respond "CmdClaw observability stack. Use grafana.observability.cmdclaw.ai, metrics.observability.cmdclaw.ai, logs.observability.cmdclaw.ai, or traces.observability.cmdclaw.ai." 200
