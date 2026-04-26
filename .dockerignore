@@ -1,5 +1,6 @@
 .git
 .github
+.codex
 .turbo
 .DS_Store
 .idea
@@ -14,6 +15,7 @@ experiments
 infra
 
 **/.next
+**/.next-*
 **/coverage
 **/dist
 **/build
