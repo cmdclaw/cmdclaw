@@ -55,7 +55,7 @@ import {
   coworkerTagAssignment,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { and, desc, eq, gte, inArray, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getOperationLabel } from "@/lib/integration-icons";
 import { parseCliCommand } from "@/lib/parse-cli-command";
@@ -764,10 +764,11 @@ const list = protectedProcedure.handler(async ({ context }) => {
     orderBy: (wf, { desc }) => [desc(wf.updatedAt)],
   });
 
-  await reconcileStaleCoworkerRunsForCoworkers(coworkers.map((row) => row.id));
+  const coworkerIds = coworkers.map((row) => row.id);
+
+  await reconcileStaleCoworkerRunsForCoworkers(coworkerIds);
 
   // Batch-fetch tag assignments for all coworkers
-  const coworkerIds = coworkers.map((c) => c.id);
   const tagAssignments =
     coworkerIds.length > 0
       ? await context.db
@@ -788,24 +789,77 @@ const list = protectedProcedure.handler(async ({ context }) => {
     tagsByCoworkerId.set(row.coworkerId, tags);
   }
 
+  const rankedCoworkerRuns =
+    coworkerIds.length > 0
+      ? context.db
+          .select({
+            runId: coworkerRun.id,
+            coworkerId: coworkerRun.coworkerId,
+            status: coworkerRun.status,
+            startedAt: coworkerRun.startedAt,
+            triggerPayload: coworkerRun.triggerPayload,
+            conversationId: generation.conversationId,
+            rowNumber:
+              sql<number>`row_number() over (partition by ${coworkerRun.coworkerId} order by ${coworkerRun.startedAt} desc)`.as(
+                "row_number",
+              ),
+          })
+          .from(coworkerRun)
+          .leftJoin(generation, eq(coworkerRun.generationId, generation.id))
+          .where(inArray(coworkerRun.coworkerId, coworkerIds))
+          .as("ranked_coworker_runs")
+      : null;
+
+  const recentRunsByCoworkerId = new Map<
+    string,
+    Array<{
+      id: string;
+      status: string;
+      startedAt: Date;
+      conversationId: string | null;
+      source: "trigger" | "manual";
+    }>
+  >();
+
+  if (rankedCoworkerRuns) {
+    const recentRunRows = await context.db
+      .select({
+        runId: rankedCoworkerRuns.runId,
+        coworkerId: rankedCoworkerRuns.coworkerId,
+        status: rankedCoworkerRuns.status,
+        startedAt: rankedCoworkerRuns.startedAt,
+        triggerPayload: rankedCoworkerRuns.triggerPayload,
+        conversationId: rankedCoworkerRuns.conversationId,
+      })
+      .from(rankedCoworkerRuns)
+      .where(lte(rankedCoworkerRuns.rowNumber, 20))
+      .orderBy(desc(rankedCoworkerRuns.startedAt));
+
+    for (const run of recentRunRows) {
+      const payload =
+        run.triggerPayload && typeof run.triggerPayload === "object"
+          ? (run.triggerPayload as Record<string, unknown>)
+          : null;
+      const source = payload && Object.keys(payload).length > 0 ? "trigger" : "manual";
+      const groupedRuns = recentRunsByCoworkerId.get(run.coworkerId) ?? [];
+      groupedRuns.push({
+        id: run.runId,
+        status: run.status,
+        startedAt: run.startedAt,
+        conversationId: run.conversationId ?? null,
+        source,
+      });
+      recentRunsByCoworkerId.set(run.coworkerId, groupedRuns);
+    }
+  }
+
   const items = await Promise.all(
     coworkers.map(async (coworkerRow) => {
       const wf = await ensureBuilderCoworkerMetadata({
         context,
         wf: coworkerRow,
       });
-      const runs = await context.db.query.coworkerRun.findMany({
-        where: eq(coworkerRun.coworkerId, wf.id),
-        orderBy: (run, { desc }) => [desc(run.startedAt)],
-        limit: 20,
-        with: {
-          generation: {
-            columns: {
-              conversationId: true,
-            },
-          },
-        },
-      });
+      const runs = recentRunsByCoworkerId.get(wf.id) ?? [];
       const lastRun = runs[0];
       const { toolAccessMode, allowedSkillSlugs } = getResolvedCoworkerToolPolicy(wf);
 
@@ -832,21 +886,7 @@ const list = protectedProcedure.handler(async ({ context }) => {
         lastRunStatus: lastRun?.status ?? null,
         lastRunAt: lastRun?.startedAt ?? null,
         tags: tagsByCoworkerId.get(wf.id) ?? [],
-        recentRuns: runs.map((run) => {
-          const payload =
-            run.triggerPayload && typeof run.triggerPayload === "object"
-              ? (run.triggerPayload as Record<string, unknown>)
-              : null;
-          const source = payload && Object.keys(payload).length > 0 ? "trigger" : "manual";
-
-          return {
-            id: run.id,
-            status: run.status,
-            startedAt: run.startedAt,
-            conversationId: run.generation?.conversationId ?? null,
-            source,
-          };
-        }),
+        recentRuns: runs,
       };
     }),
   );
