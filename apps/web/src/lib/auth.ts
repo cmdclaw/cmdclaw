@@ -33,6 +33,7 @@ async function assertInviteOnlyLogin(email: string) {
   throw new APIError("FORBIDDEN", {
     code: INVITE_ONLY_LOGIN_ERROR,
     message: INVITE_ONLY_LOGIN_ERROR,
+    email,
   });
 }
 
@@ -98,7 +99,7 @@ export const auth = betterAuth({
   trustedOrigins: getTrustedOrigins(),
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/magic-link/send") {
+      if (ctx.path !== "/sign-in/magic-link" && ctx.path !== "/sign-in/email") {
         return;
       }
 

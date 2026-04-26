@@ -29,20 +29,25 @@ const {
   DELETE: deleteHandler,
 } = toNextJsHandler(auth);
 
-async function isInviteOnlyErrorResponse(response: Response): Promise<boolean> {
+async function readInviteOnlyError(
+  response: Response,
+): Promise<{ matched: boolean; email?: string }> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    return false;
+    return { matched: false };
   }
 
   try {
     const body = (await response.clone().json()) as {
       code?: string;
       message?: string;
+      email?: string;
     };
-    return body.code === INVITE_ONLY_LOGIN_ERROR || body.message === INVITE_ONLY_LOGIN_ERROR;
+    const matched =
+      body.code === INVITE_ONLY_LOGIN_ERROR || body.message === INVITE_ONLY_LOGIN_ERROR;
+    return { matched, email: typeof body.email === "string" ? body.email : undefined };
   } catch {
-    return false;
+    return { matched: false };
   }
 }
 
@@ -55,13 +60,17 @@ async function redirectInviteOnlyAuthError(
     return null;
   }
 
-  if (!(await isInviteOnlyErrorResponse(response))) {
+  const { matched, email } = await readInviteOnlyError(response);
+  if (!matched) {
     return null;
   }
 
   const provider = request.nextUrl.pathname.slice(callbackPrefix.length);
   const inviteOnlyUrl = buildRequestAwareUrl("/invite-only", request);
   inviteOnlyUrl.searchParams.set("source", provider ? `social-${provider}` : "social");
+  if (email) {
+    inviteOnlyUrl.searchParams.set("email", email);
+  }
   return NextResponse.redirect(inviteOnlyUrl);
 }
 

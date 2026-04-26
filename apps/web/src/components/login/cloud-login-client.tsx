@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { authClient } from "@/lib/auth-client";
 
-type Step = "initial" | "choose-method" | "magic-link-sent" | "password" | "password-reset-sent";
+type Step = "initial" | "magic-link-sent" | "password" | "password-reset-sent";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -119,19 +119,10 @@ export function CloudLoginClient({
   const [error, setError] = useState<string | null>(initialError ?? null);
   const lastMethod = authClient.getLastUsedLoginMethod();
 
-  const handleContinue = useCallback(
-    (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!email) {
-        return;
-      }
-      setError(null);
-      setStep("choose-method");
-    },
-    [email],
-  );
-
   const requestMagicLink = useCallback(async () => {
+    if (!email) {
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -172,6 +163,13 @@ export function CloudLoginClient({
       });
 
       if (signInError) {
+        if (signInError.message === INVITE_ONLY_LOGIN_ERROR) {
+          router.push(
+            `/invite-only?source=password&email=${encodeURIComponent(normalizeEmail(email))}`,
+          );
+          return;
+        }
+
         setSubmitting(false);
         setError("Invalid email or password.");
         return;
@@ -196,6 +194,14 @@ export function CloudLoginClient({
     });
 
     if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { code?: string } | null;
+      if (body?.code === INVITE_ONLY_LOGIN_ERROR) {
+        router.push(
+          `/invite-only?source=password&email=${encodeURIComponent(normalizeEmail(email))}`,
+        );
+        return;
+      }
+
       setSubmitting(false);
       setError("Unable to send a password email right now.");
       return;
@@ -203,11 +209,39 @@ export function CloudLoginClient({
 
     setSubmitting(false);
     setStep("password-reset-sent");
-  }, [callbackUrl, email]);
-  const handleUsePassword = useCallback(() => {
+  }, [callbackUrl, email, router]);
+  const handleUsePassword = useCallback(async () => {
+    if (!email) {
+      return;
+    }
     setError(null);
+    setSubmitting(true);
+
+    const normalizedEmail = normalizeEmail(email);
+    const response = await fetch("/api/auth/check-email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+
+    const body = (await response.json().catch(() => null)) as { approved?: boolean } | null;
+    setSubmitting(false);
+
+    if (!body?.approved) {
+      router.push(`/invite-only?source=password&email=${encodeURIComponent(normalizedEmail)}`);
+      return;
+    }
+
     setStep("password");
-  }, []);
+  }, [email, router]);
+
+  const handleMagicLinkSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void requestMagicLink();
+    },
+    [requestMagicLink],
+  );
 
   const handleGoogleSignIn = useCallback(async () => {
     await authClient.signIn.social({
@@ -253,8 +287,8 @@ export function CloudLoginClient({
         </p>
       </div>
 
-      {/* Social buttons — always visible on initial/choose-method */}
-      {(step === "initial" || step === "choose-method") && (
+      {/* Social buttons — only visible on initial */}
+      {step === "initial" && (
         <div className="flex flex-col gap-2">
           <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
             <GoogleIcon />
@@ -269,14 +303,14 @@ export function CloudLoginClient({
         </div>
       )}
 
-      {/* Divider — only on initial/choose-method */}
-      {(step === "initial" || step === "choose-method") && (
+      {/* Divider — only on initial */}
+      {step === "initial" && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card text-muted-foreground px-2">Or continue with email</span>
+            <span className="bg-card text-muted-foreground px-2">Or with email</span>
           </div>
         </div>
       )}
@@ -292,7 +326,7 @@ export function CloudLoginClient({
             exit="exit"
             transition={stepTransition}
           >
-            <form onSubmit={handleContinue} className="space-y-3">
+            <form onSubmit={handleMagicLinkSubmit} className="space-y-3">
               <Input
                 id="email"
                 type="email"
@@ -302,60 +336,22 @@ export function CloudLoginClient({
                 onChange={handleEmailChange}
                 required
               />
-              <Button type="submit" className="w-full" disabled={!email}>
-                Continue with email
-                {lastMethod === "email" && <LastUsedBadge />}
-              </Button>
-            </form>
-          </motion.div>
-        )}
-
-        {step === "choose-method" && (
-          <motion.div
-            key="choose-method"
-            variants={stepVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={stepTransition}
-          >
-            <div className="space-y-4">
-              {/* Email display with change option */}
-              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                <span className="truncate text-sm">{email}</span>
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="text-brand hover:text-brand-dark ml-2 shrink-0 text-sm font-medium"
-                >
-                  Change
-                </button>
-              </div>
-
-              <div className="text-muted-foreground text-center text-sm">
-                How would you like to sign in?
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={submitting}
-                  onClick={requestMagicLink}
-                >
-                  {submitting ? "Sending..." : "Send magic link"}
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="submit" className="w-full" disabled={!email || submitting}>
+                  {submitting ? "Sending..." : "Magic link"}
                   {lastMethod === "email" && <LastUsedBadge />}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   className="w-full"
+                  disabled={!email || submitting}
                   onClick={handleUsePassword}
                 >
-                  Use password
+                  Password
                 </Button>
               </div>
-            </div>
+            </form>
           </motion.div>
         )}
 
@@ -434,7 +430,7 @@ export function CloudLoginClient({
                   disabled={submitting}
                   className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors disabled:opacity-50"
                 >
-                  Create or reset password
+                  Set or reset password
                 </button>
               </div>
             </div>
@@ -453,10 +449,10 @@ export function CloudLoginClient({
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               <KeyIcon />
               <div className="space-y-1">
-                <p className="text-sm font-medium">Password email sent</p>
+                <p className="text-sm font-medium">Password link sent</p>
                 <p className="text-muted-foreground text-sm">
                   We sent a link to <span className="text-foreground font-medium">{email}</span> to
-                  create or reset your password.
+                  set your password.
                 </p>
               </div>
               <button

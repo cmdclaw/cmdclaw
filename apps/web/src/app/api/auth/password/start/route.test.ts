@@ -115,7 +115,7 @@ describe("POST /api/auth/password/start", () => {
     });
   });
 
-  it("returns success without creating or sending for unapproved emails", async () => {
+  it("returns invite_only without creating or sending for unapproved emails", async () => {
     isApprovedLoginEmailMock.mockResolvedValueOnce(false);
 
     const response = await POST(
@@ -131,8 +131,8 @@ describe("POST /api/auth/password/start", () => {
       }),
     );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ ok: false, code: "invite_only" });
     expect(findUserByEmailMock).not.toHaveBeenCalled();
     expect(createUserMock).not.toHaveBeenCalled();
     expect(requestPasswordResetMock).not.toHaveBeenCalled();

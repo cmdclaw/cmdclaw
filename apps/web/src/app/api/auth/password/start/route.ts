@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const callbackUrl = sanitizeReturnPath(parsedBody.data.callbackUrl, "/chat");
 
   if (!(await isApprovedLoginEmail(normalizedEmail))) {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: false, code: INVITE_ONLY_LOGIN_ERROR }, { status: 403 });
   }
 
   await resolveOrCreateAuthUserByEmail({ email: normalizedEmail });
