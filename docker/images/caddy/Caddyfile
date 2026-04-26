@@ -1,34 +1,30 @@
-{
-	auto_https off
-	http_port {$PORT}
-	admin off
-}
-
 (cloudflare) {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 }
 
-:{$PORT} {
-	@health path /healthz
-	handle @health {
-		respond "ok" 200
-	}
+observability.cmdclaw.ai:{$PORT} {
+	respond "CmdClaw observability stack. Use grafana.observability.cmdclaw.ai, metrics.observability.cmdclaw.ai, logs.observability.cmdclaw.ai, or traces.observability.cmdclaw.ai." 200
+	import cloudflare
+}
 
-	handle_path /metrics* {
-		reverse_proxy http://{$CMDCLAW_VICTORIA_METRICS_HOST}:8428
-	}
+grafana.observability.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
+	import cloudflare
+}
 
-	handle_path /logs* {
-		reverse_proxy http://{$CMDCLAW_VICTORIA_LOGS_HOST}:9428
-	}
+metrics.observability.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_VICTORIA_METRICS_HOST}:8428
+	import cloudflare
+}
 
-	handle_path /traces* {
-		reverse_proxy http://{$CMDCLAW_VICTORIA_TRACES_HOST}:10428
-	}
+logs.observability.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_VICTORIA_LOGS_HOST}:9428
+	import cloudflare
+}
 
-	handle {
-		reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
-	}
+traces.observability.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_VICTORIA_TRACES_HOST}:10428
+	import cloudflare
 }
