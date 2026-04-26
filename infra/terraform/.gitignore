@@ -19,7 +19,7 @@ terraform.rc
 !.env.example
 
 # Editor/IDE
-.claude/settings.local.json
+**/.claude/settings.local.json
 .cursor/
 .vscode/
 .idea/
