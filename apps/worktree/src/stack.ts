@@ -4,6 +4,7 @@ export type WorktreeStackConfig = {
   composeProjectName: string;
   otelGrpcPort: number;
   otelHttpPort: number;
+  vectorTracePort: number;
   vectorLogPort: number;
   victoriaMetricsPort: number;
   victoriaLogsPort: number;
@@ -64,6 +65,7 @@ export function buildWorktreeHostPorts(slot: number): WorktreeHostPort[] {
     { name: "ws", port: port(47, slot) },
     { name: "otel-grpc", port: stack.otelGrpcPort },
     { name: "otel-http", port: stack.otelHttpPort },
+    { name: "vector-traces", port: stack.vectorTracePort },
     { name: "vector-logs", port: stack.vectorLogPort },
     { name: "victoria-metrics", port: stack.victoriaMetricsPort },
     { name: "victoria-logs", port: stack.victoriaLogsPort },
@@ -117,6 +119,7 @@ export function buildWorktreeStackConfig(instanceId: string, slot: number): Work
     composeProjectName,
     otelGrpcPort: port(431, slot),
     otelHttpPort: port(432, slot),
+    vectorTracePort: port(53, slot),
     vectorLogPort: port(86, slot),
     victoriaMetricsPort: port(84, slot),
     victoriaLogsPort: port(94, slot),
