@@ -15,6 +15,16 @@ import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import type { Client as PgClient } from "pg";
 
 import {
+  buildWorktreeSlotLease,
+  isWorktreeSlotLeaseFresh,
+  isWorktreeSlotLeaseOwnedByInstance,
+  refreshWorktreeSlotLease,
+  resolveSharedWorktreeLocksDir,
+  resolveSharedWorktreeRoot,
+  resolveSharedWorktreeSlotLeasePath,
+  type WorktreeSlotLease,
+} from "./coordination";
+import {
   buildSharedStackConfig,
   buildWorktreeHostPorts,
   buildWorktreeStackConfig,
@@ -422,20 +432,6 @@ function parseStackSlot(value: unknown): number | null {
   return value;
 }
 
-function resolveWorktreeRepoRoots(repoRoot: string): string[] {
-  const worktreeList = runCommand("git", ["worktree", "list", "--porcelain"], repoRoot);
-  return Array.from(
-    new Set(
-      worktreeList
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("worktree "))
-        .map((line) => line.slice("worktree ".length))
-        .filter(Boolean),
-    ),
-  );
-}
-
 function ensureDir(path: string): void {
   mkdirSync(path, { recursive: true });
 }
@@ -515,6 +511,28 @@ function expandPath(value: string, repoRoot: string): string {
   return resolvePath(repoRoot, value);
 }
 
+function resolveSharedWorktreeRootPath(): string {
+  const explicit = process.env.CMDCLAW_SHARED_WORKTREE_ROOT?.trim();
+  if (explicit) {
+    return expandPath(explicit, process.cwd());
+  }
+
+  const home = process.env.HOME;
+  if (!home) {
+    fail("HOME is not set, unable to resolve the shared worktree root.");
+  }
+
+  return resolveSharedWorktreeRoot(home);
+}
+
+function resolveSharedWorktreeLocksPath(): string {
+  return resolveSharedWorktreeLocksDir(resolveSharedWorktreeRootPath());
+}
+
+function resolveSlotLeasePath(slot: number): string {
+  return resolveSharedWorktreeSlotLeasePath(resolveSharedWorktreeRootPath(), slot);
+}
+
 function resolveRecognizedWorktreeRoots(): string[] {
   const configured = process.env.CMDCLAW_WORKTREE_STATUS_PATHS?.trim();
   if (configured) {
@@ -590,6 +608,60 @@ function removeProcessesFile(instanceRoot: string): void {
   if (existsSync(path)) {
     unlinkSync(path);
   }
+}
+
+function loadSlotLease(slot: number): WorktreeSlotLease | null {
+  const path = resolveSlotLeasePath(slot);
+  if (!existsSync(path)) {
+    return null;
+  }
+
+  return JSON.parse(readFileSync(path, "utf8")) as WorktreeSlotLease;
+}
+
+function writeSlotLease(lease: WorktreeSlotLease, mode: "create" | "update"): boolean {
+  ensureDir(resolveSharedWorktreeLocksPath());
+
+  try {
+    writeFileSync(resolveSlotLeasePath(lease.slot), `${JSON.stringify(lease, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: mode === "create" ? "wx" : "w",
+    });
+    return true;
+  } catch (error) {
+    if (
+      mode === "create" &&
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EEXIST"
+    ) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function removeSlotLease(
+  slot: number,
+  owner?: {
+    instanceId: string;
+    repoRoot: string;
+  },
+): void {
+  const path = resolveSlotLeasePath(slot);
+  if (!existsSync(path)) {
+    return;
+  }
+
+  if (owner) {
+    const lease = loadSlotLease(slot);
+    if (lease && !isWorktreeSlotLeaseOwnedByInstance(lease, owner)) {
+      return;
+    }
+  }
+
+  unlinkSync(path);
 }
 
 function hydrateMetadataCredentials(metadata: InstanceMetadata): InstanceMetadata {
@@ -765,23 +837,150 @@ function isSlotActivelyOwnedByInstance(metadata: InstanceMetadata): boolean {
   return hasRunningTrackedProcesses(metadata) || listDockerProjectContainers(metadata).length > 0;
 }
 
-async function allocateStackSlot(repoRoot: string): Promise<number> {
-  const occupiedSlots = new Set<number>();
+function isSlotLeaseStale(lease: WorktreeSlotLease): boolean {
+  const ownerMetadata = loadMetadataForRepoRoot(lease.repoRoot);
+  if (
+    ownerMetadata &&
+    ownerMetadata.instanceId === lease.instanceId &&
+    ownerMetadata.stackSlot === lease.slot
+  ) {
+    return false;
+  }
 
-  for (const candidateRepoRoot of resolveWorktreeRepoRoots(repoRoot)) {
-    if (candidateRepoRoot === repoRoot) {
-      continue;
+  return !isWorktreeSlotLeaseFresh(lease);
+}
+
+async function canUseReservedSlot(slot: number, existing: InstanceMetadata | null): Promise<boolean> {
+  const conflicts = await resolveSlotConflicts(slot);
+  if (conflicts.length === 0) {
+    return true;
+  }
+
+  return existing?.stackSlot === slot && isSlotActivelyOwnedByInstance(existing);
+}
+
+type SlotReservationAttempt =
+  | { status: "reserved" }
+  | { status: "busy"; reason: string };
+
+async function tryReserveStackSlot(
+  repoRoot: string,
+  slot: number,
+  existing: InstanceMetadata | null,
+): Promise<SlotReservationAttempt> {
+  const owner = {
+    instanceId: buildInstanceId(repoRoot),
+    repoRoot,
+  };
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const lease = loadSlotLease(slot);
+    if (!lease) {
+      const createdLease = buildWorktreeSlotLease({
+        slot,
+        instanceId: owner.instanceId,
+        repoRoot: owner.repoRoot,
+      });
+      if (!writeSlotLease(createdLease, "create")) {
+        continue;
+      }
+
+      if (!(await canUseReservedSlot(slot, existing))) {
+        removeSlotLease(slot, owner);
+        const conflicts = await resolveSlotConflicts(slot);
+        return {
+          status: "busy",
+          reason:
+            conflicts.length > 0
+              ? conflicts.map(formatSlotConflict).join(", ")
+              : "the slot ports are already in use",
+        };
+      }
+
+      return { status: "reserved" };
     }
 
-    const slot = parseStackSlot(loadMetadataForRepoRoot(candidateRepoRoot)?.stackSlot);
-    if (slot !== null) {
-      occupiedSlots.add(slot);
+    if (isWorktreeSlotLeaseOwnedByInstance(lease, owner)) {
+      writeSlotLease(refreshWorktreeSlotLease(lease), "update");
+
+      if (!(await canUseReservedSlot(slot, existing))) {
+        const conflicts = await resolveSlotConflicts(slot);
+        return {
+          status: "busy",
+          reason:
+            conflicts.length > 0
+              ? conflicts.map(formatSlotConflict).join(", ")
+              : "the slot ports are already in use",
+        };
+      }
+
+      return { status: "reserved" };
+    }
+
+    if (!isSlotLeaseStale(lease)) {
+      return {
+        status: "busy",
+        reason: `lease held by ${lease.instanceId} (${lease.repoRoot})`,
+      };
+    }
+
+    try {
+      removeSlotLease(slot, {
+        instanceId: lease.instanceId,
+        repoRoot: lease.repoRoot,
+      });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        continue;
+      }
+
+      throw error;
     }
   }
 
+  return {
+    status: "busy",
+    reason: "the slot lease changed while attempting to claim it",
+  };
+}
+
+async function reserveStackSlot(
+  repoRoot: string,
+  existing: InstanceMetadata | null,
+  options?: {
+    excludedSlots?: Set<number>;
+    preferredSlot?: number | null;
+  },
+): Promise<{ slot: number; previousSlot: number | null; reason: string | null }> {
+  const excludedSlots = options?.excludedSlots ?? new Set<number>();
+  const preferredSlot = options?.preferredSlot ?? parseStackSlot(existing?.stackSlot);
+  let preferredReason: string | null = null;
+
+  if (preferredSlot !== null && !excludedSlots.has(preferredSlot)) {
+    const preferred = await tryReserveStackSlot(repoRoot, preferredSlot, existing);
+    if (preferred.status === "reserved") {
+      return {
+        slot: preferredSlot,
+        previousSlot: null,
+        reason: null,
+      };
+    }
+
+    preferredReason = preferred.reason;
+  }
+
   for (let slot = 1; slot <= 99; slot += 1) {
-    if (!occupiedSlots.has(slot) && (await resolveSlotConflicts(slot)).length === 0) {
-      return slot;
+    if (slot === preferredSlot || excludedSlots.has(slot)) {
+      continue;
+    }
+
+    const reserved = await tryReserveStackSlot(repoRoot, slot, existing);
+    if (reserved.status === "reserved") {
+      return {
+        slot,
+        previousSlot: preferredSlot,
+        reason: preferredReason,
+      };
     }
   }
 
@@ -1418,7 +1617,10 @@ function runWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): v
   );
 }
 
-function tryRunWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): boolean {
+function runWorktreeDockerComposeResult(
+  metadata: InstanceMetadata,
+  args: string[],
+): { status: number; stdout: string; stderr: string } {
   const result = spawnSync(
     "docker",
     [
@@ -1440,15 +1642,63 @@ function tryRunWorktreeDockerCompose(metadata: InstanceMetadata, args: string[])
     },
   );
 
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  if (stdout) {
+    process.stdout.write(stdout);
+  }
+  if (stderr) {
+    process.stderr.write(stderr);
+  }
+
+  return {
+    status: result.status ?? 1,
+    stdout,
+    stderr,
+  };
+}
+
+function tryRunWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): boolean {
+  const result = runWorktreeDockerComposeResult(metadata, args);
+
   if (result.status === 0) {
     return true;
   }
 
-  const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
+  const output = result.stderr.trim() || result.stdout.trim() || `exit ${result.status}`;
   console.warn(
     `[worktree] docker compose ${args.join(" ")} failed during cleanup: ${output}`,
   );
   return false;
+}
+
+function isDockerPortAllocationFailure(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return normalized.includes("port is already allocated") || normalized.includes("bind for 0.0.0.0:");
+}
+
+async function ensureWorktreeDockerStackUp(metadata: InstanceMetadata): Promise<InstanceMetadata> {
+  const initialAttempt = runWorktreeDockerComposeResult(metadata, ["up", "-d"]);
+  if (initialAttempt.status === 0) {
+    return metadata;
+  }
+
+  const output = `${initialAttempt.stderr}\n${initialAttempt.stdout}`.trim();
+  if (isSlotActivelyOwnedByInstance(metadata) || !isDockerPortAllocationFailure(output)) {
+    fail(`docker compose up -d failed with exit ${initialAttempt.status}`);
+  }
+
+  const recoveredMetadata = await reallocateMetadataStackSlot(
+    metadata,
+    output || "docker reported that one of the slot ports is already allocated",
+    new Set([metadata.stackSlot]),
+  );
+  const retryAttempt = runWorktreeDockerComposeResult(recoveredMetadata, ["up", "-d"]);
+  if (retryAttempt.status !== 0) {
+    fail(`docker compose up -d failed with exit ${retryAttempt.status}`);
+  }
+
+  return recoveredMetadata;
 }
 
 function runSharedServiceCommand(
@@ -1612,10 +1862,10 @@ function teardownDockerResources(metadata: InstanceMetadata): void {
 }
 
 async function dockerUpInstance(): Promise<void> {
-  const metadata = await resolveMetadata();
+  let metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
   ensureSharedInfraRunning(metadata.repoRoot);
-  runWorktreeDockerCompose(metadata, ["up", "-d"]);
+  metadata = await ensureWorktreeDockerStackUp(metadata);
   await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
   await ensureDatabase(metadata);
   await ensureDatabaseExtensions(metadata);
@@ -2054,6 +2304,46 @@ function createMetadata(
   };
 }
 
+function updateMetadataStackSlot(metadata: InstanceMetadata, stackSlot: number): InstanceMetadata {
+  const ports = buildAppPorts(stackSlot);
+  const updated = hydrateMetadataCredentials({
+    ...metadata,
+    stackSlot,
+    appPort: ports.appPort,
+    wsPort: ports.wsPort,
+    appUrl: buildAppUrl(ports.appPort),
+    updatedAt: new Date().toISOString(),
+  });
+  saveMetadata(updated);
+  writeDerivedEnvFile(updated);
+  return updated;
+}
+
+async function reallocateMetadataStackSlot(
+  metadata: InstanceMetadata,
+  reason: string,
+  excludedSlots?: Set<number>,
+): Promise<InstanceMetadata> {
+  const reservation = await reserveStackSlot(metadata.repoRoot, metadata, {
+    excludedSlots,
+    preferredSlot: null,
+  });
+  const updated = updateMetadataStackSlot(metadata, reservation.slot);
+  if (updated.stackSlot !== metadata.stackSlot) {
+    console.warn(
+      `[worktree] reallocated stack slot ${formatWorktreeStackSlot(metadata.stackSlot)} -> ${formatWorktreeStackSlot(
+        updated.stackSlot,
+      )} because ${reason}`,
+    );
+    removeSlotLease(metadata.stackSlot, {
+      instanceId: metadata.instanceId,
+      repoRoot: metadata.repoRoot,
+    });
+  }
+
+  return updated;
+}
+
 async function resolveMetadata(): Promise<InstanceMetadata> {
   const repoRoot = resolveRepoRoot();
   const stateRoot = resolveStateRoot(repoRoot);
@@ -2063,36 +2353,26 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
 
   if (existing) {
     const hydratedExisting = hydrateMetadataCredentials(existing);
-    const existingStackSlot = parseStackSlot(existing.stackSlot);
-    let stackSlot = existingStackSlot ?? (await allocateStackSlot(repoRoot));
-
-    if (
-      existingStackSlot !== null &&
-      !isSlotActivelyOwnedByInstance(existing) &&
-      (await resolveSlotConflicts(existingStackSlot)).length > 0
-    ) {
-      const conflicts = await resolveSlotConflicts(existingStackSlot);
-      stackSlot = await allocateStackSlot(repoRoot);
+    const reservation = await reserveStackSlot(repoRoot, hydratedExisting);
+    const updated = updateMetadataStackSlot(
+      {
+        ...hydratedExisting,
+        repoRoot,
+        instanceRoot,
+      },
+      reservation.slot,
+    );
+    if (reservation.previousSlot !== null && reservation.previousSlot !== reservation.slot) {
       console.warn(
-        `[worktree] reallocated stack slot ${formatWorktreeStackSlot(existingStackSlot)} -> ${formatWorktreeStackSlot(
-          stackSlot,
-        )} because ${conflicts.map(formatSlotConflict).join(", ")} is already in use`,
+        `[worktree] reallocated stack slot ${formatWorktreeStackSlot(reservation.previousSlot)} -> ${formatWorktreeStackSlot(
+          reservation.slot,
+        )}${reservation.reason ? ` because ${reservation.reason}` : ""}`,
       );
+      removeSlotLease(reservation.previousSlot, {
+        instanceId,
+        repoRoot,
+      });
     }
-
-    const ports = buildAppPorts(stackSlot);
-    const updated = hydrateMetadataCredentials({
-      ...hydratedExisting,
-      repoRoot,
-      instanceRoot,
-      stackSlot,
-      appPort: ports.appPort,
-      wsPort: ports.wsPort,
-      appUrl: buildAppUrl(ports.appPort),
-      updatedAt: new Date().toISOString(),
-    });
-    saveMetadata(updated);
-    writeDerivedEnvFile(updated);
     return updated;
   }
 
@@ -2100,7 +2380,7 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   ensureDir(logsDir(instanceRoot));
   ensureDir(runtimeDir(instanceRoot));
 
-  const stackSlot = await allocateStackSlot(repoRoot);
+  const stackSlot = (await reserveStackSlot(repoRoot, null)).slot;
   const ports = buildAppPorts(stackSlot);
   const metadata = createMetadata(repoRoot, ports.appPort, ports.wsPort, stackSlot);
   saveMetadata(metadata);
@@ -2673,10 +2953,10 @@ async function startInstance(): Promise<void> {
 }
 
 async function setupInstance(): Promise<void> {
-  const metadata = await resolveMetadata();
+  let metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
   ensureSharedInfraRunning(metadata.repoRoot);
-  runWorktreeDockerCompose(metadata, ["up", "-d"]);
+  metadata = await ensureWorktreeDockerStackUp(metadata);
   console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   printStatusEndpoints(metadata);
   await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
@@ -2796,6 +3076,10 @@ async function destroyInstance(): Promise<void> {
   }
 
   teardownDockerResources(metadata);
+  removeSlotLease(metadata.stackSlot, {
+    instanceId: metadata.instanceId,
+    repoRoot: metadata.repoRoot,
+  });
   rmSync(metadata.instanceRoot, { recursive: true, force: true });
   console.log("[worktree] removed local state");
 }
@@ -2865,6 +3149,7 @@ async function showEnv(): Promise<void> {
 async function main(): Promise<void> {
   const repoRoot = resolveRepoRoot();
   ensureDir(resolveStateRoot(repoRoot));
+  ensureDir(resolveSharedWorktreeLocksPath());
   loadSharedEnv(repoRoot);
 
   const command = (process.argv[2] as CommandName | undefined) ?? "dev";
