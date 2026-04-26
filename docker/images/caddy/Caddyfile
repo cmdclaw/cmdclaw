@@ -23,8 +23,13 @@
 
 observability.cmdclaw.ai {
 	bind tailscale/observability
-	respond "CmdClaw observability stack. Use grafana.observability.cmdclaw.ai, metrics.observability.cmdclaw.ai, logs.observability.cmdclaw.ai, or traces.observability.cmdclaw.ai." 200
+	respond "CmdClaw observability stack at observability.cmdclaw.ai. Use grafana.observability.cmdclaw.ai, metrics.observability.cmdclaw.ai, logs.observability.cmdclaw.ai, or traces.observability.cmdclaw.ai." 200
 	import cloudflare
+}
+
+cmdclaw-observability-caddy-staging.tail3b24d0.ts.net {
+	bind tailscale/observability
+	respond "CmdClaw observability stack at cmdclaw-observability-caddy-staging.tail3b24d0.ts.net. Use observability.cmdclaw.ai or the observability subdomains." 200
 }
 
 grafana.observability.cmdclaw.ai {
