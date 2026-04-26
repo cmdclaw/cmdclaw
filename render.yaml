@@ -23,7 +23,7 @@
 #   Render private `10.0.0.0/8` range to your tailnet, and through dedicated
 #   Tailscale Serve access workers that expose stable `*.ts.net` HTTPS hostnames
 #   for Grafana and the Victoria backends. Web and worker export telemetry to
-#   Vector via private-network host + port env vars
+#   Vector via private-network host + port env vars.
 
 previews:
   generation: "off"
