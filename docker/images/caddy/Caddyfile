@@ -1,0 +1,32 @@
+{
+	auto_https off
+	http_port {$PORT}
+	admin off
+}
+
+:{$PORT} {
+	@health path /healthz
+	handle @health {
+		respond "ok" 200
+	}
+
+	handle {
+		respond "unknown observability host" 404
+	}
+}
+
+grafana.staging.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_GRAFANA_HOST}:3000
+}
+
+metrics.staging.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_VICTORIA_METRICS_HOST}:8428
+}
+
+logs.staging.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_VICTORIA_LOGS_HOST}:9428
+}
+
+traces.staging.cmdclaw.ai:{$PORT} {
+	reverse_proxy http://{$CMDCLAW_VICTORIA_TRACES_HOST}:10428
+}
