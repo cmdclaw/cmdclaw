@@ -2,34 +2,38 @@ export type WorktreeStackConfig = {
   slot: number;
   slotLabel: string;
   composeProjectName: string;
-  postgresPort: number;
-  redisPort: number;
-  minioApiPort: number;
-  minioConsolePort: number;
   otelGrpcPort: number;
   otelHttpPort: number;
   vectorLogPort: number;
   victoriaMetricsPort: number;
   victoriaLogsPort: number;
   victoriaTracesPort: number;
-  alertmanagerPort: number;
   vmalertPort: number;
-  grafanaPort: number;
   daytonaApiPort: number;
   daytonaProxyPort: number;
   daytonaSshGatewayPort: number;
   daytonaDexPort: number;
-  postgresVolume: string;
-  redisVolume: string;
-  minioVolume: string;
   victoriaMetricsVolume: string;
   victoriaLogsVolume: string;
   victoriaTracesVolume: string;
-  alertmanagerVolume: string;
-  grafanaVolume: string;
   daytonaDbVolume: string;
   daytonaDexVolume: string;
   daytonaRegistryVolume: string;
+};
+
+export type SharedStackConfig = {
+  composeProjectName: string;
+  postgresPort: number;
+  redisPort: number;
+  minioApiPort: number;
+  minioConsolePort: number;
+  grafanaPort: number;
+  alertmanagerPort: number;
+  postgresVolume: string;
+  redisVolume: string;
+  minioVolume: string;
+  alertmanagerVolume: string;
+  grafanaVolume: string;
 };
 
 export type WorktreeHostPort = {
@@ -58,24 +62,35 @@ export function buildWorktreeHostPorts(slot: number): WorktreeHostPort[] {
   return [
     { name: "app", port: port(37, slot) },
     { name: "ws", port: port(47, slot) },
-    { name: "postgres", port: stack.postgresPort },
-    { name: "redis", port: stack.redisPort },
-    { name: "minio-api", port: stack.minioApiPort },
-    { name: "minio-console", port: stack.minioConsolePort },
     { name: "otel-grpc", port: stack.otelGrpcPort },
     { name: "otel-http", port: stack.otelHttpPort },
     { name: "vector-logs", port: stack.vectorLogPort },
     { name: "victoria-metrics", port: stack.victoriaMetricsPort },
     { name: "victoria-logs", port: stack.victoriaLogsPort },
     { name: "victoria-traces", port: stack.victoriaTracesPort },
-    { name: "alertmanager", port: stack.alertmanagerPort },
     { name: "vmalert", port: stack.vmalertPort },
-    { name: "grafana", port: stack.grafanaPort },
     { name: "daytona-api", port: stack.daytonaApiPort },
     { name: "daytona-proxy", port: stack.daytonaProxyPort },
     { name: "daytona-ssh", port: stack.daytonaSshGatewayPort },
     { name: "daytona-dex", port: stack.daytonaDexPort },
   ];
+}
+
+export function buildSharedStackConfig(): SharedStackConfig {
+  return {
+    composeProjectName: "cmdclaw-shared",
+    postgresPort: 5433,
+    redisPort: 6380,
+    minioApiPort: 9100,
+    minioConsolePort: 9101,
+    grafanaPort: 3400,
+    alertmanagerPort: 9093,
+    postgresVolume: "cmdclaw-shared_postgres_data",
+    redisVolume: "cmdclaw-shared_redis_data",
+    minioVolume: "cmdclaw-shared_minio_data",
+    alertmanagerVolume: "cmdclaw-shared_alertmanager_data",
+    grafanaVolume: "cmdclaw-shared_grafana_data",
+  };
 }
 
 export function buildWorktreeStackConfig(instanceId: string, slot: number): WorktreeStackConfig {
@@ -87,31 +102,20 @@ export function buildWorktreeStackConfig(instanceId: string, slot: number): Work
     slot,
     slotLabel,
     composeProjectName,
-    postgresPort: port(54, slot),
-    redisPort: port(63, slot),
-    minioApiPort: port(91, slot),
-    minioConsolePort: port(92, slot),
     otelGrpcPort: port(431, slot),
     otelHttpPort: port(432, slot),
     vectorLogPort: port(86, slot),
     victoriaMetricsPort: port(84, slot),
     victoriaLogsPort: port(94, slot),
     victoriaTracesPort: port(104, slot),
-    alertmanagerPort: port(90, slot),
     vmalertPort: port(88, slot),
-    grafanaPort: port(74, slot),
     daytonaApiPort: port(33, slot),
     daytonaProxyPort: port(40, slot),
     daytonaSshGatewayPort: port(22, slot),
     daytonaDexPort: port(55, slot),
-    postgresVolume: `${composeProjectName}_cmdclaw_postgres_data`,
-    redisVolume: `${composeProjectName}_cmdclaw_redis_data`,
-    minioVolume: `${composeProjectName}_cmdclaw_minio_data`,
     victoriaMetricsVolume: `${composeProjectName}_cmdclaw_victoria_metrics_data`,
     victoriaLogsVolume: `${composeProjectName}_cmdclaw_victoria_logs_data`,
     victoriaTracesVolume: `${composeProjectName}_cmdclaw_victoria_traces_data`,
-    alertmanagerVolume: `${composeProjectName}_cmdclaw_alertmanager_data`,
-    grafanaVolume: `${composeProjectName}_cmdclaw_grafana_data`,
     daytonaDbVolume: `${composeProjectName}_daytona_db_data`,
     daytonaDexVolume: `${composeProjectName}_daytona_dex_data`,
     daytonaRegistryVolume: `${composeProjectName}_daytona_registry_data`,

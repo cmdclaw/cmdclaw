@@ -12,16 +12,18 @@ import {
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
+import type { Client as PgClient } from "pg";
 
 import {
+  buildSharedStackConfig,
   buildWorktreeHostPorts,
   buildWorktreeStackConfig,
   formatWorktreeStackSlot,
   type WorktreeHostPort,
-} from "./worktree-stack";
-import { buildWorktreePublicCallbackBaseUrl } from "../packages/core/src/lib/worktree-routing";
+} from "./stack";
+import { buildWorktreePublicCallbackBaseUrl } from "../../../packages/core/src/lib/worktree-routing";
 
-const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
+const require = createRequire(new URL("../../web/package.json", import.meta.url));
 const { Client } = require("pg") as typeof import("pg");
 const { serializeSignedCookie } = require("better-call") as typeof import("better-call");
 const dotenv = require("dotenv") as typeof import("dotenv");
@@ -48,9 +50,16 @@ type InstanceMetadata = {
   wsPort: number;
   appUrl: string;
   databaseName: string;
+  databaseUser: string;
+  databasePassword: string;
   databaseUrl: string;
+  redisUser: string;
+  redisPassword: string;
   queueName: string;
   redisNamespace: string;
+  minioBucketName: string;
+  minioAccessKeyId: string;
+  minioSecretAccessKey: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -88,7 +97,7 @@ const COMMENTED_WORKTREE_ENV_KEYS = [
 const DEFAULT_BASE_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres";
 const PROCESS_NAMES = ["web", "worker", "ws"] as const;
 const DEV_START_TIMEOUT_MS = 120_000;
-const GENERATED_WORKTREE_ENV_HEADER = "# Auto-generated for worktree by scripts/worktree.ts.";
+const GENERATED_WORKTREE_ENV_HEADER = "# Auto-generated for worktree by apps/worktree/src/cli.ts.";
 const GENERATED_WORKTREE_ENV_NOTICE = "# Do not edit manually; re-run a worktree command to refresh it.";
 type ProcessName = (typeof PROCESS_NAMES)[number];
 
@@ -227,6 +236,12 @@ function buildDatabaseName(instanceId: string): string {
   return `${prefix}${suffix}`.slice(0, maxLength);
 }
 
+function buildDatabaseUser(instanceId: string): string {
+  const prefix = "cmdclaw_";
+  const suffix = slugify(`${instanceId}_user`, "_");
+  return `${prefix}${suffix}`.slice(0, 63);
+}
+
 function buildAppUrl(appPort: number): string {
   return `http://127.0.0.1:${appPort}`;
 }
@@ -267,6 +282,30 @@ function buildQueueName(instanceId: string): string {
 
 function buildRedisNamespace(instanceId: string): string {
   return `instance:${slugify(instanceId)}:`;
+}
+
+function buildRedisUser(instanceId: string): string {
+  return `wt-${createHash("sha1").update(`${instanceId}:redis`).digest("hex").slice(0, 16)}`;
+}
+
+function buildMinioBucketName(instanceId: string): string {
+  return `cmdclaw-${slugify(instanceId)}`.slice(0, 63);
+}
+
+function buildMinioAccessKeyId(instanceId: string): string {
+  return `wt${createHash("sha1").update(`${instanceId}:minio`).digest("hex").slice(0, 18)}`;
+}
+
+function generateCredentialSecret(bytes = 24): string {
+  return randomBytes(bytes).toString("hex");
+}
+
+function buildDatabaseUrlForMetadata(metadata: Pick<InstanceMetadata, "databaseName" | "databaseUser" | "databasePassword">): string {
+  const shared = buildSharedStackConfig();
+  const url = new URL(buildPostgresBaseUrl(shared.postgresPort, metadata.databaseName));
+  url.username = metadata.databaseUser;
+  url.password = metadata.databasePassword;
+  return url.toString();
 }
 
 function parseStackSlot(value: unknown): number | null {
@@ -445,6 +484,32 @@ function removeProcessesFile(instanceRoot: string): void {
   if (existsSync(path)) {
     unlinkSync(path);
   }
+}
+
+function hydrateMetadataCredentials(metadata: InstanceMetadata): InstanceMetadata {
+  const databaseUser = metadata.databaseUser || buildDatabaseUser(metadata.instanceId);
+  const databasePassword = metadata.databasePassword || generateCredentialSecret();
+  const redisUser = metadata.redisUser || buildRedisUser(metadata.instanceId);
+  const redisPassword = metadata.redisPassword || generateCredentialSecret();
+  const minioBucketName = metadata.minioBucketName || buildMinioBucketName(metadata.instanceId);
+  const minioAccessKeyId = metadata.minioAccessKeyId || buildMinioAccessKeyId(metadata.instanceId);
+  const minioSecretAccessKey = metadata.minioSecretAccessKey || generateCredentialSecret();
+
+  return {
+    ...metadata,
+    databaseUser,
+    databasePassword,
+    databaseUrl: buildDatabaseUrlForMetadata({
+      databaseName: metadata.databaseName,
+      databaseUser,
+      databasePassword,
+    }),
+    redisUser,
+    redisPassword,
+    minioBucketName,
+    minioAccessKeyId,
+    minioSecretAccessKey,
+  };
 }
 
 function buildAppPorts(stackSlot: number): { appPort: number; wsPort: number } {
@@ -627,6 +692,27 @@ function resolvePostgresPassword(): string {
   return process.env.DATABASE_PASSWORD?.trim() || process.env.DB_PASSWORD?.trim() || "postgres";
 }
 
+function resolveSharedRedisAdminPassword(): string {
+  return process.env.CMDCLAW_SHARED_REDIS_ADMIN_PASSWORD?.trim() || "cmdclaw-redis-admin";
+}
+
+function resolveSharedMinioRootCredentials(): { accessKeyId: string; secretAccessKey: string } {
+  return {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim() || process.env.S3_ACCESS_KEY_ID?.trim() || "minioadmin",
+    secretAccessKey:
+      process.env.AWS_SECRET_ACCESS_KEY?.trim() ||
+      process.env.S3_SECRET_ACCESS_KEY?.trim() ||
+      "minioadmin",
+  };
+}
+
+function resolveSharedGrafanaAdminCredentials(): { username: string; password: string } {
+  return {
+    username: process.env.CMDCLAW_GRAFANA_ADMIN_USER?.trim() || "admin",
+    password: process.env.CMDCLAW_GRAFANA_ADMIN_PASSWORD?.trim() || "admin",
+  };
+}
+
 function buildPostgresBaseUrl(port: number, databaseName = "postgres"): string {
   const url = new URL("postgresql://127.0.0.1");
   url.username = "postgres";
@@ -637,12 +723,13 @@ function buildPostgresBaseUrl(port: number, databaseName = "postgres"): string {
 }
 
 function buildPostgresAdminUrl(metadata: InstanceMetadata): string {
-  return buildPostgresBaseUrl(
-    buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot).postgresPort,
-  );
+  return buildPostgresBaseUrl(buildSharedStackConfig().postgresPort);
 }
 
-async function withAdminClient<T>(connectionString: string, fn: (client: Client) => Promise<T>): Promise<T> {
+async function withAdminClient<T>(
+  connectionString: string,
+  fn: (client: PgClient) => Promise<T>,
+): Promise<T> {
   const client = new Client({ connectionString });
   try {
     await client.connect();
@@ -661,7 +748,7 @@ async function withAdminClient<T>(connectionString: string, fn: (client: Client)
   }
 }
 
-async function withClient<T>(connectionString: string, fn: (client: Client) => Promise<T>): Promise<T> {
+async function withClient<T>(connectionString: string, fn: (client: PgClient) => Promise<T>): Promise<T> {
   const client = new Client({ connectionString });
   await client.connect();
   try {
@@ -689,6 +776,47 @@ async function ensureDatabase(metadata: InstanceMetadata): Promise<void> {
   });
 }
 
+async function ensureDatabaseRole(metadata: InstanceMetadata): Promise<void> {
+  const adminUrl = buildPostgresAdminUrl(metadata);
+  await withAdminClient(adminUrl, async (client) => {
+    const existing = await client.query("select 1 from pg_roles where rolname = $1", [
+      metadata.databaseUser,
+    ]);
+
+    if (existing.rowCount === 0) {
+      await client.query(
+        `create role ${quoteIdentifier(metadata.databaseUser)} login password '${metadata.databasePassword.replaceAll("'", "''")}'`,
+      );
+      console.log(`[worktree] created postgres role ${metadata.databaseUser}`);
+    } else {
+      await client.query(
+        `alter role ${quoteIdentifier(metadata.databaseUser)} with login password '${metadata.databasePassword.replaceAll("'", "''")}'`,
+      );
+    }
+
+    await client.query(`revoke all on database ${quoteIdentifier(metadata.databaseName)} from public`);
+    await client.query(
+      `grant all privileges on database ${quoteIdentifier(metadata.databaseName)} to ${quoteIdentifier(metadata.databaseUser)}`,
+    );
+    await client.query(
+      `alter database ${quoteIdentifier(metadata.databaseName)} owner to ${quoteIdentifier(metadata.databaseUser)}`,
+    );
+  });
+
+  await withAdminClient(
+    buildPostgresBaseUrl(buildSharedStackConfig().postgresPort, metadata.databaseName),
+    async (client) => {
+      await client.query(`revoke all on schema public from public`);
+      await client.query(
+        `grant all on schema public to ${quoteIdentifier(metadata.databaseUser)}`,
+      );
+      await client.query(
+        `alter schema public owner to ${quoteIdentifier(metadata.databaseUser)}`,
+      );
+    },
+  );
+}
+
 async function dropDatabase(metadata: InstanceMetadata): Promise<void> {
   const adminUrl = buildPostgresAdminUrl(metadata);
   await withAdminClient(adminUrl, async (client) => {
@@ -706,18 +834,260 @@ async function dropDatabase(metadata: InstanceMetadata): Promise<void> {
   console.log(`[worktree] dropped database ${metadata.databaseName}`);
 }
 
+async function dropDatabaseRole(metadata: InstanceMetadata): Promise<void> {
+  const adminUrl = buildPostgresAdminUrl(metadata);
+  await withAdminClient(adminUrl, async (client) => {
+    await client.query(`drop role if exists ${quoteIdentifier(metadata.databaseUser)}`);
+  });
+  console.log(`[worktree] dropped postgres role ${metadata.databaseUser}`);
+}
+
+function buildMinioPolicyName(instanceId: string): string {
+  return `wt-${createHash("sha1").update(`${instanceId}:minio-policy`).digest("hex").slice(0, 16)}`;
+}
+
+async function ensureRedisAclUser(metadata: InstanceMetadata): Promise<void> {
+  runSharedServiceCommand(metadata.repoRoot, "redis", [
+    "redis-cli",
+    "-a",
+    resolveSharedRedisAdminPassword(),
+    "ACL",
+    "SETUSER",
+    metadata.redisUser,
+    "reset",
+    "on",
+    `>${metadata.redisPassword}`,
+    `~${metadata.redisNamespace}*`,
+    `&${metadata.redisNamespace}*`,
+    "+@all",
+  ]);
+  console.log(`[worktree] ensured redis ACL user ${metadata.redisUser}`);
+}
+
+async function dropRedisAclUser(metadata: InstanceMetadata): Promise<void> {
+  runSharedServiceCommand(
+    metadata.repoRoot,
+    "redis",
+    ["redis-cli", "-a", resolveSharedRedisAdminPassword(), "ACL", "DELUSER", metadata.redisUser],
+    { allowFailure: true },
+  );
+  console.log(`[worktree] dropped redis ACL user ${metadata.redisUser}`);
+}
+
+async function ensureMinioTenant(metadata: InstanceMetadata): Promise<void> {
+  const rootCredentials = resolveSharedMinioRootCredentials();
+  const policyName = buildMinioPolicyName(metadata.instanceId);
+  const policyDocument = JSON.stringify(
+    {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetBucketLocation", "s3:ListBucket"],
+          Resource: [`arn:aws:s3:::${metadata.minioBucketName}`],
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+          Resource: [`arn:aws:s3:::${metadata.minioBucketName}/*`],
+        },
+      ],
+    },
+    null,
+    2,
+  );
+
+  const script = [
+    `mc alias set local http://127.0.0.1:9000 ${JSON.stringify(rootCredentials.accessKeyId)} ${JSON.stringify(rootCredentials.secretAccessKey)} >/dev/null`,
+    `mc mb --ignore-existing local/${metadata.minioBucketName} >/dev/null`,
+    `mc admin user remove local ${metadata.minioAccessKeyId} >/dev/null 2>&1 || true`,
+    `mc admin policy remove local ${policyName} >/dev/null 2>&1 || true`,
+    `cat <<'EOF' > /tmp/${policyName}.json`,
+    policyDocument,
+    "EOF",
+    `mc admin policy create local ${policyName} /tmp/${policyName}.json >/dev/null`,
+    `mc admin user add local ${metadata.minioAccessKeyId} ${JSON.stringify(metadata.minioSecretAccessKey)} >/dev/null`,
+    `mc admin policy attach local ${policyName} --user ${metadata.minioAccessKeyId} >/dev/null`,
+  ].join("\n");
+
+  runSharedServiceCommand(metadata.repoRoot, "minio", ["sh", "-lc", script]);
+  console.log(`[worktree] ensured minio bucket ${metadata.minioBucketName}`);
+}
+
+async function dropMinioTenant(metadata: InstanceMetadata): Promise<void> {
+  const rootCredentials = resolveSharedMinioRootCredentials();
+  const policyName = buildMinioPolicyName(metadata.instanceId);
+  const script = [
+    `mc alias set local http://127.0.0.1:9000 ${JSON.stringify(rootCredentials.accessKeyId)} ${JSON.stringify(rootCredentials.secretAccessKey)} >/dev/null`,
+    `mc rm --recursive --force local/${metadata.minioBucketName} >/dev/null 2>&1 || true`,
+    `mc rb --force local/${metadata.minioBucketName} >/dev/null 2>&1 || true`,
+    `mc admin user remove local ${metadata.minioAccessKeyId} >/dev/null 2>&1 || true`,
+    `mc admin policy remove local ${policyName} >/dev/null 2>&1 || true`,
+  ].join("\n");
+
+  runSharedServiceCommand(metadata.repoRoot, "minio", ["sh", "-lc", script], { allowFailure: true });
+  console.log(`[worktree] removed minio bucket ${metadata.minioBucketName}`);
+}
+
+type GrafanaDatasourceConfig = {
+  name: string;
+  uid: string;
+  type: string;
+  url: string;
+  jsonData?: Record<string, unknown>;
+};
+
+function worktreeGrafanaDatasources(metadata: InstanceMetadata): GrafanaDatasourceConfig[] {
+  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const prefix = slugify(metadata.instanceId, "-");
+
+  return [
+    {
+      name: `${metadata.instanceId} Metrics`,
+      uid: `${prefix}-metrics`.slice(0, 40),
+      type: "prometheus",
+      url: `http://host.docker.internal:${stack.victoriaMetricsPort}`,
+      jsonData: {
+        httpMethod: "POST",
+        prometheusType: "Prometheus",
+        timeInterval: "15s",
+      },
+    },
+    {
+      name: `${metadata.instanceId} Logs`,
+      uid: `${prefix}-logs`.slice(0, 40),
+      type: "victoriametrics-logs-datasource",
+      url: `http://host.docker.internal:${stack.victoriaLogsPort}`,
+      jsonData: {
+        logLevelRules: [
+          { field: "level", operator: "regex", value: "error|fatal", level: "error", enabled: true },
+          { field: "level", operator: "regex", value: "warn|warning", level: "warning", enabled: true },
+          { field: "level", operator: "regex", value: "info", level: "info", enabled: true },
+        ],
+      },
+    },
+    {
+      name: `${metadata.instanceId} Traces`,
+      uid: `${prefix}-traces`.slice(0, 40),
+      type: "jaeger",
+      url: `http://host.docker.internal:${stack.victoriaTracesPort}/select/jaeger`,
+      jsonData: {
+        nodeGraph: { enabled: true },
+        spanBar: { type: "Duration" },
+      },
+    },
+  ];
+}
+
+async function grafanaApiRequest(
+  repoRoot: string,
+  path: string,
+  init: RequestInit,
+): Promise<Response> {
+  const shared = buildSharedStackConfig();
+  const auth = resolveSharedGrafanaAdminCredentials();
+  const headers = new Headers(init.headers);
+  headers.set(
+    "authorization",
+    `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString("base64")}`,
+  );
+  if (init.body && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  return await fetch(`http://127.0.0.1:${shared.grafanaPort}${path}`, {
+    ...init,
+    headers,
+  });
+}
+
+async function ensureGrafanaDatasource(
+  repoRoot: string,
+  datasource: GrafanaDatasourceConfig,
+): Promise<void> {
+  const lookup = await grafanaApiRequest(repoRoot, `/api/datasources/uid/${datasource.uid}`, {
+    method: "GET",
+  });
+  const payload = {
+    name: datasource.name,
+    uid: datasource.uid,
+    type: datasource.type,
+    access: "proxy",
+    url: datasource.url,
+    jsonData: datasource.jsonData ?? {},
+  };
+
+  if (lookup.status === 404) {
+    const createResponse = await grafanaApiRequest(repoRoot, "/api/datasources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!createResponse.ok) {
+      fail(`Failed to create Grafana datasource ${datasource.name}: ${await createResponse.text()}`);
+    }
+    return;
+  }
+
+  if (!lookup.ok) {
+    fail(`Failed to query Grafana datasource ${datasource.name}: ${await lookup.text()}`);
+  }
+
+  const existing = (await lookup.json()) as { id: number };
+  const updateResponse = await grafanaApiRequest(repoRoot, `/api/datasources/${existing.id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      id: existing.id,
+      ...payload,
+    }),
+  });
+  if (!updateResponse.ok) {
+    fail(`Failed to update Grafana datasource ${datasource.name}: ${await updateResponse.text()}`);
+  }
+}
+
+async function ensureGrafanaWorktreeDatasources(metadata: InstanceMetadata): Promise<void> {
+  await waitForHttp(
+    `http://127.0.0.1:${buildSharedStackConfig().grafanaPort}/api/health`,
+    DEV_START_TIMEOUT_MS,
+  );
+  for (const datasource of worktreeGrafanaDatasources(metadata)) {
+    await ensureGrafanaDatasource(metadata.repoRoot, datasource);
+  }
+}
+
+async function removeGrafanaWorktreeDatasources(metadata: InstanceMetadata): Promise<void> {
+  for (const datasource of worktreeGrafanaDatasources(metadata)) {
+    const response = await grafanaApiRequest(metadata.repoRoot, `/api/datasources/uid/${datasource.uid}`, {
+      method: "GET",
+    });
+    if (response.status === 404) {
+      continue;
+    }
+    if (!response.ok) {
+      console.warn(
+        `[worktree] failed to look up Grafana datasource ${datasource.name}: ${await response.text()}`,
+      );
+      continue;
+    }
+    const existing = (await response.json()) as { id: number };
+    const deleteResponse = await grafanaApiRequest(
+      metadata.repoRoot,
+      `/api/datasources/${existing.id}`,
+      { method: "DELETE" },
+    );
+    if (!deleteResponse.ok) {
+      console.warn(
+        `[worktree] failed to remove Grafana datasource ${datasource.name}: ${await deleteResponse.text()}`,
+      );
+    }
+  }
+}
+
 function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
   const instanceRuntimeDir = runtimeDir(metadata.instanceRoot);
   const instanceAppUrl = metadata.appUrl;
   const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const sharedStack = buildSharedStackConfig();
   const databaseUrl = new URL(metadata.databaseUrl);
-  const bucketName = process.env.AWS_S3_BUCKET_NAME?.trim() || "cmdclaw-documents";
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim() || "minioadmin";
-  const secretAccessKey =
-    process.env.AWS_SECRET_ACCESS_KEY?.trim() ||
-    process.env.S3_SECRET_ACCESS_KEY?.trim() ||
-    "minioadmin";
-  const databasePassword = resolvePostgresPassword();
 
   return {
     PORT: String(metadata.appPort),
@@ -736,14 +1106,14 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     PLAYWRIGHT_BASE_URL: instanceAppUrl,
     E2E_AUTH_STATE_PATH: join(instanceRuntimeDir, "playwright", "user.json"),
     DATABASE_URL: metadata.databaseUrl,
-    DATABASE_PASSWORD: databasePassword,
-    DB_PASSWORD: databasePassword,
-    REDIS_URL: `redis://127.0.0.1:${stack.redisPort}`,
-    AWS_ENDPOINT_URL: `http://127.0.0.1:${stack.minioApiPort}`,
+    DATABASE_PASSWORD: metadata.databasePassword,
+    DB_PASSWORD: metadata.databasePassword,
+    REDIS_URL: `redis://${encodeURIComponent(metadata.redisUser)}:${encodeURIComponent(metadata.redisPassword)}@127.0.0.1:${sharedStack.redisPort}/0`,
+    AWS_ENDPOINT_URL: `http://127.0.0.1:${sharedStack.minioApiPort}`,
     AWS_DEFAULT_REGION: process.env.AWS_DEFAULT_REGION ?? "us-east-1",
-    AWS_ACCESS_KEY_ID: accessKeyId,
-    AWS_SECRET_ACCESS_KEY: secretAccessKey,
-    AWS_S3_BUCKET_NAME: bucketName,
+    AWS_ACCESS_KEY_ID: metadata.minioAccessKeyId,
+    AWS_SECRET_ACCESS_KEY: metadata.minioSecretAccessKey,
+    AWS_S3_BUCKET_NAME: metadata.minioBucketName,
     AWS_S3_FORCE_PATH_STYLE: process.env.AWS_S3_FORCE_PATH_STYLE ?? "true",
     BULLMQ_QUEUE_NAME: metadata.queueName,
     CMDCLAW_INSTANCE_ID: metadata.instanceId,
@@ -752,10 +1122,10 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_WORKTREE_SLOT: formatWorktreeStackSlot(metadata.stackSlot),
     CMDCLAW_COMPOSE_PROJECT: stack.composeProjectName,
     COMPOSE_PROJECT_NAME: stack.composeProjectName,
-    CMDCLAW_POSTGRES_PORT: String(stack.postgresPort),
-    CMDCLAW_REDIS_PORT: String(stack.redisPort),
-    CMDCLAW_MINIO_API_PORT: String(stack.minioApiPort),
-    CMDCLAW_MINIO_CONSOLE_PORT: String(stack.minioConsolePort),
+    CMDCLAW_POSTGRES_PORT: String(sharedStack.postgresPort),
+    CMDCLAW_REDIS_PORT: String(sharedStack.redisPort),
+    CMDCLAW_MINIO_API_PORT: String(sharedStack.minioApiPort),
+    CMDCLAW_MINIO_CONSOLE_PORT: String(sharedStack.minioConsolePort),
     CMDCLAW_OTEL_GRPC_PORT: String(stack.otelGrpcPort),
     CMDCLAW_OTEL_HTTP_PORT: String(stack.otelHttpPort),
     CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(stack.otelGrpcPort),
@@ -764,17 +1134,17 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_VICTORIA_METRICS_PORT: String(stack.victoriaMetricsPort),
     CMDCLAW_VICTORIA_LOGS_PORT: String(stack.victoriaLogsPort),
     CMDCLAW_VICTORIA_TRACES_PORT: String(stack.victoriaTracesPort),
-    CMDCLAW_ALERTMANAGER_PORT: String(stack.alertmanagerPort),
+    CMDCLAW_ALERTMANAGER_PORT: String(sharedStack.alertmanagerPort),
     CMDCLAW_VMALERT_PORT: String(stack.vmalertPort),
-    CMDCLAW_GRAFANA_PORT: String(stack.grafanaPort),
-    CMDCLAW_POSTGRES_VOLUME: stack.postgresVolume,
-    CMDCLAW_REDIS_VOLUME: stack.redisVolume,
-    CMDCLAW_MINIO_VOLUME: stack.minioVolume,
+    CMDCLAW_GRAFANA_PORT: String(sharedStack.grafanaPort),
+    CMDCLAW_POSTGRES_VOLUME: sharedStack.postgresVolume,
+    CMDCLAW_REDIS_VOLUME: sharedStack.redisVolume,
+    CMDCLAW_MINIO_VOLUME: sharedStack.minioVolume,
     CMDCLAW_VICTORIA_METRICS_VOLUME: stack.victoriaMetricsVolume,
     CMDCLAW_VICTORIA_LOGS_VOLUME: stack.victoriaLogsVolume,
     CMDCLAW_VICTORIA_TRACES_VOLUME: stack.victoriaTracesVolume,
-    CMDCLAW_ALERTMANAGER_VOLUME: stack.alertmanagerVolume,
-    CMDCLAW_GRAFANA_VOLUME: stack.grafanaVolume,
+    CMDCLAW_ALERTMANAGER_VOLUME: sharedStack.alertmanagerVolume,
+    CMDCLAW_GRAFANA_VOLUME: sharedStack.grafanaVolume,
     PGHOST: databaseUrl.hostname,
     PGPORT: databaseUrl.port,
     PGDATABASE: databaseUrl.pathname.replace(/^\//, ""),
@@ -803,6 +1173,27 @@ function buildWorktreeRuntimeEnv(metadata: InstanceMetadata): DerivedEnv {
   return {
     ...readSharedEnvValues(metadata.repoRoot),
     ...buildDerivedEnv(metadata),
+  };
+}
+
+function buildSharedComposeEnv(repoRoot: string): NodeJS.ProcessEnv {
+  const shared = buildSharedStackConfig();
+  return {
+    ...process.env,
+    ...readSharedEnvValues(repoRoot),
+    CMDCLAW_SHARED_COMPOSE_PROJECT: shared.composeProjectName,
+    COMPOSE_PROJECT_NAME: shared.composeProjectName,
+    CMDCLAW_POSTGRES_PORT: String(shared.postgresPort),
+    CMDCLAW_REDIS_PORT: String(shared.redisPort),
+    CMDCLAW_MINIO_API_PORT: String(shared.minioApiPort),
+    CMDCLAW_MINIO_CONSOLE_PORT: String(shared.minioConsolePort),
+    CMDCLAW_GRAFANA_PORT: String(shared.grafanaPort),
+    CMDCLAW_ALERTMANAGER_PORT: String(shared.alertmanagerPort),
+    CMDCLAW_POSTGRES_VOLUME: shared.postgresVolume,
+    CMDCLAW_REDIS_VOLUME: shared.redisVolume,
+    CMDCLAW_MINIO_VOLUME: shared.minioVolume,
+    CMDCLAW_GRAFANA_VOLUME: shared.grafanaVolume,
+    CMDCLAW_ALERTMANAGER_VOLUME: shared.alertmanagerVolume,
   };
 }
 
@@ -863,22 +1254,24 @@ function isDockerDaemonReachable(): boolean {
 
 function printStatusEndpoints(metadata: InstanceMetadata): void {
   const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
+  const sharedStack = buildSharedStackConfig();
   const databaseUrl = new URL(metadata.databaseUrl);
 
   console.log(`[worktree] docker project ${stack.composeProjectName}`);
+  console.log(`[worktree] shared docker project ${sharedStack.composeProjectName}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] health ${buildHealthCheckUrl(metadata.appUrl)}`);
   console.log(
     `[worktree] postgres ${databaseUrl.hostname}:${databaseUrl.port}/${databaseUrl.pathname.replace(/^\//, "")}`,
   );
-  console.log(`[worktree] redis redis://127.0.0.1:${stack.redisPort}`);
-  console.log(`[worktree] minio api ${buildLoopbackUrl(stack.minioApiPort)}`);
-  console.log(`[worktree] minio console ${buildLoopbackUrl(stack.minioConsolePort)}`);
+  console.log(`[worktree] redis redis://127.0.0.1:${sharedStack.redisPort}`);
+  console.log(`[worktree] minio api ${buildLoopbackUrl(sharedStack.minioApiPort)}`);
+  console.log(`[worktree] minio console ${buildLoopbackUrl(sharedStack.minioConsolePort)}`);
   console.log(`[worktree] metrics ${buildLoopbackUrl(stack.victoriaMetricsPort)}`);
   console.log(`[worktree] logs ${buildLoopbackUrl(stack.victoriaLogsPort)}`);
   console.log(`[worktree] traces ${buildLoopbackUrl(stack.victoriaTracesPort)}`);
-  console.log(`[worktree] grafana ${buildLoopbackUrl(stack.grafanaPort)}`);
-  console.log(`[worktree] alertmanager ${buildLoopbackUrl(stack.alertmanagerPort)}`);
+  console.log(`[worktree] grafana ${buildLoopbackUrl(sharedStack.grafanaPort)}`);
+  console.log(`[worktree] alertmanager ${buildLoopbackUrl(sharedStack.alertmanagerPort)}`);
   console.log(`[worktree] vmalert ${buildLoopbackUrl(stack.vmalertPort)}`);
   console.log(`[worktree] otel grpc 127.0.0.1:${stack.otelGrpcPort}`);
   console.log(`[worktree] otel http ${buildLoopbackUrl(stack.otelHttpPort)}`);
@@ -886,20 +1279,42 @@ function printStatusEndpoints(metadata: InstanceMetadata): void {
   console.log(`[worktree] env file ${resolveWorktreeEnvFile(metadata.repoRoot)}`);
 }
 
-function runDockerCompose(metadata: InstanceMetadata, args: string[]): void {
+function runWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): void {
   runInheritedCommand(
     "docker",
-    ["compose", "--env-file", resolveWorktreeEnvFile(metadata.repoRoot), "-f", "docker/compose/dev.yml", ...args],
+    [
+      "compose",
+      "--env-file",
+      resolveWorktreeEnvFile(metadata.repoRoot),
+      "-f",
+      "docker/compose/worktree-observability.yml",
+      ...args,
+    ],
     metadata.repoRoot,
+    {
+      ...process.env,
+      ...buildWorktreeRuntimeEnv(metadata),
+    },
   );
 }
 
-function tryRunDockerCompose(metadata: InstanceMetadata, args: string[]): boolean {
+function tryRunWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): boolean {
   const result = spawnSync(
     "docker",
-    ["compose", "--env-file", resolveWorktreeEnvFile(metadata.repoRoot), "-f", "docker/compose/dev.yml", ...args],
+    [
+      "compose",
+      "--env-file",
+      resolveWorktreeEnvFile(metadata.repoRoot),
+      "-f",
+      "docker/compose/worktree-observability.yml",
+      ...args,
+    ],
     {
       cwd: metadata.repoRoot,
+      env: {
+        ...process.env,
+        ...buildWorktreeRuntimeEnv(metadata),
+      },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -914,6 +1329,67 @@ function tryRunDockerCompose(metadata: InstanceMetadata, args: string[]): boolea
     `[worktree] docker compose ${args.join(" ")} failed during cleanup: ${output}`,
   );
   return false;
+}
+
+function runSharedDockerCompose(repoRoot: string, args: string[]): void {
+  const env = buildSharedComposeEnv(repoRoot);
+  runInheritedCommand(
+    "docker",
+    [
+      "compose",
+      "--env-file",
+      resolveSharedEnvFile(repoRoot),
+      "-p",
+      env.CMDCLAW_SHARED_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
+      "-f",
+      "docker/compose/worktree-shared.yml",
+      ...args,
+    ],
+    repoRoot,
+    env,
+  );
+}
+
+function runSharedServiceCommand(
+  repoRoot: string,
+  service: string,
+  command: string[],
+  options?: { input?: string; allowFailure?: boolean },
+): string {
+  const env = buildSharedComposeEnv(repoRoot);
+  const result = spawnSync(
+    "docker",
+    [
+      "compose",
+      "--env-file",
+      resolveSharedEnvFile(repoRoot),
+      "-p",
+      env.CMDCLAW_SHARED_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
+      "-f",
+      "docker/compose/worktree-shared.yml",
+      "exec",
+      "-T",
+      service,
+      ...command,
+    ],
+    {
+      cwd: repoRoot,
+      env,
+      input: options?.input,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+
+  if (result.status !== 0 && !options?.allowFailure) {
+    fail(
+      `docker compose exec ${service} ${command.join(" ")} failed: ${
+        result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`
+      }`,
+    );
+  }
+
+  return result.stdout.trim();
 }
 
 function listDockerProjectContainerIds(metadata: InstanceMetadata): string[] {
@@ -970,7 +1446,7 @@ function teardownDockerResources(metadata: InstanceMetadata): void {
     return;
   }
 
-  tryRunDockerCompose(metadata, ["down", "--volumes", "--remove-orphans"]);
+  tryRunWorktreeDockerCompose(metadata, ["down", "--volumes", "--remove-orphans"]);
   removeDockerProjectContainers(metadata);
   console.log(`[worktree] docker stack removed for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
 }
@@ -978,14 +1454,21 @@ function teardownDockerResources(metadata: InstanceMetadata): void {
 async function dockerUpInstance(): Promise<void> {
   const metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
-  runDockerCompose(metadata, ["up", "-d"]);
+  runSharedDockerCompose(metadata.repoRoot, ["up", "-d"]);
+  runWorktreeDockerCompose(metadata, ["up", "-d"]);
+  await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
+  await ensureDatabase(metadata);
+  await ensureDatabaseRole(metadata);
+  await ensureRedisAclUser(metadata);
+  await ensureMinioTenant(metadata);
+  await ensureGrafanaWorktreeDatasources(metadata);
   console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   printStatusEndpoints(metadata);
 }
 
 async function dockerDownInstance(): Promise<void> {
   const metadata = await resolveMetadata();
-  runDockerCompose(metadata, ["down"]);
+  runWorktreeDockerCompose(metadata, ["down"]);
   console.log(`[worktree] docker stack stopped for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
 }
 
@@ -1076,7 +1559,7 @@ function toIdentifierList(columns: string[]): string {
 }
 
 async function upsertRows(
-  client: Client,
+  client: PgClient,
   tableName: string,
   rows: Array<Record<string, unknown>>,
   conflictColumns: string[],
@@ -1119,7 +1602,7 @@ async function upsertRows(
 }
 
 async function selectRows(
-  client: Client,
+  client: PgClient,
   tableName: string,
   whereClause: string,
   params: unknown[],
@@ -1176,7 +1659,7 @@ async function syncCliProfileFromLocalSession(metadata: InstanceMetadata): Promi
   return true;
 }
 
-async function resolveBootstrapSourceUser(sourceClient: Client): Promise<SourceUserRecord | null> {
+async function resolveBootstrapSourceUser(sourceClient: PgClient): Promise<SourceUserRecord | null> {
   const explicitEmail = process.env.CMDCLAW_WORKTREE_DEV_USER_EMAIL?.trim();
   if (explicitEmail) {
     const result = await sourceClient.query<SourceUserRecord>(
@@ -1372,9 +1855,14 @@ function createMetadata(
 ): InstanceMetadata {
   const instanceId = buildInstanceId(repoRoot);
   const instanceRoot = join(resolveStateRoot(repoRoot), instanceId);
-  const stack = buildWorktreeStackConfig(instanceId, stackSlot);
   const databaseName = buildDatabaseName(instanceId);
-  const databaseUrl = deriveDatabaseUrl(buildPostgresBaseUrl(stack.postgresPort), databaseName);
+  const databaseUser = buildDatabaseUser(instanceId);
+  const databasePassword = generateCredentialSecret();
+  const redisUser = buildRedisUser(instanceId);
+  const redisPassword = generateCredentialSecret();
+  const minioBucketName = buildMinioBucketName(instanceId);
+  const minioAccessKeyId = buildMinioAccessKeyId(instanceId);
+  const minioSecretAccessKey = generateCredentialSecret();
   const now = new Date().toISOString();
 
   return {
@@ -1386,9 +1874,20 @@ function createMetadata(
     wsPort,
     appUrl: buildAppUrl(appPort),
     databaseName,
-    databaseUrl,
+    databaseUser,
+    databasePassword,
+    databaseUrl: buildDatabaseUrlForMetadata({
+      databaseName,
+      databaseUser,
+      databasePassword,
+    }),
+    redisUser,
+    redisPassword,
     queueName: buildQueueName(instanceId),
     redisNamespace: buildRedisNamespace(instanceId),
+    minioBucketName,
+    minioAccessKeyId,
+    minioSecretAccessKey,
     createdAt: now,
     updatedAt: now,
   };
@@ -1402,6 +1901,7 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
   const existing = loadMetadata(instanceRoot);
 
   if (existing) {
+    const hydratedExisting = hydrateMetadataCredentials(existing);
     const existingStackSlot = parseStackSlot(existing.stackSlot);
     let stackSlot = existingStackSlot ?? (await allocateStackSlot(repoRoot));
 
@@ -1419,19 +1919,17 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
       );
     }
 
-    const stack = buildWorktreeStackConfig(instanceId, stackSlot);
     const ports = buildAppPorts(stackSlot);
-    const updated: InstanceMetadata = {
-      ...existing,
+    const updated = hydrateMetadataCredentials({
+      ...hydratedExisting,
       repoRoot,
       instanceRoot,
       stackSlot,
       appPort: ports.appPort,
       wsPort: ports.wsPort,
       appUrl: buildAppUrl(ports.appPort),
-      databaseUrl: deriveDatabaseUrl(buildPostgresBaseUrl(stack.postgresPort), existing.databaseName),
       updatedAt: new Date().toISOString(),
-    };
+    });
     saveMetadata(updated);
     writeDerivedEnvFile(updated);
     return updated;
@@ -1886,6 +2384,10 @@ async function createInstance(): Promise<InstanceMetadata> {
   ensureDir(logsDir(metadata.instanceRoot));
   ensureDir(runtimeDir(metadata.instanceRoot));
   await ensureDatabase(metadata);
+  await ensureDatabaseRole(metadata);
+  await ensureRedisAclUser(metadata);
+  await ensureMinioTenant(metadata);
+  await ensureGrafanaWorktreeDatasources(metadata);
   await runDbPush(metadata);
   await bootstrapDeveloperUser(metadata);
   if (!(await syncCliProfileFromLocalSession(metadata))) {
@@ -2010,7 +2512,8 @@ async function startInstance(): Promise<void> {
 async function setupInstance(): Promise<void> {
   const metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
-  runDockerCompose(metadata, ["up", "-d"]);
+  runSharedDockerCompose(metadata.repoRoot, ["up", "-d"]);
+  runWorktreeDockerCompose(metadata, ["up", "-d"]);
   console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
   printStatusEndpoints(metadata);
   await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
@@ -2099,6 +2602,34 @@ async function destroyInstance(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[worktree] failed to drop database ${metadata.databaseName}: ${message}`);
+  }
+
+  try {
+    await dropDatabaseRole(metadata);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[worktree] failed to drop postgres role ${metadata.databaseUser}: ${message}`);
+  }
+
+  try {
+    await dropRedisAclUser(metadata);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[worktree] failed to drop redis ACL user ${metadata.redisUser}: ${message}`);
+  }
+
+  try {
+    await dropMinioTenant(metadata);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[worktree] failed to remove minio tenant ${metadata.minioBucketName}: ${message}`);
+  }
+
+  try {
+    await removeGrafanaWorktreeDatasources(metadata);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[worktree] failed to remove Grafana datasources for ${metadata.instanceId}: ${message}`);
   }
 
   teardownDockerResources(metadata);
@@ -2211,6 +2742,7 @@ async function main(): Promise<void> {
     case "bootstrap-user": {
       const metadata = await resolveMetadata();
       await ensureDatabase(metadata);
+      await ensureDatabaseRole(metadata);
       await runDbPush(metadata);
       await bootstrapDeveloperUser(metadata);
       if (!(await syncCliProfileFromLocalSession(metadata))) {

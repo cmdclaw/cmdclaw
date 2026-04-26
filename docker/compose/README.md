@@ -8,11 +8,16 @@ For a worktree-local stack, export the worktree overrides first so Compose gets 
 unique project name, ports, and volumes for that checkout:
 
 ```bash
-eval "$(bun run worktree env)"
-docker compose -f docker/compose/dev.yml up -d
+bun run worktree:docker-up
 ```
 
-This starts the shared local dependencies plus the observability stack:
+In the current worktree flow, `worktree:docker-up` starts or reuses the shared
+stateful services from `docker/compose/worktree-shared.yml` and starts the
+worktree-local observability services from `docker/compose/worktree-observability.yml`.
+
+The main checkout `docker/compose/dev.yml` remains the full local stack.
+
+The default observability endpoints are:
 
 - `Vector` on `http://127.0.0.1:4318` for OTLP/HTTP, `127.0.0.1:4317` for OTLP/gRPC, and `http://127.0.0.1:8686/logs` for JSON logs
 - `VictoriaMetrics` on `http://127.0.0.1:8428`
