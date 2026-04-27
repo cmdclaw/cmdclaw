@@ -211,7 +211,7 @@ async function main() {
             request,
             Response.json({
               ok: true,
-              servers: ["internal", "gmail"],
+              servers: Object.keys(MCP_SERVER_REGISTRY),
               managedChildren: shouldManageGatewayChildren(process.env),
               authorizationServer: `${requestUrl.origin}${GATEWAY_AUTH_SERVER_METADATA_PATH}`,
               protectedResources: Object.keys(MCP_SERVER_REGISTRY).map((slug) =>
@@ -243,7 +243,10 @@ async function main() {
           );
         }
 
-        if (requestUrl.pathname === GATEWAY_AUTHORIZATION_PATH) {
+        if (
+          requestUrl.pathname === GATEWAY_AUTHORIZATION_PATH ||
+          requestUrl.pathname === "/api/mcp/oauth/authorize"
+        ) {
           return withGatewayCors(
             request,
             await fetch(
@@ -252,14 +255,20 @@ async function main() {
           );
         }
 
-        if (requestUrl.pathname === GATEWAY_TOKEN_PATH) {
+        if (
+          requestUrl.pathname === GATEWAY_TOKEN_PATH ||
+          requestUrl.pathname === "/api/mcp/oauth/token"
+        ) {
           return withGatewayCors(
             request,
             await fetch(buildAppProxyRequest(request, "/api/mcp/oauth/token", requestUrl)),
           );
         }
 
-        if (requestUrl.pathname === GATEWAY_REGISTER_PATH) {
+        if (
+          requestUrl.pathname === GATEWAY_REGISTER_PATH ||
+          requestUrl.pathname === "/api/mcp/oauth/register"
+        ) {
           return withGatewayCors(
             request,
             await fetch(buildAppProxyRequest(request, "/api/mcp/oauth/register", requestUrl)),

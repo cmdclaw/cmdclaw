@@ -171,6 +171,13 @@ export function resolveHostedMcpResource(resource: string | URL): {
       resourceName: "CmdClaw Internal MCP",
     };
   }
+  if (pathname === "/galien/mcp") {
+    return {
+      audience: "galien",
+      resource: parsed.toString(),
+      resourceName: "Galien MCP",
+    };
+  }
 
   throw new Error("Unsupported hosted MCP resource.");
 }

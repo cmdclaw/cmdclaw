@@ -5,12 +5,19 @@ describe("routeMcpRequest", () => {
   const env = {
     CMDCLAW_INTERNAL_MCP_TARGET: "http://127.0.0.1:4101",
     CMDCLAW_GMAIL_MCP_TARGET: "http://127.0.0.1:4102",
+    CMDCLAW_GALIEN_MCP_TARGET: "http://127.0.0.1:4103",
   };
 
   it("routes internal MCP requests", () => {
     const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/internal/mcp"), env);
     expect(routed?.slug).toBe("internal");
     expect(routed?.target.toString()).toBe("http://127.0.0.1:4101/mcp");
+  });
+
+  it("routes galien MCP requests", () => {
+    const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/galien/mcp"), env);
+    expect(routed?.slug).toBe("galien");
+    expect(routed?.target.toString()).toBe("http://127.0.0.1:4103/mcp");
   });
 
   it("matches the spec protected-resource metadata path", () => {

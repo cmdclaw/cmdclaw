@@ -1,5 +1,8 @@
 import type { Session, User } from "better-auth";
-import { verifyHostedMcpAccessToken } from "@cmdclaw/core/server/hosted-mcp-oauth";
+import {
+  type HostedMcpAudience,
+  verifyHostedMcpAccessToken,
+} from "@cmdclaw/core/server/hosted-mcp-oauth";
 import { db } from "@cmdclaw/db/client";
 import { user as userTable } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
@@ -9,7 +12,7 @@ export type HostedMcpContext = {
   token: string;
   userId: string;
   workspaceId: string;
-  audience: "gmail" | "internal";
+  audience: HostedMcpAudience;
   scopes: string[];
   clientId: string;
   grantId: string;

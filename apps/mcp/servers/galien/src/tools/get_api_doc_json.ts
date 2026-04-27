@@ -1,0 +1,21 @@
+import { z } from "zod";
+import { type InferSchema, type ToolMetadata } from "xmcp";
+import { toMcpToolResult } from "../../../../shared/tool-result";
+import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+
+export const schema = {};
+
+export const metadata: ToolMetadata = {
+  name: "get_api_doc_json",
+  description: "Galien GET request (/api/doc.json)",
+  annotations: {
+    title: "get_api_doc_json",
+    readOnlyHint: true,
+    idempotentHint: true,
+  },
+};
+
+export default async function getApiDocJson(params: InferSchema<typeof schema>) {
+  const result = await requestGalienGet("/api/doc.json", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+  return toMcpToolResult(result);
+}
