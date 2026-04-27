@@ -55,7 +55,7 @@ describe("CloudLoginClient", () => {
     mocks.signInEmail.mockResolvedValue({});
     mocks.signInSocial.mockResolvedValue({});
     mocks.fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), {
+      new Response(JSON.stringify({ approved: true }), {
         status: 200,
         headers: {
           "content-type": "application/json",
@@ -117,7 +117,6 @@ describe("CloudLoginClient", () => {
 
     expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Forgot password?" })).toBeInTheDocument();
-
     fireEvent.change(screen.getByPlaceholderText("Enter your password"), {
       target: { value: "hunter2hunter2" },
     });
@@ -166,6 +165,15 @@ describe("CloudLoginClient", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create password" }));
 
     await waitFor(() => {
+      expect(mocks.fetchMock).toHaveBeenNthCalledWith(1, "/api/auth/check-email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "pilot@cmdclaw.ai",
+        }),
+      });
       expect(mocks.fetchMock).toHaveBeenNthCalledWith(2, "/api/auth/password/start", {
         method: "POST",
         headers: {

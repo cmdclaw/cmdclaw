@@ -129,10 +129,27 @@ function createContext() {
   const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
   const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
 
-  const selectWhereMock = vi.fn().mockResolvedValue([]);
-  const selectInnerJoinMock = vi.fn(() => ({ where: selectWhereMock }));
-  const selectFromMock = vi.fn(() => ({ innerJoin: selectInnerJoinMock }));
-  const selectMock = vi.fn(() => ({ from: selectFromMock }));
+  const selectResultQueue: unknown[][] = [];
+  const enqueueSelectResult = (...rows: unknown[][]) => {
+    selectResultQueue.push(...rows);
+  };
+  const buildSelectQuery = (shape: Record<string, unknown>, rows: unknown[]) => {
+    const resolvedRows = Promise.resolve(rows);
+    const result = Object.assign(resolvedRows, {
+      orderBy: vi.fn(() => resolvedRows),
+      as: vi.fn((alias: string) => ({ ...shape, __alias: alias })),
+    });
+    const query = {
+      from: vi.fn(() => query),
+      innerJoin: vi.fn(() => query),
+      leftJoin: vi.fn(() => query),
+      where: vi.fn(() => result),
+    };
+    return query;
+  };
+  const selectMock = vi.fn((shape: Record<string, unknown>) =>
+    buildSelectQuery(shape, selectResultQueue.shift() ?? []),
+  );
 
   const context = {
     user: { id: "user-1" },
@@ -174,6 +191,7 @@ function createContext() {
       updateSetMock,
       updateReturningMock,
       deleteReturningMock,
+      enqueueSelectResult,
     },
   };
 
@@ -347,24 +365,28 @@ describe("coworkerRouter", () => {
         updatedAt: now,
       },
     ]);
-    context.db.query.coworkerRun.findMany
-      .mockResolvedValueOnce([
+    context.mocks.enqueueSelectResult(
+      [],
+      [],
+      [
         {
-          id: "run-1",
+          runId: "run-1",
+          coworkerId: "wf-1",
           status: "success",
           startedAt,
-          generation: { conversationId: "conv-1" },
+          conversationId: "conv-1",
           triggerPayload: { event: "schedule" },
         },
         {
-          id: "run-2",
+          runId: "run-2",
+          coworkerId: "wf-1",
           status: "failed",
           startedAt: secondStartedAt,
-          generation: null,
+          conversationId: null,
           triggerPayload: {},
         },
-      ])
-      .mockResolvedValueOnce([]);
+      ],
+    );
 
     const result = await coworkerRouterAny.list({ context });
 
