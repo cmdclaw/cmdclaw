@@ -171,8 +171,21 @@ const list = protectedProcedure.handler(async ({ context }) => {
 const get = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
-    const { existingSkill } = await requireReadableSkillInActiveWorkspace(context, input.id);
+    const { existingSkill, workspaceId } = await requireReadableSkillInActiveWorkspace(
+      context,
+      input.id,
+    );
     const isOwnedByCurrentUser = existingSkill.userId === context.user.id;
+
+    console.info("[Skill Debug] Loaded skill", {
+      skillId: existingSkill.id,
+      requestUserId: context.user.id,
+      skillUserId: existingSkill.userId,
+      resolvedWorkspaceId: workspaceId,
+      skillWorkspaceId: existingSkill.workspaceId,
+      canEdit: isOwnedByCurrentUser,
+      authSource: context.authSource,
+    });
 
     return {
       id: existingSkill.id,
@@ -304,7 +317,18 @@ const importSkillDefinition = protectedProcedure
       workspace: { id: workspaceId },
     } = await requireActiveWorkspaceAccess(context.user.id);
 
-    return await importSkill(context.db as never, context.user.id, workspaceId, input);
+    const created = await importSkill(context.db as never, context.user.id, workspaceId, input);
+
+    console.info("[Skill Debug] Imported skill", {
+      skillId: created.id,
+      skillName: created.name,
+      requestUserId: context.user.id,
+      workspaceId,
+      authSource: context.authSource,
+      mode: input.mode,
+    });
+
+    return created;
   });
 
 const update = protectedProcedure
@@ -515,11 +539,31 @@ const updateFile = protectedProcedure
       },
     });
 
+    if (!existingFile) {
+      console.warn("[Skill Debug] updateFile missing file", {
+        fileId: input.id,
+        requestUserId: context.user.id,
+        resolvedWorkspaceId: workspaceId,
+        authSource: context.authSource,
+      });
+      throw new ORPCError("NOT_FOUND", { message: "File not found" });
+    }
+
     if (
-      !existingFile ||
       existingFile.skill.userId !== context.user.id ||
       existingFile.skill.workspaceId !== workspaceId
     ) {
+      console.warn("[Skill Debug] updateFile denied", {
+        fileId: input.id,
+        skillId: existingFile.skill.id,
+        requestUserId: context.user.id,
+        skillUserId: existingFile.skill.userId,
+        resolvedWorkspaceId: workspaceId,
+        skillWorkspaceId: existingFile.skill.workspaceId,
+        ownerMismatch: existingFile.skill.userId !== context.user.id,
+        workspaceMismatch: existingFile.skill.workspaceId !== workspaceId,
+        authSource: context.authSource,
+      });
       throw new ORPCError("NOT_FOUND", { message: "File not found" });
     }
 
