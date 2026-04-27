@@ -9075,7 +9075,9 @@ class GenerationManager {
       activeCtx.status = "awaiting_approval";
       activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, pendingApprovalEvent);
-      await this.saveSessionSnapshotIfPossible(activeCtx, "plugin_awaiting_approval");
+      // Snapshot only when the generation is actually parked. Exporting the full
+      // runtime session inline here duplicates that work and can blow up the dev
+      // server heap for large sessions while this request is still open.
       this.scheduleApprovalPark(activeCtx, interrupt);
     } else {
       await this.publishDetachedGenerationStreamEvent({
@@ -9163,7 +9165,9 @@ class GenerationManager {
       activeCtx.status = "awaiting_auth";
       activeCtx.currentInterruptId = interrupt.id;
       this.broadcast(activeCtx, this.projectInterruptPendingEvent(interrupt));
-      await this.saveSessionSnapshotIfPossible(activeCtx, "awaiting_auth");
+      // Snapshot only when the generation is actually parked. Exporting the full
+      // runtime session inline here duplicates that work and can blow up the dev
+      // server heap for large sessions while this request is still open.
       this.scheduleApprovalPark(activeCtx, interrupt);
     } else {
       await this.publishDetachedGenerationStreamEvent({

@@ -3883,7 +3883,6 @@ describe("generationManager transitions", () => {
       },
     });
     saveConversationSessionSnapshotMock
-      .mockResolvedValueOnce(undefined)
       .mockImplementationOnce(() => new Promise(() => {}));
 
     const result = await generationManager.requestPluginApproval(ctx.id, {
