@@ -1,3 +1,7 @@
 FROM minio/minio:latest
 
-CMD ["server", "/data", "--address", ":10000"]
+COPY start-minio.sh /usr/local/bin/start-minio.sh
+
+RUN chmod +x /usr/local/bin/start-minio.sh
+
+CMD ["/usr/local/bin/start-minio.sh"]
