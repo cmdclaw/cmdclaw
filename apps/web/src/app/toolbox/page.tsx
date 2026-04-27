@@ -1020,6 +1020,14 @@ function ToolboxPageContent() {
     folderImportInputRef.current?.click();
   }, [importSkill.isPending, supportsFolderImport]);
 
+  const handleNewOpenApiSource = useCallback(() => {
+    router.push("/toolbox/sources/new?kind=openapi");
+  }, [router]);
+
+  const handleNewMcpSource = useCallback(() => {
+    router.push("/toolbox/sources/new?kind=mcp");
+  }, [router]);
+
   const handleImportZipChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -1438,31 +1446,80 @@ function ToolboxPageContent() {
   return (
     <>
       {/* Filters row */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <AnimatedTabs
-          activeKey={activeTab}
-          onTabChange={handleTabChange}
-          className="w-full grid-cols-3 sm:flex sm:w-fit"
-        >
-          {tabs.map((tab) => (
-            <AnimatedTab key={tab.id} value={tab.id} className="text-[11px] sm:text-sm">
-              {tab.label}
-              <span
-                className={cn(
-                  "ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:ml-1.5 sm:text-xs",
-                  activeTab === tab.id
-                    ? "bg-foreground/10 text-foreground/70"
-                    : "bg-muted-foreground/15 text-muted-foreground",
-                )}
-              >
-                {tab.count}
-              </span>
-            </AnimatedTab>
-          ))}
-        </AnimatedTabs>
+      <div className="mb-8 space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <AnimatedTabs
+              activeKey={activeTab}
+              onTabChange={handleTabChange}
+              className="w-full min-w-max grid-cols-3 sm:flex sm:w-fit sm:min-w-0"
+            >
+              {tabs.map((tab) => (
+                <AnimatedTab key={tab.id} value={tab.id} className="text-[11px] sm:text-sm">
+                  {tab.label}
+                  <span
+                    className={cn(
+                      "ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:ml-1.5 sm:text-xs",
+                      activeTab === tab.id
+                        ? "bg-foreground/10 text-foreground/70"
+                        : "bg-muted-foreground/15 text-muted-foreground",
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                </AnimatedTab>
+              ))}
+            </AnimatedTabs>
+          </div>
+          <div className="shrink-0 xl:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={importSkill.isPending || isCreating}>
+                  {importSkill.isPending || isCreating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="mr-2 h-4 w-4" />
+                  )}
+                  Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {isWorkspaceAdmin ? (
+                  <>
+                    <DropdownMenuItem onClick={handleNewOpenApiSource}>
+                      <FileCode className="h-4 w-4" />
+                      Add OpenAPI
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleNewMcpSource}>
+                      <Puzzle className="h-4 w-4" />
+                      Add MCP
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+                <DropdownMenuItem onClick={handleImportZipClick} disabled={importSkill.isPending}>
+                  <FileInput className="h-4 w-4" />
+                  Import .zip
+                </DropdownMenuItem>
+                {supportsFolderImport ? (
+                  <DropdownMenuItem
+                    onClick={handleImportFolderClick}
+                    disabled={importSkill.isPending}
+                  >
+                    <FileOutput className="h-4 w-4" />
+                    Import folder
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onClick={handleCreateSkill} disabled={isCreating}>
+                  <Plus className="h-4 w-4" />
+                  Create Skill
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
 
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <div className="border-border flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5 sm:w-72 sm:flex-initial">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="border-border flex w-full min-w-0 items-center gap-3 rounded-xl border px-4 py-2.5 xl:w-80 xl:flex-initial">
             <Search className="text-muted-foreground/60 size-4 shrink-0" />
             <input
               type="text"
@@ -1472,7 +1529,7 @@ function ToolboxPageContent() {
               className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
             />
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
+          <div className="hidden items-center gap-2 xl:flex">
             {isWorkspaceAdmin && (
               <>
                 <Button variant="outline" asChild>
@@ -1541,19 +1598,6 @@ function ToolboxPageContent() {
             aria-label="Import skill folder"
             onChange={handleImportFolderChange}
           />
-          <Button
-            onClick={handleCreateSkill}
-            disabled={isCreating}
-            size="sm"
-            className="shrink-0 gap-1 sm:hidden"
-          >
-            {isCreating ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Plus className="h-3.5 w-3.5" />
-            )}
-            Create
-          </Button>
         </div>
       </div>
 
