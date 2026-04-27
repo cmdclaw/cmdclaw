@@ -4,6 +4,7 @@ import {
   isApprovedLoginEmail,
   normalizeApprovedLoginEmail,
 } from "@/server/lib/approved-login-emails";
+import { hasCredentialPasswordByEmail } from "@/server/lib/credential-accounts";
 
 const requestSchema = z.object({
   email: z.string().email(),
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
 
   const normalizedEmail = normalizeApprovedLoginEmail(parsedBody.data.email);
   const approved = await isApprovedLoginEmail(normalizedEmail);
+  const hasPassword = approved ? await hasCredentialPasswordByEmail(normalizedEmail) : false;
 
-  return NextResponse.json({ approved });
+  return NextResponse.json({ approved, hasPassword });
 }

@@ -9,6 +9,7 @@ void jestDomVitest;
 const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(),
   resetPassword: vi.fn(),
+  signInEmail: vi.fn(),
   searchParams: new URLSearchParams(),
 }));
 
@@ -20,6 +21,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     resetPassword: mocks.resetPassword,
+    signIn: {
+      email: mocks.signInEmail,
+    },
   },
 }));
 
@@ -30,6 +34,7 @@ describe("/reset-password", () => {
     vi.clearAllMocks();
     mocks.searchParams = new URLSearchParams();
     mocks.resetPassword.mockResolvedValue({});
+    mocks.signInEmail.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -37,6 +42,35 @@ describe("/reset-password", () => {
   });
 
   it("resets the password and redirects to the callbackUrl", async () => {
+    mocks.searchParams = new URLSearchParams(
+      "token=token-1&callbackUrl=%2Fchat&email=pilot%40cmdclaw.ai",
+    );
+
+    render(<ResetPasswordPage />);
+
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "new-password-123" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "new-password-123" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "Set password" }).closest("form")!);
+
+    await waitFor(() => {
+      expect(mocks.resetPassword).toHaveBeenCalledWith({
+        token: "token-1",
+        newPassword: "new-password-123",
+      });
+    });
+    expect(mocks.signInEmail).toHaveBeenCalledWith({
+      email: "pilot@cmdclaw.ai",
+      password: "new-password-123",
+      callbackURL: "/chat",
+    });
+    expect(mocks.routerPush).toHaveBeenCalledWith("/chat");
+  });
+
+  it("still redirects when older reset links do not include an email", async () => {
     mocks.searchParams = new URLSearchParams("token=token-1&callbackUrl=%2Fchat");
 
     render(<ResetPasswordPage />);
@@ -55,6 +89,7 @@ describe("/reset-password", () => {
         newPassword: "new-password-123",
       });
     });
+    expect(mocks.signInEmail).not.toHaveBeenCalled();
     expect(mocks.routerPush).toHaveBeenCalledWith("/chat");
   });
 

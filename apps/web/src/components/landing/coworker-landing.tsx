@@ -447,7 +447,7 @@ export function CoworkerLanding({
   );
 
   const redirectToLogin = useCallback(() => {
-    window.location.assign("/login?callbackUrl=%2F");
+    window.location.assign("/login?callbackUrl=%2F&mode=getting-started");
   }, []);
 
   const handlePromptComposerSubmit = useCallback(
@@ -628,7 +628,7 @@ export function CoworkerLanding({
                 asChild
                 className="bg-slate-950 text-white shadow-[0_16px_32px_rgba(2,6,23,0.35)] hover:bg-slate-900"
               >
-                <Link href="/login">Get Started</Link>
+                <Link href="/login?mode=getting-started">Get Started</Link>
               </Button>
             </div>
           ) : null}

@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
   const redirectTo = buildRequestAwareUrl("/reset-password", request);
   redirectTo.searchParams.set("callbackUrl", callbackUrl);
+  redirectTo.searchParams.set("email", normalizedEmail);
 
   await auth.api.requestPasswordReset({
     body: {

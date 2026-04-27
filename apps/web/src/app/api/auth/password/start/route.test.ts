@@ -72,7 +72,8 @@ describe("POST /api/auth/password/start", () => {
     expect(requestPasswordResetMock).toHaveBeenCalledWith({
       body: {
         email: "pilot@cmdclaw.ai",
-        redirectTo: "https://app.cmdclaw.ai/reset-password?callbackUrl=%2Fchat",
+        redirectTo:
+          "https://app.cmdclaw.ai/reset-password?callbackUrl=%2Fchat&email=pilot%40cmdclaw.ai",
       },
       headers: expect.any(Headers),
     });
@@ -109,7 +110,8 @@ describe("POST /api/auth/password/start", () => {
     expect(requestPasswordResetMock).toHaveBeenCalledWith({
       body: {
         email: "new-user@cmdclaw.ai",
-        redirectTo: "https://app.cmdclaw.ai/reset-password?callbackUrl=%2Fchat",
+        redirectTo:
+          "https://app.cmdclaw.ai/reset-password?callbackUrl=%2Fchat&email=new-user%40cmdclaw.ai",
       },
       headers: expect.any(Headers),
     });
@@ -156,7 +158,8 @@ describe("POST /api/auth/password/start", () => {
     expect(requestPasswordResetMock).toHaveBeenCalledWith({
       body: {
         email: "pilot@cmdclaw.ai",
-        redirectTo: "https://app.cmdclaw.ai/reset-password?callbackUrl=%2Fchat%2F123%3Ftab%3Dfiles",
+        redirectTo:
+          "https://app.cmdclaw.ai/reset-password?callbackUrl=%2Fchat%2F123%3Ftab%3Dfiles&email=pilot%40cmdclaw.ai",
       },
       headers: expect.any(Headers),
     });

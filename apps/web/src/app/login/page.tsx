@@ -19,6 +19,7 @@ type LoginPageProps = {
     callbackUrl?: string;
     error?: string;
     email?: string;
+    mode?: string;
     source?: string;
   }>;
 };
@@ -107,10 +108,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   if (!isSelfHostedEdition()) {
     const errorMessage = getCloudErrorMessage(params.error);
+    const initialScreen = params.mode === "getting-started" ? "getting-started" : "login";
 
     return (
       <div className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
-        <CloudLoginClient callbackUrl={callbackUrl} initialError={errorMessage} />
+        <CloudLoginClient
+          callbackUrl={callbackUrl}
+          initialError={errorMessage}
+          initialScreen={initialScreen}
+        />
       </div>
     );
   }

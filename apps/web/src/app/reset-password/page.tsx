@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { authClient } from "@/lib/auth-client";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
 
@@ -49,6 +50,7 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const searchError = searchParams.get("error");
+  const email = searchParams.get("email")?.trim().toLowerCase() ?? "";
   const callbackUrl = useMemo(
     () => sanitizeReturnPath(searchParams.get("callbackUrl"), "/chat"),
     [searchParams],
@@ -95,10 +97,32 @@ export default function ResetPasswordPage() {
         return;
       }
 
+      if (!email) {
+        setStatus("success");
+        router.push(callbackUrl);
+        return;
+      }
+
+      const { error: signInError } = await authClient.signIn.email({
+        email,
+        password,
+        callbackURL: callbackUrl,
+      });
+
+      if (signInError) {
+        setStatus("error");
+        setError(
+          signInError.message === INVITE_ONLY_LOGIN_ERROR
+            ? "This app is invite-only. Only approved email addresses can sign in."
+            : "Your password was updated, but we couldn't sign you in automatically. Try logging in.",
+        );
+        return;
+      }
+
       setStatus("success");
       router.push(callbackUrl);
     },
-    [callbackUrl, confirmPassword, password, router, token],
+    [callbackUrl, confirmPassword, email, password, router, token],
   );
 
   const handlePasswordChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {

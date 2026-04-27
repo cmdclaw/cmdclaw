@@ -105,3 +105,19 @@ export async function setCredentialPassword(input: { userId: string; password: s
 
   await authContext.internalAdapter.deleteSessions(input.userId);
 }
+
+export async function hasCredentialPasswordByEmail(email: string): Promise<boolean> {
+  const authContext = await auth.$context;
+  const existingUser = await findAuthUserByEmail(email);
+
+  if (!existingUser) {
+    return false;
+  }
+
+  const existingAccounts = await authContext.internalAdapter.findAccounts(existingUser.id);
+  return (
+    existingAccounts?.some(
+      (account) => account.providerId === "credential" && Boolean(account.password),
+    ) ?? false
+  );
+}

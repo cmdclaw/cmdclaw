@@ -12,6 +12,9 @@ import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { authClient } from "@/lib/auth-client";
 
 type Step = "initial" | "magic-link-sent" | "password" | "password-reset-sent";
+type PasswordStepMode = "sign-in" | "create";
+type PasswordEmailMode = "create" | "reset";
+type InitialScreen = "login" | "getting-started";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -107,17 +110,51 @@ const stepTransition = { duration: 0.25, ease: [0.4, 0, 0.2, 1] as const };
 export function CloudLoginClient({
   callbackUrl,
   initialError,
+  initialScreen = "login",
 }: {
   callbackUrl: string;
   initialError?: string | null;
+  initialScreen?: InitialScreen;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [step, setStep] = useState<Step>("initial");
+  const [passwordStepMode, setPasswordStepMode] = useState<PasswordStepMode | null>(null);
+  const [passwordEmailMode, setPasswordEmailMode] = useState<PasswordEmailMode>("create");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
   const lastMethod = authClient.getLastUsedLoginMethod();
+
+  const title =
+    step === "initial"
+      ? initialScreen === "getting-started"
+        ? "Getting started"
+        : "Log in"
+      : step === "password"
+        ? passwordStepMode === "create"
+          ? "Sign up"
+          : "Log in"
+        : step === "magic-link-sent"
+          ? "Check your inbox"
+          : passwordEmailMode === "create"
+            ? "Create your password"
+            : "Reset your password";
+
+  const description =
+    step === "initial"
+      ? initialScreen === "getting-started"
+        ? "Use an approved email to create an account."
+        : "CmdClaw is invite-only. Use an approved email to sign in."
+      : step === "password"
+        ? passwordStepMode === "create"
+          ? "Create a password to finish setting up your CmdClaw account."
+          : "Enter your password to continue."
+        : step === "magic-link-sent"
+          ? "Open the link we sent to continue."
+          : passwordEmailMode === "create"
+            ? "We sent a password setup link to finish creating your account."
+            : "We sent a password reset link so you can sign back in.";
 
   const requestMagicLink = useCallback(async () => {
     if (!email) {
@@ -180,36 +217,46 @@ export function CloudLoginClient({
     [callbackUrl, email, password, router],
   );
 
-  const requestPasswordSetup = useCallback(async () => {
-    setSubmitting(true);
-    setError(null);
+  const requestPasswordSetup = useCallback(
+    async (mode: PasswordEmailMode) => {
+      setSubmitting(true);
+      setError(null);
 
-    const response = await fetch("/api/auth/password/start", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        email: normalizeEmail(email),
-        callbackUrl,
-      }),
-    });
+      try {
+        const response = await fetch("/api/auth/password/start", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: normalizeEmail(email),
+            callbackUrl,
+          }),
+        });
 
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { code?: string } | null;
-      if (body?.code === INVITE_ONLY_LOGIN_ERROR) {
-        router.push(
-          `/invite-only?source=password&email=${encodeURIComponent(normalizeEmail(email))}`,
-        );
-        return;
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { code?: string } | null;
+          if (body?.code === INVITE_ONLY_LOGIN_ERROR) {
+            router.push(
+              `/invite-only?source=password&email=${encodeURIComponent(normalizeEmail(email))}`,
+            );
+            return;
+          }
+
+          setSubmitting(false);
+          setError("Unable to send a password email right now.");
+          return;
+        }
+
+        setPasswordEmailMode(mode);
+        setSubmitting(false);
+        setStep("password-reset-sent");
+      } catch {
+        setSubmitting(false);
+        setError("Unable to send a password email right now.");
       }
+    },
+    [callbackUrl, email, router],
+  );
 
-      setSubmitting(false);
-      setError("Unable to send a password email right now.");
-      return;
-    }
-
-    setSubmitting(false);
-    setStep("password-reset-sent");
-  }, [callbackUrl, email, router]);
   const handleUsePassword = useCallback(async () => {
     if (!email) {
       return;
@@ -218,21 +265,35 @@ export function CloudLoginClient({
     setSubmitting(true);
 
     const normalizedEmail = normalizeEmail(email);
-    const response = await fetch("/api/auth/check-email", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
+    try {
+      const response = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
 
-    const body = (await response.json().catch(() => null)) as { approved?: boolean } | null;
-    setSubmitting(false);
+      const body = (await response.json().catch(() => null)) as {
+        approved?: boolean;
+        hasPassword?: boolean;
+      } | null;
+      setSubmitting(false);
 
-    if (!body?.approved) {
-      router.push(`/invite-only?source=password&email=${encodeURIComponent(normalizedEmail)}`);
-      return;
+      if (!response.ok) {
+        setError("Unable to start password login right now.");
+        return;
+      }
+
+      if (!body?.approved) {
+        router.push(`/invite-only?source=password&email=${encodeURIComponent(normalizedEmail)}`);
+        return;
+      }
+
+      setPasswordStepMode(body.hasPassword ? "sign-in" : "create");
+      setStep("password");
+    } catch {
+      setSubmitting(false);
+      setError("Unable to start password login right now.");
     }
-
-    setStep("password");
   }, [email, router]);
 
   const handleMagicLinkSubmit = useCallback(
@@ -259,9 +320,19 @@ export function CloudLoginClient({
     });
   }, [callbackUrl]);
 
+  const handleCreatePassword = useCallback(() => {
+    void requestPasswordSetup("create");
+  }, [requestPasswordSetup]);
+
+  const handleForgotPassword = useCallback(() => {
+    void requestPasswordSetup("reset");
+  }, [requestPasswordSetup]);
+
   const handleBack = useCallback(() => {
     setStep("initial");
     setPassword("");
+    setPasswordStepMode(null);
+    setPasswordEmailMode("create");
     setError(null);
     setSubmitting(false);
   }, []);
@@ -281,10 +352,8 @@ export function CloudLoginClient({
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
           CmdClaw
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
-        <p className="text-muted-foreground text-sm text-balance">
-          CmdClaw is invite-only. Use an approved email to sign in.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <p className="text-muted-foreground text-sm text-balance">{description}</p>
       </div>
 
       {/* Social buttons — only visible on initial */}
@@ -332,6 +401,7 @@ export function CloudLoginClient({
                 type="email"
                 autoComplete="email"
                 placeholder="you@example.com"
+                aria-label="Email"
                 value={email}
                 onChange={handleEmailChange}
                 required
@@ -406,33 +476,49 @@ export function CloudLoginClient({
                 </button>
               </div>
 
-              <form onSubmit={signInWithPassword} className="space-y-3">
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={handlePasswordChange}
-                  required
-                  aria-invalid={!!error}
-                  autoFocus
-                />
-                <Button type="submit" className="w-full" disabled={!password || submitting}>
-                  {submitting ? "Signing in..." : "Sign in"}
-                </Button>
-              </form>
+              {passwordStepMode === "create" ? (
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={submitting}
+                    onClick={handleCreatePassword}
+                  >
+                    {submitting ? "Sending..." : "Create password"}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <form onSubmit={signInWithPassword} className="space-y-3">
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Enter your password"
+                      aria-label="Password"
+                      value={password}
+                      onChange={handlePasswordChange}
+                      required
+                      aria-invalid={!!error}
+                      autoFocus
+                    />
+                    <Button type="submit" className="w-full" disabled={!password || submitting}>
+                      {submitting ? "Signing in..." : "Sign in"}
+                    </Button>
+                  </form>
 
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={requestPasswordSetup}
-                  disabled={submitting}
-                  className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors disabled:opacity-50"
-                >
-                  Set or reset password
-                </button>
-              </div>
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={submitting}
+                      className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors disabled:opacity-50"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         )}
@@ -449,10 +535,16 @@ export function CloudLoginClient({
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               <KeyIcon />
               <div className="space-y-1">
-                <p className="text-sm font-medium">Password link sent</p>
+                <p className="text-sm font-medium">
+                  {passwordEmailMode === "create"
+                    ? "Password setup link sent"
+                    : "Password reset link sent"}
+                </p>
                 <p className="text-muted-foreground text-sm">
-                  We sent a link to <span className="text-foreground font-medium">{email}</span> to
-                  set your password.
+                  We sent a link to <span className="text-foreground font-medium">{email}</span>{" "}
+                  {passwordEmailMode === "create"
+                    ? "to create your password."
+                    : "to reset your password."}
                 </p>
               </div>
               <button
