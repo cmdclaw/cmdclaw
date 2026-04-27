@@ -51,9 +51,13 @@ function AppleIcon() {
   );
 }
 
-function LastUsedBadge() {
+function LastUsedBadge({ variant = "brand" }: { variant?: "brand" | "inverted" }) {
   return (
-    <span className="bg-brand/10 text-brand ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium">
+    <span
+      className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+        variant === "inverted" ? "bg-white/12 text-white" : "bg-brand/10 text-brand"
+      }`}
+    >
       Last used
     </span>
   );
@@ -409,7 +413,7 @@ export function CloudLoginClient({
               <div className="grid grid-cols-2 gap-2">
                 <Button type="submit" className="w-full" disabled={!email || submitting}>
                   {submitting ? "Sending..." : "Magic link"}
-                  {lastMethod === "email" && <LastUsedBadge />}
+                  {lastMethod === "email" && <LastUsedBadge variant="inverted" />}
                 </Button>
                 <Button
                   type="button"
