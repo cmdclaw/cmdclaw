@@ -38,6 +38,7 @@ import {
   type MarkdownEditorMode,
 } from "@/components/ui/markdown-editor-mode-toggle";
 import { MilkdownEditor } from "@/components/ui/milkdown-editor";
+import { Switch } from "@/components/ui/switch";
 import { parseSkillContent, serializeSkillContent } from "@/lib/skill-markdown";
 import { cn } from "@/lib/utils";
 import {
@@ -432,6 +433,32 @@ function SkillEditorPageContent() {
       setIsSavingShared(false);
     }
   }, [router, saveSharedSkill, skill?.canEdit, skillId]);
+
+  const handleToggleEnabled = useCallback(
+    async (enabled: boolean) => {
+      if (!skill?.canEdit) {
+        return;
+      }
+
+      setIsSaving(true);
+      try {
+        await updateSkill.mutateAsync({
+          id: skillId,
+          enabled,
+        });
+        setNotification({
+          type: "success",
+          message: enabled ? "Skill enabled" : "Skill disabled",
+        });
+        await refetch();
+      } catch {
+        setNotification({ type: "error", message: "Failed to update skill status" });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [refetch, skill?.canEdit, skillId, updateSkill],
+  );
 
   // Document handlers
   const handleFileSelect = useCallback(
@@ -836,6 +863,7 @@ function SkillEditorPageContent() {
   const selectedFile = skill.files.find((f) => f.id === selectedFileId);
   const isSkillMd = selectedFile?.path === "SKILL.md";
   const canEdit = skill.canEdit;
+  const isEnabled = skill.enabled;
   const toolIntegrations = (skill.toolIntegrations ?? []) as DisplayIntegrationType[];
 
   return (
@@ -908,6 +936,31 @@ function SkillEditorPageContent() {
 
         {/* Notion-style inline editable metadata */}
         <div className="mb-6 shrink-0 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  isEnabled ? "bg-green-500" : "bg-muted-foreground/30",
+                )}
+              />
+              <span className="text-muted-foreground text-sm">
+                {isEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground text-xs font-medium">
+                {isEnabled ? "On" : "Off"}
+              </span>
+              <Switch
+                checked={isEnabled}
+                onCheckedChange={handleToggleEnabled}
+                disabled={!canEdit || isSaving}
+                aria-label="Toggle skill enabled"
+              />
+            </div>
+          </div>
+
           {/* Icon and Display Name */}
           <div className="flex items-start gap-3">
             {canEdit ? (
