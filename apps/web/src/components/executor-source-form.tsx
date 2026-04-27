@@ -70,6 +70,10 @@ export type ExecutorSourceMutationInput = {
   enabled?: boolean;
 };
 
+type BuildMutationInputOptions = {
+  deriveNamespaceFromName?: boolean;
+};
+
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
 export const DEFAULT_EXECUTOR_SOURCE_FORM: ExecutorSourceFormState = {
@@ -128,6 +132,20 @@ export function parseStringMap(value: string, label: string): Record<string, str
   return Object.fromEntries(entries);
 }
 
+export function normalizeExecutorSourceNamespace(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  if (normalized.length === 0) {
+    throw new Error("Namespace must contain letters or numbers.");
+  }
+
+  return normalized;
+}
+
 export function getSourceFormState(source: ExecutorSourceListItem): ExecutorSourceFormState {
   return {
     kind: source.kind,
@@ -150,13 +168,20 @@ export function getSourceFormState(source: ExecutorSourceListItem): ExecutorSour
 
 export function buildMutationInputFromForm(
   form: ExecutorSourceFormState,
+  options: BuildMutationInputOptions = {},
 ): ExecutorSourceMutationInput {
   const authPrefix = form.authPrefix.trim().length > 0 ? form.authPrefix : null;
+  const rawNamespace = form.namespace.trim();
+  const rawName = form.name.trim();
+  const namespace =
+    options.deriveNamespaceFromName && rawNamespace.length === 0 && rawName.length > 0
+      ? normalizeExecutorSourceNamespace(rawName)
+      : rawNamespace;
 
   return {
     kind: form.kind,
-    name: form.name.trim(),
-    namespace: form.namespace.trim(),
+    name: rawName,
+    namespace,
     endpoint: form.endpoint.trim(),
     specUrl: form.kind === "openapi" ? form.specUrl.trim() || null : null,
     transport: form.kind === "mcp" ? form.transport.trim() || null : null,
@@ -219,11 +244,17 @@ export function ExecutorSourceFields({
   formIdPrefix,
   onFieldChange,
   disabled = false,
+  hideNamespace = false,
+  hideMcpTransportFields = false,
+  fixedMcpAuthType = null,
 }: {
   form: ExecutorSourceFormState;
   formIdPrefix: string;
   onFieldChange: (field: keyof ExecutorSourceFormState, value: string) => void;
   disabled?: boolean;
+  hideNamespace?: boolean;
+  hideMcpTransportFields?: boolean;
+  fixedMcpAuthType?: Extract<ExecutorSourceFormState["authType"], "oauth2"> | null;
 }) {
   const handleFieldInputChange = useCallback(
     (field: keyof ExecutorSourceFormState) =>
@@ -235,12 +266,14 @@ export function ExecutorSourceFields({
 
   const handleKindChange = useCallback(
     (value: string) => {
-      if (value === "openapi" && form.authType === "oauth2") {
+      if (value === "mcp" && fixedMcpAuthType) {
+        onFieldChange("authType", fixedMcpAuthType);
+      } else if (value === "openapi" && form.authType === "oauth2") {
         onFieldChange("authType", "none");
       }
       onFieldChange("kind", value);
     },
-    [form.authType, onFieldChange],
+    [fixedMcpAuthType, form.authType, onFieldChange],
   );
 
   const handleAuthTypeChange = useCallback(
@@ -271,17 +304,21 @@ export function ExecutorSourceFields({
         <label htmlFor={`${formIdPrefix}-auth-type`} className="text-sm font-medium">
           Auth
         </label>
-        <Select value={form.authType} onValueChange={handleAuthTypeChange}>
-          <SelectTrigger id={`${formIdPrefix}-auth-type`} disabled={disabled}>
-            <SelectValue placeholder="Select auth" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="bearer">Bearer token</SelectItem>
-            <SelectItem value="api_key">API key</SelectItem>
-            {form.kind === "mcp" ? <SelectItem value="oauth2">OAuth 2.0</SelectItem> : null}
-            <SelectItem value="none">No auth</SelectItem>
-          </SelectContent>
-        </Select>
+        {form.kind === "mcp" && fixedMcpAuthType ? (
+          <Input id={`${formIdPrefix}-auth-type`} value="OAuth 2.0" disabled={true} />
+        ) : (
+          <Select value={form.authType} onValueChange={handleAuthTypeChange}>
+            <SelectTrigger id={`${formIdPrefix}-auth-type`} disabled={disabled}>
+              <SelectValue placeholder="Select auth" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bearer">Bearer token</SelectItem>
+              <SelectItem value="api_key">API key</SelectItem>
+              {form.kind === "mcp" ? <SelectItem value="oauth2">OAuth 2.0</SelectItem> : null}
+              <SelectItem value="none">No auth</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -297,18 +334,20 @@ export function ExecutorSourceFields({
         />
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor={`${formIdPrefix}-namespace`} className="text-sm font-medium">
-          Namespace
-        </label>
-        <Input
-          id={`${formIdPrefix}-namespace`}
-          value={form.namespace}
-          onChange={handleFieldInputChange("namespace")}
-          placeholder="Namespace (for example salesforce-prod)"
-          disabled={disabled}
-        />
-      </div>
+      {!hideNamespace ? (
+        <div className="space-y-2">
+          <label htmlFor={`${formIdPrefix}-namespace`} className="text-sm font-medium">
+            Namespace
+          </label>
+          <Input
+            id={`${formIdPrefix}-namespace`}
+            value={form.namespace}
+            onChange={handleFieldInputChange("namespace")}
+            placeholder="Namespace (for example salesforce-prod)"
+            disabled={disabled}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-2 md:col-span-2">
         <label htmlFor={`${formIdPrefix}-endpoint`} className="text-sm font-medium">
@@ -346,7 +385,7 @@ export function ExecutorSourceFields({
             className="md:col-span-2"
           />
         </>
-      ) : (
+      ) : hideMcpTransportFields ? null : (
         <>
           <div className="space-y-2 md:col-span-2">
             <label htmlFor={`${formIdPrefix}-transport`} className="text-sm font-medium">

@@ -1,30 +1,23 @@
 "use client";
 
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent } from "react";
 import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  type ExecutorSourceFormState,
-  type ExecutorSourceListItem,
-  ExecutorSourceFields,
-  buildMutationInputFromForm,
-  getSourceFormState,
-} from "@/components/executor-source-form";
+import type { ExecutorSourceListItem } from "@/components/executor-source-form";
 import { ExecutorSourceLogo } from "@/components/executor-source-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   useExecutorSourceList,
-  useUpdateExecutorSource,
   useDeleteExecutorSource,
   useStartExecutorSourceOAuth,
+  useUpdateExecutorSource,
   useSetExecutorSourceCredential,
   useDisconnectExecutorSourceCredential,
-  useToggleExecutorSourceCredential,
 } from "@/orpc/hooks";
 
 function SourceDetailContent() {
@@ -38,7 +31,6 @@ function SourceDetailContent() {
   const startOAuth = useStartExecutorSourceOAuth();
   const setCredential = useSetExecutorSourceCredential();
   const disconnectCredential = useDisconnectExecutorSourceCredential();
-  const toggleCredential = useToggleExecutorSourceCredential();
 
   const isWorkspaceAdmin = data?.membershipRole === "admin" || data?.membershipRole === "owner";
   const source = useMemo(
@@ -46,10 +38,17 @@ function SourceDetailContent() {
     [data?.sources, id],
   );
 
-  const [editForm, setEditForm] = useState<ExecutorSourceFormState | null>(null);
   const [secret, setSecret] = useState("");
   const [credDisplayName, setCredDisplayName] = useState("");
   const isManagedSource = Boolean(source?.internalKey);
+  const authLabel =
+    source?.authType === "none"
+      ? "None"
+      : source?.authType === "bearer"
+        ? "Bearer token"
+        : source?.authType === "oauth2"
+          ? "OAuth 2.0"
+          : "API key";
 
   const handleSecretChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setSecret(e.target.value);
@@ -80,45 +79,6 @@ function SourceDetailContent() {
     router.replace(`/toolbox/sources/${id}`);
   }, [id, router, searchParams]);
 
-  const handleEditFieldChange = useCallback(
-    (field: keyof ExecutorSourceFormState, value: string) => {
-      setEditForm((current) => (current ? { ...current, [field]: value } : current));
-    },
-    [],
-  );
-
-  const handleStartEdit = useCallback(() => {
-    if (source) {
-      setEditForm(getSourceFormState(source));
-    }
-  }, [source]);
-
-  const handleCancelEdit = useCallback(() => {
-    setEditForm(null);
-  }, []);
-
-  const handleSaveEdit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!source || !editForm) {
-        return;
-      }
-
-      try {
-        await updateSource.mutateAsync({
-          id: source.id,
-          ...buildMutationInputFromForm(editForm),
-          enabled: source.enabled,
-        });
-        setEditForm(null);
-        toast.success("Source updated.");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to update source.");
-      }
-    },
-    [editForm, source, updateSource],
-  );
-
   const handleToggleEnabled = useCallback(
     async (enabled: boolean) => {
       if (!source) {
@@ -143,7 +103,7 @@ function SourceDetailContent() {
           enabled,
         });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to toggle source.");
+        toast.error(error instanceof Error ? error.message : "Failed to update source.");
       }
     },
     [source, updateSource],
@@ -215,23 +175,6 @@ function SourceDetailContent() {
     }
   }, [disconnectCredential, source]);
 
-  const handleToggleCredential = useCallback(
-    async (enabled: boolean) => {
-      if (!source) {
-        return;
-      }
-      try {
-        await toggleCredential.mutateAsync({
-          workspaceExecutorSourceId: source.id,
-          enabled,
-        });
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to update credential.");
-      }
-    },
-    [source, toggleCredential],
-  );
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -253,7 +196,6 @@ function SourceDetailContent() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      {/* Header */}
       <div className="mb-8">
         <Link
           href="/toolbox"
@@ -262,228 +204,130 @@ function SourceDetailContent() {
           <ArrowLeft className="h-4 w-4" />
           Back to Toolbox
         </Link>
+      </div>
 
-        <div className="mt-4 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
+      <section className="bg-card rounded-xl border p-6 shadow-sm">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
             <ExecutorSourceLogo
               kind={source.kind}
               endpoint={source.endpoint}
-              className="h-12 w-12 shrink-0"
+              className="h-14 w-14 shrink-0 rounded-xl"
             />
-            <div>
-              <h1 className="text-xl font-semibold">{source.name}</h1>
-              <p className="text-muted-foreground mt-1 text-sm">
-                {source.namespace} · {source.kind === "openapi" ? "OpenAPI" : "MCP"} ·{" "}
-                {source.endpoint}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">{source.name}</h1>
+                <span className="text-muted-foreground text-sm">
+                  {source.kind === "openapi" ? "OpenAPI" : "MCP"}
+                </span>
+                <span className="text-muted-foreground text-sm">·</span>
+                <span className="text-muted-foreground font-mono text-sm">{source.namespace}</span>
+              </div>
+              <p className="text-muted-foreground mt-2 text-sm break-all">{source.endpoint}</p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                {source.connected ? "Connected" : "Not connected"} · {authLabel}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {isWorkspaceAdmin && (
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground text-xs">Enabled</span>
+          <div className="flex items-center gap-2 sm:ml-6">
+            {isWorkspaceAdmin ? (
+              <div className="mr-2 flex items-center gap-2">
+                <span className="text-muted-foreground text-xs font-medium">Enabled</span>
                 <Switch
                   checked={source.enabled}
                   disabled={updateSource.isPending}
                   onCheckedChange={handleToggleEnabled}
                 />
               </div>
-            )}
+            ) : null}
+
+            {!isManagedSource && isWorkspaceAdmin ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={deleteSource.isPending}
+                  className="text-destructive hover:text-destructive px-2"
+                  aria-label="Delete source"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
+            ) : isManagedSource ? (
+              <span className="text-muted-foreground text-xs">Managed by CmdClaw</span>
+            ) : null}
           </div>
         </div>
-      </div>
 
-      {/* Source configuration (admin only) */}
-      {isWorkspaceAdmin && (
-        <section className="bg-card mb-6 rounded-lg border p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Configuration</h2>
-            <div className="flex items-center gap-2">
-              {editForm ? (
-                <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
-                  Cancel
-                </Button>
-              ) : !isManagedSource ? (
-                <>
-                  <Button variant="outline" size="sm" onClick={handleStartEdit}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={deleteSource.isPending}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                    Delete
-                  </Button>
-                </>
-              ) : (
-                <span className="text-muted-foreground text-xs">Managed by CmdClaw</span>
-              )}
+        <div className="mt-6">
+          {source.internalKey ? (
+            <div className="mt-5 flex items-center gap-3">
+              <Button asChild variant="outline">
+                <Link href="/integrations">
+                  {source.connected ? "Manage Gmail connection" : "Connect Gmail"}
+                </Link>
+              </Button>
             </div>
-          </div>
-
-          {editForm ? (
-            <form onSubmit={handleSaveEdit} className="mt-4 grid gap-3 md:grid-cols-2">
-              <ExecutorSourceFields
-                form={editForm}
-                formIdPrefix={`source-edit-${source.id}`}
-                onFieldChange={handleEditFieldChange}
-                disabled={isManagedSource}
-              />
-              <div className="flex justify-end gap-2 md:col-span-2">
-                <Button type="submit" disabled={updateSource.isPending}>
-                  {updateSource.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Save changes"
-                  )}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="text-muted-foreground mt-3 space-y-1 text-sm">
-              <p>Kind: {source.kind === "openapi" ? "OpenAPI" : "Remote MCP"}</p>
-              <p>Endpoint: {source.endpoint}</p>
-              {source.internalKey && <p>Managed source: {source.internalKey}</p>}
-              {source.specUrl && <p>Spec URL: {source.specUrl}</p>}
-              {source.transport && <p>Transport: {source.transport}</p>}
-              <p>
-                Auth:{" "}
-                {source.authType === "none"
-                  ? "None"
-                  : source.authType === "bearer"
-                    ? "Bearer token"
-                    : source.authType === "oauth2"
-                      ? "OAuth 2.0"
-                      : "API key"}
-              </p>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Credential section (all users) */}
-      <section className="bg-card rounded-lg border p-6">
-        <h2 className="text-sm font-semibold">Your Credential</h2>
-        <p className="text-muted-foreground mt-1 text-xs">
-          {source.internalKey
-            ? source.connected
-              ? "This source uses your existing Gmail integration connection."
-              : "Connect Gmail in Integrations to use this managed source."
-            : source.authType === "none"
-              ? "This source does not require authentication."
-              : source.connected
-                ? "Your credential is connected. You can update or disconnect it."
-                : "Connect your personal credential to use this source."}
-        </p>
-
-        {source.internalKey ? (
-          <div className="mt-4 flex items-center gap-3">
-            <Button asChild variant="outline">
-              <Link href="/integrations">
-                {source.connected ? "Manage Gmail connection" : "Connect Gmail"}
-              </Link>
-            </Button>
-          </div>
-        ) : source.authType === "oauth2" ? (
-          <div className="mt-4 space-y-4">
-            <div className="flex items-center gap-3">
+          ) : source.authType === "oauth2" ? (
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button variant="outline" onClick={handleStartOAuth} disabled={startOAuth.isPending}>
                 {startOAuth.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {source.connected ? "Reconnect OAuth" : "Connect OAuth"}
               </Button>
 
-              {source.connected && (
-                <>
-                  <Button
-                    variant="ghost"
-                    onClick={handleDisconnectCredential}
-                    disabled={disconnectCredential.isPending}
-                  >
-                    Disconnect
-                  </Button>
-
-                  <div className="ml-auto flex items-center gap-2">
-                    <span className="text-muted-foreground text-xs">Credential active</span>
-                    <Switch
-                      checked={source.credentialEnabled}
-                      disabled={toggleCredential.isPending}
-                      onCheckedChange={handleToggleCredential}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        ) : source.authType !== "none" ? (
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
-              <Input
-                value={secret}
-                onChange={handleSecretChange}
-                placeholder={source.connected ? "Update your secret" : "Your API key or token"}
-                type="password"
-              />
-              <Input
-                value={credDisplayName}
-                onChange={handleCredDisplayNameChange}
-                placeholder="Label (optional)"
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={handleSaveCredential}
-                disabled={setCredential.isPending}
-              >
-                {setCredential.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {source.connected ? "Update secret" : "Connect"}
-              </Button>
-
-              {source.connected && (
-                <>
-                  <Button
-                    variant="ghost"
-                    onClick={handleDisconnectCredential}
-                    disabled={disconnectCredential.isPending}
-                  >
-                    Disconnect
-                  </Button>
-
-                  <div className="ml-auto flex items-center gap-2">
-                    <span className="text-muted-foreground text-xs">Credential active</span>
-                    <Switch
-                      checked={source.credentialEnabled}
-                      disabled={toggleCredential.isPending}
-                      onCheckedChange={handleToggleCredential}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {source.connected && (
-              <p className="text-muted-foreground text-xs">
-                Status:{" "}
-                <span
-                  className={
-                    source.credentialEnabled
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-amber-600 dark:text-amber-400"
-                  }
+              {source.connected ? (
+                <Button
+                  variant="ghost"
+                  onClick={handleDisconnectCredential}
+                  disabled={disconnectCredential.isPending}
                 >
-                  {source.credentialEnabled ? "Active" : "Paused"}
-                </span>
-                {source.credentialDisplayName && ` · ${source.credentialDisplayName}`}
-              </p>
-            )}
-          </div>
-        ) : null}
+                  Disconnect
+                </Button>
+              ) : null}
+            </div>
+          ) : source.authType !== "none" ? (
+            <div className="mt-5 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                <Input
+                  value={secret}
+                  onChange={handleSecretChange}
+                  placeholder={source.connected ? "Update your secret" : "Your API key or token"}
+                  type="password"
+                />
+                <Input
+                  value={credDisplayName}
+                  onChange={handleCredDisplayNameChange}
+                  placeholder="Label (optional)"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleSaveCredential}
+                  disabled={setCredential.isPending}
+                >
+                  {setCredential.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {source.connected ? "Update secret" : "Connect"}
+                </Button>
+
+                {source.connected ? (
+                  <Button
+                    variant="ghost"
+                    onClick={handleDisconnectCredential}
+                    disabled={disconnectCredential.isPending}
+                  >
+                    Disconnect
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </section>
     </div>
   );

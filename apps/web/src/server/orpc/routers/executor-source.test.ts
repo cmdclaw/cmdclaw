@@ -105,7 +105,6 @@ describe("executorSourceRouter", () => {
       name: "Linear MCP",
       namespace: "linear-mcp",
       endpoint: "https://mcp.linear.app/mcp",
-      transport: "streamable-http",
       authType: "oauth2",
       enabled: true,
     });
@@ -215,7 +214,6 @@ describe("executorSourceRouter", () => {
         name: "Linear MCP",
         namespace: "linear-mcp",
         endpoint: "https://mcp.linear.app/mcp",
-        transport: "streamable-http",
         authType: "oauth2",
         enabled: true,
       },
@@ -226,6 +224,7 @@ describe("executorSourceRouter", () => {
     expect(valuesMock).toHaveBeenCalledWith(
       expect.objectContaining({
         authType: "oauth2",
+        transport: null,
       }),
     );
   });

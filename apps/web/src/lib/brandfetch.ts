@@ -46,6 +46,40 @@ function reduceHostnameToBrandDomain(hostname: string): string | null {
   return labels.slice(-2).join(".");
 }
 
+function titleCaseLabel(value: string): string {
+  return value
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+export function inferBrandNameFromDomain(domain: string): string | null {
+  const labels = domain
+    .toLowerCase()
+    .split(".")
+    .map((label) => label.trim())
+    .filter(Boolean);
+
+  if (labels.length < 2) {
+    return null;
+  }
+
+  const topLevelDomain = labels.at(-1) ?? "";
+  const secondLevelDomain = labels.at(-2) ?? "";
+  const brandLabels =
+    topLevelDomain.length === 2 && secondLevelDomain.length <= 3 && labels.length >= 3
+      ? labels.slice(0, -2)
+      : labels.slice(0, -1);
+
+  const brandLabel = brandLabels.join("-").trim();
+  if (!brandLabel) {
+    return null;
+  }
+
+  return titleCaseLabel(brandLabel);
+}
+
 export function getBrandfetchDomainFromEndpoint(endpoint: string): string | null {
   try {
     const hostname = new URL(endpoint).hostname;
@@ -62,4 +96,13 @@ export function getBrandfetchLogoUrl(endpoint: string): string | null {
   }
 
   return `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/80/h/80/icon.png?c=${BRANDFETCH_CLIENT_ID}`;
+}
+
+export function inferBrandNameFromEndpoint(endpoint: string): string | null {
+  const domain = getBrandfetchDomainFromEndpoint(endpoint);
+  if (!domain) {
+    return null;
+  }
+
+  return inferBrandNameFromDomain(domain);
 }
