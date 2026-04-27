@@ -23,9 +23,9 @@ export type RuntimeProviderAuthPayload =
 export function toRuntimeProviderAuthPayload(
   auth: ResolvedProviderAuth,
 ): RuntimeProviderAuthPayload {
-  if (auth.provider === "kimi") {
+  if (auth.provider === "kimi" || auth.provider === "google") {
     return {
-      providerID: "kimi-for-coding",
+      providerID: auth.provider === "kimi" ? "kimi-for-coding" : "google",
       auth: {
         type: "api",
         key: auth.accessToken,

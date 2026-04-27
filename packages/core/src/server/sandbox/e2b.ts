@@ -865,11 +865,16 @@ export async function injectProviderAuth(
   options?: { openAIAuthSource?: ProviderAuthSource | null },
 ): Promise<void> {
   try {
-    const [openaiAuth, kimiAuth] = await Promise.all([
+    const [openaiAuth, googleAuth, kimiAuth] = await Promise.all([
       getResolvedProviderAuth({
         userId,
         provider: "openai",
         authSource: options?.openAIAuthSource,
+      }),
+      getResolvedProviderAuth({
+        userId,
+        provider: "google",
+        authSource: "shared",
       }),
       getResolvedProviderAuth({
         userId,
@@ -878,7 +883,7 @@ export async function injectProviderAuth(
       }),
     ]);
 
-    const auths = [openaiAuth, kimiAuth]
+    const auths = [openaiAuth, googleAuth, kimiAuth]
       .filter((auth): auth is NonNullable<typeof auth> => Boolean(auth))
       .map(toRuntimeProviderAuthPayload);
     await Promise.all(

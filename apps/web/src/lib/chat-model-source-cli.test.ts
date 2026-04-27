@@ -31,6 +31,19 @@ describe("chat-model-source CLI helpers", () => {
     });
   });
 
+  it("defaults google selections to shared when the shared source is available", () => {
+    expect(
+      resolveCliModelSelection({
+        model: "google/gemini-3.1-pro-preview",
+        connectedProviderIds: [],
+        sharedConnectedProviderIds: ["google"],
+      }),
+    ).toEqual({
+      model: "google/gemini-3.1-pro-preview",
+      authSource: "shared",
+    });
+  });
+
   it("honors explicit user override", () => {
     expect(
       resolveCliModelSelection({

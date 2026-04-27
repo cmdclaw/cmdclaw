@@ -57,14 +57,17 @@ import { ModelSelector } from "./model-selector";
 
 const NO_PROVIDER_AUTH = {
   anthropic: { shared: true, user: false },
+  google: { shared: false, user: false },
   openai: { shared: false, user: false },
 } as const;
 const SHARED_ONLY_AUTH = {
   anthropic: { shared: true, user: false },
+  google: { shared: true, user: false },
   openai: { shared: true, user: false },
 } as const;
 const USER_ONLY_AUTH = {
   anthropic: { shared: true, user: false },
+  google: { shared: false, user: false },
   openai: { shared: false, user: true },
 } as const;
 
@@ -85,6 +88,9 @@ describe("ModelSelector", () => {
     expect(screen.getByText("CmdClaw Models")).toBeInTheDocument();
     expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4")).toBeDisabled();
     expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4-mini")).toBeDisabled();
+    expect(
+      screen.getByTestId("chat-model-option-cmdclaw-google/gemini-3.1-pro-preview"),
+    ).toBeDisabled();
     expect(
       screen.queryByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
     ).not.toBeInTheDocument();
@@ -143,6 +149,27 @@ describe("ModelSelector", () => {
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       model: "openai/gpt-5.4",
+      authSource: "shared",
+    });
+  });
+
+  it("selects shared Gemini when shared auth is available", () => {
+    const onSelectionChange = vi.fn();
+    mockIsAdmin.mockReturnValue(false);
+
+    render(
+      <ModelSelector
+        selectedModel="google/gemini-3.1-pro-preview"
+        selectedAuthSource="shared"
+        providerAvailability={SHARED_ONLY_AUTH}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("chat-model-option-cmdclaw-google/gemini-3.1-pro-preview"));
+
+    expect(onSelectionChange).toHaveBeenCalledWith({
+      model: "google/gemini-3.1-pro-preview",
       authSource: "shared",
     });
   });

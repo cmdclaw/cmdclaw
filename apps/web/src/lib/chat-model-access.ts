@@ -21,6 +21,7 @@ const PROVIDER_MODEL_IDS_FOR_NEW_CHAT = new Map<string, Set<string>>([
       "gpt-5.4-mini",
     ]),
   ],
+  ["google", new Set(["gemini-3.1-pro-preview"])],
 ]);
 
 export function isModelAccessibleForNewChat(params: {

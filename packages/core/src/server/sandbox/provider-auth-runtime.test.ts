@@ -44,4 +44,22 @@ describe("provider auth runtime payload", () => {
       },
     });
   });
+
+  it("maps Google auth to the runtime API-key provider", () => {
+    const payload = toRuntimeProviderAuthPayload({
+      provider: "google",
+      accessToken: "gemini-key",
+      refreshToken: null,
+      expiresAt: null,
+      authSource: "shared",
+    });
+
+    expect(payload).toEqual({
+      providerID: "google",
+      auth: {
+        type: "api",
+        key: "gemini-key",
+      },
+    });
+  });
 });

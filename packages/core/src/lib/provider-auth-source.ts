@@ -9,7 +9,7 @@ export type ProviderAuthAvailability = {
   shared: boolean;
 };
 
-type AuthProviderID = "openai" | "kimi" | null;
+type AuthProviderID = "openai" | "google" | "kimi" | null;
 
 type ProviderAuthCapability = {
   authProviderID: AuthProviderID;
@@ -43,10 +43,10 @@ const PROVIDER_AUTH_CAPABILITIES: Record<ModelProviderID, ProviderAuthCapability
     supportedAuthSources: ["user", "shared"],
   },
   google: {
-    authProviderID: null,
-    defaultAuthSource: null,
-    displayName: "Google",
-    supportedAuthSources: [],
+    authProviderID: "google",
+    defaultAuthSource: "shared",
+    displayName: "Gemini",
+    supportedAuthSources: ["shared"],
   },
   "kimi-for-coding": {
     authProviderID: "kimi",

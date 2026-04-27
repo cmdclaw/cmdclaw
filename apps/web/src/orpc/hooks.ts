@@ -2227,7 +2227,21 @@ export function useDisconnectAdminSharedProvider() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (provider: "openai") => client.adminSharedProviderAuth.disconnect({ provider }),
+    mutationFn: (provider: "openai" | "google") =>
+      client.adminSharedProviderAuth.disconnect({ provider }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminSharedProviderAuth"] });
+      queryClient.invalidateQueries({ queryKey: ["providerAuth"] });
+    },
+  });
+}
+
+export function useSetAdminSharedProviderApiKey() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ provider, apiKey }: { provider: "google"; apiKey: string }) =>
+      client.adminSharedProviderAuth.setApiKey({ provider, apiKey }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["adminSharedProviderAuth"] });
       queryClient.invalidateQueries({ queryKey: ["providerAuth"] });

@@ -8,7 +8,7 @@ function getOpenAIRedirectUri(): string {
   return `${appUrl}/api/auth/provider/openai/callback`;
 }
 
-export type SubscriptionProviderID = "openai" | "kimi";
+export type SubscriptionProviderID = "openai" | "google" | "kimi";
 
 export interface SubscriptionProviderModel {
   id: string;
@@ -63,6 +63,14 @@ export const SUBSCRIPTION_PROVIDERS: Record<SubscriptionProviderID, Subscription
       { id: "gpt-5.4", name: "GPT-5.4" },
       { id: "gpt-5.4-mini", name: "GPT-5.4 Mini" },
     ],
+  },
+  google: {
+    authType: "api_key",
+    name: "Google Gemini",
+    description: "Use a shared Gemini API key",
+    docsUrl: "https://ai.google.dev/gemini-api/docs/api-key",
+    apiKeyLabel: "GEMINI_API_KEY",
+    models: [{ id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" }],
   },
   kimi: {
     authType: "api_key",

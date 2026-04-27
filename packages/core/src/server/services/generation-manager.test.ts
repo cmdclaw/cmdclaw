@@ -2979,6 +2979,30 @@ describe("generationManager transitions", () => {
     );
   });
 
+  it("rejects startGeneration when a Gemini model is selected without shared Gemini connection", async () => {
+    sharedProviderAuthFindFirstMock.mockResolvedValueOnce(null);
+
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        id: "conv-new",
+        userId: "user-1",
+        model: "google/gemini-3.1-pro-preview",
+        autoApprove: false,
+        type: "chat",
+      },
+    ]);
+
+    await expect(
+      generationManager.startGeneration({
+        content: "hello",
+        userId: "user-1",
+        model: "google/gemini-3.1-pro-preview",
+      }),
+    ).rejects.toThrow(
+      "This Gemini model requires the shared workspace connection. Ask an admin to reconnect it, then retry.",
+    );
+  });
+
   it("uses shared auth when explicitly requested for a dual-source provider", async () => {
     sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-openai" });
 
@@ -3006,6 +3030,36 @@ describe("generationManager transitions", () => {
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
       { generationId: "gen-openai-shared", runMode: "normal_run" },
+      expect.any(Object),
+    );
+  });
+
+  it("starts generation when a shared Gemini model is connected", async () => {
+    sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-google" });
+
+    insertReturningMock
+      .mockResolvedValueOnce([
+        {
+          id: "conv-google-shared",
+          userId: "user-1",
+          model: "google/gemini-3.1-pro-preview",
+          authSource: "shared",
+          autoApprove: false,
+          type: "chat",
+        },
+      ])
+      .mockResolvedValueOnce([{ id: "msg-user" }])
+      .mockResolvedValueOnce([{ id: "gen-google-shared" }]);
+
+    await generationManager.startGeneration({
+      content: "hello",
+      userId: "user-1",
+      model: "google/gemini-3.1-pro-preview",
+    });
+
+    expect(queueAddMock).toHaveBeenCalledWith(
+      "generation:chat-run",
+      { generationId: "gen-google-shared", runMode: "normal_run" },
       expect.any(Object),
     );
   });

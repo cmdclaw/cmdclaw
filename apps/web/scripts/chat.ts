@@ -1119,6 +1119,10 @@ async function printAvailableModels(
     console.log(
       `- GPT-5.4 Mini (openai/gpt-5.4-mini) [source=shared]${sharedOpenAIAvailable ? "" : " [unavailable]"}`,
     );
+    const sharedGoogleAvailable = (args.sharedConnectedProviderIds ?? []).includes("google");
+    console.log(
+      `- Gemini 3.1 Pro Preview (google/gemini-3.1-pro-preview) [source=shared]${sharedGoogleAvailable ? "" : " [unavailable]"}`,
+    );
 
     const userOpenAIAvailable = (args.connectedProviderIds ?? []).includes("openai");
     console.log("\nYour AI Accounts:");

@@ -4,6 +4,7 @@ import { isModelAccessibleForNewChat } from "./chat-model-access";
 describe("isModelAccessibleForNewChat", () => {
   const noProviderAvailability = {
     anthropic: { user: false, shared: false },
+    google: { user: false, shared: false },
     openai: { user: false, shared: false },
   } as const;
 
@@ -81,6 +82,17 @@ describe("isModelAccessibleForNewChat", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("returns true for google models when the shared Gemini source is connected", () => {
+    expect(
+      isModelAccessibleForNewChat({
+        model: "google/gemini-3.1-pro-preview",
+        providerAvailabilityByProvider: {
+          google: { user: false, shared: true },
+        },
+      }),
+    ).toBe(true);
   });
 
   it("returns false for opencode models while they are hidden from the selector", () => {

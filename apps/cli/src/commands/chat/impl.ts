@@ -64,6 +64,7 @@ type ChatState = {
   connectedProviderIds?: string[];
   conversationId?: string;
   perfettoTrace: boolean;
+  sharedConnectedProviderIds?: string[];
   timing: boolean;
   file: readonly string[];
   message?: string;
@@ -496,14 +497,14 @@ async function hydrateProviderAvailability(client: CmdclawApiClient, state: Chat
   ]);
 
   state.connectedProviderIds = Object.keys(authStatus.connected ?? {});
-  const sharedConnectedProviderIds = Object.keys(authStatus.shared ?? {});
+  state.sharedConnectedProviderIds = Object.keys(authStatus.shared ?? {});
 
   if (state.model?.trim()) {
     const resolvedSelection = resolveCliModelSelection({
       model: state.model.trim(),
       authSource: state.authSource,
       connectedProviderIds: state.connectedProviderIds,
-      sharedConnectedProviderIds,
+      sharedConnectedProviderIds: state.sharedConnectedProviderIds,
     });
     state.model = resolvedSelection.model;
     state.authSource = resolvedSelection.authSource;
@@ -511,13 +512,13 @@ async function hydrateProviderAvailability(client: CmdclawApiClient, state: Chat
     const defaultModel = resolveDefaultChatModel({
       isOpenAIConnected:
         (state.connectedProviderIds ?? []).includes("openai") ||
-        sharedConnectedProviderIds.includes("openai"),
+        (state.sharedConnectedProviderIds ?? []).includes("openai"),
       availableOpencodeFreeModelIDs: (freeModels.models ?? []).map((model) => model.id),
     });
     const resolvedSelection = resolveCliModelSelection({
       model: defaultModel,
       connectedProviderIds: state.connectedProviderIds,
-      sharedConnectedProviderIds,
+      sharedConnectedProviderIds: state.sharedConnectedProviderIds,
     });
     state.model = resolvedSelection.model;
     state.authSource = resolvedSelection.authSource;
@@ -918,6 +919,7 @@ async function runChatLoop(
         model: parsed.model,
         authSource: parsed.authSource,
         connectedProviderIds: state.connectedProviderIds,
+        sharedConnectedProviderIds: state.sharedConnectedProviderIds,
       });
       state.model = resolvedSelection.model;
       state.authSource = resolvedSelection.authSource;
@@ -954,15 +956,19 @@ async function runChatLoop(
 
 async function printAvailableModels(
   stdout: NodeJS.WriteStream,
-  state: Pick<ChatState, "connectedProviderIds">,
+  state: Pick<ChatState, "connectedProviderIds" | "sharedConnectedProviderIds">,
 ): Promise<void> {
   const freeModels = await listOpencodeFreeModels();
   const userOpenAIAvailable = (state.connectedProviderIds ?? []).includes("openai");
+  const sharedGeminiAvailable = (state.sharedConnectedProviderIds ?? []).includes("google");
 
   stdout.write("CmdClaw Models:\n");
   stdout.write("- Claude Sonnet 4.6 (anthropic/claude-sonnet-4-6) [source=shared]\n");
   stdout.write("- GPT-5.4 (openai/gpt-5.4) [source=shared]\n");
   stdout.write("- GPT-5.4 Mini (openai/gpt-5.4-mini) [source=shared]\n");
+  stdout.write(
+    `- Gemini 3.1 Pro Preview (google/gemini-3.1-pro-preview) [source=shared]${sharedGeminiAvailable ? "" : " [unavailable]"}\n`,
+  );
   stdout.write("\nYour AI Accounts:\n");
   if (userOpenAIAvailable) {
     stdout.write("- GPT-5.4 (openai/gpt-5.4) [source=user]\n");

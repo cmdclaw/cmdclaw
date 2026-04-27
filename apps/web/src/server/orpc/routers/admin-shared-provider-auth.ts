@@ -11,7 +11,8 @@ import { deletePending, getPending, storePending } from "@/server/ai/pending-oau
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 import { storeSharedProviderTokens } from "./provider-auth";
 
-const providerSchema = z.literal("openai");
+const connectProviderSchema = z.literal("openai");
+const providerSchema = z.enum(["openai", "google"]);
 const pollProviderSchema = z.object({
   provider: z.literal("openai"),
   flowId: z.string().min(1),
@@ -95,7 +96,7 @@ async function requireAdmin(context: Pick<AuthenticatedContext, "db" | "user">) 
 }
 
 const connect = protectedProcedure
-  .input(z.object({ provider: providerSchema }))
+  .input(z.object({ provider: connectProviderSchema }))
   .handler(async ({ input, context }) => {
     await requireAdmin(context);
 
@@ -285,9 +286,42 @@ const disconnect = protectedProcedure
     return { success: true };
   });
 
+const setApiKey = protectedProcedure
+  .input(
+    z.object({
+      provider: z.literal("google"),
+      apiKey: z.string().min(1),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await requireAdmin(context);
+
+    if (isSelfHostedEdition()) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Shared provider auth is not available in self-hosted edition",
+      });
+    }
+
+    const apiKey = input.apiKey.trim();
+    if (!apiKey) {
+      throw new Error("API key cannot be empty");
+    }
+
+    await storeSharedProviderTokens({
+      managedByUserId: context.user.id,
+      provider: input.provider,
+      accessToken: apiKey,
+      refreshToken: "",
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+    });
+
+    return { success: true };
+  });
+
 export const adminSharedProviderAuthRouter = {
   connect,
   poll,
   status,
   disconnect,
+  setApiKey,
 };

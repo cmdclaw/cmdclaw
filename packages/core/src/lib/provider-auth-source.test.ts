@@ -30,6 +30,14 @@ describe("provider-auth-source", () => {
     ).toBe("user");
   });
 
+  it("defaults google models to shared", () => {
+    expect(
+      normalizeModelAuthSource({
+        model: "google/gemini-3.1-pro-preview",
+      }),
+    ).toBe("shared");
+  });
+
   it("requires explicit shared availability for anthropic models", () => {
     expect(
       resolveProviderAuthAvailability({
@@ -49,6 +57,19 @@ describe("provider-auth-source", () => {
         providerID: "anthropic",
         connectedProviderIds: [],
         sharedConnectedProviderIds: ["anthropic"],
+      }),
+    ).toEqual({
+      user: false,
+      shared: true,
+    });
+  });
+
+  it("resolves google shared availability when the shared source is advertised", () => {
+    expect(
+      resolveProviderAuthAvailability({
+        providerID: "google",
+        connectedProviderIds: [],
+        sharedConnectedProviderIds: ["google"],
       }),
     ).toEqual({
       user: false,

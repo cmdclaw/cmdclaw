@@ -45,6 +45,19 @@ describe("chat-model-source CLI helpers", () => {
     });
   });
 
+  it("defaults google selections to shared when the shared source is available", () => {
+    expect(
+      resolveCliModelSelection({
+        model: "google/gemini-3.1-pro-preview",
+        connectedProviderIds: [],
+        sharedConnectedProviderIds: ["google"],
+      }),
+    ).toEqual({
+      model: "google/gemini-3.1-pro-preview",
+      authSource: "shared",
+    });
+  });
+
   it("parses interactive model commands with auth-source", () => {
     expect(parseInteractiveModelCommand("openai/gpt-5.4 --auth-source user")).toEqual({
       model: "openai/gpt-5.4",

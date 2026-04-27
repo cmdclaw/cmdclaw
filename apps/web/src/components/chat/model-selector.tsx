@@ -88,6 +88,11 @@ const CMDCLAW_MODELS: ModelOption[] = [
     name: "GPT-5.4 Mini",
   },
   {
+    authSource: "shared",
+    id: "google/gemini-3.1-pro-preview",
+    name: "Gemini 3.1 Pro Preview",
+  },
+  {
     adminOnly: true,
     authSource: "shared",
     id: "anthropic/claude-sonnet-4-6",

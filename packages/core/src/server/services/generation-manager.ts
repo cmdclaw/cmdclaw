@@ -2800,7 +2800,7 @@ class GenerationManager {
       }
     }
 
-    if (authProviderID === "openai" || authProviderID === "kimi") {
+    if (authProviderID === "openai" || authProviderID === "google" || authProviderID === "kimi") {
       const allowedIDs = new Set(getProviderModels(authProviderID).map((model) => model.id));
       if (!allowedIDs.has(modelID)) {
         const providerLabel = getProviderDisplayName(providerID);
