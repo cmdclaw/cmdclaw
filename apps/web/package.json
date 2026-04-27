@@ -6,7 +6,7 @@
     "auth:generate": "bun x @better-auth/cli@latest generate --output ../../packages/db/src/auth-schema.ts -y",
     "auth:inspect": "bun scripts/auth-inspect.ts",
     "build": "bun --env-file=../../.env next build",
-    "chat:auth": "bun run --cwd ../cli start -- auth login",
+    "chat:auth": "bun --env-file=../../.env --cwd ../cli src/bin/cmdclaw.ts auth login",
     "check": "bun run typecheck && bun run lint",
     "db:generate": "bun run --cwd ../../packages/db db:generate",
     "db:migrate": "bun run --cwd ../../packages/db --env-file=../../.env db:migrate",
@@ -61,7 +61,7 @@
     "test:record": "bun run test:e2e:live:record",
     "test:unit": "vitest run tests/unit",
     "test:unit:watch": "vitest tests/unit",
-    "tool": "bun run chat:auth && bun scripts/tool.ts",
+    "tool": "bun run chat:auth && bun --env-file=../../.env scripts/tool.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

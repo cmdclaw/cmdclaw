@@ -1,19 +1,23 @@
 import { parseArgs } from "util";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type JsonValue = ReturnType<typeof JSON.parse>;
 
 const CLI_ARGS = process.argv.slice(2);
-const IS_HELP_REQUEST = CLI_ARGS.includes("--help") || CLI_ARGS.includes("-h");
 const UNIPILE_API_KEY = process.env.UNIPILE_API_KEY ?? "";
 const UNIPILE_DSN = process.env.UNIPILE_DSN ?? "";
 const LINKEDIN_ACCOUNT_ID = process.env.LINKEDIN_ACCOUNT_ID ?? "";
 
-if ((!UNIPILE_API_KEY || !LINKEDIN_ACCOUNT_ID) && !IS_HELP_REQUEST) {
-  console.error("Error: UNIPILE_API_KEY and LINKEDIN_ACCOUNT_ID environment variables required");
-  process.exit(1);
+export function buildUnipileBaseUrl(dsn: string): string {
+  const normalizedDsn = dsn
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
+  return normalizedDsn ? `https://${normalizedDsn}/api/v1` : "";
 }
 
-const BASE_URL = `https://${UNIPILE_DSN}/api/v1`;
+const BASE_URL = buildUnipileBaseUrl(UNIPILE_DSN);
 const headers = {
   "X-API-KEY": UNIPILE_API_KEY,
   "Content-Type": "application/json",
@@ -63,7 +67,7 @@ type UserSummary = {
 
 const userSummaryCache = new Map<string, Promise<UserSummary | null>>();
 
-function normalizeUsername(raw: unknown): string | null {
+export function normalizeLinkedInProfileIdentifier(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length === 0) {
     return null;
   }
@@ -83,6 +87,39 @@ function normalizeUsername(raw: unknown): string | null {
   }
 
   return value;
+}
+
+export function normalizeLinkedInCompanyIdentifier(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length === 0) {
+    return null;
+  }
+
+  const value = raw.trim();
+  if (value.length === 0) {
+    return null;
+  }
+
+  const linkedinPathMatch = value.match(/linkedin\.com\/company\/([^/?#]+)/i);
+  if (linkedinPathMatch?.[1]) {
+    return linkedinPathMatch[1];
+  }
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return null;
+  }
+
+  return value;
+}
+
+function ensureConfigured(): void {
+  if (UNIPILE_API_KEY && LINKEDIN_ACCOUNT_ID && BASE_URL) {
+    return;
+  }
+
+  console.error(
+    "Error: UNIPILE_API_KEY, UNIPILE_DSN, and LINKEDIN_ACCOUNT_ID environment variables required",
+  );
+  process.exit(1);
 }
 
 async function getUserSummary(providerId: unknown): Promise<UserSummary | null> {
@@ -109,9 +146,9 @@ async function getUserSummary(providerId: unknown): Promise<UserSummary | null> 
         name:
           (typeof profile.display_name === "string" ? profile.display_name : null) ||
           (fullName.length > 0 ? fullName : null),
-        username: normalizeUsername(profile.public_identifier),
+        username: normalizeLinkedInProfileIdentifier(profile.public_identifier),
         headline: typeof profile.headline === "string" ? profile.headline : null,
-        profileUrl: normalizeUsername(profile.public_identifier),
+        profileUrl: normalizeLinkedInProfileIdentifier(profile.public_identifier),
       };
     } catch {
       return null;
@@ -256,13 +293,26 @@ async function startChat(attendeeId: string, message: string) {
 // ========== PROFILES ==========
 
 async function getMyProfile() {
-  const data = await api(`/users/me?account_id=${LINKEDIN_ACCOUNT_ID}`);
+  const data = await api<Record<string, JsonValue>>(`/users/me?account_id=${LINKEDIN_ACCOUNT_ID}`);
+  let headline = typeof data.headline === "string" ? data.headline : null;
+
+  if (
+    !headline &&
+    typeof data.public_identifier === "string" &&
+    data.public_identifier.length > 0
+  ) {
+    const fullProfile = await api<Record<string, JsonValue>>(
+      `/users/${encodeURIComponent(data.public_identifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+    );
+    headline = typeof fullProfile.headline === "string" ? fullProfile.headline : null;
+  }
+
   console.log(
     JSON.stringify(
       {
         id: data.provider_id,
         name: data.display_name,
-        headline: data.headline,
+        headline,
         location: data.location,
         profileUrl: data.public_identifier,
         connectionsCount: data.connections_count,
@@ -274,8 +324,9 @@ async function getMyProfile() {
 }
 
 async function getProfile(identifier: string) {
+  const normalizedIdentifier = normalizeLinkedInProfileIdentifier(identifier) ?? identifier;
   const data = await api(
-    `/users/${encodeURIComponent(identifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+    `/users/${encodeURIComponent(normalizedIdentifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
   );
   console.log(
     JSON.stringify(
@@ -296,19 +347,27 @@ async function getProfile(identifier: string) {
 }
 
 async function getCompanyProfile(identifier: string) {
+  const normalizedIdentifier = normalizeLinkedInCompanyIdentifier(identifier) ?? identifier;
   const data = await api(
-    `/companies/${encodeURIComponent(identifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+    `/linkedin/company/${encodeURIComponent(normalizedIdentifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
   );
   console.log(
     JSON.stringify(
       {
-        id: data.provider_id,
+        id: data.id,
         name: data.name,
         description: data.description,
         industry: data.industry,
         employeeCount: data.employee_count,
         website: data.website,
-        headquarters: data.headquarters,
+        headquarters: Array.isArray(data.locations)
+          ? (data.locations.find(
+              (location): location is Record<string, JsonValue> =>
+                typeof location === "object" &&
+                location !== null &&
+                location.is_headquarter === true,
+            ) ?? null)
+          : null,
       },
       null,
       2,
@@ -318,23 +377,39 @@ async function getCompanyProfile(identifier: string) {
 
 async function searchUsers(query: string) {
   const limit = parseInt(values.limit || "20");
-  const data = await api("/users/search", {
+  const params = new URLSearchParams({
+    account_id: LINKEDIN_ACCOUNT_ID!,
+    limit: limit.toString(),
+  });
+  if (values.cursor) {
+    params.set("cursor", values.cursor);
+  }
+
+  const data = await api(`/linkedin/search?${params}`, {
     method: "POST",
     body: JSON.stringify({
-      account_id: LINKEDIN_ACCOUNT_ID,
-      query,
-      limit,
+      api: "classic",
+      category: "people",
+      keywords: query,
     }),
   });
 
-  const users =
-    data.items?.map((u: Record<string, JsonValue>) => ({
-      id: u.provider_id,
-      name: u.display_name,
-      headline: u.headline,
-      profileUrl: u.public_identifier,
-      location: u.location,
-    })) || [];
+  const items = Array.isArray(data.items) ? (data.items as Record<string, JsonValue>[]) : [];
+  const users = items.map((u) => ({
+    id: u.id ?? u.provider_id ?? null,
+    name:
+      typeof u.name === "string"
+        ? u.name
+        : typeof u.display_name === "string"
+          ? u.display_name
+          : null,
+    headline: typeof u.headline === "string" ? u.headline : null,
+    profileUrl:
+      normalizeLinkedInProfileIdentifier(u.public_identifier) ??
+      normalizeLinkedInProfileIdentifier(u.profile_url) ??
+      null,
+    location: typeof u.location === "string" ? u.location : null,
+  }));
 
   console.log(JSON.stringify({ items: users, cursor: data.cursor }, null, 2));
 }
@@ -443,30 +518,98 @@ async function getPost(postId: string) {
   );
 }
 
+function mapPostSummary(post: Record<string, JsonValue>) {
+  const author =
+    typeof post.author === "object" && post.author !== null
+      ? (post.author as Record<string, JsonValue>)
+      : null;
+
+  return {
+    id: post.social_id ?? post.id ?? null,
+    text: typeof post.text === "string" ? post.text.slice(0, 200) : null,
+    author:
+      typeof author?.name === "string"
+        ? author.name
+        : typeof author?.display_name === "string"
+          ? author.display_name
+          : null,
+    likesCount:
+      typeof post.reaction_counter === "number"
+        ? post.reaction_counter
+        : typeof post.likes_count === "number"
+          ? post.likes_count
+          : null,
+    commentsCount:
+      typeof post.comment_counter === "number"
+        ? post.comment_counter
+        : typeof post.comments_count === "number"
+          ? post.comments_count
+          : null,
+    sharesCount:
+      typeof post.repost_counter === "number"
+        ? post.repost_counter
+        : typeof post.shares_count === "number"
+          ? post.shares_count
+          : null,
+    createdAt:
+      typeof post.parsed_datetime === "string"
+        ? post.parsed_datetime
+        : typeof post.created_at === "string"
+          ? post.created_at
+          : null,
+    shareUrl: typeof post.share_url === "string" ? post.share_url : null,
+  };
+}
+
+async function resolveProfileProviderId(identifier?: string): Promise<string> {
+  if (!identifier) {
+    const me = await api<Record<string, JsonValue>>(`/users/me?account_id=${LINKEDIN_ACCOUNT_ID}`);
+    if (typeof me.provider_id !== "string" || me.provider_id.length === 0) {
+      throw new Error("Could not resolve the current LinkedIn profile provider ID.");
+    }
+    return me.provider_id;
+  }
+
+  const normalizedIdentifier = normalizeLinkedInProfileIdentifier(identifier) ?? identifier;
+  const profile = await api<Record<string, JsonValue>>(
+    `/users/${encodeURIComponent(normalizedIdentifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+  );
+
+  if (typeof profile.provider_id !== "string" || profile.provider_id.length === 0) {
+    throw new Error(`Could not resolve LinkedIn provider ID for profile: ${identifier}`);
+  }
+
+  return profile.provider_id;
+}
+
+async function resolveCompanyProviderId(identifier: string): Promise<string> {
+  const normalizedIdentifier = normalizeLinkedInCompanyIdentifier(identifier) ?? identifier;
+  const company = await api<Record<string, JsonValue>>(
+    `/linkedin/company/${encodeURIComponent(normalizedIdentifier)}?account_id=${LINKEDIN_ACCOUNT_ID}`,
+  );
+
+  if (typeof company.id !== "string" || company.id.length === 0) {
+    throw new Error(`Could not resolve LinkedIn company ID for: ${identifier}`);
+  }
+
+  return company.id;
+}
+
 async function listPosts(profileId?: string) {
+  const providerId = await resolveProfileProviderId(profileId);
   const limit = parseInt(values.limit || "20");
   const params = new URLSearchParams({
     account_id: LINKEDIN_ACCOUNT_ID!,
     limit: limit.toString(),
   });
-  if (profileId) {
-    params.set("identifier", profileId);
-  }
   if (values.cursor) {
     params.set("cursor", values.cursor);
   }
 
-  const data = await api(`/posts?${params}`);
+  const data = await api(`/users/${encodeURIComponent(providerId)}/posts?${params}`);
 
-  const posts =
-    data.items?.map((p: Record<string, JsonValue>) => ({
-      id: p.id,
-      text: p.text?.substring(0, 200),
-      author: p.author?.display_name,
-      likesCount: p.likes_count,
-      commentsCount: p.comments_count,
-      createdAt: p.created_at,
-    })) || [];
+  const items = Array.isArray(data.items) ? (data.items as Record<string, JsonValue>[]) : [];
+  const posts = items.map(mapPostSummary);
 
   console.log(JSON.stringify({ items: posts, cursor: data.cursor }, null, 2));
 }
@@ -483,10 +626,11 @@ async function commentOnPost(postId: string, text: string) {
 }
 
 async function reactToPost(postId: string, reactionType: string) {
-  await api(`/posts/${postId}/reactions`, {
+  await api("/posts/reaction", {
     method: "POST",
     body: JSON.stringify({
       account_id: LINKEDIN_ACCOUNT_ID,
+      post_id: postId,
       reaction_type: reactionType.toUpperCase(),
     }),
   });
@@ -496,34 +640,32 @@ async function reactToPost(postId: string, reactionType: string) {
 // ========== COMPANY PAGES ==========
 
 async function listCompanyPosts(companyId: string) {
+  const providerId = await resolveCompanyProviderId(companyId);
   const limit = parseInt(values.limit || "20");
   const params = new URLSearchParams({
     account_id: LINKEDIN_ACCOUNT_ID!,
     limit: limit.toString(),
+    is_company: "true",
   });
   if (values.cursor) {
     params.set("cursor", values.cursor);
   }
 
-  const data = await api(`/companies/${companyId}/posts?${params}`);
+  const data = await api(`/users/${encodeURIComponent(providerId)}/posts?${params}`);
 
-  const posts =
-    data.items?.map((p: Record<string, JsonValue>) => ({
-      id: p.id,
-      text: p.text?.substring(0, 200),
-      likesCount: p.likes_count,
-      commentsCount: p.comments_count,
-      createdAt: p.created_at,
-    })) || [];
+  const items = Array.isArray(data.items) ? (data.items as Record<string, JsonValue>[]) : [];
+  const posts = items.map(mapPostSummary);
 
   console.log(JSON.stringify({ items: posts, cursor: data.cursor }, null, 2));
 }
 
 async function createCompanyPost(companyId: string, text: string) {
-  const data = await api(`/companies/${companyId}/posts`, {
+  const organizationId = await resolveCompanyProviderId(companyId);
+  const data = await api("/posts", {
     method: "POST",
     body: JSON.stringify({
       account_id: LINKEDIN_ACCOUNT_ID,
+      as_organization: organizationId,
       text,
     }),
   });
@@ -584,6 +726,8 @@ async function main() {
     showHelp();
     return;
   }
+
+  ensureConfigured();
 
   try {
     switch (command) {
@@ -783,4 +927,10 @@ async function main() {
   }
 }
 
-main();
+const isMainModule = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isMainModule) {
+  main();
+}
