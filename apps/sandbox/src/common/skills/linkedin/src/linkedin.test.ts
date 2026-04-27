@@ -27,6 +27,9 @@ describe("linkedin CLI", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("LinkedIn CLI (via Unipile) - Commands");
+    expect(result.stdout).toContain("linkedin posts comments <postId>");
+    expect(result.stdout).toContain("--comment-id <id>");
+    expect(result.stdout).toContain("--sort-by <MOST_RECENT|MOST_RELEVANT>");
   });
 
   test("normalizes LinkedIn public profile identifiers from URLs", () => {

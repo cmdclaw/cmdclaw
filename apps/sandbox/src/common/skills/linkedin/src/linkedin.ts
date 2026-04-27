@@ -18,17 +18,29 @@ export function buildUnipileBaseUrl(dsn: string): string {
 }
 
 const BASE_URL = buildUnipileBaseUrl(UNIPILE_DSN);
-const headers = {
+const baseHeaders = {
   "X-API-KEY": UNIPILE_API_KEY,
-  "Content-Type": "application/json",
   Accept: "application/json",
 };
 
 async function api<T = JsonValue>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = endpoint.startsWith("http") ? endpoint : `${BASE_URL}${endpoint}`;
+  const requestHeaders = new Headers(baseHeaders);
+
+  if (options?.body && !(options.body instanceof FormData)) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+
+  if (options?.headers) {
+    const extraHeaders = new Headers(options.headers);
+    extraHeaders.forEach((value, key) => {
+      requestHeaders.set(key, value);
+    });
+  }
+
   const res = await fetch(url, {
     ...options,
-    headers: { ...headers, ...options?.headers },
+    headers: requestHeaders,
   });
 
   if (!res.ok) {
@@ -52,6 +64,8 @@ const { positionals, values } = parseArgs({
     type: { type: "string" },
     visibility: { type: "string", default: "PUBLIC" },
     cursor: { type: "string" },
+    "comment-id": { type: "string" },
+    "sort-by": { type: "string" },
   },
 });
 
@@ -561,6 +575,77 @@ function mapPostSummary(post: Record<string, JsonValue>) {
   };
 }
 
+function mapCommentSummary(comment: Record<string, JsonValue>) {
+  const authorDetails =
+    typeof comment.author_details === "object" && comment.author_details !== null
+      ? (comment.author_details as Record<string, JsonValue>)
+      : null;
+  const author =
+    typeof comment.author === "object" && comment.author !== null
+      ? (comment.author as Record<string, JsonValue>)
+      : null;
+  const authorProfileUrl =
+    typeof authorDetails?.profile_url === "string"
+      ? authorDetails.profile_url
+      : typeof author?.public_identifier === "string"
+        ? author.public_identifier
+        : null;
+
+  return {
+    id:
+      typeof comment.id === "string"
+        ? comment.id
+        : typeof comment.provider_id === "string"
+          ? comment.provider_id
+          : null,
+    postId:
+      typeof comment.post_id === "string"
+        ? comment.post_id
+        : typeof comment.post_urn === "string"
+          ? comment.post_urn
+          : null,
+    threadId: typeof comment.thread_id === "string" ? comment.thread_id : null,
+    parentCommentId:
+      typeof comment.parent_comment_id === "string" ? comment.parent_comment_id : null,
+    text: typeof comment.text === "string" ? comment.text : null,
+    authorName:
+      typeof comment.author === "string"
+        ? comment.author
+        : typeof author?.public_identifier === "string"
+          ? author.public_identifier
+          : null,
+    authorId:
+      typeof authorDetails?.id === "string"
+        ? authorDetails.id
+        : typeof author?.provider_id === "string"
+          ? author.provider_id
+          : null,
+    authorHeadline: typeof authorDetails?.headline === "string" ? authorDetails.headline : null,
+    authorProfileUrl: authorProfileUrl,
+    authorUsername: normalizeLinkedInProfileIdentifier(authorProfileUrl),
+    networkDistance:
+      typeof authorDetails?.network_distance === "string" ? authorDetails.network_distance : null,
+    likesCount:
+      typeof comment.reaction_counter === "number"
+        ? comment.reaction_counter
+        : typeof comment.comment_like_count === "number"
+          ? comment.comment_like_count
+          : null,
+    repliesCount:
+      typeof comment.reply_counter === "number"
+        ? comment.reply_counter
+        : typeof comment.child_comment_count === "number"
+          ? comment.child_comment_count
+          : null,
+    createdAt:
+      typeof comment.date === "string"
+        ? comment.date
+        : typeof comment.created_at === "number"
+          ? new Date(comment.created_at).toISOString()
+          : null,
+  };
+}
+
 async function resolveProfileProviderId(identifier?: string): Promise<string> {
   if (!identifier) {
     const me = await api<Record<string, JsonValue>>(`/users/me?account_id=${LINKEDIN_ACCOUNT_ID}`);
@@ -614,15 +699,55 @@ async function listPosts(profileId?: string) {
   console.log(JSON.stringify({ items: posts, cursor: data.cursor }, null, 2));
 }
 
-async function commentOnPost(postId: string, text: string) {
+async function listPostComments(postId: string, commentId?: string) {
+  const limit = parseInt(values.limit || "20");
+  const params = new URLSearchParams({
+    account_id: LINKEDIN_ACCOUNT_ID!,
+    limit: limit.toString(),
+  });
+  if (values.cursor) {
+    params.set("cursor", values.cursor);
+  }
+  if (commentId) {
+    params.set("comment_id", commentId);
+  }
+  if (values["sort-by"]) {
+    params.set("sort_by", values["sort-by"]);
+  }
+
+  const data = await api(`/posts/${encodeURIComponent(postId)}/comments?${params}`);
+  const items = Array.isArray(data.items) ? (data.items as Record<string, JsonValue>[]) : [];
+  const comments = items.map(mapCommentSummary);
+
+  console.log(JSON.stringify({ items: comments, cursor: data.cursor }, null, 2));
+}
+
+async function commentOnPost(postId: string, text: string, replyToCommentId?: string) {
+  const body = new FormData();
+  body.set("account_id", LINKEDIN_ACCOUNT_ID);
+  body.set("text", text);
+  if (replyToCommentId) {
+    body.set("comment_id", replyToCommentId);
+  }
+
   const data = await api(`/posts/${postId}/comments`, {
     method: "POST",
-    body: JSON.stringify({
-      account_id: LINKEDIN_ACCOUNT_ID,
-      text,
-    }),
+    body,
+    headers: {
+      Accept: "application/json",
+    },
   });
-  console.log(JSON.stringify({ success: true, commentId: data.comment_id }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        success: true,
+        commentId: data.comment_id,
+        repliedToCommentId: replyToCommentId ?? null,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function reactToPost(postId: string, reactionType: string) {
@@ -699,8 +824,10 @@ INVITATIONS & CONNECTIONS
 POSTS & CONTENT
   linkedin posts list [--profile <id>] [-l limit]     List posts
   linkedin posts get <postId>                         Get post details
+  linkedin posts comments <postId> [-l limit]         List post comments
   linkedin posts create --text <content>              Create a post
   linkedin posts comment <postId> --text <comment>    Comment on post
+    Add --comment-id <id> to reply to a specific comment
   linkedin posts react <postId> --type <LIKE|...>     React to post
     Reaction types: LIKE, CELEBRATE, SUPPORT, LOVE, INSIGHTFUL, FUNNY
 
@@ -715,6 +842,8 @@ Options:
   -q, --query <query>                                 Search query
   -m, --message <msg>                                 Message text
   --profile <id>                                      Profile identifier
+  --comment-id <id>                                   Comment identifier for replies/thread replies
+  --sort-by <MOST_RECENT|MOST_RELEVANT>               Comment sort order
   --type <type>                                       Reaction type
   --visibility <PUBLIC|CONNECTIONS>                   Post visibility`);
 }
@@ -859,6 +988,13 @@ async function main() {
             }
             await getPost(args[0]);
             break;
+          case "comments":
+            if (!args[0]) {
+              console.error("Error: Post ID required");
+              process.exit(1);
+            }
+            await listPostComments(args[0], values["comment-id"]);
+            break;
           case "create":
             if (!values.text) {
               console.error("Error: --text required");
@@ -871,7 +1007,7 @@ async function main() {
               console.error("Error: Post ID and --text required");
               process.exit(1);
             }
-            await commentOnPost(args[0], values.text);
+            await commentOnPost(args[0], values.text, values["comment-id"]);
             break;
           case "react":
             if (!args[0] || !values.type) {
