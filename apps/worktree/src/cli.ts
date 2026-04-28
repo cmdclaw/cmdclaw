@@ -2459,7 +2459,15 @@ function buildProcessCommand(
     case "web":
       return {
         command: "bun",
-        args: ["--env-file", envFile, "next", "dev", "--port", String(metadata.appPort)],
+        args: [
+          "--env-file",
+          envFile,
+          "next",
+          "dev",
+          "--webpack",
+          "--port",
+          String(metadata.appPort),
+        ],
         cwd: join(metadata.repoRoot, "apps/web"),
       };
     case "worker":
