@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
+import { resolveGatewayPublicOrigin } from "./public-origin";
 import { matchProtectedResourceMetadataRequest, routeMcpRequest } from "./router";
 import { shouldManageGatewayChildren, startManagedGatewayChildren } from "./supervisor";
 import {
@@ -118,15 +119,15 @@ function withGatewayCors(request: Request, response: Response): Response {
   return next;
 }
 
-function buildGatewayAuthorizationServerMetadata(requestUrl: URL) {
+function buildGatewayAuthorizationServerMetadata(publicOrigin: string) {
   return {
-    issuer: requestUrl.origin,
+    issuer: publicOrigin,
     authorization_endpoint: new URL(
       GATEWAY_AUTHORIZATION_PATH,
-      requestUrl.origin,
+      publicOrigin,
     ).toString(),
-    token_endpoint: new URL(GATEWAY_TOKEN_PATH, requestUrl.origin).toString(),
-    registration_endpoint: new URL(GATEWAY_REGISTER_PATH, requestUrl.origin).toString(),
+    token_endpoint: new URL(GATEWAY_TOKEN_PATH, publicOrigin).toString(),
+    registration_endpoint: new URL(GATEWAY_REGISTER_PATH, publicOrigin).toString(),
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
@@ -135,22 +136,30 @@ function buildGatewayAuthorizationServerMetadata(requestUrl: URL) {
   };
 }
 
-function buildProtectedResourceMetadata(requestUrl: URL, slug: keyof typeof MCP_SERVER_REGISTRY) {
+function buildProtectedResourceMetadata(
+  publicOrigin: string,
+  slug: keyof typeof MCP_SERVER_REGISTRY,
+) {
   const server = MCP_SERVER_REGISTRY[slug];
   return {
-    resource: new URL(`${server.publicBasePath}/mcp`, requestUrl.origin).toString(),
-    authorization_servers: [requestUrl.origin],
+    resource: new URL(`${server.publicBasePath}/mcp`, publicOrigin).toString(),
+    authorization_servers: [publicOrigin],
     scopes_supported: [slug],
     resource_name: server.name,
   };
 }
 
-function buildProxyRequest(request: Request, target: URL, requestUrl: URL): Request {
+function buildProxyRequest(
+  request: Request,
+  target: URL,
+  publicOrigin: string,
+): Request {
+  const publicOriginUrl = new URL(publicOrigin);
   const headers = new Headers(request.headers);
   headers.set("host", target.host);
-  headers.set("x-cmdclaw-public-origin", requestUrl.origin);
-  headers.set("x-forwarded-host", requestUrl.host);
-  headers.set("x-forwarded-proto", requestUrl.protocol.replace(":", ""));
+  headers.set("x-cmdclaw-public-origin", publicOrigin);
+  headers.set("x-forwarded-host", publicOriginUrl.host);
+  headers.set("x-forwarded-proto", publicOriginUrl.protocol.replace(":", ""));
   return new Request(target, {
     method: request.method,
     headers,
@@ -164,11 +173,12 @@ function buildAppProxyRequest(
   request: Request,
   targetPath: string,
   requestUrl: URL,
+  publicOrigin: string,
 ): Request {
   const appOrigin = resolveAuthorizationServerOrigin(requestUrl);
   const target = new URL(targetPath + requestUrl.search, appOrigin);
 
-  return buildProxyRequest(request, target, requestUrl);
+  return buildProxyRequest(request, target, publicOrigin);
 }
 
 async function main() {
@@ -201,6 +211,7 @@ async function main() {
       hostname,
       async fetch(request) {
         const requestUrl = new URL(request.url);
+        const publicOrigin = resolveGatewayPublicOrigin(request, requestUrl);
 
         if (request.method === "OPTIONS") {
           return withGatewayCors(request, new Response(null, { status: 204 }));
@@ -213,11 +224,11 @@ async function main() {
               ok: true,
               servers: Object.keys(MCP_SERVER_REGISTRY),
               managedChildren: shouldManageGatewayChildren(process.env),
-              authorizationServer: `${requestUrl.origin}${GATEWAY_AUTH_SERVER_METADATA_PATH}`,
+              authorizationServer: `${publicOrigin}${GATEWAY_AUTH_SERVER_METADATA_PATH}`,
               protectedResources: Object.keys(MCP_SERVER_REGISTRY).map((slug) =>
                 new URL(
                   buildProtectedResourceMetadataPath(slug as keyof typeof MCP_SERVER_REGISTRY),
-                  requestUrl.origin,
+                  publicOrigin,
                 ).toString(),
               ),
               targets: Object.fromEntries(
@@ -235,7 +246,7 @@ async function main() {
         ) {
           return withGatewayCors(
             request,
-            Response.json(buildGatewayAuthorizationServerMetadata(requestUrl), {
+            Response.json(buildGatewayAuthorizationServerMetadata(publicOrigin), {
               headers: {
                 "Cache-Control": "no-store",
               },
@@ -250,7 +261,7 @@ async function main() {
           return withGatewayCors(
             request,
             await fetch(
-              buildAppProxyRequest(request, "/api/mcp/oauth/authorize", requestUrl),
+              buildAppProxyRequest(request, "/api/mcp/oauth/authorize", requestUrl, publicOrigin),
             ),
           );
         }
@@ -261,7 +272,9 @@ async function main() {
         ) {
           return withGatewayCors(
             request,
-            await fetch(buildAppProxyRequest(request, "/api/mcp/oauth/token", requestUrl)),
+            await fetch(
+              buildAppProxyRequest(request, "/api/mcp/oauth/token", requestUrl, publicOrigin),
+            ),
           );
         }
 
@@ -271,7 +284,9 @@ async function main() {
         ) {
           return withGatewayCors(
             request,
-            await fetch(buildAppProxyRequest(request, "/api/mcp/oauth/register", requestUrl)),
+            await fetch(
+              buildAppProxyRequest(request, "/api/mcp/oauth/register", requestUrl, publicOrigin),
+            ),
           );
         }
 
@@ -281,7 +296,7 @@ async function main() {
             request,
             Response.json(
               buildProtectedResourceMetadata(
-                requestUrl,
+                publicOrigin,
                 protectedResourceMatch.slug as keyof typeof MCP_SERVER_REGISTRY,
               ),
               {
@@ -301,7 +316,7 @@ async function main() {
                 resources: Object.keys(MCP_SERVER_REGISTRY).map((slug) =>
                   new URL(
                     buildProtectedResourceMetadataPath(slug as keyof typeof MCP_SERVER_REGISTRY),
-                    requestUrl.origin,
+                    publicOrigin,
                   ).toString(),
                 ),
               },
@@ -332,7 +347,7 @@ async function main() {
 
         return withGatewayCors(
           request,
-          await fetch(buildProxyRequest(request, routed.target, requestUrl)),
+          await fetch(buildProxyRequest(request, routed.target, publicOrigin)),
         );
       },
     });
