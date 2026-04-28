@@ -7,7 +7,7 @@ import {
   MCP_SERVER_REGISTRY,
 } from "../../shared/registry";
 
-const port = Number.parseInt(process.env.PORT ?? "3010", 10);
+const port = Number.parseInt(process.env.MCP_GATEWAY_PORT ?? process.env.PORT ?? "3010", 10);
 const hostname = process.env.HOST ?? "0.0.0.0";
 const publicHostname = hostname === "0.0.0.0" ? "127.0.0.1" : hostname;
 const GATEWAY_AUTHORIZATION_PATH = "/authorize";
