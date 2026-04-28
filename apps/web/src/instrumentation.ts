@@ -7,9 +7,6 @@ export async function register() {
     return;
   }
 
-  const observabilityModuleName = "@cmdclaw/core/server/utils/observability";
-  const { initializeObservabilityRuntime } = await (0, eval)(
-    `import("${observabilityModuleName}")`,
-  );
-  initializeObservabilityRuntime("cmdclaw-web");
+  const { registerNodeInstrumentation } = await import("./instrumentation-node");
+  registerNodeInstrumentation();
 }
