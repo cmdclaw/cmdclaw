@@ -6,6 +6,8 @@ RUN bun --version
 COPY . .
 RUN bun x turbo prune @cmdclaw/mcp --docker --out-dir /tmp/pruned
 RUN bun -e 'const fs = require("fs"); for (const path of ["/tmp/pruned/json/package.json", "/tmp/pruned/full/package.json"]) { const pkg = JSON.parse(fs.readFileSync(path, "utf8")); pkg.workspaces = pkg.workspaces.filter((entry) => entry !== "docs"); fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`); }'
+RUN mkdir -p /tmp/pruned/full/packages/config
+RUN cp -R /app/packages/config/. /tmp/pruned/full/packages/config/
 
 FROM oven/bun:1.3.9 AS deps
 WORKDIR /app
