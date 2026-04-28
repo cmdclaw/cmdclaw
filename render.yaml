@@ -409,7 +409,7 @@ projects:
             name: cmdclaw-mcp-staging
             runtime: docker
             region: frankfurt
-            plan: starter
+            plan: standard
             numInstances: 1
             dockerContext: .
             dockerfilePath: docker/images/mcp/Dockerfile
