@@ -5,7 +5,7 @@
 import type React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
@@ -128,7 +128,15 @@ export function CloudLoginClient({
   const [passwordEmailMode, setPasswordEmailMode] = useState<PasswordEmailMode>("create");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
-  const lastMethod = authClient.getLastUsedLoginMethod();
+  const [lastMethod, setLastMethod] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setLastMethod(authClient.getLastUsedLoginMethod());
+    } catch {
+      setLastMethod(null);
+    }
+  }, []);
 
   const title =
     step === "initial"

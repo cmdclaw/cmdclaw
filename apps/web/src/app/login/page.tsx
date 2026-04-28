@@ -94,9 +94,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   const callbackUrl = sanitizeReturnPath(params.callbackUrl, "/chat");
   const requestHeaders = await headers();
-  const sessionData = await auth.api.getSession({
-    headers: requestHeaders,
-  });
+  const sessionData = await auth.api
+    .getSession({
+      headers: requestHeaders,
+    })
+    .catch(() => null);
 
   if (sessionData?.user?.id) {
     redirect(callbackUrl);

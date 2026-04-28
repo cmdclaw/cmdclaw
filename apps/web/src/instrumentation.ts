@@ -3,7 +3,13 @@ export async function register() {
     return;
   }
 
-  const { initializeObservabilityRuntime } =
-    await import("@cmdclaw/core/server/utils/observability");
+  if (process.env.NODE_ENV === "development") {
+    return;
+  }
+
+  const observabilityModuleName = "@cmdclaw/core/server/utils/observability";
+  const { initializeObservabilityRuntime } = await (0, eval)(
+    `import("${observabilityModuleName}")`,
+  );
   initializeObservabilityRuntime("cmdclaw-web");
 }

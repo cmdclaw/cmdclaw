@@ -34,6 +34,19 @@ export const metadata: Metadata = {
   manifest: "/site.webmanifest",
 };
 
+function shouldUsePublicShell(pathname: string | null): boolean {
+  if (!pathname) {
+    return false;
+  }
+
+  return (
+    pathname === "/login" ||
+    pathname === "/invite-only" ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/sign-in/")
+  );
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -41,11 +54,16 @@ export default async function RootLayout({
 }>) {
   const requestHeaders = await headers();
   const pathname = requestHeaders.get("x-cmdclaw-pathname");
-  const sessionData = await auth.api.getSession({
-    headers: requestHeaders,
-  });
+  const publicShell = shouldUsePublicShell(pathname);
+  const sessionData = publicShell
+    ? null
+    : await auth.api
+        .getSession({
+          headers: requestHeaders,
+        })
+        .catch(() => null);
   const hasSession = Boolean(sessionData?.session && sessionData?.user);
-  const shouldUseMarketingShell = pathname === "/" && !hasSession;
+  const shouldUseMarketingShell = publicShell || (pathname === "/" && !hasSession);
   const Shell = shouldUseMarketingShell
     ? (await import("@/components/marketing-root-shell")).MarketingRootShell
     : (await import("@/components/app-root-shell")).AppRootShell;
