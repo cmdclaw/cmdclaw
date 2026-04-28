@@ -66,6 +66,20 @@ transforms:
       } else {
         null
       }
+      .instanceId = if exists(.resources.cmdclaw_instance_id) && !is_null(.resources.cmdclaw_instance_id) {
+        .resources.cmdclaw_instance_id
+      } else if exists(.instanceId) && !is_null(.instanceId) {
+        .instanceId
+      } else {
+        null
+      }
+      .worktreeSlot = if exists(.resources.cmdclaw_worktree_slot) && !is_null(.resources.cmdclaw_worktree_slot) {
+        .resources.cmdclaw_worktree_slot
+      } else if exists(.worktreeSlot) && !is_null(.worktreeSlot) {
+        .worktreeSlot
+      } else {
+        null
+      }
       .env = if exists(.resources."deployment.environment") && !is_null(.resources."deployment.environment") {
         .resources."deployment.environment"
       } else if exists(.env) && !is_null(.env) {
@@ -91,7 +105,7 @@ sinks:
       - app_logs
       - otlp_logs_for_victoria
     method: post
-    uri: http://${CMDCLAW_VICTORIA_LOGS_HOST:?cmdclaw victoria logs host is required}:9428/insert/jsonline?_stream_fields=service,env,level&_msg_field=message,event&_time_field=ts
+    uri: http://${CMDCLAW_VICTORIA_LOGS_HOST:?cmdclaw victoria logs host is required}:9428/insert/jsonline?_stream_fields=service,env,level,instanceId,worktreeSlot&_msg_field=message,event&_time_field=ts
     request:
       headers:
         content-type: application/stream+json

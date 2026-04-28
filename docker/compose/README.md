@@ -4,8 +4,8 @@
 docker compose --env-file .env -f docker/compose/dev.yml up -d --remove-orphans
 ```
 
-For a worktree-local stack, export the worktree overrides first so Compose gets a
-unique project name, ports, and volumes for that checkout:
+For a worktree checkout, use the worktree command surface instead of starting a
+separate Compose project:
 
 ```bash
 bun run worktree:docker-up
@@ -13,8 +13,14 @@ bun run worktree:docker-up
 
 In the current worktree flow, `worktree:docker-up` reuses the repo-global
 `cmdclaw-local` services from `docker/compose/dev.yml` for Postgres, Redis,
-MinIO, Grafana, and Alertmanager, and starts the worktree-local observability
-services from `docker/compose/worktree-observability.yml`.
+MinIO, Grafana, Alertmanager, Vector, VictoriaMetrics, VictoriaLogs,
+VictoriaTraces, and vmalert. It does not start a separate observability Compose
+project per worktree.
+
+There is no supported `docker/compose/worktree-observability.yml` path anymore.
+Shared local observability now lives only in `docker/compose/dev.yml`, and
+worktrees are separated inside telemetry by labels rather than by dedicated
+containers or per-worktree Grafana datasources.
 
 The main checkout `docker/compose/dev.yml` remains the full local stack.
 
@@ -28,7 +34,7 @@ The default observability endpoints are:
 - `Alertmanager` on `http://127.0.0.1:9093`
 - `vmalert` on `http://127.0.0.1:8880`
 
-All observability host ports follow the same worktree override pattern as the rest of the stack. The defaults are:
+All observability host ports are shared across worktrees. The defaults are:
 
 - `CMDCLAW_VECTOR_OTLP_GRPC_PORT=4317`
 - `CMDCLAW_VECTOR_OTLP_HTTP_PORT=4318`
@@ -40,7 +46,12 @@ All observability host ports follow the same worktree override pattern as the re
 - `CMDCLAW_ALERTMANAGER_PORT=9093`
 - `CMDCLAW_VMALERT_PORT=8880`
 
-Grafana is provisioned in code with the VictoriaMetrics, VictoriaLogs, VictoriaTraces, and Alertmanager datasources plus the `CmdClaw Local Observability` dashboard. `vmalert` rules also live in the repo under `docker/compose/observability/vmalert/rules/`.
+Grafana is provisioned from the repository with the shared VictoriaMetrics,
+VictoriaLogs, VictoriaTraces, and Alertmanager datasources plus the `CmdClaw
+Local Observability` dashboard. Worktrees are distinguished inside telemetry by
+labels such as `instanceId` and `worktreeSlot`, not by separate Grafana
+datasources. `vmalert` rules also live in the repo under
+`docker/compose/observability/vmalert/rules/`.
 
 To send Slack notifications from local alerts, set:
 

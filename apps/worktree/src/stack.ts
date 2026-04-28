@@ -1,22 +1,10 @@
 export type WorktreeStackConfig = {
   slot: number;
   slotLabel: string;
-  composeProjectName: string;
-  otelGrpcPort: number;
-  otelHttpPort: number;
-  vectorTracePort: number;
-  vectorLogPort: number;
-  victoriaMetricsPort: number;
-  victoriaLogsPort: number;
-  victoriaTracesPort: number;
-  vmalertPort: number;
   daytonaApiPort: number;
   daytonaProxyPort: number;
   daytonaSshGatewayPort: number;
   daytonaDexPort: number;
-  victoriaMetricsVolume: string;
-  victoriaLogsVolume: string;
-  victoriaTracesVolume: string;
   daytonaDbVolume: string;
   daytonaDexVolume: string;
   daytonaRegistryVolume: string;
@@ -30,11 +18,22 @@ export type SharedStackConfig = {
   minioConsolePort: number;
   grafanaPort: number;
   alertmanagerPort: number;
+  vectorOtelGrpcPort: number;
+  vectorOtelHttpPort: number;
+  vectorTracePort: number;
+  vectorLogPort: number;
+  victoriaMetricsPort: number;
+  victoriaLogsPort: number;
+  victoriaTracesPort: number;
+  vmalertPort: number;
   postgresVolume: string;
   redisVolume: string;
   minioVolume: string;
   alertmanagerVolume: string;
   grafanaVolume: string;
+  victoriaMetricsVolume: string;
+  victoriaLogsVolume: string;
+  victoriaTracesVolume: string;
 };
 
 export type WorktreeHostPort = {
@@ -63,14 +62,6 @@ export function buildWorktreeHostPorts(slot: number): WorktreeHostPort[] {
   return [
     { name: "app", port: port(37, slot) },
     { name: "ws", port: port(47, slot) },
-    { name: "otel-grpc", port: stack.otelGrpcPort },
-    { name: "otel-http", port: stack.otelHttpPort },
-    { name: "vector-traces", port: stack.vectorTracePort },
-    { name: "vector-logs", port: stack.vectorLogPort },
-    { name: "victoria-metrics", port: stack.victoriaMetricsPort },
-    { name: "victoria-logs", port: stack.victoriaLogsPort },
-    { name: "victoria-traces", port: stack.victoriaTracesPort },
-    { name: "vmalert", port: stack.vmalertPort },
     { name: "daytona-api", port: stack.daytonaApiPort },
     { name: "daytona-proxy", port: stack.daytonaProxyPort },
     { name: "daytona-ssh", port: stack.daytonaSshGatewayPort },
@@ -94,6 +85,14 @@ export function buildSharedStackConfig(): SharedStackConfig {
     minioConsolePort: parsePort(process.env.CMDCLAW_MINIO_CONSOLE_PORT, 9101),
     grafanaPort: parsePort(process.env.CMDCLAW_GRAFANA_PORT, 3400),
     alertmanagerPort: parsePort(process.env.CMDCLAW_ALERTMANAGER_PORT, 9093),
+    vectorOtelGrpcPort: parsePort(process.env.CMDCLAW_VECTOR_OTLP_GRPC_PORT, 4317),
+    vectorOtelHttpPort: parsePort(process.env.CMDCLAW_VECTOR_OTLP_HTTP_PORT, 4318),
+    vectorTracePort: parsePort(process.env.CMDCLAW_VECTOR_TRACES_PORT, 5318),
+    vectorLogPort: parsePort(process.env.CMDCLAW_VECTOR_LOG_PORT, 8686),
+    victoriaMetricsPort: parsePort(process.env.CMDCLAW_VICTORIA_METRICS_PORT, 8428),
+    victoriaLogsPort: parsePort(process.env.CMDCLAW_VICTORIA_LOGS_PORT, 9428),
+    victoriaTracesPort: parsePort(process.env.CMDCLAW_VICTORIA_TRACES_PORT, 10428),
+    vmalertPort: parsePort(process.env.CMDCLAW_VMALERT_PORT, 8880),
     postgresVolume:
       process.env.CMDCLAW_POSTGRES_VOLUME || `${composeProjectName}_cmdclaw_postgres_data`,
     redisVolume:
@@ -105,35 +104,31 @@ export function buildSharedStackConfig(): SharedStackConfig {
       `${composeProjectName}_cmdclaw_alertmanager_data`,
     grafanaVolume:
       process.env.CMDCLAW_GRAFANA_VOLUME || `${composeProjectName}_cmdclaw_grafana_data`,
+    victoriaMetricsVolume:
+      process.env.CMDCLAW_VICTORIA_METRICS_VOLUME ||
+      `${composeProjectName}_cmdclaw_victoria_metrics_data`,
+    victoriaLogsVolume:
+      process.env.CMDCLAW_VICTORIA_LOGS_VOLUME ||
+      `${composeProjectName}_cmdclaw_victoria_logs_data`,
+    victoriaTracesVolume:
+      process.env.CMDCLAW_VICTORIA_TRACES_VOLUME ||
+      `${composeProjectName}_cmdclaw_victoria_traces_data`,
   };
 }
 
 export function buildWorktreeStackConfig(instanceId: string, slot: number): WorktreeStackConfig {
   assertValidSlot(slot);
   const slotLabel = formatWorktreeStackSlot(slot);
-  const composeProjectName = instanceId;
 
   return {
     slot,
     slotLabel,
-    composeProjectName,
-    otelGrpcPort: port(431, slot),
-    otelHttpPort: port(432, slot),
-    vectorTracePort: port(53, slot),
-    vectorLogPort: port(86, slot),
-    victoriaMetricsPort: port(84, slot),
-    victoriaLogsPort: port(94, slot),
-    victoriaTracesPort: port(104, slot),
-    vmalertPort: port(88, slot),
     daytonaApiPort: port(33, slot),
     daytonaProxyPort: port(40, slot),
     daytonaSshGatewayPort: port(22, slot),
     daytonaDexPort: port(55, slot),
-    victoriaMetricsVolume: `${composeProjectName}_cmdclaw_victoria_metrics_data`,
-    victoriaLogsVolume: `${composeProjectName}_cmdclaw_victoria_logs_data`,
-    victoriaTracesVolume: `${composeProjectName}_cmdclaw_victoria_traces_data`,
-    daytonaDbVolume: `${composeProjectName}_daytona_db_data`,
-    daytonaDexVolume: `${composeProjectName}_daytona_dex_data`,
-    daytonaRegistryVolume: `${composeProjectName}_daytona_registry_data`,
+    daytonaDbVolume: `${instanceId}_daytona_db_data`,
+    daytonaDexVolume: `${instanceId}_daytona_dex_data`,
+    daytonaRegistryVolume: `${instanceId}_daytona_registry_data`,
   };
 }

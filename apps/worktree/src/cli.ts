@@ -32,6 +32,12 @@ import {
   type SharedStackConfig,
   type WorktreeHostPort,
 } from "./stack";
+import {
+  shouldBlockStartingWorktreeWeb,
+  summarizeRunningWorktreeWebProcesses,
+  MAX_RUNNING_WORKTREE_WEB_PROCESSES,
+  type WorktreeWebProcessSnapshot,
+} from "./start-guard";
 import { buildWorktreePublicCallbackBaseUrl } from "../../../packages/core/src/lib/worktree-routing";
 
 const require = createRequire(new URL("../../web/package.json", import.meta.url));
@@ -110,6 +116,8 @@ const PROCESS_NAMES = ["web", "worker", "ws"] as const;
 const DEV_START_TIMEOUT_MS = 120_000;
 const GENERATED_WORKTREE_ENV_HEADER = "# Auto-generated for worktree by apps/worktree/src/cli.ts.";
 const GENERATED_WORKTREE_ENV_NOTICE = "# Do not edit manually; re-run a worktree command to refresh it.";
+const WORKTREE_START_LIMIT_ERROR =
+  "You already have 5 worktree nextjs server running, you cannot start another one, please talk to the user first for him to stop one of the worktree";
 type ProcessName = (typeof PROCESS_NAMES)[number];
 
 let sharedStackRuntimeCache: SharedStackConfig | null = null;
@@ -119,12 +127,12 @@ function printHelp(): void {
   console.log("");
   console.log("Commands:");
   console.log("  create   Create or update the isolated worktree instance");
-  console.log("  setup    Start the Docker stack, prepare the database, and start background processes");
+  console.log("  setup    Ensure shared Docker services are running, prepare the database, and start background processes");
   console.log("  start    Start or restart background processes for this worktree");
   console.log("  stop     Stop background processes for this worktree");
-  console.log("  destroy  Stop processes, tear down the Docker stack, and remove local state");
-  console.log("  docker-up    Start the worktree-scoped Docker stack");
-  console.log("  docker-down  Stop the worktree-scoped Docker stack");
+  console.log("  destroy  Stop processes, remove worktree resources, and remove local state");
+  console.log("  docker-up    Ensure the shared Docker stack is running and provision worktree resources");
+  console.log("  docker-down  No-op for shared observability; worktree Docker is no longer isolated");
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
   console.log("  env      Print derived environment variables for this worktree");
@@ -803,30 +811,8 @@ function formatSlotConflict(conflict: SlotPortState): string {
 }
 
 function listDockerProjectContainers(metadata: InstanceMetadata): string[] {
-  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
-  const result = spawnSync(
-    "docker",
-    [
-      "ps",
-      "--filter",
-      `label=com.docker.compose.project=${stack.composeProjectName}`,
-      "--format",
-      "{{.Names}}\t{{.Status}}",
-    ],
-    {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-
-  if (result.status !== 0) {
-    return [];
-  }
-
-  return result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  void metadata;
+  return [];
 }
 
 function hasRunningTrackedProcesses(metadata: InstanceMetadata): boolean {
@@ -1008,13 +994,6 @@ function resolveSharedMinioRootCredentials(): { accessKeyId: string; secretAcces
       process.env.AWS_SECRET_ACCESS_KEY?.trim() ||
       process.env.S3_SECRET_ACCESS_KEY?.trim() ||
       "minioadmin",
-  };
-}
-
-function resolveSharedGrafanaAdminCredentials(): { username: string; password: string } {
-  return {
-    username: process.env.CMDCLAW_GRAFANA_ADMIN_USER?.trim() || "admin",
-    password: process.env.CMDCLAW_GRAFANA_ADMIN_PASSWORD?.trim() || "admin",
   };
 }
 
@@ -1246,163 +1225,9 @@ async function dropMinioTenant(metadata: InstanceMetadata): Promise<void> {
   console.log(`[worktree] removed minio bucket ${metadata.minioBucketName}`);
 }
 
-type GrafanaDatasourceConfig = {
-  name: string;
-  uid: string;
-  type: string;
-  url: string;
-  jsonData?: Record<string, unknown>;
-};
-
-function worktreeGrafanaDatasources(metadata: InstanceMetadata): GrafanaDatasourceConfig[] {
-  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
-  const prefix = slugify(metadata.instanceId, "-");
-
-  return [
-    {
-      name: `${metadata.instanceId} Metrics`,
-      uid: `${prefix}-metrics`.slice(0, 40),
-      type: "prometheus",
-      url: `http://host.docker.internal:${stack.victoriaMetricsPort}`,
-      jsonData: {
-        httpMethod: "POST",
-        prometheusType: "Prometheus",
-        timeInterval: "15s",
-      },
-    },
-    {
-      name: `${metadata.instanceId} Logs`,
-      uid: `${prefix}-logs`.slice(0, 40),
-      type: "victoriametrics-logs-datasource",
-      url: `http://host.docker.internal:${stack.victoriaLogsPort}`,
-      jsonData: {
-        logLevelRules: [
-          { field: "level", operator: "regex", value: "error|fatal", level: "error", enabled: true },
-          { field: "level", operator: "regex", value: "warn|warning", level: "warning", enabled: true },
-          { field: "level", operator: "regex", value: "info", level: "info", enabled: true },
-        ],
-      },
-    },
-    {
-      name: `${metadata.instanceId} Traces`,
-      uid: `${prefix}-traces`.slice(0, 40),
-      type: "jaeger",
-      url: `http://host.docker.internal:${stack.victoriaTracesPort}/select/jaeger`,
-      jsonData: {
-        nodeGraph: { enabled: true },
-        spanBar: { type: "Duration" },
-      },
-    },
-  ];
-}
-
-async function grafanaApiRequest(
-  repoRoot: string,
-  path: string,
-  init: RequestInit,
-): Promise<Response> {
-  const shared = resolveRuntimeSharedStackConfig();
-  const auth = resolveSharedGrafanaAdminCredentials();
-  const headers = new Headers(init.headers);
-  headers.set(
-    "authorization",
-    `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString("base64")}`,
-  );
-  if (init.body && !headers.has("content-type")) {
-    headers.set("content-type", "application/json");
-  }
-  return await fetch(`http://127.0.0.1:${shared.grafanaPort}${path}`, {
-    ...init,
-    headers,
-  });
-}
-
-async function ensureGrafanaDatasource(
-  repoRoot: string,
-  datasource: GrafanaDatasourceConfig,
-): Promise<void> {
-  const lookup = await grafanaApiRequest(repoRoot, `/api/datasources/uid/${datasource.uid}`, {
-    method: "GET",
-  });
-  const payload = {
-    name: datasource.name,
-    uid: datasource.uid,
-    type: datasource.type,
-    access: "proxy",
-    url: datasource.url,
-    jsonData: datasource.jsonData ?? {},
-  };
-
-  if (lookup.status === 404) {
-    const createResponse = await grafanaApiRequest(repoRoot, "/api/datasources", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    if (!createResponse.ok) {
-      fail(`Failed to create Grafana datasource ${datasource.name}: ${await createResponse.text()}`);
-    }
-    return;
-  }
-
-  if (!lookup.ok) {
-    fail(`Failed to query Grafana datasource ${datasource.name}: ${await lookup.text()}`);
-  }
-
-  const existing = (await lookup.json()) as { id: number };
-  const updateResponse = await grafanaApiRequest(repoRoot, `/api/datasources/${existing.id}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      id: existing.id,
-      ...payload,
-    }),
-  });
-  if (!updateResponse.ok) {
-    fail(`Failed to update Grafana datasource ${datasource.name}: ${await updateResponse.text()}`);
-  }
-}
-
-async function ensureGrafanaWorktreeDatasources(metadata: InstanceMetadata): Promise<void> {
-  await waitForHttp(
-    `http://127.0.0.1:${resolveRuntimeSharedStackConfig().grafanaPort}/api/health`,
-    DEV_START_TIMEOUT_MS,
-  );
-  for (const datasource of worktreeGrafanaDatasources(metadata)) {
-    await ensureGrafanaDatasource(metadata.repoRoot, datasource);
-  }
-}
-
-async function removeGrafanaWorktreeDatasources(metadata: InstanceMetadata): Promise<void> {
-  for (const datasource of worktreeGrafanaDatasources(metadata)) {
-    const response = await grafanaApiRequest(metadata.repoRoot, `/api/datasources/uid/${datasource.uid}`, {
-      method: "GET",
-    });
-    if (response.status === 404) {
-      continue;
-    }
-    if (!response.ok) {
-      console.warn(
-        `[worktree] failed to look up Grafana datasource ${datasource.name}: ${await response.text()}`,
-      );
-      continue;
-    }
-    const existing = (await response.json()) as { id: number };
-    const deleteResponse = await grafanaApiRequest(
-      metadata.repoRoot,
-      `/api/datasources/${existing.id}`,
-      { method: "DELETE" },
-    );
-    if (!deleteResponse.ok) {
-      console.warn(
-        `[worktree] failed to remove Grafana datasource ${datasource.name}: ${await deleteResponse.text()}`,
-      );
-    }
-  }
-}
-
 function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
   const instanceRuntimeDir = runtimeDir(metadata.instanceRoot);
   const instanceAppUrl = metadata.appUrl;
-  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
   const sharedStack = resolveRuntimeSharedStackConfig();
   const databaseUrl = new URL(buildDatabaseUrlForMetadata(metadata));
 
@@ -1436,31 +1261,38 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     CMDCLAW_INSTANCE_ID: metadata.instanceId,
     CMDCLAW_INSTANCE_ROOT: metadata.instanceRoot,
     CMDCLAW_REDIS_NAMESPACE: metadata.redisNamespace,
+    CMDCLAW_WORKTREE_ID: metadata.instanceId,
     CMDCLAW_WORKTREE_SLOT: formatWorktreeStackSlot(metadata.stackSlot),
-    CMDCLAW_COMPOSE_PROJECT: stack.composeProjectName,
-    COMPOSE_PROJECT_NAME: stack.composeProjectName,
+    CMDCLAW_COMPOSE_PROJECT: sharedStack.composeProjectName,
+    COMPOSE_PROJECT_NAME: sharedStack.composeProjectName,
     CMDCLAW_POSTGRES_PORT: String(sharedStack.postgresPort),
     CMDCLAW_REDIS_PORT: String(sharedStack.redisPort),
     CMDCLAW_MINIO_API_PORT: String(sharedStack.minioApiPort),
     CMDCLAW_MINIO_CONSOLE_PORT: String(sharedStack.minioConsolePort),
-    CMDCLAW_OTEL_GRPC_PORT: String(stack.otelGrpcPort),
-    CMDCLAW_OTEL_HTTP_PORT: String(stack.otelHttpPort),
-    CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(stack.otelGrpcPort),
-    CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(stack.otelHttpPort),
-    CMDCLAW_VECTOR_TRACES_PORT: String(stack.vectorTracePort),
-    CMDCLAW_VECTOR_LOG_PORT: String(stack.vectorLogPort),
-    CMDCLAW_VICTORIA_METRICS_PORT: String(stack.victoriaMetricsPort),
-    CMDCLAW_VICTORIA_LOGS_PORT: String(stack.victoriaLogsPort),
-    CMDCLAW_VICTORIA_TRACES_PORT: String(stack.victoriaTracesPort),
+    CMDCLAW_OTEL_GRPC_PORT: String(sharedStack.vectorOtelGrpcPort),
+    CMDCLAW_OTEL_HTTP_PORT: String(sharedStack.vectorOtelHttpPort),
+    CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(sharedStack.vectorOtelGrpcPort),
+    CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(sharedStack.vectorOtelHttpPort),
+    CMDCLAW_VECTOR_TRACES_PORT: String(sharedStack.vectorTracePort),
+    CMDCLAW_VECTOR_LOG_PORT: String(sharedStack.vectorLogPort),
+    CMDCLAW_VECTOR_LOG_URL: `http://127.0.0.1:${sharedStack.vectorLogPort}/logs`,
+    CMDCLAW_VECTOR_METRICS_URL: `http://127.0.0.1:${sharedStack.vectorOtelHttpPort}/v1/metrics`,
+    CMDCLAW_VECTOR_TRACES_URL: `http://127.0.0.1:${sharedStack.vectorTracePort}/v1/traces`,
+    CMDCLAW_VICTORIA_METRICS_PORT: String(sharedStack.victoriaMetricsPort),
+    CMDCLAW_VICTORIA_LOGS_PORT: String(sharedStack.victoriaLogsPort),
+    CMDCLAW_VICTORIA_TRACES_PORT: String(sharedStack.victoriaTracesPort),
+    CMDCLAW_VICTORIA_METRICS_URL: `http://127.0.0.1:${sharedStack.victoriaMetricsPort}`,
+    CMDCLAW_VICTORIA_LOGS_URL: `http://127.0.0.1:${sharedStack.victoriaLogsPort}`,
+    CMDCLAW_VICTORIA_TRACES_URL: `http://127.0.0.1:${sharedStack.victoriaTracesPort}`,
     CMDCLAW_ALERTMANAGER_PORT: String(sharedStack.alertmanagerPort),
-    CMDCLAW_VMALERT_PORT: String(stack.vmalertPort),
+    CMDCLAW_VMALERT_PORT: String(sharedStack.vmalertPort),
     CMDCLAW_GRAFANA_PORT: String(sharedStack.grafanaPort),
     CMDCLAW_POSTGRES_VOLUME: sharedStack.postgresVolume,
     CMDCLAW_REDIS_VOLUME: sharedStack.redisVolume,
     CMDCLAW_MINIO_VOLUME: sharedStack.minioVolume,
-    CMDCLAW_VICTORIA_METRICS_VOLUME: stack.victoriaMetricsVolume,
-    CMDCLAW_VICTORIA_LOGS_VOLUME: stack.victoriaLogsVolume,
-    CMDCLAW_VICTORIA_TRACES_VOLUME: stack.victoriaTracesVolume,
+    CMDCLAW_VICTORIA_METRICS_VOLUME: sharedStack.victoriaMetricsVolume,
+    CMDCLAW_VICTORIA_LOGS_VOLUME: sharedStack.victoriaLogsVolume,
+    CMDCLAW_VICTORIA_TRACES_VOLUME: sharedStack.victoriaTracesVolume,
     CMDCLAW_ALERTMANAGER_VOLUME: sharedStack.alertmanagerVolume,
     CMDCLAW_GRAFANA_VOLUME: sharedStack.grafanaVolume,
     PGHOST: databaseUrl.hostname,
@@ -1507,11 +1339,22 @@ function buildSharedComposeEnv(repoRoot: string): NodeJS.ProcessEnv {
     CMDCLAW_MINIO_CONSOLE_PORT: String(shared.minioConsolePort),
     CMDCLAW_GRAFANA_PORT: String(shared.grafanaPort),
     CMDCLAW_ALERTMANAGER_PORT: String(shared.alertmanagerPort),
+    CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(shared.vectorOtelGrpcPort),
+    CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(shared.vectorOtelHttpPort),
+    CMDCLAW_VECTOR_TRACES_PORT: String(shared.vectorTracePort),
+    CMDCLAW_VECTOR_LOG_PORT: String(shared.vectorLogPort),
+    CMDCLAW_VICTORIA_METRICS_PORT: String(shared.victoriaMetricsPort),
+    CMDCLAW_VICTORIA_LOGS_PORT: String(shared.victoriaLogsPort),
+    CMDCLAW_VICTORIA_TRACES_PORT: String(shared.victoriaTracesPort),
+    CMDCLAW_VMALERT_PORT: String(shared.vmalertPort),
     CMDCLAW_POSTGRES_VOLUME: shared.postgresVolume,
     CMDCLAW_REDIS_VOLUME: shared.redisVolume,
     CMDCLAW_MINIO_VOLUME: shared.minioVolume,
     CMDCLAW_GRAFANA_VOLUME: shared.grafanaVolume,
     CMDCLAW_ALERTMANAGER_VOLUME: shared.alertmanagerVolume,
+    CMDCLAW_VICTORIA_METRICS_VOLUME: shared.victoriaMetricsVolume,
+    CMDCLAW_VICTORIA_LOGS_VOLUME: shared.victoriaLogsVolume,
+    CMDCLAW_VICTORIA_TRACES_VOLUME: shared.victoriaTracesVolume,
   };
 }
 
@@ -1571,11 +1414,9 @@ function isDockerDaemonReachable(): boolean {
 }
 
 function printStatusEndpoints(metadata: InstanceMetadata): void {
-  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
   const sharedStack = resolveRuntimeSharedStackConfig();
   const databaseUrl = new URL(buildDatabaseUrlForMetadata(metadata));
 
-  console.log(`[worktree] docker project ${stack.composeProjectName}`);
   console.log(`[worktree] shared docker project ${sharedStack.composeProjectName}`);
   console.log(`[worktree] app ${metadata.appUrl}`);
   console.log(`[worktree] health ${buildHealthCheckUrl(metadata.appUrl)}`);
@@ -1585,91 +1426,19 @@ function printStatusEndpoints(metadata: InstanceMetadata): void {
   console.log(`[worktree] redis redis://127.0.0.1:${sharedStack.redisPort}`);
   console.log(`[worktree] minio api ${buildLoopbackUrl(sharedStack.minioApiPort)}`);
   console.log(`[worktree] minio console ${buildLoopbackUrl(sharedStack.minioConsolePort)}`);
-  console.log(`[worktree] metrics ${buildLoopbackUrl(stack.victoriaMetricsPort)}`);
-  console.log(`[worktree] logs ${buildLoopbackUrl(stack.victoriaLogsPort)}`);
-  console.log(`[worktree] traces ${buildLoopbackUrl(stack.victoriaTracesPort)}`);
+  console.log(`[worktree] metrics ${buildLoopbackUrl(sharedStack.victoriaMetricsPort)}`);
+  console.log(`[worktree] logs ${buildLoopbackUrl(sharedStack.victoriaLogsPort)}`);
+  console.log(`[worktree] traces ${buildLoopbackUrl(sharedStack.victoriaTracesPort)}`);
   console.log(`[worktree] grafana ${buildLoopbackUrl(sharedStack.grafanaPort)}`);
   console.log(`[worktree] alertmanager ${buildLoopbackUrl(sharedStack.alertmanagerPort)}`);
-  console.log(`[worktree] vmalert ${buildLoopbackUrl(stack.vmalertPort)}`);
-  console.log(`[worktree] otel grpc 127.0.0.1:${stack.otelGrpcPort}`);
-  console.log(`[worktree] otel http ${buildLoopbackUrl(stack.otelHttpPort)}`);
-  console.log(`[worktree] vector traces ${buildLoopbackUrl(stack.vectorTracePort, "/v1/traces")}`);
-  console.log(`[worktree] vector logs ${buildLoopbackUrl(stack.vectorLogPort, "/logs")}`);
+  console.log(`[worktree] vmalert ${buildLoopbackUrl(sharedStack.vmalertPort)}`);
+  console.log(`[worktree] otel grpc 127.0.0.1:${sharedStack.vectorOtelGrpcPort}`);
+  console.log(`[worktree] otel http ${buildLoopbackUrl(sharedStack.vectorOtelHttpPort)}`);
+  console.log(
+    `[worktree] vector traces ${buildLoopbackUrl(sharedStack.vectorTracePort, "/v1/traces")}`,
+  );
+  console.log(`[worktree] vector logs ${buildLoopbackUrl(sharedStack.vectorLogPort, "/logs")}`);
   console.log(`[worktree] env file ${resolveWorktreeEnvFile(metadata.repoRoot)}`);
-}
-
-function runWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): void {
-  runInheritedCommand(
-    "docker",
-    [
-      "compose",
-      "--env-file",
-      resolveWorktreeEnvFile(metadata.repoRoot),
-      "-f",
-      "docker/compose/worktree-observability.yml",
-      ...args,
-    ],
-    metadata.repoRoot,
-    {
-      ...process.env,
-      ...buildWorktreeRuntimeEnv(metadata),
-    },
-  );
-}
-
-function runWorktreeDockerComposeResult(
-  metadata: InstanceMetadata,
-  args: string[],
-): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync(
-    "docker",
-    [
-      "compose",
-      "--env-file",
-      resolveWorktreeEnvFile(metadata.repoRoot),
-      "-f",
-      "docker/compose/worktree-observability.yml",
-      ...args,
-    ],
-    {
-      cwd: metadata.repoRoot,
-      env: {
-        ...process.env,
-        ...buildWorktreeRuntimeEnv(metadata),
-      },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-
-  const stdout = result.stdout ?? "";
-  const stderr = result.stderr ?? "";
-  if (stdout) {
-    process.stdout.write(stdout);
-  }
-  if (stderr) {
-    process.stderr.write(stderr);
-  }
-
-  return {
-    status: result.status ?? 1,
-    stdout,
-    stderr,
-  };
-}
-
-function tryRunWorktreeDockerCompose(metadata: InstanceMetadata, args: string[]): boolean {
-  const result = runWorktreeDockerComposeResult(metadata, args);
-
-  if (result.status === 0) {
-    return true;
-  }
-
-  const output = result.stderr.trim() || result.stdout.trim() || `exit ${result.status}`;
-  console.warn(
-    `[worktree] docker compose ${args.join(" ")} failed during cleanup: ${output}`,
-  );
-  return false;
 }
 
 function isDockerPortAllocationFailure(output: string): boolean {
@@ -1678,27 +1447,7 @@ function isDockerPortAllocationFailure(output: string): boolean {
 }
 
 async function ensureWorktreeDockerStackUp(metadata: InstanceMetadata): Promise<InstanceMetadata> {
-  const initialAttempt = runWorktreeDockerComposeResult(metadata, ["up", "-d"]);
-  if (initialAttempt.status === 0) {
-    return metadata;
-  }
-
-  const output = `${initialAttempt.stderr}\n${initialAttempt.stdout}`.trim();
-  if (isSlotActivelyOwnedByInstance(metadata) || !isDockerPortAllocationFailure(output)) {
-    fail(`docker compose up -d failed with exit ${initialAttempt.status}`);
-  }
-
-  const recoveredMetadata = await reallocateMetadataStackSlot(
-    metadata,
-    output || "docker reported that one of the slot ports is already allocated",
-    new Set([metadata.stackSlot]),
-  );
-  const retryAttempt = runWorktreeDockerComposeResult(recoveredMetadata, ["up", "-d"]);
-  if (retryAttempt.status !== 0) {
-    fail(`docker compose up -d failed with exit ${retryAttempt.status}`);
-  }
-
-  return recoveredMetadata;
+  return metadata;
 }
 
 function runSharedServiceCommand(
@@ -1774,7 +1523,18 @@ function isDockerComposeServiceRunning(projectName: string, service: string): bo
 function ensureSharedInfraRunning(repoRoot: string): void {
   const env = buildSharedComposeEnv(repoRoot);
   const projectName = env.CMDCLAW_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName;
-  const services = ["database", "redis", "minio", "alertmanager", "grafana"];
+  const services = [
+    "database",
+    "redis",
+    "minio",
+    "victoria-metrics",
+    "victoria-logs",
+    "victoria-traces",
+    "vector",
+    "alertmanager",
+    "vmalert",
+    "grafana",
+  ];
   const missingServices = services.filter((service) => !isDockerComposeServiceRunning(projectName, service));
 
   if (missingServices.length === 0) {
@@ -1803,84 +1563,31 @@ function ensureSharedInfraRunning(repoRoot: string): void {
 }
 
 function listDockerProjectContainerIds(metadata: InstanceMetadata): string[] {
-  const stack = buildWorktreeStackConfig(metadata.instanceId, metadata.stackSlot);
-  const result = spawnSync(
-    "docker",
-    ["ps", "-aq", "--filter", `label=com.docker.compose.project=${stack.composeProjectName}`],
-    {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-
-  if (result.status !== 0) {
-    return [];
-  }
-
-  return result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function removeDockerProjectContainers(metadata: InstanceMetadata): void {
-  const containerIds = listDockerProjectContainerIds(metadata);
-  if (containerIds.length === 0) {
-    return;
-  }
-
-  const result = spawnSync("docker", ["rm", "-f", ...containerIds], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  if (result.status !== 0) {
-    const output = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status ?? 1}`;
-    console.warn(`[worktree] failed to remove leftover Docker containers: ${output}`);
-    return;
-  }
-
-  console.log(
-    `[worktree] removed ${containerIds.length} leftover Docker container${containerIds.length === 1 ? "" : "s"}`,
-  );
+  void metadata;
+  return [];
 }
 
 function teardownDockerResources(metadata: InstanceMetadata): void {
-  if (!isDockerInstalled()) {
-    console.warn("[worktree] skipping Docker cleanup because docker is not installed");
-    return;
-  }
-
-  if (!isDockerDaemonReachable()) {
-    console.warn("[worktree] skipping Docker cleanup because the Docker daemon is unavailable");
-    return;
-  }
-
-  tryRunWorktreeDockerCompose(metadata, ["down", "--volumes", "--remove-orphans"]);
-  removeDockerProjectContainers(metadata);
-  console.log(`[worktree] docker stack removed for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
+  void metadata;
 }
 
 async function dockerUpInstance(): Promise<void> {
-  let metadata = await resolveMetadata();
+  const metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
   ensureSharedInfraRunning(metadata.repoRoot);
-  metadata = await ensureWorktreeDockerStackUp(metadata);
   await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
   await ensureDatabase(metadata);
   await ensureDatabaseExtensions(metadata);
   await ensureDatabaseRole(metadata);
   await ensureRedisAclUser(metadata);
   await ensureMinioTenant(metadata);
-  await ensureGrafanaWorktreeDatasources(metadata);
-  console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
+  console.log("[worktree] shared docker stack ready");
   printStatusEndpoints(metadata);
 }
 
 async function dockerDownInstance(): Promise<void> {
-  const metadata = await resolveMetadata();
-  runWorktreeDockerCompose(metadata, ["down"]);
-  console.log(`[worktree] docker stack stopped for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
+  await resolveMetadata();
+  console.log("[worktree] shared observability is managed globally; nothing worktree-scoped to stop");
 }
 
 function resolveSourceRepoRoot(targetRepoRoot: string): string | null {
@@ -1916,6 +1623,48 @@ function resolveSourceRepoRoot(targetRepoRoot: string): string | null {
 function loadMetadataForRepoRoot(repoRoot: string): InstanceMetadata | null {
   const instanceRoot = join(resolveStateRoot(repoRoot), buildInstanceId(repoRoot));
   return loadMetadata(instanceRoot);
+}
+
+function loadProcessesForRepoRoot(repoRoot: string): InstanceProcesses {
+  const instanceRoot = join(resolveStateRoot(repoRoot), buildInstanceId(repoRoot));
+  return loadProcesses(instanceRoot);
+}
+
+function listLinkedRepoRoots(repoRoot: string): string[] {
+  const worktreeList = runCommand("git", ["worktree", "list", "--porcelain"], repoRoot);
+  const repoRoots = worktreeList
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => normalizePath(line.slice("worktree ".length)));
+
+  return Array.from(new Set(repoRoots));
+}
+
+function buildWorktreeWebProcessSnapshots(currentRepoRoot: string): WorktreeWebProcessSnapshot[] {
+  return listLinkedRepoRoots(currentRepoRoot).map((repoRoot) => {
+    const recognized = isRecognizedWorktreeRepo(repoRoot);
+    const trackedProcesses = recognized ? loadProcessesForRepoRoot(repoRoot) : {};
+    const webPid = typeof trackedProcesses.web === "number" ? trackedProcesses.web : null;
+
+    return {
+      repoRoot,
+      recognized,
+      webPid,
+      webRunning: webPid !== null && isPidRunning(webPid),
+    };
+  });
+}
+
+function assertWorktreeWebStartAllowed(metadata: InstanceMetadata): void {
+  const summary = summarizeRunningWorktreeWebProcesses({
+    currentRepoRoot: metadata.repoRoot,
+    snapshots: buildWorktreeWebProcessSnapshots(metadata.repoRoot),
+  });
+
+  if (shouldBlockStartingWorktreeWeb(summary, MAX_RUNNING_WORKTREE_WEB_PROCESSES)) {
+    fail(WORKTREE_START_LIMIT_ERROR);
+  }
 }
 
 function resolveSourceDatabaseUrl(targetRepoRoot: string): string | null {
@@ -2830,7 +2579,6 @@ async function createInstance(): Promise<InstanceMetadata> {
   await ensureDatabaseRole(metadata);
   await ensureRedisAclUser(metadata);
   await ensureMinioTenant(metadata);
-  await ensureGrafanaWorktreeDatasources(metadata);
   await runDbPush(metadata);
   await bootstrapDeveloperUser(metadata);
   if (!(await syncCliProfileFromLocalSession(metadata))) {
@@ -2904,6 +2652,7 @@ async function stopInstance(metadata: InstanceMetadata): Promise<void> {
 
 async function startInstance(): Promise<void> {
   const metadata = await resolveMetadata();
+  assertWorktreeWebStartAllowed(metadata);
   await stopInstance(metadata);
   const createdMetadata = await createInstance();
   const env = buildWorktreeRuntimeEnv(createdMetadata);
@@ -2953,11 +2702,10 @@ async function startInstance(): Promise<void> {
 }
 
 async function setupInstance(): Promise<void> {
-  let metadata = await resolveMetadata();
+  const metadata = await resolveMetadata();
   ensureDockerDaemonAvailable();
   ensureSharedInfraRunning(metadata.repoRoot);
-  metadata = await ensureWorktreeDockerStackUp(metadata);
-  console.log(`[worktree] docker stack started for slot ${formatWorktreeStackSlot(metadata.stackSlot)}`);
+  console.log("[worktree] shared docker stack ready");
   printStatusEndpoints(metadata);
   await waitForDatabaseReady(buildPostgresAdminUrl(metadata), DEV_START_TIMEOUT_MS);
   await startInstance();
@@ -3066,13 +2814,6 @@ async function destroyInstance(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[worktree] failed to remove minio tenant ${metadata.minioBucketName}: ${message}`);
-  }
-
-  try {
-    await removeGrafanaWorktreeDatasources(metadata);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[worktree] failed to remove Grafana datasources for ${metadata.instanceId}: ${message}`);
   }
 
   teardownDockerResources(metadata);

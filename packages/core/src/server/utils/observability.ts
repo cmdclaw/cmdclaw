@@ -91,6 +91,8 @@ const QUEUE_TRACE_CONTEXT_KEY = "__trace_context";
 const CONSOLE_METHODS: ConsoleMethod[] = ["log", "info", "warn", "error"];
 const DEFAULT_OBSERVABILITY_HOST = "127.0.0.1";
 const ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment" as const;
+const ATTR_CMDCLAW_INSTANCE_ID = "cmdclaw_instance_id" as const;
+const ATTR_CMDCLAW_WORKTREE_SLOT = "cmdclaw_worktree_slot" as const;
 
 const globalState = globalThis as typeof globalThis & {
   __cmdclawObservabilityState?: ObservabilityRuntimeState;
@@ -306,6 +308,14 @@ function buildConsolePayload(level: ConsoleMethod, args: unknown[]): Record<stri
       service:
         typeof parsedPayload.service === "string" ? parsedPayload.service : runtimeState.serviceName,
       env: typeof parsedPayload.env === "string" ? parsedPayload.env : runtimeState.env,
+      instanceId:
+        typeof parsedPayload.instanceId === "string"
+          ? parsedPayload.instanceId
+          : process.env.CMDCLAW_INSTANCE_ID,
+      worktreeSlot:
+        typeof parsedPayload.worktreeSlot === "string"
+          ? parsedPayload.worktreeSlot
+          : process.env.CMDCLAW_WORKTREE_SLOT,
       ...parsedPayload,
       ...(traceId ? { traceId, trace_id: traceId } : {}),
       ...(spanId ? { spanId, span_id: spanId } : {}),
@@ -319,6 +329,8 @@ function buildConsolePayload(level: ConsoleMethod, args: unknown[]): Record<stri
     level,
     service: runtimeState.serviceName,
     env: runtimeState.env,
+    instanceId: process.env.CMDCLAW_INSTANCE_ID,
+    worktreeSlot: process.env.CMDCLAW_WORKTREE_SLOT,
     message,
     args: args.map((arg) => {
       if (typeof arg === "string") {
@@ -412,6 +424,8 @@ function buildResource(serviceName: string) {
     [ATTR_SERVICE_NAMESPACE]: SERVICE_NAMESPACE,
     [ATTR_DEPLOYMENT_ENVIRONMENT]: runtimeState.env,
     [ATTR_SERVICE_VERSION]: process.env.npm_package_version ?? "0.1.0",
+    [ATTR_CMDCLAW_INSTANCE_ID]: process.env.CMDCLAW_INSTANCE_ID,
+    [ATTR_CMDCLAW_WORKTREE_SLOT]: process.env.CMDCLAW_WORKTREE_SLOT,
   });
 }
 

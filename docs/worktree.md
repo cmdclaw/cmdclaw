@@ -1,9 +1,10 @@
 # Worktrees
 
-This repo has a dedicated worktree flow for running isolated app processes with a mixed Docker model:
+This repo has a dedicated worktree flow for running isolated app processes with a shared local Docker model:
 
-- shared stateful services for Postgres, Redis, MinIO, Grafana, and Alertmanager
-- per-worktree observability services for Vector, VictoriaMetrics, VictoriaLogs, VictoriaTraces, and vmalert
+- shared stateful services for Postgres, Redis, and MinIO
+- one shared observability stack for Vector, VictoriaMetrics, VictoriaLogs, VictoriaTraces, Grafana, Alertmanager, and vmalert
+- per-worktree app processes for the web app, worker, and WS runtime
 
 ## When to use it
 
@@ -12,8 +13,9 @@ Use a worktree when you want to run multiple copies of CmdClaw side by side with
 - the web app
 - the worker
 - the WS runtime
-- local observability ports such as Jaeger and OTEL
 - Daytona ports when that profile is enabled
+
+The worktree lifecycle enforces a cap of five running worktree Next.js development servers. Starting a sixth worktree web server fails fast and tells you to stop another worktree first.
 
 ## Main idea
 
@@ -24,15 +26,14 @@ Each worktree gets:
 - its own Postgres database and Postgres role on the shared Postgres server
 - its own Redis ACL user and Redis key namespace on the shared Redis server
 - its own MinIO bucket and MinIO credentials on the shared MinIO server
-- a 2-digit stack slot used to derive worktree-only ports such as `84xx`, `94xx`, `104xx`, and `431xx`
-- its own Docker Compose project name and volumes for the observability stack only
+- a 2-digit stack slot used to derive worktree-only ports such as `37xx`, `47xx`, and optional Daytona ports
+- shared observability endpoints, with telemetry labeled by `CMDCLAW_INSTANCE_ID`, `CMDCLAW_WORKTREE_ID`, and `CMDCLAW_WORKTREE_SLOT`
 
 Example:
 
-- slot `07` maps to VictoriaMetrics `8407`
-- slot `07` maps to VictoriaLogs `9407`
-- slot `07` maps to VictoriaTraces `10407`
-- slot `07` maps to OTLP gRPC `43107`
+- slot `07` maps to app port `3707`
+- slot `07` maps to WS port `4707`
+- all worktrees still send logs, metrics, and traces to the same shared local observability stack
 
 ## Start a worktree app
 
@@ -42,7 +43,9 @@ From inside the worktree:
 bun run worktree:setup
 ```
 
-This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it reuses the repo-global `cmdclaw-local` shared infrastructure (starting the missing shared services there only when needed), starts the worktree-scoped observability services, provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
+This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it reuses the repo-global `cmdclaw-local` shared infrastructure (starting the missing shared services there only when needed), provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
+
+If five other worktree web servers are already running, `worktree:setup` fails before launching another `next dev` process.
 
 Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including `worktree:setup`, `worktree:dev`, and `bun run cli ...`.
 
@@ -54,17 +57,19 @@ If you only want Docker without starting the app processes:
 bun run worktree:docker-up
 ```
 
-This reuses the repo-global `cmdclaw-local` shared stateful services and starts the worktree-scoped observability services for the current worktree.
+This reuses the repo-global `cmdclaw-local` shared stateful services and shared observability services for the current worktree.
+
+There is no longer a `docker/compose/worktree-observability.yml` flow. Worktrees always target the shared observability services defined in `docker/compose/dev.yml`.
 
 ## Stop the worktree Docker stack
 
-Use the worktree-aware Docker teardown command instead of plain `docker compose down`:
+Keep using the worktree-aware Docker teardown command instead of plain `docker compose down`:
 
 ```bash
 bun run worktree:docker-down
 ```
 
-This stops only the current worktree observability stack. It does not stop the shared Postgres, Redis, MinIO, Grafana, or Alertmanager containers.
+This does not stop a worktree-local Docker stack because there is no longer one. The command stays in place so the command surface remains stable; it prints that observability is shared and that there is nothing worktree-scoped to stop.
 
 ## Inspect the assigned values
 
@@ -75,11 +80,11 @@ bun run worktree:status
 bun run worktree:env
 ```
 
-`worktree:status` shows the instance id, stack slot, app URL, database name, the worktree Docker project, the shared Docker project, and the derived local addresses for shared stateful services plus the worktree observability ports.
+`worktree:status` shows the instance id, stack slot, app URL, database name, the shared Docker project, and the derived local addresses for shared stateful services and shared observability endpoints.
 
 It also shows the exact `.env` path currently backing the worktree.
 
-`worktree:env` prints the full derived environment for the worktree, including the worktree-scoped `DATABASE_URL`, `REDIS_URL`, `AWS_ENDPOINT_URL`, and the derived observability ports.
+`worktree:env` prints the full derived environment for the worktree, including the worktree-scoped `DATABASE_URL`, `REDIS_URL`, `AWS_ENDPOINT_URL`, the shared Vector and Victoria URLs, and the worktree identity labels used to filter telemetry.
 
 ## Important rule
 
