@@ -1,10 +1,13 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -19,8 +22,9 @@ import {
   isWorktreeSlotLeaseFresh,
   isWorktreeSlotLeaseOwnedByInstance,
   refreshWorktreeSlotLease,
+  resolveConfiguredSharedWorktreeRoot,
+  resolveSharedWorktreeInstanceRoot,
   resolveSharedWorktreeLocksDir,
-  resolveSharedWorktreeRoot,
   resolveSharedWorktreeSlotLeasePath,
   type WorktreeSlotLease,
 } from "./coordination";
@@ -164,10 +168,6 @@ function runCommand(command: string, args: string[], cwd: string): string {
 
 function resolveRepoRoot(): string {
   return runCommand("git", ["rev-parse", "--show-toplevel"], process.cwd());
-}
-
-function resolveStateRoot(repoRoot: string): string {
-  return join(repoRoot, ".worktrees");
 }
 
 function resolveWorktreeEnvFile(repoRoot: string): string {
@@ -520,25 +520,84 @@ function expandPath(value: string, repoRoot: string): string {
 }
 
 function resolveSharedWorktreeRootPath(): string {
-  const explicit = process.env.CMDCLAW_SHARED_WORKTREE_ROOT?.trim();
-  if (explicit) {
-    return expandPath(explicit, process.cwd());
+  try {
+    return resolveConfiguredSharedWorktreeRoot({
+      cwd: process.cwd(),
+      homeDir: process.env.HOME,
+      explicitRoot: process.env.CMDCLAW_SHARED_WORKTREE_ROOT,
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-
-  const home = process.env.HOME;
-  if (!home) {
-    fail("HOME is not set, unable to resolve the shared worktree root.");
-  }
-
-  return resolveSharedWorktreeRoot(home);
 }
 
 function resolveSharedWorktreeLocksPath(): string {
   return resolveSharedWorktreeLocksDir(resolveSharedWorktreeRootPath());
 }
 
+function resolveSharedWorktreeInstancesPath(): string {
+  return join(resolveSharedWorktreeRootPath(), "instances");
+}
+
 function resolveSlotLeasePath(slot: number): string {
   return resolveSharedWorktreeSlotLeasePath(resolveSharedWorktreeRootPath(), slot);
+}
+
+function resolveLegacyStateRoot(repoRoot: string): string {
+  return join(repoRoot, ".worktrees");
+}
+
+function resolveLegacyInstanceRoot(repoRoot: string, instanceId: string): string {
+  return join(resolveLegacyStateRoot(repoRoot), instanceId);
+}
+
+function resolveInstanceRootForRepoRoot(repoRoot: string): string {
+  return resolveSharedWorktreeInstanceRoot(resolveSharedWorktreeRootPath(), buildInstanceId(repoRoot));
+}
+
+function pruneLegacyStateRootIfEmpty(repoRoot: string): void {
+  const legacyStateRoot = resolveLegacyStateRoot(repoRoot);
+  if (!existsSync(legacyStateRoot)) {
+    return;
+  }
+
+  try {
+    if (readdirSync(legacyStateRoot).length === 0) {
+      rmSync(legacyStateRoot, { recursive: false, force: true });
+    }
+  } catch {
+    // Leave the legacy directory in place if cleanup is not safe.
+  }
+}
+
+function migrateLegacyInstanceRoot(repoRoot: string): string {
+  const instanceId = buildInstanceId(repoRoot);
+  const sharedInstanceRoot = resolveSharedWorktreeInstanceRoot(
+    resolveSharedWorktreeRootPath(),
+    instanceId,
+  );
+  const legacyInstanceRoot = resolveLegacyInstanceRoot(repoRoot, instanceId);
+
+  if (!existsSync(legacyInstanceRoot)) {
+    return sharedInstanceRoot;
+  }
+
+  if (existsSync(sharedInstanceRoot)) {
+    rmSync(legacyInstanceRoot, { recursive: true, force: true });
+    pruneLegacyStateRootIfEmpty(repoRoot);
+    return sharedInstanceRoot;
+  }
+
+  ensureDir(resolveSharedWorktreeInstancesPath());
+  try {
+    renameSync(legacyInstanceRoot, sharedInstanceRoot);
+  } catch {
+    cpSync(legacyInstanceRoot, sharedInstanceRoot, { recursive: true });
+    rmSync(legacyInstanceRoot, { recursive: true, force: true });
+  }
+
+  pruneLegacyStateRootIfEmpty(repoRoot);
+  return sharedInstanceRoot;
 }
 
 function resolveRecognizedWorktreeRoots(): string[] {
@@ -1621,12 +1680,20 @@ function resolveSourceRepoRoot(targetRepoRoot: string): string | null {
 }
 
 function loadMetadataForRepoRoot(repoRoot: string): InstanceMetadata | null {
-  const instanceRoot = join(resolveStateRoot(repoRoot), buildInstanceId(repoRoot));
+  const instanceRoot = resolveInstanceRootForRepoRoot(repoRoot);
+  const legacyInstanceRoot = resolveLegacyInstanceRoot(repoRoot, buildInstanceId(repoRoot));
+  if (!existsSync(instanceRoot) && existsSync(legacyInstanceRoot)) {
+    migrateLegacyInstanceRoot(repoRoot);
+  }
   return loadMetadata(instanceRoot);
 }
 
 function loadProcessesForRepoRoot(repoRoot: string): InstanceProcesses {
-  const instanceRoot = join(resolveStateRoot(repoRoot), buildInstanceId(repoRoot));
+  const instanceRoot = resolveInstanceRootForRepoRoot(repoRoot);
+  const legacyInstanceRoot = resolveLegacyInstanceRoot(repoRoot, buildInstanceId(repoRoot));
+  if (!existsSync(instanceRoot) && existsSync(legacyInstanceRoot)) {
+    migrateLegacyInstanceRoot(repoRoot);
+  }
   return loadProcesses(instanceRoot);
 }
 
@@ -2014,7 +2081,7 @@ function createMetadata(
   stackSlot: number,
 ): InstanceMetadata {
   const instanceId = buildInstanceId(repoRoot);
-  const instanceRoot = join(resolveStateRoot(repoRoot), instanceId);
+  const instanceRoot = resolveSharedWorktreeInstanceRoot(resolveSharedWorktreeRootPath(), instanceId);
   const databaseName = buildDatabaseName(instanceId);
   const databaseUser = buildDatabaseUser(instanceId);
   const databasePassword = generateCredentialSecret();
@@ -2095,9 +2162,8 @@ async function reallocateMetadataStackSlot(
 
 async function resolveMetadata(): Promise<InstanceMetadata> {
   const repoRoot = resolveRepoRoot();
-  const stateRoot = resolveStateRoot(repoRoot);
   const instanceId = buildInstanceId(repoRoot);
-  const instanceRoot = join(stateRoot, instanceId);
+  const instanceRoot = migrateLegacyInstanceRoot(repoRoot);
   const existing = loadMetadata(instanceRoot);
 
   if (existing) {
@@ -2125,6 +2191,7 @@ async function resolveMetadata(): Promise<InstanceMetadata> {
     return updated;
   }
 
+  ensureDir(resolveSharedWorktreeInstancesPath());
   ensureDir(instanceRoot);
   ensureDir(logsDir(instanceRoot));
   ensureDir(runtimeDir(instanceRoot));
@@ -2889,7 +2956,7 @@ async function showEnv(): Promise<void> {
 
 async function main(): Promise<void> {
   const repoRoot = resolveRepoRoot();
-  ensureDir(resolveStateRoot(repoRoot));
+  ensureDir(resolveSharedWorktreeInstancesPath());
   ensureDir(resolveSharedWorktreeLocksPath());
   loadSharedEnv(repoRoot);
 

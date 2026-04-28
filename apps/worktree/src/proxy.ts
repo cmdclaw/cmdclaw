@@ -3,6 +3,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { matchWorktreePublicRoute } from "../../../packages/core/src/lib/worktree-routing";
+import {
+  resolveConfiguredSharedWorktreeRoot,
+  resolveSharedWorktreeInstanceRoot,
+} from "./coordination";
 
 type InstanceMetadata = {
   instanceId: string;
@@ -78,7 +82,7 @@ function listWorktreeRoots(repoRoot: string): string[] {
 
 function loadInstanceMetadata(worktreeRoot: string): InstanceMetadata | null {
   const instanceId = buildInstanceId(worktreeRoot);
-  const metadataFile = join(worktreeRoot, ".worktrees", instanceId, "metadata.json");
+  const metadataFile = join(resolveInstanceRoot(instanceId), "metadata.json");
   if (!existsSync(metadataFile)) {
     return null;
   }
@@ -100,6 +104,15 @@ function loadInstanceMetadata(worktreeRoot: string): InstanceMetadata | null {
   } catch {
     return null;
   }
+}
+
+function resolveInstanceRoot(instanceId: string): string {
+  const sharedRoot = resolveConfiguredSharedWorktreeRoot({
+    cwd: process.cwd(),
+    homeDir: process.env.HOME,
+    explicitRoot: process.env.CMDCLAW_SHARED_WORKTREE_ROOT,
+  });
+  return resolveSharedWorktreeInstanceRoot(sharedRoot, instanceId);
 }
 
 function resolveMainAppUrl(): string {

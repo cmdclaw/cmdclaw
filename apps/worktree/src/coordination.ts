@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve as resolvePath } from "node:path";
 
 import { formatWorktreeStackSlot } from "./stack";
 
@@ -26,8 +26,41 @@ export function resolveSharedWorktreeRoot(homeDir: string): string {
   return join(homeDir, DEFAULT_SHARED_WORKTREE_ROOT);
 }
 
+export function resolveConfiguredSharedWorktreeRoot(params: {
+  cwd: string;
+  homeDir?: string;
+  explicitRoot?: string | null;
+}): string {
+  const explicitRoot = params.explicitRoot?.trim();
+  if (explicitRoot) {
+    if (explicitRoot.startsWith("~/")) {
+      if (!params.homeDir) {
+        throw new Error(`Unable to expand ${explicitRoot}: HOME is not set.`);
+      }
+
+      return join(params.homeDir, explicitRoot.slice(2));
+    }
+
+    if (isAbsolute(explicitRoot)) {
+      return explicitRoot;
+    }
+
+    return resolvePath(params.cwd, explicitRoot);
+  }
+
+  return resolveSharedWorktreeRoot(params.homeDir ?? "");
+}
+
 export function resolveSharedWorktreeLocksDir(sharedRoot: string): string {
   return join(sharedRoot, "locks");
+}
+
+export function resolveSharedWorktreeInstancesDir(sharedRoot: string): string {
+  return join(sharedRoot, "instances");
+}
+
+export function resolveSharedWorktreeInstanceRoot(sharedRoot: string, instanceId: string): string {
+  return join(resolveSharedWorktreeInstancesDir(sharedRoot), instanceId);
 }
 
 export function resolveSharedWorktreeSlotLeasePath(sharedRoot: string, slot: number): string {

@@ -5,6 +5,9 @@ import {
   isWorktreeSlotLeaseFresh,
   isWorktreeSlotLeaseOwnedByInstance,
   refreshWorktreeSlotLease,
+  resolveConfiguredSharedWorktreeRoot,
+  resolveSharedWorktreeInstanceRoot,
+  resolveSharedWorktreeInstancesDir,
   resolveSharedWorktreeRoot,
   resolveSharedWorktreeSlotLeasePath,
   SLOT_LEASE_STALE_GRACE_MS,
@@ -19,6 +22,44 @@ describe("worktree coordination helpers", () => {
     expect(resolveSharedWorktreeSlotLeasePath("/Users/example/.cmdclaw/worktrees", 2)).toBe(
       "/Users/example/.cmdclaw/worktrees/locks/slot-02.json",
     );
+  });
+
+  test("derives deterministic shared instance paths", () => {
+    expect(resolveSharedWorktreeInstancesDir("/Users/example/.cmdclaw/worktrees")).toBe(
+      "/Users/example/.cmdclaw/worktrees/instances",
+    );
+    expect(
+      resolveSharedWorktreeInstanceRoot(
+        "/Users/example/.cmdclaw/worktrees",
+        "cmdclaw-1234abcd",
+      ),
+    ).toBe("/Users/example/.cmdclaw/worktrees/instances/cmdclaw-1234abcd");
+  });
+
+  test("resolves configured shared worktree roots from explicit or default values", () => {
+    expect(
+      resolveConfiguredSharedWorktreeRoot({
+        cwd: "/repo",
+        homeDir: "/Users/example",
+        explicitRoot: null,
+      }),
+    ).toBe("/Users/example/.cmdclaw/worktrees");
+
+    expect(
+      resolveConfiguredSharedWorktreeRoot({
+        cwd: "/repo",
+        homeDir: "/Users/example",
+        explicitRoot: "~/custom-worktrees",
+      }),
+    ).toBe("/Users/example/custom-worktrees");
+
+    expect(
+      resolveConfiguredSharedWorktreeRoot({
+        cwd: "/repo",
+        homeDir: "/Users/example",
+        explicitRoot: "tmp/worktrees",
+      }),
+    ).toBe("/repo/tmp/worktrees");
   });
 
   test("builds and refreshes slot lease records", () => {

@@ -49,6 +49,8 @@ If five other worktree web servers are already running, `worktree:setup` fails b
 
 Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including `worktree:setup`, `worktree:dev`, and `bun run cli ...`.
 
+Per-worktree state no longer lives inside the repo checkout. Metadata, process tracking, logs, and runtime artifacts now live under `~/.cmdclaw/worktrees/instances/<instanceId>`, which prevents Turbopack from watching a repo-local `.worktrees` directory and recompiling whenever worktree state changes.
+
 ## Start only the Docker stack
 
 If you only want Docker without starting the app processes:
@@ -82,7 +84,7 @@ bun run worktree:env
 
 `worktree:status` shows the instance id, stack slot, app URL, database name, the shared Docker project, and the derived local addresses for shared stateful services and shared observability endpoints.
 
-It also shows the exact `.env` path currently backing the worktree.
+It also shows the exact `.env` path currently backing the worktree, plus the shared instance root under `~/.cmdclaw/worktrees/instances/<instanceId>`.
 
 `worktree:env` prints the full derived environment for the worktree, including the worktree-scoped `DATABASE_URL`, `REDIS_URL`, `AWS_ENDPOINT_URL`, the shared Vector and Victoria URLs, and the worktree identity labels used to filter telemetry.
 
