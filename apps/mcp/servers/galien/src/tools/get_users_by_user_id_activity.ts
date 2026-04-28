@@ -1,23 +1,21 @@
-import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
-import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+import { requestCurrentGalienUserGet } from "../lib/tool-helpers";
 
-export const schema = {
-  "userId": z.number().int().describe("User id"),
-};
+export const schema = {};
 
 export const metadata: ToolMetadata = {
-  name: "get_users_by_user_id_activity",
-  description: "Get Users Activity (/api/v1/users/{userId}/activity)",
+  name: "get_my_activity",
+  description:
+    "Get the authenticated Galien user's activity. Use this for 'my activity', 'mon activité', or current-user Galien activity. The userId is read from the login JWT.",
   annotations: {
-    title: "Get Users Activity",
+    title: "Get My Activity",
     readOnlyHint: true,
     idempotentHint: true,
   },
 };
 
-export default async function getUsersByUserIdActivity(params: InferSchema<typeof schema>) {
-  const result = await requestGalienGet("/api/v1/users/{userId}/activity", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+export default async function getMyActivity(params: InferSchema<typeof schema>) {
+  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/activity", params);
   return toMcpToolResult(result);
 }

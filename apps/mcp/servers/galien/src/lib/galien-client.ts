@@ -6,6 +6,18 @@ export type GalienQueryValue = GalienScalar | GalienScalar[];
 
 export type GalienPathParams = Record<string, GalienScalar>;
 export type GalienQuery = Record<string, GalienQueryValue>;
+export type GalienCurrentUser = {
+  id: number;
+  role?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  iat?: number;
+  exp?: number;
+};
+type GalienAuthenticatedRequestParams = GalienRequestParams & {
+  bearerToken: string;
+};
 export type CreateVisitReportPayload = {
   clientId?: number;
   contactPersonId?: number;
@@ -123,6 +135,40 @@ export function extractBearerTokenFromLoginResponse(response: Response) {
   throw new Error("Galien login succeeded but did not return a bearer token.");
 }
 
+function decodeJwtPayload(bearerToken: string) {
+  const token = bearerToken.replace(/^Bearer\s+/i, "");
+  const [, payload] = token.split(".");
+  if (!payload) {
+    throw new Error("Galien login returned a bearer token that is not a JWT.");
+  }
+
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    throw new Error("Galien login returned a JWT with an unreadable payload.");
+  }
+}
+
+export function decodeGalienCurrentUserFromBearerToken(bearerToken: string): GalienCurrentUser {
+  const payload = decodeJwtPayload(bearerToken);
+  const rawId = payload.id;
+  const id = typeof rawId === "number" ? rawId : typeof rawId === "string" ? Number(rawId) : NaN;
+
+  if (!Number.isInteger(id)) {
+    throw new Error("Galien login JWT did not include a valid numeric user id claim.");
+  }
+
+  return {
+    id,
+    role: typeof payload.role === "string" ? payload.role : undefined,
+    firstName: typeof payload.firstName === "string" ? payload.firstName : undefined,
+    lastName: typeof payload.lastName === "string" ? payload.lastName : undefined,
+    username: typeof payload.username === "string" ? payload.username : undefined,
+    iat: typeof payload.iat === "number" ? payload.iat : undefined,
+    exp: typeof payload.exp === "number" ? payload.exp : undefined,
+  };
+}
+
 async function parseResponseBody(response: Response) {
   if (response.status === 204) {
     return null;
@@ -188,13 +234,17 @@ async function loginToGalien() {
   return extractBearerTokenFromLoginResponse(response);
 }
 
-export async function requestGalien(params: GalienRequestParams) {
+export async function getCurrentGalienUser() {
   const bearerToken = await loginToGalien();
+  return decodeGalienCurrentUserFromBearerToken(bearerToken);
+}
+
+async function requestGalienWithBearerToken(params: GalienAuthenticatedRequestParams) {
   const url = buildGalienUrl(params.path, params.pathParams, params.query);
   const response = await fetch(url, {
     method: params.method,
     headers: {
-      authorization: bearerToken,
+      authorization: params.bearerToken,
       accept: "application/json",
       ...(params.body ? { "content-type": "application/json" } : {}),
     },
@@ -216,4 +266,35 @@ export async function requestGalien(params: GalienRequestParams) {
     contentType: response.headers.get("content-type"),
     data,
   };
+}
+
+export async function requestGalien(params: GalienRequestParams) {
+  const bearerToken = await loginToGalien();
+  return requestGalienWithBearerToken({
+    ...params,
+    bearerToken,
+  });
+}
+
+export async function requestGalienForCurrentUser(params: GalienRequestParams) {
+  const bearerToken = await loginToGalien();
+  const currentUser = decodeGalienCurrentUserFromBearerToken(bearerToken);
+  const pathUsesUserId = /\{userId\}/.test(params.path);
+
+  return requestGalienWithBearerToken({
+    ...params,
+    bearerToken,
+    pathParams: pathUsesUserId
+      ? {
+          ...params.pathParams,
+          userId: currentUser.id,
+        }
+      : params.pathParams,
+    query: pathUsesUserId
+      ? params.query
+      : {
+          ...params.query,
+          userId: currentUser.id,
+        },
+  });
 }

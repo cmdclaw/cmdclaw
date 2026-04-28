@@ -1,11 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildGalienUrl,
+  decodeGalienCurrentUserFromBearerToken,
   extractBearerTokenFromLoginResponse,
+  requestGalienForCurrentUser,
   splitGalienRequestParts,
 } from "./galien-client";
 
 describe("galien client helpers", () => {
+  const originalFetch = globalThis.fetch;
+  const originalEmail = process.env.GALIEN_EMAIL;
+  const originalPassword = process.env.GALIEN_PASSWORD;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (originalEmail === undefined) {
+      delete process.env.GALIEN_EMAIL;
+    } else {
+      process.env.GALIEN_EMAIL = originalEmail;
+    }
+    if (originalPassword === undefined) {
+      delete process.env.GALIEN_PASSWORD;
+    } else {
+      process.env.GALIEN_PASSWORD = originalPassword;
+    }
+    vi.restoreAllMocks();
+  });
+
   it("builds Galien URLs with path params and repeated query params", () => {
     const url = buildGalienUrl(
       "/api/v1/clients/{clientId}/reports",
@@ -27,6 +48,82 @@ describe("galien client helpers", () => {
     });
 
     expect(extractBearerTokenFromLoginResponse(response)).toBe("Bearer token-123");
+  });
+
+  it("decodes the current user from the Galien login JWT", () => {
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
+      "base64url",
+    );
+    const payload = Buffer.from(
+      JSON.stringify({
+        id: 2,
+        role: "ROLE_USER",
+        firstName: "First",
+        lastName: "Last",
+        username: "user@example.com",
+        iat: 100,
+        exp: 200,
+      }),
+    ).toString("base64url");
+
+    expect(decodeGalienCurrentUserFromBearerToken(`Bearer ${header}.${payload}.signature`)).toEqual({
+      id: 2,
+      role: "ROLE_USER",
+      firstName: "First",
+      lastName: "Last",
+      username: "user@example.com",
+      iat: 100,
+      exp: 200,
+    });
+  });
+
+  it("injects the current user id as a query param for non-user paths", async () => {
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
+      "base64url",
+    );
+    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString(
+      "base64url",
+    );
+    const bearerToken = `Bearer ${header}.${payload}.signature`;
+    const requests: string[] = [];
+
+    process.env.GALIEN_EMAIL = "user@example.com";
+    process.env.GALIEN_PASSWORD = "password";
+    globalThis.fetch = vi.fn(async (input, init) => {
+      requests.push(String(input));
+
+      if (String(input).endsWith("/api/v1/tokens/login")) {
+        expect(init?.method).toBe("POST");
+        return new Response("[]", {
+          status: 200,
+          headers: {
+            authorization: bearerToken,
+          },
+        });
+      }
+
+      expect(init?.headers).toMatchObject({
+        authorization: bearerToken,
+      });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      });
+    }) as unknown as typeof fetch;
+
+    await requestGalienForCurrentUser({
+      method: "GET",
+      path: "/api/v1/reclamations",
+      query: {
+        clientId: 42,
+      },
+    });
+
+    expect(requests[1]).toBe(
+      "https://api.frontline.galien.preprod.webhelpmedica.com/api/v1/reclamations?clientId=42&userId=2",
+    );
   });
 
   it("splits path params from query params", () => {

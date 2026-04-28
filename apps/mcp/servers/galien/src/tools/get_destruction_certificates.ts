@@ -1,24 +1,23 @@
-import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
-import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+import { galienQueryValueSchema, requestCurrentGalienUserGet } from "../lib/tool-helpers";
 
 export const schema = {
-  "userId": galienQueryValueSchema.optional().describe("User Id"),
   "clientId": galienQueryValueSchema.optional().describe("Client Id"),
 };
 
 export const metadata: ToolMetadata = {
-  name: "get_destruction_certificates",
-  description: "Get Destruction Certificates (/api/v1/destructionCertificates)",
+  name: "get_my_destruction_certificates",
+  description:
+    "Get destruction certificates for the authenticated Galien user. Use this for 'mes certificats de destruction' or current-user Galien certificates. The userId is read from the login JWT.",
   annotations: {
-    title: "Get Destruction Certificates",
+    title: "Get My Destruction Certificates",
     readOnlyHint: true,
     idempotentHint: true,
   },
 };
 
-export default async function getDestructionCertificates(params: InferSchema<typeof schema>) {
-  const result = await requestGalienGet("/api/v1/destructionCertificates", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+export default async function getMyDestructionCertificates(params: InferSchema<typeof schema>) {
+  const result = await requestCurrentGalienUserGet("/api/v1/destructionCertificates", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
   return toMcpToolResult(result);
 }

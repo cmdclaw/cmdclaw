@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
-import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+import { galienIsoDateTimeSchema, galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
 
 export const schema = {
   "clientId": z.number().int().describe("Clients id"),
   "size": galienQueryValueSchema.optional().describe("Max Results"),
   "offset": galienQueryValueSchema.optional().describe("Offset"),
-  "startDate": galienQueryValueSchema.optional().describe("Start date"),
-  "endDate": galienQueryValueSchema.optional().describe("End date"),
+  "startDate": galienIsoDateTimeSchema.describe("Client appointment range start. Use ISO 8601 UTC with milliseconds, for example 2026-04-28T00:00:00.000Z."),
+  "endDate": galienIsoDateTimeSchema.describe("Client appointment range end. Use ISO 8601 UTC with milliseconds, for example 2026-05-04T23:59:59.999Z."),
 };
 
 export const metadata: ToolMetadata = {

@@ -1,27 +1,30 @@
-import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
-import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+import {
+  galienIsoDateTimeSchema,
+  galienQueryValueSchema,
+  requestCurrentGalienUserGet,
+} from "../lib/tool-helpers";
 
 export const schema = {
-  "userId": z.number().int().describe("User id"),
-  "startDate": galienQueryValueSchema.optional().describe("Start date of appointment"),
-  "endDate": galienQueryValueSchema.optional().describe("End date of appointment"),
+  "startDate": galienIsoDateTimeSchema.describe("Appointment range start. Use ISO 8601 UTC with milliseconds, for example 2026-04-28T00:00:00.000Z."),
+  "endDate": galienIsoDateTimeSchema.describe("Appointment range end. Use ISO 8601 UTC with milliseconds, for example 2026-05-04T23:59:59.999Z."),
   "size": galienQueryValueSchema.optional().describe("Number of items to return"),
   "offset": galienQueryValueSchema.optional().describe("Offset from which the list of items should be returned"),
 };
 
 export const metadata: ToolMetadata = {
-  name: "get_users_by_user_id_appointments",
-  description: "Get Users Appointments (/api/v1/users/{userId}/appointments)",
+  name: "get_my_appointments",
+  description:
+    "List the authenticated Galien user's appointments / rendez-vous / agenda. Use this for 'mes rendez-vous', 'mon agenda Galien', or 'my appointments'. The userId is read from the login JWT.",
   annotations: {
-    title: "Get Users Appointments",
+    title: "Get My Appointments",
     readOnlyHint: true,
     idempotentHint: true,
   },
 };
 
-export default async function getUsersByUserIdAppointments(params: InferSchema<typeof schema>) {
-  const result = await requestGalienGet("/api/v1/users/{userId}/appointments", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+export default async function getMyAppointments(params: InferSchema<typeof schema>) {
+  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/appointments", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
   return toMcpToolResult(result);
 }

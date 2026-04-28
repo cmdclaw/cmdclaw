@@ -2,12 +2,15 @@ import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
 import { requestGalien } from "../lib/galien-client";
+import { galienIsoDateTimeSchema } from "../lib/tool-helpers";
 
 export const schema = {
   clientId: z.number().int().optional(),
   contactPersonId: z.number().int().optional(),
   contactOutcomeId: z.number().int().optional(),
-  visitDate: z.string().optional(),
+  visitDate: galienIsoDateTimeSchema
+    .describe("Visit date. Use ISO 8601 UTC with milliseconds, for example 2026-04-28T10:00:00.000Z.")
+    .optional(),
   duration: z.number().int().optional(),
   contactTypeId: z.number().int().optional(),
   numberOfPersons: z.number().int().optional(),

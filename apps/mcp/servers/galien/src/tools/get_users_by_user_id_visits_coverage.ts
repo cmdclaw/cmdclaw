@@ -1,12 +1,14 @@
-import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
-import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+import {
+  galienIsoDateTimeSchema,
+  galienQueryValueSchema,
+  requestCurrentGalienUserGet,
+} from "../lib/tool-helpers";
 
 export const schema = {
-  "userId": z.number().int().describe("User id"),
-  "startDate": galienQueryValueSchema.optional().describe("Start date of visit report"),
-  "endDate": galienQueryValueSchema.optional().describe("End date of visit report"),
+  "startDate": galienIsoDateTimeSchema.describe("Visits coverage range start. Use ISO 8601 UTC with milliseconds, for example 2026-04-28T00:00:00.000Z."),
+  "endDate": galienIsoDateTimeSchema.describe("Visits coverage range end. Use ISO 8601 UTC with milliseconds, for example 2026-05-04T23:59:59.999Z."),
   "groupIds": galienQueryValueSchema.optional().describe("Array of group type ids"),
   "recentColaborationCode": galienQueryValueSchema.optional().describe("Recent colaboration code"),
   "previousColaborationCode": galienQueryValueSchema.optional().describe("Previous colaboration code"),
@@ -14,16 +16,17 @@ export const schema = {
 };
 
 export const metadata: ToolMetadata = {
-  name: "get_users_by_user_id_visits_coverage",
-  description: "Get user's visits coverage (/api/v1/users/{userId}/visits-coverage)",
+  name: "get_my_visits_coverage",
+  description:
+    "Get the authenticated Galien user's visits coverage / couverture de visites. Use this for current-user visit coverage. The userId is read from the login JWT.",
   annotations: {
-    title: "Get user's visits coverage",
+    title: "Get My Visits Coverage",
     readOnlyHint: true,
     idempotentHint: true,
   },
 };
 
-export default async function getUsersByUserIdVisitsCoverage(params: InferSchema<typeof schema>) {
-  const result = await requestGalienGet("/api/v1/users/{userId}/visits-coverage", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+export default async function getMyVisitsCoverage(params: InferSchema<typeof schema>) {
+  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/visits-coverage", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
   return toMcpToolResult(result);
 }

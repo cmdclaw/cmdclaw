@@ -1,23 +1,24 @@
-import { z } from "zod";
 import { type InferSchema, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
-import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
+import { getCurrentGalienUser } from "../lib/galien-client";
 
-export const schema = {
-  "userId": z.number().int().describe("User id"),
-};
+export const schema = {};
 
 export const metadata: ToolMetadata = {
-  name: "get_users_by_user_id",
-  description: "Get User (/api/v1/users/{userId})",
+  name: "get_my_profile",
+  description:
+    "Get the authenticated Galien user's profile from the login JWT. Use this for 'me', 'my Galien user', 'mon profil', or 'qui suis-je'. Does not require a userId.",
   annotations: {
-    title: "Get User",
+    title: "Get My Profile",
     readOnlyHint: true,
     idempotentHint: true,
   },
 };
 
-export default async function getUsersByUserId(params: InferSchema<typeof schema>) {
-  const result = await requestGalienGet("/api/v1/users/{userId}", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
-  return toMcpToolResult(result);
+export default async function getMyProfile(_params: InferSchema<typeof schema>) {
+  const currentUser = await getCurrentGalienUser();
+  return toMcpToolResult({
+    source: "galien-login-jwt",
+    data: currentUser,
+  });
 }
