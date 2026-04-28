@@ -1975,13 +1975,20 @@ function remapSharedProviderAuthRows(
 }
 
 function writeDerivedEnvFile(metadata: InstanceMetadata): void {
+  const envFile = resolveWorktreeEnvFile(metadata.repoRoot);
+  if (existsSync(envFile) && !isGeneratedWorktreeEnvFile(envFile)) {
+    fail(
+      `Refusing to overwrite non-generated env file at ${envFile}. Run worktree commands from an isolated worktree, or move the shared env file and set CMDCLAW_ENV_FILE.`,
+    );
+  }
+
   const env = buildWorktreeRuntimeEnv(metadata);
   const shellLines = Object.entries(env).map(([key, value]) => `${key}=${JSON.stringify(value)}`);
   const commentedLines = Object.entries(buildCommentedWorktreeEnv(metadata)).map(
     ([key, value]) => `# ${key}=${JSON.stringify(value)}`,
   );
   writeFileSync(
-    resolveWorktreeEnvFile(metadata.repoRoot),
+    envFile,
     `${GENERATED_WORKTREE_ENV_HEADER}\n${GENERATED_WORKTREE_ENV_NOTICE}\n\n${shellLines.join("\n")}\n\n${commentedLines.join("\n")}\n`,
     "utf8",
   );
