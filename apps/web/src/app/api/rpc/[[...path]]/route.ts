@@ -15,6 +15,10 @@ export const revalidate = 0;
 
 const handler = new RPCHandler(appRouter);
 
+function isSkillUpdateFilePath(request: Request): boolean {
+  return new URL(request.url).pathname === "/api/rpc/skill/updateFile";
+}
+
 function getCookieValue(cookieHeader: string, cookieName: string): string | null {
   const match = cookieHeader
     .split(";")
@@ -87,6 +91,20 @@ async function handleRequest(request: Request) {
       try {
         let response: Response | null = null;
 
+        if (isSkillUpdateFilePath(request)) {
+          console.info("[RPC Debug] Incoming skill/updateFile request", {
+            method: request.method,
+            route: requestUrl.pathname,
+            origin: request.headers.get("origin"),
+            referer: request.headers.get("referer"),
+            userAgent: request.headers.get("user-agent"),
+            contentType: request.headers.get("content-type"),
+            hasCookieHeader: Boolean(request.headers.get("cookie")),
+            xForwardedFor: request.headers.get("x-forwarded-for"),
+            cfRay: request.headers.get("cf-ray"),
+          });
+        }
+
         const context = await createORPCContext({ headers: request.headers });
         const handlerResult = await handler.handle(request, {
           prefix: "/api/rpc",
@@ -95,6 +113,24 @@ async function handleRequest(request: Request) {
 
         response = handlerResult.response ?? new Response("Not found", { status: 404 });
         logUnauthorizedRpcRequest(request, response);
+
+        if (isSkillUpdateFilePath(request)) {
+          let responseBody: string | null = null;
+
+          try {
+            responseBody = await response.clone().text();
+          } catch (error) {
+            responseBody = `[failed to read response body: ${String(error)}]`;
+          }
+
+          console.info("[RPC Debug] Completed skill/updateFile request", {
+            method: request.method,
+            route: requestUrl.pathname,
+            status: response.status,
+            responseContentType: response.headers.get("content-type"),
+            responseBody,
+          });
+        }
 
         recordCounter(
           "cmdclaw_rpc_requests_total",
