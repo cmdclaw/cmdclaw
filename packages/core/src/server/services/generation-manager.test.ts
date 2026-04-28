@@ -3004,6 +3004,9 @@ describe("generationManager transitions", () => {
   });
 
   it("uses shared auth when explicitly requested for a dual-source provider", async () => {
+    providerAuthFindFirstMock.mockRejectedValue(
+      new Error("Token refresh failed: refresh token already used"),
+    );
     sharedProviderAuthFindFirstMock.mockResolvedValue({ id: "shared-auth-openai" });
 
     insertReturningMock
@@ -3032,6 +3035,8 @@ describe("generationManager transitions", () => {
       { generationId: "gen-openai-shared", runMode: "normal_run" },
       expect.any(Object),
     );
+    expect(providerAuthFindFirstMock).not.toHaveBeenCalled();
+    expect(sharedProviderAuthFindFirstMock).toHaveBeenCalled();
   });
 
   it("starts generation when a shared Gemini model is connected", async () => {

@@ -2778,14 +2778,32 @@ class GenerationManager {
               providerID,
               sharedConnectedProviderIds: env.ANTHROPIC_API_KEY ? ["anthropic"] : [],
             })
-          : {
-              user: await hasConnectedProviderAuthForUser(params.userId, authProviderID, "user"),
-              shared: await hasConnectedProviderAuthForUser(
-                params.userId,
-                authProviderID,
-                "shared",
-              ),
-            };
+          : authSource === "user"
+            ? {
+                user: await hasConnectedProviderAuthForUser(params.userId, authProviderID, "user"),
+                shared: false,
+              }
+            : authSource === "shared"
+              ? {
+                  user: false,
+                  shared: await hasConnectedProviderAuthForUser(
+                    params.userId,
+                    authProviderID,
+                    "shared",
+                  ),
+                }
+              : {
+                  user: await hasConnectedProviderAuthForUser(
+                    params.userId,
+                    authProviderID,
+                    "user",
+                  ),
+                  shared: await hasConnectedProviderAuthForUser(
+                    params.userId,
+                    authProviderID,
+                    "shared",
+                  ),
+                };
       const hasAuth = authSource ? availabilityChecks[authSource] : true;
       if (!hasAuth) {
         const providerLabel = getProviderDisplayName(providerID);
