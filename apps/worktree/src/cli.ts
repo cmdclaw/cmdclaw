@@ -59,6 +59,7 @@ type CommandName =
   | "docker-down"
   | "dev"
   | "status"
+  | "processes"
   | "env"
   | "bootstrap-user";
 
@@ -91,6 +92,12 @@ type DerivedEnv = Record<string, string>;
 type SlotPortState = WorktreeHostPort & {
   available: boolean;
   owner: string | null;
+};
+
+type SystemProcess = {
+  pid: number;
+  ppid: number;
+  command: string;
 };
 
 type SourceUserRecord = {
@@ -139,6 +146,7 @@ function printHelp(): void {
   console.log("  docker-down  No-op for shared observability; worktree Docker is no longer isolated");
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
+  console.log("  processes  List running worktree processes and stop commands");
   console.log("  env      Print derived environment variables for this worktree");
   console.log("  bootstrap-user  Copy source developer identity and integrations");
 }
@@ -1723,6 +1731,209 @@ function buildWorktreeWebProcessSnapshots(currentRepoRoot: string): WorktreeWebP
   });
 }
 
+function listSharedInstanceMetadata(): InstanceMetadata[] {
+  const instancesRoot = resolveSharedWorktreeInstancesPath();
+  if (!existsSync(instancesRoot)) {
+    return [];
+  }
+
+  return readdirSync(instancesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => loadMetadata(join(instancesRoot, entry.name)))
+    .filter((metadata): metadata is InstanceMetadata => metadata !== null);
+}
+
+function listKnownWorktreeMetadata(repoRoot: string): InstanceMetadata[] {
+  const metadataByRepoRoot = new Map<string, InstanceMetadata>();
+
+  for (const metadata of listSharedInstanceMetadata()) {
+    if (isRecognizedWorktreeRepo(metadata.repoRoot)) {
+      metadataByRepoRoot.set(normalizePath(metadata.repoRoot), metadata);
+    }
+  }
+
+  for (const linkedRepoRoot of listLinkedRepoRoots(repoRoot)) {
+    if (!isRecognizedWorktreeRepo(linkedRepoRoot)) {
+      continue;
+    }
+
+    const metadata = loadMetadataForRepoRoot(linkedRepoRoot);
+    if (metadata) {
+      metadataByRepoRoot.set(normalizePath(metadata.repoRoot), metadata);
+    }
+  }
+
+  return [...metadataByRepoRoot.values()].sort((left, right) => {
+    if (left.stackSlot !== right.stackSlot) {
+      return left.stackSlot - right.stackSlot;
+    }
+
+    return left.repoRoot.localeCompare(right.repoRoot);
+  });
+}
+
+function listSystemProcesses(): SystemProcess[] {
+  const result = spawnSync("ps", ["-axo", "pid=,ppid=,command="], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (result.status !== 0 || !result.stdout) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line): SystemProcess | null => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        pid: Number.parseInt(match[1], 10),
+        ppid: Number.parseInt(match[2], 10),
+        command: match[3].trim(),
+      };
+    })
+    .filter((processEntry): processEntry is SystemProcess => processEntry !== null);
+}
+
+function isNextProcessCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    normalized.includes("next-server") ||
+    normalized.includes("/node_modules/.bin/next ") ||
+    normalized.includes("/.next/dev/") ||
+    normalized.includes("/next/dist/") ||
+    /\bnext\s+(dev|start|build)\b/.test(normalized)
+  );
+}
+
+function buildDescendantPidSet(
+  processes: SystemProcess[],
+  rootPids: number[],
+): Set<number> {
+  const childrenByParent = new Map<number, number[]>();
+  for (const processEntry of processes) {
+    const children = childrenByParent.get(processEntry.ppid) ?? [];
+    children.push(processEntry.pid);
+    childrenByParent.set(processEntry.ppid, children);
+  }
+
+  const descendants = new Set<number>();
+  const queue = rootPids.filter((pid) => pid > 0);
+  while (queue.length > 0) {
+    const pid = queue.shift();
+    if (pid === undefined || descendants.has(pid)) {
+      continue;
+    }
+
+    descendants.add(pid);
+    queue.push(...(childrenByParent.get(pid) ?? []));
+  }
+
+  return descendants;
+}
+
+function listNextProcessesForWorktree(
+  metadata: InstanceMetadata,
+  processes: SystemProcess[],
+): SystemProcess[] {
+  const tracked = loadProcesses(metadata.instanceRoot);
+  const webRootPids = typeof tracked.web === "number" ? [tracked.web] : [];
+  const webDescendants = buildDescendantPidSet(processes, webRootPids);
+  const repoRoot = normalizePath(metadata.repoRoot);
+
+  return processes
+    .filter((processEntry) => {
+      if (webDescendants.has(processEntry.pid)) {
+        return true;
+      }
+
+      return (
+        processEntry.command.includes(repoRoot) &&
+        isNextProcessCommand(processEntry.command)
+      );
+    })
+    .sort((left, right) => left.pid - right.pid);
+}
+
+function formatProcessCommand(command: string): string {
+  const maxLength = 160;
+  if (command.length <= maxLength) {
+    return command;
+  }
+
+  return `${command.slice(0, maxLength - 3)}...`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function formatPidList(pids: number[]): string {
+  if (pids.length === 0) {
+    return "-";
+  }
+
+  if (pids.length === 1) {
+    return String(pids[0]);
+  }
+
+  return pids.join(", ");
+}
+
+function classifyNextProcess(command: string): string {
+  if (/\bnext\s+dev\b/.test(command) && command.startsWith("bun ")) {
+    return "dev command";
+  }
+
+  if (command.includes("/node_modules/.bin/next ")) {
+    return "next cli";
+  }
+
+  if (command.includes("next-server")) {
+    return "next server";
+  }
+
+  const fileMatch = command.match(/\/([^/]+\.js)(?:\s|$)/);
+  if (fileMatch) {
+    return fileMatch[1];
+  }
+
+  const basename = command.split(/\s+/)[0]?.split("/").pop();
+  return basename && basename !== "(node)" ? basename : "node helper";
+}
+
+function groupNextProcesses(processes: SystemProcess[]): Array<{ label: string; pids: number[] }> {
+  const groups = new Map<string, number[]>();
+  for (const processEntry of processes) {
+    const label = classifyNextProcess(processEntry.command);
+    const pids = groups.get(label) ?? [];
+    pids.push(processEntry.pid);
+    groups.set(label, pids);
+  }
+
+  return [...groups.entries()]
+    .map(([label, pids]) => ({ label, pids: pids.sort((left, right) => left - right) }))
+    .sort((left, right) => {
+      const priority = ["dev command", "next cli", "next server"];
+      const leftPriority = priority.indexOf(left.label);
+      const rightPriority = priority.indexOf(right.label);
+      if (leftPriority !== -1 || rightPriority !== -1) {
+        return (leftPriority === -1 ? priority.length : leftPriority) -
+          (rightPriority === -1 ? priority.length : rightPriority);
+      }
+
+      return left.label.localeCompare(right.label);
+    });
+}
+
+function formatServiceName(name: ProcessName): string {
+  return name.padEnd(6, " ");
+}
+
 function assertWorktreeWebStartAllowed(metadata: InstanceMetadata): void {
   const summary = summarizeRunningWorktreeWebProcesses({
     currentRepoRoot: metadata.repoRoot,
@@ -2953,6 +3164,129 @@ async function showStatus(): Promise<void> {
   }
 }
 
+function matchesProcessTarget(metadata: InstanceMetadata, target: string): boolean {
+  const normalizedTarget = normalizePath(target);
+  const slot = String(metadata.stackSlot);
+  const paddedSlot = formatWorktreeStackSlot(metadata.stackSlot);
+
+  return (
+    metadata.instanceId === target ||
+    slot === target ||
+    paddedSlot === target ||
+    String(metadata.appPort) === target ||
+    normalizePath(metadata.repoRoot) === normalizedTarget
+  );
+}
+
+async function stopProcessTarget(target: string): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const matches = listKnownWorktreeMetadata(repoRoot).filter((metadata) =>
+    matchesProcessTarget(metadata, target),
+  );
+
+  if (matches.length === 0) {
+    fail(
+      `No worktree matched "${target}". Use "bun run worktree:processes" to list instance ids, slots, ports, and repo paths.`,
+    );
+  }
+
+  if (matches.length > 1) {
+    fail(`Multiple worktrees matched "${target}". Use the full instance id or repo path.`);
+  }
+
+  await stopInstance(matches[0]);
+}
+
+async function showProcesses(args: string[]): Promise<void> {
+  const command = args[0] === "list" ? "list" : args[0];
+  const commandArgs = args[0] === "list" ? args.slice(1) : args.slice(1);
+  if (command === "stop") {
+    const target = commandArgs[0];
+    if (!target) {
+      fail(
+        'Usage: bun run worktree:processes stop <instance-id|slot|app-port|repo-root>',
+      );
+    }
+
+    await stopProcessTarget(target);
+    return;
+  }
+
+  const listArgs = command === "list" ? commandArgs : args;
+  const verbose = listArgs.includes("--verbose") || listArgs.includes("-v");
+
+  const repoRoot = resolveRepoRoot();
+  const metadataList = listKnownWorktreeMetadata(repoRoot);
+  const systemProcesses = listSystemProcesses();
+  const snapshots = buildWorktreeWebProcessSnapshots(repoRoot);
+  const summary = summarizeRunningWorktreeWebProcesses({
+    currentRepoRoot: repoRoot,
+    snapshots,
+  });
+
+  console.log(
+    `[worktree] running web servers: ${summary.totalRunning}/${MAX_RUNNING_WORKTREE_WEB_PROCESSES}`,
+  );
+
+  if (metadataList.length === 0) {
+    console.log("[worktree] processes none");
+    return;
+  }
+
+  let printedAnyRunningWorktree = false;
+  for (const metadata of metadataList) {
+    const entries = getProcessEntries(metadata);
+    const nextProcesses = listNextProcessesForWorktree(metadata, systemProcesses);
+    const hasRunningTrackedProcess = entries.some((entry) => isPidRunning(entry.pid));
+    const hasRunningNextProcess = nextProcesses.length > 0;
+
+    if (!hasRunningTrackedProcess && !hasRunningNextProcess) {
+      continue;
+    }
+
+    printedAnyRunningWorktree = true;
+    console.log(
+      `\n${metadata.instanceId} (slot ${formatWorktreeStackSlot(metadata.stackSlot)}, port ${metadata.appPort})`,
+    );
+    console.log(`  app:  ${metadata.appUrl}`);
+    console.log(`  repo: ${metadata.repoRoot}`);
+    console.log(`  stop: bun run worktree:processes stop ${metadata.instanceId}`);
+
+    if (entries.length === 0) {
+      console.log("  services: none tracked");
+    } else {
+      console.log("  services:");
+      for (const entry of entries) {
+        console.log(
+          `    ${formatServiceName(entry.name)} pid ${entry.pid}  ${isPidRunning(entry.pid) ? "running" : "stopped"}`,
+        );
+      }
+    }
+
+    if (nextProcesses.length === 0) {
+      console.log("  next: none");
+    } else {
+      console.log(`  next (${nextProcesses.length} processes):`);
+      for (const group of groupNextProcesses(nextProcesses)) {
+        console.log(`    ${group.label}: ${formatPidList(group.pids)}`);
+      }
+
+      if (verbose) {
+        console.log("  commands:");
+        for (const processEntry of nextProcesses) {
+          console.log(
+            `    pid ${processEntry.pid} ppid ${processEntry.ppid}  ${formatProcessCommand(processEntry.command)}`,
+          );
+        }
+      }
+    }
+  }
+
+  if (!printedAnyRunningWorktree) {
+    console.log("[worktree] processes none");
+  }
+}
+
 async function showEnv(): Promise<void> {
   const metadata = await resolveMetadata();
   const env = buildWorktreeRuntimeEnv(metadata);
@@ -2998,6 +3332,9 @@ async function main(): Promise<void> {
       return;
     case "status":
       await showStatus();
+      return;
+    case "processes":
+      await showProcesses(process.argv.slice(3));
       return;
     case "env":
       await showEnv();

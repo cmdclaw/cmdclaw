@@ -49,6 +49,7 @@
     "worktree:stop": "bun run --cwd apps/worktree cli stop",
     "worktree:destroy": "bun run --cwd apps/worktree cli destroy",
     "worktree:status": "bun run --cwd apps/worktree cli status",
+    "worktree:processes": "bun run --cwd apps/worktree cli processes",
     "worktree:env": "bun run --cwd apps/worktree cli env",
     "worktree:docker-up": "bun run --cwd apps/worktree cli docker-up",
     "worktree:docker-down": "bun run --cwd apps/worktree cli docker-down",

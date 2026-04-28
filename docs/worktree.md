@@ -79,6 +79,7 @@ To see the current worktree assignment:
 
 ```bash
 bun run worktree:status
+bun run worktree:processes
 bun run worktree:env
 ```
 
@@ -87,6 +88,14 @@ bun run worktree:env
 It also shows the exact `.env` path currently backing the worktree, plus the shared instance root under `~/.cmdclaw/worktrees/instances/<instanceId>`.
 
 `worktree:env` prints the full derived environment for the worktree, including the worktree-scoped `DATABASE_URL`, `REDIS_URL`, `AWS_ENDPOINT_URL`, the shared Vector and Victoria URLs, and the worktree identity labels used to filter telemetry.
+
+`worktree:processes` can be run from the main checkout or a worktree. It groups running worktree app processes by worktree, summarizes discovered Next.js descendants, and prints the exact command to stop each worktree. Use `bun run worktree:processes list --verbose` to include full process command lines.
+
+To stop one directly from the list, pass its instance id, slot, app port, or repo path:
+
+```bash
+bun run worktree:processes stop <instance-id|slot|app-port|repo-root>
+```
 
 ## Important rule
 
