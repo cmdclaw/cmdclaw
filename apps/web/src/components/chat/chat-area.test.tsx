@@ -770,6 +770,30 @@ describe("ChatArea generation errors", () => {
     });
   });
 
+  it("arms the question recovery preset and forwards the question park override", async () => {
+    mockAdminState.isAdmin = true;
+    mockStartGeneration.mockResolvedValue(null);
+
+    renderInChatHeader(<ChatArea conversationId="conv-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /admin debug controls/i }));
+    fireEvent.change(screen.getAllByRole("spinbutton")[2], { target: { value: "11" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Arm" })[2]);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(mockStartGeneration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: "conv-1",
+          content:
+            "Use the question tool exactly once with header 'Pick', question 'Choose one', and options 'Alpha' and 'Beta'. After I answer, respond exactly as SELECTED=<answer>.",
+          debugApprovalHotWaitMs: 11_000,
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
   it("shows the runtime resume action for paused run-deadline generations", async () => {
     mockAdminState.isAdmin = true;
     mockActiveGenerationState.data = {

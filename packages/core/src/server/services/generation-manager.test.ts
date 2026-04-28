@@ -6337,6 +6337,104 @@ describe("generationManager transitions", () => {
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
+  it("restores a parked runtime question, reapplies the answer, and prompts OpenCode to continue", async () => {
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-question-resume",
+      title: "Conversation",
+    });
+    interruptStore.set("interrupt-question-resume", {
+      id: "interrupt-question-resume",
+      generationId: "gen-question-resume",
+      runtimeId: "runtime-1",
+      conversationId: "conv-question-resume",
+      turnSeq: 4,
+      kind: "runtime_question",
+      status: "accepted",
+      display: {
+        title: "question",
+        integration: "cmdclaw",
+        operation: "question",
+        toolInput: {
+          questions: [
+            {
+              header: "Pick",
+              question: "Choose one",
+              options: [
+                { label: "Alpha", description: "Alpha" },
+                { label: "Beta", description: "Beta" },
+              ],
+            },
+          ],
+        },
+      },
+      provider: "opencode",
+      providerRequestId: "question-request-resume",
+      providerToolUseId: "tool-question-resume",
+      responsePayload: {
+        questionAnswers: [["Beta"]],
+      },
+      requestedAt: new Date("2026-03-11T15:00:00.000Z"),
+      expiresAt: null,
+      resolvedAt: new Date("2026-03-11T15:01:00.000Z"),
+      requestedByUserId: null,
+      resolvedByUserId: "user-1",
+    });
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    const runtime = createConversationRuntimeMock({
+      promptMock,
+      subscribeMock,
+      sessionSource: "restored_snapshot",
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      runtime as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    const ctx = createCtx({
+      id: "gen-question-resume",
+      conversationId: "conv-question-resume",
+      resumeInterruptId: "interrupt-question-resume",
+      currentInterruptId: "interrupt-question-resume",
+      remainingRunMs: 444_000,
+      deadlineAt: new Date(0),
+      suspendedAt: new Date("2026-03-11T15:00:00.000Z"),
+      status: "awaiting_approval",
+      sessionId: undefined,
+      model: "openai/gpt-5.4",
+      runtimeTurnSeq: 4,
+      runtimeCallbackToken: "runtime-token",
+    });
+
+    await (mgr as any).runSuspendedInterruptResume(ctx);
+
+    expect(runtime.harnessClient.replyQuestion).toHaveBeenCalledWith({
+      requestID: "question-request-resume",
+      answers: [["Beta"]],
+    });
+    expect(markInterruptAppliedMock).toHaveBeenCalledWith("interrupt-question-resume");
+    expect(promptMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      parts: [
+        {
+          type: "text",
+          text:
+            "Continue the interrupted assistant turn. The pending question has been answered. The resolved answer was: Beta.",
+        },
+      ],
+    });
+    expect(ctx.resumeInterruptId).toBeNull();
+    expect(ctx.currentInterruptId).toBeUndefined();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
   it("reaps stale generations and error-finalizes running and waiting contexts", async () => {
     const now = Date.now();
     interruptStore.set("interrupt-stale-approval", {

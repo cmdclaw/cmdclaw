@@ -5731,6 +5731,23 @@ class GenerationManager {
     ];
   }
 
+  private buildResumedRuntimeQuestionContinuationPrompt(
+    interrupt: GenerationInterruptRecord,
+  ): RuntimePromptPart[] {
+    const flattenedAnswers =
+      interrupt.responsePayload?.questionAnswers?.flatMap((answers) =>
+        answers.map((answer) => answer.trim()).filter((answer) => answer.length > 0),
+      ) ?? [];
+    const answerSummary =
+      flattenedAnswers.length > 0 ? ` The resolved answer was: ${flattenedAnswers.join(", ")}.` : "";
+    return [
+      {
+        type: "text",
+        text: `Continue the interrupted assistant turn. The pending question has been answered.${answerSummary}`,
+      },
+    ];
+  }
+
   private async runSuspendedInterruptResume(ctx: GenerationContext): Promise<void> {
     const interruptId = ctx.resumeInterruptId;
     if (!interruptId) {
@@ -5779,6 +5796,10 @@ class GenerationManager {
       requireLiveSession: false,
       resumeInterruptId: interruptId,
       modeLabel: "resume_interrupt",
+      onRuntimeAttached:
+        interrupt?.kind === "runtime_question"
+          ? async () => this.buildResumedRuntimeQuestionContinuationPrompt(interrupt)
+          : undefined,
     });
   }
 

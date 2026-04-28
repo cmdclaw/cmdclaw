@@ -16,7 +16,7 @@ const fixtureFilePath = resolve(process.cwd(), "tests/e2e/fixtures/hello.txt");
 const expectedToken = "404df6e0-8ec4-4453-9997-f6e2285acb77";
 const fileUploadPrompt =
   process.env.E2E_CHAT_FILE_UPLOAD_PROMPT ??
-  "What is the exact content of the attached file? Reply with the file content only.";
+  "Open the attached file and read it. Reply with the exact file content only.";
 
 let liveModel = "";
 

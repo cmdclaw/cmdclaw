@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export type DebugScenarioKey = "approval" | "auth" | "runtime";
+export type DebugScenarioKey = "approval" | "auth" | "question" | "runtime";
 
 export type ArmedDebugPreset = {
   key: DebugScenarioKey;
@@ -42,11 +42,14 @@ type Props = {
 
 const DEFAULT_APPROVAL_SECONDS = "5";
 const DEFAULT_AUTH_SECONDS = "5";
+const DEFAULT_QUESTION_SECONDS = "5";
 const DEFAULT_RUNTIME_SECONDS = "30";
 
 const PROMPTS: Record<DebugScenarioKey, string> = {
   approval: "send a message on slack #experiment-cmdclaw-testing saying hi",
   auth: "Use the Notion integration to list my first 5 Notion databases by name. Do not use any other source.",
+  question:
+    "Use the question tool exactly once with header 'Pick', question 'Choose one', and options 'Alpha' and 'Beta'. After I answer, respond exactly as SELECTED=<answer>.",
   runtime:
     "analyze my last 30 emails and classify them as urgent with a summary of next action point to do",
 };
@@ -90,6 +93,7 @@ export function ChatDebugPopover({
   const [open, setOpen] = useState(false);
   const [approvalSeconds, setApprovalSeconds] = useState(DEFAULT_APPROVAL_SECONDS);
   const [authSeconds, setAuthSeconds] = useState(DEFAULT_AUTH_SECONDS);
+  const [questionSeconds, setQuestionSeconds] = useState(DEFAULT_QUESTION_SECONDS);
   const [runtimeSeconds, setRuntimeSeconds] = useState(DEFAULT_RUNTIME_SECONDS);
 
   const handleApprovalSecondsChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,6 +101,9 @@ export function ChatDebugPopover({
   }, []);
   const handleAuthSecondsChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setAuthSeconds(event.target.value);
+  }, []);
+  const handleQuestionSecondsChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuestionSeconds(event.target.value);
   }, []);
   const handleRuntimeSecondsChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setRuntimeSeconds(event.target.value);
@@ -123,6 +130,17 @@ export function ChatDebugPopover({
     });
     setOpen(false);
   }, [authSeconds, onArmPreset]);
+
+  const handleArmQuestion = useCallback(() => {
+    const seconds = coerceSeconds(questionSeconds, 5);
+    onArmPreset({
+      key: "question",
+      label: "Question",
+      prompt: PROMPTS.question,
+      debugApprovalHotWaitMs: seconds * 1000,
+    });
+    setOpen(false);
+  }, [onArmPreset, questionSeconds]);
 
   const handleArmRuntime = useCallback(() => {
     const seconds = coerceSeconds(runtimeSeconds, 30);
@@ -236,6 +254,29 @@ export function ChatDebugPopover({
                   step={1}
                   value={authSeconds}
                   onChange={handleAuthSecondsChange}
+                  className="h-8"
+                />
+                <span className="text-muted-foreground text-xs">seconds before park</span>
+              </div>
+            </div>
+
+            <div className="rounded-lg border p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-medium">Question Recovery</div>
+                  <div className="text-muted-foreground text-xs">Runtime question repro</div>
+                </div>
+                <Button type="button" size="sm" className="h-8" onClick={handleArmQuestion}>
+                  Arm
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={questionSeconds}
+                  onChange={handleQuestionSecondsChange}
                   className="h-8"
                 />
                 <span className="text-muted-foreground text-xs">seconds before park</span>
