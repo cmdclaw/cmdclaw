@@ -3,12 +3,15 @@
 This repository is organized into several top-level folders. Each folder can have its own `AGENTS.md` with specific guidance for work in that area.
 
 ## Top-Level Structure
-- `apps/` - Deployable runtimes, including `apps/web`, `apps/desktop`, and `apps/worker`.
+- `apps/` - Deployable runtimes, including `apps/web` and `apps/worker`.
 - `apple/` - macOS and iOS SwiftUI applications.
 - `packages/` - Shared workspace packages such as config, core, and db.
-- `docs/` - Documentation site (Mintlify documentation).
 - `infra/` - Infrastructure and deployment - Infrastructure as Code.
 - `skills/` - Skills for CmdClaw agent to use.
+- `docs/` - Repository documentation. Check these docs when working in the related area:
+  - `docs/observability.md` - Observability and telemetry guidance.
+  - `docs/testing.md` - Testing guidance and expectations.
+  - `docs/worktree.md` - Worktree workflow guidance.
 
 ## Remarks
 - For any work inside a folder, check that folder for its own `AGENTS.md` and follow those instructions.

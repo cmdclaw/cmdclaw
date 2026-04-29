@@ -34,6 +34,18 @@ These host ports are configurable via `CMDCLAW_*_PORT` env vars in local worktre
 - Grafana: `http://127.0.0.1:3400`
 - Alert rules: `http://127.0.0.1:8428/api/v1/rules`
 
+## Staging And Production Debugging
+
+For staging and production incidents, use the hosted Victoria endpoints together with Render cli. The Victoria endpoints provide application metrics, logs, traces; Render provides deployment state, service status, and platform/runtime logs.
+
+Staging endpoints:
+
+- Metrics: `https://victoria-metrics.ops.staging.cmdclaw.ai`
+- Logs: `https://victoria-logs.ops.staging.cmdclaw.ai`
+- Traces: `https://victoria-traces.ops.staging.cmdclaw.ai`
+
+Render: `render ...`
+
 ## Agent Query Examples
 
 Metrics:
