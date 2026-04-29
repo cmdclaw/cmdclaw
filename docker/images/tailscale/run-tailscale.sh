@@ -31,4 +31,35 @@ if [[ -n "${TAILSCALE_SERVE_TARGET_HOST:-}" ]]; then
   /render/tailscale serve status
 fi
 
+if [[ -n "${TAILSCALE_TCP_FORWARD_TARGET_HOST:-}" ]]; then
+  tcp_forwards=${TAILSCALE_TCP_FORWARD_PORTS:?tailscale tcp forward ports are required}
+
+  /render/tailscale serve reset >/dev/null 2>&1 || true
+
+  IFS=',' read -ra forwards <<< "${tcp_forwards}"
+  for forward in "${forwards[@]}"; do
+    if [[ "${forward}" != *:* ]]; then
+      echo "Invalid TCP forward '${forward}', expected listen_port:target_port" >&2
+      exit 1
+    fi
+
+    listen_port=${forward%%:*}
+    target_port=${forward#*:}
+
+    if [[ -z "${listen_port}" || -z "${target_port}" ]]; then
+      echo "Invalid TCP forward '${forward}', expected listen_port:target_port" >&2
+      exit 1
+    fi
+
+    until nc -z "${TAILSCALE_TCP_FORWARD_TARGET_HOST}" "${target_port}"; do
+      echo "Waiting for ${TAILSCALE_TCP_FORWARD_TARGET_HOST}:${target_port}" >&2
+      sleep 1
+    done
+
+    /render/tailscale serve --yes --bg --tcp="${listen_port}" "tcp://${TAILSCALE_TCP_FORWARD_TARGET_HOST}:${target_port}"
+  done
+
+  /render/tailscale serve status
+fi
+
 wait "${pid}"
