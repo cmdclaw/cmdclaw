@@ -40,9 +40,17 @@ For staging and production incidents, use the hosted Victoria endpoints together
 
 Staging endpoints:
 
+- Grafana: `https://ops.staging.cmdclaw.ai`
 - Metrics: `https://victoria-metrics.ops.staging.cmdclaw.ai`
 - Logs: `https://victoria-logs.ops.staging.cmdclaw.ai`
 - Traces: `https://victoria-traces.ops.staging.cmdclaw.ai`
+
+Production endpoints:
+
+- Grafana: `https://ops.prod.cmdclaw.ai`
+- Metrics: `https://victoria-metrics.ops.prod.cmdclaw.ai`
+- Logs: `https://victoria-logs.ops.prod.cmdclaw.ai`
+- Traces: `https://victoria-traces.ops.prod.cmdclaw.ai`
 
 Render: `render ...`
 
