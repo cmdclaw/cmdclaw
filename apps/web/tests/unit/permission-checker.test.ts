@@ -93,6 +93,13 @@ describe("parseBashCommand", () => {
       integrationName: "Outlook Mail",
       isWrite: false,
     });
+
+    expect(parseBashCommand('outlook-mail contact -q "Jane Doe"')).toEqual({
+      integration: "outlook",
+      operation: "contact",
+      integrationName: "Outlook Mail",
+      isWrite: false,
+    });
   });
 
   test("rejects legacy short aliases", () => {
@@ -168,7 +175,7 @@ describe("checkToolPermissions", () => {
     });
   });
 
-  test("allows Gmail and Outlook mailbox search when auth exists", () => {
+  test("allows Gmail and Outlook read commands when auth exists", () => {
     expect(
       checkToolPermissions("bash", { command: 'google-gmail search -q "from:boss"' }, [
         "google_gmail",
@@ -181,6 +188,14 @@ describe("checkToolPermissions", () => {
 
     expect(
       checkToolPermissions("bash", { command: 'outlook-mail search -q "invoice"' }, ["outlook"]),
+    ).toEqual({
+      allowed: true,
+      needsApproval: false,
+      needsAuth: false,
+    });
+
+    expect(
+      checkToolPermissions("bash", { command: 'outlook-mail contact -q "Jane Doe"' }, ["outlook"]),
     ).toEqual({
       allowed: true,
       needsApproval: false,

@@ -39,7 +39,7 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["send"],
   },
   outlook: {
-    read: ["list", "search", "get", "unread"],
+    read: ["list", "search", "get", "unread", "contact"],
     write: ["send"],
   },
   outlook_calendar: {

@@ -5,7 +5,7 @@ describe("permission-checker", () => {
   it("parses coworker commands for tool metadata", () => {
     expect(
       parseBashCommand(
-        'coworker edit cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --changes-file /tmp/changes.json --json',
+        "coworker edit cw-1 --base-updated-at 2026-03-03T12:00:00.000Z --changes-file /tmp/changes.json --json",
       ),
     ).toEqual({
       integration: "coworker",
@@ -46,9 +46,7 @@ describe("permission-checker", () => {
   });
 
   it("parses agent-browser commands for tool metadata", () => {
-    expect(
-      parseBashCommand("agent-browser screenshot --full /tmp/example.png"),
-    ).toEqual({
+    expect(parseBashCommand("agent-browser screenshot --full /tmp/example.png")).toEqual({
       integration: "agent-browser",
       operation: "screenshot",
       integrationName: "Agent Browser",
@@ -65,6 +63,23 @@ describe("permission-checker", () => {
         },
         [],
       ),
+    ).toEqual({
+      allowed: true,
+      needsApproval: false,
+      needsAuth: false,
+    });
+  });
+
+  it("allows Outlook contact lookups as read commands", () => {
+    expect(parseBashCommand('outlook-mail contact -q "Jane Doe"')).toEqual({
+      integration: "outlook",
+      operation: "contact",
+      integrationName: "Outlook Mail",
+      isWrite: false,
+    });
+
+    expect(
+      checkToolPermissions("bash", { command: 'outlook-mail contact -q "Jane Doe"' }, ["outlook"]),
     ).toEqual({
       allowed: true,
       needsApproval: false,

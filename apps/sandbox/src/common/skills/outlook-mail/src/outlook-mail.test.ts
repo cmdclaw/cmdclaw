@@ -3,60 +3,48 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { runSkillCli } from "../../_test-utils/run-skill-cli";
 
+const OUTLOOK_MAIL_CLI = "sandbox/src/common/skills/outlook-mail/src/outlook-mail.ts";
+const OUTLOOK_MAIL_SOURCE = "src/common/skills/outlook-mail/src/outlook-mail.ts";
+
 describe("outlook-mail CLI", () => {
   test("prints help text when auth env is missing", () => {
-    const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
-      ["--help"],
-      {
-        OUTLOOK_ACCESS_TOKEN: "",
-      },
-    );
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["--help"], {
+      OUTLOOK_ACCESS_TOKEN: "",
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Commands");
   });
 
   test("prints help text when auth env is provided", () => {
-    const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
-      ["--help"],
-      {
-        OUTLOOK_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["--help"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Outlook Mail CLI - Commands");
     expect(result.stdout).toContain("list");
     expect(result.stdout).toContain("search -q <query>");
     expect(result.stdout).toContain("unread");
+    expect(result.stdout).toContain("contact -q <query>");
     expect(result.stdout).toContain(
       "draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...",
     );
   });
 
   test("fails for invalid limit value", () => {
-    const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
-      ["list", "--limit", "0"],
-      {
-        OUTLOOK_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["list", "--limit", "0"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid --limit");
   });
 
   test("rejects queries on list", () => {
-    const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
-      ["list", "--query", "invoice"],
-      {
-        OUTLOOK_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["list", "--query", "invoice"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("outlook-mail list does not accept --query");
@@ -64,21 +52,26 @@ describe("outlook-mail CLI", () => {
   });
 
   test("requires a query for search", () => {
-    const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
-      ["search"],
-      {
-        OUTLOOK_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["search"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Required: outlook-mail search --query <search>");
   });
 
+  test("requires a query for contact lookup", () => {
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["contact"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Required: outlook-mail contact --query <name-or-email>");
+  });
+
   test("fails send when body contains unsupported html tags", () => {
     const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
+      OUTLOOK_MAIL_CLI,
       ["send", "--to", "user@example.com", "--subject", "Hello", "--body", "<div>hello</div>"],
       {
         OUTLOOK_ACCESS_TOKEN: "test-token",
@@ -92,7 +85,7 @@ describe("outlook-mail CLI", () => {
 
   test("fails draft when body contains unsupported html tags", () => {
     const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
+      OUTLOOK_MAIL_CLI,
       ["draft", "--to", "user@example.com", "--subject", "Hello", "--body", "<script>x</script>"],
       {
         OUTLOOK_ACCESS_TOKEN: "test-token",
@@ -106,7 +99,7 @@ describe("outlook-mail CLI", () => {
 
   test("fails send when an attachment file cannot be read", () => {
     const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
+      OUTLOOK_MAIL_CLI,
       [
         "send",
         "--to",
@@ -129,7 +122,7 @@ describe("outlook-mail CLI", () => {
 
   test("fails draft when an attachment file cannot be read", () => {
     const result = runSkillCli(
-      "src/common/skills/outlook-mail/src/outlook-mail.ts",
+      OUTLOOK_MAIL_CLI,
       [
         "draft",
         "--to",
@@ -151,15 +144,10 @@ describe("outlook-mail CLI", () => {
   });
 
   test("uses html content type and graph file attachments in payloads", () => {
-    const source = readFileSync(
-      path.resolve(
-        process.cwd(),
-        "src/common/skills/outlook-mail/src/outlook-mail.ts",
-      ),
-      "utf8",
-    );
+    const source = readFileSync(path.resolve(process.cwd(), OUTLOOK_MAIL_SOURCE), "utf8");
     expect(source).toContain('contentType: "HTML"');
     expect(source).toContain('"#microsoft.graph.fileAttachment"');
+    expect(source).toContain("/me/people");
     expect(source).toContain('case "draft"');
   });
 });

@@ -100,6 +100,7 @@ const configs: Record<IntegrationType, () => OAuthConfig> = {
       "Mail.Read",
       "Mail.ReadWrite",
       "Mail.Send",
+      "People.Read",
     ],
     getUserInfo: async (accessToken) => {
       const res = await fetch("https://graph.microsoft.com/v1.0/me", {

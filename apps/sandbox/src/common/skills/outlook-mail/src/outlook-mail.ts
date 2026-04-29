@@ -56,6 +56,29 @@ type OutlookFileAttachment = {
   name: string;
 };
 
+type OutlookPerson = {
+  id?: string;
+  displayName?: string;
+  givenName?: string;
+  surname?: string;
+  jobTitle?: string;
+  companyName?: string;
+  department?: string;
+  officeLocation?: string;
+  userPrincipalName?: string;
+  imAddress?: string;
+  personType?: { class?: string; subclass?: string };
+  scoredEmailAddresses?: Array<{
+    address?: string;
+    relevanceScore?: number;
+    selectionLikelihood?: string;
+  }>;
+  phones?: Array<{
+    number?: string;
+    type?: string;
+  }>;
+};
+
 function mapMessage(message: {
   id?: string;
   subject?: string;
@@ -72,6 +95,37 @@ function mapMessage(message: {
     date: message.receivedDateTime ?? "",
     snippet: message.bodyPreview ?? "",
     isRead: message.isRead ?? false,
+  };
+}
+
+function mapPersonContact(person: OutlookPerson) {
+  const emails = (person.scoredEmailAddresses ?? [])
+    .map((email) => email.address)
+    .filter((email): email is string => Boolean(email));
+  const phones = (person.phones ?? [])
+    .filter((phone) => phone.number)
+    .map((phone) => ({
+      type: phone.type ?? "",
+      number: phone.number ?? "",
+    }));
+
+  return {
+    id: person.id,
+    name:
+      person.displayName ||
+      [person.givenName, person.surname].filter(Boolean).join(" ") ||
+      emails[0] ||
+      "",
+    emails,
+    primaryEmail: emails[0] ?? person.userPrincipalName ?? "",
+    phones,
+    jobTitle: person.jobTitle ?? "",
+    company: person.companyName ?? "",
+    department: person.department ?? "",
+    officeLocation: person.officeLocation ?? "",
+    userPrincipalName: person.userPrincipalName ?? "",
+    imAddress: person.imAddress ?? "",
+    type: [person.personType?.class, person.personType?.subclass].filter(Boolean).join("."),
   };
 }
 
@@ -321,6 +375,39 @@ async function countUnread() {
   console.log(`Unread emails: ${payload["@odata.count"] ?? 0}`);
 }
 
+async function findContact() {
+  const query = values.query?.trim();
+  if (!query) {
+    throw new Error("Required: outlook-mail contact --query <name-or-email>");
+  }
+
+  const top = parseLimit();
+  const params = new URLSearchParams({
+    $search: sanitizeSearchQuery(query),
+    $top: String(top),
+  });
+
+  const res = await graphRequest(`/me/people?${params.toString()}`, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
+  const payload = (await res.json()) as {
+    value?: OutlookPerson[];
+  };
+
+  const contacts = (payload.value ?? []).map(mapPersonContact);
+  if (contacts.length === 0) {
+    console.log("No contacts found.");
+    return;
+  }
+
+  console.log(JSON.stringify(contacts, null, 2));
+}
+
 async function sendEmail() {
   const message = await buildOutgoingMessage();
   const res = await graphRequest("/me/sendMail", {
@@ -388,6 +475,7 @@ function showHelp() {
   search -q <query> [-l limit]       Search mailbox
   get <messageId>                    Get email content
   unread [-q query] [-l limit]       Count unread emails
+  contact -q <query> [-l limit]      Find a person/contact by name or email
   send --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
   draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
 
@@ -414,6 +502,9 @@ async function main() {
         break;
       case "unread":
         await countUnread();
+        break;
+      case "contact":
+        await findContact();
         break;
       case "send":
         await sendEmail();

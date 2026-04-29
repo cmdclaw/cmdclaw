@@ -22,6 +22,12 @@ describe("OAuth config", () => {
     expect(config.scopes).toContain("Mail.ReadWrite");
   });
 
+  it("includes people scope for Outlook contact lookup", () => {
+    const config = getOAuthConfig("outlook");
+
+    expect(config.scopes).toContain("People.Read");
+  });
+
   it("uses Dynamics scopes without mixing in Microsoft Graph resource scopes", () => {
     const config = getOAuthConfig("dynamics");
 

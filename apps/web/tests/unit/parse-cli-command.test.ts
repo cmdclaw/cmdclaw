@@ -65,6 +65,11 @@ describe("parseCliCommand", () => {
         operation: "list",
       },
       {
+        command: 'outlook-mail contact -q "Jane Doe"',
+        integration: "outlook",
+        operation: "contact",
+      },
+      {
         command: "google-calendar today",
         integration: "google_calendar",
         operation: "today",
