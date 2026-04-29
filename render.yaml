@@ -36,6 +36,10 @@ projects:
   - name: cmdclaw
     environments:
       - name: staging
+        envVarGroups:
+          - name: staging
+            envVars: []
+
         databases:
           - name: cmdclaw-postgres-staging
             region: frankfurt
@@ -66,6 +70,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
+              - fromGroup: staging
 
           - type: worker
             name: cmdclaw-tailscale-staging
@@ -81,8 +86,7 @@ projects:
               mountPath: /var/lib/tailscale
               sizeGB: 1
             envVars:
-              - key: TAILSCALE_AUTHKEY
-                sync: false
+              - fromGroup: staging
               - key: TAILSCALE_VERSION
                 value: 1.96.4
               - key: ADVERTISE_ROUTES
@@ -104,8 +108,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
-              - key: CLOUDFLARE_API_TOKEN
-                sync: false
+              - fromGroup: staging
               - key: CMDCLAW_GRAFANA_DOMAIN
                 value: grafana.ops.staging.cmdclaw.ai
               - key: CMDCLAW_VICTORIA_METRICS_DOMAIN
@@ -149,8 +152,7 @@ projects:
               mountPath: /var/lib/tailscale
               sizeGB: 1
             envVars:
-              - key: TAILSCALE_AUTHKEY
-                sync: false
+              - fromGroup: staging
               - key: TAILSCALE_VERSION
                 value: 1.96.4
               - key: TAILSCALE_HOSTNAME
@@ -318,6 +320,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
+              - fromGroup: staging
               - key: DATABASE_URL
                 fromDatabase:
                   name: cmdclaw-postgres-staging
@@ -373,6 +376,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
+              - fromGroup: staging
               - key: MCP_GATEWAY_MANAGED_CHILDREN
                 value: "true"
               - key: MCP_GATEWAY_CHILD_MODE
@@ -388,6 +392,7 @@ projects:
             dockerfilePath: docker/images/worker/Dockerfile
             dockerCommand: bun dist/index.js
             envVars:
+              - fromGroup: staging
               - key: DATABASE_URL
                 fromDatabase:
                   name: cmdclaw-postgres-staging
@@ -432,6 +437,10 @@ projects:
                 value: cmdclaw-agent-staging
 
       - name: production
+        envVarGroups:
+          - name: prod
+            envVars: []
+
         databases:
           - name: cmdclaw-postgres-prod
             region: frankfurt
@@ -462,6 +471,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
+              - fromGroup: prod
 
           - type: worker
             name: cmdclaw-tailscale-prod
@@ -477,8 +487,7 @@ projects:
               mountPath: /var/lib/tailscale
               sizeGB: 2
             envVars:
-              - key: TAILSCALE_AUTHKEY
-                sync: false
+              - fromGroup: prod
               - key: TAILSCALE_VERSION
                 value: 1.96.4
               - key: ADVERTISE_ROUTES
@@ -500,8 +509,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
-              - key: CLOUDFLARE_API_TOKEN
-                sync: false
+              - fromGroup: prod
               - key: CMDCLAW_GRAFANA_DOMAIN
                 value: grafana.ops.prod.cmdclaw.ai
               - key: CMDCLAW_VICTORIA_METRICS_DOMAIN
@@ -545,8 +553,7 @@ projects:
               mountPath: /var/lib/tailscale
               sizeGB: 2
             envVars:
-              - key: TAILSCALE_AUTHKEY
-                sync: false
+              - fromGroup: prod
               - key: TAILSCALE_VERSION
                 value: 1.96.4
               - key: TAILSCALE_HOSTNAME
@@ -714,6 +721,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
+              - fromGroup: prod
               - key: DATABASE_URL
                 fromDatabase:
                   name: cmdclaw-postgres-prod
@@ -769,6 +777,7 @@ projects:
             envVars:
               - key: PORT
                 value: "10000"
+              - fromGroup: prod
               - key: MCP_GATEWAY_MANAGED_CHILDREN
                 value: "true"
               - key: MCP_GATEWAY_CHILD_MODE
@@ -784,6 +793,7 @@ projects:
             dockerfilePath: docker/images/worker/Dockerfile
             dockerCommand: bun dist/index.js
             envVars:
+              - fromGroup: prod
               - key: DATABASE_URL
                 fromDatabase:
                   name: cmdclaw-postgres-prod
