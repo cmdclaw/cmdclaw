@@ -29,6 +29,13 @@ import {
   type WorktreeSlotLease,
 } from "./coordination";
 import {
+  buildDescendantPidSet,
+  collectNextProcessCleanupCandidates,
+  isNextProcessCommand,
+  type NextProcessCleanupCandidate,
+  type SystemProcess,
+} from "./process-cleanup";
+import {
   buildSharedStackConfig,
   buildWorktreeHostPorts,
   buildWorktreeStackConfig,
@@ -60,6 +67,7 @@ type CommandName =
   | "dev"
   | "status"
   | "processes"
+  | "cleanup"
   | "env"
   | "bootstrap-user";
 
@@ -92,12 +100,6 @@ type DerivedEnv = Record<string, string>;
 type SlotPortState = WorktreeHostPort & {
   available: boolean;
   owner: string | null;
-};
-
-type SystemProcess = {
-  pid: number;
-  ppid: number;
-  command: string;
 };
 
 type SourceUserRecord = {
@@ -147,6 +149,7 @@ function printHelp(): void {
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
   console.log("  processes  List running worktree processes and stop commands");
+  console.log("  cleanup  Stop orphaned Next.js processes under worktree roots");
   console.log("  env      Print derived environment variables for this worktree");
   console.log("  bootstrap-user  Copy source developer identity and integrations");
 }
@@ -1799,43 +1802,6 @@ function listSystemProcesses(): SystemProcess[] {
     .filter((processEntry): processEntry is SystemProcess => processEntry !== null);
 }
 
-function isNextProcessCommand(command: string): boolean {
-  const normalized = command.toLowerCase();
-  return (
-    normalized.includes("next-server") ||
-    normalized.includes("/node_modules/.bin/next ") ||
-    normalized.includes("/.next/dev/") ||
-    normalized.includes("/next/dist/") ||
-    /\bnext\s+(dev|start|build)\b/.test(normalized)
-  );
-}
-
-function buildDescendantPidSet(
-  processes: SystemProcess[],
-  rootPids: number[],
-): Set<number> {
-  const childrenByParent = new Map<number, number[]>();
-  for (const processEntry of processes) {
-    const children = childrenByParent.get(processEntry.ppid) ?? [];
-    children.push(processEntry.pid);
-    childrenByParent.set(processEntry.ppid, children);
-  }
-
-  const descendants = new Set<number>();
-  const queue = rootPids.filter((pid) => pid > 0);
-  while (queue.length > 0) {
-    const pid = queue.shift();
-    if (pid === undefined || descendants.has(pid)) {
-      continue;
-    }
-
-    descendants.add(pid);
-    queue.push(...(childrenByParent.get(pid) ?? []));
-  }
-
-  return descendants;
-}
-
 function listNextProcessesForWorktree(
   metadata: InstanceMetadata,
   processes: SystemProcess[],
@@ -2908,6 +2874,14 @@ function killProcessGroup(pid: number): void {
   }
 }
 
+function terminateProcess(pid: number): void {
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    // Process already gone.
+  }
+}
+
 function getProcessEntries(metadata: InstanceMetadata): Array<{ name: ProcessName; pid: number }> {
   const stored = loadProcesses(metadata.instanceRoot);
   return PROCESS_NAMES.flatMap((name) => {
@@ -3205,6 +3179,101 @@ async function stopProcessTarget(target: string): Promise<void> {
   await stopInstance(matches[0]);
 }
 
+function resolveNextCleanupRoots(metadataList: InstanceMetadata[]): string[] {
+  const roots = new Set<string>();
+  for (const root of resolveRecognizedWorktreeRoots()) {
+    roots.add(root);
+  }
+
+  const home = process.env.HOME;
+  if (home) {
+    roots.add(join(home, ".codex", "worktrees"));
+    roots.add(join(home, ".claude", "worktrees"));
+  }
+
+  for (const metadata of metadataList) {
+    if (isRecognizedWorktreeRepo(metadata.repoRoot)) {
+      roots.add(metadata.repoRoot);
+    }
+  }
+
+  return [...roots].sort((left, right) => left.localeCompare(right));
+}
+
+function listProtectedWebRootPids(metadataList: InstanceMetadata[]): number[] {
+  return metadataList.flatMap((metadata) => {
+    const webPid = loadProcesses(metadata.instanceRoot).web;
+    return typeof webPid === "number" && isPidRunning(webPid) ? [webPid] : [];
+  });
+}
+
+function formatCleanupCandidate(candidate: NextProcessCleanupCandidate): string {
+  return `pid ${candidate.pid} ppid ${candidate.ppid}  ${formatProcessCommand(candidate.command)}`;
+}
+
+async function cleanupWorktreeNextProcesses(args: string[]): Promise<void> {
+  const includeTracked = args.includes("--all") || args.includes("--include-tracked");
+  const dryRun = args.includes("--dry-run");
+  const verbose = args.includes("--verbose") || args.includes("-v");
+  const unknownArgs = args.filter(
+    (arg) => !["--all", "--include-tracked", "--dry-run", "--verbose", "-v"].includes(arg),
+  );
+
+  if (unknownArgs.length > 0) {
+    fail(
+      `Unknown cleanup option "${unknownArgs[0]}". Usage: bun run worktree:processes cleanup [--dry-run] [--all] [--verbose]`,
+    );
+  }
+
+  const repoRoot = resolveRepoRoot();
+  const metadataList = listKnownWorktreeMetadata(repoRoot);
+  const systemProcesses = listSystemProcesses();
+  const roots = resolveNextCleanupRoots(metadataList);
+  const candidates = collectNextProcessCleanupCandidates({
+    processes: systemProcesses,
+    worktreeRoots: roots,
+    protectedRootPids: includeTracked ? [] : listProtectedWebRootPids(metadataList),
+  });
+
+  if (candidates.length === 0) {
+    console.log("[worktree] cleanup no orphaned Next.js processes");
+    return;
+  }
+
+  const pids = candidates.map((candidate) => candidate.pid);
+  const mode = dryRun ? "would stop" : "stopping";
+  console.log(`[worktree] cleanup ${mode} ${pids.length} Next.js process(es): ${formatPidList(pids)}`);
+
+  if (verbose || dryRun) {
+    for (const candidate of candidates) {
+      console.log(`  ${formatCleanupCandidate(candidate)}`);
+    }
+  }
+
+  if (dryRun) {
+    return;
+  }
+
+  for (const pid of pids.sort((left, right) => right - left)) {
+    terminateProcess(pid);
+  }
+
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (pids.every((pid) => !isPidRunning(pid))) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  const stillRunning = pids.filter((pid) => isPidRunning(pid));
+  if (stillRunning.length > 0) {
+    console.warn(`[worktree] cleanup still running after SIGTERM: ${formatPidList(stillRunning)}`);
+  } else {
+    console.log("[worktree] cleanup stopped orphaned Next.js processes");
+  }
+}
+
 async function showProcesses(args: string[]): Promise<void> {
   const command = args[0] === "list" ? "list" : args[0];
   const commandArgs = args[0] === "list" ? args.slice(1) : args.slice(1);
@@ -3217,6 +3286,11 @@ async function showProcesses(args: string[]): Promise<void> {
     }
 
     await stopProcessTarget(target);
+    return;
+  }
+
+  if (command === "cleanup") {
+    await cleanupWorktreeNextProcesses(commandArgs);
     return;
   }
 
@@ -3343,6 +3417,9 @@ async function main(): Promise<void> {
       return;
     case "processes":
       await showProcesses(process.argv.slice(3));
+      return;
+    case "cleanup":
+      await cleanupWorktreeNextProcesses(process.argv.slice(3));
       return;
     case "env":
       await showEnv();
