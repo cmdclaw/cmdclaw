@@ -721,6 +721,7 @@ function createConversationRuntimeMock(params: {
   promptMock: ReturnType<typeof vi.fn>;
   subscribeMock: ReturnType<typeof vi.fn>;
   messagesMock?: ReturnType<typeof vi.fn>;
+  statusMock?: ReturnType<typeof vi.fn>;
   getSessionMock?: ReturnType<typeof vi.fn>;
   readFile?: ReturnType<typeof vi.fn>;
   writeFile?: ReturnType<typeof vi.fn>;
@@ -734,6 +735,7 @@ function createConversationRuntimeMock(params: {
       prompt: params.promptMock,
       abort: vi.fn().mockResolvedValue({ data: null, error: null }),
       messages: params.messagesMock ?? vi.fn().mockResolvedValue({ data: [], error: null }),
+      status: params.statusMock,
       getSession: params.getSessionMock ?? vi.fn().mockResolvedValue({ data: null, error: null }),
       createSession: vi.fn().mockResolvedValue({ data: { id: "session-1" }, error: null }),
       updatePart: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -4643,6 +4645,78 @@ describe("generationManager transitions", () => {
         generationId: "gen-opencode-empty-completion",
         conversationId: "conv-opencode-empty-completion",
       }),
+    );
+  });
+
+  it("waits for async OpenCode prompts to reach idle after an early stream end", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(null);
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue({ data: "", error: null });
+    const messagesMock = vi.fn().mockResolvedValue({
+      data: [
+        { info: { role: "user" }, parts: [{ type: "text", text: "hi" }] },
+        {
+          info: { role: "assistant" },
+          parts: [{ type: "text", text: "async prompt completed" }],
+        },
+      ],
+      error: null,
+    });
+    const statusMock = vi.fn().mockResolvedValue({
+      data: {},
+      error: null,
+    });
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([{ type: "server.connected", properties: {} }]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({
+        promptMock,
+        messagesMock,
+        statusMock,
+        subscribeMock,
+      }) as Awaited<ReturnType<typeof getOrCreateConversationRuntime>>,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const ctx = createCtx({
+      id: "gen-opencode-async-early-stream-end",
+      conversationId: "conv-opencode-async-early-stream-end",
+      model: "openai/gpt-5.4",
+      backendType: "opencode",
+      userMessageContent: "hi",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(ctx.assistantContent).toBe("async prompt completed");
+    expect(ctx.errorMessage).toBeUndefined();
+    expect(statusMock).toHaveBeenCalled();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+    expect(vi.mocked(logServerEvent)).not.toHaveBeenCalledWith(
+      "error",
+      "OPENCODE_EMPTY_COMPLETION",
+      expect.anything(),
+      expect.anything(),
     );
   });
 

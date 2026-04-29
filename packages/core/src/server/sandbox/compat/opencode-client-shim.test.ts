@@ -74,4 +74,34 @@ describe("createRuntimeHarnessClientFromOpencodeClient", () => {
       part: { type: "tool", id: "part-1" },
     });
   });
+
+  it("forwards status to client.session.status", async () => {
+    const statusMock = vi.fn().mockResolvedValue({
+      data: { "session-1": { type: "busy" } },
+      error: null,
+    });
+    const client = {
+      event: { subscribe: vi.fn() },
+      session: {
+        prompt: vi.fn(),
+        abort: vi.fn(),
+        messages: vi.fn(),
+        status: statusMock,
+        get: vi.fn(),
+        create: vi.fn(),
+      },
+      part: { update: vi.fn() },
+      permission: { reply: vi.fn() },
+      question: { reply: vi.fn(), reject: vi.fn() },
+    } as Parameters<typeof createRuntimeHarnessClientFromOpencodeClient>[0];
+
+    const harness = createRuntimeHarnessClientFromOpencodeClient(client);
+    const result = await harness.status?.();
+
+    expect(statusMock).toHaveBeenCalledWith({});
+    expect(result).toEqual({
+      data: { "session-1": { type: "busy" } },
+      error: null,
+    });
+  });
 });

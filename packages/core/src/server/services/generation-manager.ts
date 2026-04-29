@@ -156,6 +156,10 @@ import {
 } from "./lifecycle-policy";
 import { sendTaskDonePush } from "./web-push-service";
 
+const OPENCODE_EARLY_STREAM_REATTACH_ATTEMPTS = 2;
+const OPENCODE_EARLY_STREAM_REATTACH_WAIT_MS = 8_000;
+const OPENCODE_STATUS_POLL_INTERVAL_MS = 500;
+
 function escapeShellArg(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
@@ -711,6 +715,18 @@ function extractAssistantTextFromPromptResultData(payload: unknown): string | nu
     .join("");
 
   return text.trim() ? text : null;
+}
+
+function getRuntimeStatusTypeForSession(payload: unknown, sessionId: string): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const entry = (payload as Record<string, unknown>)[sessionId];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+  const type = (entry as Record<string, unknown>).type;
+  return typeof type === "string" ? type : null;
 }
 
 function buildExecutionPolicy(params: {
@@ -2114,6 +2130,100 @@ class GenerationManager {
 
   private getRemainingRunTimeMs(ctx: Pick<GenerationContext, "deadlineAt">): number {
     return Math.max(0, ctx.deadlineAt.getTime() - Date.now());
+  }
+
+  private async waitForOpenCodeTerminalStateAfterEarlyStreamEnd(
+    ctx: GenerationContext,
+    runtimeClient: RuntimeHarnessClient,
+    sessionId: string,
+    onEvent: (event: RuntimeEvent) => Promise<"continue" | "idle" | "error">,
+  ): Promise<"idle" | "error" | "timed_out" | "aborted" | "unknown"> {
+    for (let attempt = 1; attempt <= OPENCODE_EARLY_STREAM_REATTACH_ATTEMPTS; attempt += 1) {
+      const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
+      if (remainingRunTimeMs <= 0) {
+        return "timed_out";
+      }
+
+      const reattachController = new AbortController();
+      const reattachTimeoutId = setTimeout(
+        () => reattachController.abort(),
+        Math.min(remainingRunTimeMs, OPENCODE_EARLY_STREAM_REATTACH_WAIT_MS),
+      );
+      try {
+        const eventResult = await runtimeClient.subscribe(
+          {},
+          {
+            signal: reattachController.signal,
+          },
+        );
+        for await (const rawEvent of eventResult.stream) {
+          const event = rawEvent as RuntimeEvent;
+          const eventOutcome = await onEvent(event);
+          if (eventOutcome !== "continue") {
+            return eventOutcome;
+          }
+          if (ctx.abortController.signal.aborted) {
+            return "aborted";
+          }
+        }
+      } catch (error) {
+        if (!reattachController.signal.aborted) {
+          console.warn(
+            `[GenerationManager] OpenCode terminal reattach failed attempt=${attempt} generationId=${ctx.id}:`,
+            error,
+          );
+        }
+      } finally {
+        clearTimeout(reattachTimeoutId);
+      }
+    }
+
+    if (!runtimeClient.status) {
+      return "unknown";
+    }
+
+    let observedActiveStatus = false;
+    while (true) {
+      const remainingRunTimeMs = this.getRemainingRunTimeMs(ctx);
+      if (remainingRunTimeMs <= 0) {
+        return "timed_out";
+      }
+      if (ctx.abortController.signal.aborted || (await this.refreshCancellationSignal(ctx))) {
+        return "aborted";
+      }
+      await this.pollExternalInterruptAndSuspendIfNeeded(ctx);
+
+      try {
+        const statusResult = await runtimeClient.status();
+        if (statusResult.error) {
+          console.warn("[GenerationManager] OpenCode status poll returned an error:", statusResult.error);
+          return "unknown";
+        }
+
+        const statusType = getRuntimeStatusTypeForSession(statusResult.data, sessionId);
+        if (statusType === "idle") {
+          return "idle";
+        }
+        if (statusType === "busy" || statusType === "retry") {
+          observedActiveStatus = true;
+        } else {
+          const messagesResult = await runtimeClient.messages({ sessionID: sessionId, limit: 20 });
+          if (!messagesResult.error && extractAssistantTextFromSessionMessagesPayload(messagesResult.data)) {
+            return "idle";
+          }
+          if (observedActiveStatus) {
+            return "idle";
+          }
+        }
+      } catch (error) {
+        console.warn("[GenerationManager] OpenCode status reconciliation failed:", error);
+        return "unknown";
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(OPENCODE_STATUS_POLL_INTERVAL_MS, remainingRunTimeMs)),
+      );
+    }
   }
 
   private refreshRemainingRunBudget(ctx: GenerationContext, now = new Date()): number {
@@ -7196,15 +7306,16 @@ class GenerationManager {
       this.startExternalInterruptPolling(ctx);
       let sessionErrorMessage: string | null = null;
 
-      // Process SSE events
-      for await (const rawEvent of eventStream) {
+      const processOpenCodeRuntimeEvent = async (
+        rawEvent: RuntimeEvent,
+      ): Promise<"continue" | "idle" | "error"> => {
         if (!ctx.phaseMarks?.first_event_received) {
           this.markPhase(ctx, "first_event_received");
         }
-        const event = rawEvent as RuntimeEvent;
+        const event = rawEvent;
         this.markRuntimeActivity(ctx);
         if (await this.refreshCancellationSignal(ctx)) {
-          break;
+          return "error";
         }
         if (Date.now() - lastExternalInterruptPollAt >= 1_000) {
           lastExternalInterruptPollAt = Date.now();
@@ -7265,7 +7376,7 @@ class GenerationManager {
           observedTerminalIdle = true;
           this.markPhase(ctx, "session_idle");
           console.log("[GenerationManager] Session idle - generation complete");
-          break;
+          return "idle";
         }
 
         // Check for session error
@@ -7312,7 +7423,50 @@ class GenerationManager {
               sessionErrorMessage: errorMessage,
             });
           }
+          return "error";
+        }
+        return "continue";
+      };
+
+      // Process SSE events
+      for await (const rawEvent of eventStream) {
+        const streamOutcome = await processOpenCodeRuntimeEvent(rawEvent as RuntimeEvent);
+        if (streamOutcome !== "continue") {
           break;
+        }
+      }
+
+      if (
+        !observedTerminalIdle &&
+        !sessionErrorMessage &&
+        !ctx.abortController.signal.aborted &&
+        !promptTimeoutTriggered
+      ) {
+        const terminalOutcome = await this.waitForOpenCodeTerminalStateAfterEarlyStreamEnd(
+          ctx,
+          runtimeClient,
+          activeSessionId,
+          processOpenCodeRuntimeEvent,
+        );
+        if (terminalOutcome === "idle") {
+          observedTerminalIdle = true;
+          if (!ctx.phaseMarks?.session_idle) {
+            this.markPhase(ctx, "session_idle");
+          }
+        } else if (terminalOutcome === "timed_out") {
+          await this.parkGenerationForRunDeadline(ctx, runtimeClient);
+          return;
+        } else if (terminalOutcome === "aborted") {
+          if (ctx.abortForInterruptPark) {
+            return;
+          }
+          await this.finishGeneration(ctx, "cancelled");
+          return;
+        }
+        if (terminalOutcome !== "unknown") {
+          console.info(
+            `[GenerationManager] OpenCode early stream reconciliation outcome=${terminalOutcome} generationId=${ctx.id} conversationId=${ctx.conversationId}`,
+          );
         }
       }
 

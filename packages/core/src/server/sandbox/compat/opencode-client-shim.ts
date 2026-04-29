@@ -42,6 +42,13 @@ export function createRuntimeHarnessClientFromOpencodeClient(
       });
       return { data: result.data, error: result.error };
     },
+    status: async () => {
+      if (!client.session.status) {
+        return { data: null, error: null };
+      }
+      const result = await client.session.status({});
+      return { data: result.data, error: result.error };
+    },
     getSession: async ({ sessionID }) => {
       const result = await client.session.get({ sessionID });
       return { data: result.data, error: result.error };

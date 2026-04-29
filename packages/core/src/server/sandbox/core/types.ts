@@ -165,6 +165,7 @@ export interface RuntimeHarnessClient {
     sessionID: string;
     limit?: number;
   }): Promise<{ data: unknown; error: unknown }>;
+  status?(): Promise<{ data: unknown; error: unknown }>;
   getSession(input: { sessionID: string }): Promise<{ data: unknown; error: unknown }>;
   createSession(input: {
     title?: string;
