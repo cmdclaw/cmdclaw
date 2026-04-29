@@ -15,7 +15,6 @@ import {
   ATTR_SERVICE_NAMESPACE,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
-import { randomUUID } from "crypto";
 import {
   context,
   metrics,
@@ -681,7 +680,7 @@ export function registerObservableGauge(
 }
 
 export function createTraceId(): string {
-  return getActiveSpanIds().traceId ?? randomUUID();
+  return getActiveSpanIds().traceId ?? globalThis.crypto.randomUUID();
 }
 
 export function logServerEvent(
