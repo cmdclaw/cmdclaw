@@ -9,6 +9,8 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../../env";
 
+const S3_ERROR_BODY_LOG_LIMIT = 2048;
+
 // S3 client singleton
 let s3Client: S3Client | null = null;
 
@@ -35,6 +37,148 @@ export function getS3Client(): S3Client {
 
 export const BUCKET_NAME = env.AWS_S3_BUCKET_NAME;
 
+function getS3EndpointHost(): string | undefined {
+  if (!env.AWS_ENDPOINT_URL) {
+    return undefined;
+  }
+
+  try {
+    return new URL(env.AWS_ENDPOINT_URL).host;
+  } catch {
+    return env.AWS_ENDPOINT_URL;
+  }
+}
+
+function summarizeS3Key(key?: string): { key?: string; keyPrefix?: string; keyLength?: number } {
+  if (!key) {
+    return {};
+  }
+
+  if (key.startsWith("opencode-session-snapshots/")) {
+    return { key, keyLength: key.length };
+  }
+
+  const parts = key.split("/");
+  const keyPrefix =
+    parts.length > 1 ? `${parts.slice(0, 3).join("/")}${parts.length > 3 ? "/..." : ""}` : key;
+  return { keyPrefix, keyLength: key.length };
+}
+
+type S3ErrorWithMetadata = {
+  name?: string;
+  message?: string;
+  Code?: string;
+  code?: string;
+  $metadata?: {
+    httpStatusCode?: number;
+    requestId?: string;
+    extendedRequestId?: string;
+    attempts?: number;
+    totalRetryDelay?: number;
+  };
+  $response?: {
+    statusCode?: number;
+    reason?: string;
+    headers?: Record<string, string | string[] | undefined>;
+    body?: unknown;
+  };
+};
+
+function truncateForLog(value: string): string {
+  if (value.length <= S3_ERROR_BODY_LOG_LIMIT) {
+    return value;
+  }
+  return `${value.slice(0, S3_ERROR_BODY_LOG_LIMIT)}...[truncated ${value.length - S3_ERROR_BODY_LOG_LIMIT} chars]`;
+}
+
+async function readS3ErrorResponseBody(error: unknown): Promise<string | undefined> {
+  const body = (error as S3ErrorWithMetadata).$response?.body;
+  if (!body) {
+    return undefined;
+  }
+
+  try {
+    if (typeof body === "string") {
+      return truncateForLog(body);
+    }
+
+    if (body instanceof Uint8Array) {
+      return truncateForLog(Buffer.from(body).toString("utf8"));
+    }
+
+    if (body instanceof ArrayBuffer) {
+      return truncateForLog(Buffer.from(body).toString("utf8"));
+    }
+
+    if (typeof body === "object" && body !== null) {
+      const transformable = body as { transformToString?: () => Promise<string> };
+      if (typeof transformable.transformToString === "function") {
+        return truncateForLog(await transformable.transformToString());
+      }
+
+      const asyncIterable = body as Partial<AsyncIterable<Uint8Array>>;
+      if (typeof asyncIterable[Symbol.asyncIterator] === "function") {
+        const chunks: Uint8Array[] = [];
+        let totalLength = 0;
+        for await (const chunk of asyncIterable as AsyncIterable<Uint8Array>) {
+          chunks.push(chunk);
+          totalLength += chunk.byteLength;
+          if (totalLength >= S3_ERROR_BODY_LOG_LIMIT) {
+            break;
+          }
+        }
+        return truncateForLog(Buffer.concat(chunks).toString("utf8"));
+      }
+    }
+  } catch (readError) {
+    return `[failed to read S3 error response body: ${
+      readError instanceof Error ? readError.message : String(readError)
+    }]`;
+  }
+
+  return undefined;
+}
+
+async function logS3OperationError(
+  operation: string,
+  key: string | undefined,
+  error: unknown,
+): Promise<void> {
+  const err = error as S3ErrorWithMetadata;
+  console.error("[S3] Operation failed", {
+    operation,
+    bucket: BUCKET_NAME,
+    ...summarizeS3Key(key),
+    endpointHost: getS3EndpointHost(),
+    region: env.AWS_DEFAULT_REGION,
+    forcePathStyle: env.AWS_S3_FORCE_PATH_STYLE,
+    name: err.name,
+    code: err.Code ?? err.code,
+    message: err.message,
+    httpStatusCode: err.$metadata?.httpStatusCode,
+    requestId: err.$metadata?.requestId,
+    extendedRequestId: err.$metadata?.extendedRequestId,
+    attempts: err.$metadata?.attempts,
+    totalRetryDelay: err.$metadata?.totalRetryDelay,
+    responseStatusCode: err.$response?.statusCode,
+    responseReason: err.$response?.reason,
+    responseBody: await readS3ErrorResponseBody(error),
+  });
+}
+
+async function sendS3Operation<T>(
+  operation: string,
+  key: string | undefined,
+  send: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await send();
+  } catch (error) {
+    await logS3OperationError(operation, key, error);
+    throw error;
+  }
+}
+
 // Ensure bucket exists (call on startup or first upload)
 export async function ensureBucket(): Promise<void> {
   const client = getS3Client();
@@ -47,9 +191,12 @@ export async function ensureBucket(): Promise<void> {
       $metadata?: { httpStatusCode?: number };
     };
     if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
-      await client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME }));
+      await sendS3Operation("CreateBucket", undefined, () =>
+        client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME })),
+      );
       console.log(`Created S3 bucket: ${BUCKET_NAME}`);
     } else {
+      await logS3OperationError("HeadBucket", undefined, error);
       throw error;
     }
   }
@@ -59,13 +206,15 @@ export async function ensureBucket(): Promise<void> {
 export async function uploadToS3(key: string, body: Buffer, contentType: string): Promise<void> {
   const client = getS3Client();
 
-  await client.send(
-    new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    }),
+  await sendS3Operation("PutObject", key, () =>
+    client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    ),
   );
 }
 
@@ -73,11 +222,13 @@ export async function uploadToS3(key: string, body: Buffer, contentType: string)
 export async function deleteFromS3(key: string): Promise<void> {
   const client = getS3Client();
 
-  await client.send(
-    new DeleteObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    }),
+  await sendS3Operation("DeleteObject", key, () =>
+    client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      }),
+    ),
   );
 }
 
@@ -100,11 +251,13 @@ export async function getPresignedDownloadUrl(
 export async function downloadFromS3(key: string): Promise<Buffer> {
   const client = getS3Client();
 
-  const response = await client.send(
-    new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    }),
+  const response = await sendS3Operation("GetObject", key, () =>
+    client.send(
+      new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      }),
+    ),
   );
 
   if (!response.Body) {

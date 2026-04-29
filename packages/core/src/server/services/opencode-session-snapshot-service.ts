@@ -163,13 +163,23 @@ export async function saveConversationSessionSnapshot(input: {
   const normalizedSnapshot = normalizeOpencodeSessionSnapshotPayload(exportResult.stdout);
   const storageKey = buildConversationSessionSnapshotStorageKey(input.conversationId);
   const exportedAt = input.exportedAt ?? new Date();
+  const snapshotBuffer = Buffer.from(normalizedSnapshot.raw, "utf8");
 
-  await ensureBucket();
-  await uploadToS3(
+  console.info("[OpenCodeSessionSnapshot] Upload starting", {
+    conversationId: input.conversationId,
+    requestedSessionId: input.sessionId,
+    exportedSessionId: normalizedSnapshot.payload.info.id,
     storageKey,
-    Buffer.from(normalizedSnapshot.raw, "utf8"),
-    SNAPSHOT_CONTENT_TYPE,
-  );
+    snapshotBytes: snapshotBuffer.byteLength,
+  });
+  await ensureBucket();
+  await uploadToS3(storageKey, snapshotBuffer, SNAPSHOT_CONTENT_TYPE);
+  console.info("[OpenCodeSessionSnapshot] Upload completed", {
+    conversationId: input.conversationId,
+    exportedSessionId: normalizedSnapshot.payload.info.id,
+    storageKey,
+    snapshotBytes: snapshotBuffer.byteLength,
+  });
 
   await db
     .insert(conversationSessionSnapshot)
