@@ -153,6 +153,7 @@ function createContext() {
 
   const context = {
     user: { id: "user-1" },
+    session: { impersonatedBy: null },
     db: {
       query: {
         coworker: {
@@ -2247,6 +2248,40 @@ describe("coworkerRouter", () => {
     );
   });
 
+  it("returns minimal coworker impersonation target metadata for app admins", async () => {
+    const context = createContext();
+    context.db.query.user.findFirst.mockResolvedValue({ role: "admin" });
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-2",
+      name: "Inbox Triage",
+      username: "inbox-triage",
+      ownerId: "user-2",
+      owner: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: "https://example.com/avatar.png",
+      },
+    });
+
+    const result = await coworkerRouterAny.getImpersonationTarget({
+      input: { coworkerId: "wf-2" },
+      context,
+    });
+
+    expect(result).toEqual({
+      resourceType: "coworker",
+      resourceId: "wf-2",
+      resourceLabel: "@inbox-triage",
+      owner: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: "https://example.com/avatar.png",
+      },
+    });
+  });
+
   it("returns NOT_FOUND when getting a missing run", async () => {
     const context = createContext();
     context.db.query.coworkerRun.findFirst.mockResolvedValue(null);
@@ -2346,6 +2381,47 @@ describe("coworkerRouter", () => {
     });
     expect(reconcileStaleCoworkerRunsForCoworkerMock).toHaveBeenCalledWith("wf-1");
     expect(eventsOrderBy).toEqual(["a:created-col"]);
+  });
+
+  it("allows an existing admin impersonator to fetch minimal run impersonation target metadata", async () => {
+    const context = createContext();
+    (context.session as { impersonatedBy: string | null }).impersonatedBy = "admin-user";
+    context.db.query.user.findFirst
+      .mockResolvedValueOnce({ role: "member" })
+      .mockResolvedValueOnce({ role: "admin" });
+    context.db.query.coworkerRun.findFirst.mockResolvedValue({
+      id: "run-2",
+      coworkerId: "wf-2",
+      ownerId: "user-2",
+      owner: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: null,
+      },
+      coworker: {
+        id: "wf-2",
+        name: "Inbox Triage",
+        username: null,
+      },
+    });
+
+    const result = await coworkerRouterAny.getRunImpersonationTarget({
+      input: { runId: "run-2", coworkerId: "wf-2" },
+      context,
+    });
+
+    expect(result).toEqual({
+      resourceType: "coworker_run",
+      resourceId: "run-2",
+      resourceLabel: "Inbox Triage",
+      owner: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: null,
+      },
+    });
   });
 
   it("sets null conversation id when run has no generation", async () => {

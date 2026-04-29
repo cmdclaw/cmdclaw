@@ -8,7 +8,7 @@ import CoworkerRunPage from "./page";
 
 void jestDomVitest;
 
-const { mockParams, mockRun } = vi.hoisted(() => ({
+const { mockParams, mockRun, mockImpersonationTarget } = vi.hoisted(() => ({
   mockParams: { current: { id: "run-1" } as { id: string } },
   mockRun: {
     current: {
@@ -32,10 +32,25 @@ const { mockParams, mockRun } = vi.hoisted(() => ({
       }>;
     } | null,
   },
+  mockImpersonationTarget: {
+    current: null as {
+      resourceType: "coworker_run";
+      resourceId: string;
+      resourceLabel: string;
+      owner: {
+        id: string;
+        name: string | null;
+        email: string;
+        image: string | null;
+      };
+    } | null,
+  },
 }));
 
 vi.mock("next/navigation", () => ({
   useParams: () => mockParams.current,
+  usePathname: () => "/coworkers/runs/run-1",
+  useSearchParams: () => new URLSearchParams(""),
 }));
 
 vi.mock("@/components/chat/chat-area", () => ({
@@ -46,6 +61,16 @@ vi.mock("@/components/chat/chat-area", () => ({
 
 vi.mock("@/orpc/hooks", () => ({
   useCoworkerRun: () => ({ data: mockRun.current, isLoading: false }),
+  useCoworkerRunImpersonationTarget: () => ({
+    data: mockImpersonationTarget.current,
+    isLoading: false,
+  }),
+}));
+
+vi.mock("@/components/impersonation/impersonation-required-page", () => ({
+  ImpersonationRequiredPage: ({ target }: { target: { owner: { email: string } } }) => (
+    <div>Impersonate {target.owner.email}</div>
+  ),
 }));
 
 describe("CoworkerRunPage", () => {
@@ -60,6 +85,7 @@ describe("CoworkerRunPage", () => {
       debugInfo: null,
       events: [],
     };
+    mockImpersonationTarget.current = null;
   });
 
   it("shows the remote integration banner when the run used remote integrations", () => {
@@ -105,5 +131,25 @@ describe("CoworkerRunPage", () => {
       "flex-col",
       "overflow-hidden",
     );
+  });
+
+  it("offers impersonation when an admin can identify the run owner", () => {
+    mockRun.current = null;
+    mockImpersonationTarget.current = {
+      resourceType: "coworker_run",
+      resourceId: "run-1",
+      resourceLabel: "@inbox-triage",
+      owner: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: null,
+      },
+    };
+
+    render(<CoworkerRunPage />);
+
+    expect(screen.getByText("Impersonate other@example.com")).toBeInTheDocument();
+    expect(screen.queryByText("Run not found.")).not.toBeInTheDocument();
   });
 });

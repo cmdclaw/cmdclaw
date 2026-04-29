@@ -12,25 +12,31 @@ function createProcedureStub() {
   return stub;
 }
 
-const { conversationFindFirstMock, conversationFindManyMock, dbMock } = vi.hoisted(() => {
-  const conversationFindFirstMock = vi.fn();
-  const conversationFindManyMock = vi.fn();
+const { conversationFindFirstMock, conversationFindManyMock, userFindFirstMock, dbMock } =
+  vi.hoisted(() => {
+    const conversationFindFirstMock = vi.fn();
+    const conversationFindManyMock = vi.fn();
+    const userFindFirstMock = vi.fn();
 
-  const dbMock = {
-    query: {
-      conversation: {
-        findFirst: conversationFindFirstMock,
-        findMany: conversationFindManyMock,
+    const dbMock = {
+      query: {
+        conversation: {
+          findFirst: conversationFindFirstMock,
+          findMany: conversationFindManyMock,
+        },
+        user: {
+          findFirst: userFindFirstMock,
+        },
       },
-    },
-  };
+    };
 
-  return {
-    conversationFindFirstMock,
-    conversationFindManyMock,
-    dbMock,
-  };
-});
+    return {
+      conversationFindFirstMock,
+      conversationFindManyMock,
+      userFindFirstMock,
+      dbMock,
+    };
+  });
 
 vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
@@ -59,6 +65,7 @@ import { conversationRouter } from "./conversation";
 
 const context = {
   user: { id: "user-1" },
+  session: { impersonatedBy: null },
   db: dbMock,
 };
 
@@ -70,6 +77,7 @@ const conversationRouterAny = conversationRouter as unknown as Record<
 describe("conversationRouter.getUsage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    userFindFirstMock.mockResolvedValue({ role: "member" });
   });
 
   it("throws not found when the conversation does not belong to the user", async () => {
@@ -153,6 +161,38 @@ describe("conversationRouter.getUsage", () => {
       outputTokens: 5,
       totalTokens: 22,
       assistantMessageCount: 1,
+    });
+  });
+
+  it("returns minimal impersonation target metadata for app admins", async () => {
+    userFindFirstMock.mockResolvedValue({ role: "admin" });
+    conversationFindFirstMock.mockResolvedValue({
+      id: "conv-2",
+      title: "Pipeline review",
+      userId: "user-2",
+      user: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: null,
+      },
+    });
+
+    const result = await conversationRouterAny.getImpersonationTarget({
+      input: { conversationId: "conv-2" },
+      context,
+    });
+
+    expect(result).toEqual({
+      resourceType: "chat",
+      resourceId: "conv-2",
+      resourceLabel: "Pipeline review",
+      owner: {
+        id: "user-2",
+        name: "Other User",
+        email: "other@example.com",
+        image: null,
+      },
     });
   });
 });

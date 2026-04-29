@@ -1,21 +1,34 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useParams } from "next/navigation";
+import { usePathname, useParams, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
 import {
   extractRemoteRunSourceDetails,
   RemoteRunSourceBanner,
 } from "@/components/coworkers/remote-run-source-banner";
 import { RunDebugDetails } from "@/components/coworkers/run-debug-details";
-import { useCoworkerRun } from "@/orpc/hooks";
+import { ImpersonationRequiredPage } from "@/components/impersonation/impersonation-required-page";
+import { useCoworkerRun, useCoworkerRunImpersonationTarget } from "@/orpc/hooks";
 
 export default function CoworkerRunPage() {
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const runId = params?.id;
   const { data: run, isLoading } = useCoworkerRun(runId);
+  const shouldLoadImpersonationTarget = Boolean(runId && !isLoading && !run);
+  const { data: impersonationTarget, isLoading: isImpersonationTargetLoading } =
+    useCoworkerRunImpersonationTarget(runId, null, {
+      enabled: shouldLoadImpersonationTarget,
+    });
+  const redirectPath = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : (pathname ?? `/coworkers/runs/${runId}`);
+  }, [pathname, runId, searchParams]);
 
-  if (isLoading) {
+  if (isLoading || (shouldLoadImpersonationTarget && isImpersonationTargetLoading)) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin" />
@@ -24,6 +37,10 @@ export default function CoworkerRunPage() {
   }
 
   if (!run) {
+    if (impersonationTarget) {
+      return <ImpersonationRequiredPage target={impersonationTarget} redirectPath={redirectPath} />;
+    }
+
     return <div className="text-muted-foreground p-6 text-sm">Run not found.</div>;
   }
 

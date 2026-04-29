@@ -52,6 +52,7 @@ import {
   RemoteRunSourceBanner,
 } from "@/components/coworkers/remote-run-source-banner";
 import { RunDebugDetails } from "@/components/coworkers/run-debug-details";
+import { ImpersonationRequiredPage } from "@/components/impersonation/impersonation-required-page";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -103,10 +104,12 @@ import {
   useDisableCoworkerForwardingAlias,
   useRotateCoworkerForwardingAlias,
   useCoworker,
+  useCoworkerImpersonationTarget,
   useCoworkerForwardingAlias,
   useUpdateCoworker,
   useDeleteCoworker,
   useCoworkerRun,
+  useCoworkerRunImpersonationTarget,
   useCoworkerRuns,
   useEnqueueConversationMessage,
   useExecutorSourceList,
@@ -525,6 +528,22 @@ export default function CoworkerEditorPage() {
     baseTabParam === "admin"
       ? baseTabParam
       : null;
+  const currentRoutePath = useMemo(() => {
+    const query = searchParams.toString();
+    return query && pathname ? `${pathname}?${query}` : (pathname ?? `/coworkers/${coworkerId}`);
+  }, [coworkerId, pathname, searchParams]);
+  const shouldLoadCoworkerImpersonationTarget = Boolean(
+    coworkerId && !routeRunId && !isLoading && !coworker,
+  );
+  const shouldLoadRunImpersonationTarget = Boolean(routeRunId && !isLoading && !coworker);
+  const { data: coworkerImpersonationTarget, isLoading: isCoworkerImpersonationTargetLoading } =
+    useCoworkerImpersonationTarget(coworkerId, {
+      enabled: shouldLoadCoworkerImpersonationTarget,
+    });
+  const { data: runImpersonationTarget, isLoading: isRunImpersonationTargetLoading } =
+    useCoworkerRunImpersonationTarget(routeRunId, coworkerId, {
+      enabled: shouldLoadRunImpersonationTarget,
+    });
   const hasSetMobileDefaultRef = useRef(false);
   const remoteUserOptions = useMemo(
     () => (remoteUserSearchData?.users as RemoteIntegrationUserOption[] | undefined) ?? [],
@@ -1750,6 +1769,7 @@ export default function CoworkerEditorPage() {
   const settingsPanel = useMemo(
     () => (
       <CoworkerSettingsPanel
+        coworkerId={coworkerId}
         name={name}
         description={description}
         username={username}
@@ -1838,6 +1858,7 @@ export default function CoworkerEditorPage() {
       name,
       description,
       username,
+      coworkerId,
       isSaving,
       status,
       autoApprove,
@@ -1917,10 +1938,30 @@ export default function CoworkerEditorPage() {
     ],
   );
 
-  if (isLoading || !coworker) {
+  if (
+    isLoading ||
+    (shouldLoadCoworkerImpersonationTarget && isCoworkerImpersonationTargetLoading) ||
+    (shouldLoadRunImpersonationTarget && isRunImpersonationTargetLoading)
+  ) {
     return (
       <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!coworker) {
+    const impersonationTarget = routeRunId ? runImpersonationTarget : coworkerImpersonationTarget;
+
+    if (impersonationTarget) {
+      return (
+        <ImpersonationRequiredPage target={impersonationTarget} redirectPath={currentRoutePath} />
+      );
+    }
+
+    return (
+      <div className="text-muted-foreground flex h-full min-h-0 w-full flex-1 items-center justify-center p-6 text-sm">
+        {routeRunId ? "Run not found." : "Coworker not found."}
       </div>
     );
   }
@@ -2157,10 +2198,23 @@ export default function CoworkerEditorPage() {
   );
 }
 
-function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void }) {
+function InlineRunViewer({
+  runId,
+  coworkerId,
+  onBack,
+}: {
+  runId: string;
+  coworkerId?: string;
+  onBack: () => void;
+}) {
   const { data: run, isLoading } = useCoworkerRun(runId);
+  const shouldLoadImpersonationTarget = Boolean(runId && !isLoading && !run);
+  const { data: impersonationTarget, isLoading: isImpersonationTargetLoading } =
+    useCoworkerRunImpersonationTarget(runId, coworkerId, {
+      enabled: shouldLoadImpersonationTarget,
+    });
 
-  if (isLoading) {
+  if (isLoading || (shouldLoadImpersonationTarget && isImpersonationTargetLoading)) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin" />
@@ -2169,6 +2223,18 @@ function InlineRunViewer({ runId, onBack }: { runId: string; onBack: () => void 
   }
 
   if (!run) {
+    if (impersonationTarget) {
+      return (
+        <ImpersonationRequiredPage
+          target={impersonationTarget}
+          redirectPath={
+            coworkerId ? `/coworkers/${coworkerId}/runs/${runId}` : `/coworkers/runs/${runId}`
+          }
+          onBack={onBack}
+        />
+      );
+    }
+
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-1.5 px-4 py-2">
@@ -2484,6 +2550,7 @@ function RemoteIntegrationAdminPanel({
 }
 
 type CoworkerSettingsPanelProps = {
+  coworkerId?: string;
   name: string;
   description: string;
   username: string;
@@ -2590,6 +2657,7 @@ type CoworkerSettingsPanelProps = {
 };
 
 function CoworkerSettingsPanel({
+  coworkerId,
   name,
   description,
   username,
@@ -3317,7 +3385,11 @@ function CoworkerSettingsPanel({
                 transition={runMotionTransition}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <InlineRunViewer runId={selectedRunId} onBack={onBackToRuns} />
+                <InlineRunViewer
+                  runId={selectedRunId}
+                  coworkerId={coworkerId}
+                  onBack={onBackToRuns}
+                />
               </motion.div>
             ) : (
               <motion.div

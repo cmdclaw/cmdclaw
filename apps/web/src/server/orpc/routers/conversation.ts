@@ -5,6 +5,7 @@ import { ORPCError } from "@orpc/server";
 import { eq, desc, and, isNull, asc, sql, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { requireAppAdminActor } from "../app-admin-access";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 
@@ -214,6 +215,47 @@ const getUsage = protectedProcedure
       outputTokens: conv.usageOutputTokens,
       totalTokens: conv.usageTotalTokens,
       assistantMessageCount: conv.usageAssistantMessageCount,
+    };
+  });
+
+const getImpersonationTarget = protectedProcedure
+  .input(z.object({ conversationId: z.string() }))
+  .handler(async ({ input, context }) => {
+    await requireAppAdminActor(context);
+
+    const conv = await context.db.query.conversation.findFirst({
+      where: eq(conversation.id, input.conversationId),
+      columns: {
+        id: true,
+        title: true,
+        userId: true,
+      },
+      with: {
+        user: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
+    });
+
+    if (!conv?.userId || !conv.user) {
+      throw new ORPCError("NOT_FOUND", { message: "Conversation not found" });
+    }
+
+    return {
+      resourceType: "chat" as const,
+      resourceId: conv.id,
+      resourceLabel: conv.title,
+      owner: {
+        id: conv.user.id,
+        name: conv.user.name,
+        email: conv.user.email,
+        image: conv.user.image,
+      },
     };
   });
 
@@ -728,6 +770,7 @@ export const conversationRouter = {
   list,
   get,
   getUsage,
+  getImpersonationTarget,
   updateTitle,
   updatePinned,
   markSeen,

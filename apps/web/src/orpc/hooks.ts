@@ -225,6 +225,20 @@ export function useConversation(id: string | undefined) {
   });
 }
 
+export function useConversationImpersonationTarget(
+  conversationId: string | null | undefined,
+  options?: {
+    enabled?: boolean;
+  },
+) {
+  return useQuery({
+    queryKey: ["conversation", "impersonation-target", conversationId],
+    queryFn: () => client.conversation.getImpersonationTarget({ conversationId: conversationId! }),
+    enabled: (options?.enabled ?? true) && !!conversationId,
+    retry: false,
+  });
+}
+
 export function useConversationUsage(id: string | null, enabled = true) {
   return useQuery({
     queryKey: ["conversation", "usage", id],
@@ -1243,6 +1257,20 @@ export function useCoworker(id: string | undefined) {
   });
 }
 
+export function useCoworkerImpersonationTarget(
+  coworkerId: string | null | undefined,
+  options?: {
+    enabled?: boolean;
+  },
+) {
+  return useQuery({
+    queryKey: ["coworker", "impersonation-target", coworkerId],
+    queryFn: () => client.coworker.getImpersonationTarget({ coworkerId: coworkerId! }),
+    enabled: (options?.enabled ?? true) && !!coworkerId,
+    retry: false,
+  });
+}
+
 export function useCreateCoworker() {
   const queryClient = useQueryClient();
 
@@ -1557,6 +1585,25 @@ export function useCoworkerRun(
     refetchInterval:
       options?.refetchInterval ??
       ((query) => (isActiveCoworkerRunStatus(query.state.data?.status) ? 5_000 : false)),
+  });
+}
+
+export function useCoworkerRunImpersonationTarget(
+  runId: string | null | undefined,
+  coworkerId?: string | null,
+  options?: {
+    enabled?: boolean;
+  },
+) {
+  return useQuery({
+    queryKey: ["coworker", "run", "impersonation-target", runId, coworkerId ?? null],
+    queryFn: () =>
+      client.coworker.getRunImpersonationTarget({
+        runId: runId!,
+        ...(coworkerId ? { coworkerId } : {}),
+      }),
+    enabled: (options?.enabled ?? true) && !!runId,
+    retry: false,
   });
 }
 

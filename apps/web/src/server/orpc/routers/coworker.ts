@@ -63,6 +63,7 @@ import {
   deleteCoworkerDocument,
   uploadCoworkerDocument,
 } from "@/server/services/coworker-document";
+import { requireAppAdminActor } from "../app-admin-access";
 import { protectedProcedure } from "../middleware";
 import { queryCoworkerOverview } from "../shared/overview-queries";
 import { queryUsageDashboard } from "../shared/usage-queries";
@@ -968,6 +969,48 @@ const get = protectedProcedure
     };
   });
 
+const getImpersonationTarget = protectedProcedure
+  .input(z.object({ coworkerId: z.string() }))
+  .handler(async ({ input, context }) => {
+    await requireAppAdminActor(context);
+
+    const wf = await context.db.query.coworker.findFirst({
+      where: eq(coworker.id, input.coworkerId),
+      columns: {
+        id: true,
+        name: true,
+        username: true,
+        ownerId: true,
+      },
+      with: {
+        owner: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
+    });
+
+    if (!wf?.ownerId || !wf.owner) {
+      throw new ORPCError("NOT_FOUND", { message: "Coworker not found" });
+    }
+
+    return {
+      resourceType: "coworker" as const,
+      resourceId: wf.id,
+      resourceLabel: wf.username ? `@${wf.username}` : wf.name,
+      owner: {
+        id: wf.owner.id,
+        name: wf.owner.name,
+        email: wf.owner.email,
+        image: wf.owner.image,
+      },
+    };
+  });
+
 const create = protectedProcedure
   .input(
     z.object({
@@ -1517,6 +1560,66 @@ const getRun = protectedProcedure
         payload: evt.payload,
         createdAt: evt.createdAt,
       })),
+    };
+  });
+
+const getRunImpersonationTarget = protectedProcedure
+  .input(
+    z.object({
+      runId: z.string(),
+      coworkerId: z.string().optional(),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await requireAppAdminActor(context);
+
+    const filters = [eq(coworkerRun.id, input.runId)];
+    if (input.coworkerId) {
+      filters.push(eq(coworkerRun.coworkerId, input.coworkerId));
+    }
+
+    const run = await context.db.query.coworkerRun.findFirst({
+      where: and(...filters),
+      columns: {
+        id: true,
+        coworkerId: true,
+        ownerId: true,
+      },
+      with: {
+        owner: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        coworker: {
+          columns: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    if (!run?.ownerId || !run.owner) {
+      throw new ORPCError("NOT_FOUND", { message: "Run not found" });
+    }
+
+    return {
+      resourceType: "coworker_run" as const,
+      resourceId: run.id,
+      resourceLabel: run.coworker?.username
+        ? `@${run.coworker.username}`
+        : (run.coworker?.name ?? "Coworker run"),
+      owner: {
+        id: run.owner.id,
+        name: run.owner.name,
+        email: run.owner.email,
+        image: run.owner.image,
+      },
     };
   });
 
@@ -2600,6 +2703,7 @@ export const coworkerRouter = {
   getHistory,
   getOverview,
   getUsageDashboard,
+  getImpersonationTarget,
   create,
   update,
   edit,
@@ -2610,6 +2714,7 @@ export const coworkerRouter = {
   listRemoteIntegrationTargets,
   searchRemoteIntegrationUsers: searchRemoteIntegrationUsersProcedure,
   getRun,
+  getRunImpersonationTarget,
   listRuns,
   listWorkspaceRuns,
   getForwardingAlias,
