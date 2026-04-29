@@ -401,7 +401,7 @@ describe("skillRouter", () => {
 
     await expect(
       skillRouterAny.updateFile({
-        input: { id: "file-1", content: "updated" },
+        input: { id: "file-1", contentBase64: Buffer.from("updated", "utf8").toString("base64") },
         context,
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });

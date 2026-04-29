@@ -42,6 +42,10 @@ Add your skill instructions here...
 `;
 }
 
+function decodeRpcContent(contentBase64: string): string {
+  return Buffer.from(contentBase64, "base64").toString("utf8");
+}
+
 function formatSkillSummary(
   row: {
     id: string;
@@ -499,18 +503,20 @@ const addFile = protectedProcedure
     z.object({
       skillId: z.string(),
       path: z.string().min(1).max(256),
-      content: z.string(),
+      contentBase64: z.string(),
     }),
   )
   .handler(async ({ input, context }) => {
     await requireOwnedSkillInActiveWorkspace(context, input.skillId);
+
+    const content = decodeRpcContent(input.contentBase64);
 
     const [newFile] = await context.db
       .insert(skillFile)
       .values({
         skillId: input.skillId,
         path: input.path,
-        content: input.content,
+        content,
       })
       .returning();
 
@@ -524,7 +530,7 @@ const updateFile = protectedProcedure
   .input(
     z.object({
       id: z.string(),
-      content: z.string(),
+      contentBase64: z.string(),
     }),
   )
   .handler(async ({ input, context }) => {
@@ -567,10 +573,9 @@ const updateFile = protectedProcedure
       throw new ORPCError("NOT_FOUND", { message: "File not found" });
     }
 
-    await context.db
-      .update(skillFile)
-      .set({ content: input.content })
-      .where(eq(skillFile.id, input.id));
+    const content = decodeRpcContent(input.contentBase64);
+
+    await context.db.update(skillFile).set({ content }).where(eq(skillFile.id, input.id));
 
     return { success: true };
   });

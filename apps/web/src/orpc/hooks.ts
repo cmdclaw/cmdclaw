@@ -41,6 +41,18 @@ type DeleteConversationMutationContext = {
   previousConversationUsage: unknown;
 };
 
+function encodeRpcContent(content: string): string {
+  const bytes = new TextEncoder().encode(content);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return btoa(binary);
+}
+
 const STREAM_NOT_READY_ERROR =
   "Generation is still processing but cannot be streamed from this server yet. Please refresh shortly.";
 const STREAM_RETRY_DELAY_MS = 1500;
@@ -1163,7 +1175,7 @@ export function useAddSkillFile() {
 
   return useMutation({
     mutationFn: ({ skillId, path, content }: { skillId: string; path: string; content: string }) =>
-      client.skill.addFile({ skillId, path, content }),
+      client.skill.addFile({ skillId, path, contentBase64: encodeRpcContent(content) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["skill"] });
     },
@@ -1176,7 +1188,7 @@ export function useUpdateSkillFile() {
 
   return useMutation({
     mutationFn: ({ id, content }: { id: string; content: string }) =>
-      client.skill.updateFile({ id, content }),
+      client.skill.updateFile({ id, contentBase64: encodeRpcContent(content) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["skill"] });
     },
