@@ -331,10 +331,7 @@ projects:
                   name: cmdclaw-redis-staging
                   property: connectionString
               - key: AWS_ENDPOINT_URL
-                fromService:
-                  type: web
-                  name: cmdclaw-s3-staging
-                  envVarKey: RENDER_EXTERNAL_URL
+                value: http://cmdclaw-s3-staging:10000
               - key: AWS_DEFAULT_REGION
                 value: us-east-1
               - key: AWS_S3_BUCKET_NAME
@@ -403,10 +400,7 @@ projects:
                   name: cmdclaw-redis-staging
                   property: connectionString
               - key: AWS_ENDPOINT_URL
-                fromService:
-                  type: web
-                  name: cmdclaw-s3-staging
-                  envVarKey: RENDER_EXTERNAL_URL
+                value: http://cmdclaw-s3-staging:10000
               - key: AWS_DEFAULT_REGION
                 value: us-east-1
               - key: AWS_S3_BUCKET_NAME
@@ -732,10 +726,7 @@ projects:
                   name: cmdclaw-redis-prod
                   property: connectionString
               - key: AWS_ENDPOINT_URL
-                fromService:
-                  type: web
-                  name: cmdclaw-s3-prod
-                  envVarKey: RENDER_EXTERNAL_URL
+                value: http://cmdclaw-s3-prod:10000
               - key: AWS_DEFAULT_REGION
                 value: us-east-1
               - key: AWS_S3_BUCKET_NAME
@@ -804,10 +795,7 @@ projects:
                   name: cmdclaw-redis-prod
                   property: connectionString
               - key: AWS_ENDPOINT_URL
-                fromService:
-                  type: web
-                  name: cmdclaw-s3-prod
-                  envVarKey: RENDER_EXTERNAL_URL
+                value: http://cmdclaw-s3-prod:10000
               - key: AWS_DEFAULT_REGION
                 value: us-east-1
               - key: AWS_S3_BUCKET_NAME
