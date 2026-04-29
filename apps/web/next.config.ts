@@ -5,7 +5,7 @@ import * as envConfig from "./src/env.js";
 void envConfig;
 
 const nextBuildCpus = Math.min(
-  8,
+  4,
   Math.max(
     1,
     (typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length) -
