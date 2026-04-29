@@ -91,10 +91,16 @@ It also shows the exact `.env` path currently backing the worktree, plus the sha
 
 `worktree:processes` can be run from the main checkout or a worktree. It groups running worktree app processes by worktree, summarizes discovered Next.js descendants, and prints the exact command to stop each worktree. Use `bun run worktree:processes list --verbose` to include full process command lines.
 
+To stop every running worktree app process from the list:
+
+```bash
+bun run worktree:processes stop all
+```
+
 To stop one directly from the list, pass its instance id, slot, app port, or repo path:
 
 ```bash
-bun run worktree:processes stop <instance-id|slot|app-port|repo-root>
+bun run worktree:processes stop <all|instance-id|slot|app-port|repo-root>
 ```
 
 ## Important rule

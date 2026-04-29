@@ -148,7 +148,7 @@ function printHelp(): void {
   console.log("  docker-down  No-op for shared observability; worktree Docker is no longer isolated");
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
-  console.log("  processes  List running worktree processes and stop commands");
+  console.log("  processes  List running worktree processes and stop commands, including stop all");
   console.log("  cleanup  Stop orphaned Next.js processes under worktree roots");
   console.log("  env      Print derived environment variables for this worktree");
   console.log("  bootstrap-user  Copy source developer identity and integrations");
@@ -2882,6 +2882,18 @@ function terminateProcess(pid: number): void {
   }
 }
 
+async function waitForProcessesToExit(pids: number[], timeoutMs: number): Promise<number[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (pids.every((pid) => !isPidRunning(pid))) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  return pids.filter((pid) => isPidRunning(pid));
+}
+
 function getProcessEntries(metadata: InstanceMetadata): Array<{ name: ProcessName; pid: number }> {
   const stored = loadProcesses(metadata.instanceRoot);
   return PROCESS_NAMES.flatMap((name) => {
@@ -2904,13 +2916,7 @@ async function stopInstance(metadata: InstanceMetadata): Promise<void> {
     }
   }
 
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    if (entries.every((entry) => !isPidRunning(entry.pid))) {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
+  await waitForProcessesToExit(entries.map((entry) => entry.pid), 20_000);
 
   removeProcessesFile(metadata.instanceRoot);
   closeAgentBrowserSession(metadata);
@@ -3179,6 +3185,53 @@ async function stopProcessTarget(target: string): Promise<void> {
   await stopInstance(matches[0]);
 }
 
+async function stopAllProcessTargets(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const metadataList = listKnownWorktreeMetadata(repoRoot);
+  const systemProcesses = listSystemProcesses();
+  const activeMetadata = metadataList.filter((metadata) => {
+    const entries = getProcessEntries(metadata);
+    const hasRunningTrackedProcess = entries.some((entry) => isPidRunning(entry.pid));
+    const hasRunningNextProcess =
+      listNextProcessesForWorktree(metadata, systemProcesses).length > 0;
+    return hasRunningTrackedProcess || hasRunningNextProcess;
+  });
+
+  if (activeMetadata.length === 0) {
+    console.log("[worktree] processes none");
+    return;
+  }
+
+  console.log(`[worktree] stopping ${activeMetadata.length} worktree(s)`);
+  for (const metadata of activeMetadata) {
+    console.log(`[worktree] stopping ${metadata.instanceId}`);
+    await stopInstance(metadata);
+  }
+
+  const remainingNextPids = activeMetadata
+    .flatMap((metadata) => listNextProcessesForWorktree(metadata, listSystemProcesses()))
+    .map((processEntry) => processEntry.pid);
+  const uniqueRemainingNextPids = Array.from(new Set(remainingNextPids)).sort((left, right) =>
+    right - left,
+  );
+
+  if (uniqueRemainingNextPids.length > 0) {
+    console.log(
+      `[worktree] stopping ${uniqueRemainingNextPids.length} remaining Next.js process(es): ${formatPidList(uniqueRemainingNextPids)}`,
+    );
+    for (const pid of uniqueRemainingNextPids) {
+      terminateProcess(pid);
+    }
+
+    const stillRunning = await waitForProcessesToExit(uniqueRemainingNextPids, 10_000);
+    if (stillRunning.length > 0) {
+      console.warn(`[worktree] still running after SIGTERM: ${formatPidList(stillRunning)}`);
+    }
+  }
+
+  console.log("[worktree] stopped all worktree processes");
+}
+
 function resolveNextCleanupRoots(metadataList: InstanceMetadata[]): string[] {
   const roots = new Set<string>();
   for (const root of resolveRecognizedWorktreeRoots()) {
@@ -3258,15 +3311,7 @@ async function cleanupWorktreeNextProcesses(args: string[]): Promise<void> {
     terminateProcess(pid);
   }
 
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    if (pids.every((pid) => !isPidRunning(pid))) {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-
-  const stillRunning = pids.filter((pid) => isPidRunning(pid));
+  const stillRunning = await waitForProcessesToExit(pids, 10_000);
   if (stillRunning.length > 0) {
     console.warn(`[worktree] cleanup still running after SIGTERM: ${formatPidList(stillRunning)}`);
   } else {
@@ -3281,8 +3326,13 @@ async function showProcesses(args: string[]): Promise<void> {
     const target = commandArgs[0];
     if (!target) {
       fail(
-        'Usage: bun run worktree:processes stop <instance-id|slot|app-port|repo-root>',
+        'Usage: bun run worktree:processes stop <all|instance-id|slot|app-port|repo-root>',
       );
+    }
+
+    if (target === "all") {
+      await stopAllProcessTargets();
+      return;
     }
 
     await stopProcessTarget(target);
@@ -3309,6 +3359,7 @@ async function showProcesses(args: string[]): Promise<void> {
   console.log(
     `[worktree] running web servers: ${summary.totalRunning}/${MAX_RUNNING_WORKTREE_WEB_PROCESSES}`,
   );
+  console.log("  stop all: bun run worktree:processes stop all");
 
   if (metadataList.length === 0) {
     console.log("[worktree] processes none");
