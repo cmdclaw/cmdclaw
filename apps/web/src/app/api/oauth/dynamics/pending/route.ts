@@ -101,7 +101,7 @@ export async function POST(request: Request) {
   }
 
   const config = getOAuthConfig("dynamics");
-  const redirectUrl = new URL("/integrations", getRedirectBaseUrl(request));
+  const redirectUrl = new URL("/toolbox", getRedirectBaseUrl(request));
   if (parsed.data.generationId) {
     redirectUrl.searchParams.set("generation_id", parsed.data.generationId);
   }

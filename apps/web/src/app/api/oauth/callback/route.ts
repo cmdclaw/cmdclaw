@@ -50,13 +50,11 @@ export async function GET(request: NextRequest) {
     }
 
     console.error("OAuth error:", error);
-    return NextResponse.redirect(buildRequestAwareUrl(`/integrations?error=${error}`, request));
+    return NextResponse.redirect(buildRequestAwareUrl(`/toolbox?error=${error}`, request));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(
-      buildRequestAwareUrl("/integrations?error=missing_params", request),
-    );
+    return NextResponse.redirect(buildRequestAwareUrl("/toolbox?error=missing_params", request));
   }
 
   // Get session
@@ -158,14 +156,12 @@ export async function GET(request: NextRequest) {
   try {
     stateData = JSON.parse(Buffer.from(state, "base64url").toString());
   } catch {
-    return NextResponse.redirect(
-      buildRequestAwareUrl("/integrations?error=invalid_state", request),
-    );
+    return NextResponse.redirect(buildRequestAwareUrl("/toolbox?error=invalid_state", request));
   }
 
   // Helper to build redirect URL with the correct base path
   const buildRedirectUrl = (params: string) => {
-    const baseUrl = stateData.redirectUrl || "/integrations";
+    const baseUrl = stateData.redirectUrl || "/toolbox";
     const redirectUrl = buildRequestAwareUrl(baseUrl, request);
     const extraParams = new URLSearchParams(params);
     for (const [key, value] of extraParams.entries()) {
@@ -372,7 +368,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (stateData.type === "dynamics" && !isDynamicsInstanceScopedAuth) {
-      const dynamicsRedirect = new URL("/integrations", getRequestAwareOrigin(request));
+      const dynamicsRedirect = new URL("/toolbox", getRequestAwareOrigin(request));
       dynamicsRedirect.searchParams.set("dynamics_select", "true");
       const authResume = resolveAuthResumeContext();
       if (authResume.interruptId) {

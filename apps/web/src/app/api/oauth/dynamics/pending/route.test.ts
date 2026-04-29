@@ -156,6 +156,6 @@ describe("Dynamics pending selection route", () => {
     const decodedState = JSON.parse(Buffer.from(state!, "base64url").toString("utf8")) as {
       redirectUrl: string;
     };
-    expect(decodedState.redirectUrl).toBe("https://app.example.com/integrations");
+    expect(decodedState.redirectUrl).toBe("https://app.example.com/toolbox");
   });
 });

@@ -265,7 +265,7 @@ function SourceDetailContent() {
           {source.internalKey ? (
             <div className="mt-5 flex items-center gap-3">
               <Button asChild variant="outline">
-                <Link href="/integrations">
+                <Link href="/toolbox">
                   {source.connected ? "Manage Gmail connection" : "Connect Gmail"}
                 </Link>
               </Button>

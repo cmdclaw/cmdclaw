@@ -200,7 +200,7 @@ describe("GET /api/oauth/callback", () => {
 
     const response = await GET(request);
 
-    expect(getLocation(response)).toBe("https://app.example.com/integrations?error=missing_params");
+    expect(getLocation(response)).toBe("https://app.example.com/toolbox?error=missing_params");
   });
 
   it("uses APP_URL for early redirects when request host is internal", async () => {
@@ -210,7 +210,7 @@ describe("GET /api/oauth/callback", () => {
 
     const response = await GET(request);
 
-    expect(getLocation(response)).toBe("https://app.example.com/integrations?error=missing_params");
+    expect(getLocation(response)).toBe("https://app.example.com/toolbox?error=missing_params");
   });
 
   it("redirects to login when session is unauthorized", async () => {
@@ -232,7 +232,7 @@ describe("GET /api/oauth/callback", () => {
 
     const response = await GET(request);
 
-    expect(getLocation(response)).toBe("https://app.example.com/integrations?error=invalid_state");
+    expect(getLocation(response)).toBe("https://app.example.com/toolbox?error=invalid_state");
   });
 
   it("redirects with user_mismatch when callback state user does not match session", async () => {
@@ -601,7 +601,7 @@ describe("GET /api/oauth/callback", () => {
 
     const response = await GET(request);
 
-    expect(getLocation(response)).toBe("https://app.example.com/integrations?dynamics_select=true");
+    expect(getLocation(response)).toBe("https://app.example.com/toolbox?dynamics_select=true");
     const integrationInsertCall = (
       insertValuesMock.mock.calls as unknown as Array<[Record<string, unknown>]>
     ).find((call) => call[0] && typeof call[0] === "object" && "providerAccountId" in call[0]);
@@ -642,7 +642,7 @@ describe("GET /api/oauth/callback", () => {
 
     const response = await GET(request);
 
-    expect(getLocation(response)).toBe("https://app.example.com/integrations?dynamics_select=true");
+    expect(getLocation(response)).toBe("https://app.example.com/toolbox?dynamics_select=true");
   });
 
   it("completes dynamics instance-scoped callback and enables integration", async () => {

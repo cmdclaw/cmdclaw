@@ -47,7 +47,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const redirectUrl = buildRequestAwareUrl(linkState.returnPath || "/integrations", request);
+  const redirectUrl = buildRequestAwareUrl(linkState.returnPath || "/toolbox", request);
   redirectUrl.searchParams.set("cloudLinked", "1");
   return NextResponse.redirect(redirectUrl);
 }

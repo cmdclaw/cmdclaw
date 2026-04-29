@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Unsupported integration type" }, { status: 400 });
     }
 
-    const redirectUrl = new URL("/integrations", getRequestAwareOrigin(request)).toString();
+    const redirectUrl = new URL("/toolbox", getRequestAwareOrigin(request)).toString();
     if (type === "linkedin") {
       const authUrl = await generateLinkedInAuthUrl(sessionData.user.id, redirectUrl);
       return NextResponse.redirect(authUrl);

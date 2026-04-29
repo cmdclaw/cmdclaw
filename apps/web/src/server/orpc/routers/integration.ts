@@ -537,7 +537,7 @@ const getAuthUrl = protectedProcedure
           authUrl: await startCloudAccountLink({
             userId: context.user.id,
             requestedIntegrationType: input.type,
-            returnPath: "/integrations",
+            returnPath: "/toolbox",
           }),
         };
       }
