@@ -199,7 +199,7 @@ type SandboxRow = {
   provider: Provider;
   sandboxId: string;
   templateId: string | null;
-  state: "running" | "paused" | "stopped" | "unknown";
+  state: "running" | "paused" | "stopped" | "error" | "unknown";
   startedAt: Date | string | null;
   endAt: Date | string | null;
   cpuCount: number | null;
@@ -782,6 +782,7 @@ export default function AdminSandboxesPage() {
 
   const runningCount = sandboxes.filter((s) => s.state === "running").length;
   const pausedCount = sandboxes.filter((s) => s.state === "paused").length;
+  const errorCount = sandboxes.filter((s) => s.state === "error").length;
 
   const providerCounts = useMemo(() => {
     const counts: Record<Provider, number> = { e2b: 0, daytona: 0 };
@@ -886,6 +887,9 @@ export default function AdminSandboxesPage() {
             {pausedCount > 0 && (
               <span className="text-yellow-600 dark:text-yellow-400">{pausedCount} paused</span>
             )}
+            {errorCount > 0 && (
+              <span className="text-red-600 dark:text-red-400">{errorCount} error</span>
+            )}
             <span className="text-muted-foreground">|</span>
             {Object.entries(envCounts).map(([env, count]) => (
               <span key={env} className="inline-flex items-center gap-1">
@@ -987,7 +991,9 @@ export default function AdminSandboxesPage() {
                             ? "bg-green-500/10 text-green-700 dark:text-green-400"
                             : s.state === "paused"
                               ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                              : "bg-gray-500/10 text-gray-700 dark:text-gray-400",
+                              : s.state === "error"
+                                ? "bg-red-500/10 text-red-700 dark:text-red-400"
+                                : "bg-gray-500/10 text-gray-700 dark:text-gray-400",
                         )}
                       >
                         <span
@@ -997,7 +1003,9 @@ export default function AdminSandboxesPage() {
                               ? "bg-green-500"
                               : s.state === "paused"
                                 ? "bg-yellow-500"
-                                : "bg-gray-500",
+                                : s.state === "error"
+                                  ? "bg-red-500"
+                                  : "bg-gray-500",
                           )}
                         />
                         {s.state}

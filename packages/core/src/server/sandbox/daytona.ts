@@ -122,27 +122,47 @@ export function isDaytonaConfigured(): boolean {
 
 export type DaytonaAdminSandbox = {
   sandboxId: string;
-  state: "running" | "paused" | "stopped" | "unknown";
+  state: "running" | "paused" | "stopped" | "error" | "unknown";
   startedAt: Date | null;
   lastActivityAt: Date | null;
   metadata: Record<string, string>;
 };
 
-type DaytonaListedSandbox = {
+export type DaytonaListedSandbox = {
   id?: string;
   state?: string;
   createdAt?: string | Date;
   lastActivityAt?: string | Date;
   labels?: Record<string, string>;
   metadata?: Record<string, string>;
-  delete?: () => Promise<void>;
-  stop?: () => Promise<void>;
+  delete?: (timeout?: number) => Promise<void>;
+  stop?: (timeout?: number, force?: boolean) => Promise<void>;
 };
+
+type DaytonaListResult =
+  | DaytonaListedSandbox[]
+  | {
+      items?: DaytonaListedSandbox[];
+      totalPages?: number;
+    };
+
+type DaytonaListClient = {
+  list: (
+    labels?: Record<string, string>,
+    page?: number,
+    limit?: number,
+  ) => Promise<DaytonaListResult>;
+};
+
+const DAYTONA_LIST_PAGE_SIZE = 100;
 
 function normalizeDaytonaState(raw: string | undefined): DaytonaAdminSandbox["state"] {
   const value = (raw ?? "").toLowerCase();
   if (value === "started" || value === "running") {
     return "running";
+  }
+  if (value === "error" || value === "build_failed") {
+    return "error";
   }
   if (value === "stopped" || value === "paused") {
     // Daytona's "stopped" is analogous to E2B's "paused" (sandbox preserved, not running).
@@ -162,21 +182,45 @@ function coerceDate(value: string | Date | undefined | null): Date | null {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+export function normalizeDaytonaListItems(result: DaytonaListResult): DaytonaListedSandbox[] {
+  if (Array.isArray(result)) {
+    return result;
+  }
+  return result.items ?? [];
+}
+
+export async function listDaytonaSandboxPages(
+  daytona: DaytonaListClient,
+  labels?: Record<string, string>,
+): Promise<DaytonaListedSandbox[]> {
+  const first = await daytona.list(labels, 1, DAYTONA_LIST_PAGE_SIZE);
+  const items = [...normalizeDaytonaListItems(first)];
+  if (Array.isArray(first) || !first.totalPages || first.totalPages <= 1) {
+    return items;
+  }
+
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    // eslint-disable-next-line no-await-in-loop -- pagination must preserve API order
+    const next = await daytona.list(labels, page, DAYTONA_LIST_PAGE_SIZE);
+    items.push(...normalizeDaytonaListItems(next));
+  }
+
+  return items;
+}
+
 export async function listAllDaytonaSandboxes(): Promise<DaytonaAdminSandbox[]> {
   if (!isDaytonaConfigured()) {
     return [];
   }
 
   const { Daytona } = await import("@daytonaio/sdk");
-  const daytona = new Daytona(getDaytonaClientConfig()) as unknown as {
-    list?: () => Promise<DaytonaListedSandbox[]>;
-  };
+  const daytona = new Daytona(getDaytonaClientConfig()) as unknown as Partial<DaytonaListClient>;
 
   if (typeof daytona.list !== "function") {
     return [];
   }
 
-  const raw = await daytona.list();
+  const raw = await listDaytonaSandboxPages(daytona as DaytonaListClient);
   return raw.map((s) => {
     const metadata = (s.labels ?? s.metadata ?? {}) as Record<string, string>;
     return {

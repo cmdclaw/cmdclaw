@@ -2,7 +2,10 @@ import { Daytona } from "@daytonaio/sdk";
 import { db } from "@cmdclaw/db/client";
 import { conversationRuntime, generation } from "@cmdclaw/db/schema";
 import { and, inArray, isNotNull } from "drizzle-orm";
-import { getDaytonaClientConfig } from "../sandbox/daytona";
+import {
+  getDaytonaClientConfig,
+  listDaytonaSandboxPages,
+} from "../sandbox/daytona";
 import {
   DAYTONA_STOPPED_SANDBOX_DELETE_JOB_NAME,
   getDaytonaRunawayCleanupQueue,
@@ -18,37 +21,44 @@ type DaytonaSandboxSummary = {
   delete?: (timeout?: number) => Promise<void>;
 };
 
-type DaytonaListResult = {
-  items?: DaytonaSandboxSummary[];
-};
-
 function resolveSchedulerTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || "UTC";
+}
+
+function isDeletableTerminalState(state: string | undefined): boolean {
+  const normalized = (state ?? "").toLowerCase();
+  return normalized === "stopped" || normalized === "error" || normalized === "build_failed";
 }
 
 export async function cleanupStoppedDaytonaSandboxes(): Promise<{
   scanned: number;
   stopped: number;
+  errored: number;
   deleted: number;
   deleteFailed: number;
   skippedMissingId: number;
 }> {
   const daytona = new Daytona(getDaytonaClientConfig());
-  const result = (await daytona.list()) as DaytonaListResult;
-  const sandboxes = result.items ?? [];
+  const sandboxes = await listDaytonaSandboxPages(daytona as unknown as Parameters<typeof listDaytonaSandboxPages>[0]);
 
   let stopped = 0;
+  let errored = 0;
   let deleted = 0;
   let deleteFailed = 0;
   let skippedMissingId = 0;
   const deletedIds: string[] = [];
 
   for (const sandbox of sandboxes) {
-    if ((sandbox.state ?? "").toLowerCase() !== "stopped") {
+    const state = (sandbox.state ?? "").toLowerCase();
+    if (!isDeletableTerminalState(state)) {
       continue;
     }
 
-    stopped += 1;
+    if (state === "stopped") {
+      stopped += 1;
+    } else {
+      errored += 1;
+    }
 
     const sandboxId = sandbox.id?.trim();
     if (!sandboxId) {
@@ -104,6 +114,7 @@ export async function cleanupStoppedDaytonaSandboxes(): Promise<{
   return {
     scanned: sandboxes.length,
     stopped,
+    errored,
     deleted,
     deleteFailed,
     skippedMissingId,

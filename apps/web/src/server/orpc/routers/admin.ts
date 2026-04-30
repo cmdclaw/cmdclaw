@@ -1062,7 +1062,7 @@ type UnifiedSandbox = {
   provider: "e2b" | "daytona";
   sandboxId: string;
   templateId: string | null;
-  state: "running" | "paused" | "stopped" | "unknown";
+  state: "running" | "paused" | "stopped" | "error" | "unknown";
   startedAt: Date | null;
   endAt: Date | null;
   cpuCount: number | null;

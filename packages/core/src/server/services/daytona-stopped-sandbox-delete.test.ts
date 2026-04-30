@@ -79,6 +79,12 @@ vi.mock("@daytonaio/sdk", () => ({
 
 vi.mock("../sandbox/daytona", () => ({
   getDaytonaClientConfig: vi.fn(() => ({ apiKey: "test-key" })),
+  listDaytonaSandboxPages: vi.fn(async (daytona: { list: () => Promise<unknown> }) => {
+    const result = await daytona.list();
+    return Array.isArray(result)
+      ? result
+      : ((result as { items?: unknown[] }).items ?? []);
+  }),
 }));
 
 vi.mock("../queues/daytona-runaway-cleanup", () => ({
@@ -126,6 +132,7 @@ describe("daytona-stopped-sandbox-delete", () => {
     expect(summary).toEqual({
       scanned: 2,
       stopped: 1,
+      errored: 0,
       deleted: 1,
       deleteFailed: 0,
       skippedMissingId: 0,
@@ -161,6 +168,7 @@ describe("daytona-stopped-sandbox-delete", () => {
     expect(summary).toEqual({
       scanned: 1,
       stopped: 1,
+      errored: 0,
       deleted: 1,
       deleteFailed: 0,
       skippedMissingId: 0,
@@ -184,12 +192,37 @@ describe("daytona-stopped-sandbox-delete", () => {
     expect(summary).toEqual({
       scanned: 1,
       stopped: 1,
+      errored: 0,
       deleted: 0,
       deleteFailed: 0,
       skippedMissingId: 1,
     });
     expect(sandboxDeleteMock).not.toHaveBeenCalled();
     expect(recordedUpdates).toHaveLength(0);
+  });
+
+  it("deletes errored sandboxes left behind by timed-out creates", async () => {
+    daytonaListMock.mockResolvedValue({
+      items: [
+        {
+          id: "sbx-error-1",
+          state: "error",
+          delete: sandboxDeleteMock,
+        },
+      ],
+    });
+
+    const summary = await cleanupStoppedDaytonaSandboxes();
+
+    expect(summary).toEqual({
+      scanned: 1,
+      stopped: 0,
+      errored: 1,
+      deleted: 1,
+      deleteFailed: 0,
+      skippedMissingId: 0,
+    });
+    expect(sandboxDeleteMock).toHaveBeenCalledWith(60);
   });
 
   it("registers a repeating BullMQ scheduler for stopped sandbox deletion", async () => {

@@ -22,7 +22,11 @@ import {
   getOrCreateSession as getOrCreateE2BSession,
   injectProviderAuth,
 } from "./e2b";
-import { getDaytonaClientConfig } from "./daytona";
+import {
+  getDaytonaClientConfig,
+  listDaytonaSandboxPages,
+  type DaytonaListedSandbox,
+} from "./daytona";
 import { getPreferredCloudSandboxProvider } from "./factory";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
 import { listAccessibleEnabledSkillsForUser } from "../services/workspace-skill-service";
@@ -38,9 +42,17 @@ import {
   resolveSandboxAgentRuntimeForModel,
 } from "./opencode-runtime";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
+import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import type { RuntimeMcpServer } from "./core/types";
 
 const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
+const DAYTONA_CREATE_TIMEOUT_SECONDS = 30;
+const DAYTONA_CREATE_MAX_ATTEMPTS = 2;
+const DAYTONA_CREATE_RETRY_DELAY_MS = 1_000;
+const DAYTONA_AUTO_STOP_INTERVAL_MINUTES = Math.ceil(
+  generationLifecyclePolicy.activeSandboxTimeoutMs / 60_000,
+);
+const DAYTONA_AUTO_DELETE_INTERVAL_MINUTES = 2 * 60;
 
 type SessionInitStage =
   | "sandbox_checking_cache"
@@ -139,6 +151,39 @@ function buildSandboxBootstrapEnv(config: OpenCodeSessionConfig): Record<string,
   };
 }
 
+function buildDaytonaSandboxLabels(config: OpenCodeSessionConfig): Record<string, string> {
+  return {
+    "cmdclaw-conversation-id": config.conversationId,
+    ...(config.generationId ? { "cmdclaw-generation-id": config.generationId } : {}),
+    ...(config.userId ? { "cmdclaw-user-id": config.userId } : {}),
+  };
+}
+
+function buildDaytonaSandboxCreateParams(config: OpenCodeSessionConfig): Record<string, unknown> {
+  return {
+    snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
+    envVars: buildSandboxBootstrapEnv(config),
+    labels: buildDaytonaSandboxLabels(config),
+    autoStopInterval: DAYTONA_AUTO_STOP_INTERVAL_MINUTES,
+    autoDeleteInterval: DAYTONA_AUTO_DELETE_INTERVAL_MINUTES,
+  };
+}
+
+function isDaytonaCreateTimeout(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.name === "DaytonaError" &&
+    error.message.includes("Failed to create and start sandbox") &&
+    error.message.includes("Operation timed out")
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getConversationRuntimeState(conversationId: string): Promise<{
   runtimeId: string;
   sandboxId: string | null;
@@ -188,6 +233,19 @@ type DaytonaSandboxLike = {
     uploadFile: (source: Buffer, destination: string, timeout?: number) => Promise<void>;
     downloadFile: (path: string, timeout?: number) => Promise<Buffer | string>;
   };
+};
+
+type DaytonaClientLike = {
+  create: (
+    params: Record<string, unknown>,
+    options?: { timeout?: number },
+  ) => Promise<DaytonaSandboxLike>;
+  get: (sandboxIdOrName: string) => Promise<DaytonaSandboxLike>;
+  list: (
+    labels?: Record<string, string>,
+    page?: number,
+    limit?: number,
+  ) => Promise<DaytonaListedSandbox[] | { items?: DaytonaListedSandbox[]; totalPages?: number }>;
 };
 
 function escapeShell(value: string): string {
@@ -568,7 +626,104 @@ async function getOrCreateDockerSandbox(
 
 async function createDaytonaClient() {
   const { Daytona } = await import("@daytonaio/sdk");
-  return new Daytona(getDaytonaClientConfig());
+  return new Daytona(getDaytonaClientConfig()) as unknown as DaytonaClientLike;
+}
+
+async function recoverCreatedDaytonaSandboxAfterTimeout(
+  daytona: DaytonaClientLike,
+  config: OpenCodeSessionConfig,
+): Promise<DaytonaSandboxLike | null> {
+  if (!config.generationId) {
+    return null;
+  }
+
+  const labels = buildDaytonaSandboxLabels(config);
+  let sandboxes: DaytonaListedSandbox[];
+  try {
+    sandboxes = await listDaytonaSandboxPages(daytona, labels);
+  } catch {
+    return null;
+  }
+
+  const runningCandidate = sandboxes.find((sandbox) => {
+    const state = (sandbox.state ?? "").toLowerCase();
+    return sandbox.id && (state === "started" || state === "starting");
+  });
+  if (runningCandidate?.id) {
+    try {
+      const sandbox = await daytona.get(runningCandidate.id);
+      if (sandbox.state && sandbox.state !== "started") {
+        await sandbox.start?.();
+        await sandbox.waitUntilStarted?.(DAYTONA_CREATE_TIMEOUT_SECONDS);
+      }
+      return sandbox;
+    } catch {
+      return null;
+    }
+  }
+
+  const terminalCandidates = sandboxes.filter((sandbox) =>
+    ["error", "build_failed", "stopped"].includes((sandbox.state ?? "").toLowerCase()),
+  );
+  for (const sandbox of terminalCandidates) {
+    if (!sandbox.id) {
+      continue;
+    }
+    if (sandbox.delete) {
+      // eslint-disable-next-line no-await-in-loop -- cleanup must stay bounded and sequential
+      await sandbox.delete(60).catch(() => undefined);
+      continue;
+    }
+    // eslint-disable-next-line no-await-in-loop -- fallback lookup is per sandbox
+    const loaded = await daytona.get(sandbox.id).catch(() => null);
+    // eslint-disable-next-line no-await-in-loop -- cleanup must stay bounded and sequential
+    await loaded?.delete?.().catch(() => undefined);
+  }
+
+  return null;
+}
+
+async function createDaytonaSandboxWithRetry(
+  daytona: DaytonaClientLike,
+  config: OpenCodeSessionConfig,
+): Promise<DaytonaSandboxLike> {
+  const params = buildDaytonaSandboxCreateParams(config);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= DAYTONA_CREATE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- retries must be sequential to avoid duplicate sandboxes
+      return await daytona.create(params, { timeout: DAYTONA_CREATE_TIMEOUT_SECONDS });
+    } catch (error) {
+      lastError = error;
+      if (!isDaytonaCreateTimeout(error)) {
+        throw error;
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- recovery must observe the just-timed-out create
+      const recovered = await recoverCreatedDaytonaSandboxAfterTimeout(daytona, config);
+      if (recovered) {
+        return recovered;
+      }
+
+      if (attempt >= DAYTONA_CREATE_MAX_ATTEMPTS) {
+        break;
+      }
+
+      console.warn("[opencode-session] Daytona create timed out; retrying", {
+        conversationId: config.conversationId,
+        generationId: config.generationId,
+        attempt,
+        timeoutSeconds: DAYTONA_CREATE_TIMEOUT_SECONDS,
+      });
+      // eslint-disable-next-line no-await-in-loop -- retry delay is intentionally bounded
+      await sleep(DAYTONA_CREATE_RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Daytona sandbox create failed after retry");
 }
 
 async function cleanupStaleDaytonaRuntime(args: {
@@ -661,10 +816,7 @@ async function getOrCreateDaytonaSandbox(
   });
 
   const daytona = await createDaytonaClient();
-  const created = (await daytona.create({
-    snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
-    envVars: buildSandboxBootstrapEnv(config),
-  })) as DaytonaSandboxLike;
+  const created = await createDaytonaSandboxWithRetry(daytona, config);
 
   onLifecycle?.("sandbox_created", {
     conversationId: config.conversationId,
@@ -896,10 +1048,7 @@ async function getOrCreateDaytonaSandboxInit(
   });
 
   const daytona = await createDaytonaClient();
-  const created = (await daytona.create({
-    snapshot: env.E2B_DAYTONA_SANDBOX_NAME || DEFAULT_DAYTONA_SNAPSHOT,
-    envVars: buildSandboxBootstrapEnv(config),
-  })) as DaytonaSandboxLike;
+  const created = await createDaytonaSandboxWithRetry(daytona, config);
 
   onLifecycle?.("sandbox_created", {
     conversationId: config.conversationId,

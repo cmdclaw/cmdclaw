@@ -1,5 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { getDaytonaClientConfig, isDaytonaConfigured } from "./daytona";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  getDaytonaClientConfig,
+  isDaytonaConfigured,
+  listDaytonaSandboxPages,
+  normalizeDaytonaListItems,
+} from "./daytona";
 
 const originalEnv = {
   DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
@@ -47,5 +52,28 @@ describe("daytona sandbox config", () => {
     expect(getDaytonaClientConfig()).toEqual({
       apiKey: "test-daytona-key",
     });
+  });
+});
+
+describe("daytona sandbox listing", () => {
+  it("normalizes legacy array and paginated list responses", () => {
+    expect(normalizeDaytonaListItems([{ id: "sbx-array" }])).toEqual([{ id: "sbx-array" }]);
+    expect(normalizeDaytonaListItems({ items: [{ id: "sbx-page" }] })).toEqual([
+      { id: "sbx-page" },
+    ]);
+  });
+
+  it("collects all paginated Daytona sandbox pages", async () => {
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [{ id: "sbx-1" }], totalPages: 2 })
+      .mockResolvedValueOnce({ items: [{ id: "sbx-2" }], totalPages: 2 });
+
+    await expect(listDaytonaSandboxPages({ list })).resolves.toEqual([
+      { id: "sbx-1" },
+      { id: "sbx-2" },
+    ]);
+    expect(list).toHaveBeenNthCalledWith(1, undefined, 1, 100);
+    expect(list).toHaveBeenNthCalledWith(2, undefined, 2, 100);
   });
 });
