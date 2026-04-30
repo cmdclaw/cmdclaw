@@ -7,6 +7,11 @@ describe("prepareEmailHtmlBody", () => {
     expect(result.html).toBe("Hello team<br>Thanks &amp; regards");
   });
 
+  it("converts escaped newline sequences to br", () => {
+    const result = prepareEmailHtmlBody("Hello team\\nThanks\\r\\nRegards\\rDone");
+    expect(result.html).toBe("Hello team<br>Thanks<br>Regards<br>Done");
+  });
+
   it("keeps allowed tags unchanged", () => {
     const input = "<p>Hello <strong>team</strong><br><i>Thanks</i></p>";
     const result = prepareEmailHtmlBody(input);

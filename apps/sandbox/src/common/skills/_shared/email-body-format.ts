@@ -47,6 +47,15 @@ function throwInvalidHtml(reason: string): never {
   throw new Error(`Invalid email body HTML: ${reason}. Allowed tags: ${ALLOWED_HTML_TAGS_TEXT}`);
 }
 
+function normalizeBodyNewlines(input: string): string {
+  return input
+    .replaceAll("\\r\\n", "\n")
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\r", "\n")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n");
+}
+
 export function prepareEmailHtmlBody(input: string): { html: string } {
   if (typeof input !== "string") {
     throwInvalidHtml("body must be a string");
@@ -60,7 +69,7 @@ export function prepareEmailHtmlBody(input: string): { html: string } {
     throwInvalidHtml("script/style tags are not allowed");
   }
 
-  const normalizedInput = input.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  const normalizedInput = normalizeBodyNewlines(input);
   const tags = extractHtmlTags(normalizedInput);
 
   if (tags.length === 0) {

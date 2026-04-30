@@ -18,6 +18,17 @@ describe("buildRawEmail", () => {
     expect(decoded).not.toContain("multipart/mixed");
   });
 
+  test("converts escaped newline sequences in plain text bodies", async () => {
+    const raw = await buildRawEmail({
+      body: "Hello team\\nThanks\\r\\nRegards",
+      subject: "Hello",
+      to: "user@example.com",
+    });
+
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    expect(decoded).toContain(Buffer.from("Hello team<br>Thanks<br>Regards").toString("base64"));
+  });
+
   test("builds a multipart email when attachment paths are provided", async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "gmail-attachment-"));
     const attachmentPath = path.join(tempDir, "report.pdf");
