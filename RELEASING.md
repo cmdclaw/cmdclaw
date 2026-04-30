@@ -3,7 +3,7 @@
 CmdClaw now uses one long-lived branch:
 
 - `main` is the only working branch.
-- Railway's GitHub integration should keep deploying `main` to `staging`.
+- Render should keep deploying `main` to `staging`.
 - `production` is deployed only from release tags.
 
 ## Tag format
@@ -34,8 +34,8 @@ The `Production Release` GitHub Actions workflow will:
 
 - validate the tag format
 - verify the tagged commit is on `main`
-- deploy the tagged commit to Railway `production`
-- deploy both the web and worker services from the same tag
+- run the production prerelease workflows
+- create the release tag used for production deployment
 
 ## Same-day follow-up release
 
@@ -57,24 +57,15 @@ Examples:
 
 ## Required GitHub secrets
 
-Set these repository secrets for the production release workflow:
+Set the repository secrets required by the production prerelease workflows.
+Deployment configuration is tracked in `render.yaml`, and service secrets should
+come from the Render environment groups described there.
 
-- `RAILWAY_TOKEN`
-- `RAILWAY_PROJECT_ID`
+## Required Render setup
 
-The workflow hardcodes:
+In Render:
 
-- Railway environment: `production`
-- web service: `cmdclaw web`
-- worker service: `cmdclaw worker`
-
-## Required Railway setup
-
-In Railway:
-
-- keep `staging` GitHub autodeploy enabled on `main`
-- disable `production` GitHub autodeploy so production only moves from tags
-
-The release workflow copies `apps/web/railway.web.toml` or `apps/worker/railway.worker.toml`
-into a temporary root `railway.toml` before each deploy, so both services deploy from the tagged
-commit using the repo's tracked Railway config.
+- keep staging deployment wired to `main`
+- keep production deployment controlled by release tags
+- use the services defined in `render.yaml`, including `cmdclaw-web-prod` and
+  `cmdclaw-worker-prod`

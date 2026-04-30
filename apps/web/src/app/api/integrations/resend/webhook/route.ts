@@ -17,8 +17,7 @@ export async function POST(request: Request) {
   const svixId = request.headers.get("svix-id") ?? "";
   const svixTimestamp = request.headers.get("svix-timestamp") ?? "";
   const svixSignature = request.headers.get("svix-signature") ?? "";
-  const requestId =
-    request.headers.get("x-request-id") ?? request.headers.get("x-railway-request-id");
+  const requestId = request.headers.get("x-request-id");
 
   console.info("[resend-webhook] received request", {
     requestId: requestId ?? null,

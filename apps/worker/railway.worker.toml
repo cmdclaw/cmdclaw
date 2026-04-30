@@ -1,8 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "docker/images/worker/Dockerfile"
-
-[deploy]
-startCommand = "bun dist/index.js"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
