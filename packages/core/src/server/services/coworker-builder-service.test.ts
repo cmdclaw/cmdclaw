@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
 
-const { syncCoworkerScheduleJobMock, generateCoworkerMetadataOnFirstPromptFillMock } = vi.hoisted(
-  () => ({
+const {
+  syncCoworkerScheduleJobMock,
+  generateCoworkerMetadataOnFirstPromptFillMock,
+  logServerEventMock,
+} = vi.hoisted(() => ({
   syncCoworkerScheduleJobMock: vi.fn(),
-    generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
-  }),
-);
+  generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
+  logServerEventMock: vi.fn(),
+}));
 
 vi.mock("./coworker-scheduler", () => ({
   syncCoworkerScheduleJob: syncCoworkerScheduleJobMock,
@@ -14,6 +17,10 @@ vi.mock("./coworker-scheduler", () => ({
 
 vi.mock("./coworker-metadata", () => ({
   generateCoworkerMetadataOnFirstPromptFill: generateCoworkerMetadataOnFirstPromptFillMock,
+}));
+
+vi.mock("../utils/observability", () => ({
+  logServerEvent: logServerEventMock,
 }));
 
 import {
@@ -175,6 +182,20 @@ describe("coworker-builder-service", () => {
         status: "on",
       },
     ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "selected",
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: [],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
 
     const result = await applyCoworkerEdit({
       database: db as never,
@@ -237,6 +258,20 @@ describe("coworker-builder-service", () => {
         status: "on",
       },
     ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "new prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
 
     const result = await applyCoworkerEdit({
       database: db as never,
@@ -253,6 +288,85 @@ describe("coworker-builder-service", () => {
     }
     expect(result.appliedChanges).toEqual(["prompt"]);
     expect(syncCoworkerScheduleJobMock).not.toHaveBeenCalled();
+  });
+
+  it("reports verification failure when the persisted row does not match the edit", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "new prompt",
+        model: "anthropic/claude-sonnet-4-6",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
+
+    const result = await applyCoworkerEdit({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      changes: { prompt: "new prompt" },
+    });
+
+    expect(result.status).toBe("validation_error");
+    if (result.status !== "validation_error") {
+      return;
+    }
+    expect(result.message).toBe("Coworker edit verification failed");
+    expect(result.details).toEqual(["prompt was not persisted after applying the edit"]);
+    expect(logServerEventMock).toHaveBeenCalledWith(
+      "error",
+      "COWORKER_EDIT_VERIFY_FAILED",
+      expect.objectContaining({
+        coworkerId: "wf-1",
+        changedFields: ["prompt"],
+        mismatchedFields: ["prompt"],
+      }),
+      expect.objectContaining({
+        source: "coworker-builder-service",
+        userId: "user-1",
+      }),
+    );
   });
 
   it("keeps legacy email forwarding coworkers editable", async () => {
@@ -289,6 +403,20 @@ describe("coworker-builder-service", () => {
         status: "on",
       },
     ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "new prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,
+      schedule: null,
+      allowedIntegrations: ["github"],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
 
     const result = await applyCoworkerEdit({
       database: db as never,
@@ -345,6 +473,20 @@ describe("coworker-builder-service", () => {
         status: "on",
       },
     ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "Sales Follow Up",
+      description: "Follows up with leads after calls.",
+      username: "sales-follow-up",
+      prompt: "new prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
 
     const result = await applyCoworkerEdit({
       database: db as never,
@@ -404,6 +546,20 @@ describe("coworker-builder-service", () => {
         status: "on",
       },
     ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "openai/gpt-5.2-codex",
+      toolAccessMode: "all",
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
 
     const result = await applyCoworkerEdit({
       database: db as never,

@@ -10,6 +10,7 @@ import {
   type CoworkerToolAccessMode,
 } from "../../lib/coworker-tool-policy";
 import { coworker } from "@cmdclaw/db/schema";
+import { logServerEvent } from "../utils/observability";
 
 const BUILDER_ALLOWED_TRIGGER_TYPES = [
   "manual",
@@ -154,6 +155,12 @@ const coworkerBuilderUpdatedRowSchema = z.object({
   status: z.enum(["on", "off"]),
 });
 
+const coworkerBuilderVerifiedRowSchema = coworkerBuilderUpdatedRowSchema.extend({
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
+});
+
 function normalizeIntegrations(input: string[]): string[] {
   const seen = new Set<string>();
   const output: string[] = [];
@@ -292,6 +299,93 @@ function buildChangedFields(params: {
     changed.push("allowedIntegrations");
   }
   return changed;
+}
+
+function sameSortedStrings(left: string[], right: string[]): boolean {
+  return JSON.stringify([...left].toSorted()) === JSON.stringify([...right].toSorted());
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function buildPersistedMismatchFields(params: {
+  changedFields: string[];
+  persisted: z.infer<typeof coworkerBuilderVerifiedRowSchema>;
+  next: {
+    name: string;
+    description: string | null;
+    username: string | null;
+    prompt: string;
+    model: string;
+    toolAccessMode: CoworkerToolAccessMode;
+    triggerType: string;
+    schedule: unknown;
+    allowedIntegrations: string[];
+  };
+}): string[] {
+  const mismatched: string[] = [];
+  const persistedToolAccessMode = normalizeCoworkerToolAccessMode(
+    params.persisted.toolAccessMode,
+    params.persisted.allowedIntegrations as string[],
+  );
+
+  for (const field of params.changedFields) {
+    switch (field) {
+      case "name":
+        if (params.persisted.name !== params.next.name) {
+          mismatched.push(field);
+        }
+        break;
+      case "description":
+        if ((params.persisted.description ?? null) !== params.next.description) {
+          mismatched.push(field);
+        }
+        break;
+      case "username":
+        if ((params.persisted.username ?? null) !== params.next.username) {
+          mismatched.push(field);
+        }
+        break;
+      case "prompt":
+        if (params.persisted.prompt !== params.next.prompt) {
+          mismatched.push(field);
+        }
+        break;
+      case "model":
+        if (params.persisted.model !== params.next.model) {
+          mismatched.push(field);
+        }
+        break;
+      case "toolAccessMode":
+        if (persistedToolAccessMode !== params.next.toolAccessMode) {
+          mismatched.push(field);
+        }
+        break;
+      case "triggerType":
+        if (params.persisted.triggerType !== params.next.triggerType) {
+          mismatched.push(field);
+        }
+        break;
+      case "schedule":
+        if (!sameJson(params.persisted.schedule ?? null, params.next.schedule)) {
+          mismatched.push(field);
+        }
+        break;
+      case "allowedIntegrations":
+        if (
+          !sameSortedStrings(
+            params.persisted.allowedIntegrations as string[],
+            params.next.allowedIntegrations,
+          )
+        ) {
+          mismatched.push(field);
+        }
+        break;
+    }
+  }
+
+  return mismatched;
 }
 
 export async function applyCoworkerEdit(params: {
@@ -549,18 +643,87 @@ export async function applyCoworkerEdit(params: {
     };
   }
 
+  const verifiedUnknown = await database.query.coworker.findFirst({
+    where: and(eq(coworker.id, updated.id), eq(coworker.ownerId, params.userId)),
+    columns: {
+      id: true,
+      name: true,
+      description: true,
+      username: true,
+      prompt: true,
+      model: true,
+      toolAccessMode: true,
+      triggerType: true,
+      schedule: true,
+      allowedIntegrations: true,
+      updatedAt: true,
+      status: true,
+    },
+  });
+
+  if (!verifiedUnknown) {
+    logServerEvent(
+      "error",
+      "COWORKER_EDIT_VERIFY_FAILED",
+      {
+        coworkerId: updated.id,
+        changedFields,
+        reason: "coworker_missing_after_update",
+      },
+      {
+        source: "coworker-builder-service",
+        userId: params.userId,
+      },
+    );
+    return {
+      status: "validation_error",
+      message: "Coworker edit verification failed",
+      details: ["Coworker could not be read after applying the edit."],
+    };
+  }
+
+  const verified = coworkerBuilderVerifiedRowSchema.parse(verifiedUnknown);
+  const mismatchedFields = buildPersistedMismatchFields({
+    changedFields,
+    persisted: verified,
+    next: nextState,
+  });
+  if (mismatchedFields.length > 0) {
+    logServerEvent(
+      "error",
+      "COWORKER_EDIT_VERIFY_FAILED",
+      {
+        coworkerId: updated.id,
+        changedFields,
+        mismatchedFields,
+        reason: "persisted_fields_mismatched",
+      },
+      {
+        source: "coworker-builder-service",
+        userId: params.userId,
+      },
+    );
+    return {
+      status: "validation_error",
+      message: "Coworker edit verification failed",
+      details: mismatchedFields.map(
+        (field) => `${field} was not persisted after applying the edit`,
+      ),
+    };
+  }
+
   if (changedFields.includes("triggerType") || changedFields.includes("schedule")) {
     try {
       const { syncCoworkerScheduleJob } = await import("./coworker-scheduler");
       await syncCoworkerScheduleJob({
-        id: updated.id,
-        status: updated.status,
-        triggerType: updated.triggerType,
-        schedule: updated.schedule,
+        id: verified.id,
+        status: verified.status,
+        triggerType: verified.triggerType,
+        schedule: verified.schedule,
       });
     } catch (error) {
       console.error(
-        `[coworker-builder] failed to sync scheduler after coworker edit (${updated.id})`,
+        `[coworker-builder] failed to sync scheduler after coworker edit (${verified.id})`,
         error,
       );
       throw new ORPCError("INTERNAL_SERVER_ERROR", {
@@ -572,14 +735,14 @@ export async function applyCoworkerEdit(params: {
   return {
     status: "applied",
     coworker: toBuilderContext({
-      id: updated.id,
-      prompt: updated.prompt,
-      model: updated.model,
-      toolAccessMode: updated.toolAccessMode,
-      triggerType: updated.triggerType,
-      schedule: updated.schedule,
-      allowedIntegrations: updated.allowedIntegrations as string[],
-      updatedAt: updated.updatedAt,
+      id: verified.id,
+      prompt: verified.prompt,
+      model: verified.model,
+      toolAccessMode: verified.toolAccessMode,
+      triggerType: verified.triggerType,
+      schedule: verified.schedule,
+      allowedIntegrations: verified.allowedIntegrations as string[],
+      updatedAt: verified.updatedAt,
     }),
     appliedChanges: changedFields,
   };
