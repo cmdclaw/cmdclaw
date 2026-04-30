@@ -2,11 +2,10 @@ global:
   resolve_timeout: 5m
 
 route:
-  receiver: slack-local
+  receiver: "null"
   group_by:
     - alertname
-    - service_name
-    - queue
+    - alertgroup
   group_wait: 30s
   group_interval: 10m
   repeat_interval: 4h
@@ -22,25 +21,4 @@ inhibit_rules:
       - queue
 
 receivers:
-  - name: slack-local
-    slack_configs:
-      - api_url: https://slack.com/api/chat.postMessage
-        channel: "#ops-telemetry-alerts"
-        http_config:
-          authorization:
-            credentials_file: /etc/alertmanager/secrets/slack_bot_token
-        send_resolved: true
-        username: CmdClaw Local
-        icon_emoji: ":rotating_light:"
-        title: >-
-          [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
-        text: >-
-          {{ range .Alerts -}}
-          *Summary:* {{ .Annotations.summary }}
-          *Description:* {{ .Annotations.description }}
-          *Severity:* {{ .Labels.severity }}
-          {{ if .Labels.service_name }}*Service:* {{ .Labels.service_name }}{{ end }}
-          {{ if .Labels.queue }}*Queue:* {{ .Labels.queue }}{{ end }}
-          {{ if .Annotations.dashboard_url }}*Dashboard:* {{ .Annotations.dashboard_url }}{{ end }}
-
-          {{ end -}}
+  - name: "null"

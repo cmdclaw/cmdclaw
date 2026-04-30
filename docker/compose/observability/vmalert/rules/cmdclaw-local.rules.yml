@@ -70,21 +70,27 @@ groups:
           description: The primary queue has been backed up for at least 15 minutes.
 
       - alert: VectorComponentErrors
-        expr: sum(increase(vector_component_errors_total[30m])) > 0
+        expr: |
+          sum by (component_id, component_type, component_kind) (
+            increase(vector_component_errors_total[30m])
+          ) > 100
         for: 10m
         labels:
           severity: warning
           service_name: vector
         annotations:
           summary: Vector is reporting component errors.
-          description: One or more Vector components have emitted internal errors in the last 30 minutes.
+          description: A Vector component has emitted more than 100 internal errors in the last 30 minutes.
 
       - alert: VectorDroppedEvents
-        expr: sum(increase(vector_component_discarded_events_total{intentional="false"}[30m])) > 0
+        expr: |
+          sum by (component_id, component_type, component_kind) (
+            increase(vector_component_discarded_events_total{intentional="false"}[30m])
+          ) > 50
         for: 10m
         labels:
           severity: warning
           service_name: vector
         annotations:
           summary: Vector has dropped unintentional events.
-          description: Vector has discarded telemetry because of an error in the last 30 minutes.
+          description: A Vector component has discarded more than 50 telemetry events because of errors in the last 30 minutes.

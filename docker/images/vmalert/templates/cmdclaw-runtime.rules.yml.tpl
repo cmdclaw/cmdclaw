@@ -1,5 +1,5 @@
 groups:
-  - name: cmdclaw-staging-runtime
+  - name: cmdclaw-__CMDCLAW_ALERT_ENV__-runtime
     interval: 30s
     rules:
       - alert: CmdClawWebDown
@@ -10,7 +10,7 @@ groups:
           service_name: cmdclaw-web
         annotations:
           summary: CmdClaw web runtime has stopped exporting telemetry.
-          description: The staging web process has not reported cmdclaw_runtime_up for 10 minutes.
+          description: The __CMDCLAW_ALERT_ENV__ web process has not reported cmdclaw_runtime_up for 10 minutes.
 
       - alert: CmdClawWorkerDown
         expr: absent_over_time(cmdclaw_runtime_up{service_name="cmdclaw-worker"}[10m])
@@ -20,7 +20,7 @@ groups:
           service_name: cmdclaw-worker
         annotations:
           summary: CmdClaw worker runtime has stopped exporting telemetry.
-          description: The staging worker process has not reported cmdclaw_runtime_up for 10 minutes.
+          description: The __CMDCLAW_ALERT_ENV__ worker process has not reported cmdclaw_runtime_up for 10 minutes.
 
       - alert: CmdClawRpcErrorRateElevated
         expr: |
@@ -70,21 +70,27 @@ groups:
           description: The primary queue has been backed up for at least 15 minutes.
 
       - alert: VectorComponentErrors
-        expr: sum(increase(vector_component_errors_total[30m])) > 0
+        expr: |
+          sum by (component_id, component_type, component_kind) (
+            increase(vector_component_errors_total[30m])
+          ) > 100
         for: 10m
         labels:
           severity: warning
           service_name: vector
         annotations:
           summary: Vector is reporting component errors.
-          description: One or more Vector components have emitted internal errors in the last 30 minutes.
+          description: A Vector component has emitted more than 100 internal errors in the last 30 minutes.
 
       - alert: VectorDroppedEvents
-        expr: sum(increase(vector_component_discarded_events_total{intentional="false"}[30m])) > 0
+        expr: |
+          sum by (component_id, component_type, component_kind) (
+            increase(vector_component_discarded_events_total{intentional="false"}[30m])
+          ) > 50
         for: 10m
         labels:
           severity: warning
           service_name: vector
         annotations:
           summary: Vector has dropped unintentional events.
-          description: Vector has discarded telemetry because of an error in the last 30 minutes.
+          description: A Vector component has discarded more than 50 telemetry events because of errors in the last 30 minutes.

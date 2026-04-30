@@ -2,11 +2,10 @@ global:
   resolve_timeout: 5m
 
 route:
-  receiver: slack-staging
+  receiver: __CMDCLAW_ALERT_RECEIVER__
   group_by:
     - alertname
-    - service_name
-    - queue
+    - alertgroup
   group_wait: 30s
   group_interval: 10m
   repeat_interval: 4h
@@ -22,7 +21,7 @@ inhibit_rules:
       - queue
 
 receivers:
-  - name: slack-staging
+  - name: __CMDCLAW_ALERT_RECEIVER__
     slack_configs:
       - api_url: https://slack.com/api/chat.postMessage
         channel: "#ops-telemetry-alerts"
@@ -30,7 +29,7 @@ receivers:
           authorization:
             credentials_file: /etc/alertmanager/secrets/slack_bot_token
         send_resolved: true
-        username: CmdClaw Staging
+        username: __CMDCLAW_ALERT_USERNAME__
         icon_emoji: ":rotating_light:"
         title: >-
           [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
@@ -39,8 +38,10 @@ receivers:
           *Summary:* {{ .Annotations.summary }}
           *Description:* {{ .Annotations.description }}
           *Severity:* {{ .Labels.severity }}
+          *Environment:* __CMDCLAW_ALERT_ENV__
           {{ if .Labels.service_name }}*Service:* {{ .Labels.service_name }}{{ end }}
           {{ if .Labels.queue }}*Queue:* {{ .Labels.queue }}{{ end }}
+          {{ if .Labels.component_id }}*Component:* {{ .Labels.component_id }}{{ end }}
           {{ if .Annotations.dashboard_url }}*Dashboard:* {{ .Annotations.dashboard_url }}{{ end }}
 
           {{ end -}}

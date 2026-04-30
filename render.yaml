@@ -244,6 +244,9 @@ projects:
               name: cmdclaw-alertmanager-data
               mountPath: /alertmanager
               sizeGB: 1
+            envVars:
+              - key: CMDCLAW_ALERT_ENV
+                value: staging
 
           - type: pserv
             name: cmdclaw-vmalert-staging
@@ -254,6 +257,8 @@ projects:
             dockerContext: docker/images/vmalert
             dockerfilePath: docker/images/vmalert/Dockerfile
             envVars:
+              - key: CMDCLAW_ALERT_ENV
+                value: staging
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
                   type: pserv
@@ -639,6 +644,9 @@ projects:
               name: cmdclaw-alertmanager-data-prod
               mountPath: /alertmanager
               sizeGB: 2
+            envVars:
+              - key: CMDCLAW_ALERT_ENV
+                value: prod
 
           - type: pserv
             name: cmdclaw-vmalert-prod
@@ -649,6 +657,8 @@ projects:
             dockerContext: docker/images/vmalert
             dockerfilePath: docker/images/vmalert/Dockerfile
             envVars:
+              - key: CMDCLAW_ALERT_ENV
+                value: prod
               - key: CMDCLAW_VICTORIA_METRICS_HOST
                 fromService:
                   type: pserv

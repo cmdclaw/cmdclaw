@@ -251,23 +251,34 @@ const handlers: Record<string, JobHandler> = {
   },
 };
 
-async function handleScheduledCoworkerJob(job: Parameters<JobHandler>[0]) {
+export async function handleScheduledCoworkerJob(job: Parameters<JobHandler>[0]) {
   const coworkerId = job.data?.coworkerId;
   if (!coworkerId || typeof coworkerId !== "string") {
     throw new Error(`Missing coworkerId in scheduled job "${job.id}"`);
   }
 
-  const scheduleType = typeof job.data?.scheduleType === "string" ? job.data.scheduleType : "unknown";
+  const scheduleType =
+    typeof job.data?.scheduleType === "string" ? job.data.scheduleType : "unknown";
 
-  return triggerCoworkerRun({
-    coworkerId,
-    triggerPayload: {
-      source: "schedule",
+  try {
+    return await triggerCoworkerRun({
       coworkerId,
-      scheduleType,
-      scheduledFor: new Date().toISOString(),
-    },
-  });
+      triggerPayload: {
+        source: "schedule",
+        coworkerId,
+        scheduleType,
+        scheduledFor: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    if (isActiveCoworkerRunConflict(error)) {
+      console.warn(
+        `[worker] skipped scheduled coworker trigger because run is already active for coworker ${coworkerId}`,
+      );
+      return;
+    }
+    throw error;
+  }
 }
 
 const processor: Processor<JobPayload, unknown, string> = async (job) => {

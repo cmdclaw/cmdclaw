@@ -53,13 +53,18 @@ labels such as `instanceId` and `worktreeSlot`, not by separate Grafana
 datasources. `vmalert` rules also live in the repo under
 `docker/compose/observability/vmalert/rules/`.
 
-To send Slack notifications from local alerts, set:
+Local Alertmanager intentionally routes alerts to a null receiver so worktree
+alerts do not post into shared Slack channels. Use the local Alertmanager,
+vmalert, Grafana, and Victoria endpoints directly when debugging local
+telemetry.
+
+Hosted staging and production alert images post directly to
+`#ops-telemetry-alerts` using Slack's `chat.postMessage` API. The hosted images
+use `CMDCLAW_ALERT_ENV` to render staging or prod labels:
 
 ```bash
-export SLACK_BOT_TOKEN='xoxb-...'
+export CMDCLAW_ALERT_ENV=staging # or prod
 ```
-
-Alertmanager will post directly to `#ops-telemetry-alerts` using Slack's `chat.postMessage` API.
 
 Useful direct queries after `bun run dev` is producing traffic:
 
