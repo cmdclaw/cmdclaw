@@ -3166,9 +3166,8 @@ function matchesProcessTarget(metadata: InstanceMetadata, target: string): boole
   );
 }
 
-async function stopProcessTarget(target: string): Promise<void> {
-  const repoRoot = resolveRepoRoot();
-  const matches = listKnownWorktreeMetadata(repoRoot).filter((metadata) =>
+function resolveProcessTarget(metadataList: InstanceMetadata[], target: string): InstanceMetadata {
+  const matches = metadataList.filter((metadata) =>
     matchesProcessTarget(metadata, target),
   );
 
@@ -3182,7 +3181,33 @@ async function stopProcessTarget(target: string): Promise<void> {
     fail(`Multiple worktrees matched "${target}". Use the full instance id or repo path.`);
   }
 
-  await stopInstance(matches[0]);
+  return matches[0];
+}
+
+async function stopProcessTargets(targets: string[]): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const metadataList = listKnownWorktreeMetadata(repoRoot);
+  const seenInstanceIds = new Set<string>();
+  const selectedMetadata: InstanceMetadata[] = [];
+
+  for (const target of targets) {
+    const metadata = resolveProcessTarget(metadataList, target);
+    if (seenInstanceIds.has(metadata.instanceId)) {
+      continue;
+    }
+
+    seenInstanceIds.add(metadata.instanceId);
+    selectedMetadata.push(metadata);
+  }
+
+  for (const metadata of selectedMetadata) {
+    console.log(
+      `[worktree] stopping ${metadata.instanceId} (slot ${formatWorktreeStackSlot(
+        metadata.stackSlot,
+      )}, port ${metadata.appPort})`,
+    );
+    await stopInstance(metadata);
+  }
 }
 
 async function stopAllProcessTargets(): Promise<void> {
@@ -3323,19 +3348,23 @@ async function showProcesses(args: string[]): Promise<void> {
   const command = args[0] === "list" ? "list" : args[0];
   const commandArgs = args[0] === "list" ? args.slice(1) : args.slice(1);
   if (command === "stop") {
-    const target = commandArgs[0];
-    if (!target) {
+    const targets = commandArgs[0] === "slot" ? commandArgs.slice(1) : commandArgs;
+    if (targets.length === 0) {
       fail(
-        'Usage: bun run worktree:processes stop <all|instance-id|slot|app-port|repo-root>',
+        'Usage: bun run worktree:processes stop <all|slot|instance-id|app-port|repo-root> [...]',
       );
     }
 
-    if (target === "all") {
+    if (targets.includes("all")) {
+      if (targets.length > 1) {
+        fail('Usage: "all" must be the only target: bun run worktree:processes stop all');
+      }
+
       await stopAllProcessTargets();
       return;
     }
 
-    await stopProcessTarget(target);
+    await stopProcessTargets(targets);
     return;
   }
 
@@ -3383,7 +3412,9 @@ async function showProcesses(args: string[]): Promise<void> {
     );
     console.log(`  app:  ${metadata.appUrl}`);
     console.log(`  repo: ${metadata.repoRoot}`);
-    console.log(`  stop: bun run worktree:processes stop ${metadata.instanceId}`);
+    console.log(
+      `  stop: bun run worktree:processes stop ${formatWorktreeStackSlot(metadata.stackSlot)}`,
+    );
 
     if (entries.length === 0) {
       console.log("  services: none tracked");
