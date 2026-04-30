@@ -978,6 +978,23 @@ async function ensureDaytonaAgentReady(
       sandboxId: sandbox.id,
       port: getSandboxServerPort(config.model),
     });
+    const startResult = await sandbox.process.executeCommand(
+      getSandboxServerBackgroundStartCommand({
+        sandboxId: sandbox.id,
+        model: config.model,
+      }),
+      "/app",
+      undefined,
+      10,
+    );
+    const startExitCode = startResult.exitCode ?? 0;
+    if (startExitCode !== 0) {
+      throw new Error(
+        `OpenCode server start failed (exit=${startExitCode}): ${
+          startResult.stderr || startResult.stdout || startResult.result || "unknown error"
+        }`,
+      );
+    }
     onLifecycle?.("opencode_waiting_ready", {
       conversationId: config.conversationId,
       sandboxId: sandbox.id,
