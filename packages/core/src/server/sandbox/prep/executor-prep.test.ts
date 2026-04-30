@@ -161,7 +161,11 @@ describe("prepareExecutorInSandbox", () => {
     });
 
     expect(result?.sourceCount).toBe(1);
-    expect(await result?.finalize()).toEqual({ oauthCacheHits: 0 });
+    expect(await result?.finalize()).toEqual({
+      oauthCacheHits: 0,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: [],
+    });
 
     expect(sandbox.ensureDir).toHaveBeenCalledWith(EXECUTOR_HOME);
     expect(sandbox.ensureDir).toHaveBeenCalledWith(EXECUTOR_SCOPE_DIR);
@@ -326,6 +330,34 @@ describe("prepareExecutorInSandbox", () => {
 
   it("reconciles native MCP OAuth sources through scoped secrets and MCP patch/refresh endpoints", async () => {
     const sandbox = makeSandboxHandle();
+    getWorkspaceExecutorBootstrapMock.mockResolvedValue({
+      revisionHash: "rev-1",
+      configJson: `${JSON.stringify({
+        workspace: { name: "Workspace" },
+        sources: {
+          "source-1": {
+            kind: "mcp",
+            name: "Linear",
+            namespace: "linear",
+            enabled: true,
+            config: {
+              endpoint: "https://mcp.linear.app/mcp",
+              transport: "streamable-http",
+            },
+          },
+        },
+      })}\n`,
+      workspaceStateJson: "{}",
+      sources: [
+        {
+          id: "source-1",
+          namespace: "linear",
+          kind: "mcp",
+          name: "Linear",
+          connected: true,
+        },
+      ],
+    });
     getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
       {
         sourceId: "source-1",
@@ -407,8 +439,14 @@ describe("prepareExecutorInSandbox", () => {
     ).toBe(true);
     expect(
       vi.mocked(sandbox.exec).mock.calls.some(([command]) =>
-        command.includes('"headerName":"Authorization"') &&
-        command.includes('"kind":"header"'),
+        command.includes('"headers":{"Authorization":"Bearer oauth-access"}'),
+      ),
+    ).toBe(true);
+    expect(
+      vi.mocked(sandbox.writeFile).mock.calls.some(
+        ([path, content]) =>
+          path === EXECUTOR_CONFIG_PATH &&
+          String(content).includes('"Authorization": "Bearer oauth-access"'),
       ),
     ).toBe(true);
   });
@@ -587,6 +625,223 @@ describe("prepareExecutorInSandbox", () => {
     ).toBe(2);
   });
 
+  it("serializes MCP source refresh requests across multiple oauth sources", async () => {
+    const sandbox = makeSandboxHandle();
+    let activeRefreshCount = 0;
+    let maxConcurrentRefreshes = 0;
+
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      {
+        sourceId: "source-1",
+        namespace: "attio",
+        name: "Attio",
+        endpoint: "https://mcp.attio.com/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "attio-access",
+          refreshToken: null,
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "read",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://mcp.attio.com",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+      {
+        sourceId: "source-2",
+        namespace: "linear",
+        name: "Linear",
+        endpoint: "https://mcp.linear.app/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "linear-access",
+          refreshToken: null,
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "read",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://mcp.linear.app",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+    ]);
+
+    vi.mocked(sandbox.exec).mockImplementation(async (command) => {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
+        const secretIdMatch = command.match(/"id":"([^"]+)"/);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ id: secretIdMatch?.[1] ?? "secret-id" }),
+          stderr: "",
+        };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/") && matchCommand(command, "-X PATCH")) {
+        return { exitCode: 0, stdout: '{"updated":true}', stderr: "" };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        activeRefreshCount += 1;
+        maxConcurrentRefreshes = Math.max(maxConcurrentRefreshes, activeRefreshCount);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeRefreshCount -= 1;
+        return { exitCode: 0, stdout: '{"toolCount":1}', stderr: "" };
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+
+    const result = await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    await result?.finalize();
+
+    expect(maxConcurrentRefreshes).toBe(1);
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/mcp/sources/refresh"))
+        .length,
+    ).toBe(2);
+  });
+
+  it("continues refreshing other MCP OAuth sources when one refresh fails", async () => {
+    const sandbox = makeSandboxHandle();
+    getWorkspaceExecutorNativeMcpOAuthBootstrapSourcesMock.mockResolvedValue([
+      {
+        sourceId: "source-1",
+        namespace: "attio",
+        name: "Attio",
+        endpoint: "https://mcp.attio.com/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "attio-access",
+          refreshToken: null,
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "read",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://mcp.attio.com",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+      {
+        sourceId: "source-2",
+        namespace: "github",
+        name: "GitHub",
+        endpoint: "https://api.githubcopilot.com/mcp",
+        transport: "streamable-http",
+        queryParams: null,
+        credential: {
+          accessToken: "github-access",
+          refreshToken: null,
+          expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          metadata: {
+            tokenType: "Bearer",
+            scope: "repo",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: "https://github.com",
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+        },
+      },
+    ]);
+
+    vi.mocked(sandbox.exec).mockImplementation(async (command) => {
+      if (matchCommand(command, "/api/scopes/scope-1/secrets")) {
+        const secretIdMatch = command.match(/"id":"([^"]+)"/);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ id: secretIdMatch?.[1] ?? "secret-id" }),
+          stderr: "",
+        };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/") && matchCommand(command, "-X PATCH")) {
+        return { exitCode: 0, stdout: '{"updated":true}', stderr: "" };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh") && command.includes('"attio"')) {
+        return { exitCode: 22, stdout: "", stderr: "curl: (22) The requested URL returned error: 500" };
+      }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return { exitCode: 0, stdout: '{"toolCount":1}', stderr: "" };
+      }
+      if (matchCommand(command, "-X GET 'http://127.0.0.1:8788/api/scope'")) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(EXECUTOR_SCOPE_INFO),
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+
+    const result = await prepareExecutorInSandbox({
+      sandbox,
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      userId: "user-1",
+    });
+
+    expect(await result?.finalize()).toEqual({
+      oauthCacheHits: 0,
+      oauthRefreshFailures: [
+        expect.objectContaining({
+          sourceId: "source-1",
+          namespace: "attio",
+          error: expect.stringContaining("Executor MCP source refresh (attio) failed"),
+        }),
+      ],
+      oauthSourceStatuses: expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "source-1",
+          namespace: "attio",
+          status: "unavailable",
+          reason: "refresh_failed",
+        }),
+        expect.objectContaining({
+          sourceId: "source-2",
+          namespace: "github",
+          status: "available",
+          toolCount: 1,
+        }),
+      ]),
+    });
+    expect(
+      vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/mcp/sources/refresh"))
+        .length,
+    ).toBe(2);
+    expect(vi.mocked(sandbox.writeFile).mock.calls.at(-1)?.[1]).toContain("source-2");
+    expect(vi.mocked(sandbox.writeFile).mock.calls.at(-1)?.[1]).not.toContain("source-1");
+  });
+
   it("returns prompt-ready executor bootstrap before oauth reconcile finishes", async () => {
     const sandbox = makeSandboxHandle();
     const accessSecretDeferred = createDeferred<{ exitCode: number; stdout: string; stderr: string }>();
@@ -659,11 +914,22 @@ describe("prepareExecutorInSandbox", () => {
     accessSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-access"}', stderr: "" });
     refreshSecretDeferred.resolve({ exitCode: 0, stdout: '{"id":"sec-refresh"}', stderr: "" });
 
-    await expect(finalizePromise).resolves.toEqual({ oauthCacheHits: 0 });
+    await expect(finalizePromise).resolves.toEqual({
+      oauthCacheHits: 0,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: [
+        expect.objectContaining({
+          sourceId: "source-1",
+          namespace: "linear",
+          status: "available",
+          toolCount: 1,
+        }),
+      ],
+    });
     expect(finalizeSettled).toBe(true);
   });
 
-  it("skips oauth reconciliation for unchanged credentials on reused runtimes", async () => {
+  it("refreshes unchanged oauth sources on reused runtimes without rewriting secrets", async () => {
     const sandbox = makeSandboxHandle();
     const unchangedSource = {
       sourceId: "source-1",
@@ -706,6 +972,9 @@ describe("prepareExecutorInSandbox", () => {
           stderr: "",
         };
       }
+      if (matchCommand(command, "/api/scopes/scope-1/mcp/sources/refresh")) {
+        return { exitCode: 0, stdout: '{"toolCount":1}', stderr: "" };
+      }
       return { exitCode: 0, stdout: "", stderr: "" };
     });
 
@@ -717,7 +986,18 @@ describe("prepareExecutorInSandbox", () => {
       reuseExistingState: true,
     });
 
-    expect(await result?.finalize()).toEqual({ oauthCacheHits: 1 });
+    expect(await result?.finalize()).toEqual({
+      oauthCacheHits: 1,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: [
+        expect.objectContaining({
+          sourceId: "source-1",
+          namespace: "linear",
+          status: "available",
+          toolCount: 1,
+        }),
+      ],
+    });
     expect(vi.mocked(sandbox.readFile)).toHaveBeenCalledWith(
       "/tmp/cmdclaw-executor/default/oauth-reconcile-cache.json",
     );
@@ -729,7 +1009,7 @@ describe("prepareExecutorInSandbox", () => {
     ).toBe(false);
     expect(
       vi.mocked(sandbox.exec).mock.calls.some(([command]) => command.includes("/mcp/sources/refresh")),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("reconciles only changed oauth sources on reused runtimes", async () => {
@@ -827,7 +1107,24 @@ describe("prepareExecutorInSandbox", () => {
       reuseExistingState: true,
     });
 
-    expect(await result?.finalize()).toEqual({ oauthCacheHits: 1 });
+    expect(await result?.finalize()).toEqual({
+      oauthCacheHits: 1,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "source-1",
+          namespace: "linear",
+          status: "available",
+          toolCount: 1,
+        }),
+        expect.objectContaining({
+          sourceId: "source-2",
+          namespace: "github",
+          status: "available",
+          toolCount: 1,
+        }),
+      ]),
+    });
     expect(
       vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/api/scopes/scope-1/secrets"))
         .length,
@@ -839,7 +1136,7 @@ describe("prepareExecutorInSandbox", () => {
     expect(
       vi.mocked(sandbox.exec).mock.calls.filter(([command]) => command.includes("/mcp/sources/refresh"))
         .length,
-    ).toBe(1);
+    ).toBe(2);
   });
 
   it("skips native MCP OAuth reconciliation when no credential is available", async () => {
@@ -882,7 +1179,17 @@ describe("prepareExecutorInSandbox", () => {
       workspaceName: "Workspace",
       userId: "user-1",
     });
-    expect(await result?.finalize()).toEqual({ oauthCacheHits: 0 });
+    expect(await result?.finalize()).toEqual({
+      oauthCacheHits: 0,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: [
+        expect.objectContaining({
+          sourceId: "source-1",
+          status: "needs_reconnect",
+          reason: "needs_reconnect",
+        }),
+      ],
+    });
 
     expect(sandbox.exec).toHaveBeenCalledTimes(4);
   });
@@ -921,7 +1228,11 @@ describe("prepareExecutorInSandbox", () => {
         phases.push(`${phase}:${status}`);
       },
     });
-    expect(await result?.finalize()).toEqual({ oauthCacheHits: 0 });
+    expect(await result?.finalize()).toEqual({
+      oauthCacheHits: 0,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: [],
+    });
 
     expect(phases).toEqual([
       "bootstrap_load:started",

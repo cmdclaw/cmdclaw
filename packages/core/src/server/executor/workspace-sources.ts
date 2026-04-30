@@ -698,13 +698,13 @@ export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: 
     credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
   );
 
-  return sources
+  const oauthSources = sources
     .filter(
       (source) =>
         source.kind === "mcp" &&
         source.authType === "oauth2",
     )
-    .map((source) => {
+    .map(async (source) => {
       const credential = credentialBySourceId.get(source.id);
       return {
         sourceId: source.id,
@@ -716,9 +716,15 @@ export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: 
         credential:
           credential?.enabled === false
             ? null
-            : readStoredExecutorSourceOauthCredential(source, credential),
+            : await getHydratedExecutorSourceOauthCredential({
+                database,
+                source,
+                credential,
+              }),
       };
     });
+
+  return Promise.all(oauthSources);
 }
 
 export async function rebuildWorkspaceExecutorPackage(input: {

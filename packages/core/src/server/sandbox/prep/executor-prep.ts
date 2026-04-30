@@ -19,7 +19,7 @@ const DEFAULT_EXECUTOR_TRACE_SERVICE_NAME = "cmdclaw-sandbox-executor";
 const EXECUTOR_OAUTH_CACHE_PATH = "oauth-reconcile-cache.json";
 const EXECUTOR_OAUTH_SECRET_CONCURRENCY = 3;
 const EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY = 1;
-const EXECUTOR_OAUTH_REFRESH_CONCURRENCY = 3;
+const EXECUTOR_OAUTH_REFRESH_CONCURRENCY = 1;
 const EXECUTOR_SANDBOX_SECRET_PROVIDER = "file";
 
 type LegacyExecutorSourceKind = "mcp" | "openapi";
@@ -207,7 +207,11 @@ export type ExecutorSandboxBootstrap = {
 };
 
 export type ExecutorSandboxPreparation = ExecutorSandboxBootstrap & {
-  finalize: () => Promise<{ oauthCacheHits: number }>;
+  finalize: () => Promise<{
+    oauthCacheHits: number;
+    oauthRefreshFailures: ExecutorOauthRefreshFailure[];
+    oauthSourceStatuses: ExecutorOauthSourceStatus[];
+  }>;
 };
 
 export type ExecutorPreparePhase =
@@ -222,6 +226,37 @@ type ExecutorOauthCacheRecord = {
   version: 1;
   sources: Record<string, string>;
 };
+
+export type ExecutorOauthRefreshFailure = {
+  sourceId: string;
+  name: string;
+  namespace: string;
+  reason: ExecutorOauthSourceUnavailableReason;
+  error: string;
+};
+
+export type ExecutorOauthSourceUnavailableReason =
+  | "refresh_failed"
+  | "needs_reconnect"
+  | "zero_tools";
+
+export type ExecutorOauthSourceStatus =
+  | {
+      sourceId: string;
+      name: string;
+      namespace: string;
+      status: "available";
+      toolCount: number | null;
+    }
+  | {
+      sourceId: string;
+      name: string;
+      namespace: string;
+      status: "unavailable" | "needs_reconnect";
+      reason: ExecutorOauthSourceUnavailableReason;
+      toolCount: number | null;
+      error: string;
+    };
 
 function isCommandExitErrorLike(
   error: unknown,
@@ -278,6 +313,16 @@ function parseJsonResult<T>(value: string, label: string): T {
       `${label} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function classifyRefreshFailure(error: string): ExecutorOauthSourceUnavailableReason {
+  return /\b(401|403|invalid_grant|unauthorized|forbidden)\b/i.test(error)
+    ? "needs_reconnect"
+    : "refresh_failed";
 }
 
 function executorOauthCacheFilePath(homeDirectory: string): string {
@@ -470,10 +515,7 @@ async function upsertExecutorScopedSecret(input: {
   return secret.id;
 }
 
-function buildNativeMcpOauthHeaderAuth(
-  source: WorkspaceExecutorNativeMcpOauthBootstrapSource,
-  accessTokenSecretId: string,
-) {
+function buildNativeMcpOauthHeaders(source: WorkspaceExecutorNativeMcpOauthBootstrapSource) {
   if (!source.credential) {
     throw new Error(`Missing OAuth credential for source ${source.sourceId}`);
   }
@@ -482,15 +524,71 @@ function buildNativeMcpOauthHeaderAuth(
   const normalizedPrefix =
     tokenType && tokenType.length > 0
       ? tokenType.toLowerCase() === "bearer"
-        ? "Bearer "
-        : `${tokenType} `
-      : "Bearer ";
+        ? "Bearer"
+        : tokenType
+      : "Bearer";
+
   return {
-    kind: "header" as const,
-    headerName: "Authorization",
-    secretId: accessTokenSecretId,
-    prefix: normalizedPrefix,
+    Authorization: `${normalizedPrefix} ${source.credential.accessToken}`,
   };
+}
+
+async function writeNativeMcpOauthHeadersToConfig(input: {
+  sandbox: SandboxHandle;
+  configJson: string;
+  sources: WorkspaceExecutorNativeMcpOauthBootstrapSource[];
+}) {
+  const headersByNamespace = new Map(
+    input.sources
+      .filter((source) => Boolean(source.credential))
+      .map((source) => [source.namespace, buildNativeMcpOauthHeaders(source)]),
+  );
+  if (headersByNamespace.size === 0) {
+    return;
+  }
+
+  const config = parseJsonResult<{ sources?: unknown }>(
+    input.configJson,
+    "Executor config",
+  );
+  if (!Array.isArray(config.sources)) {
+    throw new Error("Executor config is missing a sources array.");
+  }
+
+  let changed = false;
+  const sources = config.sources.map((source) => {
+    if (!source || typeof source !== "object") {
+      return source;
+    }
+
+    const record = source as Record<string, unknown>;
+    const namespace = typeof record.namespace === "string" ? record.namespace : null;
+    const headers = namespace ? headersByNamespace.get(namespace) : null;
+    if (!headers) {
+      return source;
+    }
+
+    changed = true;
+    const existingHeaders = isStringRecord(record.headers as Record<string, unknown> | null | undefined)
+      ? (record.headers as Record<string, string>)
+      : {};
+    return {
+      ...record,
+      headers: {
+        ...existingHeaders,
+        ...headers,
+      },
+    };
+  });
+
+  if (!changed) {
+    return;
+  }
+
+  await input.sandbox.writeFile(
+    EXECUTOR_CONFIG_PATH,
+    `${JSON.stringify({ ...config, sources }, null, 2)}\n`,
+  );
 }
 
 async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
@@ -499,8 +597,13 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
   scopeId: string;
   sources: WorkspaceExecutorNativeMcpOauthBootstrapSource[];
   homeDirectory: string;
+  configJson: string;
   reuseExistingState?: boolean;
-}): Promise<{ cacheHits: number }> {
+}): Promise<{
+  cacheHits: number;
+  refreshFailures: ExecutorOauthRefreshFailure[];
+  sourceStatuses: ExecutorOauthSourceStatus[];
+}> {
   const existingCache = input.reuseExistingState
     ? await readExecutorOauthCache(input.sandbox, input.homeDirectory)
     : null;
@@ -522,6 +625,21 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     );
 
   let cacheHits = 0;
+  const sourceStatusById = new Map<string, ExecutorOauthSourceStatus>();
+  for (const source of input.sources) {
+    if (!source.credential) {
+      sourceStatusById.set(source.sourceId, {
+        sourceId: source.sourceId,
+        name: source.name,
+        namespace: source.namespace,
+        status: "needs_reconnect",
+        reason: "needs_reconnect",
+        toolCount: null,
+        error: "No OAuth credential is available for this source.",
+      });
+    }
+  }
+
   const sourcesToReconcile = pendingSources.filter((entry) => {
     const cachedFingerprint = existingCache?.sources[entry.source.sourceId];
     if (input.reuseExistingState && cachedFingerprint === entry.fingerprint) {
@@ -538,6 +656,12 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     refreshTokenSecretId: string | null;
   };
   const preparedSources: PreparedSource[] = new Array(sourcesToReconcile.length);
+
+  await writeNativeMcpOauthHeadersToConfig({
+    sandbox: input.sandbox,
+    configJson: input.configJson,
+    sources: pendingSources.map((entry) => entry.source),
+  });
 
   await mapWithConcurrency(
     sourcesToReconcile,
@@ -585,13 +709,14 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     preparedSources,
     EXECUTOR_OAUTH_CONFIG_MUTATION_CONCURRENCY,
     async (entry) => {
+      const headers = buildNativeMcpOauthHeaders(entry.source);
       await executorApiRequestJson<{ updated?: boolean }>({
         sandbox: input.sandbox,
         env: input.env,
         method: "PATCH",
         path: `/api/scopes/${encodeURIComponent(input.scopeId)}/mcp/sources/${encodeURIComponent(entry.source.namespace)}`,
         payload: {
-          auth: buildNativeMcpOauthHeaderAuth(entry.source, entry.accessTokenSecretId),
+          headers,
         },
         timeoutMs: 30_000,
         label: `Executor MCP source update (${entry.source.namespace})`,
@@ -599,22 +724,74 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     },
   );
 
+  const refreshFailures: ExecutorOauthRefreshFailure[] = [];
+
   await mapWithConcurrency(
-    preparedSources,
+    pendingSources,
     EXECUTOR_OAUTH_REFRESH_CONCURRENCY,
     async (entry) => {
-      await executorApiRequestJson<{ toolCount?: number }>({
-        sandbox: input.sandbox,
-        env: input.env,
-        method: "POST",
-        path: `/api/scopes/${encodeURIComponent(input.scopeId)}/mcp/sources/refresh`,
-        payload: {
+      try {
+        const refresh = await executorApiRequestJson<{ toolCount?: number }>({
+          sandbox: input.sandbox,
+          env: input.env,
+          method: "POST",
+          path: `/api/scopes/${encodeURIComponent(input.scopeId)}/mcp/sources/refresh`,
+          payload: {
+            namespace: entry.source.namespace,
+          },
+          timeoutMs: 30_000,
+          label: `Executor MCP source refresh (${entry.source.namespace})`,
+        });
+        const toolCount = typeof refresh.toolCount === "number" ? refresh.toolCount : null;
+        if (toolCount === 0) {
+          delete nextCache.sources[entry.source.sourceId];
+          sourceStatusById.set(entry.source.sourceId, {
+            sourceId: entry.source.sourceId,
+            name: entry.source.name,
+            namespace: entry.source.namespace,
+            status: "unavailable",
+            reason: "zero_tools",
+            toolCount,
+            error: "The source refreshed successfully but exposed 0 tools.",
+          });
+          refreshFailures.push({
+            sourceId: entry.source.sourceId,
+            name: entry.source.name,
+            namespace: entry.source.namespace,
+            reason: "zero_tools",
+            error: "The source refreshed successfully but exposed 0 tools.",
+          });
+          return;
+        }
+        nextCache.sources[entry.source.sourceId] = entry.fingerprint;
+        sourceStatusById.set(entry.source.sourceId, {
+          sourceId: entry.source.sourceId,
+          name: entry.source.name,
           namespace: entry.source.namespace,
-        },
-        timeoutMs: 30_000,
-        label: `Executor MCP source refresh (${entry.source.namespace})`,
-      });
-      nextCache.sources[entry.source.sourceId] = entry.fingerprint;
+          status: "available",
+          toolCount,
+        });
+      } catch (error) {
+        const message = errorMessage(error);
+        const reason = classifyRefreshFailure(message);
+        delete nextCache.sources[entry.source.sourceId];
+        sourceStatusById.set(entry.source.sourceId, {
+          sourceId: entry.source.sourceId,
+          name: entry.source.name,
+          namespace: entry.source.namespace,
+          status: reason === "needs_reconnect" ? "needs_reconnect" : "unavailable",
+          reason,
+          toolCount: null,
+          error: message,
+        });
+        refreshFailures.push({
+          sourceId: entry.source.sourceId,
+          name: entry.source.name,
+          namespace: entry.source.namespace,
+          reason,
+          error: message,
+        });
+      }
     },
   );
 
@@ -626,7 +803,13 @@ async function reconcileNativeMcpOAuthSourcesInSandbox(input: {
     });
   }
 
-  return { cacheHits };
+  return {
+    cacheHits,
+    refreshFailures,
+    sourceStatuses: Array.from(sourceStatusById.values()).sort((left, right) =>
+      left.namespace.localeCompare(right.namespace),
+    ),
+  };
 }
 
 async function loadExecutorBootstrap(input: {
@@ -820,6 +1003,7 @@ export async function prepareExecutorInSandbox(input: {
     `- \`EXECUTOR_HOME=${homeDirectory} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIRECTORY} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIRECTORY} executor tools sources --base-url ${EXECUTOR_BASE_URL}\``,
     `- \`EXECUTOR_HOME=${homeDirectory} EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIRECTORY} EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIRECTORY} executor tools search "latest linear issues" --base-url ${EXECUTOR_BASE_URL}\``,
     "OpenCode still reaches Executor through the local MCP command `executor mcp`.",
+    "For user data requests, prefer the `executor_execute` MCP tool over shelling out to the `executor` CLI. Use the CLI commands above only for daemon diagnostics.",
     "Connected workspace sources in this sandbox:",
     ...bootstrap.sources.map(
       (source) =>
@@ -835,11 +1019,14 @@ export async function prepareExecutorInSandbox(input: {
         scopeId: scopeInfo.id,
         sources: nativeMcpOauthSources,
         homeDirectory,
+        configJson: translateLegacyExecutorConfig(bootstrap.configJson),
         reuseExistingState: input.reuseExistingState,
       });
 
       return {
         oauthCacheHits: oauthReconcile.cacheHits,
+        oauthRefreshFailures: oauthReconcile.refreshFailures,
+        oauthSourceStatuses: oauthReconcile.sourceStatuses,
       };
     });
 

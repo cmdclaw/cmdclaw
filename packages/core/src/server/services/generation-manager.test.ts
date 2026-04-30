@@ -817,7 +817,32 @@ function createDeferred<T>() {
 function createExecutorPreparationMock(input?: {
   instructions?: string;
   oauthCacheHits?: number;
-  finalize?: () => Promise<{ oauthCacheHits: number }>;
+  sessionMcpServers?: Array<{
+    type: "stdio";
+    name: string;
+    command: string;
+    args: string[];
+    env: Array<{ name: string; value: string }>;
+  }>;
+  finalize?: () => Promise<{
+    oauthCacheHits: number;
+    oauthRefreshFailures: Array<{
+      sourceId: string;
+      name: string;
+      namespace: string;
+      reason: string;
+      error: string;
+    }>;
+    oauthSourceStatuses: Array<{
+      sourceId: string;
+      name: string;
+      namespace: string;
+      status: string;
+      reason?: string;
+      toolCount: number | null;
+      error?: string;
+    }>;
+  }>;
 }) {
   return {
     revisionHash: "rev-1",
@@ -825,9 +850,15 @@ function createExecutorPreparationMock(input?: {
     baseUrl: "http://127.0.0.1:8788",
     homeDirectory: "/tmp/cmdclaw-executor/default",
     instructions: input?.instructions ?? "executor prompt",
+    sessionMcpServers: input?.sessionMcpServers ?? [],
     finalize:
       input?.finalize ??
-      (() => Promise.resolve({ oauthCacheHits: input?.oauthCacheHits ?? 0 })),
+      (() =>
+        Promise.resolve({
+          oauthCacheHits: input?.oauthCacheHits ?? 0,
+          oauthRefreshFailures: [],
+          oauthSourceStatuses: [],
+        })),
   };
 }
 
@@ -4380,12 +4411,15 @@ describe("generationManager transitions", () => {
     expect(promptMock).toHaveBeenCalledTimes(1);
   });
 
-  it.skip("starts prompt streaming before executor oauth reconcile finalizes", async () => {
+  it("waits for executor oauth reconcile before registering executor MCP session", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
-    const finalizeDeferred = createDeferred<{ oauthCacheHits: number }>();
-    let finalizeSettled = false;
-    const promptCalled = createDeferred<void>();
+    const finalizeDeferred = createDeferred<{
+      oauthCacheHits: number;
+      oauthRefreshFailures: [];
+      oauthSourceStatuses: [];
+    }>();
+    let finalizeStarted = false;
 
     vi.mocked(getCliEnvForUser).mockResolvedValue({});
     vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
@@ -4396,17 +4430,19 @@ describe("generationManager transitions", () => {
     dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
     vi.mocked(prepareExecutorInSandbox).mockResolvedValue(
       createExecutorPreparationMock({
-        finalize: () =>
-          finalizeDeferred.promise.then(
-            (result) => {
-              finalizeSettled = true;
-              return result;
-            },
-            (error) => {
-              finalizeSettled = true;
-              throw error;
-            },
-          ),
+        sessionMcpServers: [
+          {
+            type: "stdio",
+            name: "executor",
+            command: "executor",
+            args: ["mcp"],
+            env: [],
+          },
+        ],
+        finalize: () => {
+          finalizeStarted = true;
+          return finalizeDeferred.promise;
+        },
       }),
     );
     vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
@@ -4415,10 +4451,7 @@ describe("generationManager transitions", () => {
     vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
     vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
 
-    const promptMock = vi.fn().mockImplementation(async () => {
-      promptCalled.resolve();
-      return undefined;
-    });
+    const promptMock = vi.fn().mockResolvedValue(undefined);
     const subscribeMock = vi.fn().mockResolvedValue({
       stream: asAsyncIterable([
         { type: "server.connected", properties: {} },
@@ -4445,17 +4478,212 @@ describe("generationManager transitions", () => {
       }),
     );
 
-    await promptCalled.promise;
+    await vi.waitFor(() => {
+      expect(finalizeStarted).toBe(true);
+    });
+    expect(promptMock).not.toHaveBeenCalled();
+
+    finalizeDeferred.resolve({
+      oauthCacheHits: 0,
+      oauthRefreshFailures: [],
+      oauthSourceStatuses: [],
+    });
     await runPromise;
 
     expect(promptMock).toHaveBeenCalledTimes(1);
-    expect(finalizeSettled).toBe(false);
     expect(finishSpy).toHaveBeenCalledWith(expect.anything(), "completed");
+  });
 
-    finalizeDeferred.resolve({ oauthCacheHits: 0 });
-    await vi.waitFor(() => {
-      expect(finalizeSettled).toBe(true);
+  it("prompts with executor source health when a selected executor source is unavailable", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(
+      createExecutorPreparationMock({
+        sessionMcpServers: [
+          {
+            type: "stdio",
+            name: "executor",
+            command: "executor",
+            args: ["mcp"],
+            env: [],
+          },
+        ],
+        finalize: () =>
+          Promise.resolve({
+            oauthCacheHits: 0,
+            oauthRefreshFailures: [
+              {
+                sourceId: "source-1",
+                name: "Linear",
+                namespace: "linear-mcp",
+                reason: "zero_tools",
+                error: "The source refreshed successfully but exposed 0 tools.",
+              },
+            ],
+            oauthSourceStatuses: [
+              {
+                sourceId: "source-1",
+                name: "Linear",
+                namespace: "linear-mcp",
+                status: "unavailable",
+                reason: "zero_tools",
+                toolCount: 0,
+                error: "The source refreshed successfully but exposed 0 tools.",
+              },
+            ],
+          }),
+      }),
+    );
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
     });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({ promptMock, subscribeMock }) as Awaited<
+        ReturnType<typeof getOrCreateConversationRuntime>
+      >,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const ctx = createCtx({
+      id: "gen-opencode-selected-executor-source-unavailable",
+      conversationId: "conv-opencode-selected-executor-source-unavailable",
+      model: "anthropic/claude-sonnet-4-6",
+      allowedExecutorSourceIds: ["source-1"],
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executorInstructions: expect.stringContaining("Executor source health after refresh"),
+      }),
+    );
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executorInstructions: expect.stringContaining("The next action must be an `executor_execute` tool call"),
+      }),
+    );
+    expect(ctx.errorMessage).toBeUndefined();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
+  });
+
+  it("prompts with executor tool-loop failure instructions when the user asks for an unavailable executor source by name", async () => {
+    Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
+
+    vi.mocked(getCliEnvForUser).mockResolvedValue({});
+    vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);
+    vi.mocked(getCliInstructionsWithCustom).mockResolvedValue("");
+    vi.mocked(syncMemoryFilesToSandbox).mockResolvedValue([]);
+    vi.mocked(buildMemorySystemPrompt).mockReturnValue("");
+    vi.mocked(listAccessibleEnabledSkillMetadataForUser).mockResolvedValue([]);
+    dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
+    vi.mocked(prepareExecutorInSandbox).mockResolvedValue(
+      createExecutorPreparationMock({
+        sessionMcpServers: [
+          {
+            type: "stdio",
+            name: "executor",
+            command: "executor",
+            args: ["mcp"],
+            env: [],
+          },
+        ],
+        finalize: () =>
+          Promise.resolve({
+            oauthCacheHits: 0,
+            oauthRefreshFailures: [
+              {
+                sourceId: "source-1",
+                name: "linear-mcp",
+                namespace: "linear-mcp",
+                reason: "zero_tools",
+                error: "The source refreshed successfully but exposed 0 tools.",
+              },
+            ],
+            oauthSourceStatuses: [
+              {
+                sourceId: "source-1",
+                name: "linear-mcp",
+                namespace: "linear-mcp",
+                status: "unavailable",
+                reason: "zero_tools",
+                toolCount: 0,
+                error: "The source refreshed successfully but exposed 0 tools.",
+              },
+            ],
+          }),
+      }),
+    );
+    vi.mocked(writeSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(writeResolvedIntegrationSkillsToSandbox).mockResolvedValue([]);
+    vi.mocked(getIntegrationSkillsSystemPrompt).mockReturnValue("");
+    vi.mocked(collectNewSandboxFiles).mockResolvedValue([]);
+
+    const promptMock = vi.fn().mockResolvedValue(undefined);
+    const subscribeMock = vi.fn().mockResolvedValue({
+      stream: asAsyncIterable([
+        { type: "server.connected", properties: {} },
+        { type: "session.idle", properties: {} },
+      ]),
+    });
+    vi.mocked(getOrCreateConversationRuntime).mockResolvedValue(
+      createConversationRuntimeMock({ promptMock, subscribeMock }) as Awaited<
+        ReturnType<typeof getOrCreateConversationRuntime>
+      >,
+    );
+
+    const mgr = asTestManager();
+    const finishSpy = vi.spyOn(mgr, "finishGeneration").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "processOpencodeEvent").mockResolvedValue(undefined);
+    vi.spyOn(mgr, "handleOpenCodeActionableEvent").mockResolvedValue({ type: "none" });
+
+    const ctx = createCtx({
+      id: "gen-opencode-requested-executor-source-unavailable",
+      conversationId: "conv-opencode-requested-executor-source-unavailable",
+      model: "anthropic/claude-sonnet-4-6",
+      userMessageContent: "what's my latest issue on linear",
+    });
+
+    await mgr.runOpenCodeGeneration(ctx);
+
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executorInstructions: expect.stringContaining("linear-mcp (linear-mcp): unavailable"),
+      }),
+    );
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executorInstructions: expect.stringContaining("Do not use `bash` executor CLI commands"),
+      }),
+    );
+    expect(ctx.errorMessage).toBeUndefined();
+    expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
   it("fails the generation when executor prompt-ready bootstrap fails", async () => {
@@ -4509,7 +4737,11 @@ describe("generationManager transitions", () => {
   it.skip("treats late executor oauth reconcile failures as non-fatal", async () => {
     Object.defineProperty(env, "ANTHROPIC_API_KEY", { value: "test-key", configurable: true });
 
-    const finalizeDeferred = createDeferred<{ oauthCacheHits: number }>();
+    const finalizeDeferred = createDeferred<{
+      oauthCacheHits: number;
+      oauthRefreshFailures: [];
+      oauthSourceStatuses: [];
+    }>();
 
     vi.mocked(getCliEnvForUser).mockResolvedValue({});
     vi.mocked(getEnabledIntegrationTypes).mockResolvedValue([]);

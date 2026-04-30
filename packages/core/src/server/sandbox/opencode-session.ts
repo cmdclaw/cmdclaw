@@ -337,7 +337,12 @@ async function ensureOpencodeMcpServerConfigured(
 
   const currentStatus = statusResult.data?.[server.name];
   if (currentStatus?.status === "connected") {
-    return;
+    const disconnectResult = await client.mcp.disconnect({ name: server.name });
+    if (disconnectResult.error) {
+      throw new Error(
+        `Failed to disconnect stale OpenCode MCP server ${server.name}: ${formatMcpError(disconnectResult.error)}`,
+      );
+    }
   }
 
   if (!currentStatus || currentStatus.status === "failed") {

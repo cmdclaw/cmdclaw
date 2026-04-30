@@ -103,7 +103,10 @@ import {
 } from "../sandbox/core/orchestrator";
 import { writeCoworkerDocumentsToSandbox } from "../sandbox/prep/coworker-documents-prep";
 import { buildMemorySystemPrompt, syncMemoryFilesToSandbox } from "../sandbox/prep/memory-prep";
-import { prepareExecutorInSandbox } from "../sandbox/prep/executor-prep";
+import {
+  prepareExecutorInSandbox,
+  type ExecutorOauthSourceStatus,
+} from "../sandbox/prep/executor-prep";
 import {
   resolveSandboxRuntimeAppUrl,
   syncRuntimeEnvToSandbox,
@@ -1081,6 +1084,42 @@ class ExecutorPromptReadyError extends Error {
     this.name = "ExecutorPromptReadyError";
     this.cause = cause;
   }
+}
+
+function buildExecutorSourceHealthInstructions(statuses: ExecutorOauthSourceStatus[]): string | null {
+  if (statuses.length === 0) {
+    return null;
+  }
+
+  const unavailableSources = statuses.filter((source) => source.status !== "available");
+  const lines = [
+    "Executor source health after refresh:",
+    ...statuses.map((source) => {
+      if (source.status === "available") {
+        return `- ${source.namespace} (${source.name}): available${
+          source.toolCount === null ? "" : `, ${source.toolCount} tool${source.toolCount === 1 ? "" : "s"}`
+        }`;
+      }
+      return `- ${source.namespace} (${source.name}): ${source.status}, reason=${source.reason}, error=${source.error}`;
+    }),
+  ];
+
+  if (unavailableSources.length > 0) {
+    lines.push(
+      "Unavailable Executor source policy:",
+      "If the user asks for one of the unavailable sources above, keep the agent loop alive and make the failure visible inside the Executor tool loop.",
+      "The next action must be an `executor_execute` tool call that lists Executor sources and throws an error for the matching source. Use this pattern:",
+      "```js",
+      "const sources = await tools.executor.sources.list();",
+      "const source = sources.find((entry) => entry.id === '<namespace>' || entry.name === '<namespace>');",
+      "throw new Error(`Executor source ${source?.id ?? '<namespace>'} is unavailable (toolCount=${source?.toolCount ?? 'unknown'}). Refresh/reconnect the source before using it.`);",
+      "```",
+      "After that Executor tool error, report the source as unavailable and ask the user to reconnect or refresh it.",
+      "Do not use `bash` executor CLI commands, GraphQL addSource, coworkers, global searches, or unrelated source tools as a fallback for that request.",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function isMissingSandboxError(error: unknown): boolean {
@@ -6758,37 +6797,96 @@ class GenerationManager {
             },
           });
           executorInstructions = executorBootstrap?.instructions ?? null;
-          resolveExecutorSessionMcpServers(executorBootstrap?.sessionMcpServers);
-          return async () => {
-            try {
-              const result = executorBootstrap?.finalize
-                ? await executorBootstrap.finalize()
-                : { oauthCacheHits: 0 };
-              logServerEvent(
-                "info",
-                "EXECUTOR_PREP_COMPLETED",
-                {
-                  oauthCacheHits: result.oauthCacheHits,
-                },
-                executorLogContext(),
-              );
-            } catch (error) {
-              console.error(
-                "[GenerationManager] Executor OAuth reconcile failed after prompt-ready bootstrap:",
-                error,
-              );
-              logServerEvent(
-                "error",
-                "EXECUTOR_PREP_FINALIZE_FAILED",
-                {
-                  error: error instanceof Error ? error.message : String(error),
-                },
-                executorLogContext(),
-              );
-            } finally {
-              completeExecutorPrepare();
-            }
+          let executorFinalizePromise: Promise<void> | null = null;
+          const runExecutorFinalize = async () => {
+            executorFinalizePromise ??= (async () => {
+              let result: {
+                oauthCacheHits: number;
+                oauthRefreshFailures: Array<{
+                  sourceId: string;
+                  name: string;
+                  namespace: string;
+                  reason: string;
+                  error: string;
+                }>;
+                oauthSourceStatuses: ExecutorOauthSourceStatus[];
+              } = { oauthCacheHits: 0, oauthRefreshFailures: [], oauthSourceStatuses: [] };
+              try {
+                result = executorBootstrap?.finalize
+                  ? await executorBootstrap.finalize()
+                  : result;
+                const sourceHealthInstructions = buildExecutorSourceHealthInstructions(
+                  result.oauthSourceStatuses,
+                );
+                if (sourceHealthInstructions) {
+                  executorInstructions = [
+                    executorBootstrap?.instructions ?? null,
+                    sourceHealthInstructions,
+                  ]
+                    .filter((entry): entry is string => Boolean(entry))
+                    .join("\n\n");
+                }
+                if (result.oauthRefreshFailures.length > 0) {
+                  logServerEvent(
+                    "warn",
+                    "EXECUTOR_PREP_REFRESH_PARTIAL_FAILED",
+                    {
+                      oauthCacheHits: result.oauthCacheHits,
+                      oauthRefreshFailureCount: result.oauthRefreshFailures.length,
+                      oauthRefreshFailureNamespaces: result.oauthRefreshFailures.map(
+                        (failure) => failure.namespace,
+                      ),
+                      oauthRefreshFailures: result.oauthRefreshFailures.map((failure) => ({
+                        namespace: failure.namespace,
+                        reason: failure.reason,
+                        error: failure.error,
+                      })),
+                    },
+                    executorLogContext(),
+                  );
+                }
+                const unavailableSelectedSources =
+                  ctx.allowedExecutorSourceIds && ctx.allowedExecutorSourceIds.length > 0
+                    ? result.oauthSourceStatuses.filter(
+                        (source) =>
+                          ctx.allowedExecutorSourceIds?.includes(source.sourceId) &&
+                          source.status !== "available",
+                      )
+                    : [];
+                logServerEvent(
+                  "info",
+                  "EXECUTOR_PREP_COMPLETED",
+                  {
+                    oauthCacheHits: result.oauthCacheHits,
+                    oauthRefreshFailureCount: result.oauthRefreshFailures.length,
+                    unavailableSelectedSourceCount: unavailableSelectedSources.length,
+                  },
+                  executorLogContext(),
+                );
+              } catch (error) {
+                console.error(
+                  "[GenerationManager] Executor OAuth reconcile failed:",
+                  error,
+                );
+                logServerEvent(
+                  "error",
+                  "EXECUTOR_PREP_FINALIZE_FAILED",
+                  {
+                    error: error instanceof Error ? error.message : String(error),
+                  },
+                  executorLogContext(),
+                );
+              } finally {
+                completeExecutorPrepare();
+              }
+            })();
+            await executorFinalizePromise;
           };
+
+          await runExecutorFinalize();
+
+          resolveExecutorSessionMcpServers(executorBootstrap?.sessionMcpServers);
+          return runExecutorFinalize;
         } catch (error) {
           console.error("[GenerationManager] Failed to prepare executor in sandbox:", error);
           rejectExecutorSessionMcpServers(error);

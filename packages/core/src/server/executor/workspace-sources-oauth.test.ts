@@ -22,7 +22,10 @@ vi.mock("./mcp-oauth", () => ({
   ensureValidMcpOAuthCredential: ensureValidMcpOAuthCredentialMock,
 }));
 
-const { getWorkspaceExecutorBootstrap } = await import("./workspace-sources");
+const {
+  getWorkspaceExecutorBootstrap,
+  getWorkspaceExecutorNativeMcpOAuthBootstrapSources,
+} = await import("./workspace-sources");
 
 function createSource() {
   const updatedAt = new Date("2025-01-01T00:00:00.000Z");
@@ -262,5 +265,86 @@ describe("workspace executor OAuth bootstrap", () => {
       sources: Record<string, { status: string }>;
     };
     expect(workspaceState.sources["src-1"]?.status).toBe("auth_required");
+  });
+
+  it("refreshes expired OAuth credentials before native sandbox reconciliation", async () => {
+    const source = createSource();
+    const packageRow = createPackageRow(source);
+    const expiredAt = new Date("2025-01-01T01:00:00.000Z");
+    const refreshedAt = new Date("2099-01-01T01:00:00.000Z");
+    ensureValidMcpOAuthCredentialMock.mockResolvedValueOnce({
+      credential: {
+        accessToken: "fresh-access",
+        refreshToken: "fresh-refresh",
+        expiresAt: refreshedAt,
+        metadata: {
+          tokenType: "Bearer",
+          scope: "read write",
+          redirectUri: "https://app.example.com/api/oauth/callback",
+          resourceMetadataUrl: null,
+          authorizationServerUrl: null,
+          resourceMetadata: null,
+          authorizationServerMetadata: null,
+          clientInformation: null,
+        },
+      },
+      refreshed: true,
+      reauthRequired: false,
+    });
+    const database = createDatabase({
+      source,
+      packageRow,
+      credentials: [
+        {
+          id: "cred-1",
+          workspaceExecutorSourceId: source.id,
+          userId: "user-1",
+          secret: null,
+          accessToken: encrypt("expired-access"),
+          refreshToken: encrypt("oauth-refresh"),
+          expiresAt: expiredAt,
+          oauthMetadata: {
+            tokenType: "Bearer",
+            scope: "read write",
+            redirectUri: "https://app.example.com/api/oauth/callback",
+            resourceMetadataUrl: null,
+            authorizationServerUrl: null,
+            resourceMetadata: null,
+            authorizationServerMetadata: null,
+            clientInformation: null,
+          },
+          enabled: true,
+          displayName: null,
+          createdAt: source.createdAt,
+          updatedAt: source.updatedAt,
+        },
+      ],
+    });
+
+    const result = await getWorkspaceExecutorNativeMcpOAuthBootstrapSources({
+      database: database as never,
+      workspaceId: "ws-1",
+      userId: "user-1",
+    });
+
+    expect(ensureValidMcpOAuthCredentialMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: source.endpoint,
+        accessToken: "expired-access",
+        refreshToken: "oauth-refresh",
+        expiresAt: expiredAt,
+      }),
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        namespace: "linear-mcp",
+        credential: expect.objectContaining({
+          accessToken: "fresh-access",
+          refreshToken: "fresh-refresh",
+          expiresAt: refreshedAt,
+        }),
+      }),
+    ]);
+    expect(database.insert).toHaveBeenCalled();
   });
 });
