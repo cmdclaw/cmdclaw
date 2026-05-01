@@ -254,14 +254,16 @@ async function ensureManagedExecutorSources(input: {
   const database = input.database ?? db;
   const definitions: Array<ManagedExecutorSourceDefinition | null> =
     GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED ? [getManagedSourceDefinition("gmail")] : [];
+  const galienDefinition = getManagedSourceDefinition("galien");
   if (
+    galienDefinition &&
     await canUserUseGalienInWorkspace({
       database,
       userId: input.userId,
       workspaceId: input.workspaceId,
     })
   ) {
-    definitions.push(getManagedSourceDefinition("galien"));
+    definitions.push(galienDefinition);
   }
 
   const activeDefinitions = definitions.filter(
