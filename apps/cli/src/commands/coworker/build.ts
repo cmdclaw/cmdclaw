@@ -8,6 +8,7 @@ type BuildFlags = {
   server?: string;
   name?: string;
   message?: string;
+  attach?: string;
   trigger?: string;
   model?: string;
   authSource?: "user" | "shared";
@@ -17,9 +18,33 @@ type BuildFlags = {
   file?: readonly string[];
   validate: boolean;
   sandbox?: "e2b" | "daytona" | "docker";
+  chaosRunDeadline?: string;
+  chaosApproval: "ask" | "defer";
+  chaosApprovalParkAfter?: string;
 };
 
 export default async function (this: LocalContext, flags: BuildFlags): Promise<void> {
+  if (flags.attach) {
+    await chatCommand.call(this, {
+      server: flags.server,
+      attach: flags.attach,
+      model: flags.model,
+      authSource: flags.authSource ?? "shared",
+      sandbox: flags.sandbox,
+      autoApprove: flags.autoApprove ?? true,
+      open: flags.open ?? false,
+      chaosApproval: flags.chaosApproval,
+      chaosRunDeadline: flags.chaosRunDeadline,
+      chaosApprovalParkAfter: flags.chaosApprovalParkAfter,
+      validate: flags.validate,
+      file: flags.file ?? [],
+      questionAnswer: [],
+      perfettoTrace: false,
+      timing: false,
+    });
+    return;
+  }
+
   const { client, runner } = await getCoworkerRunner({ server: flags.server });
   const model = flags.model ?? DEFAULT_CONNECTED_CHATGPT_MODEL;
   const allowedIntegrations = flags.integrations
@@ -56,7 +81,9 @@ export default async function (this: LocalContext, flags: BuildFlags): Promise<v
     sandbox: flags.sandbox,
     autoApprove: flags.autoApprove ?? true,
     open: flags.open ?? false,
-    chaosApproval: "ask",
+    chaosApproval: flags.chaosApproval,
+    chaosRunDeadline: flags.chaosRunDeadline,
+    chaosApprovalParkAfter: flags.chaosApprovalParkAfter,
     validate: flags.validate,
     file: flags.file ?? [],
     questionAnswer: [],

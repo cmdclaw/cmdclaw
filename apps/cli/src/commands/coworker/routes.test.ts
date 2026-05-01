@@ -7,10 +7,14 @@ describe("coworker command routes", () => {
       .parameters?.flags;
 
     expect(flags?.message).toBeDefined();
+    expect(flags?.attach).toBeDefined();
     expect(flags?.model).toBeDefined();
     expect(flags?.authSource).toBeDefined();
     expect(flags?.integrations).toBeDefined();
     expect(flags?.file).toBeDefined();
     expect(flags?.autoApprove).toBeDefined();
+    expect(flags?.chaosRunDeadline).toBeDefined();
+    expect(flags?.chaosApproval).toBeDefined();
+    expect(flags?.chaosApprovalParkAfter).toBeDefined();
   });
 });

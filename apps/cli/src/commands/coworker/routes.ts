@@ -146,6 +146,12 @@ export const coworkerBuildCommand = buildCommand({
         optional: true,
         brief: "Initial builder message",
       },
+      attach: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Attach to an existing builder conversation",
+      },
       trigger: {
         kind: "parsed",
         parse: (input: string) => input,
@@ -198,11 +204,30 @@ export const coworkerBuildCommand = buildCommand({
         optional: true,
         brief: "Sandbox provider",
       },
+      chaosRunDeadline: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Debug: override this builder generation's run deadline (for example 60s)",
+      },
+      chaosApproval: {
+        kind: "enum",
+        values: ["ask", "defer"] as const,
+        default: "ask",
+        brief: "Debug: choose how CLI handles approval interrupts",
+      },
+      chaosApprovalParkAfter: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Debug: park a pending approval after this hot-wait duration (for example 5s)",
+      },
     },
     aliases: {
       s: "server",
       n: "name",
       m: "message",
+      c: "attach",
       t: "trigger",
       M: "model",
       f: "file",
