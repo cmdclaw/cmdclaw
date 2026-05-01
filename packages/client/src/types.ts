@@ -443,6 +443,7 @@ export interface CmdclawApiClient {
     list(): Promise<CoworkerSummary[]>;
     get(input: { id: string }): Promise<CoworkerDetails>;
     create(input: CoworkerCreateInput): Promise<CoworkerCreateResult>;
+    getOrCreateBuilderConversation(input: { id: string }): Promise<{ conversationId: string }>;
     trigger(input: { id: string; payload?: unknown }): Promise<CoworkerTriggerResult>;
     getRun(input: { id: string }): Promise<CoworkerRun>;
     listRuns(input: { coworkerId: string; limit: number }): Promise<CoworkerRunSummary[]>;

@@ -129,6 +129,94 @@ export const coworkerCreateCommand = buildCommand({
   },
 });
 
+export const coworkerBuildCommand = buildCommand({
+  loader: async () => import("./build"),
+  parameters: {
+    flags: {
+      server: commonServerFlags.server,
+      name: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Initial coworker name",
+      },
+      message: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Initial builder message",
+      },
+      trigger: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Initial trigger type",
+      },
+      model: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Model reference",
+      },
+      authSource: {
+        kind: "enum",
+        values: ["user", "shared"] as const,
+        optional: true,
+        brief: "Model auth source",
+      },
+      integrations: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Comma-separated allowed integrations",
+      },
+      autoApprove: {
+        kind: "boolean",
+        optional: true as const,
+        brief: "Auto-approve builder tool calls",
+      },
+      open: {
+        kind: "boolean",
+        optional: true as const,
+        brief: "Open auth URLs in the browser automatically",
+      },
+      file: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        variadic: true,
+        brief: "Attach a file to the initial builder message",
+      },
+      validate: {
+        kind: "boolean",
+        default: true,
+        brief: "Validate persisted assistant messages",
+      },
+      sandbox: {
+        kind: "enum",
+        values: ["e2b", "daytona", "docker"] as const,
+        optional: true,
+        brief: "Sandbox provider",
+      },
+    },
+    aliases: {
+      s: "server",
+      n: "name",
+      m: "message",
+      t: "trigger",
+      M: "model",
+      f: "file",
+    },
+    positional: {
+      kind: "tuple",
+      parameters: [],
+    },
+  },
+  docs: {
+    brief: "Build a coworker through the conversational builder",
+  },
+});
+
 export const coworkerRunCommand = buildCommand({
   loader: async () => import("./run"),
   parameters: {
@@ -250,6 +338,7 @@ export const coworkerRoutes = buildRouteMap({
     list: coworkerListCommand,
     get: coworkerGetCommand,
     create: coworkerCreateCommand,
+    build: coworkerBuildCommand,
     run: coworkerRunCommand,
     logs: coworkerLogsCommand,
     approve: coworkerApproveCommand,
