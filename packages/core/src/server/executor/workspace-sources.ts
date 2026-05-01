@@ -72,6 +72,7 @@ type ManagedExecutorSourceDefinition = {
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 const MANAGED_MCP_TOKEN_TTL_SECONDS = 10 * 60;
 const WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION = 3;
+const GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED = false;
 const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
   /re-authorization is required/i,
   /reauthorization is required/i,
@@ -251,9 +252,8 @@ async function ensureManagedExecutorSources(input: {
   userId: string;
 }) {
   const database = input.database ?? db;
-  const definitions: Array<ManagedExecutorSourceDefinition | null> = [
-    getManagedSourceDefinition("gmail"),
-  ];
+  const definitions: Array<ManagedExecutorSourceDefinition | null> =
+    GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED ? [getManagedSourceDefinition("gmail")] : [];
   if (
     await canUserUseGalienInWorkspace({
       database,
@@ -398,6 +398,10 @@ async function isManagedSourceVisibleForUser(input: {
           workspaceId: input.source.workspaceId,
         })),
     );
+  }
+
+  if (input.source.internalKey === "gmail") {
+    return GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED;
   }
 
   return true;
