@@ -1,5 +1,10 @@
 import { eq, and, lt } from "drizzle-orm";
 import { env } from "../../env";
+import {
+  renderMessageToSlack,
+  renderMessageToSlackPayload,
+  type SlackBlock,
+} from "@cmdclaw/message-format";
 import { db } from "@cmdclaw/db/client";
 import {
   slackUserLink,
@@ -48,11 +53,12 @@ async function removeReaction(channel: string, timestamp: string, name: string) 
   await slackApi("reactions.remove", { channel, timestamp, name }).catch(() => {});
 }
 
-async function postMessage(channel: string, text: string, threadTs?: string) {
+async function postMessage(channel: string, text: string, threadTs?: string, blocks?: SlackBlock[]) {
   await slackApi("chat.postMessage", {
     channel,
     ...(threadTs ? { thread_ts: threadTs } : {}),
     text,
+    ...(blocks ? { blocks } : {}),
   });
 }
 
@@ -106,16 +112,7 @@ async function getSlackUserInfo(
 // ─── Markdown conversion ────────────────────────────────────
 
 export function convertMarkdownToSlack(text: string): string {
-  // Bold: **text** → *text*
-  let result = text.replace(/\*\*(.+?)\*\*/g, "*$1*");
-  // Italic: _text_ stays the same in Slack
-  // Strikethrough: ~~text~~ → ~text~
-  result = result.replace(/~~(.+?)~~/g, "~$1~");
-  // Links: [text](url) → <url|text>
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<$2|$1>");
-  // Headers: # text → *text*
-  result = result.replace(/^#{1,6}\s+(.+)$/gm, "*$1*");
-  return result;
+  return renderMessageToSlack(text);
 }
 
 // ─── Core event handler ─────────────────────────────────────
@@ -211,7 +208,17 @@ export async function handleSlackEvent(payload: SlackEvent) {
 
     // Send response to Slack
     if (responseText) {
-      const slackText = convertMarkdownToSlack(responseText);
+      const slackPayload = renderMessageToSlackPayload(responseText);
+      if (slackPayload.blocks) {
+        await postMessage(
+          channel,
+          slackPayload.text,
+          isDirectMessage ? undefined : threadTs,
+          slackPayload.blocks,
+        );
+        return;
+      }
+      const slackText = slackPayload.text;
       // Split long messages (Slack limit ~4000 chars)
       const chunks = splitMessage(slackText, 3900);
       await chunks.reduce<Promise<void>>(async (prev, chunk) => {

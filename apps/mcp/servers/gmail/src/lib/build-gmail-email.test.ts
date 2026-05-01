@@ -18,6 +18,32 @@ describe("buildRawEmail", () => {
     expect(decoded).not.toContain("multipart/mixed");
   });
 
+  test("converts newlines in bodies with allowed html tags", async () => {
+    const raw = await buildRawEmail({
+      body: "Hello <strong>team</strong>\\nThanks\nRegards",
+      subject: "Hello",
+      to: "user@example.com",
+    });
+
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    expect(decoded).toContain(
+      Buffer.from("Hello <strong>team</strong><br>Thanks<br>Regards").toString("base64"),
+    );
+  });
+
+  test("renders common markdown syntax in plain text bodies", async () => {
+    const raw = await buildRawEmail({
+      body: "### Hi\n* **M:** z",
+      subject: "Hello",
+      to: "user@example.com",
+    });
+
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    expect(decoded).toContain(
+      Buffer.from("<strong>Hi</strong><br>- <strong>M:</strong> z").toString("base64"),
+    );
+  });
+
   test("builds a multipart email when attachment paths are provided", async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "gmail-attachment-"));
     const attachmentPath = path.join(tempDir, "report.pdf");

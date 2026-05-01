@@ -255,6 +255,7 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 - google-gmail unread - Count unread emails
 - google-gmail draft --to <email> --subject <subject> --body <body>
 - google-gmail send --to <email> --subject <subject> --body <body>
+- Email bodies accept plain text, common Markdown, or allowed safe email HTML.
 - Example: google-gmail search -q "from:boss" -l 5
 
 ## Outlook Mail CLI [${statusTag("outlook")}]
@@ -265,6 +266,7 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 - outlook-mail unread - Count unread emails
 - outlook-mail draft --to <email> --subject <subject> --body <body> [--attachment <path>]
 - outlook-mail send --to <email> --subject <subject> --body <body> [--attachment <path>]
+- Email bodies accept plain text, common Markdown, or allowed safe email HTML.
 - Example: outlook-mail search -q "invoice" -l 5
 
 ## Outlook Calendar CLI [${statusTag("outlook_calendar")}]
@@ -342,6 +344,7 @@ export function getCliInstructions(connectedIntegrations: IntegrationType[]): st
 - slack channels - List channels
 - slack history -c <channelId> - Get channel messages
 - slack send -c <channelId> -t <text> --as <user|bot> [--thread <ts>] - Send message (explicit actor required)
+- Slack message text accepts common Markdown; the CLI converts it to Slack mrkdwn.
 - slack search -q <query> - Search messages
 - slack users - List users
 - slack user -u <userId> - Get user info

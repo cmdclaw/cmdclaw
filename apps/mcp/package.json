@@ -29,6 +29,7 @@
   "dependencies": {
     "@cmdclaw/client": "workspace:*",
     "@cmdclaw/core": "workspace:*",
+    "@cmdclaw/message-format": "workspace:*",
     "xmcp": "0.6.5",
     "zod": "^4.1.13"
   },

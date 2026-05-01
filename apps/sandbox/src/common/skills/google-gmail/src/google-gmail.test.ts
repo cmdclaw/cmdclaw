@@ -3,28 +3,23 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { runSkillCli } from "../../_test-utils/run-skill-cli";
 
+const GOOGLE_GMAIL_CLI = "sandbox/src/common/skills/google-gmail/src/google-gmail.ts";
+const GOOGLE_GMAIL_SOURCE = "src/common/skills/google-gmail/src/google-gmail.ts";
+
 describe("google-gmail CLI", () => {
   test("prints help text when auth env is missing", () => {
-    const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
-      ["--help"],
-      {
-        GMAIL_ACCESS_TOKEN: "",
-      },
-    );
+    const result = runSkillCli(GOOGLE_GMAIL_CLI, ["--help"], {
+      GMAIL_ACCESS_TOKEN: "",
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Commands");
   });
 
   test("prints help text when auth env is provided", () => {
-    const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
-      ["--help"],
-      {
-        GMAIL_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(GOOGLE_GMAIL_CLI, ["--help"], {
+      GMAIL_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Google Gmail CLI - Commands");
@@ -37,26 +32,18 @@ describe("google-gmail CLI", () => {
   });
 
   test("fails for invalid limit value", () => {
-    const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
-      ["list", "--limit", "0"],
-      {
-        GMAIL_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(GOOGLE_GMAIL_CLI, ["list", "--limit", "0"], {
+      GMAIL_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid --limit");
   });
 
   test("rejects queries on list", () => {
-    const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
-      ["list", "--query", "from:boss"],
-      {
-        GMAIL_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(GOOGLE_GMAIL_CLI, ["list", "--query", "from:boss"], {
+      GMAIL_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("google-gmail list does not accept --query");
@@ -64,26 +51,18 @@ describe("google-gmail CLI", () => {
   });
 
   test("fails for unsupported scope value", () => {
-    const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
-      ["list", "--scope", "archive-only"],
-      {
-        GMAIL_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(GOOGLE_GMAIL_CLI, ["list", "--scope", "archive-only"], {
+      GMAIL_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid --scope");
   });
 
   test("requires a query for search", () => {
-    const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
-      ["search"],
-      {
-        GMAIL_ACCESS_TOKEN: "test-token",
-      },
-    );
+    const result = runSkillCli(GOOGLE_GMAIL_CLI, ["search"], {
+      GMAIL_ACCESS_TOKEN: "test-token",
+    });
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Required: google-gmail search --query <search>");
@@ -91,7 +70,7 @@ describe("google-gmail CLI", () => {
 
   test("fails send when body contains unsupported html tags", () => {
     const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
+      GOOGLE_GMAIL_CLI,
       [
         "send",
         "--to",
@@ -99,7 +78,7 @@ describe("google-gmail CLI", () => {
         "--subject",
         "Hello",
         "--body",
-        "<p>Hello</p><table><tr><td>x</td></tr></table>",
+        "<p>Hello</p><div>x</div>",
       ],
       {
         GMAIL_ACCESS_TOKEN: "test-token",
@@ -107,13 +86,15 @@ describe("google-gmail CLI", () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.combined).toContain("Invalid email body HTML: unsupported tag <table>");
-    expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
+    expect(result.combined).toContain("Invalid email body HTML: unsupported tag <div>");
+    expect(result.combined).toContain(
+      "Allowed tags: b,strong,s,i,em,u,br,p,table,thead,tbody,tr,th,td",
+    );
   });
 
   test("fails draft when body contains unsupported html tags", () => {
     const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
+      GOOGLE_GMAIL_CLI,
       [
         "draft",
         "--to",
@@ -130,12 +111,14 @@ describe("google-gmail CLI", () => {
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid email body HTML: script/style tags are not allowed");
-    expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
+    expect(result.combined).toContain(
+      "Allowed tags: b,strong,s,i,em,u,br,p,table,thead,tbody,tr,th,td",
+    );
   });
 
   test("fails send when an attachment file cannot be read", () => {
     const result = runSkillCli(
-      "src/common/skills/google-gmail/src/google-gmail.ts",
+      GOOGLE_GMAIL_CLI,
       [
         "send",
         "--to",
@@ -158,10 +141,7 @@ describe("google-gmail CLI", () => {
 
   test("uses html mime content type for outgoing messages", () => {
     const source = readFileSync(
-      path.resolve(
-        process.cwd(),
-        "src/common/skills/google-gmail/src/google-gmail.ts",
-      ),
+      path.resolve(process.cwd(), GOOGLE_GMAIL_SOURCE),
       "utf8",
     );
     expect(source).toContain("buildRawEmail");

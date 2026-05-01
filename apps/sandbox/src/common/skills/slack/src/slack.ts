@@ -1,5 +1,6 @@
 import { constants } from "fs";
 import { readFile, access } from "fs/promises";
+import { renderMessageToSlack, renderMessageToSlackPayload } from "@cmdclaw/message-format";
 import { parseArgs } from "util";
 
 type JsonValue = ReturnType<typeof JSON.parse>;
@@ -212,9 +213,11 @@ async function sendMessage() {
     process.exit(1);
   }
 
+  const slackPayload = renderMessageToSlackPayload(values.text);
   const body: Record<string, JsonValue> = {
     channel: values.channel,
-    text: values.text,
+    text: slackPayload.text,
+    ...(slackPayload.blocks ? { blocks: slackPayload.blocks } : {}),
   };
   if (values.thread) {
     body.thread_ts = values.thread;
@@ -433,7 +436,7 @@ async function uploadFile() {
   const completeData = await api("files.completeUploadExternal", {
     files: [{ id: uploadUrlData.file_id, title: values.title || fileName }],
     channel_id: values.channel,
-    initial_comment: values.text,
+    initial_comment: values.text ? renderMessageToSlack(values.text) : undefined,
     thread_ts: values.thread,
   });
 

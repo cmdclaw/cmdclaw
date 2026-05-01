@@ -42,10 +42,10 @@ Use repeated `--attachment <path>` flags to include multiple files.
 ## Email Body Formatting
 
 - Email body is sent as HTML.
-- Allowed tags: `<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<br>`, `<p>`.
+- Allowed tags: `<b>`, `<strong>`, `<s>`, `<i>`, `<em>`, `<u>`, `<br>`, `<p>`, `<table>`, `<thead>`, `<tbody>`, `<tr>`, `<th>`, `<td>`.
 - Unsupported tags cause command failure.
-- Attributes on allowed tags are not allowed.
-- Markdown remains literal text (no Markdown-to-HTML conversion).
+- Only safe formatter-managed table attributes are allowed.
+- Plain text bodies can use common Markdown for headings, bullets, bold, italic, strikethrough, links, and tables. The CLI converts those into safe email HTML.
 
 ## Scope behavior
 

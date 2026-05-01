@@ -73,7 +73,7 @@
     "test:monitor": "turbo run test:monitor --filter=@cmdclaw/web",
     "test:prod": "turbo run test:prod --filter=@cmdclaw/web",
     "test:record": "turbo run test:record --filter=@cmdclaw/web",
-    "test:unit": "turbo run test:unit --filter=@cmdclaw/cli --filter=@cmdclaw/mcp --filter=@cmdclaw/client --filter=@cmdclaw/core --filter=@cmdclaw/web"
+    "test:unit": "turbo run test:unit --filter=@cmdclaw/cli --filter=@cmdclaw/mcp --filter=@cmdclaw/client --filter=@cmdclaw/core --filter=@cmdclaw/message-format --filter=@cmdclaw/web"
   },
   "devDependencies": {
     "@vitest/ui": "4.0.18",

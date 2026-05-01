@@ -1,5 +1,6 @@
 import { db } from "@cmdclaw/db/client";
 import { conversationRuntime, coworker, coworkerRun } from "@cmdclaw/db/schema";
+import { renderMessageToSlackPayload, type SlackBlock } from "@cmdclaw/message-format";
 import { and, eq, inArray } from "drizzle-orm";
 import { env } from "@/env";
 
@@ -38,7 +39,12 @@ function getAllowedChannels(): Set<string> {
   );
 }
 
-async function postMessage(channel: string, text: string, threadTs?: string) {
+async function postMessage(
+  channel: string,
+  text: string,
+  threadTs?: string,
+  blocks?: SlackBlock[],
+) {
   const response = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
@@ -48,6 +54,7 @@ async function postMessage(channel: string, text: string, threadTs?: string) {
     body: JSON.stringify({
       channel,
       text,
+      ...(blocks ? { blocks } : {}),
       ...(threadTs ? { thread_ts: threadTs } : {}),
     }),
   });
@@ -190,7 +197,8 @@ export async function POST(request: Request) {
 
   let slackResult: Awaited<ReturnType<typeof postMessage>> | undefined;
   try {
-    slackResult = await postMessage(channel, text, threadTs);
+    const slackPayload = renderMessageToSlackPayload(text);
+    slackResult = await postMessage(channel, slackPayload.text, threadTs, slackPayload.blocks);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return Response.json(

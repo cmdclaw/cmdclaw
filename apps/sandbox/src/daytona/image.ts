@@ -1,7 +1,22 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Image } from "@daytonaio/sdk";
 import { EXECUTOR_VERSION, OPENCODE_PLUGIN_VERSION, OPENCODE_VERSION } from "../common/versions";
 
-const COMMON_ROOT = "src/common";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SANDBOX_ROOT = path.resolve(__dirname, "../..");
+const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const COMMON_ROOT = path.join(SANDBOX_ROOT, "src/common");
+const MESSAGE_FORMAT_PACKAGE_ROOT = path.join(REPO_ROOT, "packages/message-format");
+const runtimePackageJson = JSON.stringify({
+  name: "sandbox-runtime",
+  private: true,
+  dependencies: {
+    "@cmdclaw/message-format": "file:./packages/message-format",
+    "@opencode-ai/plugin": OPENCODE_PLUGIN_VERSION,
+  },
+});
 
 export const image = Image.debianSlim()
   .addLocalFile(`${COMMON_ROOT}/opencode.json`, "/app/opencode.json")
@@ -11,6 +26,7 @@ export const image = Image.debianSlim()
   .addLocalDir(`${COMMON_ROOT}/lib`, "/app/.opencode/lib")
   .addLocalDir(`${COMMON_ROOT}/skills`, "/app/.claude/skills")
   .addLocalDir(`${COMMON_ROOT}/lib`, "/app/.claude/lib")
+  .addLocalDir(MESSAGE_FORMAT_PACKAGE_ROOT, "/app/packages/message-format")
   .addLocalFile(`${COMMON_ROOT}/setup.sh`, "/app/setup.sh")
   .addLocalFile(`${COMMON_ROOT}/daytona-start.sh`, "/app/daytona-start.sh")
   .runCommands("apt-get update")
@@ -34,7 +50,7 @@ export const image = Image.debianSlim()
   .runCommands("sandbox-agent install-agent opencode")
   // Install TypeScript tool runtime deps resolved from /app/.opencode/tools/*.ts
   .runCommands(
-    `bash -lc 'cd /app && printf "{\\"name\\":\\"sandbox-runtime\\",\\"private\\":true}\\n" > package.json && bun install @opencode-ai/plugin@${OPENCODE_PLUGIN_VERSION}'`,
+    `bash -lc 'cd /app && printf %s ${JSON.stringify(runtimePackageJson)} > package.json && bun install'`,
   )
   .runCommands("mkdir -p $HOME/.config/opencode /app/.opencode $HOME/.cache/opencode")
   .runCommands("cp /app/opencode.json /app/.opencode/opencode.json")

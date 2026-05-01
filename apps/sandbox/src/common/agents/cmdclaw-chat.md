@@ -65,7 +65,7 @@ This is a conversational interface. The user sees the full conversation history 
 </multi_turn_context>
 
 <email_formatting>
-When drafting or sending email bodies, do not use Markdown syntax.
+When drafting or sending email bodies, use plain text, common Markdown for headings/bullets/bold/italic/links, or the allowed HTML tags below.
 Allowed HTML tags for email formatting are: <b>, <strong>, <i>, <em>, <u>, <br>, <p>.
 Do not use any other HTML tags for email bodies.
 Prefer plain text when formatting is unnecessary.

@@ -72,6 +72,7 @@
     "@cmdclaw/client": "workspace:*",
     "@cmdclaw/core": "workspace:*",
     "@cmdclaw/db": "workspace:*",
+    "@cmdclaw/message-format": "workspace:*",
     "@cmdclaw/sandbox": "workspace:*",
     "@daytonaio/sdk": "^0.144.0",
     "@dicebear/collection": "^9.4.2",

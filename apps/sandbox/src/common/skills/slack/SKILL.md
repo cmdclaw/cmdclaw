@@ -47,6 +47,11 @@ slack react -c <channelId> --ts <messageTs> -e thumbsup
 slack upload -c <channelId> -f ./report.pdf [--filename report.pdf] [--title "Q4 Report"] [--text "Here's the report"] [--thread <ts>]
 ```
 
+## Message Formatting
+
+- `send --text` and `upload --text` accept common Markdown for headings, bullets, nested bullets, bold, italic, strikethrough, links, and tables.
+- The CLI converts common Markdown into Slack mrkdwn and Slack blocks before sending.
+
 ## Output Format
 
 JSON arrays. Example for `history`:

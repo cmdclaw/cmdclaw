@@ -56,6 +56,7 @@
       "dependencies": {
         "@cmdclaw/client": "workspace:*",
         "@cmdclaw/core": "workspace:*",
+        "@cmdclaw/message-format": "workspace:*",
         "xmcp": "0.6.5",
         "zod": "^4.1.13",
       },
@@ -71,6 +72,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cmdclaw/db": "workspace:*",
+        "@cmdclaw/message-format": "workspace:*",
         "@daytonaio/sdk": "^0.144.0",
         "@opencode-ai/sdk": "^1.1.34",
         "dotenv": "^17.2.3",
@@ -97,6 +99,7 @@
         "@cmdclaw/client": "workspace:*",
         "@cmdclaw/core": "workspace:*",
         "@cmdclaw/db": "workspace:*",
+        "@cmdclaw/message-format": "workspace:*",
         "@cmdclaw/sandbox": "workspace:*",
         "@daytonaio/sdk": "^0.144.0",
         "@dicebear/collection": "^9.4.2",
@@ -268,6 +271,7 @@
         "@aws-sdk/client-s3": "^3.968.0",
         "@aws-sdk/s3-request-presigner": "^3.968.0",
         "@cmdclaw/db": "workspace:*",
+        "@cmdclaw/message-format": "workspace:*",
         "@cmdclaw/sandbox": "workspace:*",
         "@daytonaio/sdk": "^0.144.0",
         "@google/generative-ai": "^0.24.1",
@@ -326,6 +330,16 @@
       "devDependencies": {
         "@types/pg": "^8.15.6",
         "drizzle-kit": "^0.31.10",
+      },
+    },
+    "packages/message-format": {
+      "name": "@cmdclaw/message-format",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.6",
+        "@types/node": "^20",
+        "typescript": "^5",
+        "vitest": "^4.0.18",
       },
     },
   },
@@ -542,6 +556,8 @@
     "@cmdclaw/docs": ["@cmdclaw/docs@workspace:apps/docs"],
 
     "@cmdclaw/mcp": ["@cmdclaw/mcp@workspace:apps/mcp"],
+
+    "@cmdclaw/message-format": ["@cmdclaw/message-format@workspace:packages/message-format"],
 
     "@cmdclaw/sandbox": ["@cmdclaw/sandbox@workspace:apps/sandbox"],
 
