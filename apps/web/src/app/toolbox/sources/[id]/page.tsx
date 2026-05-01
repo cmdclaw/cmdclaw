@@ -11,6 +11,7 @@ import { ExecutorSourceLogo } from "@/components/executor-source-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { formatOAuthConnectionError } from "@/lib/oauth-error-message";
 import {
   useExecutorSourceList,
   useDeleteExecutorSource,
@@ -73,7 +74,7 @@ function SourceDetailContent() {
     if (oauthStatus === "success") {
       toast.success("OAuth connected.");
     } else {
-      toast.error(searchParams.get("oauth_error") ?? "OAuth connection failed.");
+      toast.error(formatOAuthConnectionError(searchParams.get("oauth_error")));
     }
 
     router.replace(`/toolbox/sources/${id}`);

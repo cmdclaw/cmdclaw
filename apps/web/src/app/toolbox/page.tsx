@@ -56,6 +56,7 @@ import {
   isComingSoonIntegration,
   type IntegrationType as IntegrationIconType,
 } from "@/lib/integration-icons";
+import { formatOAuthConnectionError } from "@/lib/oauth-error-message";
 import { cn } from "@/lib/utils";
 import {
   useIntegrationList,
@@ -902,7 +903,7 @@ function ToolboxPageContent() {
       refetchIntegrations();
     } else if (error) {
       queueMicrotask(() => {
-        toast.error(`Failed to connect: ${error.replace(/_/g, " ")}`);
+        toast.error(formatOAuthConnectionError(error));
       });
       window.history.replaceState({}, "", "/toolbox");
     }
