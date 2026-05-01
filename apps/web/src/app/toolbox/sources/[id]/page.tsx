@@ -19,6 +19,9 @@ import {
   useUpdateExecutorSource,
   useSetExecutorSourceCredential,
   useDisconnectExecutorSourceCredential,
+  useGalienStatus,
+  useConnectGalien,
+  useDisconnectGalien,
 } from "@/orpc/hooks";
 
 function SourceDetailContent() {
@@ -32,6 +35,9 @@ function SourceDetailContent() {
   const startOAuth = useStartExecutorSourceOAuth();
   const setCredential = useSetExecutorSourceCredential();
   const disconnectCredential = useDisconnectExecutorSourceCredential();
+  const { data: galienStatus } = useGalienStatus();
+  const connectGalien = useConnectGalien();
+  const disconnectGalien = useDisconnectGalien();
 
   const isWorkspaceAdmin = data?.membershipRole === "admin" || data?.membershipRole === "owner";
   const source = useMemo(
@@ -41,7 +47,10 @@ function SourceDetailContent() {
 
   const [secret, setSecret] = useState("");
   const [credDisplayName, setCredDisplayName] = useState("");
+  const [galienUsername, setGalienUsername] = useState("");
+  const [galienPassword, setGalienPassword] = useState("");
   const isManagedSource = Boolean(source?.internalKey);
+  const isGalienSource = source?.internalKey === "galien";
   const authLabel =
     source?.authType === "none"
       ? "None"
@@ -57,6 +66,14 @@ function SourceDetailContent() {
 
   const handleCredDisplayNameChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setCredDisplayName(e.target.value);
+  }, []);
+
+  const handleGalienUsernameChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setGalienUsername(e.target.value);
+  }, []);
+
+  const handleGalienPasswordChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setGalienPassword(e.target.value);
   }, []);
 
   useEffect(() => {
@@ -176,6 +193,34 @@ function SourceDetailContent() {
     }
   }, [disconnectCredential, source]);
 
+  const handleConnectGalien = useCallback(async () => {
+    const username = galienUsername.trim();
+    const password = galienPassword.trim();
+    if (!username || !password) {
+      toast.error("Enter your Galien username and password.");
+      return;
+    }
+
+    try {
+      await connectGalien.mutateAsync({ username, password });
+      setGalienPassword("");
+      toast.success("Galien connected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to connect Galien.");
+    }
+  }, [connectGalien, galienPassword, galienUsername]);
+
+  const handleDisconnectGalien = useCallback(async () => {
+    try {
+      await disconnectGalien.mutateAsync();
+      setGalienUsername("");
+      setGalienPassword("");
+      toast.success("Galien disconnected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to disconnect Galien.");
+    }
+  }, [disconnectGalien]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -263,7 +308,62 @@ function SourceDetailContent() {
         </div>
 
         <div className="mt-6">
-          {source.internalKey ? (
+          {isGalienSource ? (
+            <div className="mt-5 space-y-4">
+              <div>
+                <p className="text-sm font-medium">
+                  {galienStatus?.connected
+                    ? `Connected${galienStatus.displayName ? ` as ${galienStatus.displayName}` : ""}`
+                    : "Connect Galien"}
+                </p>
+                {galienStatus?.connected && galienStatus.validatedAt ? (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Last validated {new Date(galienStatus.validatedAt).toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  value={galienUsername}
+                  onChange={handleGalienUsernameChange}
+                  placeholder="Galien username"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <Input
+                  value={galienPassword}
+                  onChange={handleGalienPasswordChange}
+                  placeholder={galienStatus?.connected ? "Update password" : "Galien password"}
+                  type="password"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleConnectGalien}
+                  disabled={connectGalien.isPending}
+                >
+                  {connectGalien.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {galienStatus?.connected ? "Update Galien credentials" : "Connect Galien"}
+                </Button>
+
+                {galienStatus?.connected ? (
+                  <Button
+                    variant="ghost"
+                    onClick={handleDisconnectGalien}
+                    disabled={disconnectGalien.isPending}
+                  >
+                    Disconnect
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : source.internalKey ? (
             <div className="mt-5 flex items-center gap-3">
               <Button asChild variant="outline">
                 <Link href="/toolbox">

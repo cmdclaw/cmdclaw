@@ -18,6 +18,10 @@ export type GalienCurrentUser = {
 type GalienAuthenticatedRequestParams = GalienRequestParams & {
   bearerToken: string;
 };
+export type GalienCredentials = {
+  username: string;
+  password: string;
+};
 export type CreateVisitReportPayload = {
   clientId?: number;
   contactPersonId?: number;
@@ -52,7 +56,7 @@ type GalienRequestParams = {
   body?: CreateVisitReportPayload;
 };
 
-function getGalienCredentials() {
+function getGalienCredentials(): GalienCredentials {
   const email = process.env.GALIEN_EMAIL?.trim();
   const password = process.env.GALIEN_PASSWORD?.trim();
 
@@ -60,7 +64,7 @@ function getGalienCredentials() {
     throw new Error("GALIEN_EMAIL and GALIEN_PASSWORD must be configured.");
   }
 
-  return { email, password };
+  return { username: email, password };
 }
 
 export function buildGalienUrl(
@@ -210,8 +214,8 @@ function formatErrorBody(body: unknown) {
   }
 }
 
-async function loginToGalien() {
-  const { email, password } = getGalienCredentials();
+async function loginToGalien(credentials?: GalienCredentials) {
+  const { username, password } = credentials ?? getGalienCredentials();
   const response = await fetch(new URL(GALIEN_LOGIN_PATH, GALIEN_BASE_URL), {
     method: "POST",
     headers: {
@@ -219,7 +223,7 @@ async function loginToGalien() {
       accept: "application/json",
     },
     body: JSON.stringify({
-      username: email,
+      username,
       password,
     }),
   });
@@ -234,8 +238,8 @@ async function loginToGalien() {
   return extractBearerTokenFromLoginResponse(response);
 }
 
-export async function getCurrentGalienUser() {
-  const bearerToken = await loginToGalien();
+export async function getCurrentGalienUser(credentials?: GalienCredentials) {
+  const bearerToken = await loginToGalien(credentials);
   return decodeGalienCurrentUserFromBearerToken(bearerToken);
 }
 
@@ -268,16 +272,19 @@ async function requestGalienWithBearerToken(params: GalienAuthenticatedRequestPa
   };
 }
 
-export async function requestGalien(params: GalienRequestParams) {
-  const bearerToken = await loginToGalien();
+export async function requestGalien(params: GalienRequestParams, credentials?: GalienCredentials) {
+  const bearerToken = await loginToGalien(credentials);
   return requestGalienWithBearerToken({
     ...params,
     bearerToken,
   });
 }
 
-export async function requestGalienForCurrentUser(params: GalienRequestParams) {
-  const bearerToken = await loginToGalien();
+export async function requestGalienForCurrentUser(
+  params: GalienRequestParams,
+  credentials?: GalienCredentials,
+) {
+  const bearerToken = await loginToGalien(credentials);
   const currentUser = decodeGalienCurrentUserFromBearerToken(bearerToken);
   const pathUsesUserId = /\{userId\}/.test(params.path);
 

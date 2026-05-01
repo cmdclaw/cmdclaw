@@ -8,6 +8,10 @@ import {
 } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getValidTokensForUser } from "../integrations/token-refresh";
+import {
+  canUserUseGalienInWorkspace,
+  getGalienCredentialStatus,
+} from "../galien/service";
 import { signManagedMcpToken } from "../managed-mcp-auth";
 import { decrypt, encrypt } from "../utils/encryption";
 import {
@@ -53,6 +57,16 @@ type LocalWorkspaceState = {
     }
   >;
   policies: Record<string, never>;
+};
+
+type ManagedExecutorSourceDefinition = {
+  internalKey: "gmail" | "galien";
+  kind: "mcp";
+  name: string;
+  namespace: string;
+  endpoint: string;
+  transport: string;
+  authType: "none";
 };
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -200,14 +214,24 @@ function resolveManagedMcpBaseUrl(): string | null {
   return value && value.length > 0 ? value : null;
 }
 
-function getManagedSourceDefinition(internalKey: string) {
-  if (internalKey !== "gmail") {
-    return null;
-  }
-
+function getManagedSourceDefinition(
+  internalKey: "gmail" | "galien",
+): ManagedExecutorSourceDefinition | null {
   const baseUrl = resolveManagedMcpBaseUrl();
   if (!baseUrl) {
     return null;
+  }
+
+  if (internalKey === "galien") {
+    return {
+      internalKey: "galien" as const,
+      kind: "mcp" as const,
+      name: "Galien MCP",
+      namespace: "galien",
+      endpoint: new URL("/galien/mcp", baseUrl).toString(),
+      transport: "http",
+      authType: "none" as const,
+    };
   }
 
   return {
@@ -227,40 +251,40 @@ async function ensureManagedExecutorSources(input: {
   userId: string;
 }) {
   const database = input.database ?? db;
-  const definition = getManagedSourceDefinition("gmail");
-  if (!definition) {
+  const definitions: Array<ManagedExecutorSourceDefinition | null> = [
+    getManagedSourceDefinition("gmail"),
+  ];
+  if (
+    await canUserUseGalienInWorkspace({
+      database,
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+    })
+  ) {
+    definitions.push(getManagedSourceDefinition("galien"));
+  }
+
+  const activeDefinitions = definitions.filter(
+    (definition): definition is NonNullable<typeof definition> => Boolean(definition),
+  );
+  if (activeDefinitions.length === 0) {
     return;
   }
 
   const existing = await database.query.workspaceExecutorSource.findMany({
     where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
   });
-  const current = existing.find(
-    (source) =>
-      source.internalKey === definition.internalKey || source.namespace === definition.namespace,
-  );
 
-  const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
-    kind: definition.kind,
-    internalKey: definition.internalKey,
-    name: definition.name,
-    namespace: definition.namespace,
-    endpoint: definition.endpoint,
-    specUrl: null,
-    transport: definition.transport,
-    headers: null,
-    queryParams: null,
-    defaultHeaders: null,
-    authType: definition.authType,
-    authHeaderName: null,
-    authQueryParam: null,
-    authPrefix: null,
-    enabled: current?.enabled ?? true,
-  });
+  for (const definition of activeDefinitions) {
+    const current = existing.find(
+      (source) =>
+        source.internalKey === definition.internalKey || source.namespace === definition.namespace,
+    );
 
-  if (!current) {
-    await database.insert(workspaceExecutorSource).values({
-      workspaceId: input.workspaceId,
+    const enabled =
+      current && current.internalKey === definition.internalKey ? current.enabled : true;
+
+    const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
       kind: definition.kind,
       internalKey: definition.internalKey,
       name: definition.name,
@@ -275,28 +299,14 @@ async function ensureManagedExecutorSources(input: {
       authHeaderName: null,
       authQueryParam: null,
       authPrefix: null,
-      enabled: true,
-      revisionHash,
-      createdByUserId: input.userId,
-      updatedByUserId: input.userId,
+      enabled,
     });
-    return;
-  }
 
-  if (
-    current.internalKey !== definition.internalKey ||
-    current.name !== definition.name ||
-    current.namespace !== definition.namespace ||
-    current.endpoint !== definition.endpoint ||
-    current.transport !== definition.transport ||
-    current.authType !== definition.authType ||
-    current.revisionHash !== revisionHash
-  ) {
-    await database
-      .update(workspaceExecutorSource)
-      .set({
-        internalKey: definition.internalKey,
+    if (!current) {
+      await database.insert(workspaceExecutorSource).values({
+        workspaceId: input.workspaceId,
         kind: definition.kind,
+        internalKey: definition.internalKey,
         name: definition.name,
         namespace: definition.namespace,
         endpoint: definition.endpoint,
@@ -309,20 +319,88 @@ async function ensureManagedExecutorSources(input: {
         authHeaderName: null,
         authQueryParam: null,
         authPrefix: null,
+        enabled: true,
         revisionHash,
+        createdByUserId: input.userId,
         updatedByUserId: input.userId,
-      })
-      .where(eq(workspaceExecutorSource.id, current.id));
+      });
+      continue;
+    }
+
+    if (
+      current.internalKey !== definition.internalKey ||
+      current.name !== definition.name ||
+      current.namespace !== definition.namespace ||
+      current.endpoint !== definition.endpoint ||
+      current.transport !== definition.transport ||
+      current.authType !== definition.authType ||
+      current.revisionHash !== revisionHash
+    ) {
+      await database
+        .update(workspaceExecutorSource)
+        .set({
+          internalKey: definition.internalKey,
+          kind: definition.kind,
+          name: definition.name,
+          namespace: definition.namespace,
+          endpoint: definition.endpoint,
+          specUrl: null,
+          transport: definition.transport,
+          headers: null,
+          queryParams: null,
+          defaultHeaders: null,
+          authType: definition.authType,
+          authHeaderName: null,
+          authQueryParam: null,
+          authPrefix: null,
+          enabled,
+          revisionHash,
+          updatedByUserId: input.userId,
+        })
+        .where(eq(workspaceExecutorSource.id, current.id));
+    }
   }
 }
 
 async function isManagedSourceConnected(source: WorkspaceExecutorSourceRecord, userId?: string) {
-  if (!userId || source.internalKey !== "gmail") {
+  if (!userId) {
+    return false;
+  }
+
+  if (source.internalKey === "galien") {
+    const status = await getGalienCredentialStatus({ userId });
+    return status.connected;
+  }
+
+  if (source.internalKey !== "gmail") {
     return false;
   }
 
   const tokens = await getValidTokensForUser(userId, ["google_gmail"]);
   return Boolean(tokens.get("google_gmail"));
+}
+
+async function isManagedSourceVisibleForUser(input: {
+  database?: DatabaseLike;
+  source: WorkspaceExecutorSourceRecord;
+  userId?: string;
+}) {
+  if (!input.source.internalKey) {
+    return true;
+  }
+
+  if (input.source.internalKey === "galien") {
+    return Boolean(
+      input.userId &&
+        (await canUserUseGalienInWorkspace({
+          database: input.database,
+          userId: input.userId,
+          workspaceId: input.source.workspaceId,
+        })),
+    );
+  }
+
+  return true;
 }
 
 function shouldRefreshOauthCredential(expiresAt: Date | null): boolean {
@@ -549,7 +627,7 @@ function mergeAuthIntoSourceConfig(input: {
   config: LocalExecutorConfigSource;
 }): Promise<LocalExecutorConfigSource> {
   const next = JSON.parse(JSON.stringify(input.config)) as LocalExecutorConfigSource;
-  if (input.source.internalKey === "gmail") {
+  if (input.source.internalKey === "gmail" || input.source.internalKey === "galien") {
     if (!env.CMDCLAW_SERVER_SECRET) {
       throw new Error("CMDCLAW_SERVER_SECRET is required for managed MCP sources.");
     }
@@ -562,7 +640,7 @@ function mergeAuthIntoSourceConfig(input: {
       {
         userId: input.userId,
         workspaceId: input.source.workspaceId,
-        internalKey: "gmail",
+        internalKey: input.source.internalKey,
         exp: Math.floor(Date.now() / 1000) + MANAGED_MCP_TOKEN_TTL_SECONDS,
       },
       env.CMDCLAW_SERVER_SECRET,
@@ -656,7 +734,21 @@ export async function listWorkspaceExecutorSources(input: {
     credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
   );
 
-  return Promise.all(sources.map(async (source) => {
+  const visibleSources = (
+    await Promise.all(
+      sources.map(async (source) =>
+        (await isManagedSourceVisibleForUser({
+          database,
+          source,
+          userId: input.userId,
+        }))
+          ? source
+          : null,
+      ),
+    )
+  ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
+
+  return Promise.all(visibleSources.map(async (source) => {
     const credential = credentialBySourceId.get(source.id);
     const connected = source.internalKey
       ? await isManagedSourceConnected(source, input.userId)
@@ -698,7 +790,21 @@ export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: 
     credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
   );
 
-  const oauthSources = sources
+  const visibleSources = (
+    await Promise.all(
+      sources.map(async (source) =>
+        (await isManagedSourceVisibleForUser({
+          database,
+          source,
+          userId: input.userId,
+        }))
+          ? source
+          : null,
+      ),
+    )
+  ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
+
+  const oauthSources = visibleSources
     .filter(
       (source) =>
         source.kind === "mcp" &&
@@ -910,8 +1016,22 @@ export async function getWorkspaceExecutorBootstrap(input: {
     credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
   );
 
+  const visibleSources = (
+    await Promise.all(
+      sources.map(async (source) =>
+        (await isManagedSourceVisibleForUser({
+          database,
+          source,
+          userId: input.userId,
+        }))
+          ? source
+          : null,
+      ),
+    )
+  ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
+
   const hydratedSourceEntries = await Promise.all(
-    sources.map(async (source) => {
+    visibleSources.map(async (source) => {
       const baseConfig = config.sources[source.id] ?? buildBaseSourceConfig(source);
       const credential = credentialBySourceId.get(source.id);
       const hydratedConfig = await mergeAuthIntoSourceConfig({
@@ -947,18 +1067,21 @@ export async function getWorkspaceExecutorBootstrap(input: {
   const hydratedSources = Object.fromEntries(
     hydratedSourceEntries.map((entry) => [entry.sourceId, entry.config]),
   );
+  const visibleSourceIds = new Set(visibleSources.map((source) => source.id));
   const hydratedWorkspaceState: LocalWorkspaceState = {
     ...workspaceState,
     sources: Object.fromEntries(
-      Object.entries(workspaceState.sources).map(([sourceId, sourceState]) => {
-        const sourceStatus = hydratedSourceEntries.find((entry) => entry.sourceId === sourceId);
-        return [
-          sourceId,
-          sourceStatus && !sourceStatus.connected
-            ? { ...sourceState, status: "auth_required" as const }
-            : sourceState,
-        ];
-      }),
+      Object.entries(workspaceState.sources)
+        .filter(([sourceId]) => visibleSourceIds.has(sourceId))
+        .map(([sourceId, sourceState]) => {
+          const sourceStatus = hydratedSourceEntries.find((entry) => entry.sourceId === sourceId);
+          return [
+            sourceId,
+            sourceStatus && !sourceStatus.connected
+              ? { ...sourceState, status: "auth_required" as const }
+              : sourceState,
+          ];
+        }),
     ),
   };
 
@@ -966,7 +1089,7 @@ export async function getWorkspaceExecutorBootstrap(input: {
     revisionHash: packageRow.revisionHash,
     configJson: `${JSON.stringify({ ...config, sources: hydratedSources }, null, 2)}\n`,
     workspaceStateJson: `${JSON.stringify(hydratedWorkspaceState, null, 2)}\n`,
-    sources: sources.map((source) => ({
+    sources: visibleSources.map((source) => ({
       id: source.id,
       name: source.name,
       namespace: source.namespace,

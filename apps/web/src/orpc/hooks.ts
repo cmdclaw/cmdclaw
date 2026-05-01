@@ -419,6 +419,69 @@ export function useGoogleAccessStatus() {
   });
 }
 
+export function useGalienStatus() {
+  return useQuery({
+    queryKey: ["galien", "status"],
+    queryFn: () => client.galien.status(),
+  });
+}
+
+export function useConnectGalien() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { username: string; password: string }) => client.galien.connect(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["galien", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useDisconnectGalien() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.galien.disconnect(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["galien", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useAdminGalienAccess(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["galien", "admin-access", workspaceId],
+    queryFn: () => client.galien.adminListAccess({ workspaceId: workspaceId! }),
+    enabled: Boolean(workspaceId),
+  });
+}
+
+export function useAdminAddGalienAccess() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; email: string }) =>
+      client.galien.adminAddAccess(input),
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: ["galien", "admin-access", input.workspaceId] });
+    },
+  });
+}
+
+export function useAdminRemoveGalienAccess() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; workspaceId: string }) =>
+      client.galien.adminRemoveAccess({ id: input.id }),
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: ["galien", "admin-access", input.workspaceId] });
+    },
+  });
+}
+
 export function useApprovedLoginEmailAllowlist() {
   return useQuery({
     queryKey: ["integration", "approved-login-email-allowlist"],

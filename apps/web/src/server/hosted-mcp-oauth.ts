@@ -2,6 +2,7 @@ import {
   getWorkspaceMembershipForUser,
   listWorkspacesForUser,
 } from "@cmdclaw/core/server/billing/service";
+import { canUserUseGalienInWorkspace } from "@cmdclaw/core/server/galien/service";
 import {
   type HostedMcpAudience,
   HOSTED_MCP_AUDIENCES,
@@ -297,6 +298,16 @@ export async function createHostedMcpAuthorizationCode(params: {
   codeChallenge: string;
 }): Promise<string> {
   const resolved = resolveHostedMcpResource(params.resource);
+  if (
+    resolved.audience === "galien" &&
+    !(await canUserUseGalienInWorkspace({
+      userId: params.userId,
+      workspaceId: params.workspaceId,
+    }))
+  ) {
+    throw new Error("Galien is not enabled for this user in the selected workspace.");
+  }
+
   const scopes = normalizeRequestedScopes(resolved.audience, params.scopes.join(" "));
   const grantId = randomUUID();
   const authorizationCode = randomBytes(32).toString("base64url");

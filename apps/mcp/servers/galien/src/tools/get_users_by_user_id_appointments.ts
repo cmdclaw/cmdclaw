@@ -1,4 +1,4 @@
-import { type InferSchema, type ToolMetadata } from "xmcp";
+import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
 import {
   galienIsoDateTimeSchema,
@@ -24,7 +24,7 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function getMyAppointments(params: InferSchema<typeof schema>) {
-  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/appointments", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+export default async function getMyAppointments(params: InferSchema<typeof schema>, extra?: ToolExtraArguments) {
+  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/appointments", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>, extra);
   return toMcpToolResult(result);
 }

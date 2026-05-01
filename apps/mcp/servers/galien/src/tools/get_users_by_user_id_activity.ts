@@ -1,4 +1,4 @@
-import { type InferSchema, type ToolMetadata } from "xmcp";
+import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
 import { requestCurrentGalienUserGet } from "../lib/tool-helpers";
 
@@ -15,7 +15,7 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function getMyActivity(params: InferSchema<typeof schema>) {
-  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/activity", params);
+export default async function getMyActivity(params: InferSchema<typeof schema>, extra?: ToolExtraArguments) {
+  const result = await requestCurrentGalienUserGet("/api/v1/users/{userId}/activity", params, extra);
   return toMcpToolResult(result);
 }

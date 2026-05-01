@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { type InferSchema, type ToolMetadata } from "xmcp";
+import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
 import { requestGalien } from "../lib/galien-client";
+import { getManagedGalienToolCredentials } from "../lib/galien-auth";
 import { galienIsoDateTimeSchema } from "../lib/tool-helpers";
 
 export const schema = {
@@ -44,11 +45,12 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function createVisitReport(params: InferSchema<typeof schema>) {
+export default async function createVisitReport(params: InferSchema<typeof schema>, extra?: ToolExtraArguments) {
+  const credentials = await getManagedGalienToolCredentials(extra);
   const result = await requestGalien({
     method: "POST",
     path: "/api/v1/visit-reports",
     body: params,
-  });
+  }, credentials);
   return toMcpToolResult(result);
 }

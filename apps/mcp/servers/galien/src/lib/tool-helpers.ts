@@ -1,10 +1,12 @@
 import { z } from "zod";
+import type { ToolExtraArguments } from "xmcp";
 import {
   requestGalien,
   requestGalienForCurrentUser,
   splitGalienRequestParts,
   type GalienQueryValue,
 } from "./galien-client";
+import { getManagedGalienToolCredentials } from "./galien-auth";
 
 export const galienScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
 export const galienQueryValueSchema = z.union([galienScalarSchema, z.array(galienScalarSchema)]);
@@ -17,24 +19,28 @@ export const galienIsoDateTimeSchema = z
 export async function requestGalienGet(
   path: string,
   params: Record<string, GalienQueryValue | undefined>,
+  extra?: ToolExtraArguments,
 ) {
   const requestParts = splitGalienRequestParts(path, params);
+  const credentials = await getManagedGalienToolCredentials(extra);
   return requestGalien({
     method: "GET",
     path,
     ...requestParts,
-  });
+  }, credentials);
 }
 
 export async function requestCurrentGalienUserGet(
   path: string,
   params: Record<string, GalienQueryValue | undefined>,
+  extra?: ToolExtraArguments,
 ) {
   const requestParts = splitGalienRequestParts(path, params);
+  const credentials = await getManagedGalienToolCredentials(extra);
 
   return requestGalienForCurrentUser({
     method: "GET",
     path,
     ...requestParts,
-  });
+  }, credentials);
 }

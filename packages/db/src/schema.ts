@@ -450,6 +450,51 @@ export const googleIntegrationAccessAllowlist = pgTable(
   (table) => [uniqueIndex("google_integration_access_allowlist_email_idx").on(table.email)],
 );
 
+export const galienWorkspaceAccess = pgTable(
+  "galien_workspace_access",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("galien_workspace_access_workspace_idx").on(table.workspaceId),
+    uniqueIndex("galien_workspace_access_workspace_email_idx").on(table.workspaceId, table.email),
+  ],
+);
+
+export const galienCredential = pgTable(
+  "galien_credential",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    username: text("username").notNull(),
+    password: text("password").notNull(),
+    galienUserId: integer("galien_user_id"),
+    displayName: text("display_name"),
+    validatedAt: timestamp("validated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("galien_credential_user_idx").on(table.userId),
+    index("galien_credential_galien_user_idx").on(table.galienUserId),
+  ],
+);
+
 export const approvedLoginEmailAllowlist = pgTable(
   "approved_login_email_allowlist",
   {

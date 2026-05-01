@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type InferSchema, type ToolMetadata } from "xmcp";
+import { type InferSchema, type ToolExtraArguments, type ToolMetadata } from "xmcp";
 import { toMcpToolResult } from "../../../../shared/tool-result";
 import { galienQueryValueSchema, requestGalienGet } from "../lib/tool-helpers";
 
@@ -15,7 +15,7 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function getGroupments(params: InferSchema<typeof schema>) {
-  const result = await requestGalienGet("/api/v1/groupments", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>);
+export default async function getGroupments(params: InferSchema<typeof schema>, extra?: ToolExtraArguments) {
+  const result = await requestGalienGet("/api/v1/groupments", params as Record<string, string | number | boolean | Array<string | number | boolean> | undefined>, extra);
   return toMcpToolResult(result);
 }

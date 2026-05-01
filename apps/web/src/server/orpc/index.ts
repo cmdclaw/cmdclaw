@@ -7,6 +7,7 @@ import { coworkerRouter } from "./routers/coworker";
 import { coworkerTagRouter } from "./routers/coworker-tag";
 import { coworkerViewRouter } from "./routers/coworker-view";
 import { executorSourceRouter } from "./routers/executor-source";
+import { galienRouter } from "./routers/galien";
 import { generationRouter } from "./routers/generation";
 import { inboxRouter } from "./routers/inbox";
 import { integrationRouter } from "./routers/integration";
@@ -30,6 +31,7 @@ export const appRouter = {
   billing: billingRouter,
   conversation: conversationRouter,
   generation: generationRouter,
+  galien: galienRouter,
   inbox: inboxRouter,
   integration: integrationRouter,
   integrationSkill: integrationSkillRouter,

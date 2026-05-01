@@ -25,3 +25,37 @@ export async function getManagedIntegrationTokens(params: {
   const payload = (await response.json()) as { tokens?: Record<string, string> };
   return payload.tokens ?? {};
 }
+
+export async function getManagedGalienCredentials(params: {
+  userId: string;
+  workspaceId: string;
+}): Promise<{
+  username: string;
+  password: string;
+  displayName: string | null;
+  galienUserId: number | null;
+}> {
+  const response = await fetch(
+    new URL("/api/internal/mcp/galien-credentials", resolveCmdclawAppUrl()),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${requireServerSecret()}`,
+      },
+      body: JSON.stringify(params),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to fetch Galien credentials (${response.status})`);
+  }
+
+  return (await response.json()) as {
+    username: string;
+    password: string;
+    displayName: string | null;
+    galienUserId: number | null;
+  };
+}
