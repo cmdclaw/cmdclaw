@@ -6553,16 +6553,21 @@ describe("generationManager transitions", () => {
       }),
     );
     expect(ctx.contentParts).not.toContainEqual({ type: "text", text: "Done." });
-    expect(promptMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      parts: [
-        {
-          type: "text",
-          text:
-            "Continue the interrupted assistant turn from the restored tool result. Do not rerun the already approved command.",
-        },
-      ],
-    });
+    expect(promptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "session-1",
+        agent: CMDCLAW_CHAT_AGENT_ID,
+        system: "mock system prompt for chat",
+        model: { providerID: "openai", modelID: "gpt-5.4" },
+        parts: [
+          {
+            type: "text",
+            text:
+              "Continue the interrupted assistant turn from the restored tool result. Do not rerun the already approved command.",
+          },
+        ],
+      }),
+    );
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
 
@@ -6627,16 +6632,21 @@ describe("generationManager transitions", () => {
 
     await (mgr as any).runSuspendedInterruptResume(ctx);
 
-    expect(promptMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      parts: [
-        {
-          type: "text",
-          text:
-            "Continue the interrupted assistant turn. Authentication for notion is now complete.",
-        },
-      ],
-    });
+    expect(promptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "session-1",
+        agent: CMDCLAW_CHAT_AGENT_ID,
+        system: "mock system prompt for chat",
+        model: { providerID: "openai", modelID: "gpt-5.4" },
+        parts: [
+          {
+            type: "text",
+            text:
+              "Continue the interrupted assistant turn. Authentication for notion is now complete.",
+          },
+        ],
+      }),
+    );
     expect(ctx.resumeInterruptId).toBeNull();
     expect(ctx.currentInterruptId).toBeUndefined();
     expect(updateSetMock).toHaveBeenCalledWith(
@@ -6722,6 +6732,16 @@ describe("generationManager transitions", () => {
       model: "openai/gpt-5.4",
       runtimeTurnSeq: 4,
       runtimeCallbackToken: "runtime-token",
+      builderCoworkerContext: {
+        coworkerId: "wf-builder-resume",
+        updatedAt: "2026-03-03T12:00:00.000Z",
+        prompt: "Current coworker prompt",
+        model: "openai/gpt-5.4",
+        toolAccessMode: "selected",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: [],
+      },
     });
 
     await (mgr as any).runSuspendedInterruptResume(ctx);
@@ -6731,16 +6751,27 @@ describe("generationManager transitions", () => {
       answers: [["Beta"]],
     });
     expect(markInterruptAppliedMock).toHaveBeenCalledWith("interrupt-question-resume");
-    expect(promptMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      parts: [
-        {
-          type: "text",
-          text:
-            "Continue the interrupted assistant turn. The pending question has been answered. The resolved answer was: Beta.",
-        },
-      ],
-    });
+    expect(vi.mocked(composeOpencodePromptSpec)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "coworker_builder",
+        builderCoworkerContext: ctx.builderCoworkerContext,
+      }),
+    );
+    expect(promptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "session-1",
+        agent: CMDCLAW_COWORKER_BUILDER_AGENT_ID,
+        system: "mock system prompt for coworker_builder",
+        model: { providerID: "openai", modelID: "gpt-5.4" },
+        parts: [
+          {
+            type: "text",
+            text:
+              "Continue the interrupted assistant turn. The pending question has been answered. The resolved answer was: Beta.",
+          },
+        ],
+      }),
+    );
     expect(ctx.resumeInterruptId).toBeNull();
     expect(ctx.currentInterruptId).toBeUndefined();
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");

@@ -374,6 +374,7 @@ async function runCliLive(env: NodeJS.ProcessEnv): Promise<void> {
       "src/app/chat/chat.google-calendar.cli.live.test.ts",
       "src/app/chat/chat.google-drive.cli.live.test.ts",
       "src/app/coworkers/coworkers.cli.live.test.ts",
+      "src/app/coworkers/coworker-builder.cli.live.test.ts",
     ],
     env,
   );

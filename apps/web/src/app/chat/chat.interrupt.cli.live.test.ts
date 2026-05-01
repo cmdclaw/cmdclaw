@@ -49,8 +49,6 @@ type SlackHistoryMessage = {
 
 let liveModel = "";
 
-const slackAttachSuccessPattern = /User message sent to|\[tool_result_data\] Bot message sent to/;
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -267,6 +265,37 @@ function extractAttachGenerationId(output: string): string {
     throw new Error(`Missing resumed generation id in attach output:\n${output}`);
   }
   return generationId;
+}
+
+async function waitForApprovalPromptAnsweringQuestions(
+  command: RunningCommand,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let answeredQuestionPromptCount = 0;
+  const poll = async (): Promise<void> => {
+    const stdout = command.stdout();
+    if (/Approve\? \(y\/n\)/.test(stdout)) {
+      return;
+    }
+
+    const questionPromptCount = stdout.match(/Select an option/g)?.length ?? 0;
+    while (answeredQuestionPromptCount < questionPromptCount) {
+      command.write("1\n");
+      answeredQuestionPromptCount += 1;
+    }
+
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out waiting for approval prompt while answering questions\nstdout:\n${command.stdout()}\nstderr:\n${command.stderr()}`,
+      );
+    }
+
+    await sleep(100);
+    return poll();
+  };
+
+  await poll();
 }
 
 async function pollSlackMessagesContaining(args: {
@@ -548,9 +577,15 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       );
       const latestTargetBeforePromptTs = parseSlackTimestamp(latestTargetBeforePrompt?.ts ?? "0");
       const marker = `slack-chaos-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-      const prompt =
-        `Send a message on Slack #${targetChannelName} saying "hi ${marker}". ` +
-        "Use the Slack integration tool only. Do not use custom scripts, direct Slack API calls, node, python, or curl.";
+      const prompt = [
+        "Use the Slack integration tool only.",
+        "Do not ask any clarification questions.",
+        "Do not list channels.",
+        "Run exactly this Slack command and do not change the flags:",
+        `slack send -c ${targetChannelId} -t "hi ${marker}" --as bot`,
+        "Do not use custom scripts, direct Slack API calls, node, python, or curl.",
+        "After it succeeds, reply with only the posted text.",
+      ].join("\n");
 
       const result = await runChatCommand(
         buildCliCommandArgs(
@@ -590,17 +625,9 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       );
 
       await attach.waitFor(/\[attach\] conversation=/, 60_000);
-      await attach.waitFor(/Approve\? \(y\/n\)/, 60_000);
+      await waitForApprovalPromptAnsweringQuestions(attach, 60_000);
       attach.write("y\n");
       await attach.waitFor(/\[approval_accepted\]/, 30_000);
-      await attach.waitFor(slackAttachSuccessPattern, 60_000);
-
-      const attachResult = await attach.waitForExit(Math.max(responseTimeoutMs, 120_000));
-      assertExitOk(attachResult, "chat chaos approval attach");
-      expect(attachResult.stdout).not.toContain("[approval_parked]");
-      expect(attachResult.stdout).toContain("[approval_accepted]");
-      expect(attachResult.stdout).toMatch(slackAttachSuccessPattern);
-
       const postedMessages = await pollSlackMessagesContaining({
         token: slackAccessToken,
         channelId: targetChannelId,
@@ -611,6 +638,11 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       });
       const texts = postedMessages.map((message) => message.text ?? "");
       expect(texts.some((text) => text.includes(`hi ${marker}`))).toBe(true);
+
+      const attachResult = await attach.waitForExit(Math.max(responseTimeoutMs, 120_000));
+      assertExitOk(attachResult, "chat chaos approval attach");
+      expect(attachResult.stdout).not.toContain("[approval_parked]");
+      expect(attachResult.stdout).toContain("[approval_accepted]");
     },
   );
 

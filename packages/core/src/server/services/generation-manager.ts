@@ -76,6 +76,7 @@ import {
 import {
   composeOpencodePromptSpec,
   type OpencodePromptCompositionInput,
+  type ResolvedPromptSpec,
 } from "../prompts/opencode-runtime-prompt";
 import {
   buildQueueJobId,
@@ -5915,6 +5916,61 @@ class GenerationManager {
     ];
   }
 
+  private buildPromptSpecInputForContext(
+    ctx: GenerationContext,
+    shared: {
+      cliInstructions?: string | null;
+      executorInstructions?: string | null;
+      skillsInstructions?: string | null;
+      integrationSkillsInstructions?: string | null;
+      memoryInstructions?: string | null;
+      userTimezone?: string | null;
+    },
+  ): OpencodePromptCompositionInput {
+    const base = {
+      ...shared,
+      selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
+    };
+    if (ctx.coworkerRunId) {
+      return {
+        kind: "coworker_runner",
+        ...base,
+        coworkerPrompt: ctx.coworkerPrompt,
+        coworkerPromptDo: ctx.coworkerPromptDo,
+        coworkerPromptDont: ctx.coworkerPromptDont,
+        triggerPayload: ctx.triggerPayload,
+      };
+    }
+    if (ctx.builderCoworkerContext) {
+      return {
+        kind: "coworker_builder",
+        ...base,
+        builderCoworkerContext: ctx.builderCoworkerContext,
+      };
+    }
+    return {
+      kind: "chat",
+      ...base,
+    };
+  }
+
+  private async composeContinuationPromptSpec(ctx: GenerationContext): Promise<ResolvedPromptSpec> {
+    const dbUser = await db.query.user.findFirst({
+      where: eq(user.id, ctx.userId),
+      columns: { timezone: true },
+    });
+    return composeOpencodePromptSpec(
+      this.buildPromptSpecInputForContext(ctx, {
+        cliInstructions: "",
+        executorInstructions: null,
+        skillsInstructions: "",
+        integrationSkillsInstructions: "",
+        memoryInstructions: buildMemorySystemPrompt(),
+        userTimezone: dbUser?.timezone ?? null,
+      }),
+    );
+  }
+
   private async runSuspendedInterruptResume(ctx: GenerationContext): Promise<void> {
     const interruptId = ctx.resumeInterruptId;
     if (!interruptId) {
@@ -6123,12 +6179,24 @@ class GenerationManager {
         },
       );
       const eventStream = eventResult.stream;
+      const parsedModel = parseModelReference(ctx.model);
+      const modelConfig = {
+        providerID: parsedModel.providerID,
+        modelID: parsedModel.modelID,
+      };
+      const continuationPromptSpec =
+        continuationPromptParts && continuationPromptParts.length > 0
+          ? await this.composeContinuationPromptSpec(ctx)
+          : null;
       const continuationPromptPromise =
         continuationPromptParts && continuationPromptParts.length > 0 && ctx.sessionId
           ? runtimeClient
               .prompt({
                 sessionID: ctx.sessionId,
                 parts: continuationPromptParts,
+                agent: continuationPromptSpec?.agentId,
+                system: continuationPromptSpec?.systemPrompt,
+                model: modelConfig,
               })
               .then(
                 () => ({ ok: true as const }),
@@ -7144,43 +7212,14 @@ class GenerationManager {
       const integrationSkillsInstructions =
         getIntegrationSkillsSystemPrompt(writtenIntegrationSkills);
 
-      const promptSpecInput: OpencodePromptCompositionInput = ctx.coworkerRunId
-        ? {
-            kind: "coworker_runner",
-            cliInstructions,
-            executorInstructions,
-            skillsInstructions,
-            integrationSkillsInstructions,
-            memoryInstructions,
-            selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
-            userTimezone: dbUser?.timezone ?? null,
-            coworkerPrompt: ctx.coworkerPrompt,
-            coworkerPromptDo: ctx.coworkerPromptDo,
-            coworkerPromptDont: ctx.coworkerPromptDont,
-            triggerPayload: ctx.triggerPayload,
-          }
-        : ctx.builderCoworkerContext
-          ? {
-              kind: "coworker_builder",
-              cliInstructions,
-              executorInstructions,
-              skillsInstructions,
-              integrationSkillsInstructions,
-              memoryInstructions,
-              selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
-              userTimezone: dbUser?.timezone ?? null,
-              builderCoworkerContext: ctx.builderCoworkerContext,
-            }
-          : {
-              kind: "chat",
-              cliInstructions,
-              executorInstructions,
-              skillsInstructions,
-              integrationSkillsInstructions,
-              memoryInstructions,
-              selectedPlatformSkillSlugs: ctx.selectedPlatformSkillSlugs,
-              userTimezone: dbUser?.timezone ?? null,
-            };
+      const promptSpecInput = this.buildPromptSpecInputForContext(ctx, {
+        cliInstructions,
+        executorInstructions,
+        skillsInstructions,
+        integrationSkillsInstructions,
+        memoryInstructions,
+        userTimezone: dbUser?.timezone ?? null,
+      });
       const promptSpec = await runPrePromptStep(
         "prompt_spec_compose",
         "composePromptSpecMs",
