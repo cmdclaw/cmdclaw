@@ -36,6 +36,7 @@ const ACTIVE_COWORKER_RUN_STATUSES = [
   "awaiting_auth",
   "paused",
 ] as const;
+const DISABLED_COWORKER_TRIGGER_TYPES = ["gmail.new_email"] as const;
 const TERMINAL_GENERATION_STATUSES = [
   "completed",
   "cancelled",
@@ -62,6 +63,31 @@ function mapGenerationStatusToCoworkerRunStatus(
     return "cancelled";
   }
   return "error";
+}
+
+export function isDisabledCoworkerTriggerType(triggerType: string): boolean {
+  return DISABLED_COWORKER_TRIGGER_TYPES.includes(
+    triggerType as (typeof DISABLED_COWORKER_TRIGGER_TYPES)[number],
+  );
+}
+
+export function isDisabledCoworkerTriggerError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const maybeError = error as {
+    code?: unknown;
+    status?: unknown;
+    message?: unknown;
+  };
+
+  return (
+    maybeError.code === "BAD_REQUEST" &&
+    maybeError.status === 400 &&
+    typeof maybeError.message === "string" &&
+    maybeError.message.includes("Coworker trigger type is disabled")
+  );
 }
 
 export async function reconcileStaleCoworkerRunsForCoworker(
@@ -218,6 +244,12 @@ export async function triggerCoworkerRun(params: {
 
   if (wf.status !== "on") {
     throw new ORPCError("BAD_REQUEST", { message: "Coworker is turned off" });
+  }
+
+  if (isDisabledCoworkerTriggerType(wf.triggerType)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Coworker trigger type is disabled: ${wf.triggerType}`,
+    });
   }
 
   // Defensive reconciliation for runs that were left active while their generation already ended.

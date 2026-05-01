@@ -89,6 +89,7 @@ describe("triggerCoworkerRun", () => {
       ownerId: "user-1",
       workspaceId: "ws-1",
       status: "on",
+      triggerType: "manual",
       autoApprove: true,
       toolAccessMode: "all",
       allowedIntegrations: ["slack"],
@@ -149,6 +150,7 @@ describe("triggerCoworkerRun", () => {
     coworkerFindFirstMock.mockResolvedValue({
       id: "wf-1",
       ownerId: "user-1",
+      triggerType: "manual",
       status: "off",
       autoApprove: true,
       allowedIntegrations: [],
@@ -162,6 +164,37 @@ describe("triggerCoworkerRun", () => {
     await expect(
       triggerCoworkerRun({ coworkerId: "wf-1", triggerPayload: {} }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("throws BAD_REQUEST when coworker uses disabled Gmail trigger", async () => {
+    coworkerFindFirstMock.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      status: "on",
+      triggerType: "gmail.new_email",
+      autoApprove: true,
+      toolAccessMode: "all",
+      allowedIntegrations: [],
+      allowedCustomIntegrations: [],
+      allowedExecutorSourceIds: [],
+      allowedSkillSlugs: [],
+      model: "anthropic/claude-sonnet-4-6",
+      prompt: "",
+      promptDo: null,
+      promptDont: null,
+    });
+
+    await expect(
+      triggerCoworkerRun({ coworkerId: "wf-1", triggerPayload: {} }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Coworker trigger type is disabled: gmail.new_email",
+    });
+
+    expect(coworkerRunFindFirstMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(startCoworkerGenerationMock).not.toHaveBeenCalled();
   });
 
   it("blocks non-admin users when an active run exists", async () => {

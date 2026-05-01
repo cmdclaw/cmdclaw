@@ -103,6 +103,7 @@ const modelReferenceSchema = z
     }
   }, "Model must use provider/model format");
 
+const DISABLED_TRIGGER_TYPES = ["gmail.new_email"] as const;
 const triggerTypeSchema = z.string().min(1).max(128);
 const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
 const COWORKER_HISTORY_PAGE_SIZE = 100;
@@ -471,6 +472,18 @@ function normalizeDescriptionInput(value: string | null | undefined): string | n
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function isDisabledTriggerType(triggerType: string): boolean {
+  return DISABLED_TRIGGER_TYPES.includes(triggerType as (typeof DISABLED_TRIGGER_TYPES)[number]);
+}
+
+function assertNewTriggerTypeAllowed(triggerType: string): void {
+  if (isDisabledTriggerType(triggerType)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Coworker trigger type is disabled: ${triggerType}`,
+    });
+  }
 }
 
 function normalizeCoworkerInstructionInput(value: string | null | undefined): string | null {
@@ -1056,6 +1069,7 @@ const create = protectedProcedure
       coworkerId,
       username: input.username,
     });
+    assertNewTriggerTypeAllowed(input.triggerType);
 
     const [created] = await context.db
       .insert(coworker)
@@ -1175,6 +1189,9 @@ const update = protectedProcedure
       updates.status = input.status;
     }
     if (input.triggerType !== undefined) {
+      if (input.triggerType !== existing.triggerType) {
+        assertNewTriggerTypeAllowed(input.triggerType);
+      }
       updates.triggerType = input.triggerType;
     }
     if (input.prompt !== undefined) {

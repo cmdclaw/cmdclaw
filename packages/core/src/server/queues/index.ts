@@ -2,7 +2,10 @@ import { Queue, QueueEvents, Worker, type ConnectionOptions, type Processor } fr
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
 import { buildRedisOptions } from "../redis/connection-options";
 import { processForwardedEmailEvent } from "../services/coworker-email-forwarding";
-import { triggerCoworkerRun } from "../services/coworker-service";
+import {
+  isDisabledCoworkerTriggerError,
+  triggerCoworkerRun,
+} from "../services/coworker-service";
 import {
   attachTraceContext,
   extractTraceContextFromPayload,
@@ -98,6 +101,12 @@ const handlers: Record<string, JobHandler> = {
       if (isActiveCoworkerRunConflict(error)) {
         console.warn(
           `[worker] skipped gmail coworker trigger because run is already active for coworker ${coworkerId}`,
+        );
+        return;
+      }
+      if (isDisabledCoworkerTriggerError(error)) {
+        console.warn(
+          `[worker] skipped gmail coworker trigger because trigger type is disabled for coworker ${coworkerId}`,
         );
         return;
       }

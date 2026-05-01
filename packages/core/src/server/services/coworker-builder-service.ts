@@ -15,11 +15,13 @@ import { logServerEvent } from "../utils/observability";
 const BUILDER_ALLOWED_TRIGGER_TYPES = [
   "manual",
   "schedule",
-  "gmail.new_email",
   "twitter.new_dm",
 ] as const;
 
-const LEGACY_READ_ONLY_TRIGGER_TYPES = [EMAIL_FORWARDED_TRIGGER_TYPE] as const;
+const LEGACY_READ_ONLY_TRIGGER_TYPES = [
+  EMAIL_FORWARDED_TRIGGER_TYPE,
+  "gmail.new_email",
+] as const;
 
 const modelReferenceSchema = z
   .string()

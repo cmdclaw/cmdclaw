@@ -3,8 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
-
-export const COWORKERS_OPEN_RECENT_DRAWER_EVENT = "coworkers:open-recent-drawer";
+import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/lib/coworkers-events";
 
 export default function CoworkersLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

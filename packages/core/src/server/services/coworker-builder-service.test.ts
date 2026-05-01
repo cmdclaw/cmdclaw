@@ -224,6 +224,14 @@ describe("coworker-builder-service", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects new Gmail trigger edits", () => {
+    const result = coworkerBuilderEditSchema.safeParse({
+      triggerType: "gmail.new_email",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("applies prompt changes and reports changed fields", async () => {
     const { db, mocks } = createDbStub();
     const updatedAt = new Date("2026-03-03T12:00:00.000Z");
@@ -412,6 +420,71 @@ describe("coworker-builder-service", () => {
       model: "anthropic/claude-sonnet-4-6",
       toolAccessMode: "all",
       triggerType: EMAIL_FORWARDED_TRIGGER_TYPE,
+      schedule: null,
+      allowedIntegrations: ["github"],
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
+
+    const result = await applyCoworkerEdit({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      changes: { prompt: "new prompt" },
+    });
+
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") {
+      return;
+    }
+    expect(result.appliedChanges).toEqual(["prompt"]);
+  });
+
+  it("keeps legacy Gmail trigger coworkers editable", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "gmail.new_email",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "new prompt",
+        model: "anthropic/claude-sonnet-4-6",
+        triggerType: "gmail.new_email",
+        schedule: null,
+        allowedIntegrations: ["github"],
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "new prompt",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: "gmail.new_email",
       schedule: null,
       allowedIntegrations: ["github"],
       updatedAt: nextUpdatedAt,

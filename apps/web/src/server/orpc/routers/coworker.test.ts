@@ -330,6 +330,29 @@ describe("coworkerRouter", () => {
     );
   });
 
+  it("rejects creating a Gmail-trigger coworker", async () => {
+    const context = createContext();
+
+    await expect(
+      coworkerRouterAny.create({
+        input: {
+          triggerType: "gmail.new_email",
+          prompt: "Watch Gmail",
+          model: DEFAULT_MODEL,
+          autoApprove: true,
+          allowedIntegrations: ["slack"],
+          allowedCustomIntegrations: [],
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Coworker trigger type is disabled: gmail.new_email",
+    });
+
+    expect(context.mocks.insertValuesMock).not.toHaveBeenCalled();
+  });
+
   it("lists coworkers with run summaries and source classification", async () => {
     const context = createContext();
     const now = new Date("2026-02-12T00:00:00.000Z");
@@ -1371,6 +1394,82 @@ describe("coworkerRouter", () => {
     });
 
     expect(result).toEqual({ success: true });
+  });
+
+  it("rejects changing a coworker to the Gmail trigger", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      name: "Coworker",
+      status: "on",
+      triggerType: "manual",
+      prompt: "Prompt",
+      promptDo: null,
+      promptDont: null,
+      autoApprove: true,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+    });
+
+    await expect(
+      coworkerRouterAny.update({
+        input: {
+          id: "wf-1",
+          triggerType: "gmail.new_email",
+        },
+        context,
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Coworker trigger type is disabled: gmail.new_email",
+    });
+
+    expect(context.mocks.updateSetMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves existing legacy Gmail trigger when editing other fields", async () => {
+    const context = createContext();
+    context.db.query.coworker.findFirst.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      name: "Coworker",
+      status: "on",
+      triggerType: "gmail.new_email",
+      prompt: "Prompt",
+      promptDo: null,
+      promptDont: null,
+      autoApprove: true,
+      allowedIntegrations: ["slack"],
+      allowedCustomIntegrations: [],
+      schedule: null,
+    });
+    context.mocks.updateReturningMock.mockResolvedValue([
+      {
+        id: "wf-1",
+        status: "on",
+        triggerType: "gmail.new_email",
+        schedule: null,
+      },
+    ]);
+
+    const result = await coworkerRouterAny.update({
+      input: {
+        id: "wf-1",
+        name: "Renamed Coworker",
+        triggerType: "gmail.new_email",
+      },
+      context,
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(context.mocks.updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Renamed Coworker",
+        triggerType: "gmail.new_email",
+      }),
+    );
   });
 
   it("returns NOT_FOUND when updating a missing coworker", async () => {

@@ -23,7 +23,6 @@ import { syncConversationLoadingCleanupJob } from "./server/services/conversatio
 import { syncDaytonaRunawayCleanupJob } from "./server/services/daytona-runaway-cleanup";
 import { syncStoppedDaytonaSandboxDeleteJob } from "./server/services/daytona-stopped-sandbox-delete";
 import { syncSandboxUsageSnapshotJob } from "./server/services/sandbox-usage-snapshot";
-import { startGmailCoworkerWatcher } from "./server/services/coworker-gmail-watcher";
 import { reconcileScheduledCoworkerJobs } from "./server/services/coworker-scheduler";
 import { syncDailyTelemetryDigestJob } from "./server/services/telemetry-digest";
 import { startXDmCoworkerWatcher } from "./server/services/coworker-x-dm-watcher";
@@ -47,7 +46,6 @@ export async function startWorkerRuntime(): Promise<void> {
     queueName: sandboxSnapshotQueueName,
     redisUrl: sandboxSnapshotRedisUrl,
   } = startSandboxUsageSnapshotQueue();
-  const stopGmailWatcher = startGmailCoworkerWatcher();
   const stopXDmWatcher = startXDmCoworkerWatcher();
   const staleReaperIntervalMs = 10 * 60 * 1000;
   const pausedSandboxCleanupIntervalMs = 60 * 60 * 1000;
@@ -128,7 +126,6 @@ export async function startWorkerRuntime(): Promise<void> {
     shutdownPromise = (async () => {
       console.log("[worker] shutting down...");
 
-      stopGmailWatcher();
       stopXDmWatcher();
       if (staleReaperInterval) {
         clearInterval(staleReaperInterval);
