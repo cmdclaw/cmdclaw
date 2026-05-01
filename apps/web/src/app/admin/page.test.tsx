@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,8 @@ const {
   removeAllowlistEntryMutateAsyncMock,
   setUserAdminRoleMutateAsyncMock,
   grantAdminAccessByEmailMutateAsyncMock,
+  addGalienAccessMutateAsyncMock,
+  removeGalienAccessMutateAsyncMock,
   getSessionMock,
   listUsersMock,
 } = vi.hoisted(() => ({
@@ -23,6 +25,8 @@ const {
   removeAllowlistEntryMutateAsyncMock: vi.fn(),
   setUserAdminRoleMutateAsyncMock: vi.fn(),
   grantAdminAccessByEmailMutateAsyncMock: vi.fn(),
+  addGalienAccessMutateAsyncMock: vi.fn(),
+  removeGalienAccessMutateAsyncMock: vi.fn(),
   getSessionMock: vi.fn(),
   listUsersMock: vi.fn(),
 }));
@@ -129,6 +133,24 @@ vi.mock("@/orpc/hooks", () => ({
     mutateAsync: grantAdminAccessByEmailMutateAsyncMock,
     isPending: false,
   }),
+  useAdminWorkspaces: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+  useAdminGalienAccess: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+  useAdminAddGalienAccess: () => ({
+    mutateAsync: addGalienAccessMutateAsyncMock,
+    isPending: false,
+  }),
+  useAdminRemoveGalienAccess: () => ({
+    mutateAsync: removeGalienAccessMutateAsyncMock,
+    isPending: false,
+  }),
 }));
 
 import AdminPage from "./page";
@@ -164,7 +186,8 @@ describe("AdminPage", () => {
 
     render(<AdminPage />);
 
-    fireEvent.change(screen.getByPlaceholderText("user@company.com"), {
+    const addForm = screen.getByRole("button", { name: "Add" }).closest("form") as HTMLElement;
+    fireEvent.change(within(addForm).getByPlaceholderText("user@company.com"), {
       target: { value: "User@Example.com " },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -217,7 +240,8 @@ describe("AdminPage", () => {
 
     render(<AdminPage />);
 
-    fireEvent.change(screen.getByPlaceholderText("user@company.com"), {
+    const addForm = screen.getByRole("button", { name: "Add" }).closest("form") as HTMLElement;
+    fireEvent.change(within(addForm).getByPlaceholderText("user@company.com"), {
       target: { value: "Admin@Example.com " },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
