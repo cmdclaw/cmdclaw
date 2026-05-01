@@ -5,6 +5,8 @@ import { requestGalien } from "../lib/galien-client";
 import { getManagedGalienToolCredentials } from "../lib/galien-auth";
 import { galienIsoDateTimeSchema } from "../lib/tool-helpers";
 
+export const CMDCLAW_VISIT_REPORT_COMMENT_MARKER = "(made by CmdClaw)";
+
 export const schema = {
   clientId: z.number().int().optional(),
   contactPersonId: z.number().int().optional(),
@@ -45,12 +47,30 @@ export const metadata: ToolMetadata = {
   },
 };
 
+export function addCmdClawCommentMarker(comment?: string) {
+  const existingComment = comment ?? "";
+  const trimmedComment = existingComment.trim();
+
+  if (!trimmedComment) {
+    return CMDCLAW_VISIT_REPORT_COMMENT_MARKER;
+  }
+
+  if (existingComment.includes(CMDCLAW_VISIT_REPORT_COMMENT_MARKER)) {
+    return existingComment;
+  }
+
+  return `${existingComment.trimEnd()}\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`;
+}
+
 export default async function createVisitReport(params: InferSchema<typeof schema>, extra?: ToolExtraArguments) {
   const credentials = await getManagedGalienToolCredentials(extra);
   const result = await requestGalien({
     method: "POST",
     path: "/api/v1/visit-reports",
-    body: params,
+    body: {
+      ...params,
+      comment: addCmdClawCommentMarker(params.comment),
+    },
   }, credentials);
   return toMcpToolResult(result);
 }

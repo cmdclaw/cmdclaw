@@ -3,6 +3,7 @@ import type { ToolExtraArguments } from "xmcp";
 import {
   requestGalien,
   requestGalienForCurrentUser,
+  requestGalienForCurrentUserPathParam,
   splitGalienRequestParts,
   type GalienQueryValue,
 } from "./galien-client";
@@ -43,4 +44,20 @@ export async function requestCurrentGalienUserGet(
     path,
     ...requestParts,
   }, credentials);
+}
+
+export async function requestCurrentGalienUserPathParamGet(
+  path: string,
+  currentUserPathParam: string,
+  params: Record<string, GalienQueryValue | undefined>,
+  extra?: ToolExtraArguments,
+) {
+  const requestParts = splitGalienRequestParts(path, params);
+  const credentials = await getManagedGalienToolCredentials(extra);
+
+  return requestGalienForCurrentUserPathParam({
+    method: "GET",
+    path,
+    ...requestParts,
+  }, currentUserPathParam, credentials);
 }

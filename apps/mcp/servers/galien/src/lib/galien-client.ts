@@ -305,3 +305,21 @@ export async function requestGalienForCurrentUser(
         },
   });
 }
+
+export async function requestGalienForCurrentUserPathParam(
+  params: GalienRequestParams,
+  pathParamName: string,
+  credentials?: GalienCredentials,
+) {
+  const bearerToken = await loginToGalien(credentials);
+  const currentUser = decodeGalienCurrentUserFromBearerToken(bearerToken);
+
+  return requestGalienWithBearerToken({
+    ...params,
+    bearerToken,
+    pathParams: {
+      ...params.pathParams,
+      [pathParamName]: currentUser.id,
+    },
+  });
+}
