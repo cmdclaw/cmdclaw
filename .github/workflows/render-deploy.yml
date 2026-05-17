@@ -33,12 +33,6 @@ on:
     secrets:
       RENDER_API_KEY:
         required: false
-      RENDER_WEB_SERVICE_ID:
-        required: false
-      RENDER_WORKER_SERVICE_ID:
-        required: false
-      RENDER_MCP_SERVICE_ID:
-        required: false
 
 jobs:
   deploy:
@@ -46,9 +40,9 @@ jobs:
     environment: ${{ inputs.environment }}
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_WEB_SERVICE_ID: ${{ secrets.RENDER_WEB_SERVICE_ID }}
-      RENDER_WORKER_SERVICE_ID: ${{ secrets.RENDER_WORKER_SERVICE_ID }}
-      RENDER_MCP_SERVICE_ID: ${{ secrets.RENDER_MCP_SERVICE_ID }}
+      RENDER_WEB_SERVICE_NAME: cmdclaw-web-${{ inputs.environment }}
+      RENDER_WORKER_SERVICE_NAME: cmdclaw-worker-${{ inputs.environment }}
+      RENDER_MCP_SERVICE_NAME: cmdclaw-mcp-${{ inputs.environment }}
     outputs:
       previous_web_deploy_id: ${{ steps.previous-web.outputs.deploy_id }}
       previous_worker_deploy_id: ${{ steps.previous-worker.outputs.deploy_id }}
@@ -74,8 +68,6 @@ jobs:
 
           missing=()
           [ -n "${RENDER_API_KEY}" ] || missing+=("RENDER_API_KEY")
-          [ -n "${RENDER_WEB_SERVICE_ID}" ] || missing+=("RENDER_WEB_SERVICE_ID")
-          [ -n "${RENDER_WORKER_SERVICE_ID}" ] || missing+=("RENDER_WORKER_SERVICE_ID")
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Render secret(s) for GitHub environment "%s": %s\n' \
@@ -87,26 +79,24 @@ jobs:
 
       - name: Capture previous web deploy
         id: previous-web
-        run: bun scripts/release/render-deploy.ts previous-success --service-id "${RENDER_WEB_SERVICE_ID}"
+        run: bun scripts/release/render-deploy.ts previous-success --service-name "${RENDER_WEB_SERVICE_NAME}"
 
       - name: Capture previous worker deploy
         id: previous-worker
-        run: bun scripts/release/render-deploy.ts previous-success --service-id "${RENDER_WORKER_SERVICE_ID}"
+        run: bun scripts/release/render-deploy.ts previous-success --service-name "${RENDER_WORKER_SERVICE_NAME}"
 
       - name: Capture previous MCP deploy
         id: previous-mcp
-        if: ${{ env.RENDER_MCP_SERVICE_ID != '' }}
-        run: bun scripts/release/render-deploy.ts previous-success --service-id "${RENDER_MCP_SERVICE_ID}"
+        run: bun scripts/release/render-deploy.ts previous-success --service-name "${RENDER_MCP_SERVICE_NAME}"
 
       - name: Deploy MCP
         id: deploy-mcp
-        if: ${{ env.RENDER_MCP_SERVICE_ID != '' }}
-        run: bun scripts/release/render-deploy.ts deploy --service-id "${RENDER_MCP_SERVICE_ID}" --commit "${{ inputs.commit_sha }}"
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_MCP_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
 
       - name: Deploy web
         id: deploy-web
-        run: bun scripts/release/render-deploy.ts deploy --service-id "${RENDER_WEB_SERVICE_ID}" --commit "${{ inputs.commit_sha }}"
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_WEB_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
 
       - name: Deploy worker
         id: deploy-worker
-        run: bun scripts/release/render-deploy.ts deploy --service-id "${RENDER_WORKER_SERVICE_ID}" --commit "${{ inputs.commit_sha }}"
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_WORKER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"

@@ -20,6 +20,7 @@ After this work, a user can push to `main` and observe the `Release Main` GitHub
 - [x] (2026-05-17 08:02Z) Validated YAML parsing and ran `bun run check` successfully.
 - [x] (2026-05-17 08:34Z) Removed Daytona snapshot override secrets from the workflow so staging and production always use the built-in stable names.
 - [x] (2026-05-17 08:45Z) Changed Render deploy and rollback workflows to read generic Render secrets from the selected GitHub environment instead of passing environment-specific secret names through the caller.
+- [x] (2026-05-17 08:55Z) Replaced Render service ID secrets with hard-coded stable service names and runtime Render API service ID lookup.
 
 ## Surprises & Discoveries
 
@@ -48,6 +49,10 @@ After this work, a user can push to `main` and observe the `Release Main` GitHub
 
 - Decision: Use generic Render secret names inside the `staging` and `prod` GitHub environments.
   Rationale: Environment-scoped secrets are resolved by jobs that declare the environment. Passing `RENDER_STAGING_*` or `RENDER_PROD_*` from the caller can resolve to empty strings before the called workflow enters its environment.
+  Date/Author: 2026-05-17 / Codex.
+
+- Decision: Resolve Render service IDs by hard-coded service name at deploy time.
+  Rationale: Render service IDs can change when infrastructure is deleted and recreated, but service names from `render.yaml` are stable. Looking up IDs at runtime avoids requiring service ID secrets.
   Date/Author: 2026-05-17 / Codex.
 
 - Decision: Use Render API deploy IDs for rollback instead of GHCR image tags.
@@ -139,7 +144,9 @@ Updated docs:
     bun scripts/release/render-deploy.ts rollback --service-id <render-service-id> --deploy-id <render-deploy-id>
     bun scripts/release/render-deploy.ts wait --service-id <render-service-id> --deploy-id <render-deploy-id>
 
-It requires `RENDER_API_KEY`.
+Each command also accepts `--service-name <render-service-name>` instead of
+`--service-id`; the release workflow uses service names and resolves the current
+ID through the Render API. It requires `RENDER_API_KEY`.
 
 `apps/web/scripts/release-replay.ts` reads JSON shaped like:
 
@@ -153,6 +160,5 @@ It requires `RENDER_API_KEY`.
     }
 
 The release workflow requires the secrets listed in `RELEASING.md`. For Render,
-set `RENDER_API_KEY`, `RENDER_WEB_SERVICE_ID`, `RENDER_WORKER_SERVICE_ID`, and
-optionally `RENDER_MCP_SERVICE_ID` on each GitHub environment. The values differ
-between `staging` and `prod`, but the names are the same.
+set only `RENDER_API_KEY` on each GitHub environment. The deploy scripts resolve
+service IDs at runtime from the stable service names in `render.yaml`.

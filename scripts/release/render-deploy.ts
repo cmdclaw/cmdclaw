@@ -22,6 +22,12 @@ type RenderDeploy = {
   finishedAt?: string;
 };
 
+type RenderService = {
+  id: string;
+  name: string;
+  type?: string;
+};
+
 type RenderApiError = {
   message?: string;
   error?: string;
@@ -121,12 +127,73 @@ function unwrapDeploys(value: unknown): RenderDeploy[] {
   return value.map((entry) => unwrapDeploy(entry));
 }
 
+function unwrapService(value: unknown): RenderService {
+  if (typeof value !== "object" || value === null) {
+    fail("Render API response did not include a service object");
+  }
+
+  const record = value as Record<string, unknown>;
+  const candidate = "service" in record ? record.service : value;
+  if (typeof candidate !== "object" || candidate === null) {
+    fail("Render API response did not include a service object");
+  }
+
+  const service = candidate as RenderService;
+  if (!service.id || !service.name) {
+    fail("Render service response did not include an id and name");
+  }
+  return service;
+}
+
+function unwrapServices(value: unknown): RenderService[] {
+  if (!Array.isArray(value)) {
+    fail("Render API service list response was not an array");
+  }
+
+  return value.map((entry) => unwrapService(entry));
+}
+
 function writeOutput(name: string, value: string): void {
   const githubOutput = process.env.GITHUB_OUTPUT;
   if (githubOutput) {
     appendFileSync(githubOutput, `${name}=${value}\n`);
   }
   console.log(`${name}=${value}`);
+}
+
+async function resolveServiceIdByName(serviceName: string): Promise<string> {
+  const services = unwrapServices(
+    await renderFetch(`/services?limit=100&name=${encodeURIComponent(serviceName)}`),
+  );
+  const matches = services.filter((service) => service.name === serviceName);
+
+  if (matches.length === 0) {
+    fail(`No Render service found with name "${serviceName}"`);
+  }
+
+  if (matches.length > 1) {
+    fail(
+      `Multiple Render services found with name "${serviceName}". Use unique service names before deploying.`,
+    );
+  }
+
+  const service = matches[0];
+  console.log(`[render-deploy] Resolved service "${service.name}" to ${service.id}`);
+  return service.id;
+}
+
+async function resolveServiceId(): Promise<string> {
+  const explicitServiceId = readArg("--service-id")?.trim();
+  if (explicitServiceId) {
+    return explicitServiceId;
+  }
+
+  const serviceName = readArg("--service-name")?.trim();
+  if (!serviceName) {
+    fail("Missing required argument --service-id or --service-name");
+  }
+
+  return resolveServiceIdByName(serviceName);
 }
 
 async function getDeploy(serviceId: string, deployId: string): Promise<RenderDeploy> {
@@ -189,7 +256,7 @@ async function main(): Promise<void> {
     fail("Usage: bun scripts/release/render-deploy.ts <previous-success|deploy|rollback|wait>");
   }
 
-  const serviceId = requireArg("--service-id");
+  const serviceId = await resolveServiceId();
 
   if (command === "previous-success") {
     const deploy = await findPreviousSuccessfulDeploy(serviceId);

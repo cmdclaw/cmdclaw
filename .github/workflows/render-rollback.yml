@@ -23,12 +23,6 @@ on:
     secrets:
       RENDER_API_KEY:
         required: false
-      RENDER_WEB_SERVICE_ID:
-        required: false
-      RENDER_WORKER_SERVICE_ID:
-        required: false
-      RENDER_MCP_SERVICE_ID:
-        required: false
 
 jobs:
   rollback:
@@ -36,9 +30,9 @@ jobs:
     environment: ${{ inputs.environment }}
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_WEB_SERVICE_ID: ${{ secrets.RENDER_WEB_SERVICE_ID }}
-      RENDER_WORKER_SERVICE_ID: ${{ secrets.RENDER_WORKER_SERVICE_ID }}
-      RENDER_MCP_SERVICE_ID: ${{ secrets.RENDER_MCP_SERVICE_ID }}
+      RENDER_WEB_SERVICE_NAME: cmdclaw-web-${{ inputs.environment }}
+      RENDER_WORKER_SERVICE_NAME: cmdclaw-worker-${{ inputs.environment }}
+      RENDER_MCP_SERVICE_NAME: cmdclaw-mcp-${{ inputs.environment }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -55,8 +49,6 @@ jobs:
 
           missing=()
           [ -n "${RENDER_API_KEY}" ] || missing+=("RENDER_API_KEY")
-          [ -n "${RENDER_WEB_SERVICE_ID}" ] || missing+=("RENDER_WEB_SERVICE_ID")
-          [ -n "${RENDER_WORKER_SERVICE_ID}" ] || missing+=("RENDER_WORKER_SERVICE_ID")
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Render secret(s) for GitHub environment "%s": %s\n' \
@@ -67,11 +59,11 @@ jobs:
           fi
 
       - name: Roll back web
-        run: bun scripts/release/render-deploy.ts rollback --service-id "${RENDER_WEB_SERVICE_ID}" --deploy-id "${{ inputs.web_deploy_id }}"
+        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_WEB_SERVICE_NAME}" --deploy-id "${{ inputs.web_deploy_id }}"
 
       - name: Roll back worker
-        run: bun scripts/release/render-deploy.ts rollback --service-id "${RENDER_WORKER_SERVICE_ID}" --deploy-id "${{ inputs.worker_deploy_id }}"
+        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_WORKER_SERVICE_NAME}" --deploy-id "${{ inputs.worker_deploy_id }}"
 
       - name: Roll back MCP
-        if: ${{ env.RENDER_MCP_SERVICE_ID != '' && inputs.mcp_deploy_id != '' }}
-        run: bun scripts/release/render-deploy.ts rollback --service-id "${RENDER_MCP_SERVICE_ID}" --deploy-id "${{ inputs.mcp_deploy_id }}"
+        if: ${{ inputs.mcp_deploy_id != '' }}
+        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_MCP_SERVICE_NAME}" --deploy-id "${{ inputs.mcp_deploy_id }}"

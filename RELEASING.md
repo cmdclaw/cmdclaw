@@ -79,19 +79,17 @@ Set these secrets on each GitHub environment named `staging` and `prod` before
 enabling the workflow:
 
 - `RENDER_API_KEY`
-- `RENDER_WEB_SERVICE_ID`
-- `RENDER_WORKER_SERVICE_ID`
-- `RENDER_MCP_SERVICE_ID` if MCP should deploy with the release
 - `DAYTONA_API_KEY`, or both `DAYTONA_JWT_TOKEN` and `DAYTONA_ORGANIZATION_ID`
 - `DAYTONA_API_URL` if the default Daytona API URL is not correct
 - `DATABASE_URL_STAGING`
 - `DATABASE_URL_PROD`
 - `RELEASE_ALERT_WEBHOOK_URL` for optional failure alerts
 
-The Render service ID secret values differ per environment, but the secret names
-must stay the same. For example, the `staging` environment's
-`RENDER_WEB_SERVICE_ID` should point at `cmdclaw-web-staging`, while the `prod`
-environment's `RENDER_WEB_SERVICE_ID` should point at `cmdclaw-web-prod`.
+Render service IDs are resolved at runtime from stable service names. The release
+workflow expects these names to exist:
+
+- staging: `cmdclaw-web-staging`, `cmdclaw-worker-staging`, `cmdclaw-mcp-staging`
+- prod: `cmdclaw-web-prod`, `cmdclaw-worker-prod`, `cmdclaw-mcp-prod`
 
 Deployment configuration is tracked in `render.yaml`, and service runtime
 secrets should come from the Render environment groups described there.
