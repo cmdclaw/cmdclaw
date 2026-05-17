@@ -37,6 +37,7 @@
     "models:opencode:free": "bun scripts/list-opencode-free-models.ts",
     "monitor:playwright:kuma": "bun --env-file=../../.env scripts/monitoring-playwright-kuma.ts",
     "profiler": "bun scripts/profiler.ts",
+    "slo:backfill:prod": "bun --env-file=../../.env scripts/slo-backfill.ts",
     "start": "bun --env-file=../../.env next start",
     "test": "bun run test:integration",
     "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e && bun run test:live",

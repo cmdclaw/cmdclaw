@@ -19,8 +19,16 @@ sed "s/__CMDCLAW_ALERT_ENV__/${alert_env}/g" \
   /etc/vmalert/templates/cmdclaw-runtime.rules.yml.tpl \
   > "${rules_dir}/cmdclaw-runtime.rules.yml"
 
+if ls /etc/pyrra/slos/*.yaml >/dev/null 2>&1; then
+  pyrra generate \
+    --config-files="/etc/pyrra/slos/*.yaml" \
+    --prometheus-folder="${rules_dir}" \
+    --generic-rules
+fi
+
 exec /vmalert-prod \
   -rule="${rules_dir}/*.yml" \
+  -rule="${rules_dir}/*.yaml" \
   -datasource.url="http://${CMDCLAW_VICTORIA_METRICS_HOST}:8428" \
   -remoteWrite.url="http://${CMDCLAW_VICTORIA_METRICS_HOST}:8428" \
   -remoteRead.url="http://${CMDCLAW_VICTORIA_METRICS_HOST}:8428" \

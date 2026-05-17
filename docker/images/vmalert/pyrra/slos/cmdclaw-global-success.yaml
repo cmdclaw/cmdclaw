@@ -1,0 +1,22 @@
+apiVersion: pyrra.dev/v1alpha1
+kind: ServiceLevelObjective
+metadata:
+  name: cmdclaw-global-success
+  namespace: cmdclaw
+  labels:
+    pyrra.dev/team: product
+    pyrra.dev/service: cmdclaw
+    pyrra.dev/journey: global
+spec:
+  target: "95"
+  window: 30d
+  description: Global CmdClaw generation and coworker run success rate.
+  indicator:
+    ratio:
+      errors:
+        metric: cmdclaw_slo_events_total{journey="global",result="bad"}
+      total:
+        metric: cmdclaw_slo_events_total{journey="global"}
+  alerting:
+    disabled: true
+    absent: false

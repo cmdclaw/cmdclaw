@@ -127,6 +127,7 @@ services:
     image: victoriametrics/vmalert:v1.140.0
     command:
       - "-rule=/etc/vmalert/rules/*.yml"
+      - "-rule=/pyrra-rules/*.yaml"
       - "-datasource.url=http://victoria-metrics:8428"
       - "-remoteWrite.url=http://victoria-metrics:8428"
       - "-remoteRead.url=http://victoria-metrics:8428"
@@ -138,10 +139,35 @@ services:
       - "${CMDCLAW_VMALERT_PORT:-8880}:8880"
     volumes:
       - ./observability/vmalert:/etc/vmalert:ro
+      - cmdclaw_pyrra_slo_rules:/pyrra-rules:ro
+    depends_on:
+      pyrra-slo-rules:
+        condition: service_completed_successfully
+      victoria-metrics:
+        condition: service_started
+      alertmanager:
+        condition: service_started
+    restart: unless-stopped
+
+  pyrra-slo-rules:
+    image: ghcr.io/pyrra-dev/pyrra:v0.9.5
+    user: "0:0"
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - |
+        rm -f /etc/prometheus/pyrra/*.yaml
+        exec pyrra generate \
+          --config-files="/etc/pyrra/slos/*.yaml" \
+          --prometheus-folder=/etc/prometheus/pyrra \
+          --generic-rules
+    volumes:
+      - ../images/vmalert/pyrra/slos:/etc/pyrra/slos:ro
+      - cmdclaw_pyrra_slo_rules:/etc/prometheus/pyrra
+    restart: "no"
     depends_on:
       - victoria-metrics
-      - alertmanager
-    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:12.1.7
@@ -430,6 +456,8 @@ volumes:
     name: ${CMDCLAW_ALERTMANAGER_VOLUME:-cmdclaw-local_cmdclaw_alertmanager_data}
   cmdclaw_grafana_data:
     name: ${CMDCLAW_GRAFANA_VOLUME:-cmdclaw-local_cmdclaw_grafana_data}
+  cmdclaw_pyrra_slo_rules:
+    name: ${CMDCLAW_PYRRA_SLO_RULES_VOLUME:-cmdclaw-local_cmdclaw_pyrra_slo_rules}
   daytona_db_data:
     name: ${DAYTONA_DB_VOLUME:-daytona_db_data}
   daytona_dex_data:

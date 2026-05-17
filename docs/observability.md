@@ -34,6 +34,23 @@ These host ports are configurable via `CMDCLAW_*_PORT` env vars in local worktre
 - Grafana: `http://127.0.0.1:3400`
 - Alert rules: `http://127.0.0.1:8428/api/v1/rules`
 
+## SLO Backfill
+
+The local stack includes CmdClaw SLO rules generated from Pyrra YAML and shown
+through Grafana. Pyrra is used only as rule/dashboard tooling; there is no
+separate Pyrra UI in the local or hosted stack.
+
+Backfill the last 30 days of production conversation reliability into local
+VictoriaMetrics:
+
+```bash
+bun run --cwd apps/web slo:backfill:prod
+```
+
+The backfill reads `DATABASE_URL_PROD` with SELECT-only queries and imports
+hourly cumulative samples for `cmdclaw_slo_events_total` into VictoriaMetrics.
+The SLO dashboard is available in Grafana as `CmdClaw SLOs`.
+
 ## Staging And Production Debugging
 
 For staging and production incidents, use the hosted Victoria endpoints together with Render cli. The Victoria endpoints provide application metrics, logs, traces; Render provides deployment state, service status, and platform/runtime logs.
