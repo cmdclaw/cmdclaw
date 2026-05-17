@@ -1,0 +1,55 @@
+name: Verify Deployment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment to verify"
+        required: true
+        type: string
+      base_url:
+        description: "Public base URL to verify"
+        required: true
+        type: string
+      run_replay:
+        description: "Run release replay fixtures"
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      RELEASE_REPLAY_FILE:
+        required: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check health endpoint
+        run: curl --fail --show-error --silent "${{ inputs.base_url }}/api/health"
+
+      - name: Run CLI live checks
+        env:
+          CMDCLAW_SERVER_URL: ${{ inputs.base_url }}
+          PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
+        run: bun run --cwd apps/web test:e2e:cli:live
+
+      - name: Run conversation and workflow replay
+        if: ${{ inputs.run_replay }}
+        env:
+          CMDCLAW_SERVER_URL: ${{ inputs.base_url }}
+          PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
+          RELEASE_REPLAY_FILE: ${{ secrets.RELEASE_REPLAY_FILE }}
+        run: bun run --cwd apps/web test:replay:release

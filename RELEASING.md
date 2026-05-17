@@ -1,71 +1,96 @@
 # Releasing
 
-CmdClaw now uses one long-lived branch:
+CmdClaw ships from `main`.
 
-- `main` is the only working branch.
-- Render should keep deploying `main` to `staging`.
-- `production` is deployed only from release tags.
+Every push to `main` starts the `Release Main` workflow. The workflow deploys the
+same commit to staging, verifies staging, promotes that commit to production,
+verifies production, and creates a production release tag only after production
+verification succeeds.
 
-## Tag format
+## Release Flow
 
-Production tags use a date-based format:
+The automatic workflow is `.github/workflows/release-main.yml`.
 
-- first release of the day: `v2026.3.23`
-- later release that same day: `v2026.3.23-2`, `v2026.3.23-3`
+For each release it:
 
-Accepted tags match:
+- resolves the pushed commit and verifies it is on `main`
+- pushes database schema changes to staging
+- builds the Daytona staging snapshot
+- deploys staging Render services from the commit SHA
+- checks staging health, runs CLI live checks, and runs release replay fixtures
+- pushes database schema changes to production
+- builds the Daytona production snapshot
+- deploys production Render services from the same commit SHA
+- checks production health, runs CLI live checks, and runs release replay fixtures
+- creates an annotated production tag, using the existing release format:
+  `vYYYY.M.D` for the first release of the day, then `vYYYY.M.D-2`,
+  `vYYYY.M.D-3`, and so on for later releases that same day
+
+Production is not triggered by manually creating a tag. Tags are release history
+markers created by the successful workflow.
+
+Accepted production release tags match:
 
 ```text
 ^v\d{4}\.\d{1,2}\.\d{1,2}(-\d+)?$
 ```
 
-## Cut a production release
+## Rollback
 
-Tag a commit that is already on `main`, then push the tag:
+Render rollback is handled by `.github/workflows/render-rollback.yml`.
+
+If production verification fails after the production Render deploy completed,
+the main release workflow automatically rolls web, worker, and MCP services back
+to the previous successful Render deploy IDs captured before the production
+deploy.
+
+Database changes are not automatically rolled back. Release migrations should be
+safe for the previous application version to run against. Prefer additive
+database changes first, deploy code second, and remove old columns or tables in a
+later release after the old code path is gone.
+
+Daytona snapshots use stable environment names:
+
+- staging: `cmdclaw-agent-staging`
+- production: `cmdclaw-agent-prod`
+
+Rebuilding the previous commit can restore the previous snapshot contents if a
+Daytona rollback is needed.
+
+## Replay Fixtures
+
+The verification workflow runs:
 
 ```bash
-git checkout main
-git pull --ff-only origin main
-git tag v2026.4.8
-git push origin v2026.4.8
+bun run --cwd apps/web test:e2e:cli:live
+bun run --cwd apps/web test:replay:release
 ```
 
-The `Production Release` GitHub Actions workflow will:
+`test:replay:release` reads replay cases from
+`apps/web/tests/release-replay/conversations.json` by default, or from the path
+in `RELEASE_REPLAY_FILE`.
 
-- validate the tag format
-- verify the tagged commit is on `main`
-- run the production prerelease workflows
-- create the release tag used for production deployment
+Replay cases are command arrays that run from the repository root. This keeps
+historical conversation or workflow replays explicit and reviewable.
 
-## Same-day follow-up release
+## Required GitHub Secrets
 
-If you need another production release on the same day, use a numeric dash suffix:
+Set these repository or environment secrets before enabling the workflow:
 
-```bash
-git tag v2026.4.8-2
-git push origin v2026.4.8-2
-```
+- `RENDER_API_KEY`
+- `RENDER_STAGING_WEB_SERVICE_ID`
+- `RENDER_STAGING_WORKER_SERVICE_ID`
+- `RENDER_STAGING_MCP_SERVICE_ID` if MCP should deploy with the release
+- `RENDER_PROD_WEB_SERVICE_ID`
+- `RENDER_PROD_WORKER_SERVICE_ID`
+- `RENDER_PROD_MCP_SERVICE_ID` if MCP should deploy with the release
+- `DAYTONA_API_KEY`, or both `DAYTONA_JWT_TOKEN` and `DAYTONA_ORGANIZATION_ID`
+- `DAYTONA_API_URL` if the default Daytona API URL is not correct
+- `DAYTONA_SNAPSHOT_STAGING` if overriding `cmdclaw-agent-staging`
+- `DAYTONA_SNAPSHOT_PROD` if overriding `cmdclaw-agent-prod`
+- `DATABASE_URL_STAGING`
+- `DATABASE_URL_PROD`
+- `RELEASE_ALERT_WEBHOOK_URL` for optional failure alerts
 
-## Re-run or roll back a release
-
-Use GitHub Actions `workflow_dispatch` on the `Production Release` workflow and provide an existing release tag.
-
-Examples:
-
-- re-run current release: `v2026.4.8`
-- roll back to an older release: `v2026.4.6`
-
-## Required GitHub secrets
-
-Set the repository secrets required by the production prerelease workflows.
-Deployment configuration is tracked in `render.yaml`, and service secrets should
-come from the Render environment groups described there.
-
-## Required Render setup
-
-In Render:
-
-- keep staging deployment wired to `main`
-- keep production deployment controlled by release tags
-- use the services defined in `render.yaml`, including `cmdclaw-web-prod` and
-  `cmdclaw-worker-prod`
+Deployment configuration is tracked in `render.yaml`, and service runtime
+secrets should come from the Render environment groups described there.

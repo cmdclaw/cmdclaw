@@ -1,0 +1,69 @@
+name: Build Daytona Sandbox
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit SHA to build"
+        required: true
+        type: string
+      environment:
+        description: "Environment to target"
+        required: true
+        type: string
+    secrets:
+      DAYTONA_API_KEY:
+        required: false
+      DAYTONA_JWT_TOKEN:
+        required: false
+      DAYTONA_ORGANIZATION_ID:
+        required: false
+      DAYTONA_API_URL:
+        required: false
+      DAYTONA_SNAPSHOT_STAGING:
+        required: false
+      DAYTONA_SNAPSHOT_PROD:
+        required: false
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit SHA to build"
+        required: true
+        default: "main"
+      environment:
+        description: "Environment to target"
+        required: true
+        type: choice
+        default: "staging"
+        options:
+          - "dev"
+          - "staging"
+          - "prod"
+
+jobs:
+  build-sandbox:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Daytona snapshot
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+          DAYTONA_JWT_TOKEN: ${{ secrets.DAYTONA_JWT_TOKEN }}
+          DAYTONA_ORGANIZATION_ID: ${{ secrets.DAYTONA_ORGANIZATION_ID }}
+          DAYTONA_API_URL: ${{ secrets.DAYTONA_API_URL }}
+          DAYTONA_SNAPSHOT_STAGING: ${{ secrets.DAYTONA_SNAPSHOT_STAGING }}
+          DAYTONA_SNAPSHOT_PROD: ${{ secrets.DAYTONA_SNAPSHOT_PROD }}
+        run: bun run --cwd apps/sandbox daytona:build:${{ inputs.environment }}

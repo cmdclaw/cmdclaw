@@ -60,6 +60,7 @@
     "test:monitor": "bun scripts/e2e-live.ts prod-monitor-stable",
     "test:prod": "bun scripts/e2e-live.ts prod-stable",
     "test:record": "bun run test:e2e:live:record",
+    "test:replay:release": "bun scripts/release-replay.ts",
     "test:unit": "vitest run tests/unit",
     "test:unit:watch": "vitest tests/unit",
     "tool": "bun run chat:auth && bun --env-file=../../.env scripts/tool.ts",

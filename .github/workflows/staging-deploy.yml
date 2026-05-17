@@ -49,9 +49,9 @@ jobs:
       environment: staging
     secrets: inherit
 
-  e2b-sandbox:
+  daytona-sandbox:
     needs: resolve
-    uses: ./.github/workflows/e2b-sandbox.yml
+    uses: ./.github/workflows/daytona-sandbox.yml
     with:
       ref: ${{ needs.resolve.outputs.commit_sha }}
       environment: staging

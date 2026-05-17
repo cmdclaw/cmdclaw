@@ -49,9 +49,9 @@ jobs:
       environment: prod
     secrets: inherit
 
-  e2b-sandbox:
+  daytona-sandbox:
     needs: resolve
-    uses: ./.github/workflows/e2b-sandbox.yml
+    uses: ./.github/workflows/daytona-sandbox.yml
     with:
       ref: ${{ needs.resolve.outputs.commit_sha }}
       environment: prod
@@ -61,7 +61,7 @@ jobs:
     needs:
       - resolve
       - db-push
-      - e2b-sandbox
+      - daytona-sandbox
     uses: ./.github/workflows/create-release-tag.yml
     with:
       commit_sha: ${{ needs.resolve.outputs.commit_sha }}

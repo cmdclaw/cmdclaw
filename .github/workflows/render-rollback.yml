@@ -1,0 +1,62 @@
+name: Roll Back Render Services
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment to target"
+        required: true
+        type: string
+      web_deploy_id:
+        description: "Render web deploy ID to roll back to"
+        required: true
+        type: string
+      worker_deploy_id:
+        description: "Render worker deploy ID to roll back to"
+        required: true
+        type: string
+      mcp_deploy_id:
+        description: "Optional Render MCP deploy ID to roll back to"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      RENDER_API_KEY:
+        required: true
+      RENDER_WEB_SERVICE_ID:
+        required: true
+      RENDER_WORKER_SERVICE_ID:
+        required: true
+      RENDER_MCP_SERVICE_ID:
+        required: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      RENDER_MCP_SERVICE_ID: ${{ secrets.RENDER_MCP_SERVICE_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Roll back web
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: bun scripts/release/render-deploy.ts rollback --service-id "${{ secrets.RENDER_WEB_SERVICE_ID }}" --deploy-id "${{ inputs.web_deploy_id }}"
+
+      - name: Roll back worker
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: bun scripts/release/render-deploy.ts rollback --service-id "${{ secrets.RENDER_WORKER_SERVICE_ID }}" --deploy-id "${{ inputs.worker_deploy_id }}"
+
+      - name: Roll back MCP
+        if: ${{ env.RENDER_MCP_SERVICE_ID != '' && inputs.mcp_deploy_id != '' }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: bun scripts/release/render-deploy.ts rollback --service-id "${RENDER_MCP_SERVICE_ID}" --deploy-id "${{ inputs.mcp_deploy_id }}"

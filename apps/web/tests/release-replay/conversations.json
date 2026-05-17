@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "name": "chat conversation live replay",
+      "command": [
+        "bun",
+        "--cwd",
+        "apps/web",
+        "vitest",
+        "run",
+        "src/app/chat/chat.cli.live.test.ts"
+      ]
+    },
+    {
+      "name": "coworker builder workflow live replay",
+      "command": [
+        "bun",
+        "--cwd",
+        "apps/web",
+        "vitest",
+        "run",
+        "src/app/coworkers/coworker-builder.cli.live.test.ts"
+      ]
+    }
+  ]
+}
