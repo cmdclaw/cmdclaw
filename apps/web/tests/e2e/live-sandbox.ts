@@ -1,6 +1,4 @@
-import { db } from "@cmdclaw/db/client";
-import { generation } from "@cmdclaw/db/schema";
-import { inArray } from "drizzle-orm";
+import { callCliLiveTestingApi } from "../e2e-cli/testing-api";
 
 export type SandboxProvider = "e2b" | "daytona" | "docker";
 
@@ -52,44 +50,13 @@ async function loadSandboxRows(args: {
     return [];
   }
 
-  const [rowsByGeneration, rowsByConversation] = await Promise.all([
-    generationIds.length > 0
-      ? db.query.generation.findMany({
-          where: inArray(generation.id, generationIds),
-          columns: {
-            id: true,
-            conversationId: true,
-            sandboxId: true,
-            sandboxProvider: true,
-          },
-        })
-      : Promise.resolve([]),
-    conversationIds.length > 0
-      ? db.query.generation.findMany({
-          where: inArray(generation.conversationId, conversationIds),
-          columns: {
-            id: true,
-            conversationId: true,
-            sandboxId: true,
-            sandboxProvider: true,
-          },
-        })
-      : Promise.resolve([]),
-  ]);
+  const response = await callCliLiveTestingApi<{ rows: SandboxGenerationRow[] }>({
+    action: "sandbox:rows",
+    generationIds,
+    conversationIds,
+  });
 
-  return Array.from(
-    new Map(
-      [...rowsByGeneration, ...rowsByConversation].map((row) => [
-        row.id,
-        {
-          id: row.id,
-          conversationId: row.conversationId,
-          sandboxId: row.sandboxId ?? null,
-          sandboxProvider: row.sandboxProvider ?? null,
-        },
-      ]),
-    ).values(),
-  );
+  return response.rows;
 }
 
 export async function waitForSandboxRows(args: {

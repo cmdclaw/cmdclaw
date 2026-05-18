@@ -1,9 +1,4 @@
-import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { createRpcClient, defaultProfileStore } from "@cmdclaw/client";
-import { getValidTokensForUser } from "@cmdclaw/core/server/integrations/token-refresh";
-import { closePool, db } from "@cmdclaw/db/client";
-import { integration, integrationToken, user } from "@cmdclaw/db/schema";
-import { and, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +16,7 @@ import {
   trackCliIdentifiersFromText,
   type CliLiveCleanupState,
 } from "./live-sandbox-cleanup";
+import { callCliLiveTestingApi } from "./testing-api";
 
 export const liveEnabled = process.env.E2E_LIVE === "1";
 export const defaultServerUrl = process.env.CMDCLAW_SERVER_URL ?? "http://localhost:3000";
@@ -158,6 +154,26 @@ type UnipileUserResponse = {
   public_identifier?: string;
 };
 
+type TestingTokenBackup = {
+  accessToken: string;
+  refreshToken: string | null;
+  tokenType: string | null;
+  expiresAt: string | null;
+  idToken: string | null;
+};
+
+type GenerationStateRecord = {
+  id: string;
+  status: string;
+  completionReason: string | null;
+  sandboxId: string | null;
+  suspendedAt: string | null;
+  remainingRunMs: number;
+  executionPolicy: Record<string, unknown> | null;
+  startedAt: string;
+  deadlineAt: string;
+};
+
 export function runBunCommand(
   args: string[],
   timeoutMs = commandTimeoutMs,
@@ -231,52 +247,26 @@ export async function ensureCliAuth(): Promise<void> {
 
 export async function withIntegrationTokensTemporarilyRemoved<T>(args: {
   email: string;
-  integrationType: IntegrationType;
+  integrationType: string;
   run: () => Promise<T>;
 }): Promise<T> {
-  const dbUser = await db.query.user.findFirst({
-    where: eq(user.email, args.email),
-    columns: { id: true },
+  const { tokens: previousTokens } = await callCliLiveTestingApi<{
+    tokens: TestingTokenBackup[];
+  }>({
+    action: "integration-tokens:remove",
+    email: args.email,
+    integrationType: args.integrationType,
   });
-  if (!dbUser) {
-    return args.run();
-  }
-
-  const dbIntegration = await db.query.integration.findFirst({
-    where: and(eq(integration.userId, dbUser.id), eq(integration.type, args.integrationType)),
-    columns: { id: true },
-  });
-  if (!dbIntegration) {
-    return args.run();
-  }
-
-  const previousTokens = await db.query.integrationToken.findMany({
-    where: eq(integrationToken.integrationId, dbIntegration.id),
-  });
-
-  if (previousTokens.length > 0) {
-    await db.delete(integrationToken).where(eq(integrationToken.integrationId, dbIntegration.id));
-  }
 
   try {
     return await args.run();
   } finally {
-    const currentTokens = await db.query.integrationToken.findMany({
-      where: eq(integrationToken.integrationId, dbIntegration.id),
+    await callCliLiveTestingApi({
+      action: "integration-tokens:restore-if-empty",
+      email: args.email,
+      integrationType: args.integrationType,
+      tokens: previousTokens,
     });
-
-    if (currentTokens.length === 0 && previousTokens.length > 0) {
-      await db.insert(integrationToken).values(
-        previousTokens.map((token) => ({
-          integrationId: dbIntegration.id,
-          accessToken: token.accessToken,
-          refreshToken: token.refreshToken,
-          tokenType: token.tokenType,
-          expiresAt: token.expiresAt,
-          idToken: token.idToken,
-        })),
-      );
-    }
   }
 }
 
@@ -305,6 +295,131 @@ export function requireMatch(output: string, pattern: RegExp, context: string): 
 
 export function extractConversationId(output: string): string {
   return requireMatch(output, /\[conversation\]\s+([^\s]+)/, output);
+}
+
+export async function assertExpectedUserExists(email = expectedUserEmail): Promise<void> {
+  const { exists } = await callCliLiveTestingApi<{ exists: boolean }>({
+    action: "user:exists",
+    email,
+  });
+  if (!exists) {
+    throw new Error(`Live e2e user not found: ${email}`);
+  }
+}
+
+export async function waitForGenerationState(args: {
+  generationId: string;
+  expectedStatus: "awaiting_approval" | "awaiting_auth" | "paused";
+  completionReason?: string | null;
+  timeoutMs: number;
+}): Promise<GenerationStateRecord> {
+  const deadline = Date.now() + args.timeoutMs;
+  const poll = async (): Promise<GenerationStateRecord> => {
+    const { record } = await callCliLiveTestingApi<{ record: GenerationStateRecord | null }>({
+      action: "generation:get-state",
+      generationId: args.generationId,
+    });
+    if (
+      record &&
+      record.status === args.expectedStatus &&
+      record.suspendedAt &&
+      record.sandboxId === null &&
+      (args.completionReason === undefined || record.completionReason === args.completionReason)
+    ) {
+      return record;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out waiting for generation ${args.generationId} to reach ${args.expectedStatus}`,
+      );
+    }
+    await sleep(250);
+    return poll();
+  };
+
+  return poll();
+}
+
+export async function waitForPendingInterrupt(args: {
+  generationId: string;
+  expectedKind: "plugin_write" | "auth";
+  timeoutMs: number;
+}): Promise<{ id: string; status: string; kind: string }> {
+  const deadline = Date.now() + args.timeoutMs;
+  const poll = async (): Promise<{ id: string; status: string; kind: string }> => {
+    const { interrupt } = await callCliLiveTestingApi<{
+      interrupt: { id: string; status: string; kind: string } | null;
+    }>({
+      action: "interrupt:latest-pending",
+      generationId: args.generationId,
+      expectedKind: args.expectedKind,
+    });
+    if (interrupt) {
+      return interrupt;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out waiting for pending ${args.expectedKind} interrupt on generation ${args.generationId}`,
+      );
+    }
+    await sleep(250);
+    return poll();
+  };
+
+  return poll();
+}
+
+export async function waitForPromptGeneration(args: {
+  promptToken: string;
+  timeoutMs: number;
+}): Promise<{ conversationId: string; generationId: string }> {
+  const deadline = Date.now() + args.timeoutMs;
+  const poll = async (): Promise<{ conversationId: string; generationId: string }> => {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for the prompt-specific generation to become active.");
+    }
+
+    const { target } = await callCliLiveTestingApi<{
+      target: { conversationId: string; generationId: string } | null;
+    }>({
+      action: "generation:find-by-prompt",
+      promptToken: args.promptToken,
+    });
+    if (target) {
+      return target;
+    }
+
+    await sleep(250);
+    return poll();
+  };
+
+  return poll();
+}
+
+export async function readLatestAssistantMessage(conversationId: string): Promise<{
+  content: string;
+  contentParts: unknown[] | null;
+} | null> {
+  const { message } = await callCliLiveTestingApi<{
+    message: { content: string; contentParts: unknown[] | null } | null;
+  }>({
+    action: "conversation:latest-assistant-message",
+    conversationId,
+  });
+  return message;
+}
+
+export async function getGenerationRuntimeFields(generationId: string): Promise<{
+  remainingRunMs: number;
+  executionPolicy: Record<string, unknown> | null;
+} | null> {
+  const { record } = await callCliLiveTestingApi<{
+    record: { remainingRunMs: number; executionPolicy: Record<string, unknown> | null } | null;
+  }>({
+    action: "generation:get-runtime-fields",
+    generationId,
+  });
+  return record;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -619,16 +734,11 @@ export function buildSlackPrompt(args: { marker: string; sourceText?: string }):
 }
 
 export async function getSlackAccessTokenForExpectedUser(): Promise<string> {
-  const dbUser = await db.query.user.findFirst({
-    where: eq(user.email, expectedUserEmail),
+  const { token: slackToken } = await callCliLiveTestingApi<{ token: string | null }>({
+    action: "integration-token:get",
+    email: expectedUserEmail,
+    integrationType: "slack",
   });
-
-  if (!dbUser) {
-    throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
-  }
-
-  const tokens = await getValidTokensForUser(dbUser.id);
-  const slackToken = tokens.get("slack");
 
   if (!slackToken) {
     throw new Error(
@@ -682,16 +792,11 @@ function readHeader(headers: GmailHeader[] | undefined, name: string): string {
 }
 
 export async function getGmailAccessTokenForExpectedUser(): Promise<string> {
-  const dbUser = await db.query.user.findFirst({
-    where: eq(user.email, expectedUserEmail),
+  const { token: gmailToken } = await callCliLiveTestingApi<{ token: string | null }>({
+    action: "integration-token:get",
+    email: expectedUserEmail,
+    integrationType: "google_gmail",
   });
-
-  if (!dbUser) {
-    throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
-  }
-
-  const tokens = await getValidTokensForUser(dbUser.id);
-  const gmailToken = tokens.get("google_gmail");
 
   if (!gmailToken) {
     throw new Error(
@@ -756,16 +861,11 @@ function normalizeCalendarStart(start: GoogleCalendarEventDateTime | undefined):
 }
 
 export async function getGoogleCalendarAccessTokenForExpectedUser(): Promise<string> {
-  const dbUser = await db.query.user.findFirst({
-    where: eq(user.email, expectedUserEmail),
+  const { token: googleCalendarToken } = await callCliLiveTestingApi<{ token: string | null }>({
+    action: "integration-token:get",
+    email: expectedUserEmail,
+    integrationType: "google_calendar",
   });
-
-  if (!dbUser) {
-    throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
-  }
-
-  const tokens = await getValidTokensForUser(dbUser.id);
-  const googleCalendarToken = tokens.get("google_calendar");
 
   if (!googleCalendarToken) {
     throw new Error(
@@ -811,16 +911,11 @@ export async function readUpcomingGoogleCalendarEvent(args: {
 }
 
 export async function getGoogleDriveAccessTokenForExpectedUser(): Promise<string> {
-  const dbUser = await db.query.user.findFirst({
-    where: eq(user.email, expectedUserEmail),
+  const { token: googleDriveToken } = await callCliLiveTestingApi<{ token: string | null }>({
+    action: "integration-token:get",
+    email: expectedUserEmail,
+    integrationType: "google_drive",
   });
-
-  if (!dbUser) {
-    throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
-  }
-
-  const tokens = await getValidTokensForUser(dbUser.id);
-  const googleDriveToken = tokens.get("google_drive");
 
   if (!googleDriveToken) {
     throw new Error(
@@ -858,27 +953,21 @@ export async function readLatestGoogleDriveFile(args: {
 }
 
 export async function getLinkedInAccountIdForExpectedUser(): Promise<string> {
-  const dbUser = await db.query.user.findFirst({
-    where: eq(user.email, expectedUserEmail),
-    columns: { id: true },
+  const { providerAccountId } = await callCliLiveTestingApi<{
+    providerAccountId: string | null;
+  }>({
+    action: "integration:provider-account-id",
+    email: expectedUserEmail,
+    integrationType: "linkedin",
   });
 
-  if (!dbUser) {
-    throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
-  }
-
-  const linkedInIntegration = await db.query.integration.findFirst({
-    where: and(eq(integration.userId, dbUser.id), eq(integration.type, "linkedin")),
-    columns: { providerAccountId: true },
-  });
-
-  if (!linkedInIntegration?.providerAccountId) {
+  if (!providerAccountId) {
     throw new Error(
       `LinkedIn is not connected for ${expectedUserEmail}. Connect LinkedIn in app integrations before running this test.`,
     );
   }
 
-  return linkedInIntegration.providerAccountId;
+  return providerAccountId;
 }
 
 async function unipileApi<T>(
@@ -987,7 +1076,7 @@ export function parseSlackTimestamp(value: string): number {
 }
 
 export async function closeDbPool(): Promise<void> {
-  await closePool();
+  // Database access for CLI live tests is proxied through the staging testing API.
 }
 
 export { assertSandboxRowsUseProvider, liveSandboxProvider };

@@ -1,10 +1,8 @@
-import { db } from "@cmdclaw/db/client";
-import { conversation, generation, generationInterrupt, message, user } from "@cmdclaw/db/schema";
-import { and, desc, eq, like } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
+  assertExpectedUserExists,
   assertExitOk,
   buildCliCommandArgs,
   closeDbPool,
@@ -12,10 +10,12 @@ import {
   ensureCliAuth,
   expectedUserEmail,
   getSlackAccessTokenForExpectedUser,
+  getGenerationRuntimeFields,
   getCliClient,
   liveEnabled,
   parseSlackTimestamp,
   readLatestMessageOrNull,
+  readLatestAssistantMessage,
   responseTimeoutMs,
   resolveChannelId,
   resolveLiveModel,
@@ -23,6 +23,9 @@ import {
   targetChannelName,
   trackCliOutput,
   withIntegrationTokensTemporarilyRemoved,
+  waitForGenerationState,
+  waitForPendingInterrupt,
+  waitForPromptGeneration,
 } from "../../../tests/e2e-cli/live-fixtures";
 
 type CommandResult = {
@@ -351,134 +354,6 @@ async function pollSlackMessagesContaining(args: {
   return poll();
 }
 
-async function waitForGenerationState(args: {
-  generationId: string;
-  expectedStatus: "awaiting_approval" | "awaiting_auth" | "paused";
-  completionReason?: string | null;
-  timeoutMs: number;
-}) {
-  const deadline = Date.now() + args.timeoutMs;
-  const poll = async () => {
-    const record = await db.query.generation.findFirst({
-      where: eq(generation.id, args.generationId),
-      columns: {
-        id: true,
-        status: true,
-        completionReason: true,
-        sandboxId: true,
-        suspendedAt: true,
-        remainingRunMs: true,
-        executionPolicy: true,
-        startedAt: true,
-        deadlineAt: true,
-      },
-    });
-    if (
-      record &&
-      record.status === args.expectedStatus &&
-      record.suspendedAt &&
-      record.sandboxId === null &&
-      (args.completionReason === undefined || record.completionReason === args.completionReason)
-    ) {
-      return record;
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Timed out waiting for generation ${args.generationId} to reach ${args.expectedStatus}`,
-      );
-    }
-    await sleep(250);
-    return poll();
-  };
-
-  return poll();
-}
-
-async function waitForPendingInterrupt(args: {
-  generationId: string;
-  expectedKind: "plugin_write" | "auth";
-  timeoutMs: number;
-}) {
-  const deadline = Date.now() + args.timeoutMs;
-  const poll = async () => {
-    const interrupt = await db.query.generationInterrupt.findFirst({
-      where: and(
-        eq(generationInterrupt.generationId, args.generationId),
-        eq(generationInterrupt.kind, args.expectedKind),
-        eq(generationInterrupt.status, "pending"),
-      ),
-      columns: {
-        id: true,
-        status: true,
-        kind: true,
-      },
-      orderBy: (fields) => [desc(fields.requestedAt)],
-    });
-    if (interrupt) {
-      return interrupt;
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Timed out waiting for pending ${args.expectedKind} interrupt on generation ${args.generationId}`,
-      );
-    }
-    await sleep(250);
-    return poll();
-  };
-
-  return poll();
-}
-
-async function waitForPromptGeneration(args: {
-  promptToken: string;
-  timeoutMs: number;
-}): Promise<{ conversationId: string; generationId: string }> {
-  const deadline = Date.now() + args.timeoutMs;
-  const poll = async (): Promise<{ conversationId: string; generationId: string }> => {
-    if (Date.now() >= deadline) {
-      throw new Error("Timed out waiting for the prompt-specific generation to become active.");
-    }
-
-    const promptMessage = await db.query.message.findFirst({
-      where: and(eq(message.role, "user"), like(message.content, `%${args.promptToken}%`)),
-      columns: {
-        conversationId: true,
-      },
-      orderBy: (fields) => [desc(fields.createdAt)],
-    });
-
-    if (!promptMessage?.conversationId) {
-      await sleep(250);
-      return poll();
-    }
-
-    const active = await db.query.conversation.findFirst({
-      where: eq(conversation.id, promptMessage.conversationId),
-      columns: {
-        id: true,
-        currentGenerationId: true,
-        generationStatus: true,
-      },
-    });
-
-    if (
-      active?.currentGenerationId &&
-      ["generating", "awaiting_approval", "awaiting_auth", "paused"].includes(
-        active.generationStatus,
-      )
-    ) {
-      return {
-        conversationId: active.id,
-        generationId: active.currentGenerationId,
-      };
-    }
-    await sleep(250);
-    return poll();
-  };
-
-  return poll();
-}
-
 describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
   beforeAll(async () => {
     await ensureCliAuth();
@@ -493,13 +368,7 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
     "cancels in-flight generation and prints cancelled marker",
     { timeout: Math.max(responseTimeoutMs + 90_000, 270_000) },
     async () => {
-      const dbUser = await db.query.user.findFirst({
-        where: eq(user.email, expectedUserEmail),
-        columns: { id: true },
-      });
-      if (!dbUser) {
-        throw new Error(`Live e2e user not found: ${expectedUserEmail}`);
-      }
+      await assertExpectedUserExists(expectedUserEmail);
 
       const interruptToken = `interrupt-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 
@@ -531,18 +400,7 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       expect(result.stdout).toContain("[conversation]");
       expect(result.stdout).not.toContain("[error]");
 
-      const assistantMessages = await db
-        .select({
-          content: message.content,
-          contentParts: message.contentParts,
-        })
-        .from(message)
-        .innerJoin(conversation, eq(message.conversationId, conversation.id))
-        .where(and(eq(conversation.id, target.conversationId), eq(message.role, "assistant")))
-        .orderBy(desc(message.createdAt))
-        .limit(1);
-
-      const latest = assistantMessages[0];
+      const latest = await readLatestAssistantMessage(target.conversationId);
       if (!latest) {
         throw new Error(
           `No assistant message persisted for interrupted generation in conversation ${target.conversationId}`,
@@ -739,13 +597,7 @@ describe.runIf(liveEnabled)("@live CLI chat interrupt", () => {
       const resumedSandboxId = extractSandboxId(resumedOutput);
       expect(resumedSandboxId).not.toBe(parkedSandboxId);
 
-      const resumedGeneration = await db.query.generation.findFirst({
-        where: eq(generation.id, resumedGenerationId),
-        columns: {
-          remainingRunMs: true,
-          executionPolicy: true,
-        },
-      });
+      const resumedGeneration = await getGenerationRuntimeFields(resumedGenerationId);
       expect(resumedGeneration?.remainingRunMs).toBe(15 * 60 * 1000);
       expect(
         (resumedGeneration?.executionPolicy as { debugRunDeadlineMs?: number } | null | undefined)
