@@ -45,11 +45,28 @@ jobs:
       - name: Check health endpoint
         run: curl --fail --show-error --silent "${{ inputs.base_url }}/api/health"
 
+      - name: Resolve database URL
+        env:
+          DATABASE_URL_RAW: ${{ inputs.environment == 'prod' && secrets.DATABASE_URL_PROD || secrets.DATABASE_URL_STAGING }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          database_url="${DATABASE_URL_RAW}"
+          if [[ "${database_url}" != *"uselibpqcompat=true"* ]]; then
+            separator="?"
+            if [[ "${database_url}" == *"?"* ]]; then
+              separator="&"
+            fi
+            database_url="${database_url}${separator}uselibpqcompat=true"
+          fi
+
+          echo "DATABASE_URL=${database_url}" >> "$GITHUB_ENV"
+
       - name: Run CLI live checks
         env:
           CMDCLAW_SERVER_SECRET: ${{ secrets.CMDCLAW_SERVER_SECRET }}
           CMDCLAW_SERVER_URL: ${{ inputs.base_url }}
-          DATABASE_URL: ${{ inputs.environment == 'prod' && secrets.DATABASE_URL_PROD || secrets.DATABASE_URL_STAGING }}
           PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
           PLAYWRIGHT_SKIP_WEBSERVER: "1"
         run: bun run --cwd apps/web test:e2e:cli:live
@@ -59,7 +76,6 @@ jobs:
         env:
           CMDCLAW_SERVER_SECRET: ${{ secrets.CMDCLAW_SERVER_SECRET }}
           CMDCLAW_SERVER_URL: ${{ inputs.base_url }}
-          DATABASE_URL: ${{ inputs.environment == 'prod' && secrets.DATABASE_URL_PROD || secrets.DATABASE_URL_STAGING }}
           PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
           RELEASE_REPLAY_FILE: ${{ secrets.RELEASE_REPLAY_FILE }}
         run: bun run --cwd apps/web test:replay:release
