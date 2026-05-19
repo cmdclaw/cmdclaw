@@ -64,6 +64,7 @@
     "test:all": "bun run test:ci && bun run test:live && bun run --cwd apps/web test:e2e:cli:live",
     "test:ci": "bun run test:unit && bun run test:integration && bun run test:e2e",
     "test:e2e": "turbo run test:e2e --filter=@cmdclaw/web",
+    "test:e2e:cli:live": "bun run --cwd apps/web test:e2e:cli:live",
     "test:integration": "turbo run test:integration --filter=@cmdclaw/web",
     "test:interactive": "turbo run test:interactive --filter=@cmdclaw/web",
     "test:live": "turbo run test:live --filter=@cmdclaw/web",
