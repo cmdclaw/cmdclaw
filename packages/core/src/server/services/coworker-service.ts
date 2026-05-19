@@ -438,7 +438,7 @@ export async function triggerCoworkerRun(params: {
 
     await db
       .update(coworkerRun)
-      .set({ generationId })
+      .set({ generationId, conversationId })
       .where(eq(coworkerRun.id, run.id));
   } catch (error) {
     const errorMessage =

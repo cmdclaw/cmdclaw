@@ -245,6 +245,12 @@ describe("triggerCoworkerRun", () => {
         allowedCustomIntegrations: [],
       }),
     );
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationId: "gen-1",
+        conversationId: "conv-1",
+      }),
+    );
   });
 
   it("uses remote enabled integrations for all-tools manual runs", async () => {

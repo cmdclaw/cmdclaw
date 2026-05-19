@@ -812,7 +812,11 @@ const list = protectedProcedure.handler(async ({ context }) => {
             status: coworkerRun.status,
             startedAt: coworkerRun.startedAt,
             triggerPayload: coworkerRun.triggerPayload,
-            conversationId: generation.conversationId,
+            conversationId: sql<
+              string | null
+            >`coalesce(${coworkerRun.conversationId}, ${generation.conversationId})`.as(
+              "conversation_id",
+            ),
             rowNumber:
               sql<number>`row_number() over (partition by ${coworkerRun.coworkerId} order by ${coworkerRun.startedAt} desc)`.as(
                 "row_number",
@@ -1566,7 +1570,7 @@ const getRun = protectedProcedure
       status: run.status,
       triggerPayload: run.triggerPayload,
       generationId: run.generationId,
-      conversationId: gen?.conversationId ?? null,
+      conversationId: run.conversationId ?? gen?.conversationId ?? null,
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
       errorMessage: run.errorMessage,
@@ -1732,7 +1736,7 @@ const listWorkspaceRuns = protectedProcedure
         startedAt: run.startedAt,
         finishedAt: run.finishedAt,
         errorMessage: run.errorMessage,
-        conversationId: run.generation?.conversationId ?? null,
+        conversationId: run.conversationId ?? run.generation?.conversationId ?? null,
         coworkerId: run.coworker?.id ?? null,
         coworkerName: run.coworker?.name?.trim() || "Untitled",
       })),
@@ -2591,7 +2595,7 @@ const adminGetWorkspaceRun = protectedProcedure
       finishedAt: run.finishedAt,
       errorMessage: run.errorMessage,
       debugInfo: run.debugInfo ?? gen?.debugInfo ?? null,
-      conversationId: gen?.conversationId ?? null,
+      conversationId: run.conversationId ?? gen?.conversationId ?? null,
       coworker: run.coworker
         ? {
             id: run.coworker.id,
