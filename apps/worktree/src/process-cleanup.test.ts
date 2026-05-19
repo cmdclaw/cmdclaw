@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  collectNextProcessCleanupCandidates,
+  collectWorktreeProcessCleanupCandidates,
   type SystemProcess,
 } from "./process-cleanup";
 
@@ -24,7 +24,7 @@ describe("worktree process cleanup", () => {
     ];
 
     expect(
-      collectNextProcessCleanupCandidates({
+      collectWorktreeProcessCleanupCandidates({
         processes,
         worktreeRoots: ["/Users/dev/.codex/worktrees"],
       }).map((processEntry) => processEntry.pid),
@@ -55,7 +55,7 @@ describe("worktree process cleanup", () => {
     ];
 
     expect(
-      collectNextProcessCleanupCandidates({
+      collectWorktreeProcessCleanupCandidates({
         processes,
         worktreeRoots: ["/Users/dev/.codex/worktrees"],
         protectedRootPids: [20],
@@ -80,10 +80,37 @@ describe("worktree process cleanup", () => {
     ];
 
     expect(
-      collectNextProcessCleanupCandidates({
+      collectWorktreeProcessCleanupCandidates({
         processes,
         worktreeRoots: ["/Users/dev/.codex/worktrees"],
       }),
     ).toEqual([]);
+  });
+
+  test("collects orphaned worktree worker and websocket services", () => {
+    const processes: SystemProcess[] = [
+      {
+        pid: 50,
+        ppid: 1,
+        command: "bun --env-file /Users/dev/.codex/worktrees/old/cmdclaw/.env index.ts",
+      },
+      {
+        pid: 51,
+        ppid: 1,
+        command: "bun --env-file /Users/dev/.codex/worktrees/old/cmdclaw/.env index.ts",
+      },
+      {
+        pid: 60,
+        ppid: 1,
+        command: "bun --env-file /Users/dev/Git/cmdclaw/.env index.ts",
+      },
+    ];
+
+    expect(
+      collectWorktreeProcessCleanupCandidates({
+        processes,
+        worktreeRoots: ["/Users/dev/.codex/worktrees"],
+      }).map((processEntry) => processEntry.pid),
+    ).toEqual([50, 51]);
   });
 });

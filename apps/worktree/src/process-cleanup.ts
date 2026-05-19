@@ -4,7 +4,7 @@ export type SystemProcess = {
   command: string;
 };
 
-export type NextProcessCleanupCandidate = {
+export type WorktreeProcessCleanupCandidate = {
   pid: number;
   ppid: number;
   command: string;
@@ -22,6 +22,15 @@ export function isNextProcessCommand(command: string): boolean {
     normalized.includes("/.next/dev/") ||
     normalized.includes("/next/dist/") ||
     /\bnext\s+(dev|start|build)\b/.test(normalized)
+  );
+}
+
+export function isWorktreeServiceProcessCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    isNextProcessCommand(command) ||
+    /\bbun\s+--env-file(?:=|\s+)\S+\/\.env\s+index\.ts\b/.test(normalized) ||
+    /\bbun\s+(?:--watch\s+)?--env-file(?:=|\s+)\S+\/\.env\s+src\/proxy\.ts\b/.test(normalized)
   );
 }
 
@@ -56,11 +65,11 @@ function commandMatchesWorktreeRoot(command: string, roots: string[]): boolean {
   return roots.some((root) => normalizedCommand.includes(normalizePath(root)));
 }
 
-export function collectNextProcessCleanupCandidates(params: {
+export function collectWorktreeProcessCleanupCandidates(params: {
   processes: SystemProcess[];
   worktreeRoots: string[];
   protectedRootPids?: number[];
-}): NextProcessCleanupCandidate[] {
+}): WorktreeProcessCleanupCandidate[] {
   const worktreeRoots = Array.from(new Set(params.worktreeRoots.map(normalizePath))).filter(Boolean);
   if (worktreeRoots.length === 0) {
     return [];
@@ -74,7 +83,7 @@ export function collectNextProcessCleanupCandidates(params: {
       }
 
       return (
-        isNextProcessCommand(processEntry.command) &&
+        isWorktreeServiceProcessCommand(processEntry.command) &&
         commandMatchesWorktreeRoot(processEntry.command, worktreeRoots)
       );
     })

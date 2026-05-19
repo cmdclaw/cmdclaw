@@ -30,10 +30,10 @@ import {
 } from "./coordination";
 import {
   buildDescendantPidSet,
-  collectNextProcessCleanupCandidates,
+  collectWorktreeProcessCleanupCandidates,
   isNextProcessCommand,
-  type NextProcessCleanupCandidate,
   type SystemProcess,
+  type WorktreeProcessCleanupCandidate,
 } from "./process-cleanup";
 import {
   buildSharedStackConfig,
@@ -149,7 +149,7 @@ function printHelp(): void {
   console.log("  dev      Start web, worker, and ws in the foreground");
   console.log("  status   Show the current worktree instance state");
   console.log("  processes  List running worktree processes and stop commands, including stop all");
-  console.log("  cleanup  Stop orphaned Next.js processes under worktree roots");
+  console.log("  cleanup  Stop orphaned worktree service processes under worktree roots");
   console.log("  env      Print derived environment variables for this worktree");
   console.log("  bootstrap-user  Copy source developer identity and integrations");
 }
@@ -3254,10 +3254,11 @@ async function stopAllProcessTargets(): Promise<void> {
     }
   }
 
+  await cleanupWorktreeServiceProcesses([]);
   console.log("[worktree] stopped all worktree processes");
 }
 
-function resolveNextCleanupRoots(metadataList: InstanceMetadata[]): string[] {
+function resolveProcessCleanupRoots(metadataList: InstanceMetadata[]): string[] {
   const roots = new Set<string>();
   for (const root of resolveRecognizedWorktreeRoots()) {
     roots.add(root);
@@ -3278,18 +3279,21 @@ function resolveNextCleanupRoots(metadataList: InstanceMetadata[]): string[] {
   return [...roots].sort((left, right) => left.localeCompare(right));
 }
 
-function listProtectedWebRootPids(metadataList: InstanceMetadata[]): number[] {
+function listProtectedProcessRootPids(metadataList: InstanceMetadata[]): number[] {
   return metadataList.flatMap((metadata) => {
-    const webPid = loadProcesses(metadata.instanceRoot).web;
-    return typeof webPid === "number" && isPidRunning(webPid) ? [webPid] : [];
+    const processes = loadProcesses(metadata.instanceRoot);
+    return PROCESS_NAMES.flatMap((name) => {
+      const pid = processes[name];
+      return typeof pid === "number" && isPidRunning(pid) ? [pid] : [];
+    });
   });
 }
 
-function formatCleanupCandidate(candidate: NextProcessCleanupCandidate): string {
+function formatCleanupCandidate(candidate: WorktreeProcessCleanupCandidate): string {
   return `pid ${candidate.pid} ppid ${candidate.ppid}  ${formatProcessCommand(candidate.command)}`;
 }
 
-async function cleanupWorktreeNextProcesses(args: string[]): Promise<void> {
+async function cleanupWorktreeServiceProcesses(args: string[]): Promise<void> {
   const includeTracked = args.includes("--all") || args.includes("--include-tracked");
   const dryRun = args.includes("--dry-run");
   const verbose = args.includes("--verbose") || args.includes("-v");
@@ -3306,21 +3310,23 @@ async function cleanupWorktreeNextProcesses(args: string[]): Promise<void> {
   const repoRoot = resolveRepoRoot();
   const metadataList = listKnownWorktreeMetadata(repoRoot);
   const systemProcesses = listSystemProcesses();
-  const roots = resolveNextCleanupRoots(metadataList);
-  const candidates = collectNextProcessCleanupCandidates({
+  const roots = resolveProcessCleanupRoots(metadataList);
+  const candidates = collectWorktreeProcessCleanupCandidates({
     processes: systemProcesses,
     worktreeRoots: roots,
-    protectedRootPids: includeTracked ? [] : listProtectedWebRootPids(metadataList),
+    protectedRootPids: includeTracked ? [] : listProtectedProcessRootPids(metadataList),
   });
 
   if (candidates.length === 0) {
-    console.log("[worktree] cleanup no orphaned Next.js processes");
+    console.log("[worktree] cleanup no orphaned worktree service processes");
     return;
   }
 
   const pids = candidates.map((candidate) => candidate.pid);
   const mode = dryRun ? "would stop" : "stopping";
-  console.log(`[worktree] cleanup ${mode} ${pids.length} Next.js process(es): ${formatPidList(pids)}`);
+  console.log(
+    `[worktree] cleanup ${mode} ${pids.length} worktree service process(es): ${formatPidList(pids)}`,
+  );
 
   if (verbose || dryRun) {
     for (const candidate of candidates) {
@@ -3340,7 +3346,7 @@ async function cleanupWorktreeNextProcesses(args: string[]): Promise<void> {
   if (stillRunning.length > 0) {
     console.warn(`[worktree] cleanup still running after SIGTERM: ${formatPidList(stillRunning)}`);
   } else {
-    console.log("[worktree] cleanup stopped orphaned Next.js processes");
+    console.log("[worktree] cleanup stopped orphaned worktree service processes");
   }
 }
 
@@ -3369,7 +3375,7 @@ async function showProcesses(args: string[]): Promise<void> {
   }
 
   if (command === "cleanup") {
-    await cleanupWorktreeNextProcesses(commandArgs);
+    await cleanupWorktreeServiceProcesses(commandArgs);
     return;
   }
 
@@ -3501,7 +3507,7 @@ async function main(): Promise<void> {
       await showProcesses(process.argv.slice(3));
       return;
     case "cleanup":
-      await cleanupWorktreeNextProcesses(process.argv.slice(3));
+      await cleanupWorktreeServiceProcesses(process.argv.slice(3));
       return;
     case "env":
       await showEnv();
