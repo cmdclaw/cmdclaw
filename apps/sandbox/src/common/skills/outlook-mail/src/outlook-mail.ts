@@ -28,17 +28,19 @@ const { positionals, values } = parseArgs({
     body: { type: "string" },
     cc: { type: "string" },
     attachment: { type: "string", multiple: true },
+    cursor: { type: "string" },
+    all: { type: "boolean" },
   },
 });
 
 const [command, ...args] = positionals;
 
-function parseLimit(): number {
-  const parsed = Number.parseInt(values.limit ?? "10", 10);
+function parseLimit(defaultLimit = 10, maxLimit = 50): number {
+  const parsed = Number.parseInt(values.limit ?? String(defaultLimit), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error("Invalid --limit. Expected a positive integer.");
   }
-  return Math.min(parsed, 50);
+  return Math.min(parsed, maxLimit);
 }
 
 function sanitizeSearchQuery(query: string): string {
@@ -77,6 +79,24 @@ type OutlookPerson = {
     number?: string;
     type?: string;
   }>;
+};
+
+type OutlookContact = {
+  id?: string;
+  displayName?: string;
+  givenName?: string;
+  surname?: string;
+  emailAddresses?: Array<{
+    address?: string;
+    name?: string;
+  }>;
+  mobilePhone?: string;
+  businessPhones?: string[];
+  homePhones?: string[];
+  jobTitle?: string;
+  companyName?: string;
+  department?: string;
+  officeLocation?: string;
 };
 
 function mapMessage(message: {
@@ -127,6 +147,53 @@ function mapPersonContact(person: OutlookPerson) {
     imAddress: person.imAddress ?? "",
     type: [person.personType?.class, person.personType?.subclass].filter(Boolean).join("."),
   };
+}
+
+function mapOutlookContact(contact: OutlookContact) {
+  const emails = (contact.emailAddresses ?? [])
+    .map((email) => email.address)
+    .filter((email): email is string => Boolean(email));
+
+  return {
+    id: contact.id,
+    name:
+      contact.displayName ||
+      [contact.givenName, contact.surname].filter(Boolean).join(" ") ||
+      emails[0] ||
+      "",
+    emails,
+    primaryEmail: emails[0] ?? "",
+    mobilePhone: contact.mobilePhone ?? "",
+    businessPhones: contact.businessPhones ?? [],
+    homePhones: contact.homePhones ?? [],
+    jobTitle: contact.jobTitle ?? "",
+    company: contact.companyName ?? "",
+    department: contact.department ?? "",
+    officeLocation: contact.officeLocation ?? "",
+  };
+}
+
+function encodeCursor(nextLink: string): string {
+  return Buffer.from(nextLink, "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string): string {
+  let decoded: string;
+  try {
+    decoded = Buffer.from(cursor, "base64url").toString("utf8");
+  } catch {
+    throw new Error("Invalid --cursor. Use the cursor returned by outlook-mail contacts list.");
+  }
+
+  if (!decoded.startsWith("https://graph.microsoft.com/v1.0/")) {
+    throw new Error("Invalid --cursor. Use the cursor returned by outlook-mail contacts list.");
+  }
+
+  return decoded;
+}
+
+function quoteShellValue(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 function inferAttachmentMimeType(filePath: string): string {
@@ -205,7 +272,10 @@ async function readAttachment(filePath: string): Promise<OutlookFileAttachment> 
 }
 
 async function graphRequest(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`https://graph.microsoft.com/v1.0${path}`, {
+  const url = path.startsWith("https://graph.microsoft.com/")
+    ? path
+    : `https://graph.microsoft.com/v1.0${path}`;
+  return fetch(url, {
     ...init,
     headers: {
       ...baseHeaders,
@@ -408,6 +478,64 @@ async function findContact() {
   console.log(JSON.stringify(contacts, null, 2));
 }
 
+async function listContacts() {
+  const subcommand = args[0];
+  if (subcommand !== "list") {
+    throw new Error("Required: outlook-mail contacts list");
+  }
+
+  const pageSize = parseLimit(100, 999);
+  const contacts: ReturnType<typeof mapOutlookContact>[] = [];
+  let nextLink: string | undefined;
+  let requestUrl: string | undefined;
+
+  if (values.cursor) {
+    requestUrl = decodeCursor(values.cursor);
+  } else {
+    const params = new URLSearchParams({
+      $top: String(pageSize),
+      $select:
+        "id,displayName,givenName,surname,emailAddresses,mobilePhone,businessPhones,homePhones,jobTitle,companyName,department,officeLocation",
+    });
+    requestUrl = `/me/contacts?${params.toString()}`;
+  }
+
+  do {
+    const res = await graphRequest(requestUrl, { method: "GET" });
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+
+    const payload = (await res.json()) as {
+      value?: OutlookContact[];
+      "@odata.nextLink"?: string;
+    };
+
+    contacts.push(...(payload.value ?? []).map(mapOutlookContact));
+    nextLink = payload["@odata.nextLink"];
+    requestUrl = nextLink;
+  } while (values.all && requestUrl);
+
+  const nextCursor = values.all || !nextLink ? undefined : encodeCursor(nextLink);
+  console.log(
+    JSON.stringify(
+      {
+        contacts,
+        count: contacts.length,
+        hasMore: Boolean(nextCursor),
+        ...(nextCursor
+          ? {
+              nextCursor,
+              nextCommand: `outlook-mail contacts list --cursor ${quoteShellValue(nextCursor)}`,
+            }
+          : {}),
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 async function sendEmail() {
   const message = await buildOutgoingMessage();
   const res = await graphRequest("/me/sendMail", {
@@ -476,6 +604,8 @@ function showHelp() {
   get <messageId>                    Get email content
   unread [-q query] [-l limit]       Count unread emails
   contact -q <query> [-l limit]      Find a person/contact by name or email
+  contacts list [-l limit] [--cursor <cursor>] [--all]
+                                     List Outlook contacts with cursor pagination
   send --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
   draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...
 
@@ -505,6 +635,9 @@ async function main() {
         break;
       case "contact":
         await findContact();
+        break;
+      case "contacts":
+        await listContacts();
         break;
       case "send":
         await sendEmail();

@@ -85,5 +85,22 @@ describe("permission-checker", () => {
       needsApproval: false,
       needsAuth: false,
     });
+
+    expect(parseBashCommand("outlook-mail contacts list --limit 25")).toEqual({
+      integration: "outlook",
+      operation: "contacts.list",
+      integrationName: "Outlook Mail",
+      isWrite: false,
+    });
+
+    expect(
+      checkToolPermissions("bash", { command: "outlook-mail contacts list --limit 25" }, [
+        "outlook",
+      ]),
+    ).toEqual({
+      allowed: true,
+      needsApproval: false,
+      needsAuth: false,
+    });
   });
 });

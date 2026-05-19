@@ -42,7 +42,7 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["send"],
   },
   outlook: {
-    read: ["list", "search", "get", "unread", "contact"],
+    read: ["list", "search", "get", "unread", "contact", "contacts.list"],
     write: ["send"],
   },
   outlook_calendar: {
@@ -287,6 +287,11 @@ function parseBashCommand(command: string): { integration: string; operation: st
     return { integration, operation: `${resource}.${action}` };
   }
 
+  // Outlook Mail has nested pattern: outlook-mail contacts list
+  if (integration === "outlook" && parts[1] === "contacts" && parts.length >= 3) {
+    return { integration, operation: `contacts.${parts[2]}` };
+  }
+
   // LinkedIn has nested pattern: linkedin <resource> <action>
   if (integration === "linkedin" && parts.length >= 3) {
     const resource = parts[1];
@@ -410,14 +415,16 @@ function pickStringField(
 function pickOpenCodeRuntimeTool(
   input: Record<string, unknown>,
   output: Record<string, unknown>,
-): {
-  sessionId?: string;
-  messageId?: string;
-  partId?: string;
-  callId?: string;
-  toolName: string;
-  input: Record<string, unknown>;
-} | undefined {
+):
+  | {
+      sessionId?: string;
+      messageId?: string;
+      partId?: string;
+      callId?: string;
+      toolName: string;
+      input: Record<string, unknown>;
+    }
+  | undefined {
   const callId = pickOpenCodeRequestId(input, output);
   const messageId = pickStringField(input, output, ["messageID", "messageId"]);
   const partId = pickStringField(input, output, ["partID", "partId"]);

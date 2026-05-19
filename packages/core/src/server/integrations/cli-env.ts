@@ -264,6 +264,7 @@ function getCliInstructions(connectedIntegrations: IntegrationType[]): string {
 - outlook-mail search -q <query> [-l limit] - Search mailbox
 - outlook-mail get <messageId> - Get full email content
 - outlook-mail unread - Count unread emails
+- outlook-mail contacts list [-l limit] [--cursor <cursor>] [--all] - List Outlook contacts; follow nextCommand when hasMore is true
 - outlook-mail draft --to <email> --subject <subject> --body <body> [--attachment <path>]
 - outlook-mail send --to <email> --subject <subject> --body <body> [--attachment <path>]
 - Email bodies accept plain text, common Markdown, or allowed safe email HTML.

@@ -93,6 +93,12 @@ export function parseCliCommand(command: string): ParsedCommand | null {
     argStartIndex = 3;
   }
 
+  // Outlook Mail has nested pattern: outlook-mail contacts list
+  if (integration === "outlook" && tokens[1] === "contacts" && tokens.length >= 3) {
+    operation = `contacts.${tokens[2]}`;
+    argStartIndex = 3;
+  }
+
   // LinkedIn has nested pattern: linkedin <resource> <action>
   if (integration === "linkedin" && tokens.length >= 3) {
     const resource = tokens[1];

@@ -71,4 +71,16 @@ describe("parseCliCommand", () => {
       rawCommand: "echo preparing && agent-browser screenshot --full /tmp/example.png",
     });
   });
+
+  it("parses Outlook contacts list as a nested read operation", () => {
+    expect(parseCliCommand('outlook-mail contacts list --cursor "abc123"')).toEqual({
+      integration: "outlook",
+      operation: "contacts.list",
+      args: {
+        cursor: "abc123",
+      },
+      positionalArgs: [],
+      rawCommand: 'outlook-mail contacts list --cursor "abc123"',
+    });
+  });
 });

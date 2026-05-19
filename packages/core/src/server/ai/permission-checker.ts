@@ -39,7 +39,7 @@ const TOOL_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["send"],
   },
   outlook: {
-    read: ["list", "search", "get", "unread", "contact"],
+    read: ["list", "search", "get", "unread", "contact", "contacts.list"],
     write: ["send"],
   },
   outlook_calendar: {
@@ -267,6 +267,11 @@ export function parseBashCommand(command: string): ParsedCommand | null {
     const resource = parts[1];
     const action = parts[2];
     finalOperation = resource === "owners" ? "owners" : `${resource}.${action}`;
+  }
+
+  // Outlook Mail: outlook-mail contacts list
+  if (integration === "outlook" && parts[1] === "contacts" && parts.length >= 3) {
+    finalOperation = `contacts.${parts[2]}`;
   }
 
   // LinkedIn: linkedin <resource> <action>

@@ -1,11 +1,11 @@
 ---
 name: outlook
-description: Read, search, draft, and send Outlook emails, and look up Outlook people contacts. Use for listing emails, searching the mailbox, reading content, counting unread, finding contacts, drafting messages, and sending messages.
+description: Read, search, draft, and send Outlook emails, and look up or list Outlook contacts. Use for listing emails, searching the mailbox, reading content, counting unread, finding contacts, listing contacts, drafting messages, and sending messages.
 ---
 
 # Outlook Mail
 
-Read inbox emails, get email content, count unread emails, find people contacts, draft messages, and send messages via Microsoft Graph.
+Read inbox emails, get email content, count unread emails, find people contacts, list Outlook contacts, draft messages, and send messages via Microsoft Graph.
 
 ## Environment Variables
 
@@ -26,8 +26,11 @@ outlook-mail get <messageId>
 # Count unread emails
 outlook-mail unread [-q "subject keyword"] [-l limit]
 
-# Find a person/contact by name or email
+# Find a person/contact by name or email using Outlook People search
 outlook-mail contact -q "Jane Doe" [-l limit]
+
+# List Outlook contacts with cursor pagination
+outlook-mail contacts list [-l limit] [--cursor <cursor>] [--all]
 
 # Draft an email
 outlook-mail draft --to "user@example.com" --subject "Hello" --body "Message text" [--cc "cc@example.com"] [--attachment /tmp/report.pdf]
@@ -46,4 +49,4 @@ outlook-mail send --to "user@example.com" --subject "Hello" --body "Message text
 
 ## Output Format
 
-JSON arrays/objects for read operations.
+JSON arrays/objects for read operations. `outlook-mail contacts list` returns `contacts`, `count`, `hasMore`, and when more contacts exist, `nextCursor` plus the exact `nextCommand` to fetch the next page. Use `--all` only when the user explicitly needs every contact.

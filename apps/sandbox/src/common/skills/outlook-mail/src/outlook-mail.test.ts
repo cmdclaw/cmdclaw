@@ -1,10 +1,8 @@
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { runSkillCli } from "../../_test-utils/run-skill-cli";
 
 const OUTLOOK_MAIL_CLI = "sandbox/src/common/skills/outlook-mail/src/outlook-mail.ts";
-const OUTLOOK_MAIL_SOURCE = "src/common/skills/outlook-mail/src/outlook-mail.ts";
 
 describe("outlook-mail CLI", () => {
   test("prints help text when auth env is missing", () => {
@@ -27,6 +25,7 @@ describe("outlook-mail CLI", () => {
     expect(result.stdout).toContain("search -q <query>");
     expect(result.stdout).toContain("unread");
     expect(result.stdout).toContain("contact -q <query>");
+    expect(result.stdout).toContain("contacts list [-l limit] [--cursor <cursor>] [--all]");
     expect(result.stdout).toContain(
       "draft --to <email> --subject <subject> --body <body> [--cc <email>] [--attachment <path>]...",
     );
@@ -69,6 +68,24 @@ describe("outlook-mail CLI", () => {
     expect(result.combined).toContain("Required: outlook-mail contact --query <name-or-email>");
   });
 
+  test("requires the contacts list subcommand", () => {
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["contacts"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Required: outlook-mail contacts list");
+  });
+
+  test("rejects invalid contacts cursor before making a request", () => {
+    const result = runSkillCli(OUTLOOK_MAIL_CLI, ["contacts", "list", "--cursor", "not-a-cursor"], {
+      OUTLOOK_ACCESS_TOKEN: "test-token",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.combined).toContain("Invalid --cursor");
+  });
+
   test("fails send when body contains unsupported html tags", () => {
     const result = runSkillCli(
       OUTLOOK_MAIL_CLI,
@@ -80,7 +97,7 @@ describe("outlook-mail CLI", () => {
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid email body HTML: unsupported tag <div>");
-    expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
+    expect(result.combined).toContain("Allowed tags: b,strong,s,i,em,u,br,p,table");
   });
 
   test("fails draft when body contains unsupported html tags", () => {
@@ -94,7 +111,7 @@ describe("outlook-mail CLI", () => {
 
     expect(result.status).toBe(1);
     expect(result.combined).toContain("Invalid email body HTML: script/style tags are not allowed");
-    expect(result.combined).toContain("Allowed tags: b,strong,i,em,u,br,p");
+    expect(result.combined).toContain("Allowed tags: b,strong,s,i,em,u,br,p,table");
   });
 
   test("fails send when an attachment file cannot be read", () => {
@@ -144,10 +161,12 @@ describe("outlook-mail CLI", () => {
   });
 
   test("uses html content type and graph file attachments in payloads", () => {
-    const source = readFileSync(path.resolve(process.cwd(), OUTLOOK_MAIL_SOURCE), "utf8");
+    const source = readFileSync(new URL("./outlook-mail.ts", import.meta.url), "utf8");
     expect(source).toContain('contentType: "HTML"');
     expect(source).toContain('"#microsoft.graph.fileAttachment"');
     expect(source).toContain("/me/people");
+    expect(source).toContain("/me/contacts");
+    expect(source).toContain('"@odata.nextLink"');
     expect(source).toContain('case "draft"');
   });
 });
