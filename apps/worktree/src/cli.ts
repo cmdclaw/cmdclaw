@@ -130,7 +130,7 @@ const DEV_START_TIMEOUT_MS = 120_000;
 const GENERATED_WORKTREE_ENV_HEADER = "# Auto-generated for worktree by apps/worktree/src/cli.ts.";
 const GENERATED_WORKTREE_ENV_NOTICE = "# Do not edit manually; re-run a worktree command to refresh it.";
 const WORKTREE_START_LIMIT_ERROR =
-  "You already have 5 worktree nextjs server running, you cannot start another one, please talk to the user first for him to stop one of the worktree";
+  `You already have ${MAX_RUNNING_WORKTREE_WEB_PROCESSES} worktree nextjs server running, you cannot start another one, please talk to the user first for him to stop one of the worktree`;
 type ProcessName = (typeof PROCESS_NAMES)[number];
 
 let sharedStackRuntimeCache: SharedStackConfig | null = null;

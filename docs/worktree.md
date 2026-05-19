@@ -45,7 +45,7 @@ bun run worktree:setup
 
 This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it reuses the repo-global `cmdclaw-local` shared infrastructure (starting the missing shared services there only when needed), provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
 
-If five other worktree web servers are already running, `worktree:setup` fails before launching another `next dev` process.
+If ten other worktree web servers are already running, `worktree:setup` fails before launching another `next dev` process.
 
 Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including `worktree:setup`, `worktree:dev`, and `bun run cli ...`.
 

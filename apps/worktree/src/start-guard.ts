@@ -1,4 +1,4 @@
-export const MAX_RUNNING_WORKTREE_WEB_PROCESSES = 5;
+export const MAX_RUNNING_WORKTREE_WEB_PROCESSES = 10;
 
 export type WorktreeWebProcessSnapshot = {
   repoRoot: string;
