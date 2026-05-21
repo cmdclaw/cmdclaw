@@ -6,9 +6,9 @@ import {
 } from "../../generation-interrupt-service";
 import type { GenerationLifecycleStore } from "../core/lifecycle-store";
 import type { DecisionFlow } from "../decisions/decision-flow";
-import type { OpenCodeRecoveryReattachOptions } from "../../../runtime/opencode/opencode-recovery-runner";
 import type { GenerationContext, GenerationEvent } from "../types";
 import type { GenerationContextState } from "./generation-context-state";
+import type { RuntimeRecoveryReattachOptions } from "./generation-runtime-coordinator";
 
 type GenerationResumeRunnerDependencies = {
   lifecycleStore: GenerationLifecycleStore;
@@ -17,7 +17,7 @@ type GenerationResumeRunnerDependencies = {
   runOpenCodeGeneration(ctx: GenerationContext): Promise<void>;
   runRecoveryReattach(
     ctx: GenerationContext,
-    options?: OpenCodeRecoveryReattachOptions,
+    options?: RuntimeRecoveryReattachOptions,
   ): Promise<void>;
   finishGeneration(
     ctx: GenerationContext,

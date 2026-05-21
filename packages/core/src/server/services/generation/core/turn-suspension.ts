@@ -189,7 +189,7 @@ export class GenerationTurnSuspender {
     }
     this.deps.stopExternalInterruptPolling(ctx);
 
-    await this.saveSessionSnapshotForPark(ctx, "interrupt");
+    const snapshotSaved = await this.saveSessionSnapshotForPark(ctx, "interrupt");
     await this.deps.saveProgress(ctx);
 
     await this.deps.lifecycleStore.suspendForInterrupt({
@@ -203,20 +203,32 @@ export class GenerationTurnSuspender {
       lastRuntimeEventAt: ctx.lastRuntimeEventAt,
     });
 
-    try {
-      await this.releaseExecutionEnvironment(ctx, "paused");
-    } catch (error) {
-      console.warn("[GenerationManager] Failed to teardown sandbox during interrupt park", {
+    if (snapshotSaved) {
+      try {
+        await this.releaseExecutionEnvironment(ctx, "paused");
+      } catch (error) {
+        console.warn("[GenerationManager] Failed to teardown sandbox during interrupt park", {
+          generationId: ctx.id,
+          conversationId: ctx.conversationId,
+          runtimeId: ctx.runtimeId,
+          sandboxId: ctx.sandboxId,
+          interruptId: interrupt.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      } finally {
+        await this.releaseRuntimeAndSandbox(ctx);
+      }
+    } else {
+      console.warn("[GenerationManager] Keeping live runtime after failed interrupt snapshot", {
         generationId: ctx.id,
         conversationId: ctx.conversationId,
         runtimeId: ctx.runtimeId,
         sandboxId: ctx.sandboxId,
         interruptId: interrupt.id,
-        error: error instanceof Error ? error.message : String(error),
       });
-      throw error;
-    } finally {
-      await this.releaseRuntimeAndSandbox(ctx);
+      await this.deps.releaseSandboxSlotLease(ctx);
+      this.deps.evictActiveGenerationContext(ctx.id);
     }
 
     throw new GenerationSuspendedError(
@@ -254,9 +266,9 @@ export class GenerationTurnSuspender {
   private async saveSessionSnapshotForPark(
     ctx: GenerationContext,
     reason: "run deadline" | "interrupt",
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!ctx.executionEnvironment && (!ctx.sessionId || !ctx.sandbox)) {
-      return;
+      return false;
     }
 
     try {
@@ -268,12 +280,15 @@ export class GenerationTurnSuspender {
         console.error(
           `[GenerationManager] Timed out saving session snapshot before ${reason} park for conversation ${ctx.conversationId}`,
         );
+        return false;
       }
+      return true;
     } catch (error) {
       console.error(
         `[GenerationManager] Failed to save session snapshot before ${reason} park for conversation ${ctx.conversationId}:`,
         error,
       );
+      return false;
     }
   }
 

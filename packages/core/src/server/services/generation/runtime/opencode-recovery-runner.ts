@@ -1,30 +1,31 @@
 import { db } from "@cmdclaw/db/client";
 import { conversation } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
-import { env } from "../../../env";
-import { parseModelReference } from "../../../lib/model-reference";
+import { env } from "../../../../env";
+import { parseModelReference } from "../../../../lib/model-reference";
 import type {
   RuntimeHarnessClient,
   RuntimePromptPart,
   RuntimeSelection,
   SandboxHandle,
-} from "../../sandbox/core/types";
-import { createExecutionEnvironmentFactory } from "../../execution/execution-environment-factory";
-import type { ExecutionRuntimeSession } from "../../execution/execution-environment";
-import { logServerEvent } from "../../utils/observability";
+} from "../../../sandbox/core/types";
+import { createExecutionEnvironmentFactory } from "../../../execution/execution-environment-factory";
+import type { ExecutionEnvironmentSession } from "../../../execution/execution-environment";
+import type { ConversationExecutionRuntimeSession } from "../../../execution/providers/conversation-environment";
+import { logServerEvent } from "../../../utils/observability";
 import {
   writeRuntimeContextToSandbox,
   writeRuntimeEnvToSandbox,
-} from "../../execution/runtime-context";
+} from "../../../execution/runtime-context";
 import type {
   GenerationCompletionReason,
   RuntimeFailureClassification,
-} from "../../services/lifecycle-policy";
+} from "../../lifecycle-policy";
 import {
   GenerationSuspendedError,
-} from "../../services/generation/core/turn-suspension";
-import { composeContinuationPromptSpec } from "../../services/generation/prompts/opencode-prompt-context";
-import type { GenerationContext, GenerationEvent, GenerationStatus } from "../../services/generation/types";
+} from "../core/turn-suspension";
+import { composeContinuationPromptSpec } from "../prompts/opencode-prompt-context";
+import type { GenerationContext, GenerationEvent, GenerationStatus } from "../types";
 import { OpenCodeTurnEventBridge } from "./opencode-turn-events";
 
 export type OpenCodeRecoveryReattachOptions = {
@@ -59,7 +60,7 @@ type OpenCodeRecoveryRunnerCallbacks = {
     input: {
       runtimeSandbox: SandboxHandle;
       runtimeMetadata: RuntimeSelection;
-      executionEnvironment?: ExecutionRuntimeSession["environment"];
+      executionEnvironment?: ExecutionEnvironmentSession["environment"];
       sessionId: string;
     },
   ) => Promise<void>;
@@ -155,7 +156,11 @@ export class OpenCodeRecoveryRunner {
         defaultProvider: ctx.sandboxProviderOverride,
       });
       const session = await withTimeout(
-        executionFactory.providerFor(ctx.sandboxProviderOverride).acquireRuntime(
+        (
+          executionFactory.providerFor(ctx.sandboxProviderOverride) as unknown as {
+            acquireRuntime(input: Record<string, unknown>): Promise<ConversationExecutionRuntimeSession>;
+          }
+        ).acquireRuntime(
           {
             conversationId: ctx.conversationId,
             generationId: ctx.id,
@@ -209,7 +214,7 @@ export class OpenCodeRecoveryRunner {
 
       await this.callbacks.bindRuntimeSessionToContext(ctx, {
         runtimeSandbox: session.sandbox,
-        runtimeMetadata: session.metadata.selection ?? {
+        runtimeMetadata: (session.metadata.selection as RuntimeSelection | undefined) ?? {
           sandboxProvider: session.metadata.provider,
           runtimeHarness: session.metadata.runtimeHarness ?? "opencode",
           runtimeProtocolVersion: session.metadata.runtimeProtocolVersion ?? "opencode-v2",

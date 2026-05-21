@@ -1,57 +1,58 @@
 import { db } from "@cmdclaw/db/client";
 import { conversation } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
-import { env } from "../../../env";
-import { splitCoworkerAllowedSkillSlugs } from "../../../lib/coworker-tool-policy";
-import { parseModelReference } from "../../../lib/model-reference";
-import type { RuntimeContextFile } from "../../../lib/runtime-context";
+import { env } from "../../../../env";
+import { splitCoworkerAllowedSkillSlugs } from "../../../../lib/coworker-tool-policy";
+import { parseModelReference } from "../../../../lib/model-reference";
+import type { RuntimeContextFile } from "../../../../lib/runtime-context";
 import {
   stageExecutorPrePrompt,
   ExecutorPromptReadyError,
-} from "../../execution/executor-preprompt";
-import { createExecutionEnvironmentFactory } from "../../execution/execution-environment-factory";
-import type { ExecutionEnvironmentSession } from "../../execution/execution-environment";
-import { stagePrePromptAssets } from "../../execution/pre-prompt-assets";
-import { stageRuntimePromptAttachments } from "../../execution/prompt-attachments";
+} from "../../../execution/executor-preprompt";
+import { createExecutionEnvironmentFactory } from "../../../execution/execution-environment-factory";
+import type { ExecutionEnvironmentSession } from "../../../execution/execution-environment";
+import type { ConversationExecutionEnvironmentSession } from "../../../execution/providers/conversation-environment";
+import { stagePrePromptAssets } from "../../../execution/pre-prompt-assets";
+import { stageRuntimePromptAttachments } from "../../../execution/prompt-attachments";
 import {
   writeRuntimeContextToSandbox,
   writeRuntimeEnvToSandbox,
-} from "../../execution/runtime-context";
-import { resolveRuntimeEnvironmentForTurn } from "../../execution/runtime-env";
-import { composeOpencodePromptSpec } from "../../prompts/opencode-runtime-prompt";
+} from "../../../execution/runtime-context";
+import { resolveRuntimeEnvironmentForTurn } from "../../../execution/runtime-env";
+import { composeOpencodePromptSpec } from "../../../prompts/opencode-runtime-prompt";
 import {
   isOpaqueDiagnosticMessage,
   resolveOpenCodePromptCompletion,
   waitForOpenCodeTerminalStateAfterEarlyStreamEnd,
-} from "./opencode-runtime-driver";
+} from "../../../runtime/opencode/opencode-runtime-driver";
 import type {
   RuntimeHarnessClient,
   RuntimeMcpServer,
   RuntimePromptPart,
   RuntimeSelection,
   SandboxHandle,
-} from "../../sandbox/core/types";
+} from "../../../sandbox/core/types";
 import {
   buildMemorySystemPrompt,
   syncMemoryFilesToSandbox,
-} from "../../sandbox/prep/memory-prep";
+} from "../../../sandbox/prep/memory-prep";
 import {
   getIntegrationSkillsSystemPrompt,
   getSkillsSystemPrompt,
-} from "../../sandbox/prep/skills-prep";
-import { logServerEvent } from "../../utils/observability";
+} from "../../../sandbox/prep/skills-prep";
+import { logServerEvent } from "../../../utils/observability";
 import type {
   GenerationCompletionReason,
   RuntimeFailureClassification,
-} from "../../services/lifecycle-policy";
-import { GenerationSuspendedError } from "../../services/generation/core/turn-suspension";
-import { buildOpencodePromptSpecInputForContext } from "../../services/generation/prompts/opencode-prompt-context";
+} from "../../lifecycle-policy";
+import { GenerationSuspendedError } from "../core/turn-suspension";
+import { buildOpencodePromptSpecInputForContext } from "../prompts/opencode-prompt-context";
 import type {
   GenerationContext,
   GenerationEvent,
   GenerationStatus,
   RemoteRunDebugPhase,
-} from "../../services/generation/types";
+} from "../types";
 import type { OpenCodeTurnEventBridge } from "./opencode-turn-events";
 
 const OPENCODE_EARLY_STREAM_REATTACH_ATTEMPTS = 2;
@@ -337,7 +338,7 @@ export class OpenCodeNormalRunner {
       let sessionId: string | undefined;
       let runtimeSandbox: SandboxHandle;
       let runtimeMetadata: RuntimeSelection | undefined;
-      let runtimeInit: ExecutionEnvironmentSession;
+      let runtimeInit: ConversationExecutionEnvironmentSession;
 
       ctx.agentSandboxReadyAt = undefined;
       ctx.agentSandboxMode = undefined;
@@ -380,7 +381,11 @@ export class OpenCodeNormalRunner {
           defaultProvider: ctx.sandboxProviderOverride,
         });
         runtimeInit = await withTimeout(
-          executionFactory.providerFor(ctx.sandboxProviderOverride).acquire(
+          (
+            executionFactory.providerFor(ctx.sandboxProviderOverride) as unknown as {
+              acquire(input: Record<string, unknown>): Promise<ConversationExecutionEnvironmentSession>;
+            }
+          ).acquire(
             {
               conversationId: ctx.conversationId,
               generationId: ctx.id,
@@ -400,7 +405,7 @@ export class OpenCodeNormalRunner {
                 conversationId: ctx.conversationId,
                 userId: ctx.userId,
               },
-              onLifecycle: (stage, details) => {
+              onLifecycle: (stage: string, details: Record<string, unknown> | undefined) => {
                 const status = stage.startsWith("sandbox_")
                   ? `sandbox_init_${stage.slice("sandbox_".length)}`
                   : `agent_init_${stage}`;
@@ -425,12 +430,12 @@ export class OpenCodeNormalRunner {
                 });
               },
             },
-          ),
+          ) as Promise<ConversationExecutionEnvironmentSession>,
           remainingPreparingTimeoutMs(),
           buildPreparingTimeoutMessage(),
         );
         runtimeSandbox = runtimeInit.sandbox;
-        runtimeMetadata = runtimeInit.metadata.selection;
+        runtimeMetadata = runtimeInit.metadata.selection as RuntimeSelection | undefined;
       } catch (error) {
         this.callbacks.markPhase(ctx, "sandbox_init_failed");
         this.callbacks.broadcast(ctx, {

@@ -6,15 +6,76 @@ import type {
   RuntimeQuestionRequest,
 } from "../../sandbox/core/types";
 import { aggregateConversationUsageFromSessionMessages } from "../../services/conversation-usage-service";
-import {
-  buildDefaultQuestionAnswers,
-  buildQuestionCommand,
-  isOpenCodeActionableEvent,
-  isOpenCodeTrackedEvent,
-  type OpenCodeActionableEvent,
-  type OpenCodeRuntimeToolRef,
-  type OpenCodeTrackedEvent,
-} from "./opencode-event-translator";
+
+export type OpenCodeTrackedEvent = Extract<
+  RuntimeEvent,
+  {
+    type:
+      | "message.updated"
+      | "message.part.updated"
+      | "session.updated"
+      | "session.status";
+  }
+>;
+
+export type OpenCodeActionableEvent = Extract<
+  RuntimeEvent,
+  { type: "message.part.updated" | "permission.asked" | "question.asked" }
+>;
+
+export type OpenCodeRuntimeToolRef = {
+  sessionId?: string;
+  messageId: string;
+  partId: string;
+  callId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+};
+
+export function isOpenCodeTrackedEvent(
+  event: RuntimeEvent,
+): event is OpenCodeTrackedEvent {
+  return (
+    event.type === "message.updated" ||
+    event.type === "message.part.updated" ||
+    event.type === "session.updated" ||
+    event.type === "session.status"
+  );
+}
+
+export function isOpenCodeActionableEvent(
+  event: RuntimeEvent,
+): event is OpenCodeActionableEvent {
+  return (
+    event.type === "message.part.updated" ||
+    event.type === "permission.asked" ||
+    event.type === "question.asked"
+  );
+}
+
+function buildOpenCodeDefaultQuestionAnswers(
+  request: RuntimeQuestionRequest,
+): string[][] {
+  return request.questions.map((question) => {
+    const firstOption = question.options?.[0];
+    return firstOption?.value || firstOption?.label
+      ? [firstOption.value ?? firstOption.label]
+      : [];
+  });
+}
+
+function buildOpenCodeQuestionCommand(request: RuntimeQuestionRequest): string {
+  return request.questions
+    .map((question) => {
+      const options =
+        question.options
+          ?.map((option) => option.label || option.value)
+          .filter(Boolean)
+          .join(", ") || "custom answer";
+      return `${question.header}: ${question.question} (${options})`;
+    })
+    .join("; ");
+}
 
 export type OpenCodeTerminalReconciliationOutcome =
   | "idle"
@@ -225,7 +286,7 @@ function normalizePermissionPattern(pattern: string): string {
   return pattern.replace(/[\s*]+$/g, "").replace(/\/+$/, "");
 }
 
-function shouldAutoApproveOpenCodePermission(
+export function shouldAutoApproveOpenCodePermission(
   permissionType: string,
   patterns: string[] | undefined,
 ): boolean {
@@ -645,7 +706,7 @@ export async function handleOpenCodeActionableEvent(input: {
     }
     case "question.asked": {
       const request = input.event.properties;
-      const defaultAnswers = buildDefaultQuestionAnswers(request);
+      const defaultAnswers = buildOpenCodeDefaultQuestionAnswers(request);
       const linkedToolUseId =
         typeof request.tool?.callID === "string" && request.tool.callID.length > 0
           ? request.tool.callID
@@ -656,7 +717,7 @@ export async function handleOpenCodeActionableEvent(input: {
         linkedToolUseId ??
         (input.idFactory?.("opencode-question") ??
           `opencode-question-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-      const command = buildQuestionCommand(request);
+      const command = buildOpenCodeQuestionCommand(request);
       const toolInput = request as unknown as Record<string, unknown>;
 
       return {

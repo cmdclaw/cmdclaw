@@ -5,18 +5,16 @@ import { coworkerRun, generation } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import type {
   RuntimeHarnessClient,
-  RuntimePermissionRequest,
   RuntimePromptPart,
-  RuntimeQuestionRequest,
 } from "../../../sandbox/core/types";
 import {
-  handleRuntimeActionableEvent,
-  sendRuntimeApprovalDecision,
-  updateRuntimeToolPart,
   type RuntimeActionableEvent,
-  type RuntimeApprovalCapableClient,
   type RuntimeApprovalRequest,
+  type RuntimePermissionRequest,
+  type RuntimeQuestionRequest,
   type RuntimeToolRef,
+  buildDefaultQuestionAnswers,
+  buildQuestionCommand,
 } from "../../../runtime/runtime-driver";
 import { buildRuntimeEnvSourcedCommand } from "../../../execution/runtime-env";
 import type { SandboxBackend } from "../../../sandbox/types";
@@ -115,6 +113,13 @@ type DecisionFlowDependencies = {
   processGenerationTimeout?: (
     generationId: string,
     kind: "approval" | "auth",
+  ) => Promise<void>;
+  updateRuntimeToolPart?: (
+    runtimeClient: RuntimeHarnessClient,
+    runtimeTool: RuntimeToolRef,
+    patch:
+      | { status: "completed"; input: Record<string, unknown>; output: string }
+      | { status: "error"; input: Record<string, unknown>; error: string },
   ) => Promise<void>;
 };
 
@@ -601,7 +606,7 @@ export class DecisionFlow {
         : input.runtimeTool.input;
 
     if (execution.status === "completed") {
-      await updateRuntimeToolPart(input.runtimeClient, input.runtimeTool, {
+      await this.dependencies.updateRuntimeToolPart?.(input.runtimeClient, input.runtimeTool, {
         status: "completed",
         input: toolInput,
         output: execution.output,
@@ -616,7 +621,7 @@ export class DecisionFlow {
       };
     }
 
-    await updateRuntimeToolPart(input.runtimeClient, input.runtimeTool, {
+    await this.dependencies.updateRuntimeToolPart?.(input.runtimeClient, input.runtimeTool, {
       status: "error",
       input: toolInput,
       error: execution.error,
@@ -1338,97 +1343,86 @@ export class DecisionFlow {
       runtimeTurnSeq?: number | null;
       autoApprove?: boolean;
     };
-    client: RuntimeApprovalCapableClient;
     event: RuntimeActionableEvent;
     hotWaitMs: number;
     timeoutMs: number;
     saveProgress: () => Promise<void>;
     broadcast: (event: GenerationEvent) => void;
     parkForInterrupt: (interrupt: GenerationInterruptRecord) => Promise<void>;
+    sendRuntimeDecision: (request: RuntimeApprovalRequest) => Promise<void>;
   }): Promise<{ type: "none" | "permission" | "question" }> {
-    const result = await handleRuntimeActionableEvent({
-      event: input.event,
-      client: input.client,
-      autoApprove: input.ctx.autoApprove ?? false,
-      logAutoApprove: ({ requestId, permissionType, patterns, reason }) => {
-        console.log(
-          "[GenerationManager] Auto-approving sandbox permission:",
-          requestId,
-          permissionType,
-          patterns,
-          reason === "conversation_auto_approve"
-            ? "(conversation auto-approve enabled)"
-            : "(allowlisted path)",
-        );
-      },
-      logPermissionApproveError: (error) => {
-        console.error("[GenerationManager] Failed to approve permission:", error);
-      },
-      logPermissionQueued: ({ requestId, permission, patterns }) => {
-        console.log(
-          "[GenerationManager] Surfacing permission request to UI:",
-          requestId,
-          permission,
-          patterns,
-        );
-      },
-    });
-
-    if (result.type === "none") {
+    if (input.event.type === "none") {
       return { type: "none" };
     }
 
-    if (result.type === "permission") {
-      if (result.action === "queue") {
-        const interrupt = await this.requestRuntimeApproval({
+    if (input.event.type === "permission") {
+      const permissionType = input.event.request.permission || "file access";
+      const patterns = input.event.request.patterns;
+      const toolUseId = `runtime-perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const command = patterns?.length
+        ? `${permissionType}: ${patterns.join(", ")}`
+        : permissionType;
+      const interrupt = await this.requestRuntimeApproval({
+        ctx: input.ctx,
+        runtimeRequest: {
+          kind: "permission",
+          request: input.event.request,
+        },
+        pendingApproval: {
+          toolUseId,
+          toolName: "Permission",
+          toolInput: input.event.request as Record<string, unknown>,
+          integration: "cmdclaw",
+          operation: permissionType,
+          command,
+        },
+      });
+      input.broadcast(this.projectPendingEvent(interrupt));
+      const resolved = await this.waitForRuntimeApprovalDecision(
+        interrupt.id,
+        input.hotWaitMs,
+        input.timeoutMs,
+      );
+      if (!resolved) {
+        await input.parkForInterrupt(interrupt);
+      } else {
+        await this.applyRuntimeApprovalDecision({
           ctx: input.ctx,
-          runtimeRequest: {
-            kind: "permission",
-            request: result.request,
-          },
-          pendingApproval: result.pendingApproval,
+          interruptId: interrupt.id,
+          decision: resolved.decision,
+          questionAnswers: resolved.questionAnswers,
+          sendRuntimeDecision: input.sendRuntimeDecision,
         });
-        input.broadcast(this.projectPendingEvent(interrupt));
-        const resolved = await this.waitForRuntimeApprovalDecision(
-          interrupt.id,
-          input.hotWaitMs,
-          input.timeoutMs,
-        );
-        if (!resolved) {
-          await input.parkForInterrupt(interrupt);
-        } else {
-          await this.applyRuntimeApprovalDecision({
-            ctx: input.ctx,
-            interruptId: interrupt.id,
-            decision: resolved.decision,
-            questionAnswers: resolved.questionAnswers,
-            sendRuntimeDecision: (request) =>
-              sendRuntimeApprovalDecision(input.client, request),
-          });
-        }
       }
       return { type: "permission" };
     }
 
+    const defaultAnswers = buildDefaultQuestionAnswers(input.event.request);
+    const linkedToolUseId = input.event.request.tool?.callId;
+    const toolUseId =
+      linkedToolUseId ??
+      `runtime-question-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const command = buildQuestionCommand(input.event.request);
+    const toolInput = input.event.request as unknown as Record<string, unknown>;
     const existingToolUse = input.ctx.contentParts.find(
       (part): part is ContentPart & { type: "tool_use" } =>
-        part.type === "tool_use" && part.id === result.toolUseId,
+        part.type === "tool_use" && part.id === toolUseId,
     );
     if (!existingToolUse) {
       input.broadcast({
         type: "tool_use",
         toolName: "question",
-        toolInput: result.toolInput,
-        toolUseId: result.toolUseId,
+        toolInput,
+        toolUseId,
         integration: "cmdclaw",
         operation: "question",
       });
 
       input.ctx.contentParts.push({
         type: "tool_use",
-        id: result.toolUseId,
+        id: toolUseId,
         name: "question",
-        input: result.toolInput,
+        input: toolInput,
         integration: "cmdclaw",
         operation: "question",
       });
@@ -1439,10 +1433,17 @@ export class DecisionFlow {
       ctx: input.ctx,
       runtimeRequest: {
         kind: "question",
-        request: result.request,
-        defaultAnswers: result.defaultAnswers,
+        request: input.event.request,
+        defaultAnswers,
       },
-      pendingApproval: result.pendingApproval,
+      pendingApproval: {
+        toolUseId,
+        toolName: "question",
+        toolInput,
+        integration: "cmdclaw",
+        operation: "question",
+        command,
+      },
     });
     input.broadcast(this.projectPendingEvent(interrupt));
     const resolved = await this.waitForRuntimeApprovalDecision(
@@ -1458,7 +1459,7 @@ export class DecisionFlow {
         interruptId: interrupt.id,
         decision: resolved.decision,
         questionAnswers: resolved.questionAnswers,
-        sendRuntimeDecision: (request) => sendRuntimeApprovalDecision(input.client, request),
+        sendRuntimeDecision: input.sendRuntimeDecision,
       });
     }
     return { type: "question" };

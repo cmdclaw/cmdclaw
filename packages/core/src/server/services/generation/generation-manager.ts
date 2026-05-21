@@ -11,17 +11,10 @@ import type { RuntimeHarnessClient } from "../../sandbox/core/types";
 import {
   buildDefaultQuestionAnswers,
   buildQuestionCommand,
-  captureRuntimeUsageFromSession,
-  sendRuntimeApprovalDecision,
-  type RuntimeActionableEvent,
-  type RuntimeApprovalCapableClient,
   type RuntimeToolRef,
 } from "../../runtime/runtime-driver";
 import { SandboxSlotLeaseCoordinator } from "../../execution/sandbox-slot-lease";
-import {
-  extractRuntimeExportState,
-  inspectOpenCodeRuntimeFailureState,
-} from "../../runtime/opencode/opencode-reattach";
+import { extractRuntimeExportState } from "../../runtime/opencode/opencode-reattach";
 import type { SandboxBackend } from "../../sandbox/types";
 import {
   buildQueueJobId,
@@ -64,12 +57,10 @@ import { importIntegrationSkillDraftsFromSandbox } from "./skills/integration-sk
 import { GenerationEventLog } from "./streams/generation-event-log";
 import { GenerationContextState } from "./runtime/generation-context-state";
 import { GenerationResumeRunner } from "./runtime/generation-resume-runner";
-import { OpenCodeTurnEventBridge } from "../../runtime/opencode/opencode-turn-events";
-import { OpenCodeNormalRunner } from "../../runtime/opencode/opencode-normal-runner";
 import {
-  OpenCodeRecoveryRunner,
-  type OpenCodeRecoveryReattachOptions,
-} from "../../runtime/opencode/opencode-recovery-runner";
+  GenerationRuntimeCoordinator,
+  type RuntimeRecoveryReattachOptions,
+} from "./runtime/generation-runtime-coordinator";
 import {
   TurnIntake,
   type StartCoworkerGenerationInput,
@@ -89,14 +80,10 @@ import type {
 import {
   generationLifecyclePolicy,
   type GenerationCompletionReason,
-  type RuntimeFailureClassification,
 } from "../lifecycle-policy";
 
 export type { GenerationEvent };
 
-type ApprovalCapableClient = RuntimeApprovalCapableClient;
-
-const APPROVAL_TIMEOUT_MS = generationLifecyclePolicy.approvalTimeoutMs;
 const CANCELLATION_POLL_INTERVAL_MS = 1000;
 const AGENT_PREPARING_TIMEOUT_MS = generationLifecyclePolicy.bootstrapTimeoutMs;
 
@@ -281,7 +268,7 @@ class GenerationManager {
           error,
         ),
     });
-  private readonly decisionFlow = new DecisionFlow({
+  private readonly decisionFlow: DecisionFlow = new DecisionFlow({
     lifecycleStore: this.lifecycleStore,
     getActiveRuntimeContext: (generationId) =>
       this.activeGenerations.get(generationId),
@@ -356,6 +343,12 @@ class GenerationManager {
       ),
     processGenerationTimeout: (generationId, kind) =>
       this.processGenerationTimeout(generationId, kind),
+    updateRuntimeToolPart: (runtimeClient, runtimeTool, patch) =>
+      this.runtimeCoordinator.updateRuntimeToolPart(
+        runtimeClient,
+        runtimeTool,
+        patch,
+      ),
   });
   private readonly maintenance = new GenerationMaintenance({
     abortAndEvictActiveGeneration: (generationId) => {
@@ -389,94 +382,29 @@ class GenerationManager {
     projectInterruptPendingEvent: (interrupt) =>
       this.projectInterruptPendingEvent(interrupt),
   });
-  private readonly opencodeTurnEvents = new OpenCodeTurnEventBridge({
-    markPhase: (ctx, phase) => this.contextState.markPhase(ctx, phase),
-    broadcast: (ctx, event) => this.broadcast(ctx, event),
-    scheduleSave: (ctx) => this.scheduleSave(ctx),
-    saveProgress: (ctx) => this.saveProgress(ctx),
-    markRuntimeActivity: (ctx) => this.contextState.markRuntimeActivity(ctx),
-    refreshCancellationSignal: (ctx) => this.refreshCancellationSignal(ctx),
-    handleActionableEvent: (ctx, client, event) =>
-      this.handleRuntimeActionableEvent(ctx, client, event),
-  });
-  private readonly openCodeNormalRunner = new OpenCodeNormalRunner({
+  private readonly runtimeCoordinator: GenerationRuntimeCoordinator =
+    new GenerationRuntimeCoordinator({
     bootstrapTimeoutMs: AGENT_PREPARING_TIMEOUT_MS,
-    opencodeTurnEvents: this.opencodeTurnEvents,
-    refreshCancellationSignal: (ctx, options) =>
-      this.refreshCancellationSignal(ctx, options),
-    finishGeneration: (ctx, status) => this.finishGeneration(ctx, status),
-    setCompletionReason: (ctx, reason) =>
-      this.contextState.setCompletionReason(ctx, reason),
-    ensureRemoteRunDebugInfo: (ctx) =>
-      this.contextState.ensureRemoteRunDebugInfo(ctx),
-    recordRemoteRunPhase: (ctx, phase, patch) =>
-      this.contextState.recordRemoteRunPhase(ctx, phase, patch),
-    markPhase: (ctx, phase) => this.contextState.markPhase(ctx, phase),
-    broadcast: (ctx, event) => this.broadcast(ctx, event),
-    bindRuntimeSandboxToContext: (ctx, input) =>
-      this.contextState.bindRuntimeSandboxToContext(ctx, input),
-    bindRuntimeSessionToContext: (ctx, input) =>
-      this.contextState.bindRuntimeSessionToContext(ctx, input),
-    persistRuntimeSessionBinding: (ctx, input) =>
-      this.contextState.persistRuntimeSessionBinding(ctx, input),
-    setSnapshotRestoreAllowance: (ctx, allowed) =>
-      this.setSnapshotRestoreAllowance(ctx, allowed),
-    getRemainingRunTimeMs: (ctx) =>
-      this.contextState.getRemainingRunTimeMs(ctx),
-    parkGenerationForRunDeadline: (ctx, runtimeClient) =>
-      this.parkGenerationForRunDeadline(ctx, runtimeClient),
-    startExternalInterruptPolling: (ctx) =>
-      this.interruptParking.startExternalInterruptPolling(ctx),
-    stopExternalInterruptPolling: (ctx) =>
-      this.interruptParking.stopExternalInterruptPolling(ctx),
-    pollExternalInterruptAndSuspendIfNeeded: (ctx) =>
-      this.interruptParking.pollExternalInterruptAndSuspendIfNeeded(ctx),
-    awaitPromiseUntilRunDeadline: (ctx, promise) =>
-      this.awaitPromiseUntilRunDeadline(ctx, promise),
-    scheduleSave: (ctx) => this.scheduleSave(ctx),
-    importIntegrationSkillDraftsFromSandbox: (ctx) =>
-      this.importIntegrationSkillDraftsFromSandbox(ctx),
-    captureUsageFromRuntimeSession: (ctx, runtimeClient, sessionId) =>
-      this.captureUsageFromRuntimeSession(ctx, runtimeClient, sessionId),
-    captureOriginalError: (ctx, error, input) =>
-      this.contextState.captureOriginalError(ctx, error, input),
-    getCurrentPhase: (ctx) => this.contextState.getCurrentPhase(ctx),
-    resolveRuntimeFailure: (ctx, runtimeClient) =>
-      this.resolveRuntimeFailure(ctx, runtimeClient),
-    scheduleRecoveryReattach: (ctx) => this.scheduleRecoveryReattach(ctx),
+    contextState: this.contextState,
+    decisionFlow: this.decisionFlow,
+    interruptParking: this.interruptParking,
     turnFinalizer: this.turnFinalizer,
-  });
-  private readonly openCodeRecoveryRunner = new OpenCodeRecoveryRunner({
-    bootstrapTimeoutMs: AGENT_PREPARING_TIMEOUT_MS,
-    turnEvents: this.opencodeTurnEvents,
     refreshCancellationSignal: (ctx, options) =>
       this.refreshCancellationSignal(ctx, options),
     finishGeneration: (ctx, status) => this.finishGeneration(ctx, status),
-    setCompletionReason: (ctx, reason) =>
-      this.contextState.setCompletionReason(ctx, reason),
-    bindRuntimeSessionToContext: (ctx, input) =>
-      this.contextState.bindRuntimeSessionToContext(ctx, input),
-    broadcast: (ctx, event) => this.broadcast(ctx, event),
-    resolveSandboxRuntimeEnvForContext: (ctx) =>
-      this.contextState.resolveSandboxRuntimeEnvForContext(ctx),
-    applyResolvedInterruptToRuntime: (ctx, interruptId, runtimeClient) =>
-      this.applyResolvedInterruptToRuntime(ctx, interruptId, runtimeClient),
     setSnapshotRestoreAllowance: (ctx, allowed) =>
       this.setSnapshotRestoreAllowance(ctx, allowed),
-    getRemainingRunTimeMs: (ctx) =>
-      this.contextState.getRemainingRunTimeMs(ctx),
     parkGenerationForRunDeadline: (ctx, runtimeClient) =>
       this.parkGenerationForRunDeadline(ctx, runtimeClient),
     awaitPromiseUntilRunDeadline: (ctx, promise) =>
       this.awaitPromiseUntilRunDeadline(ctx, promise),
-    captureUsageFromRuntimeSession: (ctx, runtimeClient, sessionId) =>
-      this.captureUsageFromRuntimeSession(ctx, runtimeClient, sessionId),
+    scheduleSave: (ctx) => this.scheduleSave(ctx),
+    broadcast: (ctx, event) => this.broadcast(ctx, event),
     importIntegrationSkillDraftsFromSandbox: (ctx) =>
       this.importIntegrationSkillDraftsFromSandbox(ctx),
-    resolveRuntimeFailure: (ctx, runtimeClient) =>
-      this.resolveRuntimeFailure(ctx, runtimeClient),
-    captureOriginalError: (ctx, error, input) =>
-      this.contextState.captureOriginalError(ctx, error, input),
+    scheduleRecoveryReattach: (ctx) => this.scheduleRecoveryReattach(ctx),
+    recordRecoveryAttempt: (ctx) => this.recordRecoveryAttempt(ctx),
+    saveProgress: (ctx) => this.saveProgress(ctx),
   });
   private readonly resumeRunner = new GenerationResumeRunner({
     lifecycleStore: this.lifecycleStore,
@@ -645,33 +573,6 @@ class GenerationManager {
         message: params.message,
       },
     });
-  }
-
-  private async resolveRuntimeFailure(
-    ctx: GenerationContext,
-    client?: RuntimeHarnessClient,
-  ): Promise<RuntimeFailureClassification> {
-    const pendingInterrupt =
-      await generationInterruptService.getPendingInterruptForGeneration(ctx.id);
-    const inspected = await inspectOpenCodeRuntimeFailureState({
-      sessionId: ctx.sessionId,
-      client,
-      sandbox: ctx.sandbox,
-      pendingInterruptKind: pendingInterrupt
-        ? pendingInterrupt.kind === "auth"
-          ? "auth"
-          : "approval"
-        : null,
-      canRecover:
-        generationLifecyclePolicy.maxRecoveryAttempts >
-        (ctx.recoveryAttempts ?? 0),
-    });
-    if (inspected.classification !== "recoverable_live_runtime") {
-      return inspected.classification;
-    }
-
-    await this.recordRecoveryAttempt(ctx);
-    return inspected.classification;
   }
 
   private async setSnapshotRestoreAllowance(
@@ -1054,71 +955,13 @@ class GenerationManager {
 
   private async runRecoveryReattach(
     ctx: GenerationContext,
-    options?: OpenCodeRecoveryReattachOptions,
+    options?: RuntimeRecoveryReattachOptions,
   ): Promise<void> {
-    await this.openCodeRecoveryRunner.run(ctx, options);
+    await this.runtimeCoordinator.runRecoveryReattach(ctx, options);
   }
 
   private async runOpenCodeGeneration(ctx: GenerationContext): Promise<void> {
-    await this.openCodeNormalRunner.run(ctx);
-  }
-
-  private async captureUsageFromRuntimeSession(
-    ctx: GenerationContext,
-    runtimeClient: RuntimeHarnessClient,
-    sessionId: string,
-  ): Promise<void> {
-    try {
-      const usage = await captureRuntimeUsageFromSession(
-        runtimeClient,
-        sessionId,
-      );
-      if (!usage) {
-        return;
-      }
-      ctx.usage = {
-        ...ctx.usage,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-      };
-    } catch (error) {
-      console.warn(
-        "[GenerationManager] Failed to capture usage from runtime session:",
-        error,
-      );
-    }
-  }
-
-  private async handleRuntimeActionableEvent(
-    ctx: GenerationContext,
-    client: ApprovalCapableClient,
-    event: RuntimeActionableEvent,
-  ): Promise<{ type: "none" | "permission" | "question" }> {
-    return this.decisionFlow.handleRuntimeActionableEvent({
-      ctx,
-      client,
-      event,
-      hotWaitMs: this.contextState.getApprovalHotWaitMs(ctx),
-      timeoutMs: APPROVAL_TIMEOUT_MS,
-      saveProgress: () => this.saveProgress(ctx),
-      broadcast: (generationEvent) => this.broadcast(ctx, generationEvent),
-      parkForInterrupt: (interrupt) =>
-        this.interruptParking.parkGenerationForInterrupt(ctx, interrupt),
-    });
-  }
-
-  private async applyResolvedInterruptToRuntime(
-    ctx: GenerationContext,
-    interruptId: string,
-    runtimeClient: RuntimeHarnessClient,
-  ): Promise<void> {
-    await this.decisionFlow.applyResolvedInterruptToRuntime({
-      ctx,
-      interruptId,
-      sendRuntimeDecision: (request) =>
-        sendRuntimeApprovalDecision(runtimeClient, request),
-      broadcastResolvedEvent: (event) => this.broadcast(ctx, event),
-    });
+    await this.runtimeCoordinator.runNormal(ctx);
   }
 
   private async importIntegrationSkillDraftsFromSandbox(

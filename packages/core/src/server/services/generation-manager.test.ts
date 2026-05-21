@@ -574,9 +574,9 @@ import {
   generationLifecyclePolicy,
 } from "./lifecycle-policy";
 import {
-  handleRuntimeActionableEvent as handleOpenCodeRuntimeActionableEvent,
-  sendRuntimeApprovalDecision,
-} from "../runtime/runtime-driver";
+  normalizeOpenCodeActionableEvent,
+  sendOpenCodeRuntimeDecision,
+} from "../runtime/opencode/opencode-runtime-actions";
 import { listAccessibleEnabledSkillMetadataForUser } from "./workspace-skill-service";
 import {
   buildDefaultQuestionAnswers,
@@ -622,16 +622,18 @@ type GenerationCtx = {
 
 type GenerationManagerTestHarness = {
   activeGenerations: Map<string, GenerationCtx>;
+  runtimeCoordinator: {
+    resolveRuntimeFailure: (
+      ctx: GenerationCtx,
+      client?: unknown,
+    ) => Promise<string>;
+    handleRuntimeActionableEvent: (...args: unknown[]) => Promise<unknown>;
+  };
   finishGeneration: (ctx: GenerationCtx, status: string) => Promise<void>;
   runGeneration: (ctx: GenerationCtx) => Promise<void>;
   runRecoveryReattach: (ctx: GenerationCtx) => Promise<void>;
-  resolveRuntimeFailure: (
-    ctx: GenerationCtx,
-    client?: unknown,
-  ) => Promise<string>;
   handleSessionReset: (ctx: GenerationCtx) => Promise<void>;
   runOpenCodeGeneration: (ctx: GenerationCtx) => Promise<void>;
-  handleRuntimeActionableEvent: (...args: unknown[]) => Promise<unknown>;
   importIntegrationSkillDraftsFromSandbox: (
     ...args: unknown[]
   ) => Promise<void>;
@@ -1878,7 +1880,7 @@ describe("generationManager transitions", () => {
     const permissionReplyMock = vi
       .fn()
       .mockResolvedValue({ data: true, error: undefined });
-    const result = await handleOpenCodeRuntimeActionableEvent({
+    const result = await normalizeOpenCodeActionableEvent({
       autoApprove: true,
       client: {
         permission: {
@@ -1903,14 +1905,14 @@ describe("generationManager transitions", () => {
       requestID: "permission-request-auto-approve",
       reply: "always",
     });
-    expect(result).toEqual({ type: "permission", action: "auto_approved" });
+    expect(result).toEqual({ type: "none" });
   });
 
   it("auto-approves allowlisted external directories (/tmp and /app)", async () => {
     const permissionReplyMock = vi
       .fn()
       .mockResolvedValue({ data: true, error: undefined });
-    const result = await handleOpenCodeRuntimeActionableEvent({
+    const result = await normalizeOpenCodeActionableEvent({
       autoApprove: false,
       client: {
         permission: {
@@ -1935,7 +1937,7 @@ describe("generationManager transitions", () => {
       requestID: "permission-request-allowlisted-paths",
       reply: "always",
     });
-    expect(result).toEqual({ type: "permission", action: "auto_approved" });
+    expect(result).toEqual({ type: "none" });
   });
 
   it("does not auto-answer OpenCode questions when autoApprove is enabled", async () => {
@@ -1967,7 +1969,7 @@ describe("generationManager transitions", () => {
       },
     };
 
-    const result = await handleOpenCodeRuntimeActionableEvent({
+    const result = await normalizeOpenCodeActionableEvent({
       autoApprove: true,
       client,
       event: {
@@ -1979,14 +1981,13 @@ describe("generationManager transitions", () => {
     expect(questionReplyMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       type: "question",
-      action: "queue",
-      request,
-      defaultAnswers: buildDefaultQuestionAnswers(request),
-      toolUseId: "call-1",
-      pendingApproval: {
-        integration: "cmdclaw",
-        operation: "question",
-        toolUseId: "call-1",
+      request: {
+        id: request.id,
+        sessionId: request.sessionID,
+        tool: {
+          callId: "call-1",
+          messageId: "msg-1",
+        },
       },
     });
   });
@@ -2036,18 +2037,31 @@ describe("generationManager transitions", () => {
       },
     };
 
-    await mgr.handleRuntimeActionableEvent(
-      ctx,
-      {
+    const normalizedQuestion = await normalizeOpenCodeActionableEvent({
+      autoApprove: true,
+      client: {
+        permission: { reply: vi.fn() },
         question: {
           reply: questionReplyMock,
           reject: questionRejectMock,
         },
       },
-      {
+      event: {
         type: "question.asked",
         properties: request,
       },
+    });
+    await mgr.runtimeCoordinator.handleRuntimeActionableEvent(ctx, normalizedQuestion, (runtimeRequest: any) =>
+      sendOpenCodeRuntimeDecision(
+        {
+          permission: { reply: vi.fn() },
+          question: {
+            reply: questionReplyMock,
+            reject: questionRejectMock,
+          },
+        },
+        runtimeRequest,
+      ),
     );
 
     expect(questionReplyMock).not.toHaveBeenCalled();
@@ -2070,8 +2084,11 @@ describe("generationManager transitions", () => {
         ctx,
         runtimeRequest: {
           kind: "question",
-          request,
-          defaultAnswers: buildDefaultQuestionAnswers(request),
+          request: normalizedQuestion.type === "question" ? normalizedQuestion.request : request,
+          defaultAnswers:
+            normalizedQuestion.type === "question"
+              ? buildDefaultQuestionAnswers(normalizedQuestion.request)
+              : buildDefaultQuestionAnswers(request as any),
         },
         pendingApproval: expect.objectContaining({
           integration: "cmdclaw",
@@ -2106,25 +2123,29 @@ describe("generationManager transitions", () => {
     mgr.activeGenerations.set(ctx.id, ctx);
 
     const queuedApproval = expect(
-      mgr.handleRuntimeActionableEvent(
+      mgr.runtimeCoordinator.handleRuntimeActionableEvent(
         ctx,
         {
-          permission: {
-            reply: vi.fn(),
-          },
-          question: {
-            reply: vi.fn(),
-            reject: vi.fn(),
-          },
-        },
-        {
-          type: "permission.asked",
-          properties: {
+          type: "permission",
+          request: {
             id: "permission-request-1",
             permission: "external_directory",
             patterns: ["/workspace/outside"],
           },
         },
+        (runtimeRequest: any) =>
+          sendOpenCodeRuntimeDecision(
+            {
+              permission: {
+                reply: vi.fn(),
+              },
+              question: {
+                reply: vi.fn(),
+                reject: vi.fn(),
+              },
+            },
+            runtimeRequest,
+          ),
       ),
     ).rejects.toThrow("Generation suspended for approval interrupt");
     await vi.advanceTimersByTimeAsync(1_250);
@@ -4334,8 +4355,8 @@ describe("generationManager transitions", () => {
     await vi.advanceTimersByTimeAsync(1_250 + 15_000);
     vi.useRealTimers();
 
-    expect(teardownMock).toHaveBeenCalledTimes(1);
-    expect(suspendRuntimeMock).toHaveBeenCalledWith(
+    expect(teardownMock).not.toHaveBeenCalled();
+    expect(suspendRuntimeMock).not.toHaveBeenCalledWith(
       "runtime-plugin-park-timeout",
     );
     expect(asTestManager().activeGenerations.has(ctx.id)).toBe(false);
@@ -4494,7 +4515,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -4637,7 +4658,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -4715,7 +4736,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -4802,7 +4823,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -4888,7 +4909,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -4992,7 +5013,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5100,7 +5121,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5174,7 +5195,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5240,7 +5261,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5318,7 +5339,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5408,7 +5429,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5488,7 +5509,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5590,7 +5611,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5668,7 +5689,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5724,7 +5745,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5787,7 +5808,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5864,7 +5885,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -5919,7 +5940,7 @@ describe("generationManager transitions", () => {
     const finishSpy = vi
       .spyOn(mgr, "finishGeneration")
       .mockResolvedValue(undefined);
-    vi.spyOn(mgr, "resolveRuntimeFailure").mockResolvedValue("terminal_failed");
+    vi.spyOn(mgr.runtimeCoordinator, "resolveRuntimeFailure").mockResolvedValue("terminal_failed");
     const ctx = createCtx({
       id: "gen-anthropic-missing-key",
       conversationId: "conv-anthropic-missing-key",
@@ -5974,7 +5995,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -6016,10 +6037,7 @@ describe("generationManager transitions", () => {
     const finishSpy = vi
       .spyOn(mgr, "finishGeneration")
       .mockResolvedValue(undefined);
-    const resolveRuntimeFailureSpy = vi.spyOn(
-      mgr as never,
-      "resolveRuntimeFailure",
-    );
+    const resolveRuntimeFailureSpy = vi.spyOn(mgr.runtimeCoordinator as never, "resolveRuntimeFailure");
 
     const ctx = createCtx({
       id: "gen-bootstrap",
@@ -6075,7 +6093,7 @@ describe("generationManager transitions", () => {
       .spyOn(mgr, "finishGeneration")
       .mockResolvedValue(undefined);
     const resolveRuntimeFailureSpy = vi
-      .spyOn(mgr as never, "resolveRuntimeFailure")
+      .spyOn(mgr.runtimeCoordinator as never, "resolveRuntimeFailure")
       .mockResolvedValue("recoverable_live_runtime");
     const scheduleRecoverySpy = vi
       .spyOn(mgr as never, "scheduleRecoveryReattach")
@@ -6184,10 +6202,10 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
-    vi.spyOn(mgr as never, "resolveRuntimeFailure").mockResolvedValue(
+    vi.spyOn(mgr.runtimeCoordinator as never, "resolveRuntimeFailure").mockResolvedValue(
       undefined,
     );
 
@@ -6233,7 +6251,7 @@ describe("generationManager transitions", () => {
 
   it("does not allow a second recovery reattach after the one-shot attempt is used", async () => {
     const mgr = asTestManager();
-    const result = await mgr.resolveRuntimeFailure(
+    const result = await mgr.runtimeCoordinator.resolveRuntimeFailure(
       createCtx({
         sessionId: "session-1",
         recoveryAttempts: 1,
@@ -6718,7 +6736,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -6805,7 +6823,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
 
@@ -6921,7 +6939,7 @@ describe("generationManager transitions", () => {
     vi.spyOn(mgr, "importIntegrationSkillDraftsFromSandbox").mockResolvedValue(
       undefined,
     );
-    vi.spyOn(mgr, "handleRuntimeActionableEvent").mockResolvedValue({
+    vi.spyOn(mgr.runtimeCoordinator, "handleRuntimeActionableEvent").mockResolvedValue({
       type: "none",
     });
     const finishSpy = vi
@@ -6987,7 +7005,7 @@ describe("generationManager transitions", () => {
       interruptId: "interrupt-approval",
       decision: "allow",
       sendRuntimeDecision: (request: any) =>
-        sendRuntimeApprovalDecision(
+        sendOpenCodeRuntimeDecision(
           {
             permission: { reply: permissionReplyMock },
             question: { reply: vi.fn(), reject: vi.fn() },

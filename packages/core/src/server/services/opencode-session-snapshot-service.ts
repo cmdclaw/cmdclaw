@@ -11,6 +11,8 @@ import {
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 
 const SNAPSHOT_CONTENT_TYPE = "application/json";
+const SNAPSHOT_EXPORT_ATTEMPTS = 5;
+const SNAPSHOT_EXPORT_RETRY_DELAY_MS = 1_000;
 
 const opencodeSessionSnapshotSchema = z.object({
   info: z
@@ -50,6 +52,10 @@ export function buildOpencodeExportCommand(sessionId: string): string {
 
 function buildOpencodeImportCommand(filePath: string): string {
   return `opencode import ${shellEscape(filePath)}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function extractEmbeddedJsonObject(raw: string): string {
@@ -226,16 +232,37 @@ export async function saveConversationSessionSnapshot(input: {
   storageKey: string;
   exportedAt: Date;
 }> {
-  const exportResult = await input.sandbox.exec(buildOpencodeExportCommand(input.sessionId), {
-    timeoutMs: 60_000,
-  });
-  if (exportResult.exitCode !== 0) {
-    throw new Error(
-      exportResult.stderr || exportResult.stdout || `Failed to export session ${input.sessionId}`,
-    );
+  let normalizedSnapshot: ReturnType<typeof normalizeOpencodeSessionSnapshotPayload> | undefined;
+  let lastExportError: unknown;
+
+  for (let attempt = 1; attempt <= SNAPSHOT_EXPORT_ATTEMPTS; attempt += 1) {
+    const exportResult = await input.sandbox.exec(buildOpencodeExportCommand(input.sessionId), {
+      timeoutMs: 60_000,
+    });
+    if (exportResult.exitCode !== 0) {
+      lastExportError = new Error(
+        exportResult.stderr || exportResult.stdout || `Failed to export session ${input.sessionId}`,
+      );
+    } else {
+      try {
+        normalizedSnapshot = normalizeOpencodeSessionSnapshotPayload(exportResult.stdout);
+        break;
+      } catch (error) {
+        lastExportError = error;
+      }
+    }
+
+    if (attempt < SNAPSHOT_EXPORT_ATTEMPTS) {
+      await sleep(SNAPSHOT_EXPORT_RETRY_DELAY_MS);
+    }
   }
 
-  const normalizedSnapshot = normalizeOpencodeSessionSnapshotPayload(exportResult.stdout);
+  if (!normalizedSnapshot) {
+    throw lastExportError instanceof Error
+      ? lastExportError
+      : new Error(`Failed to export session ${input.sessionId}`);
+  }
+
   const storageKey = buildConversationSessionSnapshotStorageKey(input.conversationId);
   const exportedAt = input.exportedAt ?? new Date();
   const snapshotBuffer = Buffer.from(normalizedSnapshot.raw, "utf8");

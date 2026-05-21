@@ -1,20 +1,5 @@
 import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import type { ExecutionEnvironment } from "../execution/execution-environment";
-import {
-  buildDefaultQuestionAnswers,
-  buildQuestionCommand,
-  limitToolResultContent,
-  type OpenCodeActionableEvent,
-  type OpenCodeRuntimeToolRef,
-} from "./opencode/opencode-event-translator";
-import {
-  captureOpenCodeUsageFromSession,
-  handleOpenCodeActionableEvent,
-  sendOpenCodeApprovalRuntimeDecision,
-  updateOpenCodeToolPart,
-  type OpenCodeApprovalCapableClient,
-  type OpenCodeApprovalRuntimeRequest,
-} from "./opencode/opencode-runtime-driver";
 
 export interface RuntimeDriver {
   startTurn(input: RuntimeStartTurnInput): Promise<RuntimeTurn>;
@@ -177,13 +162,99 @@ export type RuntimeDecisionResolution =
       answers?: string[][];
     };
 
-export type RuntimeActionableEvent = OpenCodeActionableEvent;
-export type RuntimeToolRef = OpenCodeRuntimeToolRef;
-export type RuntimeApprovalCapableClient = OpenCodeApprovalCapableClient;
-export type RuntimeApprovalRequest = OpenCodeApprovalRuntimeRequest;
+export type RuntimePermissionRequest = {
+  id: string;
+  permission?: string;
+  patterns?: string[];
+};
 
-export const handleRuntimeActionableEvent = handleOpenCodeActionableEvent;
-export const sendRuntimeApprovalDecision = sendOpenCodeApprovalRuntimeDecision;
-export const updateRuntimeToolPart = updateOpenCodeToolPart;
-export const captureRuntimeUsageFromSession = captureOpenCodeUsageFromSession;
-export { buildDefaultQuestionAnswers, buildQuestionCommand, limitToolResultContent };
+export type RuntimeQuestionRequest = {
+  id: string;
+  sessionId?: string;
+  questions: RuntimeQuestion[];
+  tool?: {
+    messageId?: string;
+    callId?: string;
+  };
+};
+
+export type RuntimeActionableEvent =
+  | { type: "none" }
+  | {
+      type: "permission";
+      request: RuntimePermissionRequest;
+    }
+  | {
+      type: "question";
+      request: RuntimeQuestionRequest;
+    };
+
+export type RuntimeToolRef = {
+  sessionId?: string;
+  messageId: string;
+  partId: string;
+  callId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+};
+
+export type RuntimeApprovalRequest =
+  | {
+      kind: "permission";
+      requestId: string;
+      reply: "always" | "reject";
+    }
+  | {
+      kind: "question";
+      requestId: string;
+      answers?: string[][];
+      reject?: boolean;
+    };
+
+const MAX_TOOL_RESULT_CONTENT_CHARS = 100_000;
+
+function truncateString(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}\n... (output truncated)`;
+}
+
+export function limitToolResultContent(value: unknown): unknown {
+  if (typeof value === "string") {
+    return truncateString(value, MAX_TOOL_RESULT_CONTENT_CHARS);
+  }
+
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized.length <= MAX_TOOL_RESULT_CONTENT_CHARS) {
+      return value;
+    }
+    return truncateString(serialized, MAX_TOOL_RESULT_CONTENT_CHARS);
+  } catch {
+    return truncateString(String(value), MAX_TOOL_RESULT_CONTENT_CHARS);
+  }
+}
+
+export function buildDefaultQuestionAnswers(request: RuntimeQuestionRequest): string[][] {
+  return request.questions.map((question) => {
+    const recommended =
+      question.options.find((option) => /\(Recommended\)/i.test(option.label)) ??
+      question.options[0];
+    return recommended ? [recommended.label] : [];
+  });
+}
+
+export function buildQuestionCommand(request: RuntimeQuestionRequest): string {
+  const firstQuestion = request.questions[0];
+  if (!firstQuestion) {
+    return "Question";
+  }
+  const options =
+    firstQuestion.options.length > 0
+      ? ` [${firstQuestion.options.map((option) => option.label).join(" | ")}]`
+      : "";
+  const extraCount = Math.max(0, request.questions.length - 1);
+  const extra = extraCount > 0 ? ` (+${extraCount} more)` : "";
+  return `Question: ${firstQuestion.question}${options}${extra}`;
+}

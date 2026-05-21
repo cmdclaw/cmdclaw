@@ -1,19 +1,26 @@
 import {
   OpenCodeEventTranslator,
-  type OpenCodeActionableEvent,
   type OpenCodeTrackedEvent,
 } from "./opencode-event-translator";
 import {
   OpenCodeRuntimeEventLoop,
   type OpenCodeApprovalCapableClient,
-} from "./opencode-runtime-driver";
+} from "../../../runtime/opencode/opencode-runtime-driver";
+import {
+  normalizeOpenCodeActionableEvent,
+  sendOpenCodeRuntimeDecision,
+} from "../../../runtime/opencode/opencode-runtime-actions";
 import {
   parseCoworkerEditApplyEnvelope,
   parseCoworkerInvocationEnvelope,
-} from "../../../lib/coworker-runtime-cli";
-import { logServerEvent } from "../../utils/observability";
-import { getToolUseMetadata } from "../../services/generation/streams/replay-events";
-import type { GenerationContext, GenerationEvent } from "../../services/generation/types";
+} from "../../../../lib/coworker-runtime-cli";
+import { logServerEvent } from "../../../utils/observability";
+import { getToolUseMetadata } from "../streams/replay-events";
+import type { GenerationContext, GenerationEvent } from "../types";
+import type {
+  RuntimeActionableEvent,
+  RuntimeApprovalRequest,
+} from "../../../runtime/runtime-driver";
 
 export type OpenCodeTurnEventLoopMode = "normal" | "recovery_reattach";
 
@@ -26,8 +33,8 @@ type OpenCodeTurnEventBridgeCallbacks = {
   refreshCancellationSignal: (ctx: GenerationContext) => Promise<boolean>;
   handleActionableEvent: (
     ctx: GenerationContext,
-    client: OpenCodeApprovalCapableClient,
-    event: OpenCodeActionableEvent,
+    event: RuntimeActionableEvent,
+    sendRuntimeDecision: (request: RuntimeApprovalRequest) => Promise<void>,
   ) => Promise<{ type: "none" | "permission" | "question" }>;
 };
 
@@ -121,8 +128,38 @@ export class OpenCodeTurnEventBridge {
           setCurrentTextPart,
         });
       },
-      handleActionableEvent: (event) =>
-        this.callbacks.handleActionableEvent(ctx, client, event),
+      handleActionableEvent: async (event) => {
+        const normalized = await normalizeOpenCodeActionableEvent({
+          event,
+          client,
+          autoApprove: ctx.autoApprove ?? false,
+          logAutoApprove: ({ requestId, permissionType, patterns, reason }) => {
+            console.log(
+              "[GenerationManager] Auto-approving sandbox permission:",
+              requestId,
+              permissionType,
+              patterns,
+              reason === "conversation_auto_approve"
+                ? "(conversation auto-approve enabled)"
+                : "(allowlisted path)",
+            );
+          },
+          logPermissionApproveError: (error) => {
+            console.error("[GenerationManager] Failed to approve permission:", error);
+          },
+          logPermissionQueued: ({ requestId, permission, patterns }) => {
+            console.log(
+              "[GenerationManager] Surfacing permission request to UI:",
+              requestId,
+              permission,
+              patterns,
+            );
+          },
+        });
+        return this.callbacks.handleActionableEvent(ctx, normalized, (request) =>
+          sendOpenCodeRuntimeDecision(client, request),
+        );
+      },
       onIdle: input.onIdle,
       onSessionError: input.onSessionError,
     });

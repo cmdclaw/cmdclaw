@@ -3,21 +3,49 @@ import {
   getOrCreateConversationRuntime,
   getOrCreateConversationSandbox,
 } from "../../sandbox/core/orchestrator";
-import type { SandboxHandle } from "../../sandbox/core/types";
+import type {
+  ConversationRuntimeOptions,
+  RuntimeHarnessClient,
+  RuntimeMcpServer,
+  SandboxHandle,
+} from "../../sandbox/core/types";
 import type {
   AcquireEnvironmentInput,
-  AcquireRuntimeEnvironmentInput,
   ExecutionEnvironment,
   ExecutionEnvironmentMetadata,
   ExecutionEnvironmentProvider,
   ExecutionEnvironmentSession,
   ExecutionEnvironmentSnapshotRef,
-  ExecutionRuntimeSession,
   ReleaseEnvironmentInput,
   RestoreEnvironmentInput,
   SandboxProviderName,
   SnapshotEnvironmentInput,
 } from "../execution-environment";
+
+type RuntimeBootstrapInput = AcquireEnvironmentInput & {
+  anthropicApiKey?: string;
+  openAIAuthSource?: "user" | "shared" | null;
+  integrationEnvs?: Record<string, string>;
+  replayHistory?: boolean;
+  sessionMcpServers?: RuntimeMcpServer[];
+  onLifecycle?: ConversationRuntimeOptions["onLifecycle"];
+};
+
+export type ConversationExecutionEnvironmentSession = ExecutionEnvironmentSession & {
+  completeAgentInit(input?: {
+    sessionMcpServers?: RuntimeMcpServer[];
+  }): Promise<{
+    runtimeClient: RuntimeHarnessClient;
+    sessionId: string;
+    sessionSource?: "live_session" | "restored_snapshot" | "created_session";
+  }>;
+};
+
+export type ConversationExecutionRuntimeSession = ConversationExecutionEnvironmentSession & {
+  runtimeClient: RuntimeHarnessClient;
+  sessionId: string;
+  sessionSource?: "live_session" | "restored_snapshot" | "created_session";
+};
 
 function normalizeEnv(
   env: Record<string, string | null | undefined> | undefined,
@@ -105,19 +133,19 @@ function toMetadata(
   };
 }
 
-function toConversationContext(input: AcquireEnvironmentInput | RestoreEnvironmentInput) {
+function toConversationContext(input: RuntimeBootstrapInput | RestoreEnvironmentInput) {
   return {
     conversationId: input.conversationId,
     generationId: input.generationId,
     userId: input.userId,
     model: "model" in input ? input.model : "anthropic/claude-sonnet-4-6",
     openAIAuthSource: "openAIAuthSource" in input ? input.openAIAuthSource : undefined,
-    anthropicApiKey: "anthropicApiKey" in input ? input.anthropicApiKey : "",
+    anthropicApiKey: "anthropicApiKey" in input ? (input.anthropicApiKey ?? "") : "",
     integrationEnvs: "integrationEnvs" in input ? input.integrationEnvs : undefined,
   };
 }
 
-function toRuntimeOptions(input: AcquireEnvironmentInput | RestoreEnvironmentInput) {
+function toRuntimeOptions(input: RuntimeBootstrapInput | RestoreEnvironmentInput) {
   const providerPreference =
     "snapshot" in input ? input.snapshot.provider : input.providerPreference;
   return {
@@ -136,7 +164,7 @@ function toRuntimeOptions(input: AcquireEnvironmentInput | RestoreEnvironmentInp
 export class ConversationExecutionEnvironmentProvider implements ExecutionEnvironmentProvider {
   constructor(private readonly provider: SandboxProviderName) {}
 
-  async acquire(input: AcquireEnvironmentInput): Promise<ExecutionEnvironmentSession> {
+  async acquire(input: RuntimeBootstrapInput): Promise<ConversationExecutionEnvironmentSession> {
     const sandboxInit = await getOrCreateConversationSandbox(
       toConversationContext(input),
       toRuntimeOptions({ ...input, providerPreference: this.provider }),
@@ -172,14 +200,13 @@ export class ConversationExecutionEnvironmentProvider implements ExecutionEnviro
       generationId: input.generationId,
       userId: input.userId,
       model: toConversationContext(input).model,
-      anthropicApiKey: "",
       providerPreference: input.snapshot.provider,
       allowSnapshotRestore: true,
       env: input.env,
     });
   }
 
-  async acquireRuntime(input: AcquireRuntimeEnvironmentInput): Promise<ExecutionRuntimeSession> {
+  async acquireRuntime(input: RuntimeBootstrapInput): Promise<ConversationExecutionRuntimeSession> {
     const runtime = await getOrCreateConversationRuntime(
       toConversationContext(input),
       toRuntimeOptions({ ...input, providerPreference: this.provider }),
