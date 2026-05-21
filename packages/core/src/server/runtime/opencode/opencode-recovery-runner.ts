@@ -9,9 +9,8 @@ import type {
   RuntimeSelection,
   SandboxHandle,
 } from "../../sandbox/core/types";
-import { createExecutionEnvironmentFactory } from "../../execution/execution-environment-factory";
 import type { ExecutionEnvironmentSession } from "../../execution/execution-environment";
-import type { ConversationExecutionRuntimeSession } from "../../execution/providers/conversation-environment";
+import { getOrCreateConversationRuntime } from "../../sandbox/core/orchestrator";
 import { logServerEvent } from "../../utils/observability";
 import {
   writeRuntimeContextToSandbox,
@@ -152,15 +151,8 @@ export class OpenCodeRecoveryRunner {
         columns: { title: true },
       });
 
-      const executionFactory = createExecutionEnvironmentFactory({
-        defaultProvider: ctx.sandboxProviderOverride,
-      });
       const session = await withTimeout(
-        (
-          executionFactory.providerFor(ctx.sandboxProviderOverride) as unknown as {
-            acquireRuntime(input: Record<string, unknown>): Promise<ConversationExecutionRuntimeSession>;
-          }
-        ).acquireRuntime(
+        getOrCreateConversationRuntime(
           {
             conversationId: ctx.conversationId,
             generationId: ctx.id,
@@ -169,6 +161,9 @@ export class OpenCodeRecoveryRunner {
             openAIAuthSource: ctx.authSource,
             anthropicApiKey: env.ANTHROPIC_API_KEY || "",
             integrationEnvs: {},
+          },
+          {
+            sandboxProviderOverride: ctx.sandboxProviderOverride,
             title: conv?.title || "Conversation",
             replayHistory: false,
             allowSnapshotRestore: options?.allowSnapshotRestore ?? false,
@@ -185,7 +180,7 @@ export class OpenCodeRecoveryRunner {
         `Agent preparation timed out after ${Math.round(this.callbacks.bootstrapTimeoutMs / 1000)} seconds.`,
       );
 
-      runtimeClient = session.runtimeClient;
+      runtimeClient = session.harnessClient;
 
       if (session.sessionSource === "created_session") {
         this.callbacks.setCompletionReason(ctx, "sandbox_missing");
@@ -204,7 +199,7 @@ export class OpenCodeRecoveryRunner {
         return;
       }
 
-      if (ctx.sessionId && session.sessionId !== ctx.sessionId) {
+      if (ctx.sessionId && session.session.id !== ctx.sessionId) {
         this.callbacks.setCompletionReason(ctx, "broken_runtime_state");
         ctx.errorMessage =
           "The live runtime could not be reattached because the session no longer matched the active generation.";
@@ -214,24 +209,20 @@ export class OpenCodeRecoveryRunner {
 
       await this.callbacks.bindRuntimeSessionToContext(ctx, {
         runtimeSandbox: session.sandbox,
-        runtimeMetadata: (session.metadata.selection as RuntimeSelection | undefined) ?? {
-          sandboxProvider: session.metadata.provider,
-          runtimeHarness: session.metadata.runtimeHarness ?? "opencode",
-          runtimeProtocolVersion: session.metadata.runtimeProtocolVersion ?? "opencode-v2",
-        },
-        executionEnvironment: session.environment,
-        sessionId: session.sessionId,
+        runtimeMetadata: session.metadata as RuntimeSelection,
+        executionEnvironment: undefined,
+        sessionId: session.session.id,
       });
       this.callbacks.broadcast(ctx, {
         type: "status_change",
         status: `${modeLabel}_attached`,
         metadata: {
           runtimeId: ctx.runtimeId,
-          sandboxProvider: session.metadata.provider,
+          sandboxProvider: session.metadata.sandboxProvider,
           runtimeHarness: session.metadata.runtimeHarness,
           runtimeProtocolVersion: session.metadata.runtimeProtocolVersion,
           sandboxId: session.sandbox.sandboxId,
-          sessionId: session.sessionId,
+          sessionId: session.session.id,
         },
       });
       if (ctx.runtimeId && ctx.runtimeCallbackToken && ctx.runtimeTurnSeq) {
@@ -261,7 +252,7 @@ export class OpenCodeRecoveryRunner {
           await this.callbacks.captureUsageFromRuntimeSession(
             ctx,
             runtimeClient,
-            session.sessionId,
+            session.session.id,
           );
         }
         await this.callbacks.finishGeneration(ctx, "completed");
@@ -341,7 +332,7 @@ export class OpenCodeRecoveryRunner {
         );
       }
 
-      await this.callbacks.captureUsageFromRuntimeSession(ctx, runtimeClient, session.sessionId);
+      await this.callbacks.captureUsageFromRuntimeSession(ctx, runtimeClient, session.session.id);
 
       if (ctx.sandbox) {
         try {

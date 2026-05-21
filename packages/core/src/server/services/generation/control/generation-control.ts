@@ -19,7 +19,6 @@ import {
   generationInterruptService,
   type GenerationInterruptRecord,
 } from "../../generation-interrupt-service";
-import { generationLifecyclePolicy } from "../../lifecycle-policy";
 import type { GenerationLifecycleStore } from "../core/lifecycle-store";
 import type {
   GenerationContext,
@@ -27,14 +26,6 @@ import type {
   GenerationRunMode,
 } from "../types";
 import type { UserFileAttachment } from "../queue/conversation-turn-queue";
-import type { GenerationRunQueue } from "../queue/generation-run-queue";
-
-const APPROVAL_TIMEOUT_MS = generationLifecyclePolicy.approvalTimeoutMs;
-const AUTH_TIMEOUT_MS = generationLifecyclePolicy.authTimeoutMs;
-
-function computeExpiryIso(timeoutMs: number): string {
-  return new Date(Date.now() + timeoutMs).toISOString();
-}
 
 export function getExecutionPolicyFromRecord(
   genRecord: typeof generation.$inferSelect,
@@ -109,13 +100,7 @@ export function getExecutionPolicyFromRecord(
 type GenerationControlDependencies = {
   activeGenerations: Map<string, GenerationContext>;
   lifecycleStore: GenerationLifecycleStore;
-  generationRunQueue: GenerationRunQueue;
   releaseSandboxSlotLease(ctx: GenerationContext): Promise<void>;
-  enqueueGenerationTimeout(
-    generationId: string,
-    kind: "approval" | "auth",
-    expiresAtIso: string,
-  ): Promise<void>;
 };
 
 export class GenerationControl {
@@ -161,83 +146,6 @@ export class GenerationControl {
       ctx.abortController.abort();
     }
 
-    return true;
-  }
-
-  async resumeGeneration(
-    generationId: string,
-    userId: string,
-  ): Promise<boolean> {
-    const genRecord = await db.query.generation.findFirst({
-      where: eq(generation.id, generationId),
-      with: { conversation: true },
-    });
-    if (!genRecord) {
-      return false;
-    }
-    if (
-      !genRecord.conversation.userId ||
-      genRecord.conversation.userId !== userId
-    ) {
-      throw new Error("Access denied");
-    }
-    if (
-      genRecord.status === "completed" ||
-      genRecord.status === "cancelled" ||
-      genRecord.status === "error"
-    ) {
-      return false;
-    }
-
-    let pendingInterrupt =
-      await generationInterruptService.getPendingInterruptForGeneration(
-        generationId,
-      );
-    if (pendingInterrupt) {
-      pendingInterrupt =
-        (await generationInterruptService.refreshInterruptExpiry(
-          pendingInterrupt.id,
-          new Date(
-            pendingInterrupt.kind === "auth"
-              ? computeExpiryIso(AUTH_TIMEOUT_MS)
-              : computeExpiryIso(APPROVAL_TIMEOUT_MS),
-          ),
-        )) ?? pendingInterrupt;
-    }
-    const nextStatus: GenerationStatus = pendingInterrupt
-      ? pendingInterrupt.kind === "auth"
-        ? "awaiting_auth"
-        : "awaiting_approval"
-      : "running";
-    let nextExecutionPolicy = getExecutionPolicyFromRecord(
-      genRecord,
-      genRecord.conversation.autoApprove,
-    );
-    if (genRecord.status === "paused") {
-      nextExecutionPolicy = {
-        ...nextExecutionPolicy,
-        allowSnapshotRestoreOnRun: true,
-      };
-    }
-
-    const linkedRun = await db.query.coworkerRun.findFirst({
-      where: eq(coworkerRun.generationId, generationId),
-      columns: { id: true },
-    });
-    await this.deps.lifecycleStore.resumeGenerationRequest({
-      generationId,
-      conversationId: genRecord.conversationId,
-      coworkerRunId: linkedRun?.id,
-      status: nextStatus,
-      executionPolicy: nextExecutionPolicy,
-    });
-
-    const runType: "chat" | "coworker" = linkedRun ? "coworker" : "chat";
-    await this.enqueuePendingInterruptTimeout(generationId, pendingInterrupt);
-    await this.deps.generationRunQueue.enqueueGenerationRun(
-      generationId,
-      runType,
-    );
     return true;
   }
 
@@ -292,26 +200,6 @@ export class GenerationControl {
         outputTokens: genRecord.outputTokens,
       },
     };
-  }
-
-  private async enqueuePendingInterruptTimeout(
-    generationId: string,
-    pendingInterrupt: GenerationInterruptRecord | null,
-  ): Promise<void> {
-    if (pendingInterrupt?.kind !== "auth" && pendingInterrupt?.expiresAt) {
-      await this.deps.enqueueGenerationTimeout(
-        generationId,
-        "approval",
-        pendingInterrupt.expiresAt.toISOString(),
-      );
-    }
-    if (pendingInterrupt?.kind === "auth" && pendingInterrupt.expiresAt) {
-      await this.deps.enqueueGenerationTimeout(
-        generationId,
-        "auth",
-        pendingInterrupt.expiresAt.toISOString(),
-      );
-    }
   }
 
   private projectPendingApproval(

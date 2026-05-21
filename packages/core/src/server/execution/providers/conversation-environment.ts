@@ -1,14 +1,6 @@
-import { saveConversationSessionSnapshot } from "../../services/opencode-session-snapshot-service";
-import {
-  getOrCreateConversationRuntime,
-  getOrCreateConversationSandbox,
-} from "../../sandbox/core/orchestrator";
-import type {
-  ConversationRuntimeOptions,
-  RuntimeHarnessClient,
-  RuntimeMcpServer,
-  SandboxHandle,
-} from "../../sandbox/core/types";
+import { saveConversationSessionSnapshot } from "../../services/runtime-session-snapshot-service";
+import { getOrCreateConversationSandbox } from "../../sandbox/core/orchestrator";
+import type { SandboxHandle } from "../../sandbox/core/types";
 import type {
   AcquireEnvironmentInput,
   ExecutionEnvironment,
@@ -21,31 +13,6 @@ import type {
   SandboxProviderName,
   SnapshotEnvironmentInput,
 } from "../execution-environment";
-
-type RuntimeBootstrapInput = AcquireEnvironmentInput & {
-  anthropicApiKey?: string;
-  openAIAuthSource?: "user" | "shared" | null;
-  integrationEnvs?: Record<string, string>;
-  replayHistory?: boolean;
-  sessionMcpServers?: RuntimeMcpServer[];
-  onLifecycle?: ConversationRuntimeOptions["onLifecycle"];
-};
-
-export type ConversationExecutionEnvironmentSession = ExecutionEnvironmentSession & {
-  completeAgentInit(input?: {
-    sessionMcpServers?: RuntimeMcpServer[];
-  }): Promise<{
-    runtimeClient: RuntimeHarnessClient;
-    sessionId: string;
-    sessionSource?: "live_session" | "restored_snapshot" | "created_session";
-  }>;
-};
-
-export type ConversationExecutionRuntimeSession = ConversationExecutionEnvironmentSession & {
-  runtimeClient: RuntimeHarnessClient;
-  sessionId: string;
-  sessionSource?: "live_session" | "restored_snapshot" | "created_session";
-};
 
 function normalizeEnv(
   env: Record<string, string | null | undefined> | undefined,
@@ -122,41 +89,31 @@ class SandboxExecutionEnvironment implements ExecutionEnvironment {
 
 function toMetadata(
   sandbox: SandboxHandle,
-  selection: Awaited<ReturnType<typeof getOrCreateConversationSandbox>>["metadata"],
 ): ExecutionEnvironmentMetadata {
   return {
     provider: sandbox.provider,
-    runtimeHarness: selection.runtimeHarness,
-    runtimeProtocolVersion: selection.runtimeProtocolVersion,
     sandboxId: sandbox.sandboxId,
-    selection,
   };
 }
 
-function toConversationContext(input: RuntimeBootstrapInput | RestoreEnvironmentInput) {
+function toConversationContext(input: AcquireEnvironmentInput | RestoreEnvironmentInput) {
   return {
     conversationId: input.conversationId,
     generationId: input.generationId,
     userId: input.userId,
     model: "model" in input ? input.model : "anthropic/claude-sonnet-4-6",
-    openAIAuthSource: "openAIAuthSource" in input ? input.openAIAuthSource : undefined,
-    anthropicApiKey: "anthropicApiKey" in input ? (input.anthropicApiKey ?? "") : "",
-    integrationEnvs: "integrationEnvs" in input ? input.integrationEnvs : undefined,
+    anthropicApiKey: "",
   };
 }
 
-function toRuntimeOptions(input: RuntimeBootstrapInput | RestoreEnvironmentInput) {
+function toRuntimeOptions(input: AcquireEnvironmentInput | RestoreEnvironmentInput) {
   const providerPreference =
     "snapshot" in input ? input.snapshot.provider : input.providerPreference;
   return {
     sandboxProviderOverride: providerPreference,
     title: "title" in input ? input.title : undefined,
-    replayHistory: "replayHistory" in input ? input.replayHistory : false,
     allowSnapshotRestore:
       "allowSnapshotRestore" in input ? input.allowSnapshotRestore : true,
-    sessionMcpServers:
-      "sessionMcpServers" in input ? input.sessionMcpServers : undefined,
-    onLifecycle: "onLifecycle" in input ? input.onLifecycle : undefined,
     telemetry: "telemetry" in input ? input.telemetry : undefined,
   };
 }
@@ -164,7 +121,7 @@ function toRuntimeOptions(input: RuntimeBootstrapInput | RestoreEnvironmentInput
 export class ConversationExecutionEnvironmentProvider implements ExecutionEnvironmentProvider {
   constructor(private readonly provider: SandboxProviderName) {}
 
-  async acquire(input: RuntimeBootstrapInput): Promise<ConversationExecutionEnvironmentSession> {
+  async acquire(input: AcquireEnvironmentInput): Promise<ExecutionEnvironmentSession> {
     const sandboxInit = await getOrCreateConversationSandbox(
       toConversationContext(input),
       toRuntimeOptions({ ...input, providerPreference: this.provider }),
@@ -180,17 +137,8 @@ export class ConversationExecutionEnvironmentProvider implements ExecutionEnviro
     );
     return {
       environment,
-      metadata: toMetadata(sandboxInit.sandbox, sandboxInit.metadata),
+      metadata: toMetadata(sandboxInit.sandbox),
       sandbox: sandboxInit.sandbox,
-      completeAgentInit: async (agentInput) => {
-        const result = await sandboxInit.completeAgentInit(agentInput);
-        environmentContext.sessionId = result.session.id;
-        return {
-          runtimeClient: result.harnessClient,
-          sessionId: result.session.id,
-          sessionSource: result.sessionSource,
-        };
-      },
     };
   }
 
@@ -201,33 +149,8 @@ export class ConversationExecutionEnvironmentProvider implements ExecutionEnviro
       userId: input.userId,
       model: toConversationContext(input).model,
       providerPreference: input.snapshot.provider,
-      allowSnapshotRestore: true,
       env: input.env,
     });
-  }
-
-  async acquireRuntime(input: RuntimeBootstrapInput): Promise<ConversationExecutionRuntimeSession> {
-    const runtime = await getOrCreateConversationRuntime(
-      toConversationContext(input),
-      toRuntimeOptions({ ...input, providerPreference: this.provider }),
-    );
-    const environment = new SandboxExecutionEnvironment(this.provider, runtime.sandbox, {
-      conversationId: input.conversationId,
-      sessionId: runtime.session.id,
-    });
-    return {
-      environment,
-      metadata: toMetadata(runtime.sandbox, runtime.metadata),
-      sandbox: runtime.sandbox,
-      completeAgentInit: async () => ({
-        runtimeClient: runtime.harnessClient,
-        sessionId: runtime.session.id,
-        sessionSource: runtime.sessionSource,
-      }),
-      runtimeClient: runtime.harnessClient,
-      sessionId: runtime.session.id,
-      sessionSource: runtime.sessionSource,
-    };
   }
 
   async release(input: ReleaseEnvironmentInput): Promise<void> {

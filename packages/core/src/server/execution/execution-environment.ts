@@ -74,12 +74,5 @@ export type ExecutionEnvironmentSnapshotRef = {
 
 export type ExecutionEnvironmentMetadata = {
   provider: SandboxProviderName;
-  runtimeHarness?: "opencode" | "agent-sdk";
-  runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
   sandboxId?: string;
-  selection?: {
-    sandboxProvider: SandboxProviderName;
-    runtimeHarness?: "opencode" | "agent-sdk";
-    runtimeProtocolVersion?: "opencode-v2" | "sandbox-agent-v1";
-  };
 };

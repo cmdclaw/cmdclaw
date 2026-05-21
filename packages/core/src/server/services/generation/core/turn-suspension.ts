@@ -1,13 +1,19 @@
-import type { RuntimeHarnessClient } from "../../../sandbox/core/types";
 import type { ReleaseEnvironmentInput } from "../../../execution/execution-environment";
 import { conversationRuntimeService } from "../../conversation-runtime-service";
-import type { GenerationInterruptRecord } from "../../generation-interrupt-service";
+import {
+  generationInterruptService,
+  type GenerationInterruptRecord,
+} from "../../generation-interrupt-service";
 import { saveConversationSessionSnapshot } from "../../runtime-session-snapshot-service";
 import type { GenerationContext, GenerationEvent, GenerationStatus } from "../types";
 import type { GenerationLifecycleStore } from "./lifecycle-store";
 
 const RUN_DEADLINE_ABORT_TIMEOUT_MS = 5_000;
 const RUN_DEADLINE_SNAPSHOT_TIMEOUT_MS = 15_000;
+
+type RuntimeAbortClient = {
+  abort(input: { sessionID: string }): Promise<unknown>;
+};
 
 export class GenerationSuspendedError extends Error {
   constructor(
@@ -112,7 +118,7 @@ export class GenerationTurnSuspender {
 
   async parkGenerationForRunDeadline(
     ctx: GenerationContext,
-    runtimeClient?: RuntimeHarnessClient,
+    runtimeClient?: RuntimeAbortClient,
   ): Promise<void> {
     const now = new Date();
     const releasedSandboxId = ctx.sandboxId;
@@ -190,6 +196,16 @@ export class GenerationTurnSuspender {
     this.deps.stopExternalInterruptPolling(ctx);
 
     const snapshotSaved = await this.saveSessionSnapshotForPark(ctx, "interrupt");
+    const latestInterrupt = await generationInterruptService.getInterrupt(interrupt.id);
+    if (!latestInterrupt || latestInterrupt.status !== "pending") {
+      ctx.status = "running";
+      ctx.currentInterruptId = undefined;
+      ctx.suspendedAt = null;
+      throw new GenerationSuspendedError(
+        interrupt.id,
+        interrupt.kind === "auth" ? "auth" : "approval",
+      );
+    }
     await this.deps.saveProgress(ctx);
 
     await this.deps.lifecycleStore.suspendForInterrupt({
@@ -239,7 +255,7 @@ export class GenerationTurnSuspender {
 
   private async abortRuntimeForRunDeadlinePark(
     ctx: Pick<GenerationContext, "id" | "conversationId" | "sessionId">,
-    runtimeClient?: RuntimeHarnessClient,
+    runtimeClient?: RuntimeAbortClient,
   ): Promise<void> {
     if (!runtimeClient || !ctx.sessionId) {
       return;

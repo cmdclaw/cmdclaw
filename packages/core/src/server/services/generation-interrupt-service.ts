@@ -62,7 +62,7 @@ class GenerationInterruptService {
     turnSeq: number;
     kind: GenerationInterruptKind;
     display: GenerationInterruptDisplay;
-    provider: "plugin" | "opencode";
+    provider: "plugin" | "runtime";
     providerRequestId?: string;
     providerToolUseId: string;
     expiresAt?: Date;

@@ -7,7 +7,6 @@ import {
 } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import type { IntegrationType } from "../../oauth/config";
-import type { RuntimeHarnessClient } from "../../sandbox/core/types";
 import type { RuntimeToolRef } from "../../runtime/runtime-driver";
 import { SandboxSlotLeaseCoordinator } from "../../execution/sandbox-slot-lease";
 import type { SandboxBackend } from "../../sandbox/types";
@@ -35,8 +34,7 @@ import {
 import { GenerationLifecycleStore } from "./core/lifecycle-store";
 import { GenerationTurnFinalizer } from "./core/turn-finalizer";
 import { GenerationTurnSuspender } from "./core/turn-suspension";
-import { DecisionFlow } from "./decisions/decision-flow";
-import { InterruptParking } from "./decisions/interrupt-parking";
+import { DecisionFlow, InterruptParking } from "./decisions/decision-flow";
 import {
   GenerationMaintenance,
   type GenerationTimeoutKind,
@@ -55,6 +53,7 @@ import {
   RuntimeGenerationDriver,
   type RuntimeRecoveryReattachOptions,
 } from "../../runtime/runtime-generation-driver";
+import { createRuntimeDriver } from "../../runtime/runtime-driver-factory";
 import {
   TurnIntake,
   type StartCoworkerGenerationInput,
@@ -147,10 +146,7 @@ class GenerationManager {
   private readonly generationControl = new GenerationControl({
     activeGenerations: this.activeGenerations,
     lifecycleStore: this.lifecycleStore,
-    generationRunQueue: this.generationRunQueue,
     releaseSandboxSlotLease: (ctx) => this.releaseSandboxSlotLease(ctx),
-    enqueueGenerationTimeout: (generationId, kind, expiresAtIso) =>
-      this.enqueueGenerationTimeout(generationId, kind, expiresAtIso),
   });
   private readonly contextState = new GenerationContextState({
     lifecycleStore: this.lifecycleStore,
@@ -319,8 +315,10 @@ class GenerationManager {
         activeCtx.approvalParkTimeoutId = undefined;
       }
     },
-    resumeGeneration: (generationId, userId) =>
-      this.resumeGeneration(generationId, userId),
+    enqueueGenerationRun: (generationId, runType) =>
+      this.generationRunQueue.enqueueGenerationRun(generationId, runType),
+    enqueueGenerationTimeout: (generationId, kind, expiresAtIso) =>
+      this.enqueueGenerationTimeout(generationId, kind, expiresAtIso),
     enqueueResolvedInterruptResume: (input) =>
       this.generationRunQueue.enqueueResolvedInterruptResume(input),
     enqueueConversationQueuedMessageProcess: (conversationId) =>
@@ -374,28 +372,35 @@ class GenerationManager {
   });
   private readonly runtimeCoordinator: RuntimeGenerationDriver =
     new RuntimeGenerationDriver({
-    bootstrapTimeoutMs: AGENT_PREPARING_TIMEOUT_MS,
-    contextState: this.contextState,
-    decisionFlow: this.decisionFlow,
-    interruptParking: this.interruptParking,
-    turnFinalizer: this.turnFinalizer,
-    refreshCancellationSignal: (ctx, options) =>
-      this.refreshCancellationSignal(ctx, options),
-    finishGeneration: (ctx, status) => this.finishGeneration(ctx, status),
-    setSnapshotRestoreAllowance: (ctx, allowed) =>
-      this.setSnapshotRestoreAllowance(ctx, allowed),
-    parkGenerationForRunDeadline: (ctx, runtimeClient) =>
-      this.parkGenerationForRunDeadline(ctx, runtimeClient),
-    awaitPromiseUntilRunDeadline: (ctx, promise) =>
-      this.awaitPromiseUntilRunDeadline(ctx, promise),
-    scheduleSave: (ctx) => this.scheduleSave(ctx),
-    broadcast: (ctx, event) => this.broadcast(ctx, event),
-    importIntegrationSkillDraftsFromSandbox: (ctx) =>
-      this.importIntegrationSkillDraftsFromSandbox(ctx),
-    scheduleRecoveryReattach: (ctx) => this.scheduleRecoveryReattach(ctx),
-    recordRecoveryAttempt: (ctx) => this.recordRecoveryAttempt(ctx),
-    saveProgress: (ctx) => this.saveProgress(ctx),
-  });
+      runtimeDriver: createRuntimeDriver({
+        adapter: "opencode",
+        opencode: {
+        bootstrapTimeoutMs: AGENT_PREPARING_TIMEOUT_MS,
+        contextState: this.contextState,
+        decisionFlow: this.decisionFlow,
+        interruptParking: this.interruptParking,
+        turnFinalizer: this.turnFinalizer,
+        refreshCancellationSignal: (ctx, options) =>
+          this.refreshCancellationSignal(ctx, options),
+        finishGeneration: (ctx, status) => this.finishGeneration(ctx, status),
+        setSnapshotRestoreAllowance: (ctx, allowed) =>
+          this.setSnapshotRestoreAllowance(ctx, allowed),
+        parkGenerationForRunDeadline: (ctx, runtimeClient) =>
+          this.parkGenerationForRunDeadline(ctx, runtimeClient),
+        awaitPromiseUntilRunDeadline: (ctx, promise) =>
+          this.awaitPromiseUntilRunDeadline(ctx, promise),
+        scheduleSave: (ctx) => this.scheduleSave(ctx),
+        broadcast: (ctx, event) => this.broadcast(ctx, event),
+        importIntegrationSkillDraftsFromSandbox: (ctx) =>
+          this.importIntegrationSkillDraftsFromSandbox(ctx),
+        scheduleRecoveryReattach: (ctx) => this.scheduleRecoveryReattach(ctx),
+        recordRecoveryAttempt: (ctx) => this.recordRecoveryAttempt(ctx),
+        saveProgress: (ctx) => this.saveProgress(ctx),
+        getActiveContext: (generationId) =>
+          this.activeGenerations.get(generationId),
+        },
+      }),
+    });
   private readonly resumeRunner = new GenerationResumeRunner({
     lifecycleStore: this.lifecycleStore,
     decisionFlow: this.decisionFlow,
@@ -743,7 +748,7 @@ class GenerationManager {
     generationId: string,
     userId: string,
   ): Promise<boolean> {
-    return this.generationControl.resumeGeneration(generationId, userId);
+    return this.decisionFlow.resumeGeneration(generationId, userId);
   }
 
   async processGenerationTimeout(
@@ -1156,7 +1161,7 @@ class GenerationManager {
 
   private async parkGenerationForRunDeadline(
     ctx: GenerationContext,
-    runtimeClient?: RuntimeHarnessClient,
+    runtimeClient?: { abort(input: { sessionID: string }): Promise<unknown> },
   ): Promise<void> {
     await this.turnSuspender.parkGenerationForRunDeadline(ctx, runtimeClient);
   }

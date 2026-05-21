@@ -1962,6 +1962,28 @@ function toIdentifierList(columns: string[]): string {
   return columns.map((column) => quoteIdentifier(column)).join(", ");
 }
 
+const tableColumnCache = new Map<string, Set<string>>();
+
+async function getTableColumnSet(client: PgClient, tableName: string): Promise<Set<string>> {
+  const cached = tableColumnCache.get(tableName);
+  if (cached) {
+    return cached;
+  }
+
+  const result = await client.query<{ column_name: string }>(
+    `
+      select column_name
+      from information_schema.columns
+      where table_schema = current_schema()
+        and table_name = $1
+    `,
+    [tableName],
+  );
+  const columns = new Set(result.rows.map((row) => row.column_name));
+  tableColumnCache.set(tableName, columns);
+  return columns;
+}
+
 async function upsertRows(
   client: PgClient,
   tableName: string,
@@ -1972,7 +1994,10 @@ async function upsertRows(
     return;
   }
 
-  const columns = Object.keys(rows[0] ?? {});
+  const targetColumns = await getTableColumnSet(client, tableName);
+  const columns = Object.keys(rows[0] ?? {}).filter((column) =>
+    targetColumns.has(column),
+  );
   if (columns.length === 0) {
     return;
   }

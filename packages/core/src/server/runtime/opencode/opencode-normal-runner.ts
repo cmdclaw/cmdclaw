@@ -9,9 +9,7 @@ import {
   stageExecutorPrePrompt,
   ExecutorPromptReadyError,
 } from "../../execution/executor-preprompt";
-import { createExecutionEnvironmentFactory } from "../../execution/execution-environment-factory";
 import type { ExecutionEnvironmentSession } from "../../execution/execution-environment";
-import type { ConversationExecutionEnvironmentSession } from "../../execution/providers/conversation-environment";
 import { stagePrePromptAssets } from "../../execution/pre-prompt-assets";
 import { stageRuntimePromptAttachments } from "../../execution/prompt-attachments";
 import {
@@ -32,6 +30,7 @@ import type {
   RuntimeSelection,
   SandboxHandle,
 } from "../../sandbox/core/types";
+import { getOrCreateConversationSandbox } from "../../sandbox/core/orchestrator";
 import {
   buildMemorySystemPrompt,
   syncMemoryFilesToSandbox,
@@ -338,7 +337,7 @@ export class OpenCodeNormalRunner {
       let sessionId: string | undefined;
       let runtimeSandbox: SandboxHandle;
       let runtimeMetadata: RuntimeSelection | undefined;
-      let runtimeInit: ConversationExecutionEnvironmentSession;
+      let runtimeInit: Awaited<ReturnType<typeof getOrCreateConversationSandbox>>;
 
       ctx.agentSandboxReadyAt = undefined;
       ctx.agentSandboxMode = undefined;
@@ -377,15 +376,8 @@ export class OpenCodeNormalRunner {
       }, initWarnAfterMs);
 
       try {
-        const executionFactory = createExecutionEnvironmentFactory({
-          defaultProvider: ctx.sandboxProviderOverride,
-        });
         runtimeInit = await withTimeout(
-          (
-            executionFactory.providerFor(ctx.sandboxProviderOverride) as unknown as {
-              acquire(input: Record<string, unknown>): Promise<ConversationExecutionEnvironmentSession>;
-            }
-          ).acquire(
+          getOrCreateConversationSandbox(
             {
               conversationId: ctx.conversationId,
               generationId: ctx.id,
@@ -394,6 +386,9 @@ export class OpenCodeNormalRunner {
               openAIAuthSource: ctx.authSource,
               anthropicApiKey: env.ANTHROPIC_API_KEY || "",
               integrationEnvs,
+            },
+            {
+              sandboxProviderOverride: ctx.sandboxProviderOverride,
               title: conv?.title || "Conversation",
               replayHistory: hasExistingMessages,
               allowSnapshotRestore:
@@ -430,12 +425,12 @@ export class OpenCodeNormalRunner {
                 });
               },
             },
-          ) as Promise<ConversationExecutionEnvironmentSession>,
+          ),
           remainingPreparingTimeoutMs(),
           buildPreparingTimeoutMessage(),
         );
         runtimeSandbox = runtimeInit.sandbox;
-        runtimeMetadata = runtimeInit.metadata.selection as RuntimeSelection | undefined;
+        runtimeMetadata = runtimeInit.metadata as RuntimeSelection | undefined;
       } catch (error) {
         this.callbacks.markPhase(ctx, "sandbox_init_failed");
         this.callbacks.broadcast(ctx, {
@@ -467,7 +462,7 @@ export class OpenCodeNormalRunner {
       await this.callbacks.bindRuntimeSandboxToContext(ctx, {
         runtimeSandbox,
         runtimeMetadata,
-        executionEnvironment: runtimeInit.environment,
+        executionEnvironment: undefined,
       });
       if (ctx.remoteIntegrationSource) {
         this.callbacks.recordRemoteRunPhase(ctx, "sandbox_created");
@@ -535,8 +530,8 @@ export class OpenCodeNormalRunner {
             remainingPreparingTimeoutMs(),
             buildPreparingTimeoutMessage(),
           );
-          client = session.runtimeClient;
-          sessionId = session.sessionId;
+          client = session.harnessClient;
+          sessionId = session.session.id;
           await this.callbacks.persistRuntimeSessionBinding(ctx, {
             runtimeMetadata,
             sessionId,

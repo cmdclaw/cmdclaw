@@ -7,7 +7,7 @@ import {
   buildQuestionCommand,
 } from "./runtime-driver";
 
-export const RUNTIME_INTERRUPT_PROVIDER = "opencode" as const;
+export const RUNTIME_INTERRUPT_PROVIDER = "runtime" as const;
 export const RUNTIME_CONTENT_INTEGRATION = "cmdclaw" as const;
 
 export type RuntimePendingApprovalDisplay = {

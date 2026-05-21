@@ -3,10 +3,7 @@ import { db } from "@cmdclaw/db/client";
 import type { ContentPart } from "@cmdclaw/db/schema";
 import { coworkerRun, generation } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
-import type {
-  RuntimeHarnessClient,
-  RuntimePromptPart,
-} from "../../../sandbox/core/types";
+import type { RuntimePromptPart } from "../../../sandbox/core/types";
 import {
   type RuntimeActionableEvent,
   type RuntimeApprovalRequest,
@@ -32,7 +29,11 @@ import {
 } from "../../generation-interrupt-service";
 import { generationLifecyclePolicy } from "../../lifecycle-policy";
 import type { GenerationLifecycleStore } from "../core/lifecycle-store";
-import type { GenerationEvent } from "../types";
+import {
+  GenerationSuspendedError,
+  type GenerationTurnSuspender,
+} from "../core/turn-suspension";
+import type { GenerationContext, GenerationEvent, GenerationStatus } from "../types";
 import type {
   ApplyDecisionResult,
   ApplyDecisionToRuntimeInput,
@@ -45,6 +46,12 @@ import type {
 } from "./decision-types";
 
 const PARKED_INTERRUPT_TIMEOUT_MS = generationLifecyclePolicy.explicitPauseRetentionMs;
+const APPROVAL_TIMEOUT_MS = generationLifecyclePolicy.approvalTimeoutMs;
+const AUTH_TIMEOUT_MS = generationLifecyclePolicy.authTimeoutMs;
+
+function computeExpiryIso(timeoutMs: number): string {
+  return new Date(Date.now() + timeoutMs).toISOString();
+}
 
 type DecisionGenerationRecord = NonNullable<
   Awaited<ReturnType<typeof db.query.generation.findFirst>>
@@ -65,6 +72,11 @@ type ParkedPluginWriteExecution =
   | { status: "completed"; output: string }
   | { status: "error"; error: string; outputForStream: unknown };
 
+type DecisionExecutionPolicy = Record<string, unknown> & {
+  autoApprove?: boolean | null;
+  allowSnapshotRestoreOnRun?: boolean;
+};
+
 export type ParkedPluginWriteApplicationResult = {
   toolUseId: string;
   toolName: string;
@@ -81,12 +93,13 @@ type DecisionFlowDependencies = {
     | "markCoworkerRunAwaitingAuth"
     | "markCoworkerRunAwaitingApproval"
     | "clearAppliedResumeInterrupt"
+    | "resumeGenerationRequest"
   >;
   getActiveRuntimeContext?: (generationId: string) => ActiveDecisionContext | null | undefined;
   getExecutionPolicy?: (
     generationRecord: DecisionGenerationRecord,
     defaultAutoApprove: boolean,
-  ) => { autoApprove?: boolean | null };
+  ) => DecisionExecutionPolicy;
   onPendingInterrupt?: (input: {
     generationId: string;
     conversationId: string;
@@ -106,7 +119,6 @@ type DecisionFlowDependencies = {
     interrupt: GenerationInterruptRecord;
     event: GenerationEvent;
   }) => Promise<void> | void;
-  resumeGeneration?: (generationId: string, userId: string) => Promise<boolean>;
   enqueueResolvedInterruptResume?: (input: {
     generationId: string;
     conversationId: string;
@@ -116,13 +128,22 @@ type DecisionFlowDependencies = {
     remainingRunMs?: number | null;
   }) => Promise<void>;
   enqueueConversationQueuedMessageProcess?: (conversationId: string) => Promise<void>;
+  enqueueGenerationRun?: (
+    generationId: string,
+    runType: "chat" | "coworker",
+  ) => Promise<void>;
+  enqueueGenerationTimeout?: (
+    generationId: string,
+    kind: "approval" | "auth",
+    expiresAtIso: string,
+  ) => Promise<void>;
   touchConversationLastUserVisibleAction?: (conversationId: string) => Promise<void>;
   processGenerationTimeout?: (
     generationId: string,
     kind: "approval" | "auth",
   ) => Promise<void>;
   updateRuntimeToolPart?: (
-    runtimeClient: RuntimeHarnessClient,
+    runtimeClient: unknown,
     runtimeTool: RuntimeToolRef,
     patch:
       | { status: "completed"; input: Record<string, unknown>; output: string }
@@ -182,8 +203,290 @@ export function getRuntimeToolRefForInterrupt(
   return ctx?.runtimeTools?.get(matchingToolUse.id);
 }
 
+type InterruptParkingDependencies = {
+  activeGenerations: Map<string, GenerationContext>;
+  getApprovalHotWaitMs(
+    ctx: Pick<GenerationContext, "approvalHotWaitMs">,
+  ): number;
+  broadcast(ctx: GenerationContext, event: GenerationEvent): void;
+  suspendGenerationForInterrupt: GenerationTurnSuspender["suspendGenerationForInterrupt"];
+  getPluginApprovalStatus(
+    generationId: string,
+    interruptId: string,
+  ): Promise<"pending" | "allow" | "deny">;
+};
+
+export class InterruptParking {
+  constructor(private readonly deps: InterruptParkingDependencies) {}
+
+  async parkGenerationForInterrupt(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<never> {
+    const latest = await generationInterruptService.getInterrupt(interrupt.id);
+    if (!latest || latest.status !== "pending") {
+      throw new GenerationSuspendedError(
+        interrupt.id,
+        interrupt.kind === "auth" ? "auth" : "approval",
+      );
+    }
+
+    const enrichedInterrupt = await this.enrichPluginWriteInterruptRuntimeTool(
+      ctx,
+      latest,
+    );
+    const parkedInterrupt =
+      await this.refreshInterruptForPark(enrichedInterrupt);
+    const releasedSandboxId = ctx.sandboxId;
+    this.broadcastApprovalParked(ctx, parkedInterrupt, releasedSandboxId);
+    return await this.deps.suspendGenerationForInterrupt(ctx, parkedInterrupt);
+  }
+
+  scheduleApprovalPark(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): void {
+    if (ctx.approvalParkTimeoutId) {
+      clearTimeout(ctx.approvalParkTimeoutId);
+    }
+    ctx.approvalParkTimeoutId = setTimeout(() => {
+      ctx.approvalParkTimeoutId = undefined;
+      void (async () => {
+        const activeCtx = this.deps.activeGenerations.get(ctx.id);
+        if (!activeCtx || activeCtx.currentInterruptId !== interrupt.id) {
+          return;
+        }
+        const latest = await generationInterruptService.getInterrupt(
+          interrupt.id,
+        );
+        if (!latest || latest.status !== "pending") {
+          return;
+        }
+        activeCtx.abortForInterruptPark = true;
+        try {
+          await this.parkGenerationForInterrupt(activeCtx, latest);
+        } catch (error) {
+          if (error instanceof GenerationSuspendedError) {
+            activeCtx.abortController.abort();
+            return;
+          }
+          activeCtx.abortForInterruptPark = false;
+          console.error(
+            "[GenerationManager] Failed to park approval interrupt:",
+            error,
+          );
+        }
+      })();
+    }, this.deps.getApprovalHotWaitMs(ctx));
+    ctx.approvalParkTimeoutId.unref?.();
+  }
+
+  startExternalInterruptPolling(ctx: GenerationContext): void {
+    if (ctx.externalInterruptPollIntervalId) {
+      return;
+    }
+
+    ctx.externalInterruptPollIntervalId = setInterval(() => {
+      const activeCtx = this.deps.activeGenerations.get(ctx.id);
+      if (!activeCtx) {
+        this.stopExternalInterruptPolling(ctx);
+        return;
+      }
+      void this.pollExternalInterruptAndSuspendIfNeeded(activeCtx).catch(
+        (error) => {
+          if (error instanceof GenerationSuspendedError) {
+            activeCtx.abortController.abort();
+            return;
+          }
+          console.error(
+            "[GenerationManager] External interrupt poll failed:",
+            error,
+          );
+        },
+      );
+    }, 1_000);
+    ctx.externalInterruptPollIntervalId.unref?.();
+  }
+
+  stopExternalInterruptPolling(ctx: GenerationContext): void {
+    if (!ctx.externalInterruptPollIntervalId) {
+      return;
+    }
+    clearInterval(ctx.externalInterruptPollIntervalId);
+    ctx.externalInterruptPollIntervalId = undefined;
+  }
+
+  async pollExternalInterruptAndSuspendIfNeeded(
+    ctx: GenerationContext,
+  ): Promise<void> {
+    if (ctx.currentInterruptId) {
+      const current = await generationInterruptService.getInterrupt(
+        ctx.currentInterruptId,
+      );
+      if (current && current.status !== "pending") {
+        if (current.kind === "plugin_write") {
+          await this.deps.getPluginApprovalStatus(ctx.id, current.id);
+        }
+        ctx.currentInterruptId = undefined;
+        ctx.status = "running";
+        if (ctx.approvalParkTimeoutId) {
+          clearTimeout(ctx.approvalParkTimeoutId);
+          ctx.approvalParkTimeoutId = undefined;
+        }
+      }
+      return;
+    }
+
+    const pendingInterrupt =
+      await generationInterruptService.getPendingInterruptForGeneration(ctx.id);
+    if (!pendingInterrupt) {
+      return;
+    }
+
+    const enrichedInterrupt = await this.enrichPluginWriteInterruptRuntimeTool(
+      ctx,
+      pendingInterrupt,
+    );
+    ctx.currentInterruptId = enrichedInterrupt.id;
+    ctx.status =
+      enrichedInterrupt.kind === "auth" ? "awaiting_auth" : "awaiting_approval";
+    this.scheduleApprovalPark(ctx, enrichedInterrupt);
+  }
+
+  private broadcastApprovalParked(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+    releasedSandboxId?: string,
+  ): void {
+    this.deps.broadcast(ctx, {
+      type: "status_change",
+      status: "approval_parked",
+      metadata: {
+        runtimeId: ctx.runtimeId,
+        sandboxId: releasedSandboxId,
+        releasedSandboxId,
+        parkedInterruptId: interrupt.id,
+      },
+    });
+  }
+
+  private async refreshInterruptForPark(
+    interrupt: GenerationInterruptRecord,
+  ): Promise<GenerationInterruptRecord> {
+    if (interrupt.status !== "pending") {
+      return interrupt;
+    }
+    return (
+      (await generationInterruptService.refreshInterruptExpiry(
+        interrupt.id,
+        computeParkedInterruptExpiryDate(),
+      )) ?? interrupt
+    );
+  }
+
+  private async enrichPluginWriteInterruptRuntimeTool(
+    ctx: GenerationContext,
+    interrupt: GenerationInterruptRecord,
+  ): Promise<GenerationInterruptRecord> {
+    if (interrupt.kind !== "plugin_write" || interrupt.display.runtimeTool) {
+      return interrupt;
+    }
+    const command = interrupt.display.command;
+    if (!command) {
+      return interrupt;
+    }
+    const runtimeTool = getRuntimeToolRefForInterrupt(ctx, {
+      providerRequestId: interrupt.providerRequestId,
+      command,
+    });
+    if (!runtimeTool) {
+      return interrupt;
+    }
+    return (
+      (await generationInterruptService.updateInterruptDisplay(interrupt.id, {
+        ...interrupt.display,
+        runtimeTool,
+      })) ?? interrupt
+    );
+  }
+}
+
 export class DecisionFlow {
   constructor(private readonly dependencies: DecisionFlowDependencies) {}
+
+  async resumeGeneration(generationId: string, userId: string): Promise<boolean> {
+    const genRecord = await db.query.generation.findFirst({
+      where: eq(generation.id, generationId),
+      with: { conversation: true },
+    });
+    if (!genRecord) {
+      return false;
+    }
+    if (
+      !genRecord.conversation.userId ||
+      genRecord.conversation.userId !== userId
+    ) {
+      throw new Error("Access denied");
+    }
+    if (
+      genRecord.status === "completed" ||
+      genRecord.status === "cancelled" ||
+      genRecord.status === "error"
+    ) {
+      return false;
+    }
+
+    let pendingInterrupt =
+      await generationInterruptService.getPendingInterruptForGeneration(
+        generationId,
+      );
+    if (pendingInterrupt) {
+      pendingInterrupt =
+        (await generationInterruptService.refreshInterruptExpiry(
+          pendingInterrupt.id,
+          new Date(
+            pendingInterrupt.kind === "auth"
+              ? computeExpiryIso(AUTH_TIMEOUT_MS)
+              : computeExpiryIso(APPROVAL_TIMEOUT_MS),
+          ),
+        )) ?? pendingInterrupt;
+    }
+    const nextStatus: GenerationStatus = pendingInterrupt
+      ? pendingInterrupt.kind === "auth"
+        ? "awaiting_auth"
+        : "awaiting_approval"
+      : "running";
+    let nextExecutionPolicy: DecisionExecutionPolicy =
+      this.dependencies.getExecutionPolicy?.(
+        genRecord,
+        genRecord.conversation.autoApprove,
+      ) ?? {};
+    if (genRecord.status === "paused") {
+      nextExecutionPolicy = {
+        ...nextExecutionPolicy,
+        allowSnapshotRestoreOnRun: true,
+      };
+    }
+
+    const linkedRun = await db.query.coworkerRun.findFirst({
+      where: eq(coworkerRun.generationId, generationId),
+      columns: { id: true },
+    });
+    await this.dependencies.lifecycleStore.resumeGenerationRequest({
+      generationId,
+      conversationId: genRecord.conversationId,
+      coworkerRunId: linkedRun?.id,
+      status: nextStatus,
+      executionPolicy: nextExecutionPolicy,
+    });
+
+    await this.enqueuePendingInterruptTimeout(generationId, pendingInterrupt);
+    await this.dependencies.enqueueGenerationRun?.(
+      generationId,
+      linkedRun ? "coworker" : "chat",
+    );
+    return true;
+  }
 
   normalizeQuestionAnswers(questionAnswers?: string[][]): string[][] {
     return (
@@ -589,7 +892,7 @@ export class DecisionFlow {
   async applyParkedPluginWrite(input: {
     interrupt: GenerationInterruptRecord;
     sandbox?: SandboxBackend;
-    runtimeClient: RuntimeHarnessClient;
+    runtimeClient: unknown;
     runtimeTool: RuntimeToolRef;
   }): Promise<ParkedPluginWriteApplicationResult> {
     const execution = await this.executeApprovedParkedPluginWriteCommand({
@@ -759,7 +1062,7 @@ export class DecisionFlow {
     }
 
     if (genRecord.status === "paused") {
-      return (await this.dependencies.resumeGeneration?.(input.generationId, input.userId)) ?? false;
+      return await this.resumeGeneration(input.generationId, input.userId);
     }
 
     if (!activeCtx && resolvedInterrupt) {
@@ -884,7 +1187,7 @@ export class DecisionFlow {
           event: this.projectResolvedEvent(resolvedInterrupt),
         });
       }
-      return (await this.dependencies.resumeGeneration?.(input.generationId, input.userId)) ?? false;
+      return await this.resumeGeneration(input.generationId, input.userId);
     }
 
     const activeCtx = this.dependencies.getActiveRuntimeContext?.(input.generationId);
@@ -1368,7 +1671,12 @@ export class DecisionFlow {
         input.timeoutMs,
       );
       if (!resolved) {
-        await input.parkForInterrupt(interrupt);
+        await this.parkRuntimeInterruptOrApplyResolvedDecision({
+          interrupt,
+          ctx: input.ctx,
+          parkForInterrupt: input.parkForInterrupt,
+          sendRuntimeDecision: input.sendRuntimeDecision,
+        });
       } else {
         await this.applyRuntimeApprovalDecision({
           ctx: input.ctx,
@@ -1422,7 +1730,12 @@ export class DecisionFlow {
       input.timeoutMs,
     );
     if (!resolved) {
-      await input.parkForInterrupt(interrupt);
+      await this.parkRuntimeInterruptOrApplyResolvedDecision({
+        interrupt,
+        ctx: input.ctx,
+        parkForInterrupt: input.parkForInterrupt,
+        sendRuntimeDecision: input.sendRuntimeDecision,
+      });
     } else {
       await this.applyRuntimeApprovalDecision({
         ctx: input.ctx,
@@ -1433,6 +1746,34 @@ export class DecisionFlow {
       });
     }
     return { type: "question" };
+  }
+
+  private async parkRuntimeInterruptOrApplyResolvedDecision(input: {
+    interrupt: GenerationInterruptRecord;
+    ctx: ActiveDecisionContext;
+    parkForInterrupt: (interrupt: GenerationInterruptRecord) => Promise<void>;
+    sendRuntimeDecision: (request: RuntimeApprovalRequest) => Promise<void>;
+  }): Promise<void> {
+    try {
+      await input.parkForInterrupt(input.interrupt);
+    } catch (error) {
+      if (!(error instanceof GenerationSuspendedError)) {
+        throw error;
+      }
+
+      const latest = await generationInterruptService.getInterrupt(input.interrupt.id);
+      if (!latest || latest.status === "pending") {
+        throw error;
+      }
+
+      await this.applyRuntimeApprovalDecision({
+        ctx: input.ctx,
+        interruptId: latest.id,
+        decision: latest.status === "accepted" ? "allow" : "deny",
+        questionAnswers: latest.responsePayload?.questionAnswers,
+        sendRuntimeDecision: input.sendRuntimeDecision,
+      });
+    }
   }
 
   async requestRuntimeApproval(input: {
@@ -1495,6 +1836,26 @@ export class DecisionFlow {
     }
 
     return interrupt;
+  }
+
+  private async enqueuePendingInterruptTimeout(
+    generationId: string,
+    pendingInterrupt: GenerationInterruptRecord | null,
+  ): Promise<void> {
+    if (pendingInterrupt?.kind !== "auth" && pendingInterrupt?.expiresAt) {
+      await this.dependencies.enqueueGenerationTimeout?.(
+        generationId,
+        "approval",
+        pendingInterrupt.expiresAt.toISOString(),
+      );
+    }
+    if (pendingInterrupt?.kind === "auth" && pendingInterrupt.expiresAt) {
+      await this.dependencies.enqueueGenerationTimeout?.(
+        generationId,
+        "auth",
+        pendingInterrupt.expiresAt.toISOString(),
+      );
+    }
   }
 
   private resolveExpiryMs(
