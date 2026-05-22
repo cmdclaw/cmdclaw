@@ -2,7 +2,7 @@
 
 FROM oven/bun:1.3.9 AS bun
 
-FROM node:24-bookworm-slim AS pruner
+FROM node:26-bookworm-slim AS pruner
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 RUN bun --version && node --version
@@ -12,7 +12,7 @@ RUN bun -e 'const fs = require("fs"); for (const path of ["/tmp/pruned/json/pack
 RUN mkdir -p /tmp/pruned/full/packages/config
 RUN cp -R /app/packages/config/. /tmp/pruned/full/packages/config/
 
-FROM node:24-bookworm-slim AS builder
+FROM node:26-bookworm-slim AS builder
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY --from=pruner /tmp/pruned/json/ ./
@@ -30,7 +30,7 @@ ENV BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET} \
     NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 RUN node ./node_modules/next/dist/bin/next build
 
-FROM node:24-bookworm-slim AS runner
+FROM node:26-bookworm-slim AS runner
 WORKDIR /app/apps/web
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/apps/web/package.json ./package.json
