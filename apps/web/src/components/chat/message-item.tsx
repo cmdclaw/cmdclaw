@@ -48,6 +48,25 @@ function getAttachmentKey(a: AttachmentData): string {
   return a.id ?? `${a.name}-${a.mimeType}-${a.dataUrl}`;
 }
 
+function getSandboxFileDedupeKey(file: SandboxFileData): string {
+  return `${file.path}:${file.filename}:${file.sizeBytes ?? ""}`;
+}
+
+function dedupeSandboxFiles(files: SandboxFileData[] | undefined): SandboxFileData[] | undefined {
+  if (!files || files.length === 0) {
+    return undefined;
+  }
+
+  const deduped = new Map<string, SandboxFileData>();
+  for (const file of files) {
+    const key = getSandboxFileDedupeKey(file);
+    if (!deduped.has(key)) {
+      deduped.set(key, file);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
 function parseQuestionAnswersFromResult(result: unknown): string[][] | undefined {
   if (typeof result !== "string" || result.length === 0) {
     return undefined;
@@ -78,6 +97,7 @@ export function MessageItem({
   const [expandedSegments, setExpandedSegments] = useState<Set<string>>(new Set());
   const { mutateAsync: downloadAttachment } = useDownloadAttachment();
   const { mutateAsync: downloadSandboxFile } = useDownloadSandboxFile();
+  const displaySandboxFiles = useMemo(() => dedupeSandboxFiles(sandboxFiles), [sandboxFiles]);
 
   const getAttachmentUrl = useCallback(
     async (attachment: AttachmentData): Promise<string | null> => {
@@ -344,11 +364,11 @@ export function MessageItem({
 
   const sandboxFilesById = useMemo(() => {
     const map = new Map<string, SandboxFileData>();
-    for (const file of sandboxFiles ?? []) {
+    for (const file of displaySandboxFiles ?? []) {
       map.set(file.fileId, file);
     }
     return map;
-  }, [sandboxFiles]);
+  }, [displaySandboxFiles]);
 
   const segmentToggleHandlers = useMemo(() => {
     const handlers = new Map<string, () => void>();
@@ -579,19 +599,12 @@ export function MessageItem({
         ))}
 
       {/* Show message bubble if there's text content */}
-      {textContent && (
-        <MessageBubble
-          role="assistant"
-          content={textContent}
-          sandboxFiles={sandboxFiles}
-          onFileClick={handleDownloadSandboxFile}
-        />
-      )}
+      {textContent && <MessageBubble role="assistant" content={textContent} />}
 
       {/* Show sandbox files as downloadable attachments */}
-      {sandboxFiles && sandboxFiles.length > 0 && (
+      {displaySandboxFiles && displaySandboxFiles.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {sandboxFiles.map((file) => (
+          {displaySandboxFiles.map((file) => (
             <button
               key={file.fileId}
               data-file-id={file.fileId}
@@ -612,9 +625,12 @@ export function MessageItem({
       )}
 
       {/* If no text and no trace, show empty indicator */}
-      {!textContent && !hasTrace && !sandboxFiles?.length && coworkerInvocations.length === 0 && (
-        <div className="text-muted-foreground text-sm italic">Task completed</div>
-      )}
+      {!textContent &&
+        !hasTrace &&
+        !displaySandboxFiles?.length &&
+        coworkerInvocations.length === 0 && (
+          <div className="text-muted-foreground text-sm italic">Task completed</div>
+        )}
     </div>
   );
 }

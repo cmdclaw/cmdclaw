@@ -3814,6 +3814,9 @@ describe("generationManager transitions", () => {
     expect(ctx.uploadedSandboxFileIds?.has("sandbox-file-mentioned")).toBe(
       true,
     );
+    expect(ctx.sentFilePaths?.has("/app/QUESTIONNAIRE_RCP_rempli.pdf")).toBe(
+      true,
+    );
   });
 
   it("does not auto-collect sandbox files when none are mentioned in final answer text", async () => {

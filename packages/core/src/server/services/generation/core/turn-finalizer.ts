@@ -569,6 +569,8 @@ export class GenerationTurnFinalizer {
         },
         onUploadedFile: (fileRecord) => {
           ctx.uploadedSandboxFileIds?.add(fileRecord.id);
+          ctx.sentFilePaths ??= new Set();
+          ctx.sentFilePaths.add(fileRecord.path);
           this.deps.broadcast(ctx, {
             type: "sandbox_file",
             fileId: fileRecord.id,

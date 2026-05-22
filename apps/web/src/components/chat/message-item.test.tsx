@@ -1,0 +1,68 @@
+// @vitest-environment jsdom
+
+import type { ComponentProps } from "react";
+import * as jestDomVitest from "@testing-library/jest-dom/vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SandboxFileData } from "./message-list";
+import { MessageItem } from "./message-item";
+
+void jestDomVitest;
+
+vi.mock("next/image", () => ({
+  // oxlint-disable-next-line eslint-plugin-next/no-img-element
+  default: (props: ComponentProps<"img">) => <img {...props} alt={props.alt} />,
+}));
+
+vi.mock("@/orpc/hooks", () => ({
+  useDownloadAttachment: () => ({ mutateAsync: vi.fn() }),
+  useDownloadSandboxFile: () => ({ mutateAsync: vi.fn() }),
+}));
+
+afterEach(() => {
+  cleanup();
+});
+
+const sandboxFileFixture: SandboxFileData = {
+  fileId: "file-1",
+  path: "/app/report.pdf",
+  filename: "report.pdf",
+  mimeType: "application/pdf",
+  sizeBytes: 42,
+};
+const sandboxFilesFixture = [sandboxFileFixture];
+const duplicatedSandboxFilesFixture: SandboxFileData[] = [
+  sandboxFileFixture,
+  {
+    ...sandboxFileFixture,
+    fileId: "file-2",
+  },
+];
+
+describe("MessageItem", () => {
+  it("does not render a generated sandbox file twice when the assistant text mentions its path", () => {
+    render(
+      <MessageItem
+        id="message-1"
+        role="assistant"
+        content="Done - I created `/app/report.pdf`."
+        sandboxFiles={sandboxFilesFixture}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: /report\.pdf/i })).toHaveLength(1);
+  });
+
+  it("deduplicates persisted sandbox file rows that point at the same generated file", () => {
+    render(
+      <MessageItem
+        id="message-1"
+        role="assistant"
+        content="Done - I created **/app/report.pdf**."
+        sandboxFiles={duplicatedSandboxFilesFixture}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: /report\.pdf/i })).toHaveLength(1);
+  });
+});
