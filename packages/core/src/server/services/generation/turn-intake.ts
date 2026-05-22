@@ -84,6 +84,7 @@ type TurnIntakeDeps = {
   enqueueGenerationRun: (
     generationId: string,
     runType: "chat" | "coworker",
+    options?: { traceId?: string },
   ) => Promise<void>;
 };
 
@@ -96,7 +97,7 @@ export class TurnIntake {
 
   async startGeneration(
     params: StartGenerationInput,
-  ): Promise<{ generationId: string; conversationId: string }> {
+  ): Promise<{ generationId: string; conversationId: string; traceId: string }> {
     const { content, userId, model, autoApprove } = params;
     const runDeadlineMs = resolveGenerationRunDeadlineMs(params.debugRunDeadlineMs);
     const debugApprovalHotWaitMs =
@@ -435,6 +436,7 @@ export class TurnIntake {
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
+        traceId,
         deadlineAt: lifecycle.deadlineAt,
         remainingRunMs: runDeadlineMs,
         lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
@@ -474,7 +476,7 @@ export class TurnIntake {
       { ...logContext, conversationId: conv.id, generationId: genRecord.id },
     );
 
-    await this.deps.enqueueGenerationRun(genRecord.id, "chat");
+    await this.deps.enqueueGenerationRun(genRecord.id, "chat", { traceId });
 
     logServerEvent(
       "info",
@@ -511,6 +513,7 @@ export class TurnIntake {
     return {
       generationId: genRecord.id,
       conversationId: conv.id,
+      traceId,
     };
   }
 
@@ -584,6 +587,7 @@ export class TurnIntake {
       selectedPlatformSkillSlugs,
       queuedFileAttachments: params.fileAttachments,
     });
+    const traceId = createTraceId();
     const lifecycle = createGenerationLifecycle();
     const [genRecord] = await db
       .insert(generation)
@@ -598,6 +602,7 @@ export class TurnIntake {
         contentParts: [],
         inputTokens: 0,
         outputTokens: 0,
+        traceId,
         deadlineAt: lifecycle.deadlineAt,
         remainingRunMs: generationLifecyclePolicy.runDeadlineMs,
         lastRuntimeEventAt: lifecycle.lastRuntimeEventAt,
@@ -615,8 +620,7 @@ export class TurnIntake {
       generationId: genRecord.id,
     });
 
-    const traceId = createTraceId();
-    await this.deps.enqueueGenerationRun(genRecord.id, "coworker");
+    await this.deps.enqueueGenerationRun(genRecord.id, "coworker", { traceId });
 
     logServerEvent(
       "info",

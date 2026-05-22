@@ -6,6 +6,7 @@ import { getSandboxSlotManager } from "../../sandbox-slot-manager";
 import { sendTaskDonePush } from "../../web-push-service";
 import { collectMentionedSandboxFiles } from "../files/sandbox-file-collection";
 import type { GenerationContext, GenerationEvent } from "../types";
+import { emitGenerationTerminalCanonicalEvent } from "./canonical-generation-events";
 import type { GenerationLifecycleStore } from "./lifecycle-store";
 
 const SAVE_DEBOUNCE_MS = 2000;
@@ -453,6 +454,7 @@ export class GenerationTurnFinalizer {
         sandboxId: ctx.sandboxId ?? null,
         startedAt: ctx.startedAt,
       });
+      await emitGenerationTerminalCanonicalEvent(ctx.id);
       ctx.contentParts = finishResult.contentParts;
       const messageId = finishResult.messageId;
       const completedAssistantContent = finishResult.assistantContent;

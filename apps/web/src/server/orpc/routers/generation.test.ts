@@ -79,7 +79,9 @@ vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/utils/observability", () => ({
+  emitCanonicalServiceEvent: vi.fn(),
   logServerEvent: vi.fn(),
+  createTraceId: vi.fn(() => "trace-test"),
 }));
 
 vi.mock("../workspace-access", () => ({

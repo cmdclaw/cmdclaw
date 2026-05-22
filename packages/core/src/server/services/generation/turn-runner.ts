@@ -308,7 +308,7 @@ export class TurnRunnerContextLoader {
 
     return {
       status: "ready",
-      traceId: createTraceId(),
+      traceId: genRecord.traceId ?? createTraceId(),
       latestUserMessageContent: latestUserMessage?.content ?? "",
       linkedCoworkerRun: linkedCoworkerRun ?? null,
       linkedCoworker: linkedCoworker ?? null,

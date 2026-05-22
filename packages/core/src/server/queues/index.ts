@@ -11,6 +11,7 @@ import {
   recordHistogram,
   startActiveServerSpan,
   withExtractedTraceContext,
+  withTraceIdContext,
 } from "../utils/observability";
 
 const rawQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
@@ -315,7 +316,8 @@ const processor: Processor<JobPayload, unknown, string> = async (job) => {
     attempts_made: job.attemptsMade,
   };
 
-  return withExtractedTraceContext(extractTraceContextFromPayload(job.data), () =>
+  const durableTraceId = typeof job.data?.traceId === "string" ? job.data.traceId : undefined;
+  const runWithSpan = () =>
     startActiveServerSpan(
       `bullmq ${job.name}`,
       {
@@ -354,8 +356,13 @@ const processor: Processor<JobPayload, unknown, string> = async (job) => {
           );
         }
       },
-    ),
-  );
+    );
+
+  if (durableTraceId) {
+    return withTraceIdContext(durableTraceId, runWithSpan);
+  }
+
+  return withExtractedTraceContext(extractTraceContextFromPayload(job.data), runWithSpan);
 };
 
 let queue: Queue<JobPayload, unknown, string> | null = null;

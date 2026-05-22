@@ -5,7 +5,11 @@ import { generationManager } from "@cmdclaw/core/server/services/generation-mana
 import { isGenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
 import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
-import { createTraceId, logServerEvent } from "@cmdclaw/core/server/utils/observability";
+import {
+  createTraceId,
+  emitCanonicalServiceEvent,
+  logServerEvent,
+} from "@cmdclaw/core/server/utils/observability";
 import { db } from "@cmdclaw/db/client";
 import { generation, conversation, generationInterrupt } from "@cmdclaw/db/schema";
 import { eventIterator, ORPCError } from "@orpc/server";
@@ -30,6 +34,19 @@ const activeConversationStatuses = new Set([
   "awaiting_auth",
   "paused",
 ]);
+
+function normalizeRpcErrorCode(error: unknown): string {
+  if (isGenerationStartError(error)) {
+    return error.generationErrorCode;
+  }
+  if (error instanceof ORPCError) {
+    return error.code.toLowerCase();
+  }
+  if (error instanceof Error) {
+    return error.name.toLowerCase();
+  }
+  return "unknown_error";
+}
 
 function isActiveGenerationStatus(
   status: string | null | undefined,
@@ -453,7 +470,31 @@ const startGeneration = protectedProcedure
         ...logContext,
         generationId: result.generationId,
         conversationId: result.conversationId,
+        traceId: result.traceId,
       };
+      emitCanonicalServiceEvent({
+        eventName: "cmdclaw.generation.start_rpc",
+        operationName: "generation.start_rpc",
+        eventId: `rpc:generation.start:${result.generationId}:${startedAt}`,
+        outcome: "success",
+        context: successLogContext,
+        attributes: {
+          "rpc.system": "orpc",
+          "rpc.method": "generation.startGeneration",
+          "http.route": "/api/rpc/generation/startGeneration",
+          "cmdclaw.generation.id": result.generationId,
+          "cmdclaw.conversation.id": result.conversationId,
+          "cmdclaw.user.id": context.user.id,
+          "cmdclaw.generation.request.elapsed_ms": Date.now() - startedAt,
+          "cmdclaw.model.provider": input.model
+            ? parseModelReference(input.model).providerID
+            : null,
+          "cmdclaw.sandbox.provider": input.sandboxProvider ?? "default",
+          "cmdclaw.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
+          "cmdclaw.generation.selected_platform_skill_count":
+            input.selectedPlatformSkillSlugs?.length ?? 0,
+        },
+      });
       logServerEvent(
         "info",
         "RPC_START_GENERATION_OK",
@@ -465,6 +506,33 @@ const startGeneration = protectedProcedure
 
       return result;
     } catch (error) {
+      emitCanonicalServiceEvent({
+        eventName: "cmdclaw.generation.start_rpc",
+        operationName: "generation.start_rpc",
+        eventId: `rpc:generation.start:failed:${context.user.id}:${startedAt}`,
+        outcome: "failure",
+        context: {
+          ...logContext,
+          conversationId: input.conversationId,
+        },
+        attributes: {
+          "rpc.system": "orpc",
+          "rpc.method": "generation.startGeneration",
+          "http.route": "/api/rpc/generation/startGeneration",
+          "cmdclaw.conversation.id": input.conversationId,
+          "cmdclaw.user.id": context.user.id,
+          "cmdclaw.generation.request.elapsed_ms": Date.now() - startedAt,
+          "cmdclaw.generation.failure_phase": GENERATION_ERROR_PHASES.START_RPC,
+          "cmdclaw.error.normalized_code": normalizeRpcErrorCode(error),
+          "cmdclaw.model.provider": input.model
+            ? parseModelReference(input.model).providerID
+            : null,
+          "cmdclaw.sandbox.provider": input.sandboxProvider ?? "default",
+          "cmdclaw.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
+          "cmdclaw.generation.selected_platform_skill_count":
+            input.selectedPlatformSkillSlugs?.length ?? 0,
+        },
+      });
       logServerEvent(
         "error",
         "RPC_START_GENERATION_FAILED",
@@ -680,21 +748,39 @@ const subscribeGeneration = protectedProcedure
   )
   .output(eventIterator(generationEventSchema))
   .handler(async function* ({ input, context }) {
-    await requireGenerationAccessInActiveWorkspace(
+    const access = await requireGenerationAccessInActiveWorkspace(
       context.user.id,
       input.generationId,
       context.workspaceId,
     );
-    const streamId = createTraceId();
+    const streamId = access.generation.traceId ?? createTraceId();
     const openedAt = Date.now();
     const logContext = {
       source: "rpc",
       route: "/api/rpc/generation/subscribeGeneration",
       rpcProcedure: "generation.subscribeGeneration",
       generationId: input.generationId,
+      conversationId: access.generation.conversationId,
       userId: context.user.id,
       traceId: streamId,
     };
+    emitCanonicalServiceEvent({
+      eventName: "cmdclaw.generation.subscribe_rpc",
+      operationName: "generation.subscribe_rpc",
+      eventId: `rpc:generation.subscribe:${input.generationId}:${streamId}`,
+      outcome: "success",
+      context: logContext,
+      attributes: {
+        "rpc.system": "orpc",
+        "rpc.method": "generation.subscribeGeneration",
+        "http.route": "/api/rpc/generation/subscribeGeneration",
+        "cmdclaw.generation.id": input.generationId,
+        "cmdclaw.conversation.id": access.generation.conversationId,
+        "cmdclaw.user.id": context.user.id,
+        "cmdclaw.generation.subscribe.state": "opened",
+        "cmdclaw.generation.subscribe.has_cursor": Boolean(input.cursor),
+      },
+    });
     logServerEvent(
       "info",
       "RPC_SUBSCRIBE_GENERATION_OPENED",
@@ -711,6 +797,25 @@ const subscribeGeneration = protectedProcedure
         yield event;
       }
     } finally {
+      emitCanonicalServiceEvent({
+        eventName: "cmdclaw.generation.subscribe_rpc",
+        operationName: "generation.subscribe_rpc",
+        eventId: `rpc:generation.subscribe:${input.generationId}:${streamId}:closed`,
+        outcome: "success",
+        context: logContext,
+        attributes: {
+          "rpc.system": "orpc",
+          "rpc.method": "generation.subscribeGeneration",
+          "http.route": "/api/rpc/generation/subscribeGeneration",
+          "cmdclaw.generation.id": input.generationId,
+          "cmdclaw.conversation.id": access.generation.conversationId,
+          "cmdclaw.user.id": context.user.id,
+          "cmdclaw.generation.subscribe.state": "closed",
+          "cmdclaw.generation.subscribe.elapsed_ms": Date.now() - openedAt,
+          "cmdclaw.generation.subscribe.has_cursor": Boolean(input.cursor),
+          ...generationManager.getStreamCountersSnapshot(),
+        },
+      });
       logServerEvent(
         "info",
         "RPC_SUBSCRIBE_GENERATION_CLOSED",

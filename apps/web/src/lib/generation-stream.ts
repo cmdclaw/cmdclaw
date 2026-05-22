@@ -1,6 +1,7 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import type { RouterClient } from "@orpc/server";
 import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import { reportClientObservation } from "@/lib/client-observations";
 import { normalizeGenerationError, type NormalizedGenerationError } from "@/lib/generation-errors";
 import type { AppRouter } from "../server/orpc";
 
@@ -179,6 +180,10 @@ export async function runGenerationStream(
   let generationId = params.generationId;
   let conversationId: string | undefined;
   let cursor: string | undefined;
+  const startedAt = performance.now();
+  let streamAttempt = 0;
+  let sawFirstEvent = false;
+  let closeReason: "done" | "cancelled" | "aborted" | "error" | "unknown" = "unknown";
 
   if (input) {
     const started = await client.generation.startGeneration(input);
@@ -201,6 +206,13 @@ export async function runGenerationStream(
     let iterator:
       | Awaited<ReturnType<RouterClient<AppRouter>["generation"]["subscribeGeneration"]>>
       | undefined;
+    reportClientObservation({
+      eventType: "generation.stream.opened",
+      generationId,
+      conversationId,
+      streamAttempt,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
     if (signal) {
       // eslint-disable-next-line no-await-in-loop
       iterator = await client.generation.subscribeGeneration(subscriptionInput, { signal });
@@ -213,6 +225,16 @@ export async function runGenerationStream(
     for await (const event of iterator) {
       if (signal?.aborted) {
         break;
+      }
+      if (!sawFirstEvent) {
+        sawFirstEvent = true;
+        reportClientObservation({
+          eventType: "generation.stream.first_event",
+          generationId,
+          conversationId,
+          streamAttempt,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        });
       }
       if ("cursor" in event && typeof event.cursor === "string" && event.cursor.length > 0) {
         cursor = event.cursor;
@@ -313,6 +335,15 @@ export async function runGenerationStream(
           break;
         case "done":
           conversationId = event.conversationId;
+          reportClientObservation({
+            eventType: "generation.stream.done",
+            generationId: event.generationId,
+            conversationId: event.conversationId,
+            streamAttempt,
+            elapsedMs: Math.round(performance.now() - startedAt),
+            closeReason: "done",
+          });
+          closeReason = "done";
           await callbacks.onDone?.(
             event.generationId,
             event.conversationId,
@@ -324,13 +355,40 @@ export async function runGenerationStream(
         case "error":
           if (!signal?.aborted && shouldReconnectWithCursor(event)) {
             shouldReconnect = true;
+            reportClientObservation({
+              eventType: "generation.stream.reconnected",
+              generationId,
+              conversationId,
+              streamAttempt,
+              elapsedMs: Math.round(performance.now() - startedAt),
+              visibleErrorCode: "stream_reconnect",
+            });
             break;
           }
+          reportClientObservation({
+            eventType: "generation.stream.error",
+            generationId,
+            conversationId,
+            streamAttempt,
+            elapsedMs: Math.round(performance.now() - startedAt),
+            visibleErrorCode: "stream_error",
+            closeReason: "error",
+          });
+          closeReason = "error";
           await callbacks.onError?.(
             normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
           );
           break;
         case "cancelled":
+          reportClientObservation({
+            eventType: "generation.stream.closed",
+            generationId: event.generationId,
+            conversationId: event.conversationId,
+            streamAttempt,
+            elapsedMs: Math.round(performance.now() - startedAt),
+            closeReason: "cancelled",
+          });
+          closeReason = "cancelled";
           await callbacks.onCancelled?.({
             generationId: event.generationId,
             conversationId: event.conversationId,
@@ -348,8 +406,17 @@ export async function runGenerationStream(
     }
 
     if (!shouldReconnect) {
+      reportClientObservation({
+        eventType: "generation.stream.closed",
+        generationId,
+        conversationId,
+        streamAttempt,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        closeReason: signal?.aborted ? "aborted" : closeReason,
+      });
       break;
     }
+    streamAttempt += 1;
   }
 
   return conversationId && generationId ? { generationId, conversationId } : null;

@@ -963,6 +963,7 @@ export const generation = pgTable(
     debugInfo: jsonb("debug_info").$type<Record<string, unknown>>(),
     inputTokens: integer("input_tokens").default(0).notNull(),
     outputTokens: integer("output_tokens").default(0).notNull(),
+    traceId: text("trace_id"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     cancelRequestedAt: timestamp("cancel_requested_at"),
     completedAt: timestamp("completed_at"),

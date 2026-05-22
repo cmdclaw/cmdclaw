@@ -19,8 +19,10 @@ import {
   context,
   metrics,
   propagation,
+  ROOT_CONTEXT,
   SpanStatusCode,
   trace,
+  TraceFlags,
   type Attributes,
   type Context,
   type Counter,
@@ -48,6 +50,35 @@ type LogLevel = "info" | "warn" | "error";
 type MetricValue = string | number | boolean | undefined | null;
 
 type MetricAttributes = Record<string, MetricValue>;
+
+type CanonicalValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | CanonicalValue[]
+  | { [key: string]: CanonicalValue };
+
+export type CanonicalServiceEventInput = {
+  level?: LogLevel;
+  eventName: string;
+  operationName: string;
+  eventId: string;
+  outcome: string;
+  attributes?: Record<string, CanonicalValue>;
+  context?: ObservabilityContext;
+  timestamp?: Date;
+};
+
+export type ClientObservationInput = {
+  eventId: string;
+  eventType: string;
+  attributes?: Record<string, CanonicalValue>;
+  context?: ObservabilityContext;
+  timestamp?: Date;
+};
 
 type TraceCarrier = Record<string, string>;
 
@@ -92,6 +123,14 @@ const DEFAULT_OBSERVABILITY_HOST = "127.0.0.1";
 const ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment" as const;
 const ATTR_CMDCLAW_INSTANCE_ID = "cmdclaw_instance_id" as const;
 const ATTR_CMDCLAW_WORKTREE_SLOT = "cmdclaw_worktree_slot" as const;
+const TELEMETRY_SCHEMA_VERSION = "2026-05-22";
+const FORBIDDEN_FIELD_PATTERNS = [
+  /(^|[._-])(authorization|cookie|password|secret|token|credential|api[_-]?key|oauth[_-]?code)($|[._-])/i,
+  /(^|[._-])(prompt|model[_-]?output|request[_-]?body|response[_-]?body|body|content|document|email)($|[._-])/i,
+  /(^|[._-])(tool[_-]?(input|result|payload)|file[_-]?contents?)($|[._-])/i,
+];
+const MAX_SAFE_ARRAY_ITEMS = 25;
+const MAX_SAFE_STRING_LENGTH = 512;
 
 const globalState = globalThis as typeof globalThis & {
   __cmdclawObservabilityState?: ObservabilityRuntimeState;
@@ -230,6 +269,81 @@ function withRuntimeMetricAttributes(attributes?: MetricAttributes): MetricAttri
     deployment_environment: runtimeState.env,
     ...attributes,
   };
+}
+
+function toDottedSnakeCase(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[-\s]+/g, "_")
+    .replace(/__/g, "_")
+    .replace(/_/g, "_")
+    .split(".")
+    .map((part) => part.replace(/^_+|_+$/g, "").toLowerCase())
+    .filter(Boolean)
+    .join(".");
+}
+
+function isForbiddenTelemetryField(path: string): boolean {
+  return FORBIDDEN_FIELD_PATTERNS.some((pattern) => pattern.test(path));
+}
+
+function normalizeCanonicalValue(path: string, value: CanonicalValue): unknown {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.length > MAX_SAFE_STRING_LENGTH
+      ? `${value.slice(0, MAX_SAFE_STRING_LENGTH)}…`
+      : value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, MAX_SAFE_ARRAY_ITEMS)
+      .map((item, index) => normalizeCanonicalValue(`${path}.${index}`, item))
+      .filter((item) => item !== undefined);
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const [rawKey, nestedValue] of Object.entries(value)) {
+    const key = toDottedSnakeCase(rawKey);
+    if (!key) {
+      continue;
+    }
+    const nestedPath = `${path}.${key}`;
+    if (isForbiddenTelemetryField(nestedPath)) {
+      continue;
+    }
+    const safeValue = normalizeCanonicalValue(nestedPath, nestedValue);
+    if (safeValue !== undefined) {
+      normalized[key] = safeValue;
+    }
+  }
+  return normalized;
+}
+
+export function normalizeTelemetryAttributes(
+  attributes: Record<string, CanonicalValue> = {},
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+
+  for (const [rawKey, value] of Object.entries(attributes)) {
+    const key = toDottedSnakeCase(rawKey);
+    if (!key || isForbiddenTelemetryField(key)) {
+      continue;
+    }
+    const normalizedValue = normalizeCanonicalValue(key, value);
+    if (normalizedValue !== undefined) {
+      normalized[key] = normalizedValue;
+    }
+  }
+
+  return normalized;
 }
 
 function getActiveSpanIds(): { traceId?: string; spanId?: string } {
@@ -584,6 +698,31 @@ export async function withExtractedTraceContext<T>(
   return context.with(extracted, fn);
 }
 
+function buildTraceIdContext(traceId: string | undefined): Context | undefined {
+  if (!traceId || !/^[0-9a-f]{32}$/.test(traceId)) {
+    return undefined;
+  }
+
+  return trace.setSpanContext(ROOT_CONTEXT, {
+    traceId,
+    spanId: globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 16),
+    traceFlags: TraceFlags.SAMPLED,
+    isRemote: true,
+  });
+}
+
+export async function withTraceIdContext<T>(
+  traceId: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const traceContext = buildTraceIdContext(traceId);
+  if (!traceContext) {
+    return fn();
+  }
+
+  return context.with(traceContext, fn);
+}
+
 export async function startActiveServerSpan<T>(
   name: string,
   options: {
@@ -680,7 +819,133 @@ export function registerObservableGauge(
 }
 
 export function createTraceId(): string {
-  return getActiveSpanIds().traceId ?? globalThis.crypto.randomUUID();
+  return getActiveSpanIds().traceId ?? globalThis.crypto.randomUUID().replaceAll("-", "");
+}
+
+function enrichActiveSpan(attributes: Record<string, unknown>): void {
+  const activeSpan = trace.getActiveSpan();
+  if (!activeSpan) {
+    return;
+  }
+
+  const spanAttributes: Attributes = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      Array.isArray(value)
+    ) {
+      spanAttributes[key] = value as Attributes[string];
+    }
+  }
+
+  if (Object.keys(spanAttributes).length > 0) {
+    activeSpan.setAttributes(spanAttributes);
+  }
+}
+
+function runWithTelemetrySpan<T>(
+  name: string,
+  attributes: Record<string, unknown>,
+  traceId: string | undefined,
+  fn: () => T,
+): T {
+  const tracer = runtimeState.tracer ?? trace.getTracer(INSTRUMENTATION_SCOPE);
+  const parentContext = buildTraceIdContext(traceId) ?? context.active();
+
+  return tracer.startActiveSpan(name, {}, parentContext, (span) => {
+    try {
+      enrichActiveSpan(attributes);
+      const result = fn();
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (error) {
+      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+function buildCommonTelemetryEnvelope(input: {
+  eventId: string;
+  eventKind: "canonical_service_event" | "client_observation";
+  eventName: string;
+  timestamp?: Date;
+  context?: ObservabilityContext;
+}): Record<string, CanonicalValue> {
+  return {
+    "event.kind": input.eventKind,
+    "cmdclaw.event.id": input.eventId,
+    "cmdclaw.event.name": input.eventName,
+    "cmdclaw.telemetry.schema_version": TELEMETRY_SCHEMA_VERSION,
+    "service.name": input.context?.service ?? runtimeState.serviceName,
+    "service.namespace": SERVICE_NAMESPACE,
+    "service.version": process.env.npm_package_version ?? "0.1.0",
+    "deployment.environment": runtimeState.env,
+    "cmdclaw.deployment.id": process.env.RENDER_SERVICE_ID ?? process.env.CMDCLAW_DEPLOYMENT_ID,
+    "cmdclaw.deployment.commit_sha":
+      process.env.RENDER_GIT_COMMIT ?? process.env.CMDCLAW_COMMIT_SHA,
+    "cmdclaw.instance.id": process.env.CMDCLAW_INSTANCE_ID,
+    "cmdclaw.worktree.slot": process.env.CMDCLAW_WORKTREE_SLOT,
+    timestamp: input.timestamp ?? new Date(),
+  };
+}
+
+export function emitCanonicalServiceEvent(input: CanonicalServiceEventInput): void {
+  const payload = normalizeTelemetryAttributes({
+    ...buildCommonTelemetryEnvelope({
+      eventId: input.eventId,
+      eventKind: "canonical_service_event",
+      eventName: input.eventName,
+      timestamp: input.timestamp,
+      context: input.context,
+    }),
+    "cmdclaw.operation.name": input.operationName,
+    "cmdclaw.operation.outcome": input.outcome,
+    ...input.attributes,
+  });
+
+  runWithTelemetrySpan(input.eventName, payload, input.context?.traceId, () => {
+    const activeIds = getActiveSpanIds();
+    logServerEvent(
+      input.level ?? (input.outcome === "success" ? "info" : "error"),
+      input.eventName,
+      payload,
+      {
+        ...input.context,
+        traceId: input.context?.traceId ?? activeIds.traceId,
+      },
+    );
+  });
+}
+
+export function emitClientObservation(input: ClientObservationInput): void {
+  const payload = normalizeTelemetryAttributes({
+    ...buildCommonTelemetryEnvelope({
+      eventId: input.eventId,
+      eventKind: "client_observation",
+      eventName: input.eventType,
+      timestamp: input.timestamp,
+      context: input.context,
+    }),
+    "cmdclaw.client_observation.type": input.eventType,
+    ...input.attributes,
+  });
+
+  runWithTelemetrySpan("cmdclaw.client_observation", payload, input.context?.traceId, () => {
+    const activeIds = getActiveSpanIds();
+    logServerEvent("info", "CLIENT_OBSERVATION", payload, {
+      ...input.context,
+      traceId: input.context?.traceId ?? activeIds.traceId,
+    });
+  });
 }
 
 export function logServerEvent(

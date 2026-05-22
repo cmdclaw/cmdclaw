@@ -144,6 +144,66 @@ terminal Generation metrics are updated, the client observation endpoint
 enforces authentication and resource access, and raw client observations are
 not stored in Postgres.
 
+### Generation Rollout Acceptance Queries
+
+Set the Generation id from a local or staging run:
+
+```bash
+GENERATION_ID=gen_...
+```
+
+Query the wide logs by Generation id. The result should include
+`cmdclaw.generation.start_rpc`, `cmdclaw.generation.subscribe_rpc`,
+`cmdclaw.generation.terminal`, and `event.kind="client_observation"` rows.
+
+```bash
+curl -G 'http://127.0.0.1:9428/select/logsql/query' \
+  --data-urlencode "query=cmdclaw.generation.id:${GENERATION_ID}" \
+  --data-urlencode 'limit=200'
+```
+
+Extract the run trace id from any returned row that has `trace_id`, then query
+the same run by trace id:
+
+```bash
+TRACE_ID=...
+curl -G 'http://127.0.0.1:9428/select/logsql/query' \
+  --data-urlencode "query=trace_id:${TRACE_ID}" \
+  --data-urlencode 'limit=200'
+```
+
+Check trace availability through VictoriaTraces:
+
+```bash
+curl "http://127.0.0.1:10428/select/jaeger/api/traces/${TRACE_ID}"
+```
+
+Group terminal failures by bounded dimensions:
+
+```bash
+curl -G 'http://127.0.0.1:9428/select/logsql/query' \
+  --data-urlencode 'query=cmdclaw.event.name:cmdclaw.generation.terminal cmdclaw.generation.outcome:(failed OR timed_out)' \
+  --data-urlencode 'limit=1000'
+```
+
+When inspecting the returned rows, group by
+`cmdclaw.model.provider`, `cmdclaw.sandbox.provider`,
+`cmdclaw.generation.failure_phase`, and `cmdclaw.error.normalized_code`.
+
+Check low-cardinality metrics. None of these metrics should include user,
+workspace, conversation, Generation, trace, sandbox id, route URL, file name, or
+raw error message labels.
+
+```bash
+curl -G 'http://127.0.0.1:8428/api/v1/query' \
+  --data-urlencode 'query=sum by (outcome, model_provider, sandbox_provider, failure_phase, normalized_error_code) (cmdclaw_generation_terminal_total)'
+```
+
+Confirm forbidden content is absent from the canonical rows by checking that
+fields such as `content`, `prompt`, `model_output`, `request_body`,
+`response_body`, `authorization`, `cookie`, `token`, `tool_input`,
+`tool_result`, and `file_content` are not present in emitted telemetry.
+
 ## Why This Matters For Agents
 
 Agents such as Codex or Claude Code do not need a special SDK here. They can query the local backends directly over HTTP, correlate signals, and reason from the results.

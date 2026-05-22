@@ -72,6 +72,7 @@ export class GenerationRunQueue {
       delayMs?: number;
       dedupeKey?: string;
       runMode?: GenerationRunMode;
+      traceId?: string;
     },
   ): Promise<void> {
     const queue = getQueue();
@@ -81,7 +82,11 @@ export class GenerationRunQueue {
         : CHAT_GENERATION_JOB_NAME;
     await queue.add(
       jobName,
-      { generationId, runMode: options?.runMode ?? "normal_run" },
+      {
+        generationId,
+        runMode: options?.runMode ?? "normal_run",
+        ...(options?.traceId ? { traceId: options.traceId } : {}),
+      },
       {
         jobId: buildQueueJobId([jobName, generationId, options?.dedupeKey]),
         ...(options?.delayMs && options.delayMs > 0

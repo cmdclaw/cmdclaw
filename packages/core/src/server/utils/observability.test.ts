@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveObservabilityVectorUrls } from "./observability";
+import {
+  createTraceId,
+  normalizeTelemetryAttributes,
+  resolveObservabilityVectorUrls,
+} from "./observability";
 
 describe("resolveObservabilityVectorUrls", () => {
   it("uses the explicit Vector host and ports from the environment", () => {
@@ -55,5 +59,54 @@ describe("resolveObservabilityVectorUrls", () => {
       metricsUrl: "http://cmdclaw-vector-staging:4318/v1/metrics",
       tracesUrl: "http://cmdclaw-vector-staging:4318/v1/traces",
     });
+  });
+});
+
+describe("normalizeTelemetryAttributes", () => {
+  it("normalizes emitted field names to dotted snake case", () => {
+    expect(
+      normalizeTelemetryAttributes({
+        cmdclaw: {
+          generationId: "gen-1",
+          failurePhase: "runtime",
+        },
+        "http.route": "/api/rpc/generation/startGeneration",
+        elapsedMs: 123,
+      }),
+    ).toEqual({
+      cmdclaw: {
+        "generation_id": "gen-1",
+        "failure_phase": "runtime",
+      },
+      "http.route": "/api/rpc/generation/startGeneration",
+      "elapsed_ms": 123,
+    });
+  });
+
+  it("drops forbidden content and credential fields", () => {
+    expect(
+      normalizeTelemetryAttributes({
+        "cmdclaw.generation.id": "gen-1",
+        prompt: "do secret work",
+        authorization: "Bearer token",
+        requestBody: { content: "raw body" },
+        toolInput: { query: "raw tool payload" },
+        safeSummary: {
+          attachmentCount: 2,
+          token: "secret",
+        },
+      }),
+    ).toEqual({
+      "cmdclaw.generation.id": "gen-1",
+      "safe_summary": {
+        "attachment_count": 2,
+      },
+    });
+  });
+});
+
+describe("createTraceId", () => {
+  it("returns an OpenTelemetry-compatible trace id", () => {
+    expect(createTraceId()).toMatch(/^[0-9a-f]{32}$/);
   });
 });

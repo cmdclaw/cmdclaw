@@ -198,8 +198,8 @@ class GenerationManager {
       this.persistMessageAttachments(params),
     enqueuePreparingStuckCheck: (generationId) =>
       this.enqueuePreparingStuckCheck(generationId),
-    enqueueGenerationRun: (generationId, runType) =>
-      this.generationRunQueue.enqueueGenerationRun(generationId, runType),
+    enqueueGenerationRun: (generationId, runType, options) =>
+      this.generationRunQueue.enqueueGenerationRun(generationId, runType, options),
   });
   private readonly turnRunnerContextLoader = new TurnRunnerContextLoader({
     getExecutionPolicyFromRecord: (genRecord, fallbackAutoApprove) =>
@@ -699,7 +699,7 @@ class GenerationManager {
    */
   async startGeneration(
     params: StartGenerationInput,
-  ): Promise<{ generationId: string; conversationId: string }> {
+  ): Promise<{ generationId: string; conversationId: string; traceId: string }> {
     return this.turnIntake.startGeneration(params);
   }
 

@@ -14,6 +14,7 @@ sources:
 
   app_otlp:
     type: opentelemetry
+    use_otlp_decoding: false
     grpc:
       address: 0.0.0.0:4317
     http:
