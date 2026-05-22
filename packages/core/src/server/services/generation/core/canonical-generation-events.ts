@@ -1,6 +1,6 @@
 import { db } from "@cmdclaw/db/client";
 import { conversation, generation, message, type ContentPart } from "@cmdclaw/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { parseModelReference } from "../../../../lib/model-reference";
 import {
   emitCanonicalServiceEvent,
@@ -266,14 +266,24 @@ function recordGenerationTerminalMetrics(args: {
   );
 }
 
-export async function emitGenerationTerminalCanonicalEvent(generationId: string): Promise<void> {
+export async function emitGenerationTerminalCanonicalEvent(generationId: string): Promise<boolean> {
+  const claimed = await db
+    .update(generation)
+    .set({ terminalCanonicalEventEmittedAt: new Date() })
+    .where(and(eq(generation.id, generationId), isNull(generation.terminalCanonicalEventEmittedAt)))
+    .returning({ id: generation.id });
+
+  if (claimed.length === 0) {
+    return false;
+  }
+
   const genRecord = await db.query.generation.findFirst({
     where: eq(generation.id, generationId),
     with: { conversation: true },
   });
 
   if (!genRecord) {
-    return;
+    return false;
   }
 
   const messageRecord = genRecord.messageId
@@ -316,120 +326,127 @@ export async function emitGenerationTerminalCanonicalEvent(generationId: string)
     0;
   const attachmentCount = genRecord.executionPolicy?.queuedFileAttachments?.length ?? 0;
   const authSource = conv?.authSource ?? UNKNOWN;
-  const autoApproveEnabled =
-    genRecord.executionPolicy?.autoApprove ?? conv?.autoApprove ?? false;
+  const autoApproveEnabled = genRecord.executionPolicy?.autoApprove ?? conv?.autoApprove ?? false;
 
-  emitCanonicalServiceEvent({
-    level: outcome === "failed" || outcome === "timed_out" ? "error" : "info",
-    eventName: "cmdclaw.generation.terminal",
-    operationName: "generation.terminal",
-    eventId: `generation:${generationId}:terminal`,
-    outcome,
-    context: {
-      source: "generation-lifecycle",
-      traceId: genRecord.traceId ?? undefined,
-      generationId,
-      conversationId: genRecord.conversationId,
-      userId: conv?.userId ?? undefined,
-      sandboxId: genRecord.sandboxId ?? undefined,
-      sessionId: genRecord.runtimeId ?? undefined,
-    },
-    attributes: {
-      "cmdclaw.generation.id": generationId,
-      "cmdclaw.conversation.id": genRecord.conversationId,
-      "cmdclaw.user.id": conv?.userId ?? undefined,
-      "cmdclaw.workspace.id": conv?.workspaceId ?? undefined,
-      "cmdclaw.generation.outcome": outcome,
-      "cmdclaw.generation.status": genRecord.status,
-      "cmdclaw.generation.completion_reason": genRecord.completionReason ?? UNKNOWN,
-      "cmdclaw.failure.phase": failurePhase,
-      "cmdclaw.error.normalized_code": normalizedErrorCode,
-      "cmdclaw.model.provider": modelProvider,
-      "cmdclaw.model.name": modelName,
-      "cmdclaw.sandbox.provider": sandboxProvider,
-      "cmdclaw.auth.source": authSource,
-      "cmdclaw.auto_approve.enabled": autoApproveEnabled,
-      "cmdclaw.skills.selected_count": selectedSkillCount,
-      "cmdclaw.attachments.count": attachmentCount,
-      "cmdclaw.sandbox.id": genRecord.sandboxId ?? undefined,
-      "cmdclaw.runtime.id": genRecord.runtimeId ?? undefined,
-      "cmdclaw.runtime.harness": genRecord.runtimeHarness ?? undefined,
-      "cmdclaw.runtime.protocol_version": genRecord.runtimeProtocolVersion ?? undefined,
-      "cmdclaw.generation.duration_ms": durationMs,
-      "cmdclaw.phase.sandbox_startup_ms": timing?.sandboxStartupDurationMs,
-      "cmdclaw.phase.sandbox_startup_mode": timing?.sandboxStartupMode,
-      "cmdclaw.phase.sandbox_connect_or_create_ms": phaseDurationsMs.sandboxConnectOrCreateMs,
-      "cmdclaw.phase.opencode_ready_ms": phaseDurationsMs.opencodeReadyMs,
-      "cmdclaw.phase.session_ready_ms": phaseDurationsMs.sessionReadyMs,
-      "cmdclaw.phase.agent_init_ms": phaseDurationsMs.agentInitMs,
-      "cmdclaw.phase.pre_prompt_setup_ms": phaseDurationsMs.prePromptSetupMs,
-      "cmdclaw.phase.pre_prompt_memory_sync_ms": phaseDurationsMs.prePromptMemorySyncMs,
-      "cmdclaw.phase.pre_prompt_runtime_context_write_ms":
-        phaseDurationsMs.prePromptRuntimeContextWriteMs,
-      "cmdclaw.phase.pre_prompt_executor_prepare_ms":
-        phaseDurationsMs.prePromptExecutorPrepareMs,
-      "cmdclaw.phase.pre_prompt_executor_bootstrap_load_ms":
-        phaseDurationsMs.prePromptExecutorBootstrapLoadMs,
-      "cmdclaw.phase.pre_prompt_executor_config_write_ms":
-        phaseDurationsMs.prePromptExecutorConfigWriteMs,
-      "cmdclaw.phase.pre_prompt_executor_server_probe_ms":
-        phaseDurationsMs.prePromptExecutorServerProbeMs,
-      "cmdclaw.phase.pre_prompt_executor_server_wait_ready_ms":
-        phaseDurationsMs.prePromptExecutorServerWaitReadyMs,
-      "cmdclaw.phase.pre_prompt_executor_status_check_ms":
-        phaseDurationsMs.prePromptExecutorStatusCheckMs,
-      "cmdclaw.phase.pre_prompt_executor_oauth_reconcile_ms":
-        phaseDurationsMs.prePromptExecutorOauthReconcileMs,
-      "cmdclaw.phase.pre_prompt_skills_and_creds_load_ms":
-        phaseDurationsMs.prePromptSkillsAndCredsLoadMs,
-      "cmdclaw.phase.pre_prompt_cache_read_ms": phaseDurationsMs.prePromptCacheReadMs,
-      "cmdclaw.phase.pre_prompt_skills_write_ms": phaseDurationsMs.prePromptSkillsWriteMs,
-      "cmdclaw.phase.pre_prompt_custom_integration_cli_write_ms":
-        phaseDurationsMs.prePromptCustomIntegrationCliWriteMs,
-      "cmdclaw.phase.pre_prompt_custom_integration_permissions_write_ms":
-        phaseDurationsMs.prePromptCustomIntegrationPermissionsWriteMs,
-      "cmdclaw.phase.pre_prompt_integration_skills_write_ms":
-        phaseDurationsMs.prePromptIntegrationSkillsWriteMs,
-      "cmdclaw.phase.pre_prompt_cache_write_ms": phaseDurationsMs.prePromptCacheWriteMs,
-      "cmdclaw.phase.pre_prompt_prompt_spec_compose_ms":
-        phaseDurationsMs.prePromptPromptSpecComposeMs,
-      "cmdclaw.phase.pre_prompt_event_stream_subscribe_ms":
-        phaseDurationsMs.prePromptEventStreamSubscribeMs,
-      "cmdclaw.phase.pre_prompt_coworker_docs_stage_ms":
-        phaseDurationsMs.prePromptCoworkerDocsStageMs,
-      "cmdclaw.phase.pre_prompt_attachments_stage_ms":
-        phaseDurationsMs.prePromptAttachmentsStageMs,
-      "cmdclaw.phase.wait_for_first_event_ms": phaseDurationsMs.waitForFirstEventMs,
-      "cmdclaw.phase.prompt_to_first_token_ms": phaseDurationsMs.promptToFirstTokenMs,
-      "cmdclaw.phase.generation_to_first_token_ms": phaseDurationsMs.generationToFirstTokenMs,
-      "cmdclaw.phase.prompt_to_first_visible_output_ms":
-        phaseDurationsMs.promptToFirstVisibleOutputMs,
-      "cmdclaw.phase.generation_to_first_visible_output_ms":
-        phaseDurationsMs.generationToFirstVisibleOutputMs,
-      "cmdclaw.phase.model_stream_ms": phaseDurationsMs.modelStreamMs,
-      "cmdclaw.phase.post_processing_ms": phaseDurationsMs.postProcessingMs,
-      "cmdclaw.tool.call_count": toolSummary.toolCallCount,
-      "cmdclaw.tool.write_count": toolSummary.toolWriteCount,
-      "cmdclaw.tool.summary_json": JSON.stringify(toolSummary.summaries.slice(0, 25)),
-      "cmdclaw.approval.count": toolSummary.approvalCount,
-      "cmdclaw.auth_interrupt.count": toolSummary.authInterruptionCount,
-      "cmdclaw.usage.input_tokens": genRecord.inputTokens,
-      "cmdclaw.usage.output_tokens": genRecord.outputTokens,
-      "cmdclaw.usage.total_tokens": genRecord.inputTokens + genRecord.outputTokens,
-      "cmdclaw.generation.started_at": genRecord.startedAt,
-      "cmdclaw.generation.completed_at": genRecord.completedAt ?? undefined,
-    },
-  });
+  try {
+    emitCanonicalServiceEvent({
+      level: outcome === "failed" || outcome === "timed_out" ? "error" : "info",
+      eventName: "cmdclaw.generation.terminal",
+      operationName: "generation.terminal",
+      eventId: `generation:${generationId}:terminal`,
+      outcome,
+      context: {
+        source: "generation-lifecycle",
+        traceId: genRecord.traceId ?? undefined,
+        generationId,
+        conversationId: genRecord.conversationId,
+        userId: conv?.userId ?? undefined,
+        sandboxId: genRecord.sandboxId ?? undefined,
+        sessionId: genRecord.runtimeId ?? undefined,
+      },
+      attributes: {
+        "cmdclaw.generation.id": generationId,
+        "cmdclaw.conversation.id": genRecord.conversationId,
+        "cmdclaw.user.id": conv?.userId ?? undefined,
+        "cmdclaw.workspace.id": conv?.workspaceId ?? undefined,
+        "cmdclaw.generation.outcome": outcome,
+        "cmdclaw.generation.status": genRecord.status,
+        "cmdclaw.generation.completion_reason": genRecord.completionReason ?? UNKNOWN,
+        "cmdclaw.failure.phase": failurePhase,
+        "cmdclaw.error.normalized_code": normalizedErrorCode,
+        "cmdclaw.model.provider": modelProvider,
+        "cmdclaw.model.name": modelName,
+        "cmdclaw.sandbox.provider": sandboxProvider,
+        "cmdclaw.auth.source": authSource,
+        "cmdclaw.auto_approve.enabled": autoApproveEnabled,
+        "cmdclaw.skills.selected_count": selectedSkillCount,
+        "cmdclaw.attachments.count": attachmentCount,
+        "cmdclaw.sandbox.id": genRecord.sandboxId ?? undefined,
+        "cmdclaw.runtime.id": genRecord.runtimeId ?? undefined,
+        "cmdclaw.runtime.harness": genRecord.runtimeHarness ?? undefined,
+        "cmdclaw.runtime.protocol_version": genRecord.runtimeProtocolVersion ?? undefined,
+        "cmdclaw.generation.duration_ms": durationMs,
+        "cmdclaw.phase.sandbox_startup_ms": timing?.sandboxStartupDurationMs,
+        "cmdclaw.phase.sandbox_startup_mode": timing?.sandboxStartupMode,
+        "cmdclaw.phase.sandbox_connect_or_create_ms": phaseDurationsMs.sandboxConnectOrCreateMs,
+        "cmdclaw.phase.opencode_ready_ms": phaseDurationsMs.opencodeReadyMs,
+        "cmdclaw.phase.session_ready_ms": phaseDurationsMs.sessionReadyMs,
+        "cmdclaw.phase.agent_init_ms": phaseDurationsMs.agentInitMs,
+        "cmdclaw.phase.pre_prompt_setup_ms": phaseDurationsMs.prePromptSetupMs,
+        "cmdclaw.phase.pre_prompt_memory_sync_ms": phaseDurationsMs.prePromptMemorySyncMs,
+        "cmdclaw.phase.pre_prompt_runtime_context_write_ms":
+          phaseDurationsMs.prePromptRuntimeContextWriteMs,
+        "cmdclaw.phase.pre_prompt_executor_prepare_ms": phaseDurationsMs.prePromptExecutorPrepareMs,
+        "cmdclaw.phase.pre_prompt_executor_bootstrap_load_ms":
+          phaseDurationsMs.prePromptExecutorBootstrapLoadMs,
+        "cmdclaw.phase.pre_prompt_executor_config_write_ms":
+          phaseDurationsMs.prePromptExecutorConfigWriteMs,
+        "cmdclaw.phase.pre_prompt_executor_server_probe_ms":
+          phaseDurationsMs.prePromptExecutorServerProbeMs,
+        "cmdclaw.phase.pre_prompt_executor_server_wait_ready_ms":
+          phaseDurationsMs.prePromptExecutorServerWaitReadyMs,
+        "cmdclaw.phase.pre_prompt_executor_status_check_ms":
+          phaseDurationsMs.prePromptExecutorStatusCheckMs,
+        "cmdclaw.phase.pre_prompt_executor_oauth_reconcile_ms":
+          phaseDurationsMs.prePromptExecutorOauthReconcileMs,
+        "cmdclaw.phase.pre_prompt_skills_and_creds_load_ms":
+          phaseDurationsMs.prePromptSkillsAndCredsLoadMs,
+        "cmdclaw.phase.pre_prompt_cache_read_ms": phaseDurationsMs.prePromptCacheReadMs,
+        "cmdclaw.phase.pre_prompt_skills_write_ms": phaseDurationsMs.prePromptSkillsWriteMs,
+        "cmdclaw.phase.pre_prompt_custom_integration_cli_write_ms":
+          phaseDurationsMs.prePromptCustomIntegrationCliWriteMs,
+        "cmdclaw.phase.pre_prompt_custom_integration_permissions_write_ms":
+          phaseDurationsMs.prePromptCustomIntegrationPermissionsWriteMs,
+        "cmdclaw.phase.pre_prompt_integration_skills_write_ms":
+          phaseDurationsMs.prePromptIntegrationSkillsWriteMs,
+        "cmdclaw.phase.pre_prompt_cache_write_ms": phaseDurationsMs.prePromptCacheWriteMs,
+        "cmdclaw.phase.pre_prompt_prompt_spec_compose_ms":
+          phaseDurationsMs.prePromptPromptSpecComposeMs,
+        "cmdclaw.phase.pre_prompt_event_stream_subscribe_ms":
+          phaseDurationsMs.prePromptEventStreamSubscribeMs,
+        "cmdclaw.phase.pre_prompt_coworker_docs_stage_ms":
+          phaseDurationsMs.prePromptCoworkerDocsStageMs,
+        "cmdclaw.phase.pre_prompt_attachments_stage_ms":
+          phaseDurationsMs.prePromptAttachmentsStageMs,
+        "cmdclaw.phase.wait_for_first_event_ms": phaseDurationsMs.waitForFirstEventMs,
+        "cmdclaw.phase.prompt_to_first_token_ms": phaseDurationsMs.promptToFirstTokenMs,
+        "cmdclaw.phase.generation_to_first_token_ms": phaseDurationsMs.generationToFirstTokenMs,
+        "cmdclaw.phase.prompt_to_first_visible_output_ms":
+          phaseDurationsMs.promptToFirstVisibleOutputMs,
+        "cmdclaw.phase.generation_to_first_visible_output_ms":
+          phaseDurationsMs.generationToFirstVisibleOutputMs,
+        "cmdclaw.phase.model_stream_ms": phaseDurationsMs.modelStreamMs,
+        "cmdclaw.phase.post_processing_ms": phaseDurationsMs.postProcessingMs,
+        "cmdclaw.tool.call_count": toolSummary.toolCallCount,
+        "cmdclaw.tool.write_count": toolSummary.toolWriteCount,
+        "cmdclaw.tool.summary_json": JSON.stringify(toolSummary.summaries.slice(0, 25)),
+        "cmdclaw.approval.count": toolSummary.approvalCount,
+        "cmdclaw.auth_interrupt.count": toolSummary.authInterruptionCount,
+        "cmdclaw.usage.input_tokens": genRecord.inputTokens,
+        "cmdclaw.usage.output_tokens": genRecord.outputTokens,
+        "cmdclaw.usage.total_tokens": genRecord.inputTokens + genRecord.outputTokens,
+        "cmdclaw.generation.started_at": genRecord.startedAt,
+        "cmdclaw.generation.completed_at": genRecord.completedAt ?? undefined,
+      },
+    });
 
-  recordGenerationTerminalMetrics({
-    outcome,
-    modelProvider,
-    sandboxProvider,
-    failurePhase,
-    normalizedErrorCode,
-    durationMs,
-    toolCallMetrics: toolSummary.toolCallMetrics,
-    inputTokens: genRecord.inputTokens,
-    outputTokens: genRecord.outputTokens,
-  });
+    recordGenerationTerminalMetrics({
+      outcome,
+      modelProvider,
+      sandboxProvider,
+      failurePhase,
+      normalizedErrorCode,
+      durationMs,
+      toolCallMetrics: toolSummary.toolCallMetrics,
+      inputTokens: genRecord.inputTokens,
+      outputTokens: genRecord.outputTokens,
+    });
+  } catch (error) {
+    await db
+      .update(generation)
+      .set({ terminalCanonicalEventEmittedAt: null })
+      .where(eq(generation.id, generationId));
+    throw error;
+  }
+  return true;
 }

@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   generationFindFirstMock,
+  generationUpdateReturningMock,
+  generationUpdateWhereMock,
+  generationUpdateSetMock,
+  dbUpdateMock,
   messageFindFirstMock,
   conversationFindFirstMock,
   emitCanonicalServiceEventMock,
@@ -9,6 +13,10 @@ const {
   recordHistogramMock,
 } = vi.hoisted(() => ({
   generationFindFirstMock: vi.fn(),
+  generationUpdateReturningMock: vi.fn(),
+  generationUpdateWhereMock: vi.fn(),
+  generationUpdateSetMock: vi.fn(),
+  dbUpdateMock: vi.fn(),
   messageFindFirstMock: vi.fn(),
   conversationFindFirstMock: vi.fn(),
   emitCanonicalServiceEventMock: vi.fn(),
@@ -18,6 +26,7 @@ const {
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: {
+    update: dbUpdateMock,
     query: {
       generation: { findFirst: generationFindFirstMock },
       message: { findFirst: messageFindFirstMock },
@@ -37,6 +46,10 @@ import { emitGenerationTerminalCanonicalEvent } from "./canonical-generation-eve
 describe("Generation terminal canonical event", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbUpdateMock.mockReturnValue({ set: generationUpdateSetMock });
+    generationUpdateSetMock.mockReturnValue({ where: generationUpdateWhereMock });
+    generationUpdateWhereMock.mockReturnValue({ returning: generationUpdateReturningMock });
+    generationUpdateReturningMock.mockResolvedValue([{ id: "gen-1" }]);
     conversationFindFirstMock.mockResolvedValue(null);
     generationFindFirstMock.mockResolvedValue({
       id: "gen-1",
@@ -113,7 +126,7 @@ describe("Generation terminal canonical event", () => {
   });
 
   it("emits the documented terminal Generation namespaces", async () => {
-    await emitGenerationTerminalCanonicalEvent("gen-1");
+    await expect(emitGenerationTerminalCanonicalEvent("gen-1")).resolves.toBe(true);
 
     expect(emitCanonicalServiceEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -230,5 +243,16 @@ describe("Generation terminal canonical event", () => {
       terminalMetricLabels,
       "Tool call count per terminal Generation.",
     );
+  });
+
+  it("does not emit logs or metrics when the terminal event was already claimed", async () => {
+    generationUpdateReturningMock.mockResolvedValueOnce([]);
+
+    await expect(emitGenerationTerminalCanonicalEvent("gen-1")).resolves.toBe(false);
+
+    expect(generationFindFirstMock).not.toHaveBeenCalled();
+    expect(emitCanonicalServiceEventMock).not.toHaveBeenCalled();
+    expect(recordCounterMock).not.toHaveBeenCalled();
+    expect(recordHistogramMock).not.toHaveBeenCalled();
   });
 });

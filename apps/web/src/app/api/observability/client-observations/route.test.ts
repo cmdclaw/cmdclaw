@@ -188,6 +188,30 @@ describe("client observation intake", () => {
     );
   });
 
+  it("prefers the durable Generation trace id over a browser-supplied trace id", async () => {
+    const response = await POST(
+      request({
+        observations: [
+          {
+            eventId: "event-123456",
+            eventType: "generation.stream.opened",
+            generationId: "gen-1",
+            traceId: "browser-trace",
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(emitClientObservationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          traceId: "trace-123",
+        }),
+      }),
+    );
+  });
+
   it("rate-limits with the durable user-session-ip bucket", async () => {
     redisExecMock.mockResolvedValue([
       [null, 121],

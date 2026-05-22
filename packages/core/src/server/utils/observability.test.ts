@@ -75,11 +75,11 @@ describe("normalizeTelemetryAttributes", () => {
       }),
     ).toEqual({
       cmdclaw: {
-        "generation_id": "gen-1",
-        "failure_phase": "runtime",
+        generation_id: "gen-1",
+        failure_phase: "runtime",
       },
       "http.route": "/api/rpc/generation/startGeneration",
-      "elapsed_ms": 123,
+      elapsed_ms: 123,
     });
   });
 
@@ -98,9 +98,22 @@ describe("normalizeTelemetryAttributes", () => {
       }),
     ).toEqual({
       "cmdclaw.generation.id": "gen-1",
-      "safe_summary": {
-        "attachment_count": 2,
+      safe_summary: {
+        attachment_count: 2,
       },
+    });
+  });
+
+  it("keeps safe phase timing fields whose names include prompt", () => {
+    expect(
+      normalizeTelemetryAttributes({
+        "cmdclaw.phase.pre_prompt_setup_ms": 25,
+        "cmdclaw.phase.prompt_to_first_token_ms": 50,
+        prompt: "do secret work",
+      }),
+    ).toEqual({
+      "cmdclaw.phase.pre_prompt_setup_ms": 25,
+      "cmdclaw.phase.prompt_to_first_token_ms": 50,
     });
   });
 });

@@ -56,6 +56,7 @@ const {
     submitAuthResultByInterrupt: vi.fn(),
     getGenerationStatus: vi.fn(),
     getGenerationForConversation: vi.fn(),
+    getStreamCountersSnapshot: vi.fn(),
   };
 
   return {
@@ -94,11 +95,13 @@ vi.mock("../workspace-access", () => ({
 
 import { generationRouter } from "./generation";
 
-const context = { user: { id: "user-1" } };
+const context = { user: { id: "user-1" }, workspaceId: "ws-1" };
 const generationRouterAny = generationRouter as unknown as Record<
   string,
   (args: unknown) => Promise<unknown>
 >;
+
+async function* emptyGenerationStream(): AsyncGenerator<never> {}
 
 describe("generationRouter", () => {
   beforeEach(() => {
@@ -149,6 +152,11 @@ describe("generationRouter", () => {
       contentParts: [],
       pendingApproval: null,
       usage: { inputTokens: 1, outputTokens: 2 },
+    });
+    generationManagerMock.getStreamCountersSnapshot.mockReturnValue({
+      activeGenerationStreams: 0,
+      activeStreamConsumers: 0,
+      totalStreamsCreated: 0,
     });
   });
 
@@ -504,6 +512,40 @@ describe("generationRouter", () => {
       "slack",
       true,
       "user-1",
+    );
+  });
+
+  it("emits one final canonical subscribe event", async () => {
+    generationFindFirstMock.mockResolvedValue({
+      id: "gen-1",
+      conversationId: "conv-1",
+      traceId: "trace-123",
+      conversation: {
+        id: "conv-1",
+        userId: "user-1",
+        workspaceId: "ws-1",
+      },
+    });
+    generationManagerMock.subscribeToGeneration.mockReturnValue(emptyGenerationStream());
+
+    const stream = generationRouterAny.subscribeGeneration({
+      input: { generationId: "gen-1" },
+      context,
+    }) as unknown as AsyncIterable<unknown>;
+    for await (const _event of stream) {
+      // Empty stream.
+    }
+
+    expect(emitCanonicalServiceEvent).toHaveBeenCalledTimes(1);
+    expect(emitCanonicalServiceEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: "cmdclaw.generation.subscribe_rpc",
+        operationName: "generation.subscribe_rpc",
+        eventId: "rpc:generation.subscribe:gen-1:trace-123",
+        attributes: expect.objectContaining({
+          "cmdclaw.generation.subscribe.state": "closed",
+        }),
+      }),
     );
   });
 

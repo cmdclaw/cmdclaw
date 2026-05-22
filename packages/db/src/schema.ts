@@ -964,6 +964,7 @@ export const generation = pgTable(
     inputTokens: integer("input_tokens").default(0).notNull(),
     outputTokens: integer("output_tokens").default(0).notNull(),
     traceId: text("trace_id"),
+    terminalCanonicalEventEmittedAt: timestamp("terminal_canonical_event_emitted_at"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     cancelRequestedAt: timestamp("cancel_requested_at"),
     completedAt: timestamp("completed_at"),
@@ -1165,12 +1166,7 @@ export type SloReplayJourney =
   | "coworker_builder"
   | "coworker_run"
   | "unknown_coworker_generation";
-export type SloReplayStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "error"
-  | "setup_failed";
+export type SloReplayStatus = "pending" | "running" | "completed" | "error" | "setup_failed";
 export const coworkerEmailAliasStatusEnum = pgEnum("coworker_email_alias_status", [
   "active",
   "disabled",

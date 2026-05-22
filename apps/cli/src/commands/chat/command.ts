@@ -132,14 +132,7 @@ export const chatCommand = buildCommand({
     },
     positional: {
       kind: "tuple",
-      parameters: [
-        {
-          parse: (input: string) => input,
-          optional: true,
-          placeholder: "message",
-          brief: "Send an initial message",
-        },
-      ],
+      parameters: [],
     },
   },
   docs: {

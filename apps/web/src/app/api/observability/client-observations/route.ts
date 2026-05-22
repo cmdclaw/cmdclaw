@@ -191,7 +191,7 @@ export async function POST(request: Request) {
           return { ok: false as const };
         }
         resolvedConversationId = generationAccess.conversationId ?? resolvedConversationId;
-        resolvedTraceId = observation.traceId ?? generationAccess.traceId ?? undefined;
+        resolvedTraceId = generationAccess.traceId ?? observation.traceId ?? undefined;
       } else if (observation.conversationId) {
         const ok = await verifyConversationAccess({
           conversationId: observation.conversationId,

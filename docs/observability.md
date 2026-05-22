@@ -152,6 +152,13 @@ Set the Generation id from a local or staging run:
 GENERATION_ID=gen_...
 ```
 
+Run the executable validator to prove the Generation id, trace id, terminal
+metrics, and trace payload all correlate across the local Victoria backends:
+
+```bash
+bun run observability:validate-generation -- --generation-id "${GENERATION_ID}"
+```
+
 Query the wide logs by Generation id. The result should include
 `cmdclaw.generation.start_rpc`, `cmdclaw.generation.subscribe_rpc`,
 `cmdclaw.generation.terminal`, and `event.kind="client_observation"` rows.

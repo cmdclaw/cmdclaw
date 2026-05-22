@@ -129,6 +129,7 @@ const FORBIDDEN_FIELD_PATTERNS = [
   /(^|[._-])(prompt|model[_-]?output|request[_-]?body|response[_-]?body|body|content|document|email)($|[._-])/i,
   /(^|[._-])(tool[_-]?(input|result|payload)|file[_-]?contents?)($|[._-])/i,
 ];
+const SAFE_FIELD_PREFIXES = ["cmdclaw.phase."] as const;
 const MAX_SAFE_ARRAY_ITEMS = 25;
 const MAX_SAFE_STRING_LENGTH = 512;
 
@@ -284,6 +285,9 @@ function toDottedSnakeCase(key: string): string {
 }
 
 function isForbiddenTelemetryField(path: string): boolean {
+  if (SAFE_FIELD_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    return false;
+  }
   return FORBIDDEN_FIELD_PATTERNS.some((pattern) => pattern.test(path));
 }
 
@@ -415,11 +419,12 @@ function buildConsolePayload(level: ConsoleMethod, args: unknown[]): Record<stri
       activeIds.spanId;
 
     return {
-      ts:
-        typeof parsedPayload.ts === "string" ? parsedPayload.ts : new Date().toISOString(),
+      ts: typeof parsedPayload.ts === "string" ? parsedPayload.ts : new Date().toISOString(),
       level: typeof parsedPayload.level === "string" ? parsedPayload.level : level,
       service:
-        typeof parsedPayload.service === "string" ? parsedPayload.service : runtimeState.serviceName,
+        typeof parsedPayload.service === "string"
+          ? parsedPayload.service
+          : runtimeState.serviceName,
       env: typeof parsedPayload.env === "string" ? parsedPayload.env : runtimeState.env,
       instanceId:
         typeof parsedPayload.instanceId === "string"
@@ -807,13 +812,13 @@ export function registerObservableGauge(
     .getMeter(INSTRUMENTATION_SCOPE)
     .createObservableGauge(name, description ? { description } : undefined)
     .addCallback((observableResult: ObservableResult) => {
-        callback((value, attributes) => {
-          observableResult.observe(
-            value,
-            trimUndefinedAttributes(withRuntimeMetricAttributes(attributes)),
-          );
-        });
+      callback((value, attributes) => {
+        observableResult.observe(
+          value,
+          trimUndefinedAttributes(withRuntimeMetricAttributes(attributes)),
+        );
       });
+    });
 
   runtimeState.instruments.observableGauges.add(name);
 }

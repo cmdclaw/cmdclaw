@@ -765,23 +765,6 @@ const subscribeGeneration = protectedProcedure
       userId: context.user.id,
       traceId: streamId,
     };
-    emitCanonicalServiceEvent({
-      eventName: "cmdclaw.generation.subscribe_rpc",
-      operationName: "generation.subscribe_rpc",
-      eventId: `rpc:generation.subscribe:${input.generationId}:${streamId}`,
-      outcome: "success",
-      context: logContext,
-      attributes: {
-        "rpc.system": "orpc",
-        "rpc.method": "generation.subscribeGeneration",
-        "http.route": "/api/rpc/generation/subscribeGeneration",
-        "cmdclaw.generation.id": input.generationId,
-        "cmdclaw.conversation.id": access.generation.conversationId,
-        "cmdclaw.user.id": context.user.id,
-        "cmdclaw.generation.subscribe.state": "opened",
-        "cmdclaw.generation.subscribe.has_cursor": Boolean(input.cursor),
-      },
-    });
     logServerEvent(
       "info",
       "RPC_SUBSCRIBE_GENERATION_OPENED",
@@ -801,7 +784,7 @@ const subscribeGeneration = protectedProcedure
       emitCanonicalServiceEvent({
         eventName: "cmdclaw.generation.subscribe_rpc",
         operationName: "generation.subscribe_rpc",
-        eventId: `rpc:generation.subscribe:${input.generationId}:${streamId}:closed`,
+        eventId: `rpc:generation.subscribe:${input.generationId}:${streamId}`,
         outcome: "success",
         context: logContext,
         attributes: {

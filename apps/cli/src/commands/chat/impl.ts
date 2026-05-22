@@ -31,10 +31,7 @@ import { resolveCliToolMetadata } from "../../lib/tool-metadata";
 import { resolveServerUrl } from "../../lib/client";
 import { parseChaosDurationMs } from "./chaos";
 import { exportPerfettoTraceForCompletedRun } from "./perfetto-trace";
-import {
-  buildGenerationTimingLines,
-  createGenerationTimingTracker,
-} from "./stream-timing";
+import { buildGenerationTimingLines, createGenerationTimingTracker } from "./stream-timing";
 
 type ChatFlags = {
   server?: string;
@@ -263,7 +260,10 @@ function fileToAttachment(filePath: string): {
   };
 }
 
-function formatKeyValueMarker(label: string, values: Record<string, string | undefined>): string | null {
+function formatKeyValueMarker(
+  label: string,
+  values: Record<string, string | undefined>,
+): string | null {
   const entries = Object.entries(values).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0,
   );
@@ -305,9 +305,9 @@ export function printRuntimeMetadata(
 export function hasCompleteRuntimeMetadata(metadata?: StatusChangeMetadata): boolean {
   return Boolean(
     metadata?.runtimeHarness ||
-      metadata?.runtimeProtocolVersion ||
-      metadata?.sandboxProvider ||
-      metadata?.sessionId,
+    metadata?.runtimeProtocolVersion ||
+    metadata?.sandboxProvider ||
+    metadata?.sessionId,
   );
 }
 
@@ -344,9 +344,7 @@ function printRunDeadlineParked(
     `sandbox=${metadata?.releasedSandboxId ?? metadata?.sandboxId}`,
   ].filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
   stdout.write(
-    details.length > 0
-      ? `[run_deadline_parked] ${details.join(" ")}\n`
-      : "[run_deadline_parked]\n",
+    details.length > 0 ? `[run_deadline_parked] ${details.join(" ")}\n` : "[run_deadline_parked]\n",
   );
 }
 
@@ -356,7 +354,9 @@ function printApprovalDecisionMarker(
   decision: "approve" | "deny",
 ): void {
   stdout.write(
-    decision === "approve" ? `[approval_accepted] ${toolUseId}\n` : `[approval_rejected] ${toolUseId}\n`,
+    decision === "approve"
+      ? `[approval_accepted] ${toolUseId}\n`
+      : `[approval_rejected] ${toolUseId}\n`,
   );
 }
 
@@ -589,8 +589,7 @@ async function runOneGeneration(
             sandboxProvider: state.sandbox,
             autoApprove: state.autoApprove,
             resumePausedGenerationId: target.resumePausedGenerationId,
-            debugRunDeadlineMs:
-              target.debugRunDeadlineMsOverride ?? state.debugRunDeadlineMs,
+            debugRunDeadlineMs: target.debugRunDeadlineMsOverride ?? state.debugRunDeadlineMs,
             debugApprovalHotWaitMs: state.debugApprovalHotWaitMs,
             fileAttachments: target.attachments?.length ? target.attachments : undefined,
           },
@@ -645,7 +644,9 @@ async function runOneGeneration(
     onToolResult: (toolName, resultValue) => {
       generationTiming.noteVisibleOutput();
       stdout.write(`\n[tool_result] ${toolName}\n`);
-      stdout.write(`[tool_result_data] ${typeof resultValue === "string" ? resultValue : JSON.stringify(resultValue)}\n`);
+      stdout.write(
+        `[tool_result_data] ${typeof resultValue === "string" ? resultValue : JSON.stringify(resultValue)}\n`,
+      );
     },
     onApprovalResult: () => {
       attachRuntimeMetadataUnlocked = true;
@@ -685,7 +686,9 @@ async function runOneGeneration(
 
       if (questionItems) {
         if (state.questionAnswer.length > 0) {
-          const questionAnswers = collectScriptedQuestionAnswers(questionItems, [...state.questionAnswer]);
+          const questionAnswers = collectScriptedQuestionAnswers(questionItems, [
+            ...state.questionAnswer,
+          ]);
           await apiClient.generation.submitApproval({
             generationId: approval.generationId,
             toolUseId: approval.toolUseId,
@@ -935,18 +938,12 @@ async function runChatLoop(
     const attachments = pendingFiles.map((file) => fileToAttachment(file));
     pendingFiles = [];
 
-    const nextConversationId = await runOneGeneration(
-      stdout,
-      client,
-      rl,
-      state,
-      {
-        kind: "start",
-        content: input,
-        conversationId,
-        attachments: attachments.length ? attachments : undefined,
-      },
-    );
+    const nextConversationId = await runOneGeneration(stdout, client, rl, state, {
+      kind: "start",
+      content: input,
+      conversationId,
+      attachments: attachments.length ? attachments : undefined,
+    });
     if (!nextConversationId) {
       return;
     }
@@ -992,16 +989,8 @@ function attachSigintHandler(rl: readline.Interface): void {
   });
 }
 
-export default async function (
-  this: LocalContext,
-  flags: ChatFlags,
-  positionalMessage?: string,
-): Promise<void> {
-  if (flags.message && positionalMessage) {
-    throw new Error("Use either --message or a positional message, not both");
-  }
-  const initialMessage = flags.message ?? positionalMessage;
-  if ((flags.attach || flags.attachGeneration) && initialMessage) {
+export default async function (this: LocalContext, flags: ChatFlags): Promise<void> {
+  if ((flags.attach || flags.attachGeneration) && flags.message) {
     throw new Error("--attach/--attach-generation cannot be used with --message");
   }
   if (flags.attach && flags.attachGeneration) {
@@ -1030,7 +1019,7 @@ export default async function (
   const state: ChatState = {
     server: serverUrl,
     conversationId: flags.conversation,
-    message: initialMessage,
+    message: flags.message,
     model: flags.model,
     authSource: flags.authSource,
     sandbox: flags.sandbox,
@@ -1066,9 +1055,9 @@ export default async function (
   }
 
   if (flags.attach) {
-    const active = await client.generation.getActiveGeneration({
+    const active = (await client.generation.getActiveGeneration({
       conversationId: flags.attach,
-    }) as ActiveConversationGeneration;
+    })) as ActiveConversationGeneration;
     state.conversationId = flags.attach;
     if (shouldAutoResumePausedRunDeadline(active) && active.generationId) {
       this.process.stdout.write(
@@ -1083,7 +1072,9 @@ export default async function (
       return;
     }
     if (active.generationId && isAttachableGenerationStatus(active.status)) {
-      this.process.stdout.write(`[attach] conversation=${flags.attach} generation=${active.generationId}\n`);
+      this.process.stdout.write(
+        `[attach] conversation=${flags.attach} generation=${active.generationId}\n`,
+      );
       const rl = process.stdin.isTTY && process.stdout.isTTY ? createPrompt() : null;
       if (rl) {
         attachSigintHandler(rl);
@@ -1119,18 +1110,12 @@ export default async function (
       attachSigintHandler(rl);
     }
     const attachments = state.file.map((file) => fileToAttachment(file));
-    const conversationId = await runOneGeneration(
-      this.process.stdout,
-      client,
-      rl,
-      state,
-      {
-        kind: "start",
-        content: state.message,
-        conversationId: state.conversationId,
-        attachments: attachments.length ? attachments : undefined,
-      },
-    );
+    const conversationId = await runOneGeneration(this.process.stdout, client, rl, state, {
+      kind: "start",
+      content: state.message,
+      conversationId: state.conversationId,
+      attachments: attachments.length ? attachments : undefined,
+    });
     if (conversationId && rl) {
       state.conversationId = conversationId;
       state.message = undefined;

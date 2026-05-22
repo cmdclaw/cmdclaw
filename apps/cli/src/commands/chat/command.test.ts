@@ -16,12 +16,16 @@ describe("chat command flags", () => {
     expect(flags?.chromeTrace).toBeUndefined();
   });
 
-  it("accepts one optional positional message", () => {
-    const positional = (chatCommand as {
-      parameters?: { positional?: { kind?: string; parameters?: Array<{ placeholder?: string }> } };
-    }).parameters?.positional;
+  it("does not expose positional message input", () => {
+    const positional = (
+      chatCommand as {
+        parameters?: {
+          positional?: { kind?: string; parameters?: Array<{ placeholder?: string }> };
+        };
+      }
+    ).parameters?.positional;
 
     expect(positional?.kind).toBe("tuple");
-    expect(positional?.parameters?.[0]?.placeholder).toBe("message");
+    expect(positional?.parameters).toEqual([]);
   });
 });

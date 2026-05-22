@@ -1,7 +1,6 @@
 {
   "name": "cmdclaw",
   "private": true,
-  "packageManager": "bun@1.3.9",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -54,6 +53,7 @@
     "worktree:docker-up": "bun run --cwd apps/worktree cli docker-up",
     "worktree:docker-down": "bun run --cwd apps/worktree cli docker-down",
     "worktree:bootstrap-user": "bun run --cwd apps/worktree cli bootstrap-user",
+    "observability:validate-generation": "bun scripts/validate-generation-observability.ts",
     "check:cli": "turbo check --filter=@cmdclaw/cli",
     "cli:e2e:live:record": "bun run --cwd apps/web test:e2e:live:record",
     "check:web": "turbo check --filter=@cmdclaw/web",
@@ -76,16 +76,6 @@
     "test:record": "turbo run test:record --filter=@cmdclaw/web",
     "test:unit": "turbo run test:unit --filter=@cmdclaw/cli --filter=@cmdclaw/mcp --filter=@cmdclaw/client --filter=@cmdclaw/core --filter=@cmdclaw/message-format --filter=@cmdclaw/web"
   },
-  "devDependencies": {
-    "@vitest/ui": "4.0.18",
-    "oxfmt": "^0.32.0",
-    "oxlint": "^1.47.0",
-    "turbo": "^2.8.16",
-    "vitest": "^4.0.18"
-  },
-  "patchedDependencies": {
-    "drizzle-kit@0.31.10": "patches/drizzle-kit@0.31.10.patch"
-  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opentelemetry/api": "^1.9.0",
@@ -98,5 +88,16 @@
     "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.37.0"
+  },
+  "devDependencies": {
+    "@vitest/ui": "4.0.18",
+    "oxfmt": "^0.32.0",
+    "oxlint": "^1.47.0",
+    "turbo": "^2.8.16",
+    "vitest": "^4.0.18"
+  },
+  "packageManager": "bun@1.3.9",
+  "patchedDependencies": {
+    "drizzle-kit@0.31.10": "patches/drizzle-kit@0.31.10.patch"
   }
 }
