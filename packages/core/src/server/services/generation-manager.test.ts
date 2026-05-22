@@ -470,6 +470,10 @@ vi.mock("../utils/observability", () => ({
   logServerEvent: vi.fn(),
 }));
 
+vi.mock("./generation/core/canonical-generation-events", () => ({
+  emitGenerationTerminalCanonicalEvent: vi.fn(),
+}));
+
 vi.mock("../queues", () => ({
   buildQueueJobId: (parts: Array<string | number | null | undefined>) =>
     parts
@@ -2480,6 +2484,7 @@ describe("generationManager transitions", () => {
     expect(result).toEqual({
       generationId: "gen-new",
       conversationId: "conv-new",
+      traceId: "trace-1",
     });
     expect(queueAddMock).toHaveBeenNthCalledWith(
       1,
@@ -2495,7 +2500,7 @@ describe("generationManager transitions", () => {
     expect(queueAddMock).toHaveBeenNthCalledWith(
       2,
       "generation:chat-run",
-      { generationId: "gen-new", runMode: "normal_run" },
+      { generationId: "gen-new", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     expect(asTestManager().activeGenerations.has("gen-new")).toBe(false);
@@ -2577,10 +2582,11 @@ describe("generationManager transitions", () => {
     expect(result).toEqual({
       generationId: "gen-existing",
       conversationId: "conv-existing",
+      traceId: "trace-1",
     });
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
-      { generationId: "gen-existing", runMode: "normal_run" },
+      { generationId: "gen-existing", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     expect(updateSetMock).not.toHaveBeenCalledWith(
@@ -2650,7 +2656,7 @@ describe("generationManager transitions", () => {
 
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
-      { generationId: "gen-coworker-builder", runMode: "normal_run" },
+      { generationId: "gen-coworker-builder", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     const metadataUpdateCall = updateSetMock.mock.calls.find(
@@ -2827,7 +2833,7 @@ describe("generationManager transitions", () => {
 
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
-      { generationId: "gen-openai", runMode: "normal_run" },
+      { generationId: "gen-openai", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     expect(asTestManager().activeGenerations.has("gen-openai")).toBe(false);
@@ -2874,7 +2880,7 @@ describe("generationManager transitions", () => {
     expect(queueAddMock).toHaveBeenNthCalledWith(
       2,
       "generation:chat-run",
-      { generationId: "gen-new", runMode: "normal_run" },
+      { generationId: "gen-new", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     expect(insertValuesMock).toHaveBeenCalledWith(
@@ -3258,10 +3264,11 @@ describe("generationManager transitions", () => {
     expect(result).toEqual({
       generationId: "gen-resumed",
       conversationId: "conv-deadline",
+      traceId: "trace-1",
     });
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
-      { generationId: "gen-resumed", runMode: "normal_run" },
+      { generationId: "gen-resumed", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
   });
@@ -3362,7 +3369,7 @@ describe("generationManager transitions", () => {
 
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
-      { generationId: "gen-openai-shared", runMode: "normal_run" },
+      { generationId: "gen-openai-shared", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     expect(providerAuthFindFirstMock).not.toHaveBeenCalled();
@@ -3396,7 +3403,7 @@ describe("generationManager transitions", () => {
 
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:chat-run",
-      { generationId: "gen-google-shared", runMode: "normal_run" },
+      { generationId: "gen-google-shared", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
   });
@@ -3447,7 +3454,7 @@ describe("generationManager transitions", () => {
     });
     expect(queueAddMock).toHaveBeenCalledWith(
       "generation:coworker-run",
-      { generationId: "gen-coworker", runMode: "normal_run" },
+      { generationId: "gen-coworker", runMode: "normal_run", traceId: "trace-1" },
       expect.any(Object),
     );
     expect(asTestManager().activeGenerations.has("gen-coworker")).toBe(false);

@@ -6,12 +6,20 @@ const {
   generationFindFirstMock,
   emitClientObservationMock,
   requireActiveWorkspaceAccessMock,
+  redisExecMock,
+  redisIncrbyMock,
+  redisPttlMock,
+  redisPexpireMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   conversationFindFirstMock: vi.fn(),
   generationFindFirstMock: vi.fn(),
   emitClientObservationMock: vi.fn(),
   requireActiveWorkspaceAccessMock: vi.fn(),
+  redisExecMock: vi.fn(),
+  redisIncrbyMock: vi.fn(),
+  redisPttlMock: vi.fn(),
+  redisPexpireMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -43,6 +51,28 @@ vi.mock("@/server/orpc/workspace-access", () => ({
   requireActiveWorkspaceAccess: requireActiveWorkspaceAccessMock,
 }));
 
+vi.mock("ioredis", () => ({
+  default: function IORedisMock() {
+    return {
+      pexpire: redisPexpireMock,
+      multi: () => {
+        const chain = {
+          incrby: (...args: unknown[]) => {
+            redisIncrbyMock(...args);
+            return chain;
+          },
+          pttl: (...args: unknown[]) => {
+            redisPttlMock(...args);
+            return chain;
+          },
+          exec: redisExecMock,
+        };
+        return chain;
+      },
+    };
+  },
+}));
+
 import { POST } from "./route";
 
 function request(body: unknown): Request {
@@ -66,9 +96,14 @@ describe("client observation intake", () => {
     generationFindFirstMock.mockResolvedValue({
       id: "gen-1",
       conversationId: "conv-1",
+      traceId: "trace-123",
       conversation: { userId: "user-1", workspaceId: "ws-1" },
     });
     conversationFindFirstMock.mockResolvedValue({ id: "conv-1" });
+    redisExecMock.mockResolvedValue([
+      [null, 1],
+      [null, 1],
+    ]);
   });
 
   it("requires authentication", async () => {
@@ -140,11 +175,39 @@ describe("client observation intake", () => {
         eventId: "event-123456",
         eventType: "generation.stream.opened",
         context: expect.objectContaining({
+          traceId: "trace-123",
           generationId: "gen-1",
           conversationId: "conv-1",
           userId: "user-1",
         }),
       }),
     );
+  });
+
+  it("rate-limits with the durable user-session-ip bucket", async () => {
+    redisExecMock.mockResolvedValue([
+      [null, 121],
+      [null, 1],
+    ]);
+
+    const response = await POST(
+      request({
+        observations: [
+          {
+            eventId: "event-123456",
+            eventType: "generation.stream.error",
+            generationId: "gen-1",
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, rateLimited: true });
+    expect(redisIncrbyMock).toHaveBeenCalledWith(
+      "client_observation_rate:user-1:session-1:127.0.0.1",
+      1,
+    );
+    expect(emitClientObservationMock).not.toHaveBeenCalled();
   });
 });

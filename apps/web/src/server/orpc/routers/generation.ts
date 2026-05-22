@@ -430,6 +430,7 @@ const startGeneration = protectedProcedure
     z.object({
       generationId: z.string(),
       conversationId: z.string(),
+      traceId: z.string(),
     }),
   )
   .handler(async ({ input, context }) => {

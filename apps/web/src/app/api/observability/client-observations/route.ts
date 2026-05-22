@@ -1,8 +1,10 @@
 import { clientObservationSchema } from "@cmdclaw/core/lib/client-observation";
 import { emitClientObservation } from "@cmdclaw/core/server/utils/observability";
+import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
 import { db } from "@cmdclaw/db/client";
 import { conversation, generation } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";
+import IORedis from "ioredis";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { requireActiveWorkspaceAccess } from "@/server/orpc/workspace-access";
@@ -15,14 +17,20 @@ const clientObservationsRequestSchema = z.object({
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_EVENTS = 120;
+const LOW_VALUE_SUCCESS_SAMPLE_RATE = 0.25;
 
-const globalRateLimitState = globalThis as typeof globalThis & {
-  __cmdclawClientObservationRateLimit?: Map<string, { count: number; resetAt: number }>;
+const redisState = globalThis as typeof globalThis & {
+  __cmdclawClientObservationRedis?: IORedis;
 };
 
-function getRateLimitStore(): Map<string, { count: number; resetAt: number }> {
-  globalRateLimitState.__cmdclawClientObservationRateLimit ??= new Map();
-  return globalRateLimitState.__cmdclawClientObservationRateLimit;
+function getClientObservationRedis(): IORedis {
+  redisState.__cmdclawClientObservationRedis ??= new IORedis(
+    buildRedisOptions(process.env.REDIS_URL ?? "redis://localhost:6379", {
+      maxRetriesPerRequest: 1,
+      enableReadyCheck: false,
+    }),
+  );
+  return redisState.__cmdclawClientObservationRedis;
 }
 
 function getClientIp(request: Request): string {
@@ -33,16 +41,43 @@ function getClientIp(request: Request): string {
   );
 }
 
-function isRateLimited(key: string, eventCount: number): boolean {
-  const now = Date.now();
-  const store = getRateLimitStore();
-  const current = store.get(key);
-  if (!current || current.resetAt <= now) {
-    store.set(key, { count: eventCount, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return false;
+async function isRateLimited(key: string, eventCount: number): Promise<boolean> {
+  const redis = getClientObservationRedis();
+  const redisKey = `client_observation_rate:${key}`;
+  const result = await redis.multi().incrby(redisKey, eventCount).pttl(redisKey).exec();
+  const count = Array.isArray(result?.[0]) ? Number(result?.[0]?.[1]) : Number.NaN;
+  const ttlMs = Array.isArray(result?.[1]) ? Number(result?.[1]?.[1]) : Number.NaN;
+  if (Number.isFinite(ttlMs) && ttlMs < 0) {
+    await redis.pexpire(redisKey, RATE_LIMIT_WINDOW_MS);
   }
-  current.count += eventCount;
-  return current.count > RATE_LIMIT_MAX_EVENTS;
+  return Number.isFinite(count) && count > RATE_LIMIT_MAX_EVENTS;
+}
+
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function shouldRetainObservation(observation: z.infer<typeof clientObservationSchema>): boolean {
+  if (process.env.NODE_ENV === "test") {
+    return true;
+  }
+  if (
+    observation.eventType === "generation.stream.error" ||
+    observation.eventType === "generation.visible_error" ||
+    observation.eventType === "generation.stream.reconnected" ||
+    observation.eventType === "generation.stream.done" ||
+    observation.closeReason === "error" ||
+    observation.visibleErrorCode
+  ) {
+    return true;
+  }
+  const bucket = stableHash(observation.eventId) / 0xffffffff;
+  return bucket < LOW_VALUE_SUCCESS_SAMPLE_RATE;
 }
 
 async function verifyConversationAccess(args: {
@@ -66,12 +101,13 @@ async function verifyGenerationAccess(args: {
   conversationId?: string;
   userId: string;
   workspaceId: string;
-}): Promise<{ ok: boolean; conversationId?: string }> {
+}): Promise<{ ok: boolean; conversationId?: string; traceId?: string | null }> {
   const row = await db.query.generation.findFirst({
     where: eq(generation.id, args.generationId),
     columns: {
       id: true,
       conversationId: true,
+      traceId: true,
     },
     with: {
       conversation: {
@@ -92,7 +128,7 @@ async function verifyGenerationAccess(args: {
     return { ok: false };
   }
 
-  return { ok: true, conversationId: row.conversationId };
+  return { ok: true, conversationId: row.conversationId, traceId: row.traceId };
 }
 
 export async function POST(request: Request) {
@@ -117,13 +153,20 @@ export async function POST(request: Request) {
   const ip = getClientIp(request);
   const sessionId = sessionData.session?.id ?? "unknown-session";
   const rateLimitKey = `${sessionData.user.id}:${sessionId}:${ip}`;
-  if (isRateLimited(rateLimitKey, parsed.data.observations.length)) {
+  let rateLimited = false;
+  try {
+    rateLimited = await isRateLimited(rateLimitKey, parsed.data.observations.length);
+  } catch {
+    rateLimited = false;
+  }
+  if (rateLimited) {
     return Response.json({ ok: true, rateLimited: true });
   }
 
   const verifiedObservations = await Promise.all(
     parsed.data.observations.map(async (observation) => {
       let resolvedConversationId = observation.conversationId;
+      let resolvedTraceId = observation.traceId;
       if (observation.generationId) {
         const generationAccess = await verifyGenerationAccess({
           generationId: observation.generationId,
@@ -135,6 +178,7 @@ export async function POST(request: Request) {
           return { ok: false as const };
         }
         resolvedConversationId = generationAccess.conversationId ?? resolvedConversationId;
+        resolvedTraceId = observation.traceId ?? generationAccess.traceId ?? undefined;
       } else if (observation.conversationId) {
         const ok = await verifyConversationAccess({
           conversationId: observation.conversationId,
@@ -145,7 +189,7 @@ export async function POST(request: Request) {
           return { ok: false as const };
         }
       }
-      return { ok: true as const, observation, resolvedConversationId };
+      return { ok: true as const, observation, resolvedConversationId, resolvedTraceId };
     }),
   );
 
@@ -157,7 +201,10 @@ export async function POST(request: Request) {
     if (!verified.ok) {
       continue;
     }
-    const { observation, resolvedConversationId } = verified;
+    const { observation, resolvedConversationId, resolvedTraceId } = verified;
+    if (!shouldRetainObservation(observation)) {
+      continue;
+    }
 
     emitClientObservation({
       eventId: observation.eventId,
@@ -165,7 +212,7 @@ export async function POST(request: Request) {
       timestamp: observation.occurredAt ? new Date(observation.occurredAt) : undefined,
       context: {
         source: "browser",
-        traceId: observation.traceId,
+        traceId: resolvedTraceId,
         generationId: observation.generationId,
         conversationId: resolvedConversationId,
         userId: sessionData.user.id,
@@ -178,6 +225,7 @@ export async function POST(request: Request) {
         "cmdclaw.workspace.id": access.workspace.id,
         "cmdclaw.generation.id": observation.generationId,
         "cmdclaw.conversation.id": resolvedConversationId,
+        "cmdclaw.trace.id": resolvedTraceId,
         "cmdclaw.client.stream_attempt": observation.streamAttempt,
         "cmdclaw.client.elapsed_ms": observation.elapsedMs,
         "cmdclaw.client.visible_error_code": observation.visibleErrorCode,

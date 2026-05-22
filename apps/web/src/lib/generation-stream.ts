@@ -141,7 +141,11 @@ export type GenerationCallbacks = {
     },
     artifacts?: DoneArtifactsData,
   ) => void | Promise<void>;
-  onStarted?: (generationId: string, conversationId: string) => void | Promise<void>;
+  onStarted?: (
+    generationId: string,
+    conversationId: string,
+    traceId?: string,
+  ) => void | Promise<void>;
   onError?: (error: NormalizedGenerationError) => void | Promise<void>;
   onCancelled?: (data: {
     generationId: string;
@@ -180,6 +184,7 @@ export async function runGenerationStream(
   let generationId = params.generationId;
   let conversationId: string | undefined;
   let cursor: string | undefined;
+  let traceId: string | undefined;
   const startedAt = performance.now();
   let streamAttempt = 0;
   let sawFirstEvent = false;
@@ -189,7 +194,8 @@ export async function runGenerationStream(
     const started = await client.generation.startGeneration(input);
     generationId = started.generationId;
     conversationId = started.conversationId;
-    await callbacks.onStarted?.(started.generationId, started.conversationId);
+    traceId = started.traceId;
+    await callbacks.onStarted?.(started.generationId, started.conversationId, started.traceId);
   }
 
   if (!generationId) {
@@ -210,6 +216,7 @@ export async function runGenerationStream(
       eventType: "generation.stream.opened",
       generationId,
       conversationId,
+      traceId,
       streamAttempt,
       elapsedMs: Math.round(performance.now() - startedAt),
     });
@@ -232,6 +239,7 @@ export async function runGenerationStream(
           eventType: "generation.stream.first_event",
           generationId,
           conversationId,
+          traceId,
           streamAttempt,
           elapsedMs: Math.round(performance.now() - startedAt),
         });
@@ -339,6 +347,7 @@ export async function runGenerationStream(
             eventType: "generation.stream.done",
             generationId: event.generationId,
             conversationId: event.conversationId,
+            traceId,
             streamAttempt,
             elapsedMs: Math.round(performance.now() - startedAt),
             closeReason: "done",
@@ -359,6 +368,7 @@ export async function runGenerationStream(
               eventType: "generation.stream.reconnected",
               generationId,
               conversationId,
+              traceId,
               streamAttempt,
               elapsedMs: Math.round(performance.now() - startedAt),
               visibleErrorCode: "stream_reconnect",
@@ -369,6 +379,7 @@ export async function runGenerationStream(
             eventType: "generation.stream.error",
             generationId,
             conversationId,
+            traceId,
             streamAttempt,
             elapsedMs: Math.round(performance.now() - startedAt),
             visibleErrorCode: "stream_error",
@@ -384,6 +395,7 @@ export async function runGenerationStream(
             eventType: "generation.stream.closed",
             generationId: event.generationId,
             conversationId: event.conversationId,
+            traceId,
             streamAttempt,
             elapsedMs: Math.round(performance.now() - startedAt),
             closeReason: "cancelled",
@@ -410,6 +422,7 @@ export async function runGenerationStream(
         eventType: "generation.stream.closed",
         generationId,
         conversationId,
+        traceId,
         streamAttempt,
         elapsedMs: Math.round(performance.now() - startedAt),
         closeReason: signal?.aborted ? "aborted" : closeReason,

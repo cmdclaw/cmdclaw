@@ -21,6 +21,7 @@ import type {
   RequestCancellationInput,
   TurnRecord,
 } from "./turn-record";
+import { emitGenerationTerminalCanonicalEvent } from "./canonical-generation-events";
 import type { GenerationCompletionReason } from "../../lifecycle-policy";
 
 export type FinishTurnPersistenceInput = {
@@ -50,6 +51,17 @@ export type FinishTurnPersistenceInput = {
   sandboxId?: string | null;
   startedAt: Date;
 };
+
+async function emitPersistedTerminalGenerationEvent(generationId: string): Promise<void> {
+  try {
+    await emitGenerationTerminalCanonicalEvent(generationId);
+  } catch (error) {
+    console.error("[GenerationLifecycleStore] Failed to emit terminal canonical event", {
+      generationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 export type FinishTurnPersistenceResult = {
   messageId?: string;
@@ -290,6 +302,7 @@ export class GenerationLifecycleStore {
         .set({ status: "cancelled", finishedAt: new Date() })
         .where(eq(coworkerRun.id, input.coworkerRunId));
     }
+    await emitPersistedTerminalGenerationEvent(input.generationId);
   }
 
   async resumeGenerationRequest(input: ResumeGenerationRequestInput): Promise<void> {
@@ -357,6 +370,7 @@ export class GenerationLifecycleStore {
         completedAt: new Date(),
       })
       .where(eq(generation.id, input.generationId));
+    await emitPersistedTerminalGenerationEvent(input.generationId);
   }
 
   async pauseForRunDeadline(input: PauseForRunDeadlineInput): Promise<void> {
@@ -515,6 +529,7 @@ export class GenerationLifecycleStore {
         })
         .where(eq(coworkerRun.id, input.coworkerRunId));
     }
+    await emitPersistedTerminalGenerationEvent(input.generationId);
   }
 
   async setSnapshotRestoreAllowance(input: {
@@ -738,6 +753,7 @@ export class GenerationLifecycleStore {
         .where(eq(coworkerRun.id, input.coworkerRunId));
     }
 
+    await emitPersistedTerminalGenerationEvent(input.generationId);
     return terminalMessage;
   }
 
@@ -886,6 +902,11 @@ export class GenerationLifecycleStore {
       input.completedAt,
     );
     await this.finalizeStaleProductRows(input.auth.ids, input.auth.message, input.completedAt);
+    await Promise.all(
+      [...input.running.ids, ...input.approval.ids, ...input.auth.ids].map((generationId) =>
+        emitPersistedTerminalGenerationEvent(generationId),
+      ),
+    );
   }
 
   private async finalizeStaleProductRows(
