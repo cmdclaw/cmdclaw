@@ -3,6 +3,7 @@ import {
   START_GENERATION_ERROR_CODES,
 } from "@cmdclaw/core/lib/generation-errors";
 import { GenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
+import { emitCanonicalServiceEvent } from "@cmdclaw/core/server/utils/observability";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function createProcedureStub() {
@@ -423,6 +424,18 @@ describe("generationRouter", () => {
         phase: GENERATION_ERROR_PHASES.START_RPC,
       },
     });
+    expect(emitCanonicalServiceEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: "cmdclaw.generation.start_rpc",
+        outcome: "failure",
+        attributes: expect.objectContaining({
+          "cmdclaw.failure.phase": GENERATION_ERROR_PHASES.START_RPC,
+        }),
+      }),
+    );
+    expect(vi.mocked(emitCanonicalServiceEvent).mock.calls[0]?.[0]?.attributes).not.toHaveProperty(
+      "cmdclaw.generation.failure_phase",
+    );
   });
 
   it("passes debug lifecycle overrides through startGeneration", async () => {

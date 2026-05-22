@@ -79,8 +79,16 @@ describe("Generation terminal canonical event", () => {
           operation: "read_latest",
         },
         {
+          type: "tool_use",
+          id: "tool-2",
+          name: "gmail.send",
+          input: { body: "private" },
+          integration: "gmail",
+          operation: "send",
+        },
+        {
           type: "approval",
-          tool_use_id: "tool-2",
+          tool_use_id: "tool-3",
           tool_name: "gmail.send",
           tool_input: { body: "private" },
           integration: "gmail",
@@ -127,8 +135,8 @@ describe("Generation terminal canonical event", () => {
           "cmdclaw.attachments.count": 1,
           "cmdclaw.phase.agent_init_ms": 900,
           "cmdclaw.phase.model_stream_ms": 2200,
-          "cmdclaw.tool.call_count": 1,
-          "cmdclaw.tool.write_count": 1,
+          "cmdclaw.tool.call_count": 2,
+          "cmdclaw.tool.write_count": 2,
           "cmdclaw.approval.count": 1,
           "cmdclaw.auth_interrupt.count": 0,
           "cmdclaw.usage.input_tokens": 11,
@@ -149,6 +157,12 @@ describe("Generation terminal canonical event", () => {
         tool_name: "gmail.read_latest",
         operation: "read_latest",
         access: "read",
+      },
+      {
+        integration_type: "gmail",
+        tool_name: "gmail.send",
+        operation: "send",
+        access: "write",
       },
       {
         integration_type: "gmail",
@@ -187,6 +201,34 @@ describe("Generation terminal canonical event", () => {
       24,
       terminalMetricLabels,
       "Total token usage per terminal Generation.",
+    );
+    expect(recordHistogramMock).toHaveBeenCalledWith(
+      "cmdclaw_generation_terminal_tool_calls",
+      1,
+      {
+        ...terminalMetricLabels,
+        integration_type: "gmail",
+        operation: "read_latest",
+        access: "read",
+      },
+      "Tool call count per terminal Generation, grouped by bounded tool dimensions.",
+    );
+    expect(recordHistogramMock).toHaveBeenCalledWith(
+      "cmdclaw_generation_terminal_tool_calls",
+      1,
+      {
+        ...terminalMetricLabels,
+        integration_type: "gmail",
+        operation: "send",
+        access: "write",
+      },
+      "Tool call count per terminal Generation, grouped by bounded tool dimensions.",
+    );
+    expect(recordHistogramMock).not.toHaveBeenCalledWith(
+      "cmdclaw_generation_terminal_tool_calls",
+      2,
+      terminalMetricLabels,
+      "Tool call count per terminal Generation.",
     );
   });
 });

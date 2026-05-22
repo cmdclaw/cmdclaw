@@ -188,7 +188,7 @@ curl -G 'http://127.0.0.1:9428/select/logsql/query' \
 
 When inspecting the returned rows, group by
 `cmdclaw.model.provider`, `cmdclaw.sandbox.provider`,
-`cmdclaw.generation.failure_phase`, and `cmdclaw.error.normalized_code`.
+`cmdclaw.failure.phase`, and `cmdclaw.error.normalized_code`.
 
 Check low-cardinality metrics. None of these metrics should include user,
 workspace, conversation, Generation, trace, sandbox id, route URL, file name, or

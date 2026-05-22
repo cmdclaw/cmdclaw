@@ -15,6 +15,12 @@ type ToolSummary = {
   toolWriteCount: number;
   approvalCount: number;
   authInterruptionCount: number;
+  toolCallMetrics: Array<{
+    integration_type: string;
+    operation: string;
+    access: "read" | "write";
+    count: number;
+  }>;
   summaries: Array<{
     integration_type: string;
     tool_name: string;
@@ -98,6 +104,7 @@ function summarizeTools(contentParts: ContentPart[] | null | undefined): ToolSum
     toolWriteCount: 0,
     approvalCount: 0,
     authInterruptionCount: 0,
+    toolCallMetrics: [],
     summaries: [],
   };
 
@@ -108,6 +115,11 @@ function summarizeTools(contentParts: ContentPart[] | null | undefined): ToolSum
       if (access === "write") {
         summary.toolWriteCount += 1;
       }
+      incrementToolCallMetric(summary, {
+        integration_type: part.integration ?? UNKNOWN,
+        operation: part.operation ?? UNKNOWN,
+        access,
+      });
       summary.summaries.push({
         integration_type: part.integration ?? UNKNOWN,
         tool_name: part.name,
@@ -132,6 +144,27 @@ function summarizeTools(contentParts: ContentPart[] | null | undefined): ToolSum
   }
 
   return summary;
+}
+
+function incrementToolCallMetric(
+  summary: ToolSummary,
+  metric: {
+    integration_type: string;
+    operation: string;
+    access: "read" | "write";
+  },
+): void {
+  const existing = summary.toolCallMetrics.find(
+    (entry) =>
+      entry.integration_type === metric.integration_type &&
+      entry.operation === metric.operation &&
+      entry.access === metric.access,
+  );
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+  summary.toolCallMetrics.push({ ...metric, count: 1 });
 }
 
 function isWriteOperation(operation: string | null | undefined): boolean {
@@ -174,7 +207,7 @@ function recordGenerationTerminalMetrics(args: {
   failurePhase: string;
   normalizedErrorCode: string;
   durationMs?: number;
-  toolCallCount: number;
+  toolCallMetrics: ToolSummary["toolCallMetrics"];
   inputTokens: number;
   outputTokens: number;
 }): void {
@@ -200,12 +233,19 @@ function recordGenerationTerminalMetrics(args: {
       "Terminal Generation duration in milliseconds.",
     );
   }
-  recordHistogram(
-    "cmdclaw_generation_terminal_tool_calls",
-    args.toolCallCount,
-    labels,
-    "Tool call count per terminal Generation.",
-  );
+  for (const toolCallMetric of args.toolCallMetrics) {
+    recordHistogram(
+      "cmdclaw_generation_terminal_tool_calls",
+      toolCallMetric.count,
+      {
+        ...labels,
+        integration_type: toolCallMetric.integration_type,
+        operation: toolCallMetric.operation,
+        access: toolCallMetric.access,
+      },
+      "Tool call count per terminal Generation, grouped by bounded tool dimensions.",
+    );
+  }
   recordHistogram(
     "cmdclaw_generation_terminal_input_tokens",
     args.inputTokens,
@@ -388,7 +428,7 @@ export async function emitGenerationTerminalCanonicalEvent(generationId: string)
     failurePhase,
     normalizedErrorCode,
     durationMs,
-    toolCallCount: toolSummary.toolCallCount,
+    toolCallMetrics: toolSummary.toolCallMetrics,
     inputTokens: genRecord.inputTokens,
     outputTokens: genRecord.outputTokens,
   });

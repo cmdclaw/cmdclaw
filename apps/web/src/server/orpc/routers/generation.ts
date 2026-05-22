@@ -523,7 +523,7 @@ const startGeneration = protectedProcedure
           "cmdclaw.conversation.id": input.conversationId,
           "cmdclaw.user.id": context.user.id,
           "cmdclaw.generation.request.elapsed_ms": Date.now() - startedAt,
-          "cmdclaw.generation.failure_phase": GENERATION_ERROR_PHASES.START_RPC,
+          "cmdclaw.failure.phase": GENERATION_ERROR_PHASES.START_RPC,
           "cmdclaw.error.normalized_code": normalizeRpcErrorCode(error),
           "cmdclaw.model.provider": input.model
             ? parseModelReference(input.model).providerID
