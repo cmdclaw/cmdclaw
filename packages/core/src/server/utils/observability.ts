@@ -191,9 +191,9 @@ function getValueFromEnvRecord(env: EnvLookup, ...names: string[]): string | und
 function buildVectorUrlFromEnv(
   path: string,
   env: EnvLookup,
-  options: { fullUrlEnvNames?: string[]; portEnvNames?: string[] } = {},
+  options: { defaultPort?: string; fullUrlEnvNames?: string[]; portEnvNames?: string[] } = {},
 ): string {
-  const { fullUrlEnvNames = [], portEnvNames = [] } = options;
+  const { defaultPort, fullUrlEnvNames = [], portEnvNames = [] } = options;
 
   const fullUrl = getValueFromEnvRecord(env, ...fullUrlEnvNames);
   if (fullUrl) {
@@ -221,7 +221,7 @@ function buildVectorUrlFromEnv(
     return `http://${host}:8686${path}`;
   }
 
-  return `http://${host}:4318${path}`;
+  return `http://${host}:${defaultPort ?? "4318"}${path}`;
 }
 
 export function resolveObservabilityVectorUrls(
@@ -238,11 +238,8 @@ export function resolveObservabilityVectorUrls(
     }),
     tracesUrl: buildVectorUrlFromEnv("/v1/traces", env, {
       fullUrlEnvNames: ["CMDCLAW_VECTOR_TRACES_URL"],
-      portEnvNames: [
-        "CMDCLAW_VECTOR_TRACES_PORT",
-        "CMDCLAW_VECTOR_OTLP_HTTP_PORT",
-        "CMDCLAW_OTEL_HTTP_PORT",
-      ],
+      portEnvNames: ["CMDCLAW_VECTOR_TRACES_PORT"],
+      defaultPort: "5318",
     }),
   };
 }

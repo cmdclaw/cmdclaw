@@ -26,7 +26,7 @@ The main checkout `docker/compose/dev.yml` remains the full local stack.
 
 The default observability endpoints are:
 
-- `Vector` on `http://127.0.0.1:4318` for OTLP/HTTP, `127.0.0.1:4317` for OTLP/gRPC, and `http://127.0.0.1:8686/logs` for JSON logs
+- `Vector` on `http://127.0.0.1:4318` for OTLP/HTTP metrics and logs, `http://127.0.0.1:5318` for raw OTLP/HTTP traces, `127.0.0.1:4317` for OTLP/gRPC metrics and logs, and `http://127.0.0.1:8686/logs` for JSON logs
 - `VictoriaMetrics` on `http://127.0.0.1:8428`
 - `VictoriaLogs` on `http://127.0.0.1:9428`
 - `VictoriaTraces` on `http://127.0.0.1:10428`
@@ -38,6 +38,7 @@ All observability host ports are shared across worktrees. The defaults are:
 
 - `CMDCLAW_VECTOR_OTLP_GRPC_PORT=4317`
 - `CMDCLAW_VECTOR_OTLP_HTTP_PORT=4318`
+- `CMDCLAW_VECTOR_TRACES_PORT=5318`
 - `CMDCLAW_VECTOR_LOG_PORT=8686`
 - `CMDCLAW_VICTORIA_METRICS_PORT=8428`
 - `CMDCLAW_VICTORIA_LOGS_PORT=9428`

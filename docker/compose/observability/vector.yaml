@@ -20,7 +20,7 @@ sources:
     http:
       address: 0.0.0.0:4318
 
-  daytona_otlp_traces:
+  raw_otlp_traces:
     type: opentelemetry
     use_otlp_decoding: true
     grpc:
@@ -127,8 +127,7 @@ sinks:
   victoria_traces:
     type: opentelemetry
     inputs:
-      - app_otlp.traces
-      - daytona_otlp_traces.traces
+      - raw_otlp_traces.traces
     protocol:
       type: http
       uri: http://victoria-traces:10428/insert/opentelemetry/v1/traces

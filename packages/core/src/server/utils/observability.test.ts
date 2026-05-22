@@ -44,11 +44,11 @@ describe("resolveObservabilityVectorUrls", () => {
     expect(urls).toEqual({
       logUrl: "http://127.0.0.1:8686/logs",
       metricsUrl: "http://127.0.0.1:4318/v1/metrics",
-      tracesUrl: "http://127.0.0.1:4318/v1/traces",
+      tracesUrl: "http://127.0.0.1:5318/v1/traces",
     });
   });
 
-  it("falls back to the shared OTLP port when no dedicated trace port is set", () => {
+  it("keeps traces on the dedicated raw OTLP port when only the shared OTLP port is set", () => {
     const urls = resolveObservabilityVectorUrls({
       CMDCLAW_VECTOR_HOST: "cmdclaw-vector-staging",
       CMDCLAW_VECTOR_OTLP_HTTP_PORT: "4318",
@@ -57,7 +57,7 @@ describe("resolveObservabilityVectorUrls", () => {
     expect(urls).toEqual({
       logUrl: "http://cmdclaw-vector-staging:8686/logs",
       metricsUrl: "http://cmdclaw-vector-staging:4318/v1/metrics",
-      tracesUrl: "http://cmdclaw-vector-staging:4318/v1/traces",
+      tracesUrl: "http://cmdclaw-vector-staging:5318/v1/traces",
     });
   });
 });
