@@ -1,9 +1,9 @@
 "use client";
 
+import type React from "react";
 import { Check, ExternalLink, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -214,7 +214,7 @@ export function IntegrationDetailContent({
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
                 Connected Accounts
               </p>
-              <div className="divide-border overflow-hidden rounded-lg border bg-background">
+              <div className="divide-border bg-background overflow-hidden rounded-lg border">
                 {connectedAccounts.map((account) => (
                   <ConnectedAccountRow
                     key={account.id}
@@ -385,7 +385,7 @@ function ConnectedAccountRow({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-7 shrink-0 text-muted-foreground"
+                className="text-muted-foreground size-7 shrink-0"
                 onClick={handleEdit}
                 disabled={!account.accountLabelId}
                 title="Rename Account Label"
@@ -420,7 +420,7 @@ function ConnectedAccountRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 text-muted-foreground hover:text-destructive"
+            className="text-muted-foreground hover:text-destructive size-8"
             onClick={handleDisconnect}
             title="Disconnect Connected Account"
           >

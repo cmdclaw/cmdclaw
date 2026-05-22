@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import React from "react";
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PromptSegment } from "@/lib/prompt-segments";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";

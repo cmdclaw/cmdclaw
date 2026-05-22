@@ -336,7 +336,7 @@ export function ChatInput({
           placeholder="Send a message..."
           disabled={disabled}
           rows={1}
-          className="flex-1 resize-none overflow-y-hidden bg-transparent px-2 py-1.5 text-sm overscroll-contain focus:outline-none disabled:opacity-50"
+          className="flex-1 resize-none overflow-y-hidden overscroll-contain bg-transparent px-2 py-1.5 text-sm focus:outline-none disabled:opacity-50"
         />
         {onStartRecording && onStopRecording && (
           <Button

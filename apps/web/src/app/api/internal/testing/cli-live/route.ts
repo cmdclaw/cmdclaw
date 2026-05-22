@@ -1,8 +1,8 @@
+import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import {
   getValidConnectedAccountTokensForUser,
   getValidTokensForUser,
 } from "@cmdclaw/core/server/integrations/token-refresh";
-import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import { db } from "@cmdclaw/db/client";
 import {
   conversation,

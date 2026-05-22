@@ -2364,7 +2364,11 @@ function InlineRunViewer({
       <RemoteRunSourceBanner source={remoteRunSource} />
       {run.status === "error" || run.status === "cancelled" ? (
         <div className="border-border/20 border-b px-4 py-2">
-          <p className="text-muted-foreground text-xs">{run.errorMessage ?? "Run failed."}</p>
+          <p className="text-muted-foreground text-xs">
+            {run.status === "cancelled"
+              ? (run.errorMessage ?? "Run cancelled.")
+              : (run.errorMessage ?? "Run failed.")}
+          </p>
           <RunDebugDetails
             className="mt-2"
             debugInfo={run.debugInfo}
@@ -3108,11 +3112,10 @@ function CoworkerSettingsPanel({
                 </span>
               </div>
               {prompt ? (
-                <div className="relative max-h-[120px] overflow-hidden">
+                <div className="relative max-h-[min(36dvh,20rem)] overflow-y-auto overscroll-contain pr-2">
                   <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1.5 prose-headings:text-sm prose-headings:font-semibold prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1.5 prose-code:text-xs max-w-none text-sm leading-relaxed">
                     <ReactMarkdown remarkPlugins={instructionRemarkPlugins}>{prompt}</ReactMarkdown>
                   </div>
-                  <div className="from-background group-hover:from-muted/20 pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
                 </div>
               ) : (
                 <p className="text-muted-foreground/60 text-sm italic">
@@ -3165,7 +3168,7 @@ function CoworkerSettingsPanel({
                 {instructionEditorMode === "source" ? (
                   <div className="flex flex-1 flex-col overflow-hidden">
                     <textarea
-                      className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
+                      className="text-foreground placeholder:text-muted-foreground/50 flex-1 resize-none overflow-y-auto overscroll-contain bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed focus:outline-none"
                       value={prompt}
                       onChange={handleRawPromptChange}
                       placeholder={

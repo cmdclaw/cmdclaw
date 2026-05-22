@@ -1,6 +1,6 @@
 import { clientObservationSchema } from "@cmdclaw/core/lib/client-observation";
-import { emitClientObservation } from "@cmdclaw/core/server/utils/observability";
 import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
+import { emitClientObservation } from "@cmdclaw/core/server/utils/observability";
 import { db } from "@cmdclaw/db/client";
 import { conversation, generation } from "@cmdclaw/db/schema";
 import { and, eq } from "drizzle-orm";

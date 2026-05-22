@@ -7,8 +7,8 @@ import {
 } from "@cmdclaw/core/server/control-plane/client";
 import { getCloudAccountLinkForUser } from "@cmdclaw/core/server/control-plane/local-links";
 import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
-import { assignConnectedIdentityForProviderAccount } from "@cmdclaw/core/server/integrations/connected-identities";
 import { normalizeAccountLabel } from "@cmdclaw/core/server/integrations/account-labels";
+import { assignConnectedIdentityForProviderAccount } from "@cmdclaw/core/server/integrations/connected-identities";
 import { encrypt, decrypt } from "@cmdclaw/core/server/lib/encryption";
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import {
