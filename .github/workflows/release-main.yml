@@ -63,19 +63,23 @@ jobs:
 
       - name: Detect observability changes
         id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD: ${{ needs.resolve.outputs.commit_sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             grafana=true
             vmalert=true
             alertmanager=true
             vector=true
             caddy=true
           else
-            before="${{ github.event.before }}"
-            head="${{ needs.resolve.outputs.commit_sha }}"
+            before="${BEFORE}"
+            head="${HEAD}"
 
             if [ -z "${before}" ] || [[ "${before}" =~ ^0+$ ]]; then
               before="$(git rev-parse "${head}^")"
@@ -334,19 +338,29 @@ jobs:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
       - name: Report failure
+        env:
+          COMMIT_SHA: ${{ needs.resolve.outputs.commit_sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
-          echo "Release failed for commit ${{ needs.resolve.outputs.commit_sha }}"
-          echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Release failed for commit ${COMMIT_SHA}"
+          echo "Run: ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
 
       - name: Send Slack alert
         if: ${{ env.SLACK_BOT_TOKEN != '' }}
+        env:
+          COMMIT_SHA: ${{ needs.resolve.outputs.commit_sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SERVER_URL: ${{ github.server_url }}
         shell: bash
         run: |
           set -euo pipefail
 
           payload="$(jq -n \
             --arg channel "#ops-alerts" \
-            --arg text "CmdClaw release failed for ${{ needs.resolve.outputs.commit_sha }}: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg text "CmdClaw release failed for ${COMMIT_SHA}: ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
             '{channel: $channel, text: $text}')"
 
           response="$(curl --fail --show-error --silent \

@@ -56,6 +56,8 @@ jobs:
           bun-version: latest
 
       - name: Validate Render configuration
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
         shell: bash
         run: |
           set -euo pipefail
@@ -65,9 +67,9 @@ jobs:
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Render secret(s) for GitHub environment "%s": %s\n' \
-              "${{ inputs.environment }}" "${missing[*]}" >&2
+              "${ENVIRONMENT}" "${missing[*]}" >&2
             printf 'Set these as secrets on the GitHub environment named "%s".\n' \
-              "${{ inputs.environment }}" >&2
+              "${ENVIRONMENT}" >&2
             exit 1
           fi
 
@@ -77,7 +79,9 @@ jobs:
 
       - name: Deploy web
         id: deploy-web
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_WEB_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_WEB_SERVICE_NAME}" --commit "${COMMIT_SHA}"
 
   deploy-worker:
     runs-on: ubuntu-latest
@@ -100,6 +104,8 @@ jobs:
           bun-version: latest
 
       - name: Validate Render configuration
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
         shell: bash
         run: |
           set -euo pipefail
@@ -109,9 +115,9 @@ jobs:
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Render secret(s) for GitHub environment "%s": %s\n' \
-              "${{ inputs.environment }}" "${missing[*]}" >&2
+              "${ENVIRONMENT}" "${missing[*]}" >&2
             printf 'Set these as secrets on the GitHub environment named "%s".\n' \
-              "${{ inputs.environment }}" >&2
+              "${ENVIRONMENT}" >&2
             exit 1
           fi
 
@@ -121,7 +127,9 @@ jobs:
 
       - name: Deploy worker
         id: deploy-worker
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_WORKER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_WORKER_SERVICE_NAME}" --commit "${COMMIT_SHA}"
 
   deploy-mcp:
     runs-on: ubuntu-latest
@@ -144,6 +152,8 @@ jobs:
           bun-version: latest
 
       - name: Validate Render configuration
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
         shell: bash
         run: |
           set -euo pipefail
@@ -153,9 +163,9 @@ jobs:
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Render secret(s) for GitHub environment "%s": %s\n' \
-              "${{ inputs.environment }}" "${missing[*]}" >&2
+              "${ENVIRONMENT}" "${missing[*]}" >&2
             printf 'Set these as secrets on the GitHub environment named "%s".\n' \
-              "${{ inputs.environment }}" >&2
+              "${ENVIRONMENT}" >&2
             exit 1
           fi
 
@@ -165,4 +175,6 @@ jobs:
 
       - name: Deploy MCP
         id: deploy-mcp
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_MCP_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_MCP_SERVICE_NAME}" --commit "${COMMIT_SHA}"

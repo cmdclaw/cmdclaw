@@ -43,7 +43,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Check health endpoint
-        run: curl --fail --show-error --silent "${{ inputs.base_url }}/api/health"
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: curl --fail --show-error --silent "${BASE_URL}/api/health"
 
       - name: Resolve database URL
         env:

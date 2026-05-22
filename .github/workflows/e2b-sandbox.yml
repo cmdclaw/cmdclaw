@@ -48,4 +48,17 @@ jobs:
       - name: Build E2B Sandbox
         env:
           E2B_ACCESS_TOKEN: ${{ secrets.E2B_API_KEY }}
-        run: bun run --cwd apps/sandbox e2b:build:${{ inputs.environment }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${ENVIRONMENT}" in
+            dev | staging | prod)
+              bun run --cwd apps/sandbox "e2b:build:${ENVIRONMENT}"
+              ;;
+            *)
+              echo "Unsupported environment: ${ENVIRONMENT}" >&2
+              exit 1
+              ;;
+          esac

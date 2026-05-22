@@ -352,10 +352,17 @@ services:
   daytona-dex:
     profiles: ["daytona"]
     image: dexidp/dex:v2.42.0
+    environment:
+      DAYTONA_DEX_PASSWORD_HASH: ${DAYTONA_DEX_PASSWORD_HASH:-}
     volumes:
       - ./daytona/dex/config.yaml:/etc/dex/config.yaml
       - daytona_dex_data:/var/dex
-    entrypoint: ["sh", "-c", "touch /var/dex/dex.db && exec dex serve /etc/dex/config.yaml"]
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        ": \"$${DAYTONA_DEX_PASSWORD_HASH:?Set DAYTONA_DEX_PASSWORD_HASH to a bcrypt hash for the local Daytona Dex user}\" && sed \"s|__DAYTONA_DEX_PASSWORD_HASH__|$${DAYTONA_DEX_PASSWORD_HASH}|g\" /etc/dex/config.yaml > /tmp/dex-config.yaml && touch /var/dex/dex.db && exec dex serve /tmp/dex-config.yaml",
+      ]
     ports:
       - "${DAYTONA_DEX_PORT:-5556}:5556"
     healthcheck:

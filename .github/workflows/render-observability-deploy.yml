@@ -69,7 +69,9 @@ jobs:
           }
 
       - name: Deploy Grafana
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${COMMIT_SHA}"
 
   deploy-vmalert:
     if: ${{ inputs.deploy_vmalert }}
@@ -99,7 +101,9 @@ jobs:
           }
 
       - name: Deploy vmalert
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${COMMIT_SHA}"
 
   deploy-alertmanager:
     if: ${{ inputs.deploy_alertmanager }}
@@ -129,7 +133,9 @@ jobs:
           }
 
       - name: Deploy Alertmanager
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${COMMIT_SHA}"
 
   deploy-vector:
     if: ${{ inputs.deploy_vector }}
@@ -159,7 +165,9 @@ jobs:
           }
 
       - name: Deploy Vector
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${COMMIT_SHA}"
 
   deploy-caddy:
     if: ${{ inputs.deploy_caddy }}
@@ -189,4 +197,6 @@ jobs:
           }
 
       - name: Deploy Caddy
-        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${{ inputs.commit_sha }}"
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${COMMIT_SHA}"

@@ -60,4 +60,17 @@ jobs:
           DAYTONA_JWT_TOKEN: ${{ secrets.DAYTONA_JWT_TOKEN }}
           DAYTONA_ORGANIZATION_ID: ${{ secrets.DAYTONA_ORGANIZATION_ID }}
           DAYTONA_API_URL: ${{ secrets.DAYTONA_API_URL }}
-        run: bun run --cwd apps/sandbox daytona:build:${{ inputs.environment }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${ENVIRONMENT}" in
+            dev | staging | prod)
+              bun run --cwd apps/sandbox "daytona:build:${ENVIRONMENT}"
+              ;;
+            *)
+              echo "Unsupported environment: ${ENVIRONMENT}" >&2
+              exit 1
+              ;;
+          esac

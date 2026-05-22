@@ -53,12 +53,13 @@ jobs:
         env:
           DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
           DATABASE_URL_STAGING: ${{ secrets.DATABASE_URL_STAGING }}
+          ENVIRONMENT: ${{ inputs.environment }}
           SKIP_ENV_VALIDATION: "1"
         shell: bash
         run: |
           set -euo pipefail
 
-          case "${{ inputs.environment }}" in
+          case "${ENVIRONMENT}" in
             staging)
               export DATABASE_URL="${DATABASE_URL_STAGING}"
               ;;
@@ -66,13 +67,13 @@ jobs:
               export DATABASE_URL="${DATABASE_URL_PROD}"
               ;;
             *)
-              echo "Unsupported environment: ${{ inputs.environment }}" >&2
+              echo "Unsupported environment: ${ENVIRONMENT}" >&2
               exit 1
               ;;
           esac
 
           if [ -z "${DATABASE_URL}" ]; then
-            case "${{ inputs.environment }}" in
+            case "${ENVIRONMENT}" in
               staging)
                 echo "Missing DATABASE_URL_STAGING secret" >&2
                 ;;

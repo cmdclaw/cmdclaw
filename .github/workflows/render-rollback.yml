@@ -43,6 +43,8 @@ jobs:
           bun-version: latest
 
       - name: Validate Render configuration
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
         shell: bash
         run: |
           set -euo pipefail
@@ -52,18 +54,24 @@ jobs:
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Render secret(s) for GitHub environment "%s": %s\n' \
-              "${{ inputs.environment }}" "${missing[*]}" >&2
+              "${ENVIRONMENT}" "${missing[*]}" >&2
             printf 'Set these as secrets on the GitHub environment named "%s".\n' \
-              "${{ inputs.environment }}" >&2
+              "${ENVIRONMENT}" >&2
             exit 1
           fi
 
       - name: Roll back web
-        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_WEB_SERVICE_NAME}" --deploy-id "${{ inputs.web_deploy_id }}"
+        env:
+          WEB_DEPLOY_ID: ${{ inputs.web_deploy_id }}
+        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_WEB_SERVICE_NAME}" --deploy-id "${WEB_DEPLOY_ID}"
 
       - name: Roll back worker
-        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_WORKER_SERVICE_NAME}" --deploy-id "${{ inputs.worker_deploy_id }}"
+        env:
+          WORKER_DEPLOY_ID: ${{ inputs.worker_deploy_id }}
+        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_WORKER_SERVICE_NAME}" --deploy-id "${WORKER_DEPLOY_ID}"
 
       - name: Roll back MCP
         if: ${{ inputs.mcp_deploy_id != '' }}
-        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_MCP_SERVICE_NAME}" --deploy-id "${{ inputs.mcp_deploy_id }}"
+        env:
+          MCP_DEPLOY_ID: ${{ inputs.mcp_deploy_id }}
+        run: bun scripts/release/render-deploy.ts rollback --service-name "${RENDER_MCP_SERVICE_NAME}" --deploy-id "${MCP_DEPLOY_ID}"

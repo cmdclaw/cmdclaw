@@ -30,13 +30,15 @@ jobs:
 
       - name: Resolve commit on main
         id: resolve
+        env:
+          REF: ${{ inputs.ref }}
         shell: bash
         run: |
           set -euo pipefail
 
           git fetch origin main --force
 
-          commit_sha="$(git rev-parse "${{ inputs.ref }}^{commit}")"
+          commit_sha="$(git rev-parse "${REF}^{commit}")"
           git merge-base --is-ancestor "${commit_sha}" origin/main
 
           echo "commit_sha=${commit_sha}" >> "$GITHUB_OUTPUT"

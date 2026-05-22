@@ -24,7 +24,19 @@ Access the local dashboard at [http://localhost:3300](http://localhost:3300).
 Sign in with:
 
 - Email: `dev@daytona.io`
-- Password: `password`
+- Password: the local password you chose for `DAYTONA_DEX_PASSWORD_HASH`
+
+Before starting the stack, generate a bcrypt hash for your local Dex password and add it to the repo-root `/.env`:
+
+```bash
+docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 admin 'replace-with-a-local-password' | cut -d: -f2
+```
+
+```dotenv
+DAYTONA_DEX_PASSWORD_HASH='<paste-generated-bcrypt-hash>'
+```
+
+The hash is rendered into Dex's container-local `/tmp/dex-config.yaml` at startup so credential material is not committed to the repository.
 
 ## Create Local API Credentials
 
