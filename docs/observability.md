@@ -291,6 +291,19 @@ terminal `completed`.
 
 For staging and production incidents, use the hosted Victoria endpoints together with Render cli. The Victoria endpoints provide application metrics, logs, traces; Render provides deployment state, service status, and platform/runtime logs.
 
+Before querying hosted observability, agents must verify that Tailscale is up
+and that the relevant Grafana hostname resolves:
+
+```bash
+tailscale status
+dig +short grafana.staging.cmdclaw.ai
+dig +short grafana.prod.cmdclaw.ai
+```
+
+If Tailscale is down, or if the target Grafana hostname does not resolve, stop
+the debugging workflow immediately and alert the user that Tailscale appears to
+be off and must be started before hosted observability can be queried.
+
 Staging endpoints:
 
 - Grafana: `https://ops.staging.cmdclaw.ai`
