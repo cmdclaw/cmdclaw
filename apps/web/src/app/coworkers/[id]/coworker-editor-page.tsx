@@ -645,6 +645,9 @@ export default function CoworkerEditorPage() {
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri
   const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1);
+  const [scheduleTimezone, setScheduleTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  );
   const providerAvailability = useMemo(
     () =>
       buildProviderAuthAvailabilityByProvider({
@@ -652,10 +655,6 @@ export default function CoworkerEditorPage() {
         sharedConnectedProviders: providerAuthStatus?.shared,
       }),
     [providerAuthStatus],
-  );
-  const localTimezone = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    [],
   );
   const coworkerForwardingAddress = coworkerForwardingAlias?.forwardingAddress ?? null;
   const hasActiveForwardingAlias = Boolean(coworkerForwardingAlias?.activeAlias);
@@ -744,31 +743,31 @@ export default function CoworkerEditorPage() {
         return {
           type: "daily",
           time: scheduleTime.slice(0, 5),
-          timezone: localTimezone,
+          timezone: scheduleTimezone,
         };
       case "weekly":
         return {
           type: "weekly",
           time: scheduleTime.slice(0, 5),
           daysOfWeek: scheduleDaysOfWeek,
-          timezone: localTimezone,
+          timezone: scheduleTimezone,
         };
       case "monthly":
         return {
           type: "monthly",
           time: scheduleTime.slice(0, 5),
           dayOfMonth: scheduleDayOfMonth,
-          timezone: localTimezone,
+          timezone: scheduleTimezone,
         };
       default:
         return null;
     }
   }, [
     intervalMinutes,
-    localTimezone,
     scheduleDayOfMonth,
     scheduleDaysOfWeek,
     scheduleTime,
+    scheduleTimezone,
     scheduleType,
     triggerType,
   ]);
@@ -785,6 +784,9 @@ export default function CoworkerEditorPage() {
     }
 
     setScheduleTime(schedule.time.slice(0, 5));
+    setScheduleTimezone(
+      schedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    );
     if (schedule.type === "weekly") {
       setScheduleDaysOfWeek(schedule.daysOfWeek);
       return;
@@ -1840,7 +1842,7 @@ export default function CoworkerEditorPage() {
         scheduleTime={scheduleTime}
         scheduleDaysOfWeek={scheduleDaysOfWeek}
         scheduleDayOfMonth={scheduleDayOfMonth}
-        localTimezone={localTimezone}
+        localTimezone={scheduleTimezone}
         hasActiveForwardingAlias={hasActiveForwardingAlias}
         coworkerForwardingAddress={coworkerForwardingAddress}
         coworkerForwardingAlias={coworkerForwardingAlias}
@@ -1928,7 +1930,7 @@ export default function CoworkerEditorPage() {
       scheduleTime,
       scheduleDaysOfWeek,
       scheduleDayOfMonth,
-      localTimezone,
+      scheduleTimezone,
       hasActiveForwardingAlias,
       coworkerForwardingAddress,
       coworkerForwardingAlias,
@@ -2098,7 +2100,7 @@ export default function CoworkerEditorPage() {
               scheduleTime={scheduleTime}
               scheduleDaysOfWeek={scheduleDaysOfWeek}
               scheduleDayOfMonth={scheduleDayOfMonth}
-              localTimezone={localTimezone}
+              localTimezone={scheduleTimezone}
               hasActiveForwardingAlias={hasActiveForwardingAlias}
               coworkerForwardingAddress={coworkerForwardingAddress}
               coworkerForwardingAlias={coworkerForwardingAlias}
