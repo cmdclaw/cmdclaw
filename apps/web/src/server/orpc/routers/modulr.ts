@@ -1,3 +1,4 @@
+import { listWorkspaceExecutorSources } from "@cmdclaw/core/server/executor/workspace-sources";
 import {
   addModulrWorkspaceAccess,
   canUserUseModulrInWorkspace,
@@ -9,14 +10,13 @@ import {
   setModulrWorkspaceConnection,
   validateModulrWorkspaceConnection,
 } from "@cmdclaw/core/server/modulr/service";
-import { listWorkspaceExecutorSources } from "@cmdclaw/core/server/executor/workspace-sources";
 import { user, workspace } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import type { AuthenticatedContext } from "../middleware";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
-import { z } from "zod";
 
 async function requireAdmin(context: Pick<AuthenticatedContext, "db" | "user">) {
   const currentUser = await context.db.query.user.findFirst({

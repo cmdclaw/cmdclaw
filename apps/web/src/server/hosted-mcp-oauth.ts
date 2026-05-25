@@ -3,7 +3,6 @@ import {
   listWorkspacesForUser,
 } from "@cmdclaw/core/server/billing/service";
 import { canUserUseGalienInWorkspace } from "@cmdclaw/core/server/galien/service";
-import { canUserUseModulrInWorkspace } from "@cmdclaw/core/server/modulr/service";
 import {
   type HostedMcpAudience,
   HOSTED_MCP_AUDIENCES,
@@ -11,6 +10,7 @@ import {
   resolveHostedMcpIssuerUrl,
   signHostedMcpAccessToken,
 } from "@cmdclaw/core/server/hosted-mcp-oauth";
+import { canUserUseModulrInWorkspace } from "@cmdclaw/core/server/modulr/service";
 import { db } from "@cmdclaw/db/client";
 import {
   hostedMcpOauthAuthorizationCode,
