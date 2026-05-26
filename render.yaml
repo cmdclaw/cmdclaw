@@ -402,6 +402,14 @@ projects:
               - key: PORT
                 value: "10000"
               - fromGroup: staging
+              - key: AWS_ENDPOINT_URL
+                value: http://cmdclaw-s3-staging:10000
+              - key: AWS_DEFAULT_REGION
+                value: us-east-1
+              - key: AWS_S3_BUCKET_NAME
+                value: cmdclaw-documents
+              - key: AWS_S3_FORCE_PATH_STYLE
+                value: "true"
               - key: MCP_GATEWAY_MANAGED_CHILDREN
                 value: "true"
               - key: MCP_GATEWAY_CHILD_MODE
@@ -824,6 +832,14 @@ projects:
               - key: PORT
                 value: "10000"
               - fromGroup: prod
+              - key: AWS_ENDPOINT_URL
+                value: http://cmdclaw-s3-prod:10000
+              - key: AWS_DEFAULT_REGION
+                value: us-east-1
+              - key: AWS_S3_BUCKET_NAME
+                value: cmdclaw-documents-prod
+              - key: AWS_S3_FORCE_PATH_STYLE
+                value: "true"
               - key: MCP_GATEWAY_MANAGED_CHILDREN
                 value: "true"
               - key: MCP_GATEWAY_CHILD_MODE
