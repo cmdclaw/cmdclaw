@@ -34,12 +34,20 @@ describe("get_clients_by_client_id_appointments", () => {
         expect(init?.headers).toMatchObject({
           Authorization: "Bearer server-secret",
         });
-        return new Response(JSON.stringify({ username: "user@example.com", password: "password" }), {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
+        return new Response(
+          JSON.stringify({
+            username: "user@example.com",
+            password: "password",
+            targetEnv: "preprod",
+            apiBaseUrl: "https://api.frontline.galien.preprod.webhelpmedica.com",
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
           },
-        });
+        );
       }
 
       if (String(input).endsWith("/api/v1/tokens/login")) {

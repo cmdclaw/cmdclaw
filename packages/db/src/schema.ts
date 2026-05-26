@@ -463,6 +463,7 @@ export const galienWorkspaceAccess = pgTable(
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
+    targetEnv: text("target_env").$type<"prod" | "preprod">().default("prod").notNull(),
     createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -502,6 +503,7 @@ export const galienCredential = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     username: text("username").notNull(),
     password: text("password").notNull(),
+    targetEnv: text("target_env").$type<"prod" | "preprod">().default("prod").notNull(),
     galienUserId: integer("galien_user_id"),
     displayName: text("display_name"),
     validatedAt: timestamp("validated_at").defaultNow().notNull(),
@@ -512,7 +514,7 @@ export const galienCredential = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("galien_credential_user_idx").on(table.userId),
+    uniqueIndex("galien_credential_user_target_env_idx").on(table.userId, table.targetEnv),
     index("galien_credential_galien_user_idx").on(table.galienUserId),
   ],
 );

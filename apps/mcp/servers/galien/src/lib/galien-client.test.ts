@@ -36,7 +36,20 @@ describe("galien client helpers", () => {
     );
 
     expect(url.toString()).toBe(
-      "https://api.frontline.galien.preprod.webhelpmedica.com/api/v1/clients/42/reports?size=10&filters=city&filters=zipCode",
+      "https://api.frontline.galien.webhelpmedica.com/api/v1/clients/42/reports?size=10&filters=city&filters=zipCode",
+    );
+  });
+
+  it("builds Galien URLs with an explicit API base URL", () => {
+    const url = buildGalienUrl(
+      "/api/v1/clients/{clientId}/reports",
+      { clientId: 42 },
+      { size: 10 },
+      "https://api.frontline.galien.preprod.webhelpmedica.com",
+    );
+
+    expect(url.toString()).toBe(
+      "https://api.frontline.galien.preprod.webhelpmedica.com/api/v1/clients/42/reports?size=10",
     );
   });
 
@@ -52,9 +65,7 @@ describe("galien client helpers", () => {
   });
 
   it("decodes the current user from the Galien login JWT", () => {
-    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
-      "base64url",
-    );
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
     const payload = Buffer.from(
       JSON.stringify({
         id: 2,
@@ -67,24 +78,22 @@ describe("galien client helpers", () => {
       }),
     ).toString("base64url");
 
-    expect(decodeGalienCurrentUserFromBearerToken(`Bearer ${header}.${payload}.signature`)).toEqual({
-      id: 2,
-      role: "ROLE_USER",
-      firstName: "First",
-      lastName: "Last",
-      username: "user@example.com",
-      iat: 100,
-      exp: 200,
-    });
+    expect(decodeGalienCurrentUserFromBearerToken(`Bearer ${header}.${payload}.signature`)).toEqual(
+      {
+        id: 2,
+        role: "ROLE_USER",
+        firstName: "First",
+        lastName: "Last",
+        username: "user@example.com",
+        iat: 100,
+        exp: 200,
+      },
+    );
   });
 
   it("injects the current user id as a query param for non-user paths", async () => {
-    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
-      "base64url",
-    );
-    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString(
-      "base64url",
-    );
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString("base64url");
     const bearerToken = `Bearer ${header}.${payload}.signature`;
     const requests: string[] = [];
 
@@ -114,13 +123,20 @@ describe("galien client helpers", () => {
       });
     }) as unknown as typeof fetch;
 
-    await requestGalienForCurrentUser({
-      method: "GET",
-      path: "/api/v1/reclamations",
-      query: {
-        clientId: 42,
+    await requestGalienForCurrentUser(
+      {
+        method: "GET",
+        path: "/api/v1/reclamations",
+        query: {
+          clientId: 42,
+        },
       },
-    });
+      {
+        username: "user@example.com",
+        password: "password",
+        apiBaseUrl: "https://api.frontline.galien.preprod.webhelpmedica.com",
+      },
+    );
 
     expect(requests[1]).toBe(
       "https://api.frontline.galien.preprod.webhelpmedica.com/api/v1/reclamations?clientId=42&userId=2",
@@ -128,12 +144,8 @@ describe("galien client helpers", () => {
   });
 
   it("injects the current user id into a named path parameter", async () => {
-    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
-      "base64url",
-    );
-    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString(
-      "base64url",
-    );
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString("base64url");
     const bearerToken = `Bearer ${header}.${payload}.signature`;
     const requests: string[] = [];
 
@@ -175,6 +187,11 @@ describe("galien client helpers", () => {
         },
       },
       "clientId",
+      {
+        username: "user@example.com",
+        password: "password",
+        apiBaseUrl: "https://api.frontline.galien.preprod.webhelpmedica.com",
+      },
     );
 
     expect(requests[1]).toBe(

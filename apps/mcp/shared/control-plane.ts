@@ -32,6 +32,8 @@ export async function getManagedGalienCredentials(params: {
 }): Promise<{
   username: string;
   password: string;
+  targetEnv: "prod" | "preprod";
+  apiBaseUrl: string;
   displayName: string | null;
   galienUserId: number | null;
 }> {
@@ -55,6 +57,8 @@ export async function getManagedGalienCredentials(params: {
   return (await response.json()) as {
     username: string;
     password: string;
+    targetEnv: "prod" | "preprod";
+    apiBaseUrl: string;
     displayName: string | null;
     galienUserId: number | null;
   };

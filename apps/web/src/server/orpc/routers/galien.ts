@@ -2,10 +2,14 @@ import {
   addGalienWorkspaceAccess,
   deleteGalienCredential,
   GalienCredentialValidationError,
+  type GalienTargetEnv,
   getGalienAccessStatus,
+  getGalienWorkspaceAccessForUser,
   listGalienWorkspaceAccess,
+  parseGalienTargetEnv,
   removeGalienWorkspaceAccess,
   setGalienCredential,
+  updateGalienWorkspaceAccessTargetEnv,
 } from "@cmdclaw/core/server/galien/service";
 import { user, workspace } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
@@ -58,12 +62,12 @@ const connect = protectedProcedure
   )
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAccess(context.user.id);
-    const accessStatus = await getGalienAccessStatus({
+    const galienAccess = await getGalienWorkspaceAccessForUser({
       database: context.db,
       userId: context.user.id,
       workspaceId: access.workspace.id,
     });
-    if (!accessStatus.allowed) {
+    if (!galienAccess) {
       throw new ORPCError("FORBIDDEN", {
         message: "Galien is not enabled for this user in this workspace.",
       });
@@ -73,6 +77,7 @@ const connect = protectedProcedure
       await setGalienCredential({
         database: context.db,
         userId: context.user.id,
+        targetEnv: galienAccess.targetEnv,
         username: input.username,
         password: input.password,
       });
@@ -91,11 +96,17 @@ const connect = protectedProcedure
   });
 
 const disconnect = protectedProcedure.handler(async ({ context }) => {
+  const access = await requireActiveWorkspaceAccess(context.user.id);
+  const galienAccess = await getGalienWorkspaceAccessForUser({
+    database: context.db,
+    userId: context.user.id,
+    workspaceId: access.workspace.id,
+  });
   await deleteGalienCredential({
     database: context.db,
     userId: context.user.id,
+    targetEnv: galienAccess?.targetEnv ?? "prod",
   });
-  const access = await requireActiveWorkspaceAccess(context.user.id);
   return getGalienAccessStatus({
     database: context.db,
     userId: context.user.id,
@@ -119,6 +130,7 @@ const adminAddAccess = protectedProcedure
     z.object({
       workspaceId: z.string().min(1),
       email: z.string().email(),
+      targetEnv: z.enum(["prod", "preprod"]).optional(),
     }),
   )
   .handler(async ({ input, context }) => {
@@ -128,8 +140,29 @@ const adminAddAccess = protectedProcedure
       database: context.db,
       workspaceId: input.workspaceId,
       email: input.email,
+      targetEnv: input.targetEnv ? parseGalienTargetEnv(input.targetEnv) : undefined,
       createdByUserId: context.user.id,
     });
+  });
+
+const adminUpdateAccessTargetEnv = protectedProcedure
+  .input(
+    z.object({
+      id: z.string().min(1),
+      targetEnv: z.enum(["prod", "preprod"]),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    await requireAdmin(context);
+    const updated = await updateGalienWorkspaceAccessTargetEnv({
+      database: context.db,
+      id: input.id,
+      targetEnv: input.targetEnv as GalienTargetEnv,
+    });
+    if (!updated) {
+      throw new ORPCError("NOT_FOUND", { message: "Galien access entry not found." });
+    }
+    return updated;
   });
 
 const adminRemoveAccess = protectedProcedure
@@ -152,5 +185,6 @@ export const galienRouter = {
   disconnect,
   adminListAccess,
   adminAddAccess,
+  adminUpdateAccessTargetEnv,
   adminRemoveAccess,
 };

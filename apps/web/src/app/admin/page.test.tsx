@@ -16,6 +16,7 @@ const {
   grantAdminAccessByEmailMutateAsyncMock,
   addGalienAccessMutateAsyncMock,
   removeGalienAccessMutateAsyncMock,
+  updateGalienAccessTargetEnvMutateAsyncMock,
   getSessionMock,
   listUsersMock,
 } = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const {
   grantAdminAccessByEmailMutateAsyncMock: vi.fn(),
   addGalienAccessMutateAsyncMock: vi.fn(),
   removeGalienAccessMutateAsyncMock: vi.fn(),
+  updateGalienAccessTargetEnvMutateAsyncMock: vi.fn(),
   getSessionMock: vi.fn(),
   listUsersMock: vi.fn(),
 }));
@@ -149,6 +151,10 @@ vi.mock("@/orpc/hooks", () => ({
   }),
   useAdminRemoveGalienAccess: () => ({
     mutateAsync: removeGalienAccessMutateAsyncMock,
+    isPending: false,
+  }),
+  useAdminUpdateGalienAccessTargetEnv: () => ({
+    mutateAsync: updateGalienAccessTargetEnvMutateAsyncMock,
     isPending: false,
   }),
 }));

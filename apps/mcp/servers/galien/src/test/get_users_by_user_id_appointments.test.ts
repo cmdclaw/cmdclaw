@@ -22,12 +22,8 @@ describe("get_my_appointments", () => {
   });
 
   it("requests the authenticated user's appointment endpoint", async () => {
-    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
-      "base64url",
-    );
-    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString(
-      "base64url",
-    );
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString("base64url");
     const bearerToken = `Bearer ${header}.${payload}.signature`;
     const requests: string[] = [];
 
@@ -41,12 +37,20 @@ describe("get_my_appointments", () => {
         expect(init?.headers).toMatchObject({
           Authorization: "Bearer server-secret",
         });
-        return new Response(JSON.stringify({ username: "user@example.com", password: "password" }), {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
+        return new Response(
+          JSON.stringify({
+            username: "user@example.com",
+            password: "password",
+            targetEnv: "preprod",
+            apiBaseUrl: "https://api.frontline.galien.preprod.webhelpmedica.com",
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
           },
-        });
+        );
       }
 
       if (String(input).endsWith("/api/v1/tokens/login")) {

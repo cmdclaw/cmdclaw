@@ -26,5 +26,6 @@ export async function getManagedGalienToolCredentials(
   return {
     username: credential.username,
     password: credential.password,
+    apiBaseUrl: credential.apiBaseUrl,
   };
 }

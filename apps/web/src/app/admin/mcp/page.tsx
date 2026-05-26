@@ -20,6 +20,7 @@ import {
   useAdminModulrAccess,
   useAdminRemoveGalienAccess,
   useAdminRemoveModulrAccess,
+  useAdminUpdateGalienAccessTargetEnv,
   useAdminWorkspaces,
   useConnectModulr,
   useDisconnectModulr,
@@ -35,6 +36,8 @@ type ModulrFormState = {
   baseUrl: string;
 };
 
+type GalienTargetEnv = "prod" | "preprod";
+
 const DEFAULT_FORM: ModulrFormState = {
   database: "",
   clientId: "",
@@ -46,22 +49,42 @@ const DEFAULT_FORM: ModulrFormState = {
 function AccessEntryButton({
   id,
   email,
+  targetEnv,
+  onTargetEnvChange,
   onRemove,
 }: {
   id: string;
   email: string;
+  targetEnv?: GalienTargetEnv;
+  onTargetEnvChange?: (id: string, targetEnv: GalienTargetEnv) => void;
   onRemove: (id: string, email: string) => void;
 }) {
   const handleClick = useCallback(() => onRemove(id, email), [email, id, onRemove]);
+  const handleTargetEnvChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      onTargetEnvChange?.(id, event.target.value as GalienTargetEnv);
+    },
+    [id, onTargetEnvChange],
+  );
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="bg-muted hover:bg-muted/80 rounded-md px-2 py-1 text-xs"
-    >
-      {email} ×
-    </button>
+    <div className="bg-muted flex items-center gap-2 rounded-md px-2 py-1 text-xs">
+      <span>{email}</span>
+      {targetEnv && onTargetEnvChange ? (
+        <select
+          aria-label={`Galien target environment for ${email}`}
+          value={targetEnv}
+          onChange={handleTargetEnvChange}
+          className="bg-background rounded border px-1 py-0.5 text-xs"
+        >
+          <option value="prod">Production</option>
+          <option value="preprod">Preproduction</option>
+        </select>
+      ) : null}
+      <button type="button" onClick={handleClick} className="hover:text-destructive">
+        ×
+      </button>
+    </div>
   );
 }
 
@@ -72,23 +95,35 @@ function McpAccessPanel({
   entries,
   isLoading,
   isPending,
+  targetEnv,
   onEmailChange,
+  onTargetEnvChange,
   onAdd,
   onRemove,
+  onEntryTargetEnvChange,
 }: {
   name: "Galien" | "Modulr";
   workspaceId: string | null;
   email: string;
-  entries: Array<{ id: string; email: string }>;
+  entries: Array<{ id: string; email: string; targetEnv?: GalienTargetEnv }>;
   isLoading: boolean;
   isPending: boolean;
+  targetEnv?: GalienTargetEnv;
   onEmailChange: (value: string) => void;
+  onTargetEnvChange?: (value: GalienTargetEnv) => void;
   onAdd: (event: React.FormEvent) => void;
   onRemove: (id: string, email: string) => void;
+  onEntryTargetEnvChange?: (id: string, targetEnv: GalienTargetEnv) => void;
 }) {
   const handleEmailChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => onEmailChange(event.target.value),
     [onEmailChange],
+  );
+  const handleTargetEnvChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      onTargetEnvChange?.(event.target.value as GalienTargetEnv);
+    },
+    [onTargetEnvChange],
   );
 
   return (
@@ -107,6 +142,17 @@ function McpAccessPanel({
           onChange={handleEmailChange}
           className="sm:max-w-xs"
         />
+        {targetEnv && onTargetEnvChange ? (
+          <select
+            aria-label="Galien target environment"
+            value={targetEnv}
+            onChange={handleTargetEnvChange}
+            className="bg-background rounded-md border px-3 py-2 text-sm"
+          >
+            <option value="prod">Production</option>
+            <option value="preprod">Preproduction</option>
+          </select>
+        ) : null}
         <Button type="submit" size="sm" disabled={!workspaceId || isPending}>
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Add ${name}`}
         </Button>
@@ -120,6 +166,8 @@ function McpAccessPanel({
               key={entry.id}
               id={entry.id}
               email={entry.email}
+              targetEnv={entry.targetEnv}
+              onTargetEnvChange={onEntryTargetEnvChange}
               onRemove={onRemove}
             />
           ))
@@ -139,11 +187,13 @@ export default function AdminMcpPage() {
   const disconnectModulr = useDisconnectModulr();
   const addGalienAccess = useAdminAddGalienAccess();
   const removeGalienAccess = useAdminRemoveGalienAccess();
+  const updateGalienAccessTargetEnv = useAdminUpdateGalienAccessTargetEnv();
   const addModulrAccess = useAdminAddModulrAccess();
   const removeModulrAccess = useAdminRemoveModulrAccess();
   const [form, setForm] = useState<ModulrFormState>(DEFAULT_FORM);
   const [accessWorkspaceId, setAccessWorkspaceId] = useState<string | null>(null);
   const [galienEmail, setGalienEmail] = useState("");
+  const [galienTargetEnv, setGalienTargetEnv] = useState<GalienTargetEnv>("prod");
   const [modulrEmail, setModulrEmail] = useState("");
   const [galienActionPending, setGalienActionPending] = useState(false);
   const [modulrActionPending, setModulrActionPending] = useState(false);
@@ -261,7 +311,11 @@ export default function AdminMcpPage() {
 
       setGalienActionPending(true);
       try {
-        await addGalienAccess.mutateAsync({ workspaceId: accessWorkspaceId, email });
+        await addGalienAccess.mutateAsync({
+          workspaceId: accessWorkspaceId,
+          email,
+          targetEnv: galienTargetEnv,
+        });
         setGalienEmail("");
         toast.success(`Enabled Galien for ${email}.`);
       } catch (error) {
@@ -271,7 +325,27 @@ export default function AdminMcpPage() {
         setGalienActionPending(false);
       }
     },
-    [accessWorkspaceId, addGalienAccess, galienEmail],
+    [accessWorkspaceId, addGalienAccess, galienEmail, galienTargetEnv],
+  );
+
+  const handleUpdateGalienAccessTargetEnv = useCallback(
+    async (id: string, targetEnv: GalienTargetEnv) => {
+      if (!accessWorkspaceId) {
+        return;
+      }
+      try {
+        await updateGalienAccessTargetEnv.mutateAsync({
+          id,
+          workspaceId: accessWorkspaceId,
+          targetEnv,
+        });
+        toast.success("Updated Galien target environment.");
+      } catch (error) {
+        console.error("Failed to update Galien target environment:", error);
+        toast.error("Failed to update Galien target environment.");
+      }
+    },
+    [accessWorkspaceId, updateGalienAccessTargetEnv],
   );
 
   const handleRemoveGalienAccess = useCallback(
@@ -381,12 +455,15 @@ export default function AdminMcpPage() {
             name="Galien"
             workspaceId={accessWorkspaceId}
             email={galienEmail}
+            targetEnv={galienTargetEnv}
             entries={visibleGalienAccessEntries}
             isLoading={isGalienAccessLoading}
             isPending={galienActionPending}
             onEmailChange={setGalienEmail}
+            onTargetEnvChange={setGalienTargetEnv}
             onAdd={handleAddGalienAccess}
             onRemove={handleRemoveGalienAccess}
+            onEntryTargetEnvChange={handleUpdateGalienAccessTargetEnv}
           />
           <McpAccessPanel
             name="Modulr"

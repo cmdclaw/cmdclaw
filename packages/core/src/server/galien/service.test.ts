@@ -15,7 +15,9 @@ process.env.AWS_SECRET_ACCESS_KEY ??= "test-secret-key";
 const {
   decodeGalienCurrentUserFromBearerToken,
   GalienCredentialValidationError,
+  getGalienApiBaseUrl,
   normalizeGalienAccessEmail,
+  parseGalienTargetEnv,
   validateGalienCredentials,
 } = await import("./service");
 
@@ -31,10 +33,18 @@ describe("Galien service helpers", () => {
     expect(normalizeGalienAccessEmail("  USER@Example.COM ")).toBe("user@example.com");
   });
 
-  it("decodes the Galien login JWT current user", () => {
-    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
-      "base64url",
+  it("resolves Galien target environment API base URLs", () => {
+    expect(parseGalienTargetEnv("preprod")).toBe("preprod");
+    expect(parseGalienTargetEnv("prod")).toBe("prod");
+    expect(parseGalienTargetEnv("unexpected")).toBe("prod");
+    expect(getGalienApiBaseUrl("prod")).toBe("https://api.frontline.galien.webhelpmedica.com");
+    expect(getGalienApiBaseUrl("preprod")).toBe(
+      "https://api.frontline.galien.preprod.webhelpmedica.com",
     );
+  });
+
+  it("decodes the Galien login JWT current user", () => {
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
     const payload = Buffer.from(
       JSON.stringify({
         id: "42",
@@ -59,15 +69,16 @@ describe("Galien service helpers", () => {
   });
 
   it("validates credentials by posting to Galien login", async () => {
-    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString(
-      "base64url",
-    );
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
     const payload = Buffer.from(JSON.stringify({ id: 7, username: "rep@example.com" })).toString(
       "base64url",
     );
     const bearerToken = `Bearer ${header}.${payload}.signature`;
 
-    globalThis.fetch = vi.fn(async (_input, init) => {
+    globalThis.fetch = vi.fn(async (input, init) => {
+      expect(String(input)).toBe(
+        "https://api.frontline.galien.webhelpmedica.com/api/v1/tokens/login",
+      );
       expect(init?.method).toBe("POST");
       expect(JSON.parse(String(init?.body))).toEqual({
         username: "rep@example.com",
@@ -89,6 +100,37 @@ describe("Galien service helpers", () => {
       }),
     ).resolves.toMatchObject({
       id: 7,
+      username: "rep@example.com",
+    });
+  });
+
+  it("validates credentials against preproduction when selected", async () => {
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ id: 8, username: "rep@example.com" })).toString(
+      "base64url",
+    );
+    const bearerToken = `Bearer ${header}.${payload}.signature`;
+
+    globalThis.fetch = vi.fn(async (input) => {
+      expect(String(input)).toBe(
+        "https://api.frontline.galien.preprod.webhelpmedica.com/api/v1/tokens/login",
+      );
+      return new Response("[]", {
+        status: 200,
+        headers: {
+          authorization: bearerToken,
+        },
+      });
+    }) as unknown as typeof fetch;
+
+    await expect(
+      validateGalienCredentials({
+        username: "rep@example.com",
+        password: "secret",
+        targetEnv: "preprod",
+      }),
+    ).resolves.toMatchObject({
+      id: 8,
       username: "rep@example.com",
     });
   });

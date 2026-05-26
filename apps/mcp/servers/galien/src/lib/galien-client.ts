@@ -1,4 +1,4 @@
-const GALIEN_BASE_URL = "https://api.frontline.galien.preprod.webhelpmedica.com";
+const DEFAULT_GALIEN_BASE_URL = "https://api.frontline.galien.webhelpmedica.com";
 const GALIEN_LOGIN_PATH = "/api/v1/tokens/login";
 
 export type GalienScalar = string | number | boolean;
@@ -17,10 +17,12 @@ export type GalienCurrentUser = {
 };
 type GalienAuthenticatedRequestParams = GalienRequestParams & {
   bearerToken: string;
+  apiBaseUrl: string;
 };
 export type GalienCredentials = {
   username: string;
   password: string;
+  apiBaseUrl?: string;
 };
 type CreateVisitReportPayload = {
   clientId?: number;
@@ -71,6 +73,7 @@ export function buildGalienUrl(
   pathTemplate: string,
   pathParams?: GalienPathParams,
   query?: GalienQuery,
+  apiBaseUrl = DEFAULT_GALIEN_BASE_URL,
 ) {
   const resolvedPath = pathTemplate.replace(/\{([^}]+)\}/g, (_, key: string) => {
     const value = pathParams?.[key];
@@ -80,7 +83,7 @@ export function buildGalienUrl(
     return encodeURIComponent(String(value));
   });
 
-  const url = new URL(resolvedPath, GALIEN_BASE_URL);
+  const url = new URL(resolvedPath, apiBaseUrl);
 
   if (query) {
     for (const [key, rawValue] of Object.entries(query)) {
@@ -147,7 +150,10 @@ function decodeJwtPayload(bearerToken: string) {
   }
 
   try {
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
   } catch {
     throw new Error("Galien login returned a JWT with an unreadable payload.");
   }
@@ -216,7 +222,8 @@ function formatErrorBody(body: unknown) {
 
 async function loginToGalien(credentials?: GalienCredentials) {
   const { username, password } = credentials ?? getGalienCredentials();
-  const response = await fetch(new URL(GALIEN_LOGIN_PATH, GALIEN_BASE_URL), {
+  const apiBaseUrl = credentials?.apiBaseUrl ?? DEFAULT_GALIEN_BASE_URL;
+  const response = await fetch(new URL(GALIEN_LOGIN_PATH, apiBaseUrl), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -244,7 +251,7 @@ export async function getCurrentGalienUser(credentials?: GalienCredentials) {
 }
 
 async function requestGalienWithBearerToken(params: GalienAuthenticatedRequestParams) {
-  const url = buildGalienUrl(params.path, params.pathParams, params.query);
+  const url = buildGalienUrl(params.path, params.pathParams, params.query, params.apiBaseUrl);
   const response = await fetch(url, {
     method: params.method,
     headers: {
@@ -277,6 +284,7 @@ export async function requestGalien(params: GalienRequestParams, credentials?: G
   return requestGalienWithBearerToken({
     ...params,
     bearerToken,
+    apiBaseUrl: credentials?.apiBaseUrl ?? DEFAULT_GALIEN_BASE_URL,
   });
 }
 
@@ -291,6 +299,7 @@ export async function requestGalienForCurrentUser(
   return requestGalienWithBearerToken({
     ...params,
     bearerToken,
+    apiBaseUrl: credentials?.apiBaseUrl ?? DEFAULT_GALIEN_BASE_URL,
     pathParams: pathUsesUserId
       ? {
           ...params.pathParams,
@@ -317,6 +326,7 @@ export async function requestGalienForCurrentUserPathParam(
   return requestGalienWithBearerToken({
     ...params,
     bearerToken,
+    apiBaseUrl: credentials?.apiBaseUrl ?? DEFAULT_GALIEN_BASE_URL,
     pathParams: {
       ...params.pathParams,
       [pathParamName]: currentUser.id,

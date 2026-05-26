@@ -566,10 +566,26 @@ export function useAdminAddGalienAccess() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { workspaceId: string; email: string }) =>
+    mutationFn: (input: { workspaceId: string; email: string; targetEnv?: "prod" | "preprod" }) =>
       client.galien.adminAddAccess(input),
     onSuccess: (_data, input) => {
       queryClient.invalidateQueries({ queryKey: ["galien", "admin-access", input.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["galien", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
+    },
+  });
+}
+
+export function useAdminUpdateGalienAccessTargetEnv() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; workspaceId: string; targetEnv: "prod" | "preprod" }) =>
+      client.galien.adminUpdateAccessTargetEnv({ id: input.id, targetEnv: input.targetEnv }),
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: ["galien", "admin-access", input.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["galien", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
   });
 }
@@ -582,6 +598,8 @@ export function useAdminRemoveGalienAccess() {
       client.galien.adminRemoveAccess({ id: input.id }),
     onSuccess: (_data, input) => {
       queryClient.invalidateQueries({ queryKey: ["galien", "admin-access", input.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["galien", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
   });
 }

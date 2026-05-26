@@ -124,6 +124,14 @@ _Avoid_: download response, inline file
 A workspace-owned Modulr integration connection for one broker/company database. CmdClaw derives short-lived Modulr bearer tokens from this connection when invoking Modulr MCP tools.
 _Avoid_: Modulr user account, bearer credential
 
+**Galien Target Environment**:
+The Galien deployment, production or preproduction, selected by workspace access policy for a specific **User** in a specific workspace. A **Galien Target Environment** is not part of the user's Galien credentials.
+_Avoid_: Galien account type, credential environment, user environment
+
+**Galien Credential**:
+The username and password a **User** stores for one **Galien Target Environment**. A **Galien Credential** validated against one Galien deployment is not assumed valid for another deployment.
+_Avoid_: shared Galien login, global Galien credential
+
 ## Flagged Ambiguities
 
 **account**:

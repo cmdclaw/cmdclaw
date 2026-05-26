@@ -8,10 +8,7 @@ import {
 } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getValidTokensForUser } from "../integrations/token-refresh";
-import {
-  canUserUseGalienInWorkspace,
-  getGalienCredentialStatus,
-} from "../galien/service";
+import { canUserUseGalienInWorkspace, getGalienAccessStatus } from "../galien/service";
 import { signManagedMcpToken } from "../managed-mcp-auth";
 import {
   MODULR_INTERNAL_KEY,
@@ -19,10 +16,7 @@ import {
   getModulrWorkspaceConnectionStatus,
 } from "../modulr/service";
 import { decrypt, encrypt } from "../utils/encryption";
-import {
-  type McpOAuthMetadata,
-  ensureValidMcpOAuthCredential,
-} from "./mcp-oauth";
+import { type McpOAuthMetadata, ensureValidMcpOAuthCredential } from "./mcp-oauth";
 
 type DatabaseLike = typeof db;
 
@@ -274,22 +268,22 @@ async function ensureManagedExecutorSources(input: {
   const modulrDefinition = getManagedSourceDefinition(MODULR_INTERNAL_KEY);
   if (
     modulrDefinition &&
-    await canUserUseModulrInWorkspace({
+    (await canUserUseModulrInWorkspace({
       database,
       userId: input.userId,
       workspaceId: input.workspaceId,
-    })
+    }))
   ) {
     definitions.push(modulrDefinition);
   }
   const galienDefinition = getManagedSourceDefinition("galien");
   if (
     galienDefinition &&
-    await canUserUseGalienInWorkspace({
+    (await canUserUseGalienInWorkspace({
       database,
       userId: input.userId,
       workspaceId: input.workspaceId,
-    })
+    }))
   ) {
     definitions.push(galienDefinition);
   }
@@ -402,8 +396,12 @@ async function isManagedSourceConnected(input: {
     if (!userId) {
       return false;
     }
-    const status = await getGalienCredentialStatus({ database: input.database, userId });
-    return status.connected;
+    const status = await getGalienAccessStatus({
+      database: input.database,
+      userId,
+      workspaceId: source.workspaceId,
+    });
+    return status.allowed && status.connected;
   }
 
   if (source.internalKey === MODULR_INTERNAL_KEY) {
@@ -442,11 +440,11 @@ async function isManagedSourceVisibleForUser(input: {
   if (input.source.internalKey === "galien") {
     return Boolean(
       input.userId &&
-        (await canUserUseGalienInWorkspace({
-          database: input.database,
-          userId: input.userId,
-          workspaceId: input.source.workspaceId,
-        })),
+      (await canUserUseGalienInWorkspace({
+        database: input.database,
+        userId: input.userId,
+        workspaceId: input.source.workspaceId,
+      })),
     );
   }
 
@@ -457,11 +455,11 @@ async function isManagedSourceVisibleForUser(input: {
   if (input.source.internalKey === MODULR_INTERNAL_KEY) {
     return Boolean(
       input.userId &&
-        (await canUserUseModulrInWorkspace({
-          database: input.database,
-          userId: input.userId,
-          workspaceId: input.source.workspaceId,
-        })),
+      (await canUserUseModulrInWorkspace({
+        database: input.database,
+        userId: input.userId,
+        workspaceId: input.source.workspaceId,
+      })),
     );
   }
 
@@ -817,19 +815,21 @@ export async function listWorkspaceExecutorSources(input: {
     )
   ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
 
-  return Promise.all(visibleSources.map(async (source) => {
-    const credential = credentialBySourceId.get(source.id);
-    const connected = source.internalKey
-      ? await isManagedSourceConnected({ database, source, userId: input.userId })
-      : hasStoredCredentialSecret(source, credential);
-    return {
-      ...source,
-      connected,
-      credentialEnabled: source.internalKey ? connected : (credential?.enabled ?? false),
-      credentialDisplayName: credential?.displayName ?? null,
-      credentialUpdatedAt: credential?.updatedAt ?? null,
-    };
-  }));
+  return Promise.all(
+    visibleSources.map(async (source) => {
+      const credential = credentialBySourceId.get(source.id);
+      const connected = source.internalKey
+        ? await isManagedSourceConnected({ database, source, userId: input.userId })
+        : hasStoredCredentialSecret(source, credential);
+      return {
+        ...source,
+        connected,
+        credentialEnabled: source.internalKey ? connected : (credential?.enabled ?? false),
+        credentialDisplayName: credential?.displayName ?? null,
+        credentialUpdatedAt: credential?.updatedAt ?? null,
+      };
+    }),
+  );
 }
 
 export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: {
@@ -874,11 +874,7 @@ export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: 
   ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
 
   const oauthSources = visibleSources
-    .filter(
-      (source) =>
-        source.kind === "mcp" &&
-        source.authType === "oauth2",
-    )
+    .filter((source) => source.kind === "mcp" && source.authType === "oauth2")
     .map(async (source) => {
       const credential = credentialBySourceId.get(source.id);
       return {
@@ -1110,14 +1106,15 @@ export async function getWorkspaceExecutorBootstrap(input: {
         userId: input.userId,
         config: baseConfig,
       });
-      const refreshedCredential = source.authType === "oauth2"
-        ? await database.query.workspaceExecutorSourceCredential.findFirst({
-            where: and(
-              eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-              eq(workspaceExecutorSourceCredential.userId, input.userId),
-            ),
-          })
-        : credential;
+      const refreshedCredential =
+        source.authType === "oauth2"
+          ? await database.query.workspaceExecutorSourceCredential.findFirst({
+              where: and(
+                eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
+                eq(workspaceExecutorSourceCredential.userId, input.userId),
+              ),
+            })
+          : credential;
       const connected = source.internalKey
         ? await isManagedSourceConnected({ database, source, userId: input.userId })
         : Boolean(
