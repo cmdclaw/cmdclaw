@@ -9,18 +9,32 @@ describe("routeMcpRequest", () => {
   };
 
   it("routes internal MCP requests", () => {
-    const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/internal/mcp"), env);
+    const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/internal"), env);
     expect(routed?.slug).toBe("internal");
     expect(routed?.target.toString()).toBe("http://127.0.0.1:4101/mcp");
   });
 
   it("routes galien MCP requests", () => {
+    const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/galien"), env);
+    expect(routed?.slug).toBe("galien");
+    expect(routed?.target.toString()).toBe("http://127.0.0.1:4103/mcp");
+  });
+
+  it("routes legacy slug/mcp requests", () => {
     const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/galien/mcp"), env);
     expect(routed?.slug).toBe("galien");
     expect(routed?.target.toString()).toBe("http://127.0.0.1:4103/mcp");
   });
 
   it("matches the spec protected-resource metadata path", () => {
+    expect(
+      matchProtectedResourceMetadataRequest(
+        new URL("https://mcp.cmdclaw.ai/.well-known/oauth-protected-resource/gmail"),
+      ),
+    ).toEqual({ slug: "gmail" });
+  });
+
+  it("matches the legacy spec protected-resource metadata path", () => {
     expect(
       matchProtectedResourceMetadataRequest(
         new URL("https://mcp.cmdclaw.ai/.well-known/oauth-protected-resource/gmail/mcp"),
@@ -37,6 +51,6 @@ describe("routeMcpRequest", () => {
   });
 
   it("returns null for unknown slugs", () => {
-    expect(routeMcpRequest(new URL("https://mcp.cmdclaw.ai/reddit/mcp"), env)).toBeNull();
+    expect(routeMcpRequest(new URL("https://mcp.cmdclaw.ai/reddit"), env)).toBeNull();
   });
 });

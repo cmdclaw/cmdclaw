@@ -145,28 +145,28 @@ function resolveHostedMcpResource(resource: string | URL): {
 } {
   const parsed = resource instanceof URL ? resource : new URL(resource);
   const pathname = parsed.pathname.replace(/\/+$/, "");
-  if (pathname === "/gmail/mcp") {
+  if (pathname === "/gmail" || pathname === "/gmail/mcp") {
     return {
       audience: "gmail",
       resource: parsed.toString(),
       resourceName: "CmdClaw Gmail MCP",
     };
   }
-  if (pathname === "/internal/mcp") {
+  if (pathname === "/internal" || pathname === "/internal/mcp") {
     return {
       audience: "internal",
       resource: parsed.toString(),
       resourceName: "CmdClaw Internal MCP",
     };
   }
-  if (pathname === "/galien/mcp") {
+  if (pathname === "/galien" || pathname === "/galien/mcp") {
     return {
       audience: "galien",
       resource: parsed.toString(),
       resourceName: "Galien MCP",
     };
   }
-  if (pathname === "/modulr/mcp") {
+  if (pathname === "/modulr" || pathname === "/modulr/mcp") {
     return {
       audience: "modulr",
       resource: parsed.toString(),

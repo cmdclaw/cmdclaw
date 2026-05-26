@@ -3,7 +3,7 @@ import { resolveGatewayPublicOrigin } from "./public-origin";
 
 describe("resolveGatewayPublicOrigin", () => {
   it("uses the explicit public origin header", () => {
-    const request = new Request("http://127.0.0.1:3010/galien/mcp", {
+    const request = new Request("http://127.0.0.1:3010/galien", {
       headers: {
         "x-cmdclaw-public-origin": "https://cmdclaw-mcp-03.beta.localcan.dev",
       },
@@ -15,7 +15,7 @@ describe("resolveGatewayPublicOrigin", () => {
   });
 
   it("uses forwarded host and protocol headers", () => {
-    const request = new Request("http://127.0.0.1:3010/galien/mcp", {
+    const request = new Request("http://127.0.0.1:3010/galien", {
       headers: {
         "x-forwarded-host": "cmdclaw-mcp-03.beta.localcan.dev",
         "x-forwarded-proto": "https",
@@ -28,7 +28,7 @@ describe("resolveGatewayPublicOrigin", () => {
   });
 
   it("defaults LocalCan hosts to HTTPS when no forwarded protocol is available", () => {
-    const request = new Request("http://cmdclaw-mcp-03.beta.localcan.dev/galien/mcp");
+    const request = new Request("http://cmdclaw-mcp-03.beta.localcan.dev/galien");
 
     expect(resolveGatewayPublicOrigin(request)).toBe(
       "https://cmdclaw-mcp-03.beta.localcan.dev",

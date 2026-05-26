@@ -9,10 +9,18 @@ const WELL_KNOWN_PREFIX = "/.well-known/oauth-protected-resource";
 
 export function matchProtectedResourceMetadataRequest(requestUrl: URL): { slug: string } | null {
   const specMatch = requestUrl.pathname.match(
-    /^\/\.well-known\/oauth-protected-resource\/([^/]+)\/mcp\/?$/,
+    /^\/\.well-known\/oauth-protected-resource\/([^/]+)\/?$/,
   );
   if (specMatch?.[1]) {
     const slug = specMatch[1];
+    return getMcpServerDefinition(slug) ? { slug } : null;
+  }
+
+  const legacySpecMatch = requestUrl.pathname.match(
+    /^\/\.well-known\/oauth-protected-resource\/([^/]+)\/mcp\/?$/,
+  );
+  if (legacySpecMatch?.[1]) {
+    const slug = legacySpecMatch[1];
     return getMcpServerDefinition(slug) ? { slug } : null;
   }
 

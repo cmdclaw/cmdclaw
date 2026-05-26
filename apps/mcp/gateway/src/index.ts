@@ -234,7 +234,7 @@ function buildProtectedResourceMetadata(
 ) {
   const server = MCP_SERVER_REGISTRY[slug];
   return {
-    resource: new URL(`${server.publicBasePath}/mcp`, publicOrigin).toString(),
+    resource: new URL(server.publicBasePath, publicOrigin).toString(),
     authorization_servers: [new URL(server.publicBasePath, publicOrigin).toString()],
     scopes_supported: [slug],
     resource_name: server.name,
@@ -252,7 +252,7 @@ function buildScopedAppProxyRequest(
   if (!scopedRequestUrl.searchParams.has("resource")) {
     scopedRequestUrl.searchParams.set(
       "resource",
-      new URL(`${MCP_SERVER_REGISTRY[slug].publicBasePath}/mcp`, publicOrigin).toString(),
+      new URL(MCP_SERVER_REGISTRY[slug].publicBasePath, publicOrigin).toString(),
     );
   }
 
@@ -549,7 +549,7 @@ async function main() {
   console.log(`MCP gateway listening on http://${hostname}:${port}`);
   console.log("[gateway] public MCP endpoints:");
   for (const server of Object.values(MCP_SERVER_REGISTRY)) {
-    console.log(`  - http://${publicHostname}:${port}${server.publicBasePath}/mcp`);
+    console.log(`  - http://${publicHostname}:${port}${server.publicBasePath}`);
   }
 }
 

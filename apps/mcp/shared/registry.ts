@@ -68,10 +68,10 @@ export function getMcpServerDefinition(slug: string): McpServerDefinition | null
   return MCP_SERVER_REGISTRY[slug as McpServerSlug] ?? null;
 }
 
-function buildMcpPublicUrl(baseUrl: string, slug: McpServerSlug, path = "/mcp"): string {
+function buildMcpPublicUrl(baseUrl: string, slug: McpServerSlug, path = ""): string {
   return new URL(`${MCP_SERVER_REGISTRY[slug].publicBasePath}${path}`, baseUrl).toString();
 }
 
-export function buildProtectedResourceMetadataPath(slug: McpServerSlug): `/.well-known/oauth-protected-resource/${string}/mcp` {
-  return `/.well-known/oauth-protected-resource/${slug}/mcp`;
+export function buildProtectedResourceMetadataPath(slug: McpServerSlug): `/.well-known/oauth-protected-resource/${string}` {
+  return `/.well-known/oauth-protected-resource/${slug}`;
 }

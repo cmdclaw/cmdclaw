@@ -234,7 +234,7 @@ function getManagedSourceDefinition(
       kind: "mcp" as const,
       name: "Galien MCP",
       namespace: "galien",
-      endpoint: new URL("/galien/mcp", baseUrl).toString(),
+      endpoint: new URL("/galien", baseUrl).toString(),
       transport: "http",
       authType: "none" as const,
     };
@@ -246,7 +246,7 @@ function getManagedSourceDefinition(
       kind: "mcp" as const,
       name: "Modulr MCP",
       namespace: "modulr",
-      endpoint: new URL("/modulr/mcp", baseUrl).toString(),
+      endpoint: new URL("/modulr", baseUrl).toString(),
       transport: "http",
       authType: "none" as const,
     };
@@ -257,7 +257,7 @@ function getManagedSourceDefinition(
     kind: "mcp" as const,
     name: "Gmail MCP",
     namespace: "gmail",
-    endpoint: new URL("/gmail/mcp", baseUrl).toString(),
+    endpoint: new URL("/gmail", baseUrl).toString(),
     transport: "http",
     authType: "none" as const,
   };
