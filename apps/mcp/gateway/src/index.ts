@@ -8,7 +8,9 @@ import { matchProtectedResourceMetadataRequest, routeMcpRequest } from "./router
 import { shouldManageGatewayChildren, startManagedGatewayChildren } from "./supervisor";
 import {
   buildProtectedResourceMetadataPath,
+  getMcpServerDefinition,
   MCP_SERVER_REGISTRY,
+  type McpServerSlug,
 } from "../../shared/registry";
 
 const port = Number.parseInt(process.env.MCP_GATEWAY_PORT ?? process.env.PORT ?? "3010", 10);
@@ -19,6 +21,9 @@ const GATEWAY_TOKEN_PATH = "/token";
 const GATEWAY_REGISTER_PATH = "/register";
 const GATEWAY_AUTH_SERVER_METADATA_PATH = "/.well-known/oauth-authorization-server";
 const GATEWAY_OPENID_CONFIGURATION_PATH = "/.well-known/openid-configuration";
+const GATEWAY_AUTHORIZATION_ENDPOINT = "authorize";
+const GATEWAY_TOKEN_ENDPOINT = "token";
+const GATEWAY_REGISTER_ENDPOINT = "register";
 
 type ListeningProcess = {
   pid: number;
@@ -85,7 +90,9 @@ async function assertGatewayPortAvailable(port: number, host: string) {
     );
   }
 
-  throw new Error(`Gateway port ${port} is already in use. Run: lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+  throw new Error(
+    `Gateway port ${port} is already in use. Run: lsof -nP -iTCP:${port} -sTCP:LISTEN`,
+  );
 }
 
 function resolveAuthorizationServerOrigin(requestUrl: URL): string {
@@ -162,20 +169,62 @@ async function handleModulrDocumentDownload(requestUrl: URL): Promise<Response> 
   });
 }
 
-function buildGatewayAuthorizationServerMetadata(publicOrigin: string) {
+function resolveScopedOAuthPath(
+  pathname: string,
+  endpoint: string,
+): { slug: McpServerSlug } | null {
+  const match = pathname.match(new RegExp(`^/([^/]+)/${endpoint}/?$`));
+  const slug = match?.[1];
+  if (!slug || !getMcpServerDefinition(slug)) {
+    return null;
+  }
+  return { slug: slug as McpServerSlug };
+}
+
+function resolveScopedAuthorizationServerMetadataPath(
+  pathname: string,
+): { slug: McpServerSlug } | null {
+  const specMatch = pathname.match(
+    /^\/\.well-known\/(?:oauth-authorization-server|openid-configuration)\/([^/]+)\/?$/,
+  );
+  const specSlug = specMatch?.[1];
+  if (specSlug && getMcpServerDefinition(specSlug)) {
+    return { slug: specSlug as McpServerSlug };
+  }
+
+  const legacyMatch = pathname.match(
+    /^\/([^/]+)\/\.well-known\/(?:oauth-authorization-server|openid-configuration)\/?$/,
+  );
+  const legacySlug = legacyMatch?.[1];
+  if (legacySlug && getMcpServerDefinition(legacySlug)) {
+    return { slug: legacySlug as McpServerSlug };
+  }
+
+  return null;
+}
+
+function buildGatewayAuthorizationServerMetadata(publicOrigin: string, slug?: McpServerSlug) {
+  const issuer = slug
+    ? new URL(MCP_SERVER_REGISTRY[slug].publicBasePath, publicOrigin).toString()
+    : publicOrigin;
+  const endpointPrefix = slug ? `${MCP_SERVER_REGISTRY[slug].publicBasePath}` : "";
+
   return {
-    issuer: publicOrigin,
+    issuer,
     authorization_endpoint: new URL(
-      GATEWAY_AUTHORIZATION_PATH,
+      `${endpointPrefix}${GATEWAY_AUTHORIZATION_PATH}`,
       publicOrigin,
     ).toString(),
-    token_endpoint: new URL(GATEWAY_TOKEN_PATH, publicOrigin).toString(),
-    registration_endpoint: new URL(GATEWAY_REGISTER_PATH, publicOrigin).toString(),
+    token_endpoint: new URL(`${endpointPrefix}${GATEWAY_TOKEN_PATH}`, publicOrigin).toString(),
+    registration_endpoint: new URL(
+      `${endpointPrefix}${GATEWAY_REGISTER_PATH}`,
+      publicOrigin,
+    ).toString(),
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: Object.keys(MCP_SERVER_REGISTRY),
+    scopes_supported: slug ? [slug] : Object.keys(MCP_SERVER_REGISTRY),
   };
 }
 
@@ -186,17 +235,31 @@ function buildProtectedResourceMetadata(
   const server = MCP_SERVER_REGISTRY[slug];
   return {
     resource: new URL(`${server.publicBasePath}/mcp`, publicOrigin).toString(),
-    authorization_servers: [publicOrigin],
+    authorization_servers: [new URL(server.publicBasePath, publicOrigin).toString()],
     scopes_supported: [slug],
     resource_name: server.name,
   };
 }
 
-function buildProxyRequest(
+function buildScopedAppProxyRequest(
   request: Request,
-  target: URL,
+  targetPath: string,
+  requestUrl: URL,
   publicOrigin: string,
+  slug: McpServerSlug,
 ): Request {
+  const scopedRequestUrl = new URL(requestUrl);
+  if (!scopedRequestUrl.searchParams.has("resource")) {
+    scopedRequestUrl.searchParams.set(
+      "resource",
+      new URL(`${MCP_SERVER_REGISTRY[slug].publicBasePath}/mcp`, publicOrigin).toString(),
+    );
+  }
+
+  return buildAppProxyRequest(request, targetPath, scopedRequestUrl, publicOrigin);
+}
+
+function buildProxyRequest(request: Request, target: URL, publicOrigin: string): Request {
   const publicOriginUrl = new URL(publicOrigin);
   const headers = new Headers(request.headers);
   headers.set("host", target.host);
@@ -275,19 +338,36 @@ async function main() {
                 ).toString(),
               ),
               targets: Object.fromEntries(
-                Object.entries(routingEnv).filter(([key]) =>
-                  key.startsWith("CMDCLAW_") && key.endsWith("_MCP_TARGET"),
+                Object.entries(routingEnv).filter(
+                  ([key]) => key.startsWith("CMDCLAW_") && key.endsWith("_MCP_TARGET"),
                 ),
               ),
             }),
           );
         }
 
-        if (
-          request.method === "GET" &&
-          requestUrl.pathname === "/modulr/documents/download"
-        ) {
+        if (request.method === "GET" && requestUrl.pathname === "/modulr/documents/download") {
           return withGatewayCors(request, await handleModulrDocumentDownload(requestUrl));
+        }
+
+        const scopedAuthorizationServerMetadata = resolveScopedAuthorizationServerMetadataPath(
+          requestUrl.pathname,
+        );
+        if (scopedAuthorizationServerMetadata) {
+          return withGatewayCors(
+            request,
+            Response.json(
+              buildGatewayAuthorizationServerMetadata(
+                publicOrigin,
+                scopedAuthorizationServerMetadata.slug,
+              ),
+              {
+                headers: {
+                  "Cache-Control": "no-store",
+                },
+              },
+            ),
+          );
         }
 
         if (
@@ -304,6 +384,25 @@ async function main() {
           );
         }
 
+        const scopedAuthorize = resolveScopedOAuthPath(
+          requestUrl.pathname,
+          GATEWAY_AUTHORIZATION_ENDPOINT,
+        );
+        if (scopedAuthorize) {
+          return withGatewayCors(
+            request,
+            await fetch(
+              buildScopedAppProxyRequest(
+                request,
+                "/api/mcp/oauth/authorize",
+                requestUrl,
+                publicOrigin,
+                scopedAuthorize.slug,
+              ),
+            ),
+          );
+        }
+
         if (
           requestUrl.pathname === GATEWAY_AUTHORIZATION_PATH ||
           requestUrl.pathname === "/api/mcp/oauth/authorize"
@@ -316,6 +415,16 @@ async function main() {
           );
         }
 
+        const scopedToken = resolveScopedOAuthPath(requestUrl.pathname, GATEWAY_TOKEN_ENDPOINT);
+        if (scopedToken) {
+          return withGatewayCors(
+            request,
+            await fetch(
+              buildAppProxyRequest(request, "/api/mcp/oauth/token", requestUrl, publicOrigin),
+            ),
+          );
+        }
+
         if (
           requestUrl.pathname === GATEWAY_TOKEN_PATH ||
           requestUrl.pathname === "/api/mcp/oauth/token"
@@ -324,6 +433,19 @@ async function main() {
             request,
             await fetch(
               buildAppProxyRequest(request, "/api/mcp/oauth/token", requestUrl, publicOrigin),
+            ),
+          );
+        }
+
+        const scopedRegister = resolveScopedOAuthPath(
+          requestUrl.pathname,
+          GATEWAY_REGISTER_ENDPOINT,
+        );
+        if (scopedRegister) {
+          return withGatewayCors(
+            request,
+            await fetch(
+              buildAppProxyRequest(request, "/api/mcp/oauth/register", requestUrl, publicOrigin),
             ),
           );
         }
