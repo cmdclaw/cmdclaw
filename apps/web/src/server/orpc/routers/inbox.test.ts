@@ -25,6 +25,9 @@ const {
   insertMock,
   insertValuesMock,
   insertOnConflictDoUpdateMock,
+  updateMock,
+  updateSetMock,
+  updateReturningMock,
   dbMock,
   generationManagerMock,
 } = vi.hoisted(() => {
@@ -44,6 +47,16 @@ const {
   }));
   const insertMock = vi.fn(() => ({
     values: insertValuesMock,
+  }));
+  const updateReturningMock = vi.fn();
+  const updateWhereMock = vi.fn(() => ({
+    returning: updateReturningMock,
+  }));
+  const updateSetMock = vi.fn(() => ({
+    where: updateWhereMock,
+  }));
+  const updateMock = vi.fn(() => ({
+    set: updateSetMock,
   }));
 
   const dbMock = {
@@ -72,6 +85,7 @@ const {
       },
     },
     insert: insertMock,
+    update: updateMock,
   };
 
   const generationManagerMock = {
@@ -93,6 +107,10 @@ const {
     insertMock,
     insertValuesMock,
     insertOnConflictDoUpdateMock,
+    updateMock,
+    updateSetMock,
+    updateWhereMock,
+    updateReturningMock,
     dbMock,
     generationManagerMock,
   };
@@ -133,6 +151,7 @@ describe("inboxRouter", () => {
     generationManagerMock.submitApproval.mockResolvedValue(true);
     generationManagerMock.enqueueConversationMessage.mockResolvedValue({ queuedMessageId: "qm-1" });
     inboxReadStateFindManyMock.mockResolvedValue([]);
+    updateReturningMock.mockResolvedValue([{ id: "run-pending" }]);
   });
 
   it("forbids non-admin users from listing inbox items", async () => {
@@ -327,6 +346,49 @@ describe("inboxRouter", () => {
     ]);
   });
 
+  it("lists pending coworker starts as Needs your input without querying chat statuses", async () => {
+    coworkerRunFindManyMock.mockResolvedValue([
+      {
+        id: "run-pending",
+        coworkerId: "cw-1",
+        generationId: null,
+        conversationId: "conv-pending",
+        status: "needs_user_input",
+        startedAt: new Date("2026-03-30T14:32:00.000Z"),
+        finishedAt: null,
+        errorMessage: null,
+        coworker: { id: "cw-1", name: "Email Drafter" },
+        generation: null,
+        events: [{ createdAt: new Date("2026-03-30T14:40:00.000Z") }],
+      },
+    ]);
+    conversationFindManyMock.mockResolvedValue([]);
+    generationInterruptFindManyMock.mockResolvedValue([]);
+    generationFindManyMock.mockResolvedValue([]);
+
+    const result = (await inboxRouterAny.list({
+      input: {
+        limit: 20,
+        type: "all",
+        statuses: ["needs_user_input"],
+        query: "",
+      },
+      context,
+    })) as { items: Array<Record<string, unknown>> };
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        kind: "coworker",
+        runId: "run-pending",
+        status: "needs_user_input",
+        generationId: null,
+        conversationId: "conv-pending",
+        coworkerName: "Email Drafter",
+      }),
+    ]);
+    expect(conversationFindManyMock).not.toHaveBeenCalled();
+  });
+
   it("hides rows marked read until the row is updated again", async () => {
     coworkerRunFindManyMock.mockResolvedValue([
       {
@@ -493,6 +555,28 @@ describe("inboxRouter", () => {
       }),
     );
     expect(insertOnConflictDoUpdateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismisses a pending coworker start without using generation cancellation", async () => {
+    const result = await inboxRouterAny.dismissCoworkerRun({
+      input: { id: "run-pending" },
+      context,
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "cancelled",
+        finishedAt: expect.any(Date),
+      }),
+    );
+    expect(updateReturningMock).toHaveBeenCalledTimes(1);
+    expect(insertValuesMock).toHaveBeenCalledWith({
+      coworkerRunId: "run-pending",
+      type: "dismissed",
+      payload: { source: "inbox" },
+    });
   });
 
   it("denies the approval, enqueues the edited request, and records a coworker user_interrupt", async () => {

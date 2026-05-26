@@ -165,7 +165,8 @@ export class TurnRunnerContextLoader {
         model: genRecord.conversation.model ?? DEFAULT_CONNECTED_CHATGPT_MODEL,
         authSource: genRecord.conversation.authSource,
       }),
-      userMessageContent: loaded.latestUserMessageContent,
+      userMessageContent:
+        loaded.executionPolicy.queuedUserMessageContent ?? loaded.latestUserMessageContent,
       attachments: loaded.executionPolicy.queuedFileAttachments,
       assistantMessageIds: new Set(),
       messageRoles: new Map(),

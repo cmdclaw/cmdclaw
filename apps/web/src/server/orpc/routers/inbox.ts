@@ -15,7 +15,13 @@ import { z } from "zod";
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 import { requireActiveWorkspaceAccess } from "../workspace-access";
 
-const inboxStatusSchema = z.enum(["awaiting_approval", "awaiting_auth", "paused", "error"]);
+const inboxStatusSchema = z.enum([
+  "needs_user_input",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+  "error",
+]);
 const inboxTypeSchema = z.enum(["all", "coworkers", "chats"]);
 
 type InboxStatus = z.infer<typeof inboxStatusSchema>;
@@ -271,6 +277,12 @@ const list = protectedProcedure
         workspace: { id: workspaceId },
       } = await requireActiveWorkspaceAccess(context.user.id);
       const statuses = input.statuses.length > 0 ? input.statuses : inboxStatusSchema.options;
+      const conversationStatuses = statuses.filter(
+        (
+          status,
+        ): status is Exclude<(typeof inboxStatusSchema.options)[number], "needs_user_input"> =>
+          status !== "needs_user_input",
+      );
 
       // If tagIds filter is provided, resolve matching coworker IDs
       let tagFilteredCoworkerIds: string[] | undefined;
@@ -329,14 +341,14 @@ const list = protectedProcedure
             });
 
       const chatConversations =
-        input.type === "coworkers"
+        input.type === "coworkers" || conversationStatuses.length === 0
           ? []
           : await context.db.query.conversation.findMany({
               where: and(
                 eq(conversation.userId, context.user.id),
                 eq(conversation.workspaceId, workspaceId),
                 eq(conversation.type, "chat"),
-                inArray(conversation.generationStatus, statuses),
+                inArray(conversation.generationStatus, conversationStatuses),
                 isNull(conversation.archivedAt),
               ),
               columns: {
@@ -433,7 +445,7 @@ const list = protectedProcedure
           updatedAt,
           createdAt: run.startedAt,
           generationId: run.generationId,
-          conversationId: run.generation?.conversationId ?? null,
+          conversationId: run.conversationId ?? run.generation?.conversationId ?? null,
           errorMessage: run.errorMessage ?? null,
           pauseReason:
             run.status === "paused" && generationById.get(run.generationId ?? "")?.completionReason
@@ -607,6 +619,42 @@ const markAsRead = protectedProcedure
     return { success: true };
   });
 
+const dismissCoworkerRun = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    await ensureAdmin(context);
+    const {
+      workspace: { id: workspaceId },
+    } = await requireActiveWorkspaceAccess(context.user.id);
+    const [updated] = await context.db
+      .update(coworkerRun)
+      .set({
+        status: "cancelled",
+        finishedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(coworkerRun.id, input.id),
+          eq(coworkerRun.ownerId, context.user.id),
+          eq(coworkerRun.workspaceId, workspaceId),
+          eq(coworkerRun.status, "needs_user_input"),
+        ),
+      )
+      .returning({ id: coworkerRun.id });
+
+    if (!updated) {
+      throw new ORPCError("BAD_REQUEST", { message: "Pending coworker run not found" });
+    }
+
+    await context.db.insert(coworkerRunEvent).values({
+      coworkerRunId: updated.id,
+      type: "dismissed",
+      payload: { source: "inbox" },
+    });
+
+    return { success: true };
+  });
+
 const editApprovalAndResend = protectedProcedure
   .input(
     z.discriminatedUnion("kind", [
@@ -733,5 +781,6 @@ const editApprovalAndResend = protectedProcedure
 export const inboxRouter = {
   list,
   markAsRead,
+  dismissCoworkerRun,
   editApprovalAndResend,
 };

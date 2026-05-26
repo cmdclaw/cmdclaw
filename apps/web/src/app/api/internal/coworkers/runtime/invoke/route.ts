@@ -107,7 +107,7 @@ export async function POST(request: Request) {
         runId: result.runId,
         conversationId: result.conversationId,
         generationId: result.generationId,
-        status: "running",
+        status: result.generationId ? "running" : "needs_user_input",
         attachmentNames: attachments.map((attachment) => attachment.name),
         message: parsed.data.message.trim(),
       },

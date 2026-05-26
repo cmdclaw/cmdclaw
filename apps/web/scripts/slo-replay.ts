@@ -621,6 +621,9 @@ async function executeReplayCandidate(
         autoApprove: false,
         syntheticKind: "slo_replay",
       });
+      if (!result.generationId) {
+        throw new Error("SLO replay coworker run is waiting for user input");
+      }
       executed = true;
       await localDb
         .update(sloReplayRun)

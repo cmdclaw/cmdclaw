@@ -45,6 +45,7 @@ export function getExecutionPolicyFromRecord(
   debugRuntimeNoProgressTimeoutMs?: number;
   debugForceRuntimeNoProgressAfterPrompt?: boolean;
   queuedFileAttachments?: UserFileAttachment[];
+  queuedUserMessageContent?: string;
 } {
   const policy =
     (genRecord.executionPolicy as
@@ -99,6 +100,10 @@ export function getExecutionPolicyFromRecord(
             typeof entry.dataUrl === "string",
         )
       : undefined,
+    queuedUserMessageContent:
+      typeof policy?.queuedUserMessageContent === "string"
+        ? policy.queuedUserMessageContent
+        : undefined,
   };
 }
 

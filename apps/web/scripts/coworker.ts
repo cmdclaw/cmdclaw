@@ -31,6 +31,7 @@ type ParsedArgs = {
   format?: "text" | "markdown" | "json";
   // Generic command flags
   payload?: string;
+  userInput?: string;
   watch: boolean;
   debug: boolean;
   watchIntervalSeconds: number;
@@ -120,6 +121,10 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--payload":
       case "-P":
         args.payload = argv[i + 1];
+        i += 1;
+        break;
+      case "--user-input":
+        args.userInput = argv[i + 1];
         i += 1;
         break;
       case "--watch":
@@ -342,6 +347,7 @@ function statusBadge(status: string): string {
     cancelled: "[CANCELLED]",
     awaiting_approval: "[AWAITING APPROVAL]",
     awaiting_auth: "[AWAITING AUTH]",
+    needs_user_input: "[NEEDS YOUR INPUT]",
   };
   return badges[status] ?? `[${status.toUpperCase()}]`;
 }
@@ -436,6 +442,9 @@ function printHelp(): void {
   console.log("  runs <coworker-id|@username>      List recent runs for a coworker");
   console.log("\nRun flags:");
   console.log("  -P, --payload <json>              JSON payload for run/trigger");
+  console.log(
+    "  --user-input <text>               Trusted first user input for coworkers that need it",
+  );
   console.log("  --watch                           Poll until run reaches terminal status");
   console.log(
     "  --debug                           Trigger a fresh run and tail run, transcript, and final DB state",
@@ -489,6 +498,8 @@ type CoworkerDetails = {
   prompt: string;
   promptDo: string | null;
   promptDont: string | null;
+  requiresUserInput?: boolean;
+  userInputPrompt?: string | null;
   toolAccessMode: string;
   allowedIntegrations: string[];
   allowedCustomIntegrations: string[];
@@ -543,6 +554,7 @@ function formatCoworkerDetailsMarkdown(details: CoworkerDetails): string {
     `- Trigger: ${details.triggerType}`,
     `- Tool Access Mode: ${details.toolAccessMode}`,
     `- Auto Approve: ${details.autoApprove ? "yes" : "no"}`,
+    `- Needs User Input: ${details.requiresUserInput ? "yes" : "no"}`,
     `- Created: ${formatDate(details.createdAt)}`,
     `- Updated: ${formatDate(details.updatedAt)}`,
     `- Allowed Integrations: ${details.allowedIntegrations.join(", ") || "-"}`,
@@ -559,6 +571,9 @@ function formatCoworkerDetailsMarkdown(details: CoworkerDetails): string {
   }
   if (details.promptDont) {
     lines.push("", "## Prompt Don't", "", details.promptDont);
+  }
+  if (details.userInputPrompt) {
+    lines.push("", "## User Input Prompt", "", details.userInputPrompt);
   }
   if (details.schedule) {
     lines.push("", "## Schedule", "", "```json", JSON.stringify(details.schedule, null, 2), "```");
@@ -598,6 +613,10 @@ function printCoworkerDetails(
   console.log(`  auth source: ${details.authSource ?? "-"}`);
   console.log(`  tool access: ${details.toolAccessMode}`);
   console.log(`  auto approve: ${details.autoApprove ? "yes" : "no"}`);
+  console.log(`  needs user input: ${details.requiresUserInput ? "yes" : "no"}`);
+  if (details.userInputPrompt) {
+    console.log(`  user input prompt: ${details.userInputPrompt}`);
+  }
   console.log(`  created: ${formatDate(details.createdAt)}`);
   console.log(`  updated: ${formatDate(details.updatedAt)}`);
   console.log(`  allowed integrations: ${details.allowedIntegrations.join(", ") || "-"}`);
@@ -859,12 +878,27 @@ async function runCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): P
   }
 
   const payload = parsePayload(args.payload);
-  const result = await client.coworker.trigger({ id: coworkerId, payload });
+  const trustedUserInput = args.userInput?.trim();
+  const result = await client.coworker.trigger({
+    id: coworkerId,
+    payload,
+    trustedUserInput:
+      trustedUserInput && trustedUserInput.length > 0 ? trustedUserInput : undefined,
+  });
 
   console.log(`Triggered coworker ${result.coworkerId}`);
   console.log(`  run id: ${result.runId}`);
-  console.log(`  generation id: ${result.generationId}`);
+  console.log(`  generation id: ${result.generationId ?? "-"}`);
   console.log(`  conversation id: ${result.conversationId}`);
+
+  if (!result.generationId) {
+    console.log("  status: Needs your input");
+    console.log("  answer in the linked coworker conversation to start the run.");
+    if (args.debug || args.watch) {
+      console.log("  skipping watch/debug because no generation has started yet.");
+    }
+    return;
+  }
 
   if (args.debug) {
     console.log("\n[debug] Monitoring fresh run using current saved coworker definition.\n");

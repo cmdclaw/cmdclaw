@@ -60,6 +60,9 @@ export function InboxAgentFilter({
   const handleAwaitingApprovalToggle = useCallback(() => {
     onToggleStatus("awaiting_approval");
   }, [onToggleStatus]);
+  const handleNeedsUserInputToggle = useCallback(() => {
+    onToggleStatus("needs_user_input");
+  }, [onToggleStatus]);
   const handleAwaitingAuthToggle = useCallback(() => {
     onToggleStatus("awaiting_auth");
   }, [onToggleStatus]);
@@ -90,6 +93,11 @@ export function InboxAgentFilter({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <FilterChip
+          label="Needs your input"
+          active={statusFilters.includes("needs_user_input")}
+          onClick={handleNeedsUserInputToggle}
+        />
         <FilterChip
           label="Awaiting approval"
           active={statusFilters.includes("awaiting_approval")}

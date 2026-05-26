@@ -59,6 +59,8 @@ export type StartGenerationInput = {
 export type StartCoworkerGenerationInput = {
   coworkerId: string;
   coworkerRunId: string;
+  conversationId?: string;
+  existingUserMessageId?: string;
   content: string;
   model?: string;
   authSource?: ProviderAuthSource | null;
@@ -560,38 +562,62 @@ export class TurnIntake {
             params.debugRuntimeNoProgressTimeoutMs,
           );
 
-    const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
-    const [newConv] = await db
-      .insert(conversation)
-      .values({
-        userId,
-        workspaceId: params.workspaceId ?? null,
-        title: title || "Coworker run",
-        type: "coworker",
-        model: resolvedModel,
-        authSource: resolvedAuthSource,
-        autoApprove: params.autoApprove,
-        syntheticKind: params.syntheticKind,
-      })
-      .returning();
+    let conv: typeof conversation.$inferSelect;
+    let userMessageId: string | null = null;
+    if (params.conversationId) {
+      const existingConversation = await db.query.conversation.findFirst({
+        where: eq(conversation.id, params.conversationId),
+      });
+      if (!existingConversation) {
+        throw new Error("Coworker conversation not found");
+      }
+      conv = existingConversation;
+      await db
+        .update(conversation)
+        .set({
+          model: resolvedModel,
+          authSource: resolvedAuthSource,
+          autoApprove: params.autoApprove,
+          generationStatus: "generating",
+        })
+        .where(eq(conversation.id, conv.id));
+      userMessageId = params.existingUserMessageId ?? null;
+    } else {
+      const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+      const [newConv] = await db
+        .insert(conversation)
+        .values({
+          userId,
+          workspaceId: params.workspaceId ?? null,
+          title: title || "Coworker run",
+          type: "coworker",
+          model: resolvedModel,
+          authSource: resolvedAuthSource,
+          autoApprove: params.autoApprove,
+          syntheticKind: params.syntheticKind,
+        })
+        .returning();
+      conv = newConv;
 
-    const [userMessage] = await db
-      .insert(message)
-      .values({
-        conversationId: newConv.id,
-        role: "user",
-        content,
-      })
-      .returning({ id: message.id });
+      const [userMessage] = await db
+        .insert(message)
+        .values({
+          conversationId: conv.id,
+          role: "user",
+          content,
+        })
+        .returning({ id: message.id });
 
-    if (!userMessage?.id) {
-      throw new Error("Failed to create coworker user message");
+      if (!userMessage?.id) {
+        throw new Error("Failed to create coworker user message");
+      }
+      userMessageId = userMessage.id;
     }
 
-    if (params.fileAttachments && params.fileAttachments.length > 0) {
+    if (params.fileAttachments && params.fileAttachments.length > 0 && userMessageId) {
       await this.deps.persistMessageAttachments({
-        conversationId: newConv.id,
-        messageId: userMessage.id,
+        conversationId: conv.id,
+        messageId: userMessageId,
         attachments: params.fileAttachments,
       });
     }
@@ -606,6 +632,8 @@ export class TurnIntake {
       sandboxProvider: params.sandboxProvider,
       selectedPlatformSkillSlugs,
       queuedFileAttachments: params.fileAttachments,
+      queuedUserMessageContent:
+        params.conversationId && params.existingUserMessageId ? content : undefined,
       debugRunDeadlineMs: params.debugRunDeadlineMs,
       debugRuntimeNoProgressTimeoutMs,
       debugForceRuntimeNoProgressAfterPrompt:
@@ -618,7 +646,7 @@ export class TurnIntake {
     const [genRecord] = await db
       .insert(generation)
       .values({
-        conversationId: newConv.id,
+        conversationId: conv.id,
         status: "running",
         executionPolicy,
         debugInfo: buildInitialDebugInfo(
@@ -637,12 +665,12 @@ export class TurnIntake {
       })
       .returning();
     await conversationRuntimeService.bindGenerationToRuntime({
-      conversationId: newConv.id,
+      conversationId: conv.id,
       generationId: genRecord.id,
     });
 
     await this.deps.lifecycleStore.markConversationGenerationStarted({
-      conversationId: newConv.id,
+      conversationId: conv.id,
       generationId: genRecord.id,
     });
 
@@ -656,14 +684,14 @@ export class TurnIntake {
         source: "generation-manager",
         traceId,
         generationId: genRecord.id,
-        conversationId: newConv.id,
+        conversationId: conv.id,
         userId,
       },
     );
 
     return {
       generationId: genRecord.id,
-      conversationId: newConv.id,
+      conversationId: conv.id,
     };
   }
 }
@@ -702,6 +730,7 @@ function buildExecutionPolicy(params: {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   selectedPlatformSkillSlugs?: string[];
   queuedFileAttachments?: UserFileAttachment[];
+  queuedUserMessageContent?: string;
   debugRunDeadlineMs?: number;
   debugApprovalHotWaitMs?: number;
   debugRuntimeNoProgressTimeoutMs?: number;
@@ -718,6 +747,7 @@ function buildExecutionPolicy(params: {
     selectedPlatformSkillSlugs: params.selectedPlatformSkillSlugs,
     allowSnapshotRestoreOnRun: true,
     queuedFileAttachments: params.queuedFileAttachments,
+    queuedUserMessageContent: params.queuedUserMessageContent,
     debugRunDeadlineMs: params.debugRunDeadlineMs,
     debugApprovalHotWaitMs: params.debugApprovalHotWaitMs,
     debugRuntimeNoProgressTimeoutMs:

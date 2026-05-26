@@ -30,11 +30,13 @@ type PersistedContentPart =
       name: string;
       run_id: string;
       conversation_id: string;
-      generation_id: string;
+      generation_id: string | null;
       status:
         | "running"
+        | "needs_user_input"
         | "awaiting_approval"
         | "awaiting_auth"
+        | "paused"
         | "completed"
         | "error"
         | "cancelled";

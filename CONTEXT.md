@@ -60,6 +60,22 @@ _Avoid_: logs, telemetry
 One agent execution lifecycle for a conversation turn, including preparation, model streaming, tool use, interruption handling, and terminal completion or failure.
 _Avoid_: run, request
 
+**Start Message**:
+A free-text message a **User** provides before a **Coworker** starts a **Generation** so the **Generation** has the task-specific context it needs before work begins.
+_Avoid_: launch payload, run prompt, parameter form, initial message
+
+**Pending Start**:
+A waiting state for a **Coworker** trigger where CmdClaw has created the user-facing conversation and asked for a **Start Message**, but no **Generation** has started yet.
+_Avoid_: paused generation, pending run, pre-run
+
+**Needs User Input**:
+The inbox-facing status for a **Pending Start**, shown to the **User** as “Needs your input.”
+_Avoid_: awaiting start message, paused, approval
+
+**User Input Prompt**:
+The coworker-authored question shown during a **Pending Start** to ask for the **Start Message**.
+_Avoid_: start prompt, first-run prompt, parameter prompt
+
 **Waiting Generation**:
 A non-terminal **Generation** that is intentionally waiting for durable human action, such as approval or authentication, before it can continue.
 _Avoid_: stuck, limbo

@@ -35,11 +35,13 @@ export type MessagePart =
       name: string;
       runId: string;
       conversationId: string;
-      generationId: string;
+      generationId: string | null;
       status:
         | "running"
+        | "needs_user_input"
         | "awaiting_approval"
         | "awaiting_auth"
+        | "paused"
         | "completed"
         | "error"
         | "cancelled";

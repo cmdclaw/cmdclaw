@@ -245,7 +245,7 @@ export function InteractiveCoworkerCard({
       setIsRunning(true);
       try {
         const result = await triggerCoworker.mutateAsync({ id: coworker.id, payload: {} });
-        toast.success("Run started.");
+        toast.success(result.generationId ? "Run started." : "Needs your input.");
         router.push(result?.runId ? `/coworkers/runs/${result.runId}` : "/coworkers/runs");
       } catch {
         toast.error("Failed to start run.");

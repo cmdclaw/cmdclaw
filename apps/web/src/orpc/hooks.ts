@@ -148,7 +148,7 @@ export function useConversationList(options?: { limit?: number }) {
 export function useInboxItems(input?: {
   limit?: number;
   type?: "all" | "coworkers" | "chats";
-  statuses?: Array<"awaiting_approval" | "awaiting_auth" | "paused" | "error">;
+  statuses?: Array<"needs_user_input" | "awaiting_approval" | "awaiting_auth" | "paused" | "error">;
   sourceCoworkerId?: string;
   query?: string;
 }) {
@@ -1230,6 +1230,8 @@ export function useUpdateCoworker() {
       allowedExecutorSourceIds?: string[];
       allowedSkillSlugs?: string[];
       schedule?: CoworkerSchedule | null;
+      requiresUserInput?: boolean;
+      userInputPrompt?: string | null;
     }) => client.coworker.update(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coworker"] });
@@ -1303,6 +1305,7 @@ export function useTriggerCoworker() {
     mutationFn: (input: {
       id: string;
       payload?: unknown;
+      trustedUserInput?: string;
       fileAttachments?: { name: string; mimeType: string; dataUrl: string }[];
       remoteIntegrationSource?: {
         targetEnv: "staging" | "prod";

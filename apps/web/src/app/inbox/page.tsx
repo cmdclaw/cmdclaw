@@ -29,8 +29,19 @@ import {
   useTriggerCoworker,
 } from "@/orpc/hooks";
 
-const ALL_STATUSES: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth", "paused", "error"];
-const DEFAULT_STATUS_FILTERS: InboxItemStatus[] = ["awaiting_approval", "awaiting_auth", "paused"];
+const ALL_STATUSES: InboxItemStatus[] = [
+  "needs_user_input",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+  "error",
+];
+const DEFAULT_STATUS_FILTERS: InboxItemStatus[] = [
+  "needs_user_input",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+];
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
@@ -245,6 +256,12 @@ function InboxPageContent() {
 
   const handleStop = useCallback(
     async (item: InboxItem) => {
+      if (item.kind === "coworker" && item.status === "needs_user_input") {
+        await runItemAction(item.id, async () => {
+          await client.inbox.dismissCoworkerRun({ id: item.runId });
+        });
+        return;
+      }
       if (!item.generationId) {
         return;
       }
@@ -450,8 +467,8 @@ function InboxPageContent() {
         id: input.coworkerId,
         payload: {
           source: "manual_inbox",
-          message: input.message,
         },
+        trustedUserInput: input.message,
         fileAttachments: input.attachments,
       });
       toast.success("Run started.");

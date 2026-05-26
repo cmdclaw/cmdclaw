@@ -32,6 +32,8 @@ export function statusBadge(status: string | null | undefined): string {
       return "RUN";
     case "pending":
       return "PEND";
+    case "needs_user_input":
+      return "INPUT";
     default:
       return status ?? "-";
   }

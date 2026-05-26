@@ -74,10 +74,11 @@ vi.mock("../integrations/remote-integrations", async () => {
 });
 
 let triggerCoworkerRun: typeof import("./coworker-service").triggerCoworkerRun;
+let startPendingCoworkerRun: typeof import("./coworker-service").startPendingCoworkerRun;
 
 describe("triggerCoworkerRun", () => {
   beforeAll(async () => {
-    ({ triggerCoworkerRun } = await import("./coworker-service"));
+    ({ triggerCoworkerRun, startPendingCoworkerRun } = await import("./coworker-service"));
   });
 
   beforeEach(() => {
@@ -100,6 +101,8 @@ describe("triggerCoworkerRun", () => {
       prompt: "Do the coworker",
       promptDo: "Do this",
       promptDont: "Do not do that",
+      requiresUserInput: false,
+      userInputPrompt: null,
     });
 
     coworkerRunFindManyMock.mockResolvedValue([]);
@@ -118,19 +121,53 @@ describe("triggerCoworkerRun", () => {
       },
     });
 
-    insertValuesMock.mockImplementation((values: unknown) => ({
+    insertValuesMock.mockImplementation((values: unknown) => {
+      const record = values as Record<string, unknown>;
+      if (record.type === "coworker" && "title" in record) {
+        return {
+          returning: vi.fn().mockResolvedValue([
+            {
+              id: "conv-pending",
+              ...record,
+            },
+          ]),
+        };
+      }
+      if ("role" in record && "conversationId" in record) {
+        return {
+          returning: vi.fn().mockResolvedValue([{ id: "msg-user-1", ...record }]),
+        };
+      }
+      if ("coworkerId" in record && "status" in record) {
+        return {
+          returning: vi.fn().mockResolvedValue([
+            {
+              id: record.status === "needs_user_input" ? "run-pending" : "run-1",
+              coworkerId: "wf-1",
+              startedAt: new Date("2026-02-12T12:00:00.000Z"),
+              ...record,
+            },
+          ]),
+        };
+      }
+
+      return {
+        returning: vi.fn().mockResolvedValue([{ id: "inserted-1", ...record }]),
+      };
+    });
+
+    updateWhereMock.mockImplementation(() => ({
       returning: vi.fn().mockResolvedValue([
         {
-          id: "run-1",
+          id: "run-pending",
           coworkerId: "wf-1",
+          ownerId: "user-1",
+          workspaceId: "ws-1",
           status: "running",
           startedAt: new Date("2026-02-12T12:00:00.000Z"),
-          triggerPayload: values,
         },
       ]),
     }));
-
-    updateWhereMock.mockResolvedValue(undefined);
 
     startCoworkerGenerationMock.mockResolvedValue({
       generationId: "gen-1",
@@ -349,6 +386,284 @@ describe("triggerCoworkerRun", () => {
             dataUrl: "data:audio/mp4;base64,ZmFrZQ==",
           },
         ],
+      }),
+    );
+  });
+
+  it("creates a Pending Start when a coworker requires user input and no trusted input is supplied", async () => {
+    coworkerFindFirstMock.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      status: "on",
+      triggerType: "schedule",
+      autoApprove: true,
+      toolAccessMode: "all",
+      allowedIntegrations: [],
+      allowedCustomIntegrations: [],
+      allowedExecutorSourceIds: [],
+      allowedSkillSlugs: [],
+      model: "anthropic/claude-sonnet-4-6",
+      prompt: "Draft an email",
+      promptDo: null,
+      promptDont: null,
+      requiresUserInput: true,
+      userInputPrompt: "Which recipient should receive the draft?",
+    });
+
+    const result = await triggerCoworkerRun({
+      coworkerId: "wf-1",
+      triggerPayload: {
+        source: "schedule",
+        scheduledFor: "2026-02-12T12:00:00.000Z",
+        userInput: "external value must not be trusted",
+      },
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      coworkerId: "wf-1",
+      runId: "run-pending",
+      generationId: null,
+      conversationId: "conv-pending",
+    });
+    expect(startCoworkerGenerationMock).not.toHaveBeenCalled();
+
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Which recipient should receive the draft?",
+        type: "coworker",
+      }),
+    );
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "needs_user_input",
+        triggerPayload: expect.objectContaining({
+          source: "schedule",
+          userInputPrompt: "Which recipient should receive the draft?",
+          trigger: expect.objectContaining({
+            userInput: "external value must not be trusted",
+          }),
+        }),
+      }),
+    );
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "assistant",
+        content: "Which recipient should receive the draft?",
+      }),
+    );
+
+    const pendingRunCall = insertValuesMock.mock.calls.find(
+      (call) => (call[0] as { status?: string }).status === "needs_user_input",
+    );
+    expect(
+      ((pendingRunCall?.[0] as { triggerPayload?: Record<string, unknown> }).triggerPayload ?? {})
+        .userInput,
+    ).toBeUndefined();
+  });
+
+  it("starts immediately with trusted user input and stores it separately from the raw trigger", async () => {
+    coworkerFindFirstMock.mockResolvedValue({
+      id: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      status: "on",
+      triggerType: "manual",
+      autoApprove: true,
+      toolAccessMode: "all",
+      allowedIntegrations: [],
+      allowedCustomIntegrations: [],
+      allowedExecutorSourceIds: [],
+      allowedSkillSlugs: [],
+      model: "anthropic/claude-sonnet-4-6",
+      prompt: "Draft an email",
+      promptDo: null,
+      promptDont: null,
+      requiresUserInput: true,
+      userInputPrompt: "Which recipient should receive the draft?",
+    });
+
+    await triggerCoworkerRun({
+      coworkerId: "wf-1",
+      triggerPayload: {
+        source: "manual_inbox",
+        userInput: "raw payload value",
+      },
+      trustedUserInput: "alice@example.com",
+      userId: "user-1",
+    });
+
+    const runCall = insertValuesMock.mock.calls.find(
+      (call) => (call[0] as { status?: string }).status === "running",
+    );
+    expect(runCall?.[0]).toEqual(
+      expect.objectContaining({
+        triggerPayload: expect.objectContaining({
+          source: "manual_inbox",
+          trigger: expect.objectContaining({
+            userInput: "raw payload value",
+          }),
+          userInputPrompt: "Which recipient should receive the draft?",
+          userInput: "alice@example.com",
+        }),
+      }),
+    );
+    expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("## User Input\nalice@example.com"),
+      }),
+    );
+  });
+
+  it("starts a pending run from a file-only reply and preserves trigger plus reply attachments", async () => {
+    coworkerRunFindFirstMock.mockResolvedValue({
+      id: "run-pending",
+      coworkerId: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      status: "needs_user_input",
+      conversationId: "conv-pending",
+      triggerPayload: {
+        source: "email_forwarded",
+        trigger: { source: "email_forwarded", subject: "Review this PDF" },
+        userInputPrompt: "What should I do with the file?",
+        triggerFileAttachments: [
+          {
+            name: "forwarded.pdf",
+            mimeType: "application/pdf",
+            dataUrl: "data:application/pdf;base64,Zm9yd2FyZGVk",
+          },
+        ],
+      },
+      coworker: {
+        id: "wf-1",
+        ownerId: "user-1",
+        workspaceId: "ws-1",
+        status: "off",
+        triggerType: "email_forwarded",
+        autoApprove: true,
+        toolAccessMode: "all",
+        allowedIntegrations: [],
+        allowedCustomIntegrations: [],
+        allowedExecutorSourceIds: [],
+        allowedSkillSlugs: [],
+        model: "anthropic/claude-sonnet-4-6",
+        prompt: "Review files",
+        promptDo: null,
+        promptDont: null,
+        requiresUserInput: true,
+        userInputPrompt: "What should I do with the file?",
+      },
+    });
+
+    const result = await startPendingCoworkerRun({
+      conversationId: "conv-pending",
+      userId: "user-1",
+      userInput: "",
+      fileAttachments: [
+        {
+          name: "answer.txt",
+          mimeType: "text/plain",
+          dataUrl: "data:text/plain;base64,YW5zd2Vy",
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      coworkerId: "wf-1",
+      runId: "run-pending",
+      generationId: "gen-1",
+      conversationId: "conv-1",
+    });
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "running",
+        triggerPayload: expect.objectContaining({
+          trigger: { source: "email_forwarded", subject: "Review this PDF" },
+          userInputPrompt: "What should I do with the file?",
+        }),
+      }),
+    );
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-pending",
+        role: "user",
+        content: "",
+      }),
+    );
+    expect(startCoworkerGenerationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-pending",
+        existingUserMessageId: "msg-user-1",
+        fileAttachments: [
+          {
+            name: "forwarded.pdf",
+            mimeType: "application/pdf",
+            dataUrl: "data:application/pdf;base64,Zm9yd2FyZGVk",
+          },
+          {
+            name: "answer.txt",
+            mimeType: "text/plain",
+            dataUrl: "data:text/plain;base64,YW5zd2Vy",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("rejects a pending start reply when another reply has already claimed the run", async () => {
+    coworkerRunFindFirstMock.mockResolvedValue({
+      id: "run-pending",
+      coworkerId: "wf-1",
+      ownerId: "user-1",
+      workspaceId: "ws-1",
+      status: "needs_user_input",
+      conversationId: "conv-pending",
+      triggerPayload: {
+        source: "schedule",
+        trigger: { source: "schedule" },
+        userInputPrompt: "Which recipient?",
+      },
+      coworker: {
+        id: "wf-1",
+        ownerId: "user-1",
+        workspaceId: "ws-1",
+        status: "on",
+        triggerType: "schedule",
+        autoApprove: true,
+        toolAccessMode: "all",
+        allowedIntegrations: [],
+        allowedCustomIntegrations: [],
+        allowedExecutorSourceIds: [],
+        allowedSkillSlugs: [],
+        model: "anthropic/claude-sonnet-4-6",
+        prompt: "Draft an email",
+        promptDo: null,
+        promptDont: null,
+        requiresUserInput: true,
+        userInputPrompt: "Which recipient?",
+      },
+    });
+    updateWhereMock.mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValue([]),
+    });
+
+    await expect(
+      startPendingCoworkerRun({
+        conversationId: "conv-pending",
+        userId: "user-1",
+        userInput: "alice@example.com",
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "This coworker has already started.",
+    });
+
+    expect(startCoworkerGenerationMock).not.toHaveBeenCalled();
+    expect(insertValuesMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "user",
       }),
     );
   });

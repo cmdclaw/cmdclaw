@@ -16,6 +16,7 @@ type CoworkerInvocationCardProps = {
   conversationId: string;
   status:
     | "running"
+    | "needs_user_input"
     | "awaiting_approval"
     | "awaiting_auth"
     | "paused"
@@ -26,12 +27,20 @@ type CoworkerInvocationCardProps = {
   message: string;
 };
 
-const ACTIVE_STATUSES = new Set(["running", "awaiting_approval", "awaiting_auth", "paused"]);
+const ACTIVE_STATUSES = new Set([
+  "running",
+  "needs_user_input",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+]);
 
 function getStatusLabel(status: CoworkerInvocationCardProps["status"]): string {
   switch (status) {
     case "running":
       return "Running";
+    case "needs_user_input":
+      return "Needs your input";
     case "awaiting_approval":
       return "Awaiting approval";
     case "awaiting_auth":
@@ -57,6 +66,8 @@ function getStatusClassName(status: CoworkerInvocationCardProps["status"]): stri
       return "bg-stone-500/10 text-stone-700";
     case "paused":
       return "bg-amber-500/10 text-amber-700";
+    case "needs_user_input":
+      return "bg-emerald-500/10 text-emerald-700";
     default:
       return "bg-sky-500/10 text-sky-700";
   }

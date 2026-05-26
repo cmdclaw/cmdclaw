@@ -161,6 +161,8 @@ export type StartChatGenerationInput = {
 export type StartCoworkerGenerationInput = {
   coworkerId: string;
   coworkerRunId: string;
+  conversationId?: string;
+  existingUserMessageId?: string;
   content: string;
   model?: string;
   authSource?: ProviderAuthSource | null;

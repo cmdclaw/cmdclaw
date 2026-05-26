@@ -59,6 +59,8 @@ const coworkerBuilderScheduleSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+const userInputPromptSchema = z.string().max(1000);
+
 export const coworkerBuilderEditSchema = z
   .object({
     prompt: z.string().max(20000).optional(),
@@ -67,6 +69,8 @@ export const coworkerBuilderEditSchema = z
     allowedIntegrations: z.array(z.string()).optional(),
     triggerType: z.enum(BUILDER_ALLOWED_TRIGGER_TYPES).optional(),
     schedule: coworkerBuilderScheduleSchema.nullable().optional(),
+    requiresUserInput: z.boolean().optional(),
+    userInputPrompt: userInputPromptSchema.nullable().optional(),
   })
   .strict()
   .refine(
@@ -76,7 +80,9 @@ export const coworkerBuilderEditSchema = z
       value.toolAccessMode !== undefined ||
       value.allowedIntegrations !== undefined ||
       value.triggerType !== undefined ||
-      value.schedule !== undefined,
+      value.schedule !== undefined ||
+      value.requiresUserInput !== undefined ||
+      value.userInputPrompt !== undefined,
     {
       message: "Edit must include at least one editable field",
     },
@@ -93,6 +99,8 @@ export type CoworkerBuilderContext = {
   triggerType: string;
   schedule: unknown;
   allowedIntegrations: string[];
+  requiresUserInput: boolean;
+  userInputPrompt: string | null;
 };
 
 type DatabaseLike = unknown;
@@ -129,6 +137,8 @@ const coworkerBuilderRowSchema = z.object({
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
   allowedIntegrations: z.array(z.string()),
+  requiresUserInput: z.boolean().optional(),
+  userInputPrompt: z.string().nullable().optional(),
   allowedCustomIntegrations: z.array(z.string()).optional(),
   autoApprove: z.boolean().optional(),
   updatedAt: z.date(),
@@ -142,6 +152,8 @@ const coworkerBuilderContextRowSchema = z.object({
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
   allowedIntegrations: z.array(z.string()),
+  requiresUserInput: z.boolean().optional(),
+  userInputPrompt: z.string().nullable().optional(),
   updatedAt: z.date(),
 });
 
@@ -153,6 +165,8 @@ const coworkerBuilderUpdatedRowSchema = z.object({
   triggerType: z.string(),
   schedule: z.unknown().nullable().optional(),
   allowedIntegrations: z.array(z.string()),
+  requiresUserInput: z.boolean().optional(),
+  userInputPrompt: z.string().nullable().optional(),
   updatedAt: z.date(),
   status: z.enum(["on", "off"]),
 });
@@ -185,6 +199,8 @@ function toBuilderContext(row: {
   triggerType: string;
   schedule: unknown;
   allowedIntegrations: string[];
+  requiresUserInput?: boolean | null;
+  userInputPrompt?: string | null;
   updatedAt: Date;
 }): CoworkerBuilderContext {
   return {
@@ -196,6 +212,8 @@ function toBuilderContext(row: {
     triggerType: row.triggerType,
     schedule: row.schedule,
     allowedIntegrations: row.allowedIntegrations,
+    requiresUserInput: row.requiresUserInput ?? false,
+    userInputPrompt: row.userInputPrompt ?? null,
   };
 }
 
@@ -224,6 +242,8 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
       triggerType: true,
       schedule: true,
       allowedIntegrations: true,
+      requiresUserInput: true,
+      userInputPrompt: true,
       updatedAt: true,
     },
   });
@@ -241,6 +261,8 @@ export async function resolveCoworkerBuilderContextByConversation(params: {
     triggerType: row.triggerType,
     schedule: row.schedule,
     allowedIntegrations: row.allowedIntegrations as string[],
+    requiresUserInput: row.requiresUserInput,
+    userInputPrompt: row.userInputPrompt,
     updatedAt: row.updatedAt,
   });
 }
@@ -256,6 +278,8 @@ function buildChangedFields(params: {
       triggerType: string;
       schedule: unknown;
       allowedIntegrations: string[];
+      requiresUserInput: boolean;
+      userInputPrompt: string | null;
   };
   next: {
       name: string;
@@ -267,6 +291,8 @@ function buildChangedFields(params: {
       triggerType: string;
       schedule: unknown;
       allowedIntegrations: string[];
+      requiresUserInput: boolean;
+      userInputPrompt: string | null;
   };
 }): string[] {
   const changed: string[] = [];
@@ -300,6 +326,12 @@ function buildChangedFields(params: {
   ) {
     changed.push("allowedIntegrations");
   }
+  if (params.current.requiresUserInput !== params.next.requiresUserInput) {
+    changed.push("requiresUserInput");
+  }
+  if (params.current.userInputPrompt !== params.next.userInputPrompt) {
+    changed.push("userInputPrompt");
+  }
   return changed;
 }
 
@@ -324,6 +356,8 @@ function buildPersistedMismatchFields(params: {
     triggerType: string;
     schedule: unknown;
     allowedIntegrations: string[];
+    requiresUserInput: boolean;
+    userInputPrompt: string | null;
   };
 }): string[] {
   const mismatched: string[] = [];
@@ -384,6 +418,16 @@ function buildPersistedMismatchFields(params: {
           mismatched.push(field);
         }
         break;
+      case "requiresUserInput":
+        if ((params.persisted.requiresUserInput ?? false) !== params.next.requiresUserInput) {
+          mismatched.push(field);
+        }
+        break;
+      case "userInputPrompt":
+        if ((params.persisted.userInputPrompt ?? null) !== params.next.userInputPrompt) {
+          mismatched.push(field);
+        }
+        break;
     }
   }
 
@@ -430,6 +474,8 @@ export async function applyCoworkerEdit(params: {
       triggerType: true,
       schedule: true,
       allowedIntegrations: true,
+      requiresUserInput: true,
+      userInputPrompt: true,
       allowedCustomIntegrations: true,
       autoApprove: true,
       updatedAt: true,
@@ -452,6 +498,11 @@ export async function applyCoworkerEdit(params: {
     normalizeCoworkerToolAccessMode(existing.toolAccessMode, existing.allowedIntegrations);
   const nextSchedule =
     params.changes.schedule !== undefined ? params.changes.schedule : (existing.schedule ?? null);
+  const nextRequiresUserInput = params.changes.requiresUserInput ?? existing.requiresUserInput ?? false;
+  const nextUserInputPrompt =
+    params.changes.userInputPrompt !== undefined
+      ? params.changes.userInputPrompt?.trim() || null
+      : (existing.userInputPrompt ?? null);
   const details: string[] = [];
   const isLegacyReadOnlyTrigger =
     params.changes.triggerType === undefined &&
@@ -481,6 +532,9 @@ export async function applyCoworkerEdit(params: {
   ) {
     details.push("Claude Sonnet 4.6 model requires admin role");
   }
+  if (nextRequiresUserInput && !nextUserInputPrompt) {
+    details.push("userInputPrompt is required when requiresUserInput is true");
+  }
   if (details.length > 0) {
     return {
       status: "validation_error",
@@ -504,6 +558,8 @@ export async function applyCoworkerEdit(params: {
           ? params.changes.schedule
         : (existing.schedule ?? null),
     allowedIntegrations: normalizedIntegrations ?? (existing.allowedIntegrations as string[]),
+    requiresUserInput: nextRequiresUserInput,
+    userInputPrompt: nextUserInputPrompt,
   };
   const { generateCoworkerMetadataOnFirstPromptFill } = await import("./coworker-metadata");
   const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
@@ -555,6 +611,8 @@ export async function applyCoworkerEdit(params: {
       triggerType: existing.triggerType,
       schedule: existing.schedule ?? null,
       allowedIntegrations: existing.allowedIntegrations as string[],
+      requiresUserInput: existing.requiresUserInput ?? false,
+      userInputPrompt: existing.userInputPrompt ?? null,
     },
     next: nextState,
   });
@@ -571,6 +629,8 @@ export async function applyCoworkerEdit(params: {
         schedule: existing.schedule ?? null,
         allowedIntegrations: existing.allowedIntegrations as string[],
         updatedAt: existing.updatedAt,
+        requiresUserInput: existing.requiresUserInput,
+        userInputPrompt: existing.userInputPrompt,
       }),
       appliedChanges: [],
     };
@@ -589,6 +649,8 @@ export async function applyCoworkerEdit(params: {
       schedule: nextState.schedule,
       allowedIntegrations:
         nextState.allowedIntegrations as (typeof coworker.$inferInsert)["allowedIntegrations"],
+      requiresUserInput: nextState.requiresUserInput,
+      userInputPrompt: nextState.userInputPrompt,
     })
     .where(
       and(
@@ -605,6 +667,8 @@ export async function applyCoworkerEdit(params: {
       triggerType: coworker.triggerType,
       schedule: coworker.schedule,
       allowedIntegrations: coworker.allowedIntegrations,
+      requiresUserInput: coworker.requiresUserInput,
+      userInputPrompt: coworker.userInputPrompt,
       updatedAt: coworker.updatedAt,
       status: coworker.status,
     });
@@ -622,6 +686,8 @@ export async function applyCoworkerEdit(params: {
         triggerType: true,
         schedule: true,
         allowedIntegrations: true,
+        requiresUserInput: true,
+        userInputPrompt: true,
         updatedAt: true,
       },
     });
@@ -639,6 +705,8 @@ export async function applyCoworkerEdit(params: {
         triggerType: latest.triggerType,
         schedule: latest.schedule ?? null,
         allowedIntegrations: latest.allowedIntegrations as string[],
+        requiresUserInput: latest.requiresUserInput,
+        userInputPrompt: latest.userInputPrompt,
         updatedAt: latest.updatedAt,
       }),
       message: "Coworker changed since this edit was prepared",
@@ -658,6 +726,8 @@ export async function applyCoworkerEdit(params: {
       triggerType: true,
       schedule: true,
       allowedIntegrations: true,
+      requiresUserInput: true,
+      userInputPrompt: true,
       updatedAt: true,
       status: true,
     },
@@ -744,6 +814,8 @@ export async function applyCoworkerEdit(params: {
       triggerType: verified.triggerType,
       schedule: verified.schedule,
       allowedIntegrations: verified.allowedIntegrations as string[],
+      requiresUserInput: verified.requiresUserInput,
+      userInputPrompt: verified.userInputPrompt,
       updatedAt: verified.updatedAt,
     }),
     appliedChanges: changedFields,

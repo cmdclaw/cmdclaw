@@ -20,18 +20,24 @@ function createProcedureStub() {
 const {
   generationFindFirstMock,
   conversationFindFirstMock,
+  coworkerRunFindFirstMock,
   generationInterruptFindFirstMock,
   dbMock,
   generationManagerMock,
+  startPendingCoworkerRunMock,
 } = vi.hoisted(() => {
   const generationFindFirstMock = vi.fn();
   const conversationFindFirstMock = vi.fn();
+  const coworkerRunFindFirstMock = vi.fn();
   const generationInterruptFindFirstMock = vi.fn();
 
   const dbMock = {
     query: {
       generation: {
         findFirst: generationFindFirstMock,
+      },
+      coworkerRun: {
+        findFirst: coworkerRunFindFirstMock,
       },
       generationInterrupt: {
         findFirst: generationInterruptFindFirstMock,
@@ -58,13 +64,16 @@ const {
     getGenerationForConversation: vi.fn(),
     getStreamCountersSnapshot: vi.fn(),
   };
+  const startPendingCoworkerRunMock = vi.fn();
 
   return {
     generationFindFirstMock,
     conversationFindFirstMock,
+    coworkerRunFindFirstMock,
     generationInterruptFindFirstMock,
     dbMock,
     generationManagerMock,
+    startPendingCoworkerRunMock,
   };
 });
 
@@ -78,6 +87,10 @@ vi.mock("@cmdclaw/db/client", () => ({
 
 vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
   generationManager: generationManagerMock,
+}));
+
+vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
+  startPendingCoworkerRun: startPendingCoworkerRunMock,
 }));
 
 vi.mock("@cmdclaw/core/server/utils/observability", () => ({
@@ -95,7 +108,7 @@ vi.mock("../workspace-access", () => ({
 
 import { generationRouter } from "./generation";
 
-const context = { user: { id: "user-1" }, workspaceId: "ws-1" };
+const context = { user: { id: "user-1" }, workspaceId: "ws-1", db: dbMock };
 const generationRouterAny = generationRouter as unknown as Record<
   string,
   (args: unknown) => Promise<unknown>
@@ -157,6 +170,13 @@ describe("generationRouter", () => {
       activeGenerationStreams: 0,
       activeStreamConsumers: 0,
       totalStreamsCreated: 0,
+    });
+    coworkerRunFindFirstMock.mockResolvedValue(null);
+    startPendingCoworkerRunMock.mockResolvedValue({
+      coworkerId: "cw-1",
+      runId: "run-pending",
+      generationId: "gen-pending",
+      conversationId: "conv-1",
     });
   });
 
@@ -475,6 +495,45 @@ describe("generationRouter", () => {
         userId: "user-1",
       }),
     );
+  });
+
+  it("routes the first reply in a pending coworker conversation to startPendingCoworkerRun", async () => {
+    coworkerRunFindFirstMock.mockResolvedValueOnce({ id: "run-pending" });
+
+    const result = await generationRouterAny.startGeneration({
+      input: {
+        conversationId: "conv-1",
+        content: "",
+        model: "openai/gpt-5.4-mini",
+        fileAttachments: [
+          {
+            name: "recipient.txt",
+            mimeType: "text/plain",
+            dataUrl: "data:text/plain;base64,YWxpY2VAZXhhbXBsZS5jb20=",
+          },
+        ],
+      },
+      context,
+    });
+
+    expect(result).toEqual({
+      generationId: "gen-pending",
+      conversationId: "conv-1",
+      traceId: "trace-test",
+    });
+    expect(startPendingCoworkerRunMock).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      userId: "user-1",
+      userInput: "",
+      fileAttachments: [
+        {
+          name: "recipient.txt",
+          mimeType: "text/plain",
+          dataUrl: "data:text/plain;base64,YWxpY2VAZXhhbXBsZS5jb20=",
+        },
+      ],
+    });
+    expect(generationManagerMock.startGeneration).not.toHaveBeenCalled();
   });
 
   it("passes cancel, approval, and auth calls through to generationManager", async () => {

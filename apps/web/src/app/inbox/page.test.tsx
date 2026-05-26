@@ -22,6 +22,7 @@ const {
   mockGetOrCreateBuilderConversationMutateAsync,
   mockEditApprovalAndResendMutateAsync,
   mockMarkAsReadMutateAsync,
+  mockDismissCoworkerRun,
   toastErrorMock,
   toastSuccessMock,
 } = vi.hoisted(() => {
@@ -41,6 +42,7 @@ const {
     mockGetOrCreateBuilderConversationMutateAsync: vi.fn<MockFn>(),
     mockEditApprovalAndResendMutateAsync: vi.fn<MockFn>(),
     mockMarkAsReadMutateAsync: vi.fn<MockFn>(),
+    mockDismissCoworkerRun: vi.fn<MockFn>(),
     toastErrorMock: vi.fn<MockFn>(),
     toastSuccessMock: vi.fn<MockFn>(),
   };
@@ -67,6 +69,9 @@ vi.mock("@/orpc/client", () => ({
   client: {
     generation: {
       startGeneration: mockStartGeneration,
+    },
+    inbox: {
+      dismissCoworkerRun: mockDismissCoworkerRun,
     },
   },
 }));
@@ -173,6 +178,7 @@ describe("InboxPage", () => {
     });
     mockEditApprovalAndResendMutateAsync.mockResolvedValue({ success: true });
     mockMarkAsReadMutateAsync.mockResolvedValue({ success: true });
+    mockDismissCoworkerRun.mockResolvedValue({ success: true });
     mockStartGeneration.mockResolvedValue({
       generationId: "gen-resumed",
       conversationId: "conv-paused",
@@ -274,5 +280,42 @@ describe("InboxPage", () => {
         id: "run-1",
       });
     });
+  });
+
+  it("dismisses a pending coworker start without using the normal chat reply UI", async () => {
+    mockUseInboxItems.mockReturnValue({
+      data: {
+        items: [
+          {
+            kind: "coworker",
+            id: "run-pending",
+            runId: "run-pending",
+            coworkerId: "cw-1",
+            coworkerName: "Email Drafter",
+            builderAvailable: true,
+            title: "Email Drafter · Mar 30, 14:32",
+            status: "needs_user_input",
+            updatedAt: new Date("2026-03-30T14:40:00.000Z"),
+            createdAt: new Date("2026-03-30T14:32:00.000Z"),
+            generationId: null,
+            conversationId: "conv-pending",
+            errorMessage: null,
+          },
+        ],
+        sourceOptions: [{ coworkerId: "cw-1", coworkerName: "Email Drafter" }],
+      },
+      isLoading: false,
+    });
+
+    render(<InboxPage />);
+
+    expect(screen.getByText("Needs your input")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /Email Drafter/i })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: /Dismiss/i }));
+
+    await waitFor(() => {
+      expect(mockDismissCoworkerRun).toHaveBeenCalledWith({ id: "run-pending" });
+    });
+    expect(mockCancelGenerationMutateAsync).not.toHaveBeenCalled();
   });
 });

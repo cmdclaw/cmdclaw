@@ -106,6 +106,7 @@ const modelReferenceSchema = z
 
 const DISABLED_TRIGGER_TYPES = ["gmail.new_email"] as const;
 const triggerTypeSchema = z.string().min(1).max(128);
+const userInputPromptSchema = z.string().max(1000).nullish();
 const COWORKER_ALIAS_GENERATION_MAX_ATTEMPTS = 32;
 const COWORKER_HISTORY_PAGE_SIZE = 100;
 const HISTORY_TARGET_KEYS = [
@@ -487,6 +488,25 @@ function assertNewTriggerTypeAllowed(triggerType: string): void {
   }
 }
 
+function normalizeUserInputPromptInput(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function assertUserInputConfig(input: {
+  requiresUserInput?: boolean;
+  userInputPrompt?: string | null;
+}): void {
+  if (input.requiresUserInput && !normalizeUserInputPromptInput(input.userInputPrompt)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "User input prompt is required when user input is required.",
+    });
+  }
+}
+
 function normalizeCoworkerInstructionInput(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -658,6 +678,8 @@ const coworkerDefinitionSchema = z.object({
     allowedExecutorSourceIds: z.array(z.string()),
     allowedSkillSlugs: z.array(z.string()),
     schedule: scheduleSchema.nullable(),
+    requiresUserInput: z.boolean().default(false),
+    userInputPrompt: userInputPromptSchema,
   }),
   documents: z.array(coworkerDefinitionDocumentSchema).default([]),
 });
@@ -901,6 +923,8 @@ const list = protectedProcedure.handler(async ({ context }) => {
         allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
         allowedSkillSlugs,
         schedule: wf.schedule,
+        requiresUserInput: wf.requiresUserInput,
+        userInputPrompt: wf.userInputPrompt,
         isPinned: wf.isPinned,
         sharedAt: wf.sharedAt,
         updatedAt: wf.updatedAt,
@@ -968,6 +992,8 @@ const get = protectedProcedure
       allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
       allowedSkillSlugs,
       schedule: wf.schedule,
+      requiresUserInput: wf.requiresUserInput,
+      userInputPrompt: wf.userInputPrompt,
       sharedAt: wf.sharedAt,
       createdAt: wf.createdAt,
       updatedAt: wf.updatedAt,
@@ -1050,9 +1076,15 @@ const create = protectedProcedure
       allowedExecutorSourceIds: z.array(z.string()).default([]),
       allowedSkillSlugs: z.array(z.string()).default([]),
       schedule: scheduleSchema.nullish(),
+      requiresUserInput: z.boolean().optional(),
+      userInputPrompt: userInputPromptSchema,
     }),
   )
   .handler(async ({ input, context }) => {
+    assertUserInputConfig({
+      requiresUserInput: input.requiresUserInput ?? false,
+      userInputPrompt: input.userInputPrompt ?? null,
+    });
     const coworkerId = crypto.randomUUID();
     const {
       workspace: { id: workspaceId },
@@ -1101,6 +1133,8 @@ const create = protectedProcedure
         toolAccessMode: input.toolAccessMode,
         allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(input.allowedSkillSlugs),
         schedule: input.schedule ?? null,
+        requiresUserInput: input.requiresUserInput ?? false,
+        userInputPrompt: normalizeUserInputPromptInput(input.userInputPrompt),
       })
       .returning();
 
@@ -1146,6 +1180,8 @@ const update = protectedProcedure
       allowedExecutorSourceIds: z.array(z.string()).optional(),
       allowedSkillSlugs: z.array(z.string()).optional(),
       schedule: scheduleSchema.nullish(),
+      requiresUserInput: z.boolean().optional(),
+      userInputPrompt: userInputPromptSchema,
     }),
   )
   .handler(async ({ input, context }) => {
@@ -1182,6 +1218,15 @@ const update = protectedProcedure
             username: input.username,
           })
         : existing.username;
+    const nextRequiresUserInput = input.requiresUserInput ?? existing.requiresUserInput;
+    const nextUserInputPrompt =
+      input.userInputPrompt !== undefined
+        ? normalizeUserInputPromptInput(input.userInputPrompt)
+        : existing.userInputPrompt;
+    assertUserInputConfig({
+      requiresUserInput: nextRequiresUserInput,
+      userInputPrompt: nextUserInputPrompt,
+    });
 
     if (input.name !== undefined) {
       updates.name = nextName;
@@ -1242,6 +1287,12 @@ const update = protectedProcedure
     }
     if (input.schedule !== undefined) {
       updates.schedule = input.schedule ?? null;
+    }
+    if (input.requiresUserInput !== undefined) {
+      updates.requiresUserInput = input.requiresUserInput;
+    }
+    if (input.userInputPrompt !== undefined) {
+      updates.userInputPrompt = nextUserInputPrompt;
     }
 
     const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
@@ -1473,6 +1524,7 @@ const trigger = protectedProcedure
           }),
         )
         .optional(),
+      trustedUserInput: z.string().max(100000).optional(),
       remoteIntegrationSource: remoteIntegrationSourceSchema
         .pick({
           targetEnv: true,
@@ -1501,6 +1553,7 @@ const trigger = protectedProcedure
     return triggerCoworkerRun({
       coworkerId: input.id,
       triggerPayload: input.payload ?? {},
+      trustedUserInput: input.trustedUserInput,
       fileAttachments: input.fileAttachments,
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
@@ -2368,6 +2421,8 @@ const exportDefinition = protectedProcedure
         allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
         allowedSkillSlugs,
         schedule: wf.schedule ?? null,
+        requiresUserInput: wf.requiresUserInput,
+        userInputPrompt: wf.userInputPrompt,
       },
       documents: await Promise.all(
         documents.map(async (document) => ({
@@ -2442,6 +2497,8 @@ const importShared = protectedProcedure
         allowedExecutorSourceIds: source.allowedExecutorSourceIds,
         allowedSkillSlugs: source.allowedSkillSlugs,
         schedule: source.schedule,
+        requiresUserInput: source.requiresUserInput,
+        userInputPrompt: source.userInputPrompt,
         sharedAt: null,
       })
       .returning({
@@ -2489,6 +2546,10 @@ const importDefinition = protectedProcedure
     });
 
     assertModelAllowedForRole(definition.coworker.model, dbUser?.role);
+    assertUserInputConfig({
+      requiresUserInput: definition.coworker.requiresUserInput,
+      userInputPrompt: definition.coworker.userInputPrompt,
+    });
 
     const coworkerId = crypto.randomUUID();
     const coworkerQueryDatabase = context.db as unknown as {
@@ -2531,6 +2592,8 @@ const importDefinition = protectedProcedure
           definition.coworker.allowedSkillSlugs,
         ),
         schedule: definition.coworker.schedule,
+        requiresUserInput: definition.coworker.requiresUserInput,
+        userInputPrompt: normalizeUserInputPromptInput(definition.coworker.userInputPrompt),
         sharedAt: null,
       })
       .returning({

@@ -200,6 +200,8 @@ type CoworkerEditorPayload = {
   allowedExecutorSourceIds: string[];
   allowedSkillSlugs: string[];
   schedule: CoworkerSchedule | null;
+  requiresUserInput: boolean;
+  userInputPrompt: string | null;
 };
 
 const EMPTY_COWORKER_DOCUMENTS: CoworkerDocumentRecord[] = [];
@@ -478,6 +480,8 @@ export default function CoworkerEditorPage() {
   const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);
   const [status, setStatus] = useState<"on" | "off">("off");
   const [autoApprove, setAutoApprove] = useState(true);
+  const [requiresUserInput, setRequiresUserInput] = useState(false);
+  const [userInputPrompt, setUserInputPrompt] = useState("");
   const [showDisableAutoApproveDialog, setShowDisableAutoApproveDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -808,6 +812,8 @@ export default function CoworkerEditorPage() {
       setModel(payload.model);
       setModelAuthSource(payload.authSource);
       setAutoApprove(payload.autoApprove);
+      setRequiresUserInput(payload.requiresUserInput);
+      setUserInputPrompt(payload.userInputPrompt ?? "");
       setToolAccessMode(payload.toolAccessMode);
       setAllowedIntegrations(payload.allowedIntegrations);
       setAllowedExecutorSourceIds(payload.allowedExecutorSourceIds);
@@ -837,6 +843,8 @@ export default function CoworkerEditorPage() {
       allowedExecutorSourceIds,
       allowedSkillSlugs,
       schedule: buildSchedule(),
+      requiresUserInput,
+      userInputPrompt: userInputPrompt.trim() || null,
     };
   }, [
     allowedIntegrations,
@@ -849,11 +857,13 @@ export default function CoworkerEditorPage() {
     modelAuthSource,
     name,
     prompt,
+    requiresUserInput,
     status,
     toolAccessMode,
     triggerType,
     username,
     coworkerId,
+    userInputPrompt,
   ]);
 
   const getCoworkerPayloadSignature = useCallback(
@@ -926,6 +936,8 @@ export default function CoworkerEditorPage() {
       allowedExecutorSourceIds: coworker.allowedExecutorSourceIds ?? [],
       allowedSkillSlugs: coworker.allowedSkillSlugs ?? [],
       schedule: (coworker.schedule as CoworkerSchedule | null) ?? null,
+      requiresUserInput: coworker.requiresUserInput ?? false,
+      userInputPrompt: coworker.userInputPrompt ?? null,
     };
     const serverPayloadSignature = getCoworkerPayloadSignature(payloadFromCoworker);
     const currentLocalPayload = hasInitializedEditorRef.current ? getCoworkerUpdateInput() : null;
@@ -979,6 +991,12 @@ export default function CoworkerEditorPage() {
       }
       if (currentLocalPayload.autoApprove === lastSavedPayload.autoApprove) {
         setAutoApprove(payloadFromCoworker.autoApprove);
+      }
+      if (currentLocalPayload.requiresUserInput === lastSavedPayload.requiresUserInput) {
+        setRequiresUserInput(payloadFromCoworker.requiresUserInput);
+      }
+      if (currentLocalPayload.userInputPrompt === lastSavedPayload.userInputPrompt) {
+        setUserInputPrompt(payloadFromCoworker.userInputPrompt ?? "");
       }
       if (currentLocalPayload.toolAccessMode === lastSavedPayload.toolAccessMode) {
         setToolAccessMode(payloadFromCoworker.toolAccessMode);
@@ -1513,6 +1531,7 @@ export default function CoworkerEditorPage() {
     name,
     persistCoworker,
     prompt,
+    requiresUserInput,
     scheduleDayOfMonth,
     scheduleDaysOfWeek,
     scheduleTime,
@@ -1521,6 +1540,7 @@ export default function CoworkerEditorPage() {
     toolAccessMode,
     triggerType,
     username,
+    userInputPrompt,
     allowedSkillSlugs,
     coworkerId,
   ]);
@@ -1552,7 +1572,7 @@ export default function CoworkerEditorPage() {
           payload: {},
           remoteIntegrationSource: options?.remoteIntegrationSource,
         });
-        toast.success("Run started.");
+        toast.success(result.generationId ? "Run started." : "Needs your input.");
         void refetchRuns();
         return result;
       } catch (error) {
@@ -1822,6 +1842,8 @@ export default function CoworkerEditorPage() {
         isSaving={isSaving}
         status={status}
         autoApprove={autoApprove}
+        requiresUserInput={requiresUserInput}
+        userInputPrompt={userInputPrompt}
         prompt={prompt}
         model={model}
         modelAuthSource={modelAuthSource}
@@ -1872,6 +1894,8 @@ export default function CoworkerEditorPage() {
         onUsernameChange={handleUsernameChange}
         onStatusChange={handleStatusChange}
         onAutoApproveChange={handleAutoApproveChange}
+        onRequiresUserInputChange={setRequiresUserInput}
+        onUserInputPromptChange={setUserInputPrompt}
         onPromptChange={handlePromptChange}
         onSaveInstructions={handleSaveInstructions}
         onModelChange={handleModelSelectionChange}
@@ -1911,6 +1935,8 @@ export default function CoworkerEditorPage() {
       isSaving,
       status,
       autoApprove,
+      requiresUserInput,
+      userInputPrompt,
       prompt,
       model,
       availableSkills,
@@ -1958,6 +1984,8 @@ export default function CoworkerEditorPage() {
       handleUsernameChange,
       handleStatusChange,
       handleAutoApproveChange,
+      setRequiresUserInput,
+      setUserInputPrompt,
       handlePromptChange,
       handleSaveInstructions,
       setModel,
@@ -2080,6 +2108,8 @@ export default function CoworkerEditorPage() {
               isSaving={isSaving}
               status={status}
               autoApprove={autoApprove}
+              requiresUserInput={requiresUserInput}
+              userInputPrompt={userInputPrompt}
               prompt={prompt}
               model={model}
               modelAuthSource={modelAuthSource}
@@ -2130,6 +2160,8 @@ export default function CoworkerEditorPage() {
               onUsernameChange={handleUsernameChange}
               onStatusChange={handleStatusChange}
               onAutoApproveChange={handleAutoApproveChange}
+              onRequiresUserInputChange={setRequiresUserInput}
+              onUserInputPromptChange={setUserInputPrompt}
               onPromptChange={handlePromptChange}
               onSaveInstructions={handleSaveInstructions}
               onModelChange={handleModelSelectionChange}
@@ -2353,9 +2385,11 @@ function InlineRunViewer({
                 ? "text-blue-500"
                 : run.status === "paused"
                   ? "text-amber-500"
-                  : run.status === "error" || run.status === "cancelled"
-                    ? "text-red-500"
-                    : "text-muted-foreground",
+                  : run.status === "needs_user_input"
+                    ? "text-emerald-500"
+                    : run.status === "error" || run.status === "cancelled"
+                      ? "text-red-500"
+                      : "text-muted-foreground",
           )}
         />
         <span className="text-foreground/70 text-xs">{getCoworkerRunStatusLabel(run.status)}</span>
@@ -2614,6 +2648,8 @@ type CoworkerSettingsPanelProps = {
   isSaving: boolean;
   status: "on" | "off";
   autoApprove: boolean;
+  requiresUserInput: boolean;
+  userInputPrompt: string;
   prompt: string;
   model: string;
   modelAuthSource: ProviderAuthSource | null;
@@ -2684,6 +2720,8 @@ type CoworkerSettingsPanelProps = {
   onUsernameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onStatusChange: (checked: boolean) => void;
   onAutoApproveChange: (checked: boolean) => void;
+  onRequiresUserInputChange: (checked: boolean) => void;
+  onUserInputPromptChange: (value: string) => void;
   onPromptChange: (value: string) => void;
   onSaveInstructions: () => void | Promise<void>;
   onModelChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
@@ -2724,6 +2762,8 @@ function CoworkerSettingsPanel({
   isSaving,
   status,
   autoApprove,
+  requiresUserInput,
+  userInputPrompt,
   prompt,
   model,
   modelAuthSource,
@@ -2774,6 +2814,8 @@ function CoworkerSettingsPanel({
   onUsernameChange,
   onStatusChange,
   onAutoApproveChange,
+  onRequiresUserInputChange,
+  onUserInputPromptChange,
   onPromptChange,
   onSaveInstructions,
   onModelChange,
@@ -2824,6 +2866,13 @@ function CoworkerSettingsPanel({
       onPromptChange(e.target.value);
     },
     [onPromptChange],
+  );
+
+  const handleUserInputPromptChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      onUserInputPromptChange(event.target.value);
+    },
+    [onUserInputPromptChange],
   );
 
   const handleToggleTriggerExpanded = useCallback(() => {
@@ -3126,6 +3175,33 @@ function CoworkerSettingsPanel({
               )}
             </button>
 
+            <div className="border-border/30 rounded-xl border px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                    Require parameter
+                  </span>
+                </div>
+                <Switch
+                  checked={requiresUserInput}
+                  onCheckedChange={onRequiresUserInputChange}
+                  aria-label="Require parameter"
+                />
+              </div>
+              {requiresUserInput && (
+                <label className="mt-2 flex items-start gap-1.5 text-sm leading-relaxed">
+                  <span className="text-muted-foreground shrink-0">Parameter prompt:</span>
+                  <textarea
+                    value={userInputPrompt}
+                    onChange={handleUserInputPromptChange}
+                    maxLength={1000}
+                    placeholder="What name should I use for the greeting?"
+                    className="text-foreground placeholder:text-muted-foreground/60 min-h-[44px] flex-1 resize-none bg-transparent leading-relaxed focus:outline-none"
+                  />
+                </label>
+              )}
+            </div>
+
             {/* Instruction editor modal */}
             <Dialog open={instructionModalOpen} onOpenChange={setInstructionModalOpen}>
               <DialogContent
@@ -3420,6 +3496,44 @@ function CoworkerSettingsPanel({
                           </div>
                         </div>
                       )}
+
+                      <div className="border-border/40 space-y-3 rounded-lg border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <label className="text-xs font-medium">Needs your input</label>
+                            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                              Ask a first question in chat before this trigger starts a run.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={requiresUserInput}
+                            onCheckedChange={onRequiresUserInputChange}
+                          />
+                        </div>
+                        <AnimatePresence initial={false}>
+                          {requiresUserInput && (
+                            <motion.div
+                              key="user-input-prompt"
+                              initial={sectionMotionInitial}
+                              animate={sectionMotionAnimate}
+                              exit={sectionMotionExit}
+                              transition={sectionMotionTransition}
+                              className="overflow-hidden"
+                            >
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium">Question to ask</label>
+                                <textarea
+                                  value={userInputPrompt}
+                                  onChange={handleUserInputPromptChange}
+                                  maxLength={1000}
+                                  placeholder="Which email address should I send the draft to?"
+                                  className="bg-background text-foreground placeholder:text-muted-foreground/60 min-h-[78px] w-full resize-none rounded-md border px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring/40"
+                                />
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -3439,19 +3553,6 @@ function CoworkerSettingsPanel({
               <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
             </div>
 
-            {/* Model card */}
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Model
-              </span>
-              <ModelSelector
-                selectedModel={model}
-                selectedAuthSource={modelAuthSource}
-                providerAvailability={providerAvailability}
-                onSelectionChange={onModelChange}
-              />
-            </div>
-
             {/* Description card */}
             <div className="px-4 py-3">
               <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
@@ -3462,6 +3563,19 @@ function CoworkerSettingsPanel({
                 value={description}
                 onChange={onDescriptionChange}
                 placeholder="What does this coworker do?"
+              />
+            </div>
+
+            {/* Model card */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Model
+              </span>
+              <ModelSelector
+                selectedModel={model}
+                selectedAuthSource={modelAuthSource}
+                providerAvailability={providerAvailability}
+                onSelectionChange={onModelChange}
               />
             </div>
           </div>
@@ -3514,9 +3628,11 @@ function CoworkerSettingsPanel({
                                 ? "text-blue-500"
                                 : run.status === "paused"
                                   ? "text-amber-500"
-                                  : run.status === "error" || run.status === "cancelled"
-                                    ? "text-red-500"
-                                    : "text-muted-foreground",
+                                  : run.status === "needs_user_input"
+                                    ? "text-emerald-500"
+                                    : run.status === "error" || run.status === "cancelled"
+                                      ? "text-red-500"
+                                      : "text-muted-foreground",
                           )}
                         />
                         <span className="text-foreground/70 text-xs">

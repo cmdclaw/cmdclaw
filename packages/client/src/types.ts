@@ -285,6 +285,8 @@ export type CoworkerDetails = {
   allowedExecutorSourceIds: string[];
   allowedSkillSlugs: string[];
   schedule: CoworkerSchedule;
+  requiresUserInput?: boolean;
+  userInputPrompt?: string | null;
   sharedAt: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -322,6 +324,8 @@ export type CoworkerCreateInput = {
   allowedExecutorSourceIds?: string[];
   allowedSkillSlugs?: string[];
   schedule?: CoworkerSchedule;
+  requiresUserInput?: boolean;
+  userInputPrompt?: string | null;
 };
 
 export type CoworkerCreateResult = {
@@ -335,7 +339,7 @@ export type CoworkerCreateResult = {
 export type CoworkerTriggerResult = {
   coworkerId: string;
   runId: string;
-  generationId: string;
+  generationId: string | null;
   conversationId: string;
 };
 
@@ -450,6 +454,7 @@ export interface CmdclawApiClient {
       id: string;
       payload?: unknown;
       debugRunDeadlineMs?: number;
+      trustedUserInput?: string;
     }): Promise<CoworkerTriggerResult>;
     getRun(input: { id: string }): Promise<CoworkerRun>;
     listRuns(input: { coworkerId: string; limit: number }): Promise<CoworkerRunSummary[]>;
@@ -567,7 +572,7 @@ export interface CoworkerRunner {
   run(
     reference: string,
     payload?: unknown,
-    options?: { debugRunDeadlineMs?: number },
+    options?: { trustedUserInput?: string; debugRunDeadlineMs?: number },
   ): Promise<CoworkerTriggerResult>;
   logs(runId: string): Promise<CoworkerRun>;
 }

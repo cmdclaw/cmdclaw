@@ -717,11 +717,13 @@ export type ContentPart =
       name: string;
       run_id: string;
       conversation_id: string;
-      generation_id: string;
+      generation_id: string | null;
       status:
         | "running"
+        | "needs_user_input"
         | "awaiting_approval"
         | "awaiting_auth"
+        | "paused"
         | "completed"
         | "error"
         | "cancelled";
@@ -889,6 +891,7 @@ export type GenerationExecutionPolicy = {
     mimeType: string;
     dataUrl: string;
   }>;
+  queuedUserMessageContent?: string;
 };
 
 export type QueuedMessageAttachment = {
@@ -1174,6 +1177,7 @@ export const coworkerStatusEnum = pgEnum("coworker_status", ["on", "off"]);
 export const coworkerToolAccessModeEnum = pgEnum("coworker_tool_access_mode", ["all", "selected"]);
 
 export const coworkerRunStatusEnum = pgEnum("coworker_run_status", [
+  "needs_user_input",
   "running",
   "awaiting_approval",
   "awaiting_auth",
@@ -1215,6 +1219,8 @@ export const coworker = pgTable(
     username: text("username"),
     promptDo: text("prompt_do"),
     promptDont: text("prompt_dont"),
+    requiresUserInput: boolean("requires_user_input").default(false).notNull(),
+    userInputPrompt: text("user_input_prompt"),
     autoApprove: boolean("auto_approve").default(true).notNull(),
     toolAccessMode: coworkerToolAccessModeEnum("tool_access_mode"),
     allowedIntegrations: integrationTypeEnum("allowed_integrations").array().notNull(),

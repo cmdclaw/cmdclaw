@@ -58,12 +58,13 @@ export function createCoworkerRunner(client: CmdclawApiClient) {
     async run(
       reference: string,
       payload?: unknown,
-      options?: { debugRunDeadlineMs?: number },
+      options?: { trustedUserInput?: string; debugRunDeadlineMs?: number },
     ): Promise<CoworkerTriggerResult> {
       const id = await resolveCoworkerReference(client, reference);
       return client.coworker.trigger({
         id,
         payload,
+        trustedUserInput: options?.trustedUserInput,
         debugRunDeadlineMs: options?.debugRunDeadlineMs,
       });
     },

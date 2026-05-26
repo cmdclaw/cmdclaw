@@ -3,6 +3,7 @@ import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import { PROVIDER_AUTH_SOURCES } from "@cmdclaw/core/lib/provider-auth-source";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
 import { isGenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
+import { startPendingCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
 import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
 import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
 import {
@@ -11,7 +12,7 @@ import {
   logServerEvent,
 } from "@cmdclaw/core/server/utils/observability";
 import { db } from "@cmdclaw/db/client";
-import { generation, conversation, generationInterrupt } from "@cmdclaw/db/schema";
+import { generation, conversation, coworkerRun, generationInterrupt } from "@cmdclaw/db/schema";
 import { eventIterator, ORPCError } from "@orpc/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -394,44 +395,49 @@ const providerAuthSourceSchema = z.enum(PROVIDER_AUTH_SOURCES);
 
 const startGeneration = protectedProcedure
   .input(
-    z.object({
-      conversationId: z.string().optional(),
-      content: z.string().min(1).max(100000),
-      model: modelReferenceSchema.optional(),
-      authSource: providerAuthSourceSchema.nullish(),
-      autoApprove: z.boolean().optional(),
-      sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
-      resumePausedGenerationId: z.string().optional(),
-      debugRunDeadlineMs: z
-        .number()
-        .int()
-        .min(1_000)
-        .max(generationLifecyclePolicy.runDeadlineMs)
-        .optional(),
-      debugApprovalHotWaitMs: z
-        .number()
-        .int()
-        .min(1_000)
-        .max(generationLifecyclePolicy.runDeadlineMs)
-        .optional(),
-      debugRuntimeNoProgressTimeoutMs: z
-        .number()
-        .int()
-        .min(1_000)
-        .max(generationLifecyclePolicy.runtimeNoProgressAfterPromptMs)
-        .optional(),
-      debugForceRuntimeNoProgressAfterPrompt: z.boolean().optional(),
-      selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
-      fileAttachments: z
-        .array(
-          z.object({
-            name: z.string(),
-            mimeType: z.string(),
-            dataUrl: z.string(),
-          }),
-        )
-        .optional(),
-    }),
+    z
+      .object({
+        conversationId: z.string().optional(),
+        content: z.string().max(100000),
+        model: modelReferenceSchema.optional(),
+        authSource: providerAuthSourceSchema.nullish(),
+        autoApprove: z.boolean().optional(),
+        sandboxProvider: z.enum(["e2b", "daytona", "docker"]).optional(),
+        resumePausedGenerationId: z.string().optional(),
+        debugRunDeadlineMs: z
+          .number()
+          .int()
+          .min(1_000)
+          .max(generationLifecyclePolicy.runDeadlineMs)
+          .optional(),
+        debugApprovalHotWaitMs: z
+          .number()
+          .int()
+          .min(1_000)
+          .max(generationLifecyclePolicy.runDeadlineMs)
+          .optional(),
+        debugRuntimeNoProgressTimeoutMs: z
+          .number()
+          .int()
+          .min(1_000)
+          .max(generationLifecyclePolicy.runtimeNoProgressAfterPromptMs)
+          .optional(),
+        debugForceRuntimeNoProgressAfterPrompt: z.boolean().optional(),
+        selectedPlatformSkillSlugs: z.array(z.string().max(128)).max(50).optional(),
+        fileAttachments: z
+          .array(
+            z.object({
+              name: z.string(),
+              mimeType: z.string(),
+              dataUrl: z.string(),
+            }),
+          )
+          .optional(),
+      })
+      .refine(
+        (input) => input.content.trim().length > 0 || (input.fileAttachments?.length ?? 0) > 0,
+        "Message content or at least one attachment is required",
+      ),
   )
   .output(
     z.object({
@@ -459,6 +465,30 @@ const startGeneration = protectedProcedure
       } else {
         await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
       }
+      if (input.conversationId && !input.resumePausedGenerationId) {
+        const pendingRun = await context.db.query.coworkerRun.findFirst({
+          where: and(
+            eq(coworkerRun.conversationId, input.conversationId),
+            eq(coworkerRun.ownerId, context.user.id),
+            eq(coworkerRun.status, "needs_user_input"),
+          ),
+          columns: { id: true },
+        });
+        if (pendingRun) {
+          const result = await startPendingCoworkerRun({
+            conversationId: input.conversationId,
+            userId: context.user.id,
+            userInput: input.content,
+            fileAttachments: input.fileAttachments,
+          });
+          return {
+            generationId: result.generationId,
+            conversationId: result.conversationId,
+            traceId: createTraceId(),
+          };
+        }
+      }
+
       const result = await generationManager.startGeneration({
         conversationId: input.conversationId,
         content: input.content,

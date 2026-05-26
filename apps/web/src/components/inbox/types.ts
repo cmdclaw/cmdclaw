@@ -1,4 +1,9 @@
-export type InboxItemStatus = "awaiting_approval" | "awaiting_auth" | "paused" | "error";
+export type InboxItemStatus =
+  | "needs_user_input"
+  | "awaiting_approval"
+  | "awaiting_auth"
+  | "paused"
+  | "error";
 
 export type ToolApprovalData = {
   interruptId: string;

@@ -3,8 +3,10 @@ export const COWORKER_EDIT_APPLY_ENVELOPE_KIND = "coworker_edit_apply" as const;
 
 export type CoworkerRuntimeRunStatus =
   | "running"
+  | "needs_user_input"
   | "awaiting_approval"
   | "awaiting_auth"
+  | "paused"
   | "completed"
   | "error"
   | "cancelled";
@@ -16,7 +18,7 @@ export type CoworkerInvocationEnvelope = {
   name: string;
   runId: string;
   conversationId: string;
-  generationId: string;
+  generationId: string | null;
   status: CoworkerRuntimeRunStatus;
   attachmentNames: string[];
   message: string;
@@ -30,6 +32,8 @@ export type CoworkerEditApplyEnvelopeCoworker = {
   toolAccessMode: "all" | "selected";
   triggerType: string;
   schedule: unknown;
+  requiresUserInput: boolean;
+  userInputPrompt: string | null;
   allowedIntegrations: string[];
 };
 
@@ -126,7 +130,7 @@ function parseEnvelopeObject(value: unknown): CoworkerInvocationEnvelope | null 
     typeof candidate.name !== "string" ||
     typeof candidate.runId !== "string" ||
     typeof candidate.conversationId !== "string" ||
-    typeof candidate.generationId !== "string" ||
+    (typeof candidate.generationId !== "string" && candidate.generationId !== null) ||
     typeof candidate.status !== "string" ||
     typeof candidate.message !== "string"
   ) {
@@ -181,6 +185,8 @@ function parseEditCoworker(value: unknown): CoworkerEditApplyEnvelopeCoworker | 
     toolAccessMode: candidate.toolAccessMode,
     triggerType: candidate.triggerType,
     schedule: candidate.schedule ?? null,
+    requiresUserInput: candidate.requiresUserInput === true,
+    userInputPrompt: typeof candidate.userInputPrompt === "string" ? candidate.userInputPrompt : null,
     allowedIntegrations,
   };
 }

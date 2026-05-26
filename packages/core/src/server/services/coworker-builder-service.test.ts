@@ -146,6 +146,129 @@ describe("coworker-builder-service", () => {
     expect(result.status).toBe("validation_error");
   });
 
+  it("rejects requiring user input without a user input prompt", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      requiresUserInput: false,
+      userInputPrompt: null,
+      updatedAt,
+    });
+
+    const result = await applyCoworkerEdit({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      changes: { requiresUserInput: true, userInputPrompt: "   " },
+    });
+
+    expect(result.status).toBe("validation_error");
+    if (result.status !== "validation_error") {
+      return;
+    }
+    expect(result.details).toContain("userInputPrompt is required when requiresUserInput is true");
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("applies user input settings and reports changed fields", async () => {
+    const { db, mocks } = createDbStub();
+    const updatedAt = new Date("2026-03-03T12:00:00.000Z");
+    const nextUpdatedAt = new Date("2026-03-03T12:01:00.000Z");
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      ownerId: "user-1",
+      builderConversationId: "conv-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      promptDo: null,
+      promptDont: null,
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      allowedCustomIntegrations: [],
+      autoApprove: true,
+      requiresUserInput: false,
+      userInputPrompt: null,
+      updatedAt,
+    });
+    mocks.returning.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        prompt: "old",
+        model: "anthropic/claude-sonnet-4-6",
+        triggerType: "manual",
+        schedule: null,
+        allowedIntegrations: ["github"],
+        requiresUserInput: true,
+        userInputPrompt: "Which email address should receive the draft?",
+        updatedAt: nextUpdatedAt,
+        status: "on",
+      },
+    ]);
+    mocks.findFirst.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "",
+      description: null,
+      username: null,
+      prompt: "old",
+      model: "anthropic/claude-sonnet-4-6",
+      toolAccessMode: "all",
+      triggerType: "manual",
+      schedule: null,
+      allowedIntegrations: ["github"],
+      requiresUserInput: true,
+      userInputPrompt: "Which email address should receive the draft?",
+      updatedAt: nextUpdatedAt,
+      status: "on",
+    });
+
+    const result = await applyCoworkerEdit({
+      database: db as never,
+      userId: "user-1",
+      userRole: "admin",
+      coworkerId: "wf-1",
+      baseUpdatedAt: updatedAt.toISOString(),
+      changes: {
+        requiresUserInput: true,
+        userInputPrompt: "  Which email address should receive the draft?  ",
+      },
+    });
+
+    expect(mocks.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requiresUserInput: true,
+        userInputPrompt: "Which email address should receive the draft?",
+      }),
+    );
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") {
+      return;
+    }
+    expect(result.appliedChanges).toEqual(["requiresUserInput", "userInputPrompt"]);
+    expect(result.coworker.requiresUserInput).toBe(true);
+    expect(result.coworker.userInputPrompt).toBe("Which email address should receive the draft?");
+  });
+
   it("allows clearing integrations for selected tool access", async () => {
     const { db, mocks } = createDbStub();
     const updatedAt = new Date("2026-03-03T12:00:00.000Z");

@@ -114,7 +114,12 @@ const ACTIVE_COWORKER_RUN_STATUSES = new Set([
   "paused",
 ]);
 const HUMAN_INPUT_CONVERSATION_STATUSES = new Set(["awaiting_approval", "awaiting_auth", "paused"]);
-const HUMAN_INPUT_COWORKER_RUN_STATUSES = new Set(["awaiting_approval", "awaiting_auth", "paused"]);
+const HUMAN_INPUT_COWORKER_RUN_STATUSES = new Set([
+  "needs_user_input",
+  "awaiting_approval",
+  "awaiting_auth",
+  "paused",
+]);
 const EMPTY_CONVERSATIONS: ConversationListData["conversations"] = [];
 const EMPTY_COWORKER_RUNS: WorkspaceCoworkerRunsData["runs"] = [];
 const RECENT_LIST_LOAD_MORE_THRESHOLD_PX = 24;

@@ -5,6 +5,7 @@ import { formatConversationTranscript, getCoworkerRunner, parsePayload } from ".
 type RunFlags = {
   server?: string;
   payload?: string;
+  userInput?: string;
   watch?: boolean;
   "watch-interval"?: number;
   chaosRunDeadline?: string;
@@ -79,10 +80,12 @@ export default async function (
   reference: string,
 ): Promise<void> {
   const { runner, client } = await getCoworkerRunner({ server: flags.server });
+  const trustedUserInput = flags.userInput?.trim();
   const debugRunDeadlineMs = flags.chaosRunDeadline
     ? parseChaosDurationMs(flags.chaosRunDeadline)
     : undefined;
   const result = await runner.run(reference, parsePayload(flags.payload), {
+    trustedUserInput: trustedUserInput && trustedUserInput.length > 0 ? trustedUserInput : undefined,
     debugRunDeadlineMs,
   });
 
@@ -93,10 +96,14 @@ export default async function (
 
   this.process.stdout.write(`Triggered coworker ${result.coworkerId}\n`);
   this.process.stdout.write(`  run id: ${result.runId}\n`);
-  this.process.stdout.write(`  generation id: ${result.generationId}\n`);
+  this.process.stdout.write(`  generation id: ${result.generationId ?? "-"}\n`);
   this.process.stdout.write(`  conversation id: ${result.conversationId}\n`);
 
-  if (flags.watch) {
+  if (!result.generationId) {
+    this.process.stdout.write("  status: Needs your input\n");
+  }
+
+  if (flags.watch && result.generationId) {
     this.process.stdout.write("\nWatching logs... (Ctrl+C to stop)\n\n");
     await printRunLogs(
       this.process.stdout,

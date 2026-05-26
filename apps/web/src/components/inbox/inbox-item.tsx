@@ -9,6 +9,7 @@ import {
   Loader2,
   Pencil,
   Send,
+  MessageCircleQuestion,
   ShieldCheck,
   Square,
   TimerReset,
@@ -24,6 +25,7 @@ import type { InboxItem as InboxItemType, ToolApprovalData } from "./types";
 import { InboxEditForm } from "./inbox-edit-form";
 
 const STATUS_CONFIG = {
+  needs_user_input: { color: "bg-emerald-500", icon: MessageCircleQuestion },
   awaiting_approval: { color: "bg-amber-500", icon: ShieldCheck },
   awaiting_auth: { color: "bg-orange-500", icon: KeyRound },
   paused: { color: "bg-blue-500", icon: TimerReset },
@@ -31,6 +33,7 @@ const STATUS_CONFIG = {
 } as const;
 
 const STATUS_LABELS: Record<InboxItemType["status"], string> = {
+  needs_user_input: "Needs your input",
   awaiting_approval: "awaiting approval",
   awaiting_auth: "awaiting auth",
   paused: "needs continuation",
@@ -165,7 +168,9 @@ export function InboxItem({
   );
 
   const showStop =
-    Boolean(item.generationId) && item.status !== "error" && item.status !== "paused";
+    (Boolean(item.generationId) || item.status === "needs_user_input") &&
+    item.status !== "error" &&
+    item.status !== "paused";
   const showContinue = item.status === "paused" && item.pauseReason === "run_deadline";
   const showBuilder = item.kind === "coworker" && item.status === "error" && item.builderAvailable;
 
@@ -218,6 +223,7 @@ export function InboxItem({
               className={cn(
                 "h-3.5 w-3.5",
                 item.status === "awaiting_approval" && "text-amber-400",
+                item.status === "needs_user_input" && "text-emerald-400",
                 item.status === "awaiting_auth" && "text-orange-400",
                 item.status === "paused" && "text-blue-400",
                 item.status === "error" && "text-red-400",
@@ -255,7 +261,7 @@ export function InboxItem({
             {showStop ? (
               <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onStop}>
                 <Square className="mr-1 h-3.5 w-3.5" />
-                Stop
+                {item.status === "needs_user_input" ? "Dismiss" : "Stop"}
               </Button>
             ) : null}
             {showContinue ? (

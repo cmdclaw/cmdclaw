@@ -6,6 +6,7 @@ const KEBAB_FLAG_ALIASES = new Map<string, string>([
   ["--no-list-models", "--noListModels"],
   ["--auto-approve", "--autoApprove"],
   ["--no-auto-approve", "--noAutoApprove"],
+  ["--user-input", "--userInput"],
   ["--question-answer", "--questionAnswer"],
   ["--perfetto-trace", "--perfettoTrace"],
   ["--no-perfetto-trace", "--noPerfettoTrace"],

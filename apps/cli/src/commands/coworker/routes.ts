@@ -253,6 +253,12 @@ const coworkerRunCommand = buildCommand({
         optional: true,
         brief: "JSON payload passed to the run",
       },
+      userInput: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        brief: "Trusted first user input for coworkers that need it",
+      },
       watch: {
         kind: "boolean",
         optional: true as const,
