@@ -1192,7 +1192,7 @@ describe("coworkerRouter", () => {
     });
   });
 
-  it("returns a signed download URL for a coworker document", async () => {
+  it("returns an app download URL for a coworker document", async () => {
     const context = createContext();
     context.db.query.coworkerDocument.findFirst.mockResolvedValue({
       coworkerId: "wf-1",
@@ -1206,11 +1206,9 @@ describe("coworkerRouter", () => {
       context,
     });
 
-    expect(getPresignedDownloadUrlMock).toHaveBeenCalledWith(
-      "coworkers/user-1/wf-1/documents/brief.pdf",
-    );
+    expect(getPresignedDownloadUrlMock).not.toHaveBeenCalled();
     expect(result).toEqual({
-      url: "https://storage.example.com/brief.pdf",
+      url: "/api/coworkers/documents/doc-1/download",
       filename: "brief.pdf",
       mimeType: "application/pdf",
     });

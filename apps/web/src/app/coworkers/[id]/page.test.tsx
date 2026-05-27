@@ -399,7 +399,7 @@ describe("CoworkerEditorPage", () => {
     mockUpdateCoworkerMutateAsync.mockReset();
     mockGetCoworkerDocumentUrlMutateAsync.mockReset();
     mockGetCoworkerDocumentUrlMutateAsync.mockResolvedValue({
-      url: "https://storage.example.com/brief.pdf",
+      url: "/api/coworkers/documents/doc-1/download",
       filename: "brief.pdf",
       mimeType: "application/pdf",
     });

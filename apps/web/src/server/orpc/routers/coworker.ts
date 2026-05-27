@@ -42,7 +42,7 @@ import {
   triggerCoworkerRun,
 } from "@cmdclaw/core/server/services/coworker-service";
 import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
-import { downloadFromS3, getPresignedDownloadUrl } from "@cmdclaw/core/server/storage/s3-client";
+import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
 import {
   conversation,
   generation,
@@ -1501,10 +1501,8 @@ const getDocumentUrl = protectedProcedure
     }
 
     await requireOwnedCoworkerInActiveWorkspace(context, existingDocument.coworkerId);
-    const url = await getPresignedDownloadUrl(existingDocument.storageKey);
-
     return {
-      url,
+      url: `/api/coworkers/documents/${encodeURIComponent(input.id)}/download`,
       filename: existingDocument.filename,
       mimeType: existingDocument.mimeType,
     };
