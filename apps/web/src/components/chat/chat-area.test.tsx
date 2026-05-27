@@ -139,6 +139,7 @@ vi.mock("@/lib/generation-runtime", () => ({
           operation: string;
           command?: string;
           status: "pending" | "approved" | "denied";
+          questionAnswers?: string[][];
         };
         auth?: {
           interruptId?: string;
@@ -233,16 +234,21 @@ vi.mock("@/lib/generation-runtime", () => ({
       handleCancelled: vi.fn(),
       handleError: vi.fn(),
       setStatus: vi.fn(),
-      setApprovalStatus: vi.fn((toolUseId: string, status: "approved" | "denied") => {
-        const segment = snapshot.segments.find((value) => value.approval?.toolUseId === toolUseId);
-        if (segment?.approval) {
-          segment.approval = {
-            ...segment.approval,
-            status,
-          };
-        }
-        snapshot.traceStatus = "streaming";
-      }),
+      setApprovalStatus: vi.fn(
+        (toolUseId: string, status: "approved" | "denied", questionAnswers?: string[][]) => {
+          const segment = snapshot.segments.find(
+            (value) => value.approval?.toolUseId === toolUseId,
+          );
+          if (segment?.approval) {
+            segment.approval = {
+              ...segment.approval,
+              status,
+              questionAnswers,
+            };
+          }
+          snapshot.traceStatus = "streaming";
+        },
+      ),
       setAuthConnecting: vi.fn(),
       setAuthPending: vi.fn(),
       setAuthCancelled: vi.fn(),
@@ -461,8 +467,19 @@ vi.mock("./question-approval-utils", () => ({
 }));
 
 vi.mock("./tool-approval-card", () => ({
-  ToolApprovalCard: ({ status }: { status: "pending" | "approved" | "denied" }) => (
-    <div>{`Tool Approval ${status}`}</div>
+  ToolApprovalCard: ({
+    status,
+    questionAnswers,
+  }: {
+    status: "pending" | "approved" | "denied";
+    questionAnswers?: string[][];
+  }) => (
+    <div>
+      <div>{`Tool Approval ${status}`}</div>
+      {questionAnswers?.flat().map((answer) => (
+        <div key={answer}>{`Answer ${answer}`}</div>
+      ))}
+    </div>
   ),
 }));
 
@@ -1047,5 +1064,51 @@ describe("ChatArea generation errors", () => {
     await waitFor(() => {
       expect(mockSubscribeToGeneration).toHaveBeenCalledWith("gen-approval", expect.any(Object));
     });
+  });
+
+  it("optimistically shows submitted question answers before approval RPC resolves", async () => {
+    mockActiveGenerationState.data = null;
+    mockSubmitApprovalMutateAsync.mockImplementationOnce(() => new Promise(() => {}));
+    mockStartGeneration.mockImplementationOnce(async (_input, callbacks) => {
+      callbacks.onStarted?.("gen-question", "conv-1");
+      callbacks.onPendingApproval?.({
+        interruptId: "interrupt-question-1",
+        generationId: "gen-question",
+        conversationId: "conv-1",
+        toolUseId: "tool-question",
+        toolName: "question",
+        toolInput: {
+          questions: [
+            {
+              header: "Choose",
+              question: "Pick one",
+              options: [{ label: "Yes" }],
+            },
+          ],
+        },
+        integration: "cmdclaw",
+        operation: "question",
+      });
+      callbacks.onStatusChange?.("approval_parked");
+      return null;
+    });
+
+    render(<ChatArea conversationId="conv-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Choose")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+
+    await waitFor(() => {
+      expect(mockSubmitApprovalMutateAsync).toHaveBeenCalledWith({
+        interruptId: "interrupt-question-1",
+        decision: "approve",
+        questionAnswers: [["Yes"]],
+      });
+    });
+    expect(screen.getByText("Tool Approval approved")).toBeInTheDocument();
+    expect(screen.getByText("Answer Yes")).toBeInTheDocument();
   });
 });

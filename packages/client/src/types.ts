@@ -63,6 +63,7 @@ export type GenerationPendingApprovalData = {
 };
 
 export type GenerationApprovalData = {
+  interruptId?: string;
   toolUseId: string;
   toolName: string;
   toolInput: unknown;

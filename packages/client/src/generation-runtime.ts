@@ -420,10 +420,18 @@ export class GenerationRuntime {
     this.traceStatus = "waiting_approval";
   }
 
-  setApprovalStatus(toolUseId: string, status: "approved" | "denied"): void {
+  setApprovalStatus(
+    toolUseId: string,
+    status: "approved" | "denied",
+    questionAnswers?: string[][],
+  ): void {
     for (const seg of this.segments) {
       if (seg.approval?.toolUseId === toolUseId) {
-        seg.approval.status = status;
+        seg.approval = {
+          ...seg.approval,
+          status,
+          questionAnswers,
+        };
         const toolItem = seg.items.find(
           (item) => item.type === "tool_call" && item.status === "running",
         );
@@ -441,6 +449,7 @@ export class GenerationRuntime {
   }
 
   handleApproval(data: {
+    interruptId?: string;
     toolUseId: string;
     toolName: string;
     toolInput: unknown;
@@ -464,9 +473,12 @@ export class GenerationRuntime {
 
     let updatedExistingSegment = false;
     for (const segment of this.segments) {
-      if (segment.approval?.toolUseId === data.toolUseId) {
+      if (
+        segment.approval?.toolUseId === data.toolUseId ||
+        (data.interruptId && segment.approval?.interruptId === data.interruptId)
+      ) {
         segment.approval = {
-          interruptId: segment.approval.interruptId,
+          interruptId: segment.approval.interruptId ?? data.interruptId,
           toolUseId: data.toolUseId,
           toolName: data.toolName,
           toolInput: data.toolInput,
@@ -484,7 +496,7 @@ export class GenerationRuntime {
     if (!updatedExistingSegment) {
       const currentSeg = this.getCurrentSegment();
       currentSeg.approval = {
-        interruptId: undefined,
+        interruptId: data.interruptId,
         toolUseId: data.toolUseId,
         toolName: data.toolName,
         toolInput: data.toolInput,

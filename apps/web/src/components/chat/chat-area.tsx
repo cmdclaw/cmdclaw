@@ -2193,13 +2193,6 @@ export function ChatArea({
             return;
           }
           markInitSignal("pending_approval", { toolName: data.toolName });
-          console.log("[ApprovalCard] Showing approval card", {
-            toolUseId: data.toolUseId,
-            toolName: data.toolName,
-            integration: data.integration,
-            operation: data.operation,
-            command: data.command,
-          });
           currentGenerationIdRef.current = data.generationId;
           if (data.conversationId) {
             syncConversationForNewChat(data.conversationId);
@@ -3321,21 +3314,22 @@ export function ChatArea({
         return;
       }
 
+      const runtime = runtimeRef.current;
+      if (runtime) {
+        runtime.setApprovalStatus(toolUseId, "approved", questionAnswers);
+        syncFromRuntime(runtime);
+      } else {
+        optimisticallyResumeInterruptedGeneration(interruptId, "approval", {
+          questionAnswers,
+        });
+      }
+
       try {
         await submitApproval({
           interruptId,
           decision: "approve",
           questionAnswers,
         });
-        const runtime = runtimeRef.current;
-        if (runtime) {
-          runtime.setApprovalStatus(toolUseId, "approved");
-          syncFromRuntime(runtime);
-        } else {
-          optimisticallyResumeInterruptedGeneration(interruptId, "approval", {
-            questionAnswers,
-          });
-        }
       } catch (err) {
         console.error("Failed to approve tool use:", err);
       }

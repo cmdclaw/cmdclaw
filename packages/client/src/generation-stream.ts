@@ -179,6 +179,7 @@ export async function runGenerationStream(
             const decision = event.status === "accepted" ? "approved" : "denied";
             await callbacks.onApprovalResult?.(toolUseId, decision);
             await callbacks.onApproval?.({
+              interruptId: event.interruptId,
               toolUseId,
               toolName: event.display.title,
               toolInput: event.display.toolInput ?? {},

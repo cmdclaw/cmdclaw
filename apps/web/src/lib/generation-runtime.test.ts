@@ -114,4 +114,44 @@ describe("GenerationRuntime tool result matching", () => {
       questionAnswers: [["Review code changes"]],
     });
   });
+
+  it("resolves a pending approval by interrupt id when the resolved tool id differs", () => {
+    const runtime = createGenerationRuntime();
+
+    runtime.handlePendingApproval({
+      interruptId: "interrupt-question-1",
+      generationId: "gen-1",
+      conversationId: "conv-1",
+      toolUseId: "tool-pending",
+      toolName: "Question",
+      toolInput: {
+        questions: [{ header: "Output format", question: "What should the output look like?" }],
+      },
+      integration: "cmdclaw",
+      operation: "question",
+    });
+
+    runtime.handleApproval({
+      interruptId: "interrupt-question-1",
+      toolUseId: "tool-resolved",
+      toolName: "Question",
+      toolInput: {
+        questions: [{ header: "Output format", question: "What should the output look like?" }],
+      },
+      integration: "cmdclaw",
+      operation: "question",
+      status: "approved",
+      questionAnswers: [["Plain Hi"]],
+    });
+
+    const approvalSegments = runtime.snapshot.segments.filter((segment) => segment.approval);
+
+    expect(approvalSegments).toHaveLength(1);
+    expect(approvalSegments[0]?.approval).toMatchObject({
+      interruptId: "interrupt-question-1",
+      toolUseId: "tool-resolved",
+      status: "approved",
+      questionAnswers: [["Plain Hi"]],
+    });
+  });
 });
