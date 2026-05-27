@@ -4,6 +4,7 @@ import {
   decodeGalienCurrentUserFromBearerToken,
   extractBearerTokenFromLoginResponse,
   requestGalienForCurrentUser,
+  requestGalienForCurrentUserBodyField,
   requestGalienForCurrentUserPathParam,
   splitGalienRequestParts,
 } from "./galien-client";
@@ -141,6 +142,63 @@ describe("galien client helpers", () => {
     expect(requests[1]).toBe(
       "https://api.frontline.galien.preprod.webhelpmedica.com/api/v1/reclamations?clientId=42&userId=2",
     );
+  });
+
+  it("injects the current user id into a named body field", async () => {
+    const header = Buffer.from(JSON.stringify({ typ: "JWT", alg: "RS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ id: 2, role: "ROLE_USER" })).toString("base64url");
+    const bearerToken = `Bearer ${header}.${payload}.signature`;
+    const requestBodies: unknown[] = [];
+
+    process.env.GALIEN_EMAIL = "user@example.com";
+    process.env.GALIEN_PASSWORD = "password";
+    globalThis.fetch = vi.fn(async (input, init) => {
+      if (String(input).endsWith("/api/v1/tokens/login")) {
+        expect(init?.method).toBe("POST");
+        return new Response("[]", {
+          status: 200,
+          headers: {
+            authorization: bearerToken,
+          },
+        });
+      }
+
+      requestBodies.push(JSON.parse(String(init?.body)));
+      expect(init?.headers).toMatchObject({
+        authorization: bearerToken,
+      });
+      return new Response(JSON.stringify({ id: 123 }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      });
+    }) as unknown as typeof fetch;
+
+    await requestGalienForCurrentUserBodyField(
+      {
+        method: "POST",
+        path: "/api/v1/visit-reports",
+        body: {
+          clientId: 14,
+          comment: "Rapport de visite de test",
+        },
+      },
+      "userId",
+      {
+        username: "user@example.com",
+        password: "password",
+        apiBaseUrl: "https://api.frontline.galien.preprod.webhelpmedica.com",
+      },
+    );
+
+    expect(requestBodies).toEqual([
+      {
+        clientId: 14,
+        comment: "Rapport de visite de test",
+        userId: 2,
+      },
+    ]);
   });
 
   it("injects the current user id into a named path parameter", async () => {

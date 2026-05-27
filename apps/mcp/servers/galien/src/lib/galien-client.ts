@@ -26,6 +26,7 @@ export type GalienCredentials = {
 };
 type CreateVisitReportPayload = {
   clientId?: number;
+  userId?: number;
   contactPersonId?: number;
   contactOutcomeId?: number;
   visitDate?: string;
@@ -48,6 +49,22 @@ type CreateVisitReportPayload = {
     plvLabel?: string;
     optionsIds?: number[];
   }>;
+  version?: string;
+  localisation?: number;
+  pharmacySize?: number;
+  averagePassagesPerDay?: number;
+  positioningOfProductsOnShelf?: number;
+  doubleImplantation?: boolean | number;
+  numberOfVetoTablets?: number;
+  numberOfBiTablets?: number;
+  linearPartCalculation?: string;
+  plvUse?: number[];
+  brandPresence?: number[];
+  numberOfTrainedPeople?: number;
+  numberOfCoursesOverLastYear?: number;
+  eligibleForReferral?: boolean;
+  plvRequired?: number[] | null;
+  employeePerDay?: number | null;
 };
 
 type GalienRequestParams = {
@@ -312,6 +329,25 @@ export async function requestGalienForCurrentUser(
           ...params.query,
           userId: currentUser.id,
         },
+  });
+}
+
+export async function requestGalienForCurrentUserBodyField(
+  params: GalienRequestParams,
+  bodyFieldName: string,
+  credentials?: GalienCredentials,
+) {
+  const bearerToken = await loginToGalien(credentials);
+  const currentUser = decodeGalienCurrentUserFromBearerToken(bearerToken);
+
+  return requestGalienWithBearerToken({
+    ...params,
+    bearerToken,
+    apiBaseUrl: credentials?.apiBaseUrl ?? DEFAULT_GALIEN_BASE_URL,
+    body: {
+      ...params.body,
+      [bodyFieldName]: currentUser.id,
+    },
   });
 }
 
