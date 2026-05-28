@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const conversationRuntimeFindFirstMock = vi.fn();
 const dbUpdateMock = vi.fn();
 const daytonaGetMock = vi.fn();
+let getOrCreateSandboxForCloudProvider: typeof import("./opencode-session").getOrCreateSandboxForCloudProvider;
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: {
@@ -29,6 +30,10 @@ vi.mock("./runtime/factory", () => ({
 }));
 
 describe("getOrCreateSandboxForCloudProvider", () => {
+  beforeAll(async () => {
+    ({ getOrCreateSandboxForCloudProvider } = await import("./opencode-session"));
+  });
+
   beforeEach(() => {
     conversationRuntimeFindFirstMock.mockReset();
     dbUpdateMock.mockReset();
@@ -73,7 +78,6 @@ describe("getOrCreateSandboxForCloudProvider", () => {
     fetchMock.mockResolvedValueOnce({ ok: false });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { getOrCreateSandboxForCloudProvider } = await import("./opencode-session");
     const lifecycle = vi.fn();
     const init = await getOrCreateSandboxForCloudProvider(
       "daytona",
