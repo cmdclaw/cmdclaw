@@ -86,7 +86,7 @@ type RuntimeDiagnosticSnapshotPayload = {
 type RuntimeProbeSummary = {
   ok: boolean;
   shape: string | null;
-  detail: string | null;
+  detail: unknown;
   error: string | null;
 };
 
@@ -112,50 +112,44 @@ function tailLogText(text: string, maxLines = 120, maxChars = 8_000): string {
   return tail.length > maxChars ? `...${tail.slice(-maxChars)}` : tail;
 }
 
-function summarizeDiagnosticValue(value: unknown, depth = 0): string {
+function captureDiagnosticValue(
+  value: unknown,
+  depth = 0,
+  seen: WeakSet<object> = new WeakSet(),
+): unknown {
   if (value === null) {
-    return "null";
+    return null;
   }
   if (value === undefined) {
-    return "undefined";
+    return "[undefined]";
   }
   if (typeof value === "string") {
-    return `string(length=${value.length})`;
+    return value.length > 8_000 ? `${value.slice(0, 8_000)}...` : value;
   }
   if (typeof value === "number" || typeof value === "boolean") {
-    return typeof value;
+    return value;
   }
   if (Array.isArray(value)) {
-    if (depth >= 2) {
-      return `array(${value.length})`;
+    if (depth >= 6) {
+      return `[array depth limit length=${value.length}]`;
     }
-    return `array(${value.length})[${value
-      .slice(0, 3)
-      .map((entry) => summarizeDiagnosticValue(entry, depth + 1))
-      .join(",")}]`;
+    return value.slice(0, 100).map((entry) => captureDiagnosticValue(entry, depth + 1, seen));
   }
   if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    const safeEntries = entries.filter(
-      ([key]) =>
-        !/prompt|content|output|authorization|cookie|token|secret|tool[_-]?input|tool[_-]?result|file[_-]?content|env/i.test(
-          key,
-        ),
-    );
-    const redactedKeyCount = entries.length - safeEntries.length;
-    if (depth >= 2) {
-      return `object(keys=${safeEntries
-        .map(([key]) => key)
-        .slice(0, 8)
-        .join(",")};redacted=${redactedKeyCount})`;
+    if (seen.has(value)) {
+      return "[Circular]";
     }
-    const fields = safeEntries
-      .slice(0, 8)
-      .map(([key, entry]) => `${key}:${summarizeDiagnosticValue(entry, depth + 1)}`)
-      .join(",");
-    return `object(${fields};redacted=${redactedKeyCount})`;
+    seen.add(value);
+    if (depth >= 6) {
+      return "[object depth limit]";
+    }
+    const result: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(0, 100)) {
+      result[key] = captureDiagnosticValue(entry, depth + 1, seen);
+    }
+    return result;
   }
-  return typeof value;
+  return String(value);
 }
 
 function summarizeLogTail(rawLog: string): string | null {
@@ -190,7 +184,7 @@ async function summarizeProbe(
       detail:
         result.data === null || result.data === undefined
           ? null
-          : summarizeDiagnosticValue(result.data),
+          : captureDiagnosticValue(result.data),
       error: null,
     };
   } catch (error) {
