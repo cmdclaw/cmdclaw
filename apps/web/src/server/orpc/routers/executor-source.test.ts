@@ -111,13 +111,12 @@ describe("executorSourceRouter", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects OpenAPI sources", () => {
+  it("rejects non-MCP Workspace MCP Server kinds", () => {
     const parsed = executorSourceInputSchema.safeParse({
-      kind: "openapi",
+      kind: "http",
       name: "GitHub",
       namespace: "github",
       endpoint: "https://api.github.com",
-      specUrl: "https://example.com/openapi.json",
       authType: "oauth2",
       enabled: true,
     });
@@ -196,7 +195,7 @@ describe("executorSourceRouter", () => {
         context,
       }),
     ).rejects.toMatchObject({
-      message: "This source is not configured for MCP OAuth.",
+      message: "This Workspace MCP Server is not configured for MCP OAuth.",
     });
   });
 

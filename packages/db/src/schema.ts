@@ -245,8 +245,8 @@ export const workspaceMembershipRoleEnum = pgEnum("workspace_membership_role", [
 
 export const billingOwnerTypeEnum = pgEnum("billing_owner_type", ["user", "workspace"]);
 export const providerAuthSourceEnum = pgEnum("provider_auth_source", ["user", "shared"]);
-export const workspaceMcpServerKindEnum = pgEnum("executor_source_kind", ["mcp"]);
-export const workspaceMcpServerAuthTypeEnum = pgEnum("executor_source_auth_type", [
+export const workspaceMcpServerKindEnum = pgEnum("workspace_mcp_server_kind", ["mcp"]);
+export const workspaceMcpServerAuthTypeEnum = pgEnum("workspace_mcp_server_auth_type", [
   "none",
   "api_key",
   "bearer",
@@ -347,13 +347,13 @@ export const userRelations = relations(user, ({ many }) => ({
   devices: many(device),
   customIntegrations: many(customIntegration),
   customIntegrationCredentials: many(customIntegrationCredential),
-  executorSourcesCreated: many(workspaceMcpServer, {
+  workspaceMcpServersCreated: many(workspaceMcpServer, {
     relationName: "workspaceMcpServerCreatedByUser",
   }),
-  executorSourcesUpdated: many(workspaceMcpServer, {
+  workspaceMcpServersUpdated: many(workspaceMcpServer, {
     relationName: "workspaceMcpServerUpdatedByUser",
   }),
-  executorSourceCredentials: many(workspaceMcpAuthorization),
+  workspaceMcpAuthorizations: many(workspaceMcpAuthorization),
   integrationSkillsCreated: many(integrationSkill),
   integrationSkillPreferences: many(integrationSkillPreference),
   whatsappLinks: many(whatsappUserLink),
@@ -2655,7 +2655,7 @@ export const customIntegrationCredentialRelations = relations(
 );
 
 export const workspaceMcpServer = pgTable(
-  "workspace_executor_source",
+  "workspace_mcp_server",
   {
     id: text("id")
       .primaryKey()
@@ -2692,9 +2692,9 @@ export const workspaceMcpServer = pgTable(
       .notNull(),
   },
   (table) => [
-    index("workspace_executor_source_workspace_idx").on(table.workspaceId),
-    index("workspace_executor_source_created_by_idx").on(table.createdByUserId),
-    uniqueIndex("workspace_executor_source_workspace_namespace_idx").on(
+    index("workspace_mcp_server_workspace_idx").on(table.workspaceId),
+    index("workspace_mcp_server_created_by_idx").on(table.createdByUserId),
+    uniqueIndex("workspace_mcp_server_workspace_namespace_idx").on(
       table.workspaceId,
       table.namespace,
     ),
@@ -2702,12 +2702,12 @@ export const workspaceMcpServer = pgTable(
 );
 
 export const workspaceMcpAuthorization = pgTable(
-  "workspace_executor_source_credential",
+  "workspace_mcp_authorization",
   {
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    workspaceMcpServerId: text("workspace_executor_source_id")
+    workspaceMcpServerId: text("workspace_mcp_server_id")
       .notNull()
       .references(() => workspaceMcpServer.id, { onDelete: "cascade" }),
     userId: text("user_id")
@@ -2736,9 +2736,9 @@ export const workspaceMcpAuthorization = pgTable(
       .notNull(),
   },
   (table) => [
-    index("workspace_executor_source_credential_user_idx").on(table.userId),
-    index("workspace_executor_source_credential_source_idx").on(table.workspaceMcpServerId),
-    unique("workspace_executor_source_credential_user_source_idx").on(
+    index("workspace_mcp_authorization_user_idx").on(table.userId),
+    index("workspace_mcp_authorization_server_idx").on(table.workspaceMcpServerId),
+    unique("workspace_mcp_authorization_user_server_idx").on(
       table.userId,
       table.workspaceMcpServerId,
     ),

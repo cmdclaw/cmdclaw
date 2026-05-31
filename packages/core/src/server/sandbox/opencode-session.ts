@@ -41,13 +41,16 @@ import {
   getSandboxServerBackgroundStartCommand,
   resolveSandboxAgentRuntimeForModel,
 } from "./opencode-runtime";
+import {
+  type OpenCodeMcpRuntimeWarning,
+  reconcileOpencodeMcpServers,
+  writeOpencodeMcpConfigToSandbox,
+} from "./opencode-mcp-reconciliation";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import type { RuntimeMcpServer } from "./core/types";
 
 const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
-const OPENCODE_WORKSPACE_DIRECTORY = "/app";
-const OPENCODE_CONFIG_PATH = "/app/opencode.json";
 const DAYTONA_CREATE_TIMEOUT_SECONDS = 30;
 const DAYTONA_CREATE_MAX_ATTEMPTS = 2;
 const DAYTONA_CREATE_RETRY_DELAY_MS = 1_000;
@@ -83,11 +86,6 @@ type OpenCodeSessionOptions = {
   sessionMcpServers?: RuntimeMcpServer[];
   onLifecycle?: SessionInitLifecycleCallback;
   telemetry?: ObservabilityContext;
-};
-
-export type OpenCodeMcpRuntimeWarning = {
-  serverName: string;
-  message: string;
 };
 
 export type OpenCodeCommandResult = {
@@ -297,169 +295,6 @@ async function createDaytonaOpencodeClient(
     model,
     fetch: authedFetch as typeof fetch,
   });
-}
-
-function toOpencodeMcpConfig(server: RuntimeMcpServer) {
-  if (server.type === "stdio") {
-    return {
-      type: "local" as const,
-      command: [server.command, ...server.args],
-      environment: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])),
-      enabled: true,
-    };
-  }
-
-  return {
-    type: "remote" as const,
-    url: server.url,
-    headers: Object.fromEntries(server.headers.map((entry) => [entry.name, entry.value])),
-    oauth: server.headers.length > 0 ? (false as const) : undefined,
-    enabled: true,
-  };
-}
-
-function buildOpencodeConfigWithMcp(
-  currentRaw: string,
-  servers: RuntimeMcpServer[] | undefined,
-): string {
-  let current: Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(currentRaw) as unknown;
-    current =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-  } catch {
-    current = {};
-  }
-
-  const previousMcp =
-    current.mcp && typeof current.mcp === "object" && !Array.isArray(current.mcp)
-      ? (current.mcp as Record<string, unknown>)
-      : {};
-  const tools =
-    current.tools && typeof current.tools === "object" && !Array.isArray(current.tools)
-      ? { ...(current.tools as Record<string, unknown>) }
-      : {};
-
-  for (const serverName of Object.keys(previousMcp)) {
-    delete tools[`${serverName}_*`];
-  }
-
-  const mcp = Object.fromEntries(
-    (servers ?? []).map((server) => [server.name, toOpencodeMcpConfig(server)]),
-  );
-  for (const serverName of Object.keys(mcp)) {
-    tools[`${serverName}_*`] = true;
-  }
-
-  const next: Record<string, unknown> = {
-    ...current,
-    tools,
-    mcp,
-  };
-
-  if (Object.keys(mcp).length === 0) {
-    delete next.mcp;
-  }
-
-  return `${JSON.stringify(next, null, 2)}\n`;
-}
-
-async function writeOpencodeMcpConfigToSandbox(
-  sandbox: OpenCodeSandbox,
-  servers: RuntimeMcpServer[] | undefined,
-): Promise<boolean> {
-  const currentRaw = await sandbox.files.read(OPENCODE_CONFIG_PATH).catch(() => "{}");
-  const nextRaw = buildOpencodeConfigWithMcp(currentRaw, servers);
-  if (currentRaw === nextRaw) {
-    return false;
-  }
-  await sandbox.files.write(OPENCODE_CONFIG_PATH, nextRaw);
-  return true;
-}
-
-function formatMcpError(error: unknown): string {
-  if (!error) {
-    return "unknown error";
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
-async function ensureOpencodeMcpServerConfigured(
-  client: OpencodeClient,
-  server: RuntimeMcpServer,
-): Promise<OpenCodeMcpRuntimeWarning | null> {
-  const statusResult = await client.mcp.status({ directory: OPENCODE_WORKSPACE_DIRECTORY });
-  if (statusResult.error) {
-    return {
-      serverName: server.name,
-      message: `Failed to read OpenCode MCP status for ${server.name}: ${formatMcpError(statusResult.error)}`,
-    };
-  }
-
-  const currentStatus = statusResult.data?.[server.name];
-  if (currentStatus?.status === "connected") {
-    return null;
-  }
-
-  const status = currentStatus?.status ?? "missing";
-  const suffix =
-    currentStatus && "error" in currentStatus ? `: ${String(currentStatus.error)}` : "";
-  return {
-    serverName: server.name,
-    message: `OpenCode MCP server ${server.name} is not connected (status=${status})${suffix}.`,
-  };
-}
-
-async function ensureOpencodeMcpServersConfigured(
-  client: OpencodeClient,
-  servers: RuntimeMcpServer[] | undefined,
-): Promise<OpenCodeMcpRuntimeWarning[]> {
-  const warnings: OpenCodeMcpRuntimeWarning[] = [];
-  const desiredNames = new Set((servers ?? []).map((server) => server.name));
-  const statusResult = await client.mcp.status({ directory: OPENCODE_WORKSPACE_DIRECTORY });
-  if (statusResult.error) {
-    warnings.push({
-      serverName: "mcp",
-      message: `Failed to read OpenCode MCP status before reconciliation: ${formatMcpError(statusResult.error)}`,
-    });
-  } else {
-    for (const [name, status] of Object.entries(statusResult.data ?? {})) {
-      if (desiredNames.has(name)) {
-        continue;
-      }
-      if ((status as { status?: string }).status !== "connected") {
-        continue;
-      }
-      const disconnectResult = await client.mcp.disconnect({
-        name,
-        directory: OPENCODE_WORKSPACE_DIRECTORY,
-      });
-      if (disconnectResult.error) {
-        warnings.push({
-          serverName: name,
-          message: `Failed to disconnect stale OpenCode MCP server ${name}: ${formatMcpError(disconnectResult.error)}`,
-        });
-      }
-    }
-  }
-
-  for (const server of servers ?? []) {
-    // MCP registration must be complete before the first prompt is sent.
-    const warning = await ensureOpencodeMcpServerConfigured(client, server);
-    if (warning) {
-      warnings.push(warning);
-    }
-  }
-  return warnings;
 }
 
 async function waitForServer(
@@ -1384,12 +1219,76 @@ export async function getOrCreateSandboxForCloudProvider(
     connectAgent: async (agentOptions) => {
       const serverPort = getSandboxServerPort(config.model);
       const serverUrl = `https://${state.sandbox.getHost(serverPort)}`;
-      const health = await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
-        method: "GET",
-      }).catch(() => null);
+      const wrappedSandbox: OpenCodeSandbox = {
+        provider: "e2b",
+        sandboxId: state.sandbox.sandboxId,
+        commands: {
+          run: async (command, opts) => {
+            const result = await state.sandbox.commands.run(command, {
+              timeoutMs: opts?.timeoutMs,
+              envs: opts?.envs,
+              background: opts?.background,
+              onStderr: opts?.onStderr,
+            });
+            return {
+              exitCode: result.exitCode ?? 0,
+              stdout: result.stdout ?? "",
+              stderr: result.stderr ?? "",
+            };
+          },
+        },
+        files: {
+          write: async (path, content) => {
+            await state.sandbox.files.write(path, content);
+          },
+          read: async (path) => state.sandbox.files.read(path),
+        },
+        teardown: async () => {
+          await state.sandbox.kill().catch(() => {});
+        },
+      };
+      const configChanged =
+        resolveSandboxAgentRuntimeForModel(config.model) === "opencode" &&
+        agentOptions?.sessionMcpServers !== undefined
+          ? await writeOpencodeMcpConfigToSandbox(wrappedSandbox, agentOptions.sessionMcpServers)
+          : false;
+      if (configChanged) {
+        await wrappedSandbox.commands.run("pkill -f 'opencode serve' || true", {
+          timeoutMs: 10_000,
+        });
+      }
+      const health = configChanged
+        ? null
+        : await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
+            method: "GET",
+          }).catch(() => null);
 
       if (!health?.ok) {
-        throw new Error(`Sandbox runtime is not ready at ${serverUrl}`);
+        agentOptions?.onLifecycle?.("opencode_starting", {
+          conversationId: config.conversationId,
+          sandboxId: state.sandbox.sandboxId,
+          port: serverPort,
+        });
+        const startResult = await wrappedSandbox.commands.run(
+          getSandboxServerBackgroundStartCommand({
+            sandboxId: state.sandbox.sandboxId,
+            model: config.model,
+          }),
+          { timeoutMs: 10_000 },
+        );
+        if (startResult.exitCode !== 0) {
+          throw new Error(
+            `OpenCode server start failed (exit=${startResult.exitCode}): ${
+              startResult.stderr || startResult.stdout || "unknown error"
+            }`,
+          );
+        }
+        agentOptions?.onLifecycle?.("opencode_waiting_ready", {
+          conversationId: config.conversationId,
+          sandboxId: state.sandbox.sandboxId,
+          serverUrl,
+        });
+        await waitForServer(serverUrl, config.model);
       }
 
       agentOptions?.onLifecycle?.("opencode_ready", {
@@ -1415,7 +1314,10 @@ export async function completeSessionInitForCloudProvider(
   const client = await sandboxInit.connectAgent(options);
   let mcpWarnings: OpenCodeMcpRuntimeWarning[] = [];
   if (resolveSandboxAgentRuntimeForModel(config.model) === "opencode") {
-    mcpWarnings = await ensureOpencodeMcpServersConfigured(client, options?.sessionMcpServers);
+    mcpWarnings = await reconcileOpencodeMcpServers({
+      client,
+      servers: options?.sessionMcpServers,
+    });
   }
   const runtimeState = await getConversationRuntimeState(config.conversationId);
   const runtimeId = runtimeState?.runtimeId ?? null;

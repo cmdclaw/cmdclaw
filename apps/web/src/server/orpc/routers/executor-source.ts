@@ -150,7 +150,7 @@ async function getAdminSource(
   });
 
   if (!source) {
-    throw new ORPCError("NOT_FOUND", { message: "Executor source not found." });
+    throw new ORPCError("NOT_FOUND", { message: "Workspace MCP Server not found." });
   }
 
   return source;
@@ -161,7 +161,7 @@ function assertMutableWorkspaceMcpServer(
 ) {
   if (source.internalKey) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Managed executor sources cannot be edited or deleted manually.",
+      message: "Managed Workspace MCP Servers cannot be edited or deleted manually.",
     });
   }
 }
@@ -172,7 +172,7 @@ function assertManualCredentialSource(
   if (source.internalKey) {
     throw new ORPCError("BAD_REQUEST", {
       message:
-        "Managed executor sources use the integration connection flow, not manual credentials.",
+        "Managed Workspace MCP Servers use the integration connection flow, not manual credentials.",
     });
   }
 }
@@ -227,13 +227,13 @@ const startOAuth = protectedProcedure
 
     if (!source) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
 
     if (source.kind !== "mcp" || source.authType !== "oauth2") {
       throw new ORPCError("BAD_REQUEST", {
-        message: "This source is not configured for MCP OAuth.",
+        message: "This Workspace MCP Server is not configured for MCP OAuth.",
       });
     }
 
@@ -272,7 +272,7 @@ const create = protectedProcedure
 
     if (existing) {
       throw new ORPCError("BAD_REQUEST", {
-        message: `Source namespace "${namespace}" already exists in this workspace.`,
+        message: `Workspace MCP Server namespace "${namespace}" already exists in this workspace.`,
       });
     }
 
@@ -330,7 +330,7 @@ const adminCreate = protectedProcedure
 
     if (existing) {
       throw new ORPCError("BAD_REQUEST", {
-        message: `Source namespace "${namespace}" already exists in this workspace.`,
+        message: `Workspace MCP Server namespace "${namespace}" already exists in this workspace.`,
       });
     }
 
@@ -387,7 +387,7 @@ const update = protectedProcedure
 
     if (!current) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertMutableWorkspaceMcpServer(current);
@@ -402,7 +402,7 @@ const update = protectedProcedure
 
     if (duplicate && duplicate.id !== input.id) {
       throw new ORPCError("BAD_REQUEST", {
-        message: `Source namespace "${namespace}" already exists in this workspace.`,
+        message: `Workspace MCP Server namespace "${namespace}" already exists in this workspace.`,
       });
     }
 
@@ -457,7 +457,7 @@ const adminUpdate = protectedProcedure
 
     if (!current) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertMutableWorkspaceMcpServer(current);
@@ -472,7 +472,7 @@ const adminUpdate = protectedProcedure
 
     if (duplicate && duplicate.id !== input.id) {
       throw new ORPCError("BAD_REQUEST", {
-        message: `Source namespace "${namespace}" already exists in this workspace.`,
+        message: `Workspace MCP Server namespace "${namespace}" already exists in this workspace.`,
       });
     }
 
@@ -526,7 +526,7 @@ const remove = protectedProcedure
     });
     if (!current) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertMutableWorkspaceMcpServer(current);
@@ -542,7 +542,7 @@ const remove = protectedProcedure
 
     if (deleted.length === 0) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
 
@@ -561,7 +561,7 @@ const adminDelete = protectedProcedure
     });
     if (!current) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertMutableWorkspaceMcpServer(current);
@@ -577,7 +577,7 @@ const adminDelete = protectedProcedure
 
     if (deleted.length === 0) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
 
@@ -604,14 +604,14 @@ const setCredential = protectedProcedure
 
     if (!source) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertManualCredentialSource(source);
 
     if (source.authType === "oauth2") {
       throw new ORPCError("BAD_REQUEST", {
-        message: "OAuth sources must be connected through the OAuth flow.",
+        message: "OAuth Workspace MCP Servers must be connected through the OAuth flow.",
       });
     }
 
@@ -643,7 +643,7 @@ const adminSetCredential = protectedProcedure
 
     if (source.authType === "oauth2") {
       throw new ORPCError("BAD_REQUEST", {
-        message: "OAuth sources must be connected through the OAuth flow.",
+        message: "OAuth Workspace MCP Servers must be connected through the OAuth flow.",
       });
     }
 
@@ -672,7 +672,7 @@ const disconnectCredential = protectedProcedure
 
     if (!source) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertManualCredentialSource(source);
@@ -730,7 +730,7 @@ const toggleCredential = protectedProcedure
 
     if (!source) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source not found.",
+        message: "Workspace MCP Server not found.",
       });
     }
     assertManualCredentialSource(source);
@@ -751,7 +751,7 @@ const toggleCredential = protectedProcedure
 
     if (updated.length === 0) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source credential not found.",
+        message: "Workspace MCP Authorization not found.",
       });
     }
 
@@ -786,7 +786,7 @@ const adminToggleCredential = protectedProcedure
 
     if (updated.length === 0) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Executor source credential not found.",
+        message: "Workspace MCP Authorization not found.",
       });
     }
 

@@ -16,7 +16,7 @@ const { computeWorkspaceMcpServerRevisionHash, normalizeExecutorNamespace } = aw
   "./workspace-sources"
 );
 
-describe("workspace executor sources", () => {
+describe("Workspace MCP Servers", () => {
   it("normalizes namespaces into stable slugs", () => {
     expect(normalizeExecutorNamespace("  SalesForce Prod  ")).toBe("salesforce-prod");
     expect(normalizeExecutorNamespace("mcp/internal.crm")).toBe("mcp-internal-crm");
@@ -24,11 +24,11 @@ describe("workspace executor sources", () => {
 
   it("changes the revision hash when source auth or endpoint changes", () => {
     const base = {
-      kind: "openapi" as const,
+      kind: "mcp" as const,
       name: "HubSpot",
       namespace: "hubspot-prod",
-      endpoint: "https://api.hubspot.com",
-      specUrl: "https://api.hubspot.com/openapi.json",
+      endpoint: "https://mcp.hubspot.com/mcp",
+      specUrl: null,
       transport: null,
       headers: null,
       queryParams: null,

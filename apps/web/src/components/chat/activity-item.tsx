@@ -2,9 +2,7 @@
 
 import {
   Wrench,
-  Laptop,
   Puzzle,
-  FileCode,
   Check,
   Loader2,
   AlertCircle,
@@ -160,8 +158,8 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
     return typeof command === "string" ? parseCliCommand(command) : null;
   }, [input, toolName]);
   const executorDisplay = useMemo(
-    () => getExecutorDisplayMetadata(input, executorSources),
-    [executorSources, input],
+    () => getExecutorDisplayMetadata(input, executorSources, toolName),
+    [executorSources, input, toolName],
   );
   const displayIntegration = (parsedCommand?.integration ?? integration) as
     | DisplayIntegrationType
@@ -224,8 +222,7 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
         );
       }
 
-      const SourceIcon = executorDisplay.source.kind === "mcp" ? Puzzle : FileCode;
-      return <SourceIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
+      return <Puzzle className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
     }
 
     // Integration icons take priority when there is no matched source row.
@@ -247,10 +244,6 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
       if (IntegrationIcon) {
         return <IntegrationIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
       }
-    }
-
-    if (executorDisplay.code) {
-      return <Laptop className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />;
     }
 
     // Tool-specific icons
@@ -335,14 +328,10 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
     return toolName ? getToolDisplayName(toolName) : content;
   })();
 
-  const formattedCode = executorDisplay.code ? stripAnsi(executorDisplay.code) : "";
-  const formattedInput = executorDisplay.code
-    ? formatValue(executorDisplay.metadataInput)
-    : formatInput(input, toolName);
+  const formattedInput = formatInput(executorDisplay.metadataInput, toolName);
   const formattedResult = formatValue(result);
-  const hasDetails = Boolean(formattedCode || formattedInput || formattedResult);
-  const requestLabel =
-    formattedCode && formattedInput ? "Metadata" : toolName ? `Request (${toolName})` : "Request";
+  const hasDetails = Boolean(formattedInput || formattedResult);
+  const requestLabel = toolName ? `Request (${toolName})` : "Request";
 
   return (
     <div className="py-0.5 text-xs">
@@ -381,16 +370,6 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
             className="mt-1 ml-5 overflow-hidden"
           >
             <div className="border-border/60 space-y-2 border-l pl-3">
-              {formattedCode && (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-                    Code
-                  </p>
-                  <pre className="bg-muted/40 text-foreground overflow-x-auto rounded-sm px-2 py-1 font-mono text-[11px] leading-relaxed whitespace-pre">
-                    {formattedCode}
-                  </pre>
-                </div>
-              )}
               {formattedInput && (
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">

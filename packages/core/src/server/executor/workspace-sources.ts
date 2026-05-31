@@ -769,8 +769,36 @@ export async function resolveWorkspaceMcpServersForGeneration(input: {
 
   const requestedServers: WorkspaceMcpServerResolution["requestedServers"] = [];
   const unavailableServers: WorkspaceMcpServerResolution["unavailableServers"] = [];
+  const visibleSourceIds = new Set(visibleSources.map((source) => source.id));
+
+  if (input.allowedWorkspaceMcpServerIds && input.allowedWorkspaceMcpServerIds.length > 0) {
+    const sourceById = new Map(sources.map((source) => [source.id, source]));
+    for (const requestedId of input.allowedWorkspaceMcpServerIds) {
+      if (visibleSourceIds.has(requestedId)) {
+        continue;
+      }
+      const source = sourceById.get(requestedId);
+      unavailableServers.push({
+        id: requestedId,
+        name: source?.name ?? requestedId,
+        namespace: source?.namespace ?? requestedId,
+        reason: source
+          ? "Workspace MCP Server is not visible to this user."
+          : "Workspace MCP Server was not found in this workspace.",
+      });
+    }
+  }
 
   for (const source of visibleSources) {
+    if (!source.enabled) {
+      unavailableServers.push({
+        id: source.id,
+        name: source.name,
+        namespace: source.namespace,
+        reason: "Workspace MCP Server is disabled.",
+      });
+      continue;
+    }
     try {
       requestedServers.push({
         id: source.id,

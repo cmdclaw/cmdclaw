@@ -226,4 +226,39 @@ describe("Workspace MCP OAuth resolution", () => {
     ]);
     expect(database.insert).toHaveBeenCalled();
   });
+
+  it("warns when an allowlisted Workspace MCP Server no longer exists", async () => {
+    const database = {
+      query: {
+        workspaceMcpServer: {
+          findMany: vi.fn(async () => []),
+        },
+        workspaceMcpAuthorization: {
+          findMany: vi.fn(async () => []),
+        },
+      },
+      insert: vi.fn(() => ({
+        values: vi.fn(() => ({
+          onConflictDoUpdate: vi.fn(),
+        })),
+      })),
+    };
+
+    const result = await resolveWorkspaceMcpServersForGeneration({
+      database: database as never,
+      workspaceId: "ws-1",
+      userId: "user-1",
+      allowedWorkspaceMcpServerIds: ["missing-server"],
+    });
+
+    expect(result.requestedServers).toEqual([]);
+    expect(result.unavailableServers).toEqual([
+      {
+        id: "missing-server",
+        name: "missing-server",
+        namespace: "missing-server",
+        reason: "Workspace MCP Server was not found in this workspace.",
+      },
+    ]);
+  });
 });

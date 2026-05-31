@@ -2,27 +2,18 @@ import { ALL_INTEGRATION_TYPES, type DisplayIntegrationType } from "@/lib/integr
 
 export type WorkspaceMcpServerLike = {
   namespace: string;
-  kind: "mcp" | "openapi";
+  kind: "mcp";
   name?: string | null;
   endpoint?: string | null;
 };
 
 type ExecutorDisplayMetadata = {
-  code: string | null;
   metadataInput: unknown;
   integration?: DisplayIntegrationType;
   source?: WorkspaceMcpServerLike;
   toolPath?: string;
   displayName?: string;
 };
-
-const EXECUTOR_TOOL_NAMES = new Set(["executor_execute", "executor.execute"]);
-const TOOL_BRACKET_PATH_PATTERN = /tools\[(["'])([^"'\\\]]+)\1\]/g;
-const TOOL_DOT_PATH_PATTERN = /tools\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)/g;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function isDisplayIntegrationType(value: string): value is DisplayIntegrationType {
   return value === "linear" || (ALL_INTEGRATION_TYPES as readonly string[]).includes(value);
@@ -45,33 +36,27 @@ function normalizeExecutorMatchKey(value: string): string {
 }
 
 function stripWorkspaceMcpServerSuffix(value: string): string {
-  return value.replace(/(?:[-_\s]?)(mcp|openapi|api)$/i, "");
+  return value.replace(/(?:[-_\s]?)(mcp)$/i, "");
 }
 
-function parseWorkspaceMcpServerPath(path: string): {
+function parseWorkspaceMcpToolName(toolName: string): {
   namespace: string;
-  kind: "mcp" | "openapi";
   operation: string;
 } | null {
-  const match = path.match(/^([a-z0-9-]+)\.(mcp|openapi)\.(.+)$/i);
+  const match = toolName.match(/^([a-z0-9-]+?)(?:_mcp)?[_:.](.+)$/i);
   if (!match) {
     return null;
   }
 
-  const [, namespace, kind, operation] = match;
-  if (!namespace || !kind || !operation) {
+  const [, namespace, operation] = match;
+  if (!namespace || !operation) {
     return null;
   }
 
   return {
     namespace,
-    kind: kind.toLowerCase() as "mcp" | "openapi",
     operation,
   };
-}
-
-function extractWorkspaceMcpServerNamespace(path: string): string | null {
-  return parseWorkspaceMcpServerPath(path)?.namespace ?? null;
 }
 
 function buildSourceAliases(source: WorkspaceMcpServerLike): string[] {
@@ -121,19 +106,16 @@ function detectIntegrationFromSource(
 }
 
 function findSourceMention(
-  code: string,
-  toolPaths: readonly string[],
+  toolName: string | undefined,
   sources: readonly WorkspaceMcpServerLike[],
 ): WorkspaceMcpServerLike | undefined {
+  if (!toolName) {
+    return undefined;
+  }
   const codeKeys = new Set<string>();
-  codeKeys.add(normalizeExecutorMatchKey(code));
-
-  for (const toolPath of toolPaths) {
-    const parsed = parseWorkspaceMcpServerPath(toolPath);
-    if (!parsed) {
-      continue;
-    }
-
+  codeKeys.add(normalizeExecutorMatchKey(toolName));
+  const parsed = parseWorkspaceMcpToolName(toolName);
+  if (parsed) {
     codeKeys.add(normalizeExecutorMatchKey(parsed.namespace));
     codeKeys.add(normalizeExecutorMatchKey(stripWorkspaceMcpServerSuffix(parsed.namespace)));
   }
@@ -155,7 +137,7 @@ function findSourceMention(
         [...codeKeys].some((candidate) => candidate.includes(alias) || alias.includes(candidate))
       ) {
         score = Math.max(score, 80);
-      } else if (normalizeExecutorMatchKey(code).includes(alias)) {
+      } else if (normalizeExecutorMatchKey(toolName).includes(alias)) {
         score = Math.max(score, 60);
       }
     }
@@ -171,108 +153,57 @@ function findSourceMention(
 
 function buildExecutorDisplayName(
   source: WorkspaceMcpServerLike | undefined,
-  toolPath: string | null,
+  toolName: string | undefined,
 ): string {
-  if (!toolPath) {
+  if (!toolName) {
     const sourceLabel = source?.name?.trim() || source?.namespace || "Computer";
-    return source ? `${sourceLabel} ${source.kind.toUpperCase()}` : sourceLabel;
+    return source ? `${sourceLabel} MCP` : sourceLabel;
   }
 
-  const parsedSourcePath = parseWorkspaceMcpServerPath(toolPath);
+  const parsedSourcePath = parseWorkspaceMcpToolName(toolName);
   if (parsedSourcePath) {
     const sourceLabel =
-      source?.name?.trim() || source?.namespace || humanizeSourceName(parsedSourcePath.namespace);
+      source?.name?.trim() ||
+      source?.namespace ||
+      humanizeSourceName(stripWorkspaceMcpServerSuffix(parsedSourcePath.namespace));
     const leaf = parsedSourcePath.operation.split(".").at(-1) ?? parsedSourcePath.operation;
-    return `${sourceLabel} ${parsedSourcePath.kind.toUpperCase()} · ${humanizeOperation(leaf)}`;
+    return `${sourceLabel} MCP · ${humanizeOperation(leaf)}`;
   }
 
   if (source) {
     const sourceLabel = source.name?.trim() || source.namespace;
-    return `${sourceLabel} ${source.kind.toUpperCase()}`;
+    return `${sourceLabel} MCP`;
   }
 
-  return "Computer";
-}
-
-export function isExecutorToolCall(toolName: string | undefined, input: unknown): boolean {
-  if (toolName && EXECUTOR_TOOL_NAMES.has(toolName)) {
-    return true;
-  }
-
-  return getExecutorCode(input) !== null;
-}
-
-export function getExecutorCode(input: unknown): string | null {
-  if (!isRecord(input) || typeof input.code !== "string") {
-    return null;
-  }
-
-  const code = input.code.trimEnd();
-  return code.length > 0 ? code : null;
+  return toolName;
 }
 
 export function getExecutorMetadataInput(input: unknown): unknown {
-  if (!isRecord(input) || !("code" in input)) {
-    return input;
-  }
-
-  const next = { ...input };
-  delete next.code;
-  return Object.keys(next).length > 0 ? next : undefined;
-}
-
-function extractExecutorToolPaths(code: string): string[] {
-  const matches: string[] = [];
-
-  for (const match of code.matchAll(TOOL_BRACKET_PATH_PATTERN)) {
-    const path = match[2]?.trim();
-    if (path) {
-      matches.push(path);
-    }
-  }
-
-  for (const match of code.matchAll(TOOL_DOT_PATH_PATTERN)) {
-    const path = match[1]?.trim();
-    if (path) {
-      matches.push(path);
-    }
-  }
-
-  return [...new Set(matches)];
+  return input;
 }
 
 export function getExecutorDisplayMetadata(
   input: unknown,
   sources: readonly WorkspaceMcpServerLike[] = [],
+  toolName?: string,
 ): ExecutorDisplayMetadata {
-  const code = getExecutorCode(input);
   const metadataInput = getExecutorMetadataInput(input);
-
-  if (!code) {
-    return {
-      code: null,
-      metadataInput,
-    };
-  }
-
-  const toolPaths = extractExecutorToolPaths(code);
-  const toolPath =
-    toolPaths.find((candidate) => extractWorkspaceMcpServerNamespace(candidate) !== null) ??
-    toolPaths[0] ??
-    null;
-  const source = findSourceMention(code, toolPaths, sources);
-  const sourceNamespace =
-    source?.namespace ?? (toolPath ? extractWorkspaceMcpServerNamespace(toolPath) : null);
+  const parsedToolName = toolName ? parseWorkspaceMcpToolName(toolName) : null;
+  const source = findSourceMention(toolName, sources);
+  const sourceNamespace = source?.namespace ?? parsedToolName?.namespace ?? null;
   const integration =
     detectIntegrationFromSource(source, sourceNamespace) ??
     (sourceNamespace && isDisplayIntegrationType(sourceNamespace) ? sourceNamespace : undefined);
 
+  if (!source && !parsedToolName) {
+    return { metadataInput };
+  }
+
   return {
-    code,
     metadataInput,
     integration,
     source,
-    toolPath: toolPath ?? undefined,
-    displayName: buildExecutorDisplayName(source, toolPath),
+    toolPath: toolName,
+    displayName: buildExecutorDisplayName(source, toolName),
   };
 }

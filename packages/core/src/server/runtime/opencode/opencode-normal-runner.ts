@@ -524,7 +524,7 @@ export class OpenCodeNormalRunner {
           );
           client = session.harnessClient;
           sessionId = session.session.id;
-          runtimeMcpWarnings = session.mcpWarnings ?? [];
+          runtimeMcpWarnings.push(...(session.mcpWarnings ?? []));
           await this.callbacks.persistRuntimeSessionBinding(ctx, {
             runtimeMetadata,
             sessionId,

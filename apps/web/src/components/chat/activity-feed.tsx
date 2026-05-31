@@ -62,7 +62,7 @@ export function ActivityFeed({
         continue;
       }
 
-      const derived = getExecutorDisplayMetadata(item.input, executorSources);
+      const derived = getExecutorDisplayMetadata(item.input, executorSources, item.toolName);
       if (derived.integration) {
         next.add(derived.integration);
       }
