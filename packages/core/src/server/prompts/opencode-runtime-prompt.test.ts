@@ -23,7 +23,6 @@ describe("composeOpencodePromptSpec", () => {
     const result = composeOpencodePromptSpec({
       kind: "chat",
       cliInstructions: "CLI instructions",
-      executorInstructions: "Executor instructions",
       skillsInstructions: "Skills instructions",
       integrationSkillsInstructions: "Integration skills instructions",
       memoryInstructions: "Memory instructions",
@@ -35,10 +34,9 @@ describe("composeOpencodePromptSpec", () => {
     expect(result.sections.map((section) => section.key)).toEqual([
       "base_system",
       "file_sharing",
+      "native_mcp",
       "user_timezone",
       "cli",
-      "executor",
-      "mcp_guidance",
       "coworker_cli",
       "skills",
       "selected_platform_skills",
@@ -47,10 +45,12 @@ describe("composeOpencodePromptSpec", () => {
       "memory",
     ]);
     expect(result.systemPrompt).toContain("## File Sharing");
+    expect(result.systemPrompt).toContain("## Connected MCP Servers");
+    expect(result.systemPrompt).toContain("try the relevant MCP tool");
     expect(result.systemPrompt).toContain("## User Timezone");
     expect(result.systemPrompt).toContain("Europe/Dublin");
     expect(result.systemPrompt).toContain("CLI instructions");
-    expect(result.systemPrompt).toContain("Executor instructions");
+    expect(result.systemPrompt).not.toContain("Executor instructions");
     expect(result.systemPrompt).toContain("# Selected Platform Skills");
     expect(result.systemPrompt).toContain("/app/.opencode/integration-skill-drafts/<slug>.json");
   });
@@ -110,7 +110,7 @@ describe("composeOpencodePromptSpec", () => {
     expect(result.sections.map((section) => section.key)).toEqual([
       "base_system",
       "file_sharing",
-      "mcp_guidance",
+      "native_mcp",
       "coworker_cli",
       "integration_skill_drafts",
     ]);

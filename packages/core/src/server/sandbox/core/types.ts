@@ -157,6 +157,7 @@ export interface RuntimeHarnessClient {
     parts: RuntimePromptPart[];
     agent?: string;
     system?: string;
+    tools?: Record<string, boolean>;
     model?: unknown;
     noReply?: boolean;
   }): Promise<{ data: unknown; error: unknown }>;
@@ -234,6 +235,10 @@ export interface ConversationRuntimeAgentInitResult {
   harnessClient: RuntimeHarnessClient;
   session: ConversationRuntimeSession;
   sessionSource?: ConversationRuntimeSessionSource;
+  mcpWarnings?: Array<{
+    serverName: string;
+    message: string;
+  }>;
 }
 
 export interface ConversationRuntimeSandboxInitResult {

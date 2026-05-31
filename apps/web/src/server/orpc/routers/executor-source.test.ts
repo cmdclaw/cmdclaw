@@ -13,12 +13,12 @@ function createProcedureStub() {
 
 const {
   startMcpOAuthAuthorizationMock,
-  storeExecutorSourceOAuthPendingMock,
+  storeWorkspaceMcpServerOAuthPendingMock,
   requireActiveWorkspaceAccessMock,
   requireActiveWorkspaceAdminMock,
 } = vi.hoisted(() => ({
   startMcpOAuthAuthorizationMock: vi.fn(),
-  storeExecutorSourceOAuthPendingMock: vi.fn(),
+  storeWorkspaceMcpServerOAuthPendingMock: vi.fn(),
   requireActiveWorkspaceAccessMock: vi.fn(),
   requireActiveWorkspaceAdminMock: vi.fn(),
 }));
@@ -33,11 +33,10 @@ vi.mock("../workspace-access", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
-  computeWorkspaceExecutorSourceRevisionHash: vi.fn(() => "hash"),
-  ensureWorkspaceExecutorPackage: vi.fn(),
-  listWorkspaceExecutorSources: vi.fn(() => []),
+  computeWorkspaceMcpServerRevisionHash: vi.fn(() => "hash"),
+  listWorkspaceMcpServers: vi.fn(() => []),
   normalizeExecutorNamespace: vi.fn((value: string) => value),
-  setWorkspaceExecutorSourceCredential: vi.fn(),
+  setWorkspaceMcpServerCredential: vi.fn(),
 }));
 
 vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
@@ -54,7 +53,7 @@ vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
 }));
 
 vi.mock("@/server/executor-source-oauth", () => ({
-  storeExecutorSourceOAuthPending: storeExecutorSourceOAuthPendingMock,
+  storeWorkspaceMcpServerOAuthPending: storeWorkspaceMcpServerOAuthPendingMock,
 }));
 
 import { executorSourceInputSchema, executorSourceRouter } from "./executor-source";
@@ -75,7 +74,7 @@ function createContext() {
         workspace: {
           findFirst: vi.fn().mockResolvedValue({ id: "ws-1", name: "Workspace" }),
         },
-        workspaceExecutorSource: {
+        workspaceMcpServer: {
           findFirst: vi.fn(),
         },
       },
@@ -112,7 +111,7 @@ describe("executorSourceRouter", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects oauth2 auth for OpenAPI sources", () => {
+  it("rejects OpenAPI sources", () => {
     const parsed = executorSourceInputSchema.safeParse({
       kind: "openapi",
       name: "GitHub",
@@ -126,9 +125,9 @@ describe("executorSourceRouter", () => {
     expect(parsed.success).toBe(false);
   });
 
-  it("starts MCP OAuth for an executor source", async () => {
+  it("starts MCP OAuth for a Workspace MCP Server", async () => {
     const context = createContext();
-    context.db.query.workspaceExecutorSource.findFirst.mockResolvedValue({
+    context.db.query.workspaceMcpServer.findFirst.mockResolvedValue({
       id: "src-1",
       workspaceId: "ws-1",
       kind: "mcp",
@@ -152,7 +151,7 @@ describe("executorSourceRouter", () => {
 
     const result = await executorSourceRouterAny.startOAuth({
       input: {
-        workspaceExecutorSourceId: "src-1",
+        workspaceMcpServerId: "src-1",
         redirectUrl: "https://app.example.com/toolbox/sources/src-1",
       },
       context,
@@ -168,7 +167,7 @@ describe("executorSourceRouter", () => {
         state: expect.any(String),
       }),
     );
-    expect(storeExecutorSourceOAuthPendingMock).toHaveBeenCalledWith(
+    expect(storeWorkspaceMcpServerOAuthPendingMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "user-1",
         sourceId: "src-1",
@@ -179,7 +178,7 @@ describe("executorSourceRouter", () => {
 
   it("rejects starting OAuth for a non-oauth source", async () => {
     const context = createContext();
-    context.db.query.workspaceExecutorSource.findFirst.mockResolvedValue({
+    context.db.query.workspaceMcpServer.findFirst.mockResolvedValue({
       id: "src-1",
       workspaceId: "ws-1",
       kind: "mcp",
@@ -191,7 +190,7 @@ describe("executorSourceRouter", () => {
     await expect(
       executorSourceRouterAny.startOAuth({
         input: {
-          workspaceExecutorSourceId: "src-1",
+          workspaceMcpServerId: "src-1",
           redirectUrl: "https://app.example.com/toolbox/sources/src-1",
         },
         context,
@@ -201,9 +200,9 @@ describe("executorSourceRouter", () => {
     });
   });
 
-  it("marks new MCP OAuth sources for native bootstrap reconciliation", async () => {
+  it("creates new MCP OAuth servers for native OpenCode MCP resolution", async () => {
     const context = createContext();
-    context.db.query.workspaceExecutorSource.findFirst.mockResolvedValue(null);
+    context.db.query.workspaceMcpServer.findFirst.mockResolvedValue(null);
     const returningMock = vi.fn().mockResolvedValue([{ id: "src-1" }]);
     const valuesMock = vi.fn(() => ({ returning: returningMock }));
     context.db.insert.mockReturnValue({ values: valuesMock });

@@ -104,6 +104,7 @@ export async function runConversationSandboxPipeline(input: {
         harnessClient: createRuntimeHarnessClientFromOpencodeClient(agentResult.client),
         session: { id: agentResult.sessionId },
         sessionSource: agentResult.sessionSource,
+        mcpWarnings: agentResult.mcpWarnings,
       };
     },
   };

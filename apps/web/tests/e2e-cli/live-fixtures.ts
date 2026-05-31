@@ -18,6 +18,8 @@ import {
 } from "./live-sandbox-cleanup";
 import { callCliLiveTestingApi } from "./testing-api";
 
+export { callCliLiveTestingApi };
+
 export const liveEnabled = process.env.E2E_LIVE === "1";
 export const defaultServerUrl = process.env.CMDCLAW_SERVER_URL ?? "http://localhost:3000";
 export const responseTimeoutMs = Number(process.env.E2E_RESPONSE_TIMEOUT_MS ?? "180000");

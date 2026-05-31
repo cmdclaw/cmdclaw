@@ -36,7 +36,7 @@ type TraceTrackName =
   | "pre_prompt_skills"
   | "pre_prompt_integration"
   | "pre_prompt_runtime"
-  | "executor_prepare";
+  | "workspace_mcp";
 
 const TRACE_TRACKS: TraceTrackName[] = [
   "summary",
@@ -46,7 +46,7 @@ const TRACE_TRACKS: TraceTrackName[] = [
   "pre_prompt_skills",
   "pre_prompt_integration",
   "pre_prompt_runtime",
-  "executor_prepare",
+  "workspace_mcp",
 ];
 
 type TracePhaseSpec = {
@@ -60,13 +60,7 @@ type TracePhaseSpec = {
     | "pre_prompt_setup"
     | "pre_prompt_memory_sync"
     | "pre_prompt_runtime_context_write"
-    | "pre_prompt_executor_prepare"
-    | "pre_prompt_executor_bootstrap_load"
-    | "pre_prompt_executor_config_write"
-    | "pre_prompt_executor_server_probe"
-    | "pre_prompt_executor_server_wait_ready"
-    | "pre_prompt_executor_status_check"
-    | "pre_prompt_executor_oauth_reconcile"
+    | "pre_prompt_workspace_mcp_resolve"
     | "pre_prompt_skills_and_creds_load"
     | "pre_prompt_cache_read"
     | "pre_prompt_skills_write"
@@ -156,53 +150,11 @@ const TRACE_PHASE_SPECS: TracePhaseSpec[] = [
     endPhases: ["pre_prompt_runtime_context_write_completed"],
   },
   {
-    name: "pre_prompt_executor_prepare",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorPrepareMs",
-    startPhases: ["pre_prompt_executor_prepare_started"],
-    endPhases: ["pre_prompt_executor_prepare_completed"],
-  },
-  {
-    name: "pre_prompt_executor_bootstrap_load",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorBootstrapLoadMs",
-    startPhases: ["pre_prompt_executor_bootstrap_load_started"],
-    endPhases: ["pre_prompt_executor_bootstrap_load_completed"],
-  },
-  {
-    name: "pre_prompt_executor_config_write",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorConfigWriteMs",
-    startPhases: ["pre_prompt_executor_config_write_started"],
-    endPhases: ["pre_prompt_executor_config_write_completed"],
-  },
-  {
-    name: "pre_prompt_executor_server_probe",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorServerProbeMs",
-    startPhases: ["pre_prompt_executor_server_probe_started"],
-    endPhases: ["pre_prompt_executor_server_probe_completed"],
-  },
-  {
-    name: "pre_prompt_executor_server_wait_ready",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorServerWaitReadyMs",
-    startPhases: ["pre_prompt_executor_server_wait_ready_started"],
-    endPhases: ["pre_prompt_executor_server_wait_ready_completed"],
-  },
-  {
-    name: "pre_prompt_executor_status_check",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorStatusCheckMs",
-    startPhases: ["pre_prompt_executor_status_check_started"],
-    endPhases: ["pre_prompt_executor_status_check_completed"],
-  },
-  {
-    name: "pre_prompt_executor_oauth_reconcile",
-    track: "executor_prepare",
-    durationKey: "prePromptExecutorOauthReconcileMs",
-    startPhases: ["pre_prompt_executor_oauth_reconcile_started"],
-    endPhases: ["pre_prompt_executor_oauth_reconcile_completed"],
+    name: "pre_prompt_workspace_mcp_resolve",
+    track: "workspace_mcp",
+    durationKey: "prePromptWorkspaceMcpResolveMs",
+    startPhases: ["pre_prompt_workspace_mcp_resolve_started"],
+    endPhases: ["pre_prompt_workspace_mcp_resolve_completed"],
   },
   {
     name: "pre_prompt_skills_and_creds_load",

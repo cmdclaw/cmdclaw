@@ -162,6 +162,7 @@ export class OpenCodeGenerationRuntimeDriver implements RuntimeDriver {
       awaitPromiseUntilRunDeadline: (ctx, promise) =>
         this.deps.awaitPromiseUntilRunDeadline(ctx, promise),
       scheduleSave: (ctx) => this.deps.scheduleSave(ctx),
+      saveProgress: (ctx) => this.deps.saveProgress(ctx),
       importIntegrationSkillDraftsFromSandbox: (ctx) =>
         this.deps.importIntegrationSkillDraftsFromSandbox(ctx),
       captureUsageFromRuntimeSession: (ctx, runtimeClient, sessionId) =>

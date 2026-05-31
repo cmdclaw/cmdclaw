@@ -119,7 +119,7 @@ export async function getDelegatedRuntimeCredentials(
         cloudUserId,
         integrationTypes: input.integrationTypes,
         workspaceId: input.workspaceId,
-        allowedExecutorSourceIds: input.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: input.allowedWorkspaceMcpServerIds,
       }),
     },
   );

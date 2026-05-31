@@ -70,7 +70,7 @@ export type StartCoworkerGenerationInput = {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   allowedIntegrations: IntegrationType[];
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   fileAttachments?: UserFileAttachment[];
   remoteIntegrationSource?: RemoteIntegrationSource;
@@ -608,7 +608,7 @@ export class TurnIntake {
     const executionPolicy = buildExecutionPolicy({
       allowedIntegrations: params.allowedIntegrations,
       allowedCustomIntegrations: params.allowedCustomIntegrations,
-      allowedExecutorSourceIds: params.allowedExecutorSourceIds,
+      allowedWorkspaceMcpServerIds: params.allowedWorkspaceMcpServerIds,
       allowedSkillSlugs: normalizedAllowedSkillSlugs,
       remoteIntegrationSource: params.remoteIntegrationSource,
       autoApprove: params.autoApprove,
@@ -704,7 +704,7 @@ async function resolveCoworkerModel(model?: string): Promise<string> {
 function buildExecutionPolicy(params: {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   remoteIntegrationSource?: RemoteIntegrationSource;
   autoApprove: boolean;
@@ -720,7 +720,7 @@ function buildExecutionPolicy(params: {
   return {
     allowedIntegrations: params.allowedIntegrations,
     allowedCustomIntegrations: params.allowedCustomIntegrations,
-    allowedExecutorSourceIds: params.allowedExecutorSourceIds,
+    allowedWorkspaceMcpServerIds: params.allowedWorkspaceMcpServerIds,
     allowedSkillSlugs: params.allowedSkillSlugs,
     remoteIntegrationSource: params.remoteIntegrationSource,
     autoApprove: params.autoApprove,

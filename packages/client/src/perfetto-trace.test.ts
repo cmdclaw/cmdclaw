@@ -17,13 +17,7 @@ describe("buildPerfettoTraceFromTiming", () => {
           prePromptSetupMs: 600,
           prePromptMemorySyncMs: 40,
           prePromptRuntimeContextWriteMs: 20,
-          prePromptExecutorPrepareMs: 120,
-          prePromptExecutorBootstrapLoadMs: 30,
-          prePromptExecutorConfigWriteMs: 10,
-          prePromptExecutorServerProbeMs: 10,
-          prePromptExecutorServerWaitReadyMs: 35,
-          prePromptExecutorStatusCheckMs: 10,
-          prePromptExecutorOauthReconcileMs: 10,
+          prePromptWorkspaceMcpResolveMs: 105,
           prePromptSkillsAndCredsLoadMs: 60,
           prePromptCacheReadMs: 30,
           prePromptSkillsWriteMs: 70,
@@ -109,72 +103,12 @@ describe("buildPerfettoTraceFromTiming", () => {
             elapsedMs: 1575,
           },
           {
-            phase: "pre_prompt_executor_prepare_started",
+            phase: "pre_prompt_workspace_mcp_resolve_started",
             at: "2026-04-02T10:00:01.580Z",
             elapsedMs: 1580,
           },
           {
-            phase: "pre_prompt_executor_bootstrap_load_started",
-            at: "2026-04-02T10:00:01.580Z",
-            elapsedMs: 1580,
-          },
-          {
-            phase: "pre_prompt_executor_bootstrap_load_completed",
-            at: "2026-04-02T10:00:01.610Z",
-            elapsedMs: 1610,
-          },
-          {
-            phase: "pre_prompt_executor_config_write_started",
-            at: "2026-04-02T10:00:01.610Z",
-            elapsedMs: 1610,
-          },
-          {
-            phase: "pre_prompt_executor_config_write_completed",
-            at: "2026-04-02T10:00:01.620Z",
-            elapsedMs: 1620,
-          },
-          {
-            phase: "pre_prompt_executor_server_probe_started",
-            at: "2026-04-02T10:00:01.620Z",
-            elapsedMs: 1620,
-          },
-          {
-            phase: "pre_prompt_executor_server_probe_completed",
-            at: "2026-04-02T10:00:01.630Z",
-            elapsedMs: 1630,
-          },
-          {
-            phase: "pre_prompt_executor_server_wait_ready_started",
-            at: "2026-04-02T10:00:01.630Z",
-            elapsedMs: 1630,
-          },
-          {
-            phase: "pre_prompt_executor_server_wait_ready_completed",
-            at: "2026-04-02T10:00:01.665Z",
-            elapsedMs: 1665,
-          },
-          {
-            phase: "pre_prompt_executor_status_check_started",
-            at: "2026-04-02T10:00:01.665Z",
-            elapsedMs: 1665,
-          },
-          {
-            phase: "pre_prompt_executor_status_check_completed",
-            at: "2026-04-02T10:00:01.675Z",
-            elapsedMs: 1675,
-          },
-          {
-            phase: "pre_prompt_executor_oauth_reconcile_started",
-            at: "2026-04-02T10:00:01.675Z",
-            elapsedMs: 1675,
-          },
-          {
-            phase: "pre_prompt_executor_oauth_reconcile_completed",
-            at: "2026-04-02T10:00:01.685Z",
-            elapsedMs: 1685,
-          },
-          {
-            phase: "pre_prompt_executor_prepare_completed",
+            phase: "pre_prompt_workspace_mcp_resolve_completed",
             at: "2026-04-02T10:00:01.685Z",
             elapsedMs: 1685,
           },
@@ -353,7 +287,7 @@ describe("buildPerfettoTraceFromTiming", () => {
       "pre_prompt_skills",
       "pre_prompt_integration",
       "pre_prompt_runtime",
-      "executor_prepare",
+      "workspace_mcp",
     ]);
 
     const spanNames = result.trace.traceEvents
@@ -371,13 +305,7 @@ describe("buildPerfettoTraceFromTiming", () => {
       "pre_prompt_setup",
       "pre_prompt_memory_sync",
       "pre_prompt_runtime_context_write",
-      "pre_prompt_executor_bootstrap_load",
-      "pre_prompt_executor_prepare",
-      "pre_prompt_executor_config_write",
-      "pre_prompt_executor_server_probe",
-      "pre_prompt_executor_server_wait_ready",
-      "pre_prompt_executor_status_check",
-      "pre_prompt_executor_oauth_reconcile",
+      "pre_prompt_workspace_mcp_resolve",
       "pre_prompt_skills_and_creds_load",
       "pre_prompt_cache_read",
       "pre_prompt_skills_write",
@@ -463,10 +391,10 @@ describe("buildPerfettoTraceFromTiming", () => {
       dur: 20_000,
     });
 
-    const executorPrepare = result.trace.traceEvents.find(
-      (event) => event.name === "pre_prompt_executor_prepare",
+    const workspaceMcpResolve = result.trace.traceEvents.find(
+      (event) => event.name === "pre_prompt_workspace_mcp_resolve",
     );
-    expect(executorPrepare).toMatchObject({
+    expect(workspaceMcpResolve).toMatchObject({
       tid: 8,
       ts: 1_580_000,
       dur: 105_000,
@@ -507,14 +435,12 @@ describe("buildPerfettoTraceFromTiming", () => {
     });
   });
 
-  it("keeps executor prepare spans when oauth reconcile completes after prompt send", () => {
+  it("keeps Workspace MCP resolve spans when resolution completes after prompt send", () => {
     const result = buildPerfettoTraceFromTiming({
       timing: {
         phaseDurationsMs: {
           prePromptSetupMs: 120,
-          prePromptExecutorPrepareMs: 271,
-          prePromptExecutorStatusCheckMs: 80,
-          prePromptExecutorOauthReconcileMs: 160,
+          prePromptWorkspaceMcpResolveMs: 271,
           promptToFirstTokenMs: 90,
         },
         phaseTimestamps: [
@@ -524,19 +450,9 @@ describe("buildPerfettoTraceFromTiming", () => {
             elapsedMs: 1000,
           },
           {
-            phase: "pre_prompt_executor_prepare_started",
+            phase: "pre_prompt_workspace_mcp_resolve_started",
             at: "2026-04-02T10:00:01.010Z",
             elapsedMs: 1010,
-          },
-          {
-            phase: "pre_prompt_executor_status_check_started",
-            at: "2026-04-02T10:00:01.040Z",
-            elapsedMs: 1040,
-          },
-          {
-            phase: "pre_prompt_executor_status_check_completed",
-            at: "2026-04-02T10:00:01.120Z",
-            elapsedMs: 1120,
           },
           { phase: "prompt_sent", at: "2026-04-02T10:00:01.120Z", elapsedMs: 1120 },
           {
@@ -545,17 +461,7 @@ describe("buildPerfettoTraceFromTiming", () => {
             elapsedMs: 1210,
           },
           {
-            phase: "pre_prompt_executor_oauth_reconcile_started",
-            at: "2026-04-02T10:00:01.121Z",
-            elapsedMs: 1121,
-          },
-          {
-            phase: "pre_prompt_executor_oauth_reconcile_completed",
-            at: "2026-04-02T10:00:01.281Z",
-            elapsedMs: 1281,
-          },
-          {
-            phase: "pre_prompt_executor_prepare_completed",
+            phase: "pre_prompt_workspace_mcp_resolve_completed",
             at: "2026-04-02T10:00:01.281Z",
             elapsedMs: 1281,
           },
@@ -568,10 +474,10 @@ describe("buildPerfettoTraceFromTiming", () => {
       return;
     }
 
-    const executorPrepare = result.trace.traceEvents.find(
-      (event) => event.name === "pre_prompt_executor_prepare",
+    const workspaceMcpResolve = result.trace.traceEvents.find(
+      (event) => event.name === "pre_prompt_workspace_mcp_resolve",
     );
-    expect(executorPrepare).toMatchObject({
+    expect(workspaceMcpResolve).toMatchObject({
       ts: 10_000,
       dur: 271_000,
     });

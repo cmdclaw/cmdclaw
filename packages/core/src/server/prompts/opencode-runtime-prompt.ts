@@ -19,7 +19,6 @@ export type ResolvedPromptSpec = {
 
 type SharedPromptInput = {
   cliInstructions?: string | null;
-  executorInstructions?: string | null;
   skillsInstructions?: string | null;
   integrationSkillsInstructions?: string | null;
   memoryInstructions?: string | null;
@@ -51,20 +50,20 @@ export type OpencodePromptCompositionInput =
 
 const BASE_SYSTEM_PROMPT = "You are CmdClaw, an AI agent that helps do work.";
 
-const MCP_GUIDANCE_SECTION = [
-  "<mcp-guidance>",
-  "When asked to interact with an external service, first check executor sources",
-  "(`tools.discover(...)`) — most MCP/OpenAPI integrations are already available there",
-  "with auth handled automatically.",
-  "</mcp-guidance>",
-].join("\n");
-
 const FILE_SHARING_SECTION = [
   "## File Sharing",
   "When you create files that the user needs (PDFs, images, documents, code files, etc.), ",
   "save them to /app or /home/user. Files created during your response will automatically ",
   "be made available for download in the chat interface.",
 ].join("");
+
+const NATIVE_MCP_SECTION = [
+  "## Connected MCP Servers",
+  "OpenCode exposes connected MCP servers as native tools when they are configured for this chat.",
+  "For requests about external systems, try the relevant MCP tool before saying the system is unavailable.",
+  "Do not require a local SKILL.md file for MCP-backed services; the OpenCode MCP tool itself is the source of truth.",
+  "If no relevant MCP tool is available, or if OpenCode reports that it is not connected or needs authentication, explain that plainly.",
+].join("\n");
 
 function appendSection(
   sections: ResolvedPromptSection[],
@@ -204,10 +203,9 @@ function composeChatPrompt(input: ChatPromptInput): ResolvedPromptSpec {
 
   appendSection(sections, "base_system", BASE_SYSTEM_PROMPT);
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
+  appendSection(sections, "native_mcp", NATIVE_MCP_SECTION);
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
-  appendSection(sections, "executor", input.executorInstructions);
-  appendSection(sections, "mcp_guidance", MCP_GUIDANCE_SECTION);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
@@ -227,10 +225,9 @@ function composeCoworkerBuilderPrompt(input: CoworkerBuilderPromptInput): Resolv
 
   appendSection(sections, "base_system", BASE_SYSTEM_PROMPT);
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
+  appendSection(sections, "native_mcp", NATIVE_MCP_SECTION);
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
-  appendSection(sections, "executor", input.executorInstructions);
-  appendSection(sections, "mcp_guidance", MCP_GUIDANCE_SECTION);
   appendSection(sections, "coworker_cli", getCoworkerCliSystemPrompt());
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
@@ -254,10 +251,9 @@ function composeCoworkerRunnerPrompt(input: CoworkerRunnerPromptInput): Resolved
 
   appendSection(sections, "base_system", BASE_SYSTEM_PROMPT);
   appendSection(sections, "file_sharing", FILE_SHARING_SECTION);
+  appendSection(sections, "native_mcp", NATIVE_MCP_SECTION);
   appendSection(sections, "user_timezone", buildUserTimezoneSection(input.userTimezone));
   appendSection(sections, "cli", input.cliInstructions);
-  appendSection(sections, "executor", input.executorInstructions);
-  appendSection(sections, "mcp_guidance", MCP_GUIDANCE_SECTION);
   appendSection(sections, "skills", input.skillsInstructions);
   appendSection(
     sections,

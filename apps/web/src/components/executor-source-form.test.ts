@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildMutationInputFromForm,
   DEFAULT_EXECUTOR_SOURCE_FORM,
-  normalizeExecutorSourceNamespace,
+  normalizeWorkspaceMcpServerNamespace,
 } from "./executor-source-form";
 
 describe("executor-source-form", () => {
   it("normalizes namespaces into lowercase kebab-case", () => {
-    expect(normalizeExecutorSourceNamespace("Sales Force Prod")).toBe("sales-force-prod");
-    expect(normalizeExecutorSourceNamespace("mcp/internal.crm")).toBe("mcp-internal-crm");
+    expect(normalizeWorkspaceMcpServerNamespace("Sales Force Prod")).toBe("sales-force-prod");
+    expect(normalizeWorkspaceMcpServerNamespace("mcp/internal.crm")).toBe("mcp-internal-crm");
   });
 
   it("derives an MCP namespace from the source name when requested", () => {

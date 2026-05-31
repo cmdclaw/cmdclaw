@@ -2,9 +2,8 @@ import { createHash } from "node:crypto";
 import { env } from "../../env";
 import { db } from "@cmdclaw/db/client";
 import {
-  workspaceExecutorPackage,
-  workspaceExecutorSource,
-  workspaceExecutorSourceCredential,
+  workspaceMcpServer,
+  workspaceMcpAuthorization,
 } from "@cmdclaw/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getValidTokensForUser } from "../integrations/token-refresh";
@@ -17,48 +16,18 @@ import {
 } from "../modulr/service";
 import { decrypt, encrypt } from "../utils/encryption";
 import { type McpOAuthMetadata, ensureValidMcpOAuthCredential } from "./mcp-oauth";
+import type { RuntimeMcpServer } from "../sandbox/core/types";
 
 type DatabaseLike = typeof db;
 
-export type ExecutorSourceKind = "mcp" | "openapi";
-export type ExecutorSourceAuthType = "none" | "api_key" | "bearer" | "oauth2";
+export type WorkspaceMcpServerKind = "mcp";
+export type WorkspaceMcpServerAuthType = "none" | "api_key" | "bearer" | "oauth2";
 
-type WorkspaceExecutorSourceRecord = typeof workspaceExecutorSource.$inferSelect;
-type WorkspaceExecutorSourceCredentialRecord =
-  typeof workspaceExecutorSourceCredential.$inferSelect;
-type WorkspaceExecutorPackageRecord = typeof workspaceExecutorPackage.$inferSelect;
+type WorkspaceMcpServerRecord = typeof workspaceMcpServer.$inferSelect;
+type WorkspaceMcpServerCredentialRecord =
+  typeof workspaceMcpAuthorization.$inferSelect;
 
-type LocalExecutorConfigSource = Record<string, unknown> & {
-  kind: ExecutorSourceKind;
-  name?: string;
-  namespace?: string;
-  enabled?: boolean;
-  config: Record<string, unknown>;
-};
-
-type LocalExecutorConfig = {
-  workspace?: {
-    name?: string;
-  };
-  sources: Record<string, LocalExecutorConfigSource>;
-};
-
-type LocalWorkspaceState = {
-  version: 1;
-  sources: Record<
-    string,
-    {
-      status: "draft" | "probing" | "auth_required" | "connected" | "error";
-      lastError: string | null;
-      sourceHash: string | null;
-      createdAt: number;
-      updatedAt: number;
-    }
-  >;
-  policies: Record<string, never>;
-};
-
-type ManagedExecutorSourceDefinition = {
+type ManagedWorkspaceMcpServerDefinition = {
   internalKey: "gmail" | "galien" | "modulr";
   kind: "mcp";
   name: string;
@@ -70,7 +39,6 @@ type ManagedExecutorSourceDefinition = {
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 const MANAGED_MCP_TOKEN_TTL_SECONDS = 10 * 60;
-const WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION = 3;
 const GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED = false;
 const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
   /re-authorization is required/i,
@@ -97,8 +65,8 @@ export function normalizeExecutorNamespace(value: string): string {
   return normalized;
 }
 
-export function computeWorkspaceExecutorSourceRevisionHash(input: {
-  kind: ExecutorSourceKind;
+export function computeWorkspaceMcpServerRevisionHash(input: {
+  kind: WorkspaceMcpServerKind;
   internalKey?: string | null;
   name: string;
   namespace: string;
@@ -108,7 +76,7 @@ export function computeWorkspaceExecutorSourceRevisionHash(input: {
   headers: Record<string, string> | null | undefined;
   queryParams: Record<string, string> | null | undefined;
   defaultHeaders: Record<string, string> | null | undefined;
-  authType: ExecutorSourceAuthType;
+  authType: WorkspaceMcpServerAuthType;
   authHeaderName: string | null;
   authQueryParam: string | null;
   authPrefix: string | null;
@@ -137,66 +105,9 @@ export function computeWorkspaceExecutorSourceRevisionHash(input: {
     .digest("hex");
 }
 
-function buildBaseSourceConfig(source: WorkspaceExecutorSourceRecord): LocalExecutorConfigSource {
-  if (source.kind === "openapi") {
-    return {
-      kind: "openapi",
-      name: source.name,
-      namespace: source.namespace,
-      enabled: source.enabled,
-      config: {
-        specUrl: source.specUrl,
-        baseUrl: source.endpoint,
-        auth: { kind: "none" },
-        defaultHeaders: source.defaultHeaders ?? null,
-      },
-    };
-  }
-
-  return {
-    kind: "mcp",
-    name: source.name,
-    namespace: source.namespace,
-    enabled: source.enabled,
-    config: {
-      endpoint: source.endpoint,
-      transport: source.transport ?? null,
-      queryParams: source.queryParams ?? null,
-      headers: source.headers ?? null,
-      command: null,
-      args: null,
-      env: null,
-      cwd: null,
-      auth: { kind: "none" },
-    },
-  };
-}
-
-function buildWorkspaceState(
-  sources: WorkspaceExecutorSourceRecord[],
-  now = Date.now(),
-): LocalWorkspaceState {
-  return {
-    version: 1,
-    sources: Object.fromEntries(
-      sources.map((source) => [
-        source.id,
-        {
-          status: "connected",
-          lastError: null,
-          sourceHash: source.revisionHash,
-          createdAt: source.createdAt?.getTime() ?? now,
-          updatedAt: source.updatedAt?.getTime() ?? now,
-        },
-      ]),
-    ),
-    policies: {},
-  };
-}
-
 function hasStoredCredentialSecret(
-  source: WorkspaceExecutorSourceRecord,
-  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined,
+  source: WorkspaceMcpServerRecord,
+  credential: WorkspaceMcpServerCredentialRecord | null | undefined,
 ): boolean {
   if (!credential) {
     return false;
@@ -216,7 +127,7 @@ function resolveManagedMcpBaseUrl(): string | null {
 
 function getManagedSourceDefinition(
   internalKey: "gmail" | "galien" | "modulr",
-): ManagedExecutorSourceDefinition | null {
+): ManagedWorkspaceMcpServerDefinition | null {
   const baseUrl = resolveManagedMcpBaseUrl();
   if (!baseUrl) {
     return null;
@@ -257,13 +168,13 @@ function getManagedSourceDefinition(
   };
 }
 
-async function ensureManagedExecutorSources(input: {
+async function ensureManagedWorkspaceMcpServers(input: {
   database?: DatabaseLike;
   workspaceId: string;
   userId: string;
 }) {
   const database = input.database ?? db;
-  const definitions: Array<ManagedExecutorSourceDefinition | null> =
+  const definitions: Array<ManagedWorkspaceMcpServerDefinition | null> =
     GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED ? [getManagedSourceDefinition("gmail")] : [];
   const modulrDefinition = getManagedSourceDefinition(MODULR_INTERNAL_KEY);
   if (
@@ -295,8 +206,8 @@ async function ensureManagedExecutorSources(input: {
     return;
   }
 
-  const existing = await database.query.workspaceExecutorSource.findMany({
-    where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
+  const existing = await database.query.workspaceMcpServer.findMany({
+    where: eq(workspaceMcpServer.workspaceId, input.workspaceId),
   });
 
   for (const definition of activeDefinitions) {
@@ -308,7 +219,7 @@ async function ensureManagedExecutorSources(input: {
     const enabled =
       current && current.internalKey === definition.internalKey ? current.enabled : true;
 
-    const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
+    const revisionHash = computeWorkspaceMcpServerRevisionHash({
       kind: definition.kind,
       internalKey: definition.internalKey,
       name: definition.name,
@@ -327,7 +238,7 @@ async function ensureManagedExecutorSources(input: {
     });
 
     if (!current) {
-      await database.insert(workspaceExecutorSource).values({
+      await database.insert(workspaceMcpServer).values({
         workspaceId: input.workspaceId,
         kind: definition.kind,
         internalKey: definition.internalKey,
@@ -361,7 +272,7 @@ async function ensureManagedExecutorSources(input: {
       current.revisionHash !== revisionHash
     ) {
       await database
-        .update(workspaceExecutorSource)
+        .update(workspaceMcpServer)
         .set({
           internalKey: definition.internalKey,
           kind: definition.kind,
@@ -381,14 +292,14 @@ async function ensureManagedExecutorSources(input: {
           revisionHash,
           updatedByUserId: input.userId,
         })
-        .where(eq(workspaceExecutorSource.id, current.id));
+        .where(eq(workspaceMcpServer.id, current.id));
     }
   }
 }
 
 async function isManagedSourceConnected(input: {
   database?: DatabaseLike;
-  source: WorkspaceExecutorSourceRecord;
+  source: WorkspaceMcpServerRecord;
   userId?: string;
 }) {
   const { source, userId } = input;
@@ -430,7 +341,7 @@ async function isManagedSourceConnected(input: {
 
 async function isManagedSourceVisibleForUser(input: {
   database?: DatabaseLike;
-  source: WorkspaceExecutorSourceRecord;
+  source: WorkspaceMcpServerRecord;
   userId?: string;
 }) {
   if (!input.source.internalKey) {
@@ -479,7 +390,7 @@ function shouldTreatAsReauthRequired(error: unknown): boolean {
   return DEFINITIVE_OAUTH_REAUTH_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-function decryptExecutorSourceToken(value: string | null | undefined): string | null {
+function decryptWorkspaceMcpServerToken(value: string | null | undefined): string | null {
   if (!value) {
     return null;
   }
@@ -488,55 +399,22 @@ function decryptExecutorSourceToken(value: string | null | undefined): string | 
   return decrypted.trim().length > 0 ? decrypted : null;
 }
 
-export type StoredExecutorSourceOauthCredential = {
+export type StoredWorkspaceMcpServerOauthCredential = {
   accessToken: string;
   refreshToken: string | null;
   expiresAt: Date | null;
   metadata: McpOAuthMetadata;
 };
 
-export type WorkspaceExecutorNativeMcpOauthBootstrapSource = {
-  sourceId: string;
-  name: string;
-  namespace: string;
-  endpoint: string;
-  transport: string | null;
-  queryParams: Record<string, string> | null;
-  credential: StoredExecutorSourceOauthCredential | null;
-};
-
-function computeWorkspaceExecutorPackageRevision(
-  sources: Array<{
-    id: string;
-    revisionHash: string;
-    enabled: boolean;
-    updatedAt: Date | null | undefined;
-  }>,
-): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        formatVersion: WORKSPACE_EXECUTOR_PACKAGE_FORMAT_VERSION,
-        sources: sources.map((source) => ({
-          id: source.id,
-          revisionHash: source.revisionHash,
-          enabled: source.enabled,
-          updatedAt: source.updatedAt?.toISOString() ?? null,
-        })),
-      }),
-    )
-    .digest("hex");
-}
-
-function readStoredExecutorSourceOauthCredential(
-  source: WorkspaceExecutorSourceRecord,
-  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined,
-): StoredExecutorSourceOauthCredential | null {
+function readStoredWorkspaceMcpServerOauthCredential(
+  source: WorkspaceMcpServerRecord,
+  credential: WorkspaceMcpServerCredentialRecord | null | undefined,
+): StoredWorkspaceMcpServerOauthCredential | null {
   if (source.authType !== "oauth2" || !credential?.oauthMetadata) {
     return null;
   }
 
-  const accessToken = decryptExecutorSourceToken(credential.accessToken);
+  const accessToken = decryptWorkspaceMcpServerToken(credential.accessToken);
   if (!accessToken) {
     return null;
   }
@@ -548,15 +426,15 @@ function readStoredExecutorSourceOauthCredential(
 
   return {
     accessToken,
-    refreshToken: decryptExecutorSourceToken(credential.refreshToken),
+    refreshToken: decryptWorkspaceMcpServerToken(credential.refreshToken),
     expiresAt: credential.expiresAt ?? null,
     metadata,
   };
 }
 
-async function upsertWorkspaceExecutorSourceOAuthCredential(input: {
+async function upsertWorkspaceMcpServerOAuthCredential(input: {
   database?: DatabaseLike;
-  workspaceExecutorSourceId: string;
+  workspaceMcpServerId: string;
   userId: string;
   accessToken: string;
   refreshToken: string | null;
@@ -568,9 +446,9 @@ async function upsertWorkspaceExecutorSourceOAuthCredential(input: {
   const database = input.database ?? db;
 
   await database
-    .insert(workspaceExecutorSourceCredential)
+    .insert(workspaceMcpAuthorization)
     .values({
-      workspaceExecutorSourceId: input.workspaceExecutorSourceId,
+      workspaceMcpServerId: input.workspaceMcpServerId,
       userId: input.userId,
       secret: null,
       accessToken: encrypt(input.accessToken),
@@ -582,8 +460,8 @@ async function upsertWorkspaceExecutorSourceOAuthCredential(input: {
     })
     .onConflictDoUpdate({
       target: [
-        workspaceExecutorSourceCredential.userId,
-        workspaceExecutorSourceCredential.workspaceExecutorSourceId,
+        workspaceMcpAuthorization.userId,
+        workspaceMcpAuthorization.workspaceMcpServerId,
       ],
       set: {
         secret: null,
@@ -598,14 +476,14 @@ async function upsertWorkspaceExecutorSourceOAuthCredential(input: {
     });
 }
 
-async function markWorkspaceExecutorSourceOAuthCredentialDisconnected(input: {
+async function markWorkspaceMcpServerOAuthCredentialDisconnected(input: {
   database?: DatabaseLike;
   credentialId: string;
 }) {
   const database = input.database ?? db;
 
   await database
-    .update(workspaceExecutorSourceCredential)
+    .update(workspaceMcpAuthorization)
     .set({
       accessToken: null,
       refreshToken: null,
@@ -613,16 +491,16 @@ async function markWorkspaceExecutorSourceOAuthCredentialDisconnected(input: {
       oauthMetadata: null,
       updatedAt: new Date(),
     })
-    .where(eq(workspaceExecutorSourceCredential.id, input.credentialId));
+    .where(eq(workspaceMcpAuthorization.id, input.credentialId));
 }
 
-async function getHydratedExecutorSourceOauthCredential(input: {
+async function getHydratedWorkspaceMcpServerOauthCredential(input: {
   database?: DatabaseLike;
-  source: WorkspaceExecutorSourceRecord;
-  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined;
-}): Promise<StoredExecutorSourceOauthCredential | null> {
+  source: WorkspaceMcpServerRecord;
+  credential: WorkspaceMcpServerCredentialRecord | null | undefined;
+}): Promise<StoredWorkspaceMcpServerOauthCredential | null> {
   const database = input.database ?? db;
-  const stored = readStoredExecutorSourceOauthCredential(input.source, input.credential);
+  const stored = readStoredWorkspaceMcpServerOauthCredential(input.source, input.credential);
   if (!stored) {
     return null;
   }
@@ -642,7 +520,7 @@ async function getHydratedExecutorSourceOauthCredential(input: {
 
     if (result.reauthRequired) {
       if (input.credential?.id) {
-        await markWorkspaceExecutorSourceOAuthCredentialDisconnected({
+        await markWorkspaceMcpServerOAuthCredentialDisconnected({
           database,
           credentialId: input.credential.id,
         });
@@ -651,9 +529,9 @@ async function getHydratedExecutorSourceOauthCredential(input: {
     }
 
     if (result.refreshed && input.credential) {
-      await upsertWorkspaceExecutorSourceOAuthCredential({
+      await upsertWorkspaceMcpServerOAuthCredential({
         database,
-        workspaceExecutorSourceId: input.source.id,
+        workspaceMcpServerId: input.source.id,
         userId: input.credential.userId,
         accessToken: result.credential.accessToken,
         refreshToken: result.credential.refreshToken,
@@ -671,7 +549,7 @@ async function getHydratedExecutorSourceOauthCredential(input: {
     }
 
     if (input.credential?.id && shouldTreatAsReauthRequired(error)) {
-      await markWorkspaceExecutorSourceOAuthCredentialDisconnected({
+      await markWorkspaceMcpServerOAuthCredentialDisconnected({
         database,
         credentialId: input.credential.id,
       });
@@ -682,27 +560,35 @@ async function getHydratedExecutorSourceOauthCredential(input: {
   }
 }
 
-function mergeAuthIntoSourceConfig(input: {
+function appendQueryParams(endpoint: string, queryParams: Record<string, string>): string {
+  const url = new URL(endpoint);
+  for (const [key, value] of Object.entries(queryParams)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+function toRuntimeMcpTransport(transport: string | null): "http" | "sse" {
+  return transport === "sse" ? "sse" : "http";
+}
+
+async function buildWorkspaceMcpRuntimeServer(input: {
   database?: DatabaseLike;
-  source: WorkspaceExecutorSourceRecord;
-  credential: WorkspaceExecutorSourceCredentialRecord | null | undefined;
+  source: WorkspaceMcpServerRecord;
+  credential: WorkspaceMcpServerCredentialRecord | null | undefined;
   userId: string;
-  config: LocalExecutorConfigSource;
-}): Promise<LocalExecutorConfigSource> {
-  const next = JSON.parse(JSON.stringify(input.config)) as LocalExecutorConfigSource;
+}): Promise<RuntimeMcpServer> {
+  const headers: Record<string, string> = { ...(input.source.headers ?? {}) };
+  const queryParams: Record<string, string> = { ...(input.source.queryParams ?? {}) };
+
   if (
     input.source.internalKey === "gmail" ||
     input.source.internalKey === "galien" ||
     input.source.internalKey === MODULR_INTERNAL_KEY
   ) {
     if (!env.CMDCLAW_SERVER_SECRET) {
-      throw new Error("CMDCLAW_SERVER_SECRET is required for managed MCP sources.");
+      throw new Error("CMDCLAW_SERVER_SECRET is required for managed MCP servers.");
     }
-
-    const config = (next.config ?? {}) as Record<string, unknown>;
-    const headers = {
-      ...((config.headers as Record<string, string> | null | undefined) ?? {}),
-    };
     headers.Authorization = `Bearer ${signManagedMcpToken(
       {
         userId: input.userId,
@@ -712,93 +598,71 @@ function mergeAuthIntoSourceConfig(input: {
       },
       env.CMDCLAW_SERVER_SECRET,
     )}`;
-    config.headers = headers;
-    next.config = config;
-    return Promise.resolve(next);
-  }
-
-  if (input.source.authType === "none" || !input.credential?.enabled) {
-    return Promise.resolve(next);
-  }
-
-  if (input.source.authType === "oauth2") {
-    return Promise.resolve(next);
-  }
-
-  const secret = input.credential?.secret ? decrypt(input.credential.secret) : null;
-
-  if (!secret || secret.trim().length === 0) {
-    return Promise.resolve(next);
-  }
-
-  if (input.source.kind === "openapi") {
-    const config = (next.config ?? {}) as Record<string, unknown>;
-    const defaultHeaders = {
-      ...((config.defaultHeaders as Record<string, string> | null | undefined) ?? {}),
-    };
-
-    if (input.source.authType === "bearer") {
-      defaultHeaders[input.source.authHeaderName?.trim() || "Authorization"] =
-        `${input.source.authPrefix ?? "Bearer "}${secret}`;
-    } else {
-      defaultHeaders[input.source.authHeaderName?.trim() || "X-API-Key"] = secret;
+  } else if (input.source.authType === "oauth2") {
+    const hydrated = await getHydratedWorkspaceMcpServerOauthCredential({
+      database: input.database,
+      source: input.source,
+      credential: input.credential,
+    });
+    if (hydrated?.accessToken) {
+      const tokenType = hydrated.metadata.tokenType?.trim();
+      const prefix =
+        tokenType && tokenType.length > 0
+          ? tokenType.toLowerCase() === "bearer"
+            ? "Bearer"
+            : tokenType
+          : "Bearer";
+      headers.Authorization = `${prefix} ${hydrated.accessToken}`;
     }
-
-    config.defaultHeaders = defaultHeaders;
-    next.config = config;
-    return Promise.resolve(next);
+  } else if (input.source.authType !== "none" && input.credential?.enabled) {
+    const secret = input.credential.secret ? decrypt(input.credential.secret) : null;
+    if (secret?.trim()) {
+      if (input.source.authType === "bearer") {
+        headers[input.source.authHeaderName?.trim() || "Authorization"] =
+          `${input.source.authPrefix ?? "Bearer "}${secret}`;
+      } else if (input.source.authQueryParam?.trim()) {
+        queryParams[input.source.authQueryParam.trim()] = secret;
+      } else {
+        headers[input.source.authHeaderName?.trim() || "X-API-Key"] = secret;
+      }
+    }
   }
 
-  const config = (next.config ?? {}) as Record<string, unknown>;
-  const headers = {
-    ...((config.headers as Record<string, string> | null | undefined) ?? {}),
+  return {
+    type: toRuntimeMcpTransport(input.source.transport ?? null),
+    name: input.source.namespace,
+    url: appendQueryParams(input.source.endpoint, queryParams),
+    headers: Object.entries(headers).map(([name, value]) => ({ name, value })),
   };
-  const queryParams = {
-    ...((config.queryParams as Record<string, string> | null | undefined) ?? {}),
-  };
-
-  if (input.source.authType === "bearer") {
-    headers[input.source.authHeaderName?.trim() || "Authorization"] =
-      `${input.source.authPrefix ?? "Bearer "}${secret}`;
-  } else if (input.source.authQueryParam?.trim()) {
-    queryParams[input.source.authQueryParam.trim()] = secret;
-  } else {
-    headers[input.source.authHeaderName?.trim() || "X-API-Key"] = secret;
-  }
-
-  config.headers = headers;
-  config.queryParams = queryParams;
-  next.config = config;
-  return Promise.resolve(next);
 }
 
-export async function listWorkspaceExecutorSources(input: {
+export async function listWorkspaceMcpServers(input: {
   database?: DatabaseLike;
   workspaceId: string;
   userId?: string;
 }) {
   const database = input.database ?? db;
   if (input.userId) {
-    await ensureManagedExecutorSources({
+    await ensureManagedWorkspaceMcpServers({
       database,
       workspaceId: input.workspaceId,
       userId: input.userId,
     });
   }
   const [sources, credentials] = await Promise.all([
-    database.query.workspaceExecutorSource.findMany({
-      where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
+    database.query.workspaceMcpServer.findMany({
+      where: eq(workspaceMcpServer.workspaceId, input.workspaceId),
       orderBy: (source, { asc }) => [asc(source.name), asc(source.createdAt)],
     }),
     input.userId
-      ? database.query.workspaceExecutorSourceCredential.findMany({
-          where: eq(workspaceExecutorSourceCredential.userId, input.userId),
+      ? database.query.workspaceMcpAuthorization.findMany({
+          where: eq(workspaceMcpAuthorization.userId, input.userId),
         })
-      : Promise.resolve([] as WorkspaceExecutorSourceCredentialRecord[]),
+      : Promise.resolve([] as WorkspaceMcpServerCredentialRecord[]),
   ]);
 
   const credentialBySourceId = new Map(
-    credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
+    credentials.map((credential) => [credential.workspaceMcpServerId, credential]),
   );
 
   const visibleSources = (
@@ -813,7 +677,7 @@ export async function listWorkspaceExecutorSources(input: {
           : null,
       ),
     )
-  ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
+  ).filter((source): source is WorkspaceMcpServerRecord => Boolean(source));
 
   return Promise.all(
     visibleSources.map(async (source) => {
@@ -832,33 +696,63 @@ export async function listWorkspaceExecutorSources(input: {
   );
 }
 
-export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: {
+export type WorkspaceMcpServerResolution = {
+  requestedServers: Array<{
+    id: string;
+    name: string;
+    namespace: string;
+    server: RuntimeMcpServer;
+  }>;
+  unavailableServers: Array<{
+    id: string;
+    name: string;
+    namespace: string;
+    reason: string;
+  }>;
+};
+
+export async function resolveWorkspaceMcpServersForGeneration(input: {
   database?: DatabaseLike;
-  workspaceId: string;
+  workspaceId: string | null | undefined;
   userId: string;
-  allowedSourceIds?: string[] | null;
-}): Promise<WorkspaceExecutorNativeMcpOauthBootstrapSource[]> {
+  allowedWorkspaceMcpServerIds?: string[] | null;
+}): Promise<WorkspaceMcpServerResolution> {
+  if (!input.workspaceId) {
+    return { requestedServers: [], unavailableServers: [] };
+  }
+  if (
+    Array.isArray(input.allowedWorkspaceMcpServerIds) &&
+    input.allowedWorkspaceMcpServerIds.length === 0
+  ) {
+    return { requestedServers: [], unavailableServers: [] };
+  }
+
   const database = input.database ?? db;
+  await ensureManagedWorkspaceMcpServers({
+    database,
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+  });
+
   const [sources, credentials] = await Promise.all([
-    database.query.workspaceExecutorSource.findMany({
+    database.query.workspaceMcpServer.findMany({
       where:
-        input.allowedSourceIds && input.allowedSourceIds.length > 0
+        input.allowedWorkspaceMcpServerIds && input.allowedWorkspaceMcpServerIds.length > 0
           ? and(
-              eq(workspaceExecutorSource.workspaceId, input.workspaceId),
-              inArray(workspaceExecutorSource.id, input.allowedSourceIds),
+              eq(workspaceMcpServer.workspaceId, input.workspaceId),
+              inArray(workspaceMcpServer.id, input.allowedWorkspaceMcpServerIds),
             )
-          : eq(workspaceExecutorSource.workspaceId, input.workspaceId),
+          : eq(workspaceMcpServer.workspaceId, input.workspaceId),
       orderBy: (source, { asc }) => [asc(source.namespace), asc(source.createdAt)],
     }),
-    database.query.workspaceExecutorSourceCredential.findMany({
-      where: eq(workspaceExecutorSourceCredential.userId, input.userId),
+    database.query.workspaceMcpAuthorization.findMany({
+      where: eq(workspaceMcpAuthorization.userId, input.userId),
     }),
   ]);
 
   const credentialBySourceId = new Map(
-    credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
+    credentials.map((credential) => [credential.workspaceMcpServerId, credential]),
   );
-
   const visibleSources = (
     await Promise.all(
       sources.map(async (source) =>
@@ -871,120 +765,40 @@ export async function getWorkspaceExecutorNativeMcpOAuthBootstrapSources(input: 
           : null,
       ),
     )
-  ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
+  ).filter((source): source is WorkspaceMcpServerRecord => Boolean(source));
 
-  const oauthSources = visibleSources
-    .filter((source) => source.kind === "mcp" && source.authType === "oauth2")
-    .map(async (source) => {
-      const credential = credentialBySourceId.get(source.id);
-      return {
-        sourceId: source.id,
+  const requestedServers: WorkspaceMcpServerResolution["requestedServers"] = [];
+  const unavailableServers: WorkspaceMcpServerResolution["unavailableServers"] = [];
+
+  for (const source of visibleSources) {
+    try {
+      requestedServers.push({
+        id: source.id,
         name: source.name,
         namespace: source.namespace,
-        endpoint: source.endpoint,
-        transport: source.transport ?? null,
-        queryParams: source.queryParams ?? null,
-        credential:
-          credential?.enabled === false
-            ? null
-            : await getHydratedExecutorSourceOauthCredential({
-                database,
-                source,
-                credential,
-              }),
-      };
-    });
-
-  return Promise.all(oauthSources);
-}
-
-async function rebuildWorkspaceExecutorPackage(input: {
-  database?: DatabaseLike;
-  workspaceId: string;
-  workspaceName?: string | null;
-}) {
-  const database = input.database ?? db;
-  const sources = await database.query.workspaceExecutorSource.findMany({
-    where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
-    orderBy: (source, { asc }) => [asc(source.namespace), asc(source.createdAt)],
-  });
-
-  const revisionHash = computeWorkspaceExecutorPackageRevision(sources);
-
-  const config: LocalExecutorConfig = {
-    workspace: input.workspaceName?.trim() ? { name: input.workspaceName.trim() } : undefined,
-    sources: Object.fromEntries(
-      sources.map((source) => [source.id, buildBaseSourceConfig(source)]),
-    ),
-  };
-  const workspaceState = buildWorkspaceState(sources);
-
-  const payload = {
-    revisionHash,
-    configJson: `${JSON.stringify(config, null, 2)}\n`,
-    workspaceStateJson: `${JSON.stringify(workspaceState, null, 2)}\n`,
-  };
-
-  await database
-    .insert(workspaceExecutorPackage)
-    .values({
-      workspaceId: input.workspaceId,
-      revisionHash: payload.revisionHash,
-      configJson: payload.configJson,
-      workspaceStateJson: payload.workspaceStateJson,
-      builtAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: workspaceExecutorPackage.workspaceId,
-      set: {
-        revisionHash: payload.revisionHash,
-        configJson: payload.configJson,
-        workspaceStateJson: payload.workspaceStateJson,
-        builtAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
-
-  return payload;
-}
-
-export async function ensureWorkspaceExecutorPackage(input: {
-  database?: DatabaseLike;
-  workspaceId: string;
-  workspaceName?: string | null;
-}) {
-  const database = input.database ?? db;
-  const existing = await database.query.workspaceExecutorPackage.findFirst({
-    where: eq(workspaceExecutorPackage.workspaceId, input.workspaceId),
-  });
-
-  if (existing) {
-    const sources = await database.query.workspaceExecutorSource.findMany({
-      where: eq(workspaceExecutorSource.workspaceId, input.workspaceId),
-      columns: {
-        id: true,
-        revisionHash: true,
-        enabled: true,
-        updatedAt: true,
-      },
-    });
-    const nextRevisionHash = computeWorkspaceExecutorPackageRevision(sources);
-
-    if (nextRevisionHash === existing.revisionHash) {
-      return existing;
+        server: await buildWorkspaceMcpRuntimeServer({
+          database,
+          source,
+          credential: credentialBySourceId.get(source.id),
+          userId: input.userId,
+        }),
+      });
+    } catch (error) {
+      unavailableServers.push({
+        id: source.id,
+        name: source.name,
+        namespace: source.namespace,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
-  return rebuildWorkspaceExecutorPackage({
-    database,
-    workspaceId: input.workspaceId,
-    workspaceName: input.workspaceName,
-  });
+  return { requestedServers, unavailableServers };
 }
 
-export async function setWorkspaceExecutorSourceCredential(input: {
+export async function setWorkspaceMcpServerCredential(input: {
   database?: DatabaseLike;
-  workspaceExecutorSourceId: string;
+  workspaceMcpServerId: string;
   userId: string;
   secret: string;
   displayName?: string | null;
@@ -997,9 +811,9 @@ export async function setWorkspaceExecutorSourceCredential(input: {
   }
 
   await database
-    .insert(workspaceExecutorSourceCredential)
+    .insert(workspaceMcpAuthorization)
     .values({
-      workspaceExecutorSourceId: input.workspaceExecutorSourceId,
+      workspaceMcpServerId: input.workspaceMcpServerId,
       userId: input.userId,
       secret: encrypt(normalizedSecret),
       accessToken: null,
@@ -1011,8 +825,8 @@ export async function setWorkspaceExecutorSourceCredential(input: {
     })
     .onConflictDoUpdate({
       target: [
-        workspaceExecutorSourceCredential.userId,
-        workspaceExecutorSourceCredential.workspaceExecutorSourceId,
+        workspaceMcpAuthorization.userId,
+        workspaceMcpAuthorization.workspaceMcpServerId,
       ],
       set: {
         secret: encrypt(normalizedSecret),
@@ -1027,9 +841,9 @@ export async function setWorkspaceExecutorSourceCredential(input: {
     });
 }
 
-export async function setWorkspaceExecutorSourceOAuthCredential(input: {
+export async function setWorkspaceMcpServerOAuthCredential(input: {
   database?: DatabaseLike;
-  workspaceExecutorSourceId: string;
+  workspaceMcpServerId: string;
   userId: string;
   accessToken: string;
   refreshToken: string | null;
@@ -1038,132 +852,5 @@ export async function setWorkspaceExecutorSourceOAuthCredential(input: {
   displayName?: string | null;
   enabled?: boolean;
 }) {
-  await upsertWorkspaceExecutorSourceOAuthCredential(input);
-}
-
-export async function getWorkspaceExecutorBootstrap(input: {
-  database?: DatabaseLike;
-  workspaceId: string;
-  workspaceName?: string | null;
-  userId: string;
-  allowedSourceIds?: string[] | null;
-}) {
-  const database = input.database ?? db;
-  await ensureManagedExecutorSources({
-    database,
-    workspaceId: input.workspaceId,
-    userId: input.userId,
-  });
-  const [packageRow, sources, credentials] = await Promise.all([
-    ensureWorkspaceExecutorPackage({
-      database,
-      workspaceId: input.workspaceId,
-      workspaceName: input.workspaceName,
-    }),
-    database.query.workspaceExecutorSource.findMany({
-      where:
-        input.allowedSourceIds && input.allowedSourceIds.length > 0
-          ? and(
-              eq(workspaceExecutorSource.workspaceId, input.workspaceId),
-              inArray(workspaceExecutorSource.id, input.allowedSourceIds),
-            )
-          : eq(workspaceExecutorSource.workspaceId, input.workspaceId),
-      orderBy: (source, { asc }) => [asc(source.namespace), asc(source.createdAt)],
-    }),
-    database.query.workspaceExecutorSourceCredential.findMany({
-      where: eq(workspaceExecutorSourceCredential.userId, input.userId),
-    }),
-  ]);
-
-  const config = JSON.parse(packageRow.configJson) as LocalExecutorConfig;
-  const workspaceState = JSON.parse(packageRow.workspaceStateJson) as LocalWorkspaceState;
-  const credentialBySourceId = new Map(
-    credentials.map((credential) => [credential.workspaceExecutorSourceId, credential]),
-  );
-
-  const visibleSources = (
-    await Promise.all(
-      sources.map(async (source) =>
-        (await isManagedSourceVisibleForUser({
-          database,
-          source,
-          userId: input.userId,
-        }))
-          ? source
-          : null,
-      ),
-    )
-  ).filter((source): source is WorkspaceExecutorSourceRecord => Boolean(source));
-
-  const hydratedSourceEntries = await Promise.all(
-    visibleSources.map(async (source) => {
-      const baseConfig = config.sources[source.id] ?? buildBaseSourceConfig(source);
-      const credential = credentialBySourceId.get(source.id);
-      const hydratedConfig = await mergeAuthIntoSourceConfig({
-        database,
-        source,
-        credential,
-        userId: input.userId,
-        config: baseConfig,
-      });
-      const refreshedCredential =
-        source.authType === "oauth2"
-          ? await database.query.workspaceExecutorSourceCredential.findFirst({
-              where: and(
-                eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-                eq(workspaceExecutorSourceCredential.userId, input.userId),
-              ),
-            })
-          : credential;
-      const connected = source.internalKey
-        ? await isManagedSourceConnected({ database, source, userId: input.userId })
-        : Boolean(
-            source.authType === "oauth2"
-              ? refreshedCredential?.accessToken && refreshedCredential.enabled
-              : credential?.secret && credential.enabled,
-          );
-
-      return {
-        sourceId: source.id,
-        config: hydratedConfig,
-        connected,
-      };
-    }),
-  );
-  const hydratedSources = Object.fromEntries(
-    hydratedSourceEntries.map((entry) => [entry.sourceId, entry.config]),
-  );
-  const visibleSourceIds = new Set(visibleSources.map((source) => source.id));
-  const hydratedWorkspaceState: LocalWorkspaceState = {
-    ...workspaceState,
-    sources: Object.fromEntries(
-      Object.entries(workspaceState.sources)
-        .filter(([sourceId]) => visibleSourceIds.has(sourceId))
-        .map(([sourceId, sourceState]) => {
-          const sourceStatus = hydratedSourceEntries.find((entry) => entry.sourceId === sourceId);
-          return [
-            sourceId,
-            sourceStatus && !sourceStatus.connected
-              ? { ...sourceState, status: "auth_required" as const }
-              : sourceState,
-          ];
-        }),
-    ),
-  };
-
-  return {
-    revisionHash: packageRow.revisionHash,
-    configJson: `${JSON.stringify({ ...config, sources: hydratedSources }, null, 2)}\n`,
-    workspaceStateJson: `${JSON.stringify(hydratedWorkspaceState, null, 2)}\n`,
-    sources: visibleSources.map((source) => ({
-      id: source.id,
-      name: source.name,
-      namespace: source.namespace,
-      kind: source.kind,
-      internalKey: source.internalKey,
-      enabled: source.enabled,
-      connected:
-        hydratedSourceEntries.find((entry) => entry.sourceId === source.id)?.connected ?? false,
-    })),
-  };
+  await upsertWorkspaceMcpServerOAuthCredential(input);
 }

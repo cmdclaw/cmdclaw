@@ -11,15 +11,15 @@ const {
   fetchDynamicsInstancesMock,
   submitAuthResultMock,
   submitAuthResultByInterruptMock,
-  consumeExecutorSourceOAuthPendingMock,
+  consumeWorkspaceMcpServerOAuthPendingMock,
   exchangeMcpOAuthAuthorizationCodeMock,
-  computeWorkspaceExecutorSourceRevisionHashMock,
-  setWorkspaceExecutorSourceOAuthCredentialMock,
+  computeWorkspaceMcpServerRevisionHashMock,
+  setWorkspaceMcpServerOAuthCredentialMock,
   integrationFindFirstMock,
   connectedIdentityFindManyMock,
   connectedIdentityFindFirstMock,
-  workspaceExecutorSourceFindFirstMock,
-  workspaceExecutorSourceCredentialFindFirstMock,
+  workspaceMcpServerFindFirstMock,
+  workspaceMcpAuthorizationFindFirstMock,
   updateWhereMock,
   deleteWhereMock,
   insertReturningMock,
@@ -31,16 +31,16 @@ const {
   const fetchDynamicsInstancesMock = vi.fn<MockFn>();
   const submitAuthResultMock = vi.fn<MockFn>();
   const submitAuthResultByInterruptMock = vi.fn<MockFn>();
-  const consumeExecutorSourceOAuthPendingMock = vi.fn<MockFn>();
+  const consumeWorkspaceMcpServerOAuthPendingMock = vi.fn<MockFn>();
   const exchangeMcpOAuthAuthorizationCodeMock = vi.fn<MockFn>();
-  const computeWorkspaceExecutorSourceRevisionHashMock = vi.fn<MockFn>(() => "native-hash");
-  const setWorkspaceExecutorSourceOAuthCredentialMock = vi.fn<MockFn>();
+  const computeWorkspaceMcpServerRevisionHashMock = vi.fn<MockFn>(() => "native-hash");
+  const setWorkspaceMcpServerOAuthCredentialMock = vi.fn<MockFn>();
 
   const integrationFindFirstMock = vi.fn<MockFn>();
   const connectedIdentityFindManyMock = vi.fn<MockFn>();
   const connectedIdentityFindFirstMock = vi.fn<MockFn>();
-  const workspaceExecutorSourceFindFirstMock = vi.fn<MockFn>();
-  const workspaceExecutorSourceCredentialFindFirstMock = vi.fn<MockFn>();
+  const workspaceMcpServerFindFirstMock = vi.fn<MockFn>();
+  const workspaceMcpAuthorizationFindFirstMock = vi.fn<MockFn>();
 
   const updateWhereMock = vi.fn<MockFn>();
   const updateSetMock = vi.fn<MockFn>(() => ({ where: updateWhereMock }));
@@ -62,11 +62,11 @@ const {
         findMany: connectedIdentityFindManyMock,
         findFirst: connectedIdentityFindFirstMock,
       },
-      workspaceExecutorSource: {
-        findFirst: workspaceExecutorSourceFindFirstMock,
+      workspaceMcpServer: {
+        findFirst: workspaceMcpServerFindFirstMock,
       },
-      workspaceExecutorSourceCredential: {
-        findFirst: workspaceExecutorSourceCredentialFindFirstMock,
+      workspaceMcpAuthorization: {
+        findFirst: workspaceMcpAuthorizationFindFirstMock,
       },
     },
     update: updateMock,
@@ -80,15 +80,15 @@ const {
     fetchDynamicsInstancesMock,
     submitAuthResultMock,
     submitAuthResultByInterruptMock,
-    consumeExecutorSourceOAuthPendingMock,
+    consumeWorkspaceMcpServerOAuthPendingMock,
     exchangeMcpOAuthAuthorizationCodeMock,
-    computeWorkspaceExecutorSourceRevisionHashMock,
-    setWorkspaceExecutorSourceOAuthCredentialMock,
+    computeWorkspaceMcpServerRevisionHashMock,
+    setWorkspaceMcpServerOAuthCredentialMock,
     integrationFindFirstMock,
     connectedIdentityFindManyMock,
     connectedIdentityFindFirstMock,
-    workspaceExecutorSourceFindFirstMock,
-    workspaceExecutorSourceCredentialFindFirstMock,
+    workspaceMcpServerFindFirstMock,
+    workspaceMcpAuthorizationFindFirstMock,
     updateWhereMock,
     deleteWhereMock,
     insertReturningMock,
@@ -118,8 +118,8 @@ vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
-  computeWorkspaceExecutorSourceRevisionHash: computeWorkspaceExecutorSourceRevisionHashMock,
-  setWorkspaceExecutorSourceOAuthCredential: setWorkspaceExecutorSourceOAuthCredentialMock,
+  computeWorkspaceMcpServerRevisionHash: computeWorkspaceMcpServerRevisionHashMock,
+  setWorkspaceMcpServerOAuthCredential: setWorkspaceMcpServerOAuthCredentialMock,
 }));
 
 vi.mock("@/server/integrations/dynamics", () => ({
@@ -127,7 +127,7 @@ vi.mock("@/server/integrations/dynamics", () => ({
 }));
 
 vi.mock("@/server/executor-source-oauth", () => ({
-  consumeExecutorSourceOAuthPending: consumeExecutorSourceOAuthPendingMock,
+  consumeWorkspaceMcpServerOAuthPending: consumeWorkspaceMcpServerOAuthPendingMock,
 }));
 
 vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
@@ -167,7 +167,7 @@ describe("GET /api/oauth/callback", () => {
     ]);
     submitAuthResultMock.mockResolvedValue(true);
     submitAuthResultByInterruptMock.mockResolvedValue(true);
-    consumeExecutorSourceOAuthPendingMock.mockResolvedValue(undefined);
+    consumeWorkspaceMcpServerOAuthPendingMock.mockResolvedValue(undefined);
     exchangeMcpOAuthAuthorizationCodeMock.mockResolvedValue({
       accessToken: "oauth-access",
       refreshToken: "oauth-refresh",
@@ -183,12 +183,12 @@ describe("GET /api/oauth/callback", () => {
         clientInformation: null,
       },
     });
-    setWorkspaceExecutorSourceOAuthCredentialMock.mockResolvedValue(undefined);
+    setWorkspaceMcpServerOAuthCredentialMock.mockResolvedValue(undefined);
     integrationFindFirstMock.mockResolvedValue(null);
     connectedIdentityFindManyMock.mockResolvedValue([]);
     connectedIdentityFindFirstMock.mockResolvedValue(null);
-    workspaceExecutorSourceFindFirstMock.mockResolvedValue(null);
-    workspaceExecutorSourceCredentialFindFirstMock.mockResolvedValue(null);
+    workspaceMcpServerFindFirstMock.mockResolvedValue(null);
+    workspaceMcpAuthorizationFindFirstMock.mockResolvedValue(null);
     insertReturningMock
       .mockResolvedValueOnce([{ id: "connected-identity-1", label: "provider-user" }])
       .mockResolvedValue([{ id: "integration-1" }]);
@@ -266,7 +266,7 @@ describe("GET /api/oauth/callback", () => {
   });
 
   it("redirects executor-source OAuth errors back to the source page", async () => {
-    consumeExecutorSourceOAuthPendingMock.mockResolvedValue({
+    consumeWorkspaceMcpServerOAuthPendingMock.mockResolvedValue({
       userId: "user-1",
       sourceId: "src-1",
       redirectUrl: "https://app.example.com/toolbox/sources/src-1",
@@ -294,7 +294,7 @@ describe("GET /api/oauth/callback", () => {
   });
 
   it("stores executor-source OAuth credentials and redirects back to the source page", async () => {
-    consumeExecutorSourceOAuthPendingMock.mockResolvedValue({
+    consumeWorkspaceMcpServerOAuthPendingMock.mockResolvedValue({
       userId: "user-1",
       sourceId: "src-1",
       redirectUrl: "https://app.example.com/toolbox/sources/src-1",
@@ -309,7 +309,7 @@ describe("GET /api/oauth/callback", () => {
         clientInformation: null,
       },
     });
-    workspaceExecutorSourceFindFirstMock.mockResolvedValue({
+    workspaceMcpServerFindFirstMock.mockResolvedValue({
       id: "src-1",
       name: "Linear",
       namespace: "linear",
@@ -326,7 +326,7 @@ describe("GET /api/oauth/callback", () => {
       authPrefix: null,
       enabled: true,
     });
-    workspaceExecutorSourceCredentialFindFirstMock.mockResolvedValue({
+    workspaceMcpAuthorizationFindFirstMock.mockResolvedValue({
       displayName: "Linear",
       enabled: false,
     });
@@ -343,9 +343,9 @@ describe("GET /api/oauth/callback", () => {
       }),
       code: "oauth-code",
     });
-    expect(setWorkspaceExecutorSourceOAuthCredentialMock).toHaveBeenCalledWith(
+    expect(setWorkspaceMcpServerOAuthCredentialMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceExecutorSourceId: "src-1",
+        workspaceMcpServerId: "src-1",
         userId: "user-1",
         accessToken: "oauth-access",
         refreshToken: "oauth-refresh",
@@ -353,7 +353,7 @@ describe("GET /api/oauth/callback", () => {
         enabled: false,
       }),
     );
-    expect(computeWorkspaceExecutorSourceRevisionHashMock).toHaveBeenCalledWith(
+    expect(computeWorkspaceMcpServerRevisionHashMock).toHaveBeenCalledWith(
       expect.objectContaining({ authType: "oauth2" }),
     );
     expect(updateWhereMock).toHaveBeenCalled();

@@ -2141,7 +2141,7 @@ function remapCustomIntegrationRows(
   }));
 }
 
-function remapWorkspaceExecutorSourceRows(
+function remapWorkspaceMcpServerRows(
   rows: Array<Record<string, unknown>>,
   targetUserId: string,
 ): Array<Record<string, unknown>> {
@@ -2627,18 +2627,18 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
 
       const executorSourceCredentialRows = await selectRows(
         sourceClient,
-        "workspace_executor_source_credential",
+        "workspace_mcp_authorization",
         "user_id = $1",
         [sourceUser.id],
       );
       const executorSourceIds = executorSourceCredentialRows
-        .map((row) => row.workspace_executor_source_id)
+        .map((row) => row.workspace_mcp_server_id)
         .filter((value): value is string => typeof value === "string");
 
       const executorSourceRows =
         executorSourceIds.length > 0
           ? await sourceClient.query<Record<string, unknown>>(
-              `select * from workspace_executor_source where id = any($1::text[])`,
+              `select * from workspace_mcp_server where id = any($1::text[])`,
               [executorSourceIds],
             )
           : { rows: [] };
@@ -2750,13 +2750,13 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
         );
         await upsertRows(
           targetClient,
-          "workspace_executor_source",
-          remapWorkspaceExecutorSourceRows(executorSourceRows.rows, sourceUser.id),
+          "workspace_mcp_server",
+          remapWorkspaceMcpServerRows(executorSourceRows.rows, sourceUser.id),
           ["id"],
         );
         await upsertRows(
           targetClient,
-          "workspace_executor_source_credential",
+          "workspace_mcp_authorization",
           executorSourceCredentialRows,
           ["id"],
         );

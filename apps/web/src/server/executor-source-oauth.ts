@@ -3,7 +3,7 @@ import { consumePending, getPending, storePending } from "@/server/ai/pending-oa
 
 const EXECUTOR_SOURCE_OAUTH_PROVIDER_PREFIX = "executor_source:";
 
-type PendingExecutorSourceOAuthPayload = {
+type PendingWorkspaceMcpServerOAuthPayload = {
   redirectUrl: string;
   session: McpOAuthSession;
 };
@@ -12,8 +12,8 @@ function providerKeyForSource(sourceId: string): string {
   return `${EXECUTOR_SOURCE_OAUTH_PROVIDER_PREFIX}${sourceId}`;
 }
 
-function parsePendingPayload(raw: string): PendingExecutorSourceOAuthPayload {
-  const parsed = JSON.parse(raw) as PendingExecutorSourceOAuthPayload;
+function parsePendingPayload(raw: string): PendingWorkspaceMcpServerOAuthPayload {
+  const parsed = JSON.parse(raw) as PendingWorkspaceMcpServerOAuthPayload;
   if (!parsed || typeof parsed !== "object" || typeof parsed.redirectUrl !== "string") {
     throw new Error("Invalid executor source OAuth payload.");
   }
@@ -23,7 +23,7 @@ function parsePendingPayload(raw: string): PendingExecutorSourceOAuthPayload {
   return parsed;
 }
 
-export async function storeExecutorSourceOAuthPending(input: {
+export async function storeWorkspaceMcpServerOAuthPending(input: {
   state: string;
   userId: string;
   sourceId: string;
@@ -36,11 +36,11 @@ export async function storeExecutorSourceOAuthPending(input: {
     codeVerifier: JSON.stringify({
       redirectUrl: input.redirectUrl,
       session: input.session,
-    } satisfies PendingExecutorSourceOAuthPayload),
+    } satisfies PendingWorkspaceMcpServerOAuthPayload),
   });
 }
 
-async function readExecutorSourceOAuthPending(
+async function readWorkspaceMcpServerOAuthPending(
   state: string,
   reader: typeof getPending | typeof consumePending,
 ) {
@@ -61,6 +61,6 @@ async function readExecutorSourceOAuthPending(
   };
 }
 
-export async function consumeExecutorSourceOAuthPending(state: string) {
-  return readExecutorSourceOAuthPending(state, consumePending);
+export async function consumeWorkspaceMcpServerOAuthPending(state: string) {
+  return readWorkspaceMcpServerOAuthPending(state, consumePending);
 }

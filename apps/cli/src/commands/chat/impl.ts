@@ -37,6 +37,7 @@ type ChatFlags = {
   server?: string;
   conversation?: string;
   message?: string;
+  mesage?: string;
   model?: string;
   authSource?: ProviderAuthSource;
   sandbox?: "e2b" | "daytona" | "docker";
@@ -998,7 +999,11 @@ function attachSigintHandler(rl: readline.Interface): void {
 }
 
 export default async function (this: LocalContext, flags: ChatFlags): Promise<void> {
-  if ((flags.attach || flags.attachGeneration) && flags.message) {
+  const initialMessage = flags.message ?? flags.mesage;
+  if (flags.message && flags.mesage) {
+    throw new Error("--message and --mesage cannot both be used");
+  }
+  if ((flags.attach || flags.attachGeneration) && initialMessage) {
     throw new Error("--attach/--attach-generation cannot be used with --message");
   }
   if (flags.attach && flags.attachGeneration) {
@@ -1030,7 +1035,7 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
   const state: ChatState = {
     server: serverUrl,
     conversationId: flags.conversation,
-    message: flags.message,
+    message: initialMessage,
     model: flags.model,
     authSource: flags.authSource,
     sandbox: flags.sandbox,

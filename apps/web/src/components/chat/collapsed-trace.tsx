@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import { cn } from "@/lib/utils";
-import { useExecutorSourceList } from "@/orpc/hooks";
+import { useWorkspaceMcpServerList } from "@/orpc/hooks";
 import type { MessageTiming } from "./chat-performance-metrics";
 import { ActivityItem, type ActivityItemData } from "./activity-item";
 import { formatDuration } from "./chat-performance-metrics";
@@ -40,7 +40,7 @@ export function CollapsedTrace({
   defaultExpanded = false,
   onToggleExpand,
 }: Props) {
-  const { data: executorSourceData } = useExecutorSourceList();
+  const { data: executorSourceData } = useWorkspaceMcpServerList();
   const executorSources = useMemo(
     () => executorSourceData?.sources ?? [],
     [executorSourceData?.sources],

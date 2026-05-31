@@ -1,19 +1,18 @@
 "use client";
 
-import { FileCode, Puzzle } from "lucide-react";
+import { Puzzle } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { getBrandfetchLogoUrl } from "@/lib/brandfetch";
 import { cn } from "@/lib/utils";
 
-export function ExecutorSourceLogo({
-  kind,
+export function WorkspaceMcpServerLogo({
   endpoint,
   className,
   imgClassName,
   iconClassName,
 }: {
-  kind: "mcp" | "openapi";
+  kind: "mcp";
   endpoint: string;
   className?: string;
   imgClassName?: string;
@@ -47,10 +46,8 @@ export function ExecutorSourceLogo({
           unoptimized
           onError={handleError}
         />
-      ) : kind === "mcp" ? (
-        <Puzzle className={cn("text-foreground h-5 w-5", iconClassName)} />
       ) : (
-        <FileCode className={cn("text-foreground h-5 w-5", iconClassName)} />
+        <Puzzle className={cn("text-foreground h-5 w-5", iconClassName)} />
       )}
     </div>
   );

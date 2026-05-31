@@ -32,7 +32,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
 import { getBrandfetchLogoUrl } from "@/lib/brandfetch";
-import { type ExecutorSourceLike, getExecutorDisplayMetadata } from "@/lib/executor-tool";
+import { type WorkspaceMcpServerLike, getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import {
   getIntegrationLogo,
   getIntegrationDisplayName,
@@ -90,7 +90,7 @@ export type ActivityItemData = {
 
 type Props = {
   item: ActivityItemData;
-  executorSources?: readonly ExecutorSourceLike[];
+  executorSources?: readonly WorkspaceMcpServerLike[];
 };
 
 const TOOL_DETAILS_INITIAL = { height: 0, opacity: 0, y: -2 };
@@ -303,9 +303,11 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
 
   // Render system message (interruption, etc.)
   if (type === "system") {
+    const isWarning = content.toLowerCase().includes("warning");
+    const SystemIcon = isWarning ? AlertCircle : StopCircle;
     return (
       <div className="flex items-center gap-1.5 py-0.5 text-xs text-orange-600 dark:text-orange-400">
-        <StopCircle className="h-3.5 w-3.5 flex-shrink-0" />
+        <SystemIcon className="h-3.5 w-3.5 flex-shrink-0" />
         <span className="font-medium">{content}</span>
       </div>
     );

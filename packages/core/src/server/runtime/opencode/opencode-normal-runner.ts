@@ -5,10 +5,6 @@ import { env } from "../../../env";
 import { splitCoworkerAllowedSkillSlugs } from "../../../lib/coworker-tool-policy";
 import { parseModelReference } from "../../../lib/model-reference";
 import type { RuntimeContextFile } from "../../../lib/runtime-context";
-import {
-  stageExecutorPrePrompt,
-  ExecutorPromptReadyError,
-} from "../../execution/executor-preprompt";
 import type { ExecutionEnvironmentSession } from "../../execution/execution-environment";
 import { stagePrePromptAssets } from "../../execution/pre-prompt-assets";
 import { stageRuntimePromptAttachments } from "../../execution/prompt-attachments";
@@ -53,6 +49,7 @@ import type {
 } from "../../services/generation/types";
 import type { OpenCodeTurnEventBridge } from "./opencode-turn-events";
 import { captureRuntimeNoProgressDiagnosticSnapshot } from "../../services/runtime-diagnostic-snapshot-service";
+import { resolveWorkspaceMcpServersForGeneration } from "../../executor/workspace-sources";
 
 const OPENCODE_EARLY_STREAM_REATTACH_ATTEMPTS = 2;
 const OPENCODE_EARLY_STREAM_REATTACH_WAIT_MS = 8_000;
@@ -135,6 +132,7 @@ type NormalRunnerCallbacks = {
     promise: Promise<T>,
   ) => Promise<{ type: "resolved"; value: T } | { type: "timed_out" }>;
   scheduleSave: (ctx: GenerationContext) => void;
+  saveProgress: (ctx: GenerationContext) => Promise<void>;
   importIntegrationSkillDraftsFromSandbox: (ctx: GenerationContext) => Promise<void>;
   captureUsageFromRuntimeSession: (
     ctx: GenerationContext,
@@ -503,21 +501,22 @@ export class OpenCodeNormalRunner {
         });
       }, initWarnAfterMs);
 
-      let resolveExecutorSessionMcpServers: (
+      let resolveWorkspaceMcpSessionServers: (
         value: RuntimeMcpServer[] | undefined,
       ) => void = () => {};
-      let rejectExecutorSessionMcpServers: (reason?: unknown) => void = () => {};
-      const executorSessionMcpServersPromise: Promise<RuntimeMcpServer[] | undefined> =
+      let rejectWorkspaceMcpSessionServers: (reason?: unknown) => void = () => {};
+      const workspaceMcpSessionServersPromise: Promise<RuntimeMcpServer[] | undefined> =
         runtimeMetadata?.runtimeHarness === "opencode"
           ? new Promise((resolve, reject) => {
-              resolveExecutorSessionMcpServers = resolve;
-              rejectExecutorSessionMcpServers = reject;
+              resolveWorkspaceMcpSessionServers = resolve;
+              rejectWorkspaceMcpSessionServers = reject;
             })
           : Promise.resolve(undefined);
+      let runtimeMcpWarnings: Array<{ serverName: string; message: string }> = [];
 
       const runtimeSessionPromise = (async () => {
         try {
-          const sessionMcpServers = await executorSessionMcpServersPromise;
+          const sessionMcpServers = await workspaceMcpSessionServersPromise;
           const session = await withTimeout(
             runtimeInit.completeAgentInit({ sessionMcpServers }),
             remainingPreparingTimeoutMs(),
@@ -525,6 +524,7 @@ export class OpenCodeNormalRunner {
           );
           client = session.harnessClient;
           sessionId = session.session.id;
+          runtimeMcpWarnings = session.mcpWarnings ?? [];
           await this.callbacks.persistRuntimeSessionBinding(ctx, {
             runtimeMetadata,
             sessionId,
@@ -617,7 +617,6 @@ export class OpenCodeNormalRunner {
       };
 
       let memoryInstructions = buildMemorySystemPrompt();
-      let executorInstructions: string | null = null;
       let enabledSkillRows: Array<{ name: string; updatedAt: Date }> = [];
       let writtenSkills: string[] = [];
       let writtenIntegrationSkills: string[] = [];
@@ -654,33 +653,29 @@ export class OpenCodeNormalRunner {
         }
       })();
 
-      const executorPreparePromise = (async (): Promise<() => Promise<void>> => {
-        const preparedExecutor = await stageExecutorPrePrompt({
-          runtimeSandbox,
-          workspaceId: ctx.workspaceId,
-          userId: ctx.userId,
-          allowedExecutorSourceIds: ctx.allowedExecutorSourceIds,
-          runtimeId: ctx.runtimeId,
-          reuseExistingState: ctx.agentSandboxMode === "reused",
-          prerequisites: [runtimeContextWritePromise, memorySyncPromise],
-          resolveSessionMcpServers: resolveExecutorSessionMcpServers,
-          rejectSessionMcpServers: rejectExecutorSessionMcpServers,
-          markPhase: (phase) => this.callbacks.markPhase(ctx, phase),
-          recordMetric: (metricName, durationMs) => {
-            prePromptBreakdown[metricName] = durationMs;
-          },
-          logContext: () => ({
-            source: "generation-manager",
-            traceId: ctx.traceId,
-            generationId: ctx.id,
-            conversationId: ctx.conversationId,
+      const workspaceMcpPreparePromise = (async (): Promise<void> => {
+        markPrePromptPhase("workspace_mcp_resolve", "started");
+        const startedAt = Date.now();
+        try {
+          const resolved = await resolveWorkspaceMcpServersForGeneration({
+            workspaceId: ctx.workspaceId,
             userId: ctx.userId,
-            sandboxId: runtimeSandbox.sandboxId,
-            sessionId: sessionId ?? ctx.sessionId ?? undefined,
-          }),
-        });
-        executorInstructions = preparedExecutor.instructions;
-        return preparedExecutor.runFinalize;
+            allowedWorkspaceMcpServerIds: ctx.allowedWorkspaceMcpServerIds,
+          });
+          for (const unavailable of resolved.unavailableServers) {
+            runtimeMcpWarnings.push({
+              serverName: unavailable.namespace,
+              message: `${unavailable.name} tools are unavailable: ${unavailable.reason}`,
+            });
+          }
+          resolveWorkspaceMcpSessionServers(resolved.requestedServers.map((entry) => entry.server));
+        } catch (error) {
+          rejectWorkspaceMcpSessionServers(error);
+          throw error;
+        } finally {
+          markPrePromptStep("resolveWorkspaceMcpServersMs", startedAt);
+          markPrePromptPhase("workspace_mcp_resolve", "completed");
+        }
       })();
 
       const skillAssetPreparePromise = (async () => {
@@ -716,10 +711,10 @@ export class OpenCodeNormalRunner {
         startPostPromptCacheWrite = preparedAssets.startPostPromptCacheWrite;
       })();
 
-      const [, , runExecutorPrepareFinalize] = await Promise.all([
+      await Promise.all([
         memorySyncPromise,
         runtimeContextWritePromise,
-        executorPreparePromise,
+        workspaceMcpPreparePromise,
         skillAssetPreparePromise,
         runtimeSessionPromise,
       ]);
@@ -738,6 +733,22 @@ export class OpenCodeNormalRunner {
       });
       const activeSessionId = sessionId;
 
+      if (runtimeMcpWarnings.length > 0) {
+        const warningText = [
+          "Some selected tools are unavailable for this run:",
+          ...runtimeMcpWarnings.map((warning) => `- ${warning.serverName}: ${warning.message}`),
+        ].join("\n");
+        ctx.contentParts.push({
+          type: "system",
+          content: warningText,
+        });
+        this.callbacks.broadcast(ctx, {
+          type: "system",
+          content: warningText,
+        });
+        await this.callbacks.saveProgress(ctx);
+      }
+
       if (writtenSkills.length === 0) {
         writtenSkills = enabledSkillRows.map((entry) => entry.name);
       }
@@ -747,7 +758,6 @@ export class OpenCodeNormalRunner {
 
       const promptSpecInput = buildOpencodePromptSpecInputForContext(ctx, {
         cliInstructions,
-        executorInstructions,
         skillsInstructions,
         integrationSkillsInstructions,
         memoryInstructions,
@@ -866,7 +876,6 @@ export class OpenCodeNormalRunner {
         this.callbacks.recordRemoteRunPhase(ctx, "prompt_sent");
       }
       this.callbacks.markPhase(ctx, "prompt_sent");
-      void runExecutorPrepareFinalize();
       if (startPostPromptCacheWrite !== null) {
         void (startPostPromptCacheWrite as () => Promise<void>)();
       }
@@ -907,6 +916,7 @@ export class OpenCodeNormalRunner {
           sessionID: activeSessionId,
           parts: promptParts,
           agent: promptSpec.agentId,
+          tools: { "*": true },
           system: promptSpec.systemPrompt,
           model: modelConfig,
         })
@@ -1439,15 +1449,6 @@ export class OpenCodeNormalRunner {
         });
         this.callbacks.setCompletionReason(ctx, "bootstrap_timeout");
         ctx.errorMessage = error instanceof Error ? error.message : formatErrorMessage(error);
-        await this.callbacks.finishGeneration(ctx, "error");
-        return;
-      }
-      if (error instanceof ExecutorPromptReadyError) {
-        this.callbacks.captureOriginalError(ctx, error.cause ?? error, {
-          phase: this.callbacks.getCurrentPhase(ctx) ?? "pre_prompt_executor_prepare_failed",
-        });
-        this.callbacks.setCompletionReason(ctx, "runtime_error");
-        ctx.errorMessage = error.message;
         await this.callbacks.finishGeneration(ctx, "error");
         return;
       }

@@ -1,5 +1,4 @@
 import { getResolvedProviderAuth } from "@cmdclaw/core/server/control-plane/subscription-providers";
-import { getWorkspaceExecutorBootstrap } from "@cmdclaw/core/server/executor/workspace-sources";
 import {
   getCliEnvForUser,
   getEnabledIntegrationTypes,
@@ -10,7 +9,7 @@ import {
   resolveConnectedAccountCredential,
 } from "@cmdclaw/core/server/integrations/connected-account-resolution";
 import { db } from "@cmdclaw/db/client";
-import { providerAuth, user, workspace } from "@cmdclaw/db/schema";
+import { providerAuth } from "@cmdclaw/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { assertValidInstanceApiKey } from "@/server/control-plane/auth";
@@ -21,8 +20,6 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       cloudUserId?: string;
       integrationTypes?: string[];
-      workspaceId?: string;
-      allowedExecutorSourceIds?: string[];
       resolve?: {
         integrationType?: string;
         accountLabel?: string | null;
@@ -50,30 +47,6 @@ export async function POST(request: Request) {
         ),
       )
     ).filter((auth): auth is NonNullable<typeof auth> => Boolean(auth));
-    const controlPlaneUser = await db.query.user.findFirst({
-      where: eq(user.id, body.cloudUserId),
-      columns: {
-        activeWorkspaceId: true,
-      },
-    });
-    const workspaceId = body.workspaceId ?? controlPlaneUser?.activeWorkspaceId ?? null;
-    const workspaceRow = workspaceId
-      ? await db.query.workspace.findFirst({
-          where: eq(workspace.id, workspaceId),
-          columns: {
-            id: true,
-            name: true,
-          },
-        })
-      : null;
-    const executorBootstrap = workspaceRow?.id
-      ? await getWorkspaceExecutorBootstrap({
-          workspaceId: workspaceRow.id,
-          workspaceName: workspaceRow.name,
-          userId: body.cloudUserId,
-          allowedSourceIds: body.allowedExecutorSourceIds ?? undefined,
-        })
-      : null;
 
     if (body.resolve?.integrationType) {
       try {
@@ -113,7 +86,6 @@ export async function POST(request: Request) {
         refreshToken: auth.refreshToken,
         expiresAt: auth.expiresAt,
       })),
-      executorBootstrap,
       issuedAt: new Date().toISOString(),
     });
   } catch (error) {

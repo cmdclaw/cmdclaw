@@ -10,7 +10,7 @@ import {
   coworker,
   coworkerRun,
   coworkerRunEvent,
-  workspaceExecutorSource,
+  workspaceMcpServer,
 } from "@cmdclaw/db/schema";
 import {
   normalizeCoworkerAllowedSkillSlugs,
@@ -305,7 +305,7 @@ async function resolveCoworkerExecutionOptions(params: {
 }): Promise<{
   allowedIntegrations: IntegrationType[];
   allowedCustomIntegrations: string[];
-  allowedExecutorSourceIds: string[];
+  allowedWorkspaceMcpServerIds: string[];
   allowedSkillSlugs?: string[];
   resolvedRemoteIntegrationSource?: RemoteIntegrationSource;
 }> {
@@ -337,21 +337,21 @@ async function resolveCoworkerExecutionOptions(params: {
       : Array.isArray(wf.allowedCustomIntegrations)
         ? wf.allowedCustomIntegrations.filter((value): value is string => typeof value === "string")
         : [];
-  const allowedExecutorSourceIds =
+  const allowedWorkspaceMcpServerIds =
     toolAccessMode === "all"
       ? (
-          await db.query.workspaceExecutorSource.findMany({
+          await db.query.workspaceMcpServer.findMany({
             where: and(
-              eq(workspaceExecutorSource.workspaceId, wf.workspaceId ?? ""),
-              eq(workspaceExecutorSource.enabled, true),
+              eq(workspaceMcpServer.workspaceId, wf.workspaceId ?? ""),
+              eq(workspaceMcpServer.enabled, true),
             ),
             columns: {
               id: true,
             },
           })
         ).map((entry) => entry.id)
-      : Array.isArray(wf.allowedExecutorSourceIds)
-        ? wf.allowedExecutorSourceIds.filter((value): value is string => typeof value === "string")
+      : Array.isArray(wf.allowedWorkspaceMcpServerIds)
+        ? wf.allowedWorkspaceMcpServerIds.filter((value): value is string => typeof value === "string")
         : [];
   const allowedSkillSlugs =
     toolAccessMode === "all" ? undefined : normalizeCoworkerAllowedSkillSlugs(wf.allowedSkillSlugs);
@@ -412,7 +412,7 @@ async function resolveCoworkerExecutionOptions(params: {
   return {
     allowedIntegrations,
     allowedCustomIntegrations,
-    allowedExecutorSourceIds,
+    allowedWorkspaceMcpServerIds,
     allowedSkillSlugs,
     resolvedRemoteIntegrationSource,
   };
@@ -449,7 +449,7 @@ async function startGenerationForCoworkerRun(params: {
     autoApprove: params.autoApprove ?? params.wf.autoApprove,
     allowedIntegrations: options.allowedIntegrations,
     allowedCustomIntegrations: options.allowedCustomIntegrations,
-    allowedExecutorSourceIds: options.allowedExecutorSourceIds,
+    allowedWorkspaceMcpServerIds: options.allowedWorkspaceMcpServerIds,
     allowedSkillSlugs: options.allowedSkillSlugs,
     fileAttachments: params.fileAttachments,
     remoteIntegrationSource: options.resolvedRemoteIntegrationSource,

@@ -12,7 +12,7 @@ process.env.AWS_ENDPOINT_URL ??= "http://localhost:9000";
 process.env.AWS_ACCESS_KEY_ID ??= "test-access-key";
 process.env.AWS_SECRET_ACCESS_KEY ??= "test-secret-key";
 
-const { computeWorkspaceExecutorSourceRevisionHash, normalizeExecutorNamespace } = await import(
+const { computeWorkspaceMcpServerRevisionHash, normalizeExecutorNamespace } = await import(
   "./workspace-sources"
 );
 
@@ -40,12 +40,12 @@ describe("workspace executor sources", () => {
       enabled: true,
     };
 
-    const initial = computeWorkspaceExecutorSourceRevisionHash(base);
-    const changedEndpoint = computeWorkspaceExecutorSourceRevisionHash({
+    const initial = computeWorkspaceMcpServerRevisionHash(base);
+    const changedEndpoint = computeWorkspaceMcpServerRevisionHash({
       ...base,
       endpoint: "https://api2.hubspot.com",
     });
-    const changedAuth = computeWorkspaceExecutorSourceRevisionHash({
+    const changedAuth = computeWorkspaceMcpServerRevisionHash({
       ...base,
       authType: "api_key",
       authPrefix: null,

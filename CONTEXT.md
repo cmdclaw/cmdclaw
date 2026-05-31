@@ -36,6 +36,22 @@ _Avoid_: auth required
 One command execution against an **Integration Type** during a conversation. A **Tool Invocation** targets exactly one **Connected Account**, while a conversation can contain many **Tool Invocations** that target different **Connected Accounts**.
 _Avoid_: run, call
 
+**Workspace MCP Server**:
+A workspace-owned MCP server made available to agent runtimes for **Tool Invocations**. CmdClaw treats MCP as the integration runtime boundary; managed integrations and custom MCP endpoints are both represented as **Workspace MCP Servers**.
+_Avoid_: Executor source, OpenAPI source, tool catalog source
+
+**Toolbox**:
+The user-facing set of tools or integrations selected for a chat or coworker **Generation**. The **Toolbox** is backed by a **Workspace MCP Server Allowlist**, but end-user copy should prefer "tools" or "integrations" outside technical settings.
+_Avoid_: Executor sources, source picker
+
+**Workspace MCP Authorization**:
+The CmdClaw-owned credential or grant that allows a **Workspace MCP Server** to be used for a specific **User** or workspace policy. CmdClaw remains the authority for this authorization even when OpenCode performs the runtime MCP connection.
+_Avoid_: OpenCode auth, Executor auth, local token store
+
+**Workspace MCP Server Allowlist**:
+The concrete set of **Workspace MCP Servers** exposed to a chat or coworker **Generation**. User interfaces may group servers by **Integration Type**, but runtime access is granted by explicit server identity.
+_Avoid_: allowed Executor sources, allowed integrations
+
 **Canonical Service Event**:
 One authoritative, context-rich observability record emitted by a CmdClaw service-owned operation. HTTP requests, worker jobs, and generation lifecycle work each produce their own **Canonical Service Event**; browser-originated telemetry is a **Client Observation**, not an authoritative service event. **Canonical Service Events** use a required common envelope, operation-specific fields, and are correlated by trace id with **Generation** and conversation identifiers as domain pivots when available.
 _Avoid_: wide event, canonical log line, request log
@@ -108,6 +124,10 @@ _Avoid_: last runtime event, last activity, heartbeat
 A **Generation** failure where **Runtime Progress** was observed, but the runtime then stopped producing further **Runtime Progress** before reaching a terminal state or durable human wait.
 _Avoid_: no progress, run deadline, timeout
 
+**Runtime Warning**:
+A non-terminal condition surfaced to the **User** when a **Generation** can continue but an expected runtime capability is degraded or unavailable. A **Runtime Warning** is visible product state, not only an **Operational Log**.
+_Avoid_: soft error, hidden warning, console warning
+
 **Runtime Diagnostic Snapshot**:
 A privileged operational artifact captured when a **Generation** fails in the runtime boundary and ordinary telemetry is insufficient to explain the failure. A **Runtime Diagnostic Snapshot** contains bounded runtime probe values, counters, event types, and pointers needed for debugging. Unlike **Operational Logs** and **Canonical Service Events**, it may include raw runtime message fields, provider errors, and log snippets because it is stored behind sensitive debug access rather than emitted into the general observability stream.
 _Avoid_: dump, logs, trace
@@ -164,6 +184,9 @@ _Avoid_: shared Galien login, global Galien credential
 
 **account**:
 Use **Connected Account** for an external provider identity. Use **User** for the authenticated CmdClaw person; the database also has a Better Auth `account` table, so plain "account" is ambiguous.
+
+**source**:
+Use **Workspace MCP Server** for an MCP endpoint exposed to agent runtimes. Do not use "source" as a product term for integration runtime configuration.
 
 **client**:
 Use **Client Observation** for browser-originated telemetry. Use **Modulr Customer** for a customer record from Modulr; Modulr's API may still expose that entity as `clients`.

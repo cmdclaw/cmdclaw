@@ -2093,7 +2093,7 @@ describe("coworkerRouter", () => {
             toolAccessMode: "selected",
             allowedIntegrations: ["slack"],
             allowedCustomIntegrations: ["custom-1"],
-            allowedExecutorSourceIds: [],
+            allowedWorkspaceMcpServerIds: [],
             allowedSkillSlugs: ["skill-a"],
             schedule: {
               type: "daily",

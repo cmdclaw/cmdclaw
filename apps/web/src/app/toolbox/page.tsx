@@ -3,7 +3,6 @@
 import {
   ArrowUp,
   Copy,
-  FileCode,
   FileInput,
   FileOutput,
   Globe,
@@ -33,7 +32,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { IntegrationBadges } from "@/components/chat/integration-badges";
-import { ExecutorSourceLogo } from "@/components/executor-source-logo";
+import { WorkspaceMcpServerLogo } from "@/components/executor-source-logo";
 import { ToolboxPreviewModal } from "@/components/toolbox-preview-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +73,7 @@ import {
   useRequestGoogleAccess,
   useShareSkill,
   useUnshareSkill,
-  useExecutorSourceList,
+  useWorkspaceMcpServerList,
 } from "@/orpc/hooks";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -682,14 +681,14 @@ function CustomToolCard({
   );
 }
 
-function ExecutorSourceToolCard({
+function WorkspaceMcpServerToolCard({
   source,
 }: {
   source: {
     id: string;
     name: string;
     namespace: string;
-    kind: "mcp" | "openapi";
+    kind: "mcp";
     endpoint: string;
     enabled: boolean;
     connected: boolean;
@@ -716,7 +715,7 @@ function ExecutorSourceToolCard({
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <ExecutorSourceLogo
+            <WorkspaceMcpServerLogo
               kind={source.kind}
               endpoint={source.endpoint}
               className="h-10 w-10 shrink-0"
@@ -774,7 +773,7 @@ function ExecutorSourceToolCard({
         <div className="mt-auto flex items-center justify-between pt-4">
           <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
             <Plug className="h-3 w-3" />
-            {source.kind === "openapi" ? "OpenAPI" : "MCP"}
+            MCP
           </span>
           <ArrowUp className="text-muted-foreground/30 group-hover:text-muted-foreground size-3.5 rotate-45 transition-colors" />
         </div>
@@ -806,7 +805,7 @@ function ToolboxPageContent() {
   const linkLinkedIn = useLinkLinkedIn();
 
   // Executor source hooks
-  const { data: executorData, isLoading: executorLoading } = useExecutorSourceList();
+  const { data: executorData, isLoading: executorLoading } = useWorkspaceMcpServerList();
 
   // Skill hooks
   const { data: skills, isLoading: skillsLoading, refetch: refetchSkills } = useSkillList();
@@ -1027,10 +1026,6 @@ function ToolboxPageContent() {
     folderImportInputRef.current?.click();
   }, [importSkill.isPending, supportsFolderImport]);
 
-  const handleNewOpenApiSource = useCallback(() => {
-    router.push("/toolbox/sources/new?kind=openapi");
-  }, [router]);
-
   const handleNewMcpSource = useCallback(() => {
     router.push("/toolbox/sources/new?kind=mcp");
   }, [router]);
@@ -1245,7 +1240,7 @@ function ToolboxPageContent() {
     return filtered;
   }, [q, activeTab, communitySkillToggles]);
 
-  const filteredExecutorSources = useMemo(() => {
+  const filteredWorkspaceMcpServers = useMemo(() => {
     let filtered = executorSources;
     if (q) {
       filtered = filtered.filter(
@@ -1274,10 +1269,10 @@ function ToolboxPageContent() {
     const activeCommunity = COMMUNITY_SKILLS.filter(
       (s) => communitySkillToggles[s.id] ?? s.enabled,
     ).length;
-    const activeExecutorSources = executorSources.filter(
+    const activeWorkspaceMcpServers = executorSources.filter(
       (s) => s.enabled && s.connected && s.credentialEnabled,
     ).length;
-    return activeIntegrations + activeCustom + activeCommunity + activeExecutorSources;
+    return activeIntegrations + activeCustom + activeCommunity + activeWorkspaceMcpServers;
   }, [
     visibleIntegrations,
     connectedIntegrations,
@@ -1305,7 +1300,7 @@ function ToolboxPageContent() {
     filteredOwnedSkills.length > 0 ||
     filteredSharedSkills.length > 0 ||
     filteredCommunitySkills.length > 0 ||
-    filteredExecutorSources.length > 0;
+    filteredWorkspaceMcpServers.length > 0;
 
   const tabs: { id: FilterTab; label: string; count: number }[] = [
     { id: "all", label: "All", count: totalAll },
@@ -1520,10 +1515,6 @@ function ToolboxPageContent() {
               <DropdownMenuContent align="end">
                 {isWorkspaceAdmin ? (
                   <>
-                    <DropdownMenuItem onClick={handleNewOpenApiSource}>
-                      <FileCode className="h-4 w-4" />
-                      Add OpenAPI
-                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleNewMcpSource}>
                       <Puzzle className="h-4 w-4" />
                       Add MCP
@@ -1566,12 +1557,6 @@ function ToolboxPageContent() {
           <div className="hidden items-center gap-2 xl:flex">
             {isWorkspaceAdmin && (
               <>
-                <Button variant="outline" asChild>
-                  <Link href="/toolbox/sources/new?kind=openapi">
-                    <FileCode className="mr-2 h-4 w-4" />
-                    Add OpenAPI
-                  </Link>
-                </Button>
                 <Button variant="outline" asChild>
                   <Link href="/toolbox/sources/new?kind=mcp">
                     <Puzzle className="mr-2 h-4 w-4" />
@@ -1764,25 +1749,25 @@ function ToolboxPageContent() {
             </section>
           )}
 
-          {/* Executor Sources section */}
-          {filteredExecutorSources.length > 0 && (
+          {/* Workspace MCP Servers section */}
+          {filteredWorkspaceMcpServers.length > 0 && (
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">APIs & MCP Servers</h2>
+                  <h2 className="text-sm font-semibold">MCP Servers</h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    OpenAPI and MCP sources configured for your workspace
+                    MCP servers configured for your workspace
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredExecutorSources.length} source
-                  {filteredExecutorSources.length !== 1 ? "s" : ""}
+                  {filteredWorkspaceMcpServers.length} source
+                  {filteredWorkspaceMcpServers.length !== 1 ? "s" : ""}
                 </p>
               </div>
               <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <AnimatePresence mode="popLayout">
-                  {filteredExecutorSources.map((source) => (
-                    <ExecutorSourceToolCard key={source.id} source={source} />
+                  {filteredWorkspaceMcpServers.map((source) => (
+                    <WorkspaceMcpServerToolCard key={source.id} source={source} />
                   ))}
                 </AnimatePresence>
               </motion.div>

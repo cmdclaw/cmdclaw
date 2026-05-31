@@ -111,13 +111,7 @@ export type DoneArtifactsData = {
       prePromptSetupMs?: number;
       prePromptMemorySyncMs?: number;
       prePromptRuntimeContextWriteMs?: number;
-      prePromptExecutorPrepareMs?: number;
-      prePromptExecutorBootstrapLoadMs?: number;
-      prePromptExecutorConfigWriteMs?: number;
-      prePromptExecutorServerProbeMs?: number;
-      prePromptExecutorServerWaitReadyMs?: number;
-      prePromptExecutorStatusCheckMs?: number;
-      prePromptExecutorOauthReconcileMs?: number;
+      prePromptWorkspaceMcpResolveMs?: number;
       prePromptSkillsAndCredsLoadMs?: number;
       prePromptCacheReadMs?: number;
       prePromptSkillsWriteMs?: number;
@@ -283,7 +277,7 @@ export type CoworkerDetails = {
   toolAccessMode: string;
   allowedIntegrations: string[];
   allowedCustomIntegrations: string[];
-  allowedExecutorSourceIds: string[];
+  allowedWorkspaceMcpServerIds: string[];
   allowedSkillSlugs: string[];
   schedule: CoworkerSchedule;
   requiresUserInput?: boolean;
@@ -322,7 +316,7 @@ export type CoworkerCreateInput = {
   toolAccessMode?: string;
   allowedIntegrations?: string[];
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   schedule?: CoworkerSchedule;
   requiresUserInput?: boolean;

@@ -675,7 +675,7 @@ const coworkerDefinitionSchema = z.object({
     toolAccessMode: toolAccessModeSchema,
     allowedIntegrations: z.array(integrationTypeSchema),
     allowedCustomIntegrations: z.array(z.string()),
-    allowedExecutorSourceIds: z.array(z.string()),
+    allowedWorkspaceMcpServerIds: z.array(z.string()),
     allowedSkillSlugs: z.array(z.string()),
     schedule: scheduleSchema.nullable(),
     requiresUserInput: z.boolean().default(false),
@@ -920,7 +920,7 @@ const list = protectedProcedure.handler(async ({ context }) => {
         toolAccessMode,
         allowedIntegrations: wf.allowedIntegrations,
         allowedCustomIntegrations: wf.allowedCustomIntegrations,
-        allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: wf.allowedWorkspaceMcpServerIds,
         allowedSkillSlugs,
         schedule: wf.schedule,
         requiresUserInput: wf.requiresUserInput,
@@ -989,7 +989,7 @@ const get = protectedProcedure
       toolAccessMode,
       allowedIntegrations: wf.allowedIntegrations,
       allowedCustomIntegrations: wf.allowedCustomIntegrations,
-      allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
+      allowedWorkspaceMcpServerIds: wf.allowedWorkspaceMcpServerIds,
       allowedSkillSlugs,
       schedule: wf.schedule,
       requiresUserInput: wf.requiresUserInput,
@@ -1073,7 +1073,7 @@ const create = protectedProcedure
       toolAccessMode: toolAccessModeSchema.default("all"),
       allowedIntegrations: z.array(integrationTypeSchema).default(DEFAULT_COWORKER_INTEGRATIONS),
       allowedCustomIntegrations: z.array(z.string()).default([]),
-      allowedExecutorSourceIds: z.array(z.string()).default([]),
+      allowedWorkspaceMcpServerIds: z.array(z.string()).default([]),
       allowedSkillSlugs: z.array(z.string()).default([]),
       schedule: scheduleSchema.nullish(),
       requiresUserInput: z.boolean().optional(),
@@ -1129,7 +1129,7 @@ const create = protectedProcedure
         autoApprove: input.autoApprove ?? true,
         allowedIntegrations: input.allowedIntegrations,
         allowedCustomIntegrations: input.allowedCustomIntegrations,
-        allowedExecutorSourceIds: input.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: input.allowedWorkspaceMcpServerIds,
         toolAccessMode: input.toolAccessMode,
         allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(input.allowedSkillSlugs),
         schedule: input.schedule ?? null,
@@ -1177,7 +1177,7 @@ const update = protectedProcedure
       toolAccessMode: toolAccessModeSchema.optional(),
       allowedIntegrations: z.array(integrationTypeSchema).optional(),
       allowedCustomIntegrations: z.array(z.string()).optional(),
-      allowedExecutorSourceIds: z.array(z.string()).optional(),
+      allowedWorkspaceMcpServerIds: z.array(z.string()).optional(),
       allowedSkillSlugs: z.array(z.string()).optional(),
       schedule: scheduleSchema.nullish(),
       requiresUserInput: z.boolean().optional(),
@@ -1279,8 +1279,8 @@ const update = protectedProcedure
     if (input.allowedCustomIntegrations !== undefined) {
       updates.allowedCustomIntegrations = input.allowedCustomIntegrations;
     }
-    if (input.allowedExecutorSourceIds !== undefined) {
-      updates.allowedExecutorSourceIds = input.allowedExecutorSourceIds;
+    if (input.allowedWorkspaceMcpServerIds !== undefined) {
+      updates.allowedWorkspaceMcpServerIds = input.allowedWorkspaceMcpServerIds;
     }
     if (input.allowedSkillSlugs !== undefined) {
       updates.allowedSkillSlugs = normalizeCoworkerAllowedSkillSlugs(input.allowedSkillSlugs);
@@ -2365,7 +2365,7 @@ const listShared = protectedProcedure.handler(async ({ context }) => {
         toolAccessMode,
         allowedIntegrations: wf.allowedIntegrations,
         allowedSkillSlugs,
-        allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: wf.allowedWorkspaceMcpServerIds,
         prompt: wf.prompt,
         model: wf.model,
         sharedAt: wf.sharedAt,
@@ -2416,7 +2416,7 @@ const exportDefinition = protectedProcedure
         toolAccessMode,
         allowedIntegrations: wf.allowedIntegrations,
         allowedCustomIntegrations: wf.allowedCustomIntegrations,
-        allowedExecutorSourceIds: wf.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: wf.allowedWorkspaceMcpServerIds,
         allowedSkillSlugs,
         schedule: wf.schedule ?? null,
         requiresUserInput: wf.requiresUserInput,
@@ -2492,7 +2492,7 @@ const importShared = protectedProcedure
         toolAccessMode: source.toolAccessMode,
         allowedIntegrations: source.allowedIntegrations,
         allowedCustomIntegrations: source.allowedCustomIntegrations,
-        allowedExecutorSourceIds: source.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: source.allowedWorkspaceMcpServerIds,
         allowedSkillSlugs: source.allowedSkillSlugs,
         schedule: source.schedule,
         requiresUserInput: source.requiresUserInput,
@@ -2585,7 +2585,7 @@ const importDefinition = protectedProcedure
         toolAccessMode: definition.coworker.toolAccessMode,
         allowedIntegrations: definition.coworker.allowedIntegrations,
         allowedCustomIntegrations: definition.coworker.allowedCustomIntegrations,
-        allowedExecutorSourceIds: definition.coworker.allowedExecutorSourceIds,
+        allowedWorkspaceMcpServerIds: definition.coworker.allowedWorkspaceMcpServerIds,
         allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(
           definition.coworker.allowedSkillSlugs,
         ),

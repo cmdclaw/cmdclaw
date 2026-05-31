@@ -1,7 +1,7 @@
 import { exchangeMcpOAuthAuthorizationCode } from "@cmdclaw/core/server/executor/mcp-oauth";
 import {
-  computeWorkspaceExecutorSourceRevisionHash,
-  setWorkspaceExecutorSourceOAuthCredential,
+  computeWorkspaceMcpServerRevisionHash,
+  setWorkspaceMcpServerOAuthCredential,
 } from "@cmdclaw/core/server/executor/workspace-sources";
 import { assignConnectedIdentityForProviderAccount } from "@cmdclaw/core/server/integrations/connected-identities";
 import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
@@ -10,17 +10,17 @@ import { db } from "@cmdclaw/db/client";
 import {
   integration,
   integrationToken,
-  workspaceExecutorSource,
-  workspaceExecutorSourceCredential,
+  workspaceMcpServer,
+  workspaceMcpAuthorization,
 } from "@cmdclaw/db/schema";
 import { eq, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";
-import { consumeExecutorSourceOAuthPending } from "@/server/executor-source-oauth";
+import { consumeWorkspaceMcpServerOAuthPending } from "@/server/executor-source-oauth";
 import { fetchDynamicsInstances } from "@/server/integrations/dynamics";
 
-function buildExecutorSourceRedirectUrl(raw: string, request: NextRequest): URL {
+function buildWorkspaceMcpServerRedirectUrl(raw: string, request: NextRequest): URL {
   try {
     return new URL(raw);
   } catch {
@@ -28,7 +28,7 @@ function buildExecutorSourceRedirectUrl(raw: string, request: NextRequest): URL 
   }
 }
 
-function appendExecutorSourceRedirectParam(redirectUrl: URL, key: string, value: string) {
+function appendWorkspaceMcpServerRedirectParam(redirectUrl: URL, key: string, value: string) {
   redirectUrl.searchParams.set(key, value);
   return redirectUrl;
 }
@@ -41,11 +41,16 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     if (state) {
-      const executorPending = await consumeExecutorSourceOAuthPending(state).catch(() => undefined);
+      const executorPending = await consumeWorkspaceMcpServerOAuthPending(state).catch(
+        () => undefined,
+      );
       if (executorPending) {
-        const redirectUrl = buildExecutorSourceRedirectUrl(executorPending.redirectUrl, request);
-        appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
-        appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", error);
+        const redirectUrl = buildWorkspaceMcpServerRedirectUrl(
+          executorPending.redirectUrl,
+          request,
+        );
+        appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth", "error");
+        appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth_error", error);
         return NextResponse.redirect(redirectUrl);
       }
     }
@@ -67,24 +72,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(buildRequestAwareUrl("/login?error=unauthorized", request));
   }
 
-  const executorPending = state ? await consumeExecutorSourceOAuthPending(state) : undefined;
+  const executorPending = state ? await consumeWorkspaceMcpServerOAuthPending(state) : undefined;
   if (executorPending) {
-    const redirectUrl = buildExecutorSourceRedirectUrl(executorPending.redirectUrl, request);
+    const redirectUrl = buildWorkspaceMcpServerRedirectUrl(executorPending.redirectUrl, request);
 
     if (executorPending.userId !== sessionData.user.id) {
-      appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
-      appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", "user_mismatch");
+      appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth", "error");
+      appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth_error", "user_mismatch");
       return NextResponse.redirect(redirectUrl);
     }
 
     try {
-      const source = await db.query.workspaceExecutorSource.findFirst({
-        where: eq(workspaceExecutorSource.id, executorPending.sourceId),
+      const source = await db.query.workspaceMcpServer.findFirst({
+        where: eq(workspaceMcpServer.id, executorPending.sourceId),
       });
 
       if (!source || source.kind !== "mcp" || source.authType !== "oauth2") {
-        appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
-        appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", "invalid_source");
+        appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth", "error");
+        appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth_error", "invalid_source");
         return NextResponse.redirect(redirectUrl);
       }
 
@@ -93,16 +98,16 @@ export async function GET(request: NextRequest) {
         code,
       });
 
-      const existingCredential = await db.query.workspaceExecutorSourceCredential.findFirst({
+      const existingCredential = await db.query.workspaceMcpAuthorization.findFirst({
         where: and(
-          eq(workspaceExecutorSourceCredential.userId, sessionData.user.id),
-          eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
+          eq(workspaceMcpAuthorization.userId, sessionData.user.id),
+          eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
         ),
       });
 
-      await setWorkspaceExecutorSourceOAuthCredential({
+      await setWorkspaceMcpServerOAuthCredential({
         database: db,
-        workspaceExecutorSourceId: source.id,
+        workspaceMcpServerId: source.id,
         userId: sessionData.user.id,
         accessToken: credential.accessToken,
         refreshToken: credential.refreshToken,
@@ -112,9 +117,9 @@ export async function GET(request: NextRequest) {
         enabled: existingCredential?.enabled ?? true,
       });
       await db
-        .update(workspaceExecutorSource)
+        .update(workspaceMcpServer)
         .set({
-          revisionHash: computeWorkspaceExecutorSourceRevisionHash({
+          revisionHash: computeWorkspaceMcpServerRevisionHash({
             kind: source.kind,
             name: source.name,
             namespace: source.namespace,
@@ -132,14 +137,14 @@ export async function GET(request: NextRequest) {
           }),
           updatedAt: new Date(),
         })
-        .where(eq(workspaceExecutorSource.id, source.id));
+        .where(eq(workspaceMcpServer.id, source.id));
 
-      appendExecutorSourceRedirectParam(redirectUrl, "oauth", "success");
+      appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth", "success");
       return NextResponse.redirect(redirectUrl);
     } catch (callbackError) {
       console.error("Executor source OAuth callback error:", callbackError);
-      appendExecutorSourceRedirectParam(redirectUrl, "oauth", "error");
-      appendExecutorSourceRedirectParam(redirectUrl, "oauth_error", "callback_failed");
+      appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth", "error");
+      appendWorkspaceMcpServerRedirectParam(redirectUrl, "oauth_error", "callback_failed");
       return NextResponse.redirect(redirectUrl);
     }
   }

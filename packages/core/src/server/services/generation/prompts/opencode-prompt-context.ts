@@ -23,7 +23,6 @@ export type OpencodePromptContext = Pick<
 
 export type SharedOpencodePromptContext = {
   cliInstructions?: string | null;
-  executorInstructions?: string | null;
   skillsInstructions?: string | null;
   integrationSkillsInstructions?: string | null;
   memoryInstructions?: string | null;
@@ -71,7 +70,6 @@ export async function composeContinuationPromptSpec(
   return composeOpencodePromptSpec(
     buildOpencodePromptSpecInputForContext(ctx, {
       cliInstructions: "",
-      executorInstructions: null,
       skillsInstructions: "",
       integrationSkillsInstructions: "",
       memoryInstructions: buildMemorySystemPrompt(),

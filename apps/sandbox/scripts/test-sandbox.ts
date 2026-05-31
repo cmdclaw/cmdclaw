@@ -14,8 +14,6 @@
  * Attach mode reconnects to an existing E2B sandbox without creating a new one.
  */
 
-import type { SandboxHandle } from "../../../packages/core/src/server/sandbox/core/types";
-import { prepareExecutorInSandbox } from "../../../packages/core/src/server/sandbox/prep/executor-prep";
 import { closePool, db } from "@cmdclaw/db/client";
 import * as schema from "@cmdclaw/db/schema";
 import * as dotenvConfig from "dotenv/config";
@@ -29,8 +27,6 @@ const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev
 const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
 export const DEFAULT_CREATE_USER_EMAIL = "baptiste@heybap.com";
 export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
-const EXECUTOR_WEB_PORT = 8788;
-const EXECUTOR_WEB_LOG_PATH = "/tmp/executor-web.log";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "github" | "airtable";
 
@@ -445,56 +441,6 @@ async function resolveCreateWorkspace(workspaceSlug: string): Promise<CreateWork
   return workspace;
 }
 
-async function getEnabledExecutorSourceIds(workspaceId: string): Promise<string[]> {
-  const rows = await db.query.workspaceExecutorSource.findMany({
-    where: and(
-      eq(schema.workspaceExecutorSource.workspaceId, workspaceId),
-      eq(schema.workspaceExecutorSource.enabled, true),
-    ),
-    columns: {
-      id: true,
-    },
-  });
-
-  return rows.map((row) => row.id);
-}
-
-function createE2BSandboxHandle(sandbox: Sandbox): SandboxHandle {
-  return {
-    provider: "e2b",
-    sandboxId: sandbox.sandboxId,
-    async exec(command, opts) {
-      const result = await sandbox.commands.run(command, {
-        timeoutMs: opts?.timeoutMs,
-        envs: opts?.env,
-        background: opts?.background,
-        onStderr: opts?.onStderr,
-      });
-
-      return {
-        exitCode: result.exitCode ?? 0,
-        stdout: result.stdout ?? "",
-        stderr: result.stderr ?? "",
-      };
-    },
-    async writeFile(path, content) {
-      await sandbox.files.write(path, content);
-    },
-    async readFile(path) {
-      return await sandbox.files.read(path);
-    },
-    async ensureDir(path) {
-      const result = await sandbox.commands.run(`mkdir -p ${escapeShell(path)}`, {
-        timeoutMs: 15_000,
-      });
-
-      if (result.exitCode !== 0) {
-        throw new Error(result.stderr.trim() || `Failed to create sandbox directory: ${path}`);
-      }
-    },
-  };
-}
-
 async function getRuntimeTargetByConversationId(
   conversationId: string,
 ): Promise<ExistingSandboxTarget | null> {
@@ -704,44 +650,7 @@ function printSandboxInfo(target: ExistingSandboxTarget, mode: "create" | "attac
 
 function printPublicAccessInfo(sandbox: Sandbox): void {
   console.log(`  public services: https://<port>-${sandbox.sandboxId}.${sandbox.sandboxDomain}/`);
-  console.log(`  executor web: https://${sandbox.getHost(EXECUTOR_WEB_PORT)}/`);
   console.log("  note: bind your debug server to 0.0.0.0:<port> inside the sandbox");
-}
-
-async function ensureExecutorWebStarted(sandbox: Sandbox): Promise<"already_running" | "started"> {
-  const result = await sandbox.commands.run(
-    `bash -lc '
-if curl -fsS http://127.0.0.1:${EXECUTOR_WEB_PORT} >/dev/null 2>&1; then
-  echo already_running
-  exit 0
-fi
-nohup executor web --port ${EXECUTOR_WEB_PORT} >${EXECUTOR_WEB_LOG_PATH} 2>&1 &
-for i in $(seq 1 40); do
-  if curl -fsS http://127.0.0.1:${EXECUTOR_WEB_PORT} >/dev/null 2>&1; then
-    echo started
-    exit 0
-  fi
-  sleep 0.25
-done
-echo "executor web did not become ready; see ${EXECUTOR_WEB_LOG_PATH}" >&2
-tail -n 40 ${EXECUTOR_WEB_LOG_PATH} >&2 || true
-exit 1
-'`,
-    {
-      timeoutMs: 30_000,
-    },
-  );
-
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || "Failed to start executor web.");
-  }
-
-  const state = result.stdout.trim();
-  if (state === "already_running" || state === "started") {
-    return state;
-  }
-
-  throw new Error(`Unexpected executor state: ${state}`);
 }
 
 async function startRepl(
@@ -886,12 +795,6 @@ async function main(): Promise<void> {
     console.log(`Connecting to existing sandbox ${target.sandboxId}...`);
     const sandbox = await connectSandboxById(target.sandboxId);
     console.log(`✓ Connected to sandbox: ${sandbox.sandboxId}`);
-    const executorState = await ensureExecutorWebStarted(sandbox);
-    console.log(
-      executorState === "already_running"
-        ? `✓ Executor web already running on port ${EXECUTOR_WEB_PORT}`
-        : `✓ Started executor web on port ${EXECUTOR_WEB_PORT}`,
-    );
     printSandboxInfo(target, "attach");
     printPublicAccessInfo(sandbox);
     printAvailableCommands();
@@ -912,14 +815,6 @@ async function main(): Promise<void> {
 
   console.log(`Loading integration tokens for ${args.userEmail}...`);
   const userContext = await getCreateUserContext(args.userEmail);
-  const enabledExecutorSourceIds = await getEnabledExecutorSourceIds(workspace.id);
-
-  if (enabledExecutorSourceIds.length === 0) {
-    throw new Error(
-      `Workspace ${workspace.slug} (${workspace.name}) has no enabled executor sources.`,
-    );
-  }
-
   const envs: Record<string, string> = {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     ...userContext.integrationEnvs,
@@ -975,33 +870,7 @@ async function main(): Promise<void> {
 
   console.log(`✓ Sandbox created: ${sandbox.sandboxId}`);
   console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
-  const executorBootstrap = await prepareExecutorInSandbox({
-    sandbox: createE2BSandboxHandle(sandbox),
-    workspaceId: workspace.id,
-    workspaceName: workspace.name,
-    userId: userContext.id,
-    allowedSourceIds: enabledExecutorSourceIds,
-  });
-
-  if (!executorBootstrap) {
-    throw new Error(
-      `Workspace ${workspace.slug} (${workspace.name}) did not produce any executor bootstrap sources.`,
-    );
-  }
-
-  await executorBootstrap.finalize;
-
-  console.log(
-    `✓ Bootstrapped executor workspace with ${executorBootstrap.sourceCount} source(s) from ${workspace.name}`,
-  );
-  console.log(`✓ Executor revision: ${executorBootstrap.revisionHash}`);
   await closePool().catch(() => undefined);
-  const executorState = await ensureExecutorWebStarted(sandbox);
-  console.log(
-    executorState === "already_running"
-      ? `✓ Executor web already running on port ${EXECUTOR_WEB_PORT}`
-      : `✓ Started executor web on port ${EXECUTOR_WEB_PORT}`,
-  );
   printSandboxInfo(target, "create");
   printPublicAccessInfo(sandbox);
   printAvailableCommands();

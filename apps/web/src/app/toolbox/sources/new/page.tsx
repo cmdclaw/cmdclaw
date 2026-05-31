@@ -3,66 +3,50 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  type ExecutorSourceFormState,
+  type WorkspaceMcpServerFormState,
   DEFAULT_EXECUTOR_SOURCE_FORM,
-  ExecutorSourceFields,
   buildMutationInputFromForm,
 } from "@/components/executor-source-form";
-import { ExecutorSourceLogo } from "@/components/executor-source-logo";
+import { WorkspaceMcpServerLogo } from "@/components/executor-source-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { inferBrandNameFromEndpoint } from "@/lib/brandfetch";
 import {
-  useExecutorSourceList,
-  useCreateExecutorSource,
-  useStartExecutorSourceOAuth,
-  useSetExecutorSourceCredential,
+  useWorkspaceMcpServerList,
+  useCreateWorkspaceMcpServer,
+  useStartWorkspaceMcpServerOAuth,
+  useSetWorkspaceMcpServerCredential,
 } from "@/orpc/hooks";
 
 function NewSourceContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { data, isLoading: listLoading } = useExecutorSourceList();
-  const createSource = useCreateExecutorSource();
-  const startOAuth = useStartExecutorSourceOAuth();
-  const setCredential = useSetExecutorSourceCredential();
+  const { data, isLoading: listLoading } = useWorkspaceMcpServerList();
+  const createSource = useCreateWorkspaceMcpServer();
+  const startOAuth = useStartWorkspaceMcpServerOAuth();
+  const setCredential = useSetWorkspaceMcpServerCredential();
 
   const isWorkspaceAdmin = data?.membershipRole === "admin" || data?.membershipRole === "owner";
 
-  const initialForm = useMemo<ExecutorSourceFormState>(() => {
-    const kindParam = searchParams.get("kind");
-    const kind = kindParam === "mcp" ? "mcp" : "openapi";
+  const initialForm = useMemo<WorkspaceMcpServerFormState>(() => {
     return {
       ...DEFAULT_EXECUTOR_SOURCE_FORM,
-      kind,
+      kind: "mcp",
       transport: "",
-      authType: kind === "mcp" ? "oauth2" : DEFAULT_EXECUTOR_SOURCE_FORM.authType,
+      authType: "oauth2",
     };
-  }, [searchParams]);
+  }, []);
 
-  const [form, setForm] = useState<ExecutorSourceFormState>(initialForm);
+  const [form, setForm] = useState<WorkspaceMcpServerFormState>(initialForm);
   const isMcpCreate = form.kind === "mcp";
   const inferredName = useMemo(
     () => (isMcpCreate ? (inferBrandNameFromEndpoint(form.endpoint) ?? "") : ""),
     [form.endpoint, isMcpCreate],
   );
   const effectiveMcpName = isMcpCreate ? form.name.trim() || inferredName : form.name.trim();
-
-  const handleFieldChange = useCallback((field: keyof ExecutorSourceFormState, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  }, []);
-
-  const handleSecretChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setForm((current) => ({ ...current, secret: event.target.value }));
-  }, []);
-
-  const handleDisplayNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setForm((current) => ({ ...current, displayName: event.target.value }));
-  }, []);
 
   const handleNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setForm((current) => ({ ...current, name: event.target.value }));
@@ -101,7 +85,7 @@ function NewSourceContent() {
         if (sourceForm.kind === "mcp" && sourceForm.authType === "oauth2" && result?.id) {
           const redirectUrl = `${window.location.origin}/toolbox/sources/${result.id}`;
           const oauthResult = await startOAuth.mutateAsync({
-            workspaceExecutorSourceId: result.id,
+            workspaceMcpServerId: result.id,
             redirectUrl,
           });
           window.location.assign(oauthResult.authUrl);
@@ -110,7 +94,7 @@ function NewSourceContent() {
 
         if (sourceForm.secret.trim() && result?.id) {
           await setCredential.mutateAsync({
-            workspaceExecutorSourceId: result.id,
+            workspaceMcpServerId: result.id,
             secret: sourceForm.secret.trim(),
             displayName: sourceForm.displayName.trim(),
           });
@@ -156,16 +140,14 @@ function NewSourceContent() {
         Back to Toolbox
       </Link>
 
-      <h1 className="mb-6 text-xl font-semibold">
-        {form.kind === "mcp" ? "Add MCP Server" : "Add OpenAPI Source"}
-      </h1>
+      <h1 className="mb-6 text-xl font-semibold">Add MCP Server</h1>
 
       <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 shadow-sm">
         {isMcpCreate ? (
           <div className="max-w-2xl space-y-5">
             {form.endpoint.trim() ? (
               <div className="bg-muted/25 flex items-center gap-3 rounded-xl border px-3 py-3">
-                <ExecutorSourceLogo
+                <WorkspaceMcpServerLogo
                   kind="mcp"
                   endpoint={form.endpoint}
                   className="h-10 w-10 shrink-0"
@@ -205,43 +187,7 @@ function NewSourceContent() {
               </div>
             ) : null}
           </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            <ExecutorSourceFields
-              form={form}
-              formIdPrefix="new-source"
-              onFieldChange={handleFieldChange}
-            />
-
-            {form.authType !== "none" && form.authType !== "oauth2" && (
-              <>
-                <div className="space-y-2 md:col-span-2">
-                  <label htmlFor="new-source-secret" className="text-sm font-medium">
-                    Credential secret
-                  </label>
-                  <Input
-                    id="new-source-secret"
-                    value={form.secret}
-                    onChange={handleSecretChange}
-                    placeholder="Your API key or token (optional, can add later)"
-                    type="password"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label htmlFor="new-source-display-name" className="text-sm font-medium">
-                    Credential label
-                  </label>
-                  <Input
-                    id="new-source-display-name"
-                    value={form.displayName}
-                    onChange={handleDisplayNameChange}
-                    placeholder="Label for your credential (optional)"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        ) : null}
 
         <div className="mt-8 flex justify-end gap-3">
           <Button type="button" variant="ghost" asChild>
@@ -258,7 +204,7 @@ function NewSourceContent() {
             {createSource.isPending || startOAuth.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            {isMcpCreate ? "Connect" : "Add source"}
+            Connect
           </Button>
         </div>
       </form>

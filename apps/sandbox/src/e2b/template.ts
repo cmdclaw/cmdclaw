@@ -1,12 +1,9 @@
 import { Template } from "e2b";
-import { OPENCODE_VERSION, EXECUTOR_VERSION } from "../common/versions";
+import { OPENCODE_VERSION } from "../common/versions";
 
 const COMMON_ROOT = "common";
 const OPENCODE_PORT = 4096;
 const SANDBOX_AGENT_PORT = 2468;
-const EXECUTOR_HOME = "/tmp/cmdclaw-executor/default";
-const EXECUTOR_SCOPE_DIR = `${EXECUTOR_HOME}/scope`;
-const EXECUTOR_DATA_DIR = `${EXECUTOR_HOME}/data`;
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -15,11 +12,8 @@ function shellQuote(value: string): string {
 const templateStartScript = [
   "set -euo pipefail",
   "cd /app",
-  `mkdir -p ${EXECUTOR_SCOPE_DIR} ${EXECUTOR_DATA_DIR} /app/.cmdclaw`,
+  "mkdir -p /app/.cmdclaw",
   "export OPENCODE_CONFIG=/app/opencode.json",
-  `export EXECUTOR_HOME=${EXECUTOR_HOME}`,
-  `export EXECUTOR_SCOPE_DIR=${EXECUTOR_SCOPE_DIR}`,
-  `export EXECUTOR_DATA_DIR=${EXECUTOR_DATA_DIR}`,
   `opencode serve --hostname 0.0.0.0 --port ${OPENCODE_PORT} >/tmp/opencode.log 2>&1 &`,
   "opencode_pid=$!",
   `sandbox-agent server --no-token --host 0.0.0.0 --port ${SANDBOX_AGENT_PORT} >/tmp/sandbox-agent.log 2>&1 &`,
@@ -73,12 +67,8 @@ export const template = Template({
   .runCmd("curl -fsSL https://bun.sh/install | bash")
   .runCmd("sudo ln -s $HOME/.bun/bin/bun /usr/local/bin/bun")
   // Install OpenCode runtime + tsx for TypeScript CLI tools
-  .runCmd(
-    `$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx executor@${EXECUTOR_VERSION}`,
-  )
-  .runCmd("$HOME/.bun/bin/bun pm -g trust executor")
+  .runCmd(`$HOME/.bun/bin/bun install -g opencode-ai@${OPENCODE_VERSION} tsx`)
   .runCmd("sudo ln -s $HOME/.bun/bin/opencode /usr/local/bin/opencode")
-  .runCmd("sudo ln -s $HOME/.bun/bin/executor /usr/local/bin/executor")
   .runCmd("sudo ln -s $HOME/.bun/bin/tsx /usr/local/bin/tsx")
   // Install Agent Sandbox SDK runtime (OpenCode compatibility at /opencode)
   .runCmd("sudo npm install -g @sandbox-agent/cli@0.2.x")

@@ -13,8 +13,8 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
-export type ExecutorSourceFormState = {
-  kind: "mcp" | "openapi";
+export type WorkspaceMcpServerFormState = {
+  kind: "mcp";
   name: string;
   namespace: string;
   endpoint: string;
@@ -31,11 +31,11 @@ export type ExecutorSourceFormState = {
   displayName: string;
 };
 
-export type ExecutorSourceListItem = {
+export type WorkspaceMcpServerListItem = {
   id: string;
   name: string;
   namespace: string;
-  kind: "mcp" | "openapi";
+  kind: "mcp";
   internalKey?: string | null;
   endpoint: string;
   enabled: boolean;
@@ -53,8 +53,8 @@ export type ExecutorSourceListItem = {
   authPrefix: string | null;
 };
 
-export type ExecutorSourceMutationInput = {
-  kind: "mcp" | "openapi";
+export type WorkspaceMcpServerMutationInput = {
+  kind: "mcp";
   name: string;
   namespace: string;
   endpoint: string;
@@ -76,8 +76,8 @@ type BuildMutationInputOptions = {
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
-export const DEFAULT_EXECUTOR_SOURCE_FORM: ExecutorSourceFormState = {
-  kind: "openapi",
+export const DEFAULT_EXECUTOR_SOURCE_FORM: WorkspaceMcpServerFormState = {
+  kind: "mcp",
   name: "",
   namespace: "",
   endpoint: "",
@@ -86,7 +86,7 @@ export const DEFAULT_EXECUTOR_SOURCE_FORM: ExecutorSourceFormState = {
   headersText: "",
   queryParamsText: "",
   defaultHeadersText: "",
-  authType: "bearer",
+  authType: "oauth2",
   authHeaderName: "Authorization",
   authQueryParam: "",
   authPrefix: "Bearer ",
@@ -124,7 +124,7 @@ function parseStringMap(value: string, label: string): Record<string, string> | 
   return Object.fromEntries(entries);
 }
 
-export function normalizeExecutorSourceNamespace(value: string): string {
+export function normalizeWorkspaceMcpServerNamespace(value: string): string {
   const normalized = value
     .trim()
     .toLowerCase()
@@ -139,15 +139,15 @@ export function normalizeExecutorSourceNamespace(value: string): string {
 }
 
 export function buildMutationInputFromForm(
-  form: ExecutorSourceFormState,
+  form: WorkspaceMcpServerFormState,
   options: BuildMutationInputOptions = {},
-): ExecutorSourceMutationInput {
+): WorkspaceMcpServerMutationInput {
   const authPrefix = form.authPrefix.trim().length > 0 ? form.authPrefix : null;
   const rawNamespace = form.namespace.trim();
   const rawName = form.name.trim();
   const namespace =
     options.deriveNamespaceFromName && rawNamespace.length === 0 && rawName.length > 0
-      ? normalizeExecutorSourceNamespace(rawName)
+      ? normalizeWorkspaceMcpServerNamespace(rawName)
       : rawNamespace;
 
   return {
@@ -155,24 +155,17 @@ export function buildMutationInputFromForm(
     name: rawName,
     namespace,
     endpoint: form.endpoint.trim(),
-    specUrl: form.kind === "openapi" ? form.specUrl.trim() || null : null,
-    transport: form.kind === "mcp" ? form.transport.trim() || null : null,
-    headers: form.kind === "mcp" ? parseStringMap(form.headersText, "Headers") : undefined,
-    queryParams:
-      form.kind === "mcp" ? parseStringMap(form.queryParamsText, "Query params") : undefined,
-    defaultHeaders:
-      form.kind === "openapi"
-        ? parseStringMap(form.defaultHeadersText, "Default headers")
-        : undefined,
+    specUrl: null,
+    transport: form.transport.trim() || null,
+    headers: parseStringMap(form.headersText, "Headers"),
+    queryParams: parseStringMap(form.queryParamsText, "Query params"),
+    defaultHeaders: undefined,
     authType: form.authType,
     authHeaderName:
       form.authType === "none" || form.authType === "oauth2"
         ? null
         : form.authHeaderName.trim() || null,
-    authQueryParam:
-      form.kind === "mcp" && form.authType === "api_key"
-        ? form.authQueryParam.trim() || null
-        : null,
+    authQueryParam: form.authType === "api_key" ? form.authQueryParam.trim() || null : null,
     authPrefix: form.authType === "bearer" ? authPrefix : null,
   };
 }
@@ -211,7 +204,7 @@ function JsonMapField({
   );
 }
 
-export function ExecutorSourceFields({
+export function WorkspaceMcpServerFields({
   form,
   formIdPrefix,
   onFieldChange,
@@ -220,16 +213,16 @@ export function ExecutorSourceFields({
   hideMcpTransportFields = false,
   fixedMcpAuthType = null,
 }: {
-  form: ExecutorSourceFormState;
+  form: WorkspaceMcpServerFormState;
   formIdPrefix: string;
-  onFieldChange: (field: keyof ExecutorSourceFormState, value: string) => void;
+  onFieldChange: (field: keyof WorkspaceMcpServerFormState, value: string) => void;
   disabled?: boolean;
   hideNamespace?: boolean;
   hideMcpTransportFields?: boolean;
-  fixedMcpAuthType?: Extract<ExecutorSourceFormState["authType"], "oauth2"> | null;
+  fixedMcpAuthType?: Extract<WorkspaceMcpServerFormState["authType"], "oauth2"> | null;
 }) {
   const handleFieldInputChange = useCallback(
-    (field: keyof ExecutorSourceFormState) =>
+    (field: keyof WorkspaceMcpServerFormState) =>
       (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         onFieldChange(field, event.target.value);
       },
@@ -240,12 +233,10 @@ export function ExecutorSourceFields({
     (value: string) => {
       if (value === "mcp" && fixedMcpAuthType) {
         onFieldChange("authType", fixedMcpAuthType);
-      } else if (value === "openapi" && form.authType === "oauth2") {
-        onFieldChange("authType", "none");
       }
-      onFieldChange("kind", value);
+      onFieldChange("kind", "mcp");
     },
-    [fixedMcpAuthType, form.authType, onFieldChange],
+    [fixedMcpAuthType, onFieldChange],
   );
 
   const handleAuthTypeChange = useCallback(
@@ -266,7 +257,6 @@ export function ExecutorSourceFields({
             <SelectValue placeholder="Select source type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="openapi">OpenAPI</SelectItem>
             <SelectItem value="mcp">Remote MCP</SelectItem>
           </SelectContent>
         </Select>
@@ -334,30 +324,7 @@ export function ExecutorSourceFields({
         />
       </div>
 
-      {form.kind === "openapi" ? (
-        <>
-          <div className="space-y-2 md:col-span-2">
-            <label htmlFor={`${formIdPrefix}-spec-url`} className="text-sm font-medium">
-              OpenAPI spec URL
-            </label>
-            <Input
-              id={`${formIdPrefix}-spec-url`}
-              value={form.specUrl}
-              onChange={handleFieldInputChange("specUrl")}
-              placeholder="OpenAPI spec URL"
-              disabled={disabled}
-            />
-          </div>
-          <JsonMapField
-            id={`${formIdPrefix}-default-headers`}
-            label="Default headers"
-            value={form.defaultHeadersText}
-            onChange={handleFieldInputChange("defaultHeadersText")}
-            placeholder={`{\n  "X-Region": "eu-west-1"\n}`}
-            className="md:col-span-2"
-          />
-        </>
-      ) : hideMcpTransportFields ? null : (
+      {hideMcpTransportFields ? null : (
         <>
           <div className="space-y-2 md:col-span-2">
             <label htmlFor={`${formIdPrefix}-transport`} className="text-sm font-medium">

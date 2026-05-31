@@ -6,6 +6,7 @@ describe("chat command flags", () => {
     const flags = (chatCommand as { parameters?: { flags?: Record<string, unknown> } }).parameters
       ?.flags;
     expect(flags?.timing).toBeDefined();
+    expect(flags?.mesage).toBeDefined();
     expect(flags?.perfettoTrace).toBeDefined();
     expect(flags?.chaosRunDeadline).toBeDefined();
     expect(flags?.chaosApproval).toBeDefined();

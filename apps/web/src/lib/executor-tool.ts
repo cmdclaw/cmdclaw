@@ -1,6 +1,6 @@
 import { ALL_INTEGRATION_TYPES, type DisplayIntegrationType } from "@/lib/integration-icons";
 
-export type ExecutorSourceLike = {
+export type WorkspaceMcpServerLike = {
   namespace: string;
   kind: "mcp" | "openapi";
   name?: string | null;
@@ -11,7 +11,7 @@ type ExecutorDisplayMetadata = {
   code: string | null;
   metadataInput: unknown;
   integration?: DisplayIntegrationType;
-  source?: ExecutorSourceLike;
+  source?: WorkspaceMcpServerLike;
   toolPath?: string;
   displayName?: string;
 };
@@ -44,11 +44,11 @@ function normalizeExecutorMatchKey(value: string): string {
   return value.toLowerCase().replaceAll(/[^a-z0-9]+/g, "");
 }
 
-function stripExecutorSourceSuffix(value: string): string {
+function stripWorkspaceMcpServerSuffix(value: string): string {
   return value.replace(/(?:[-_\s]?)(mcp|openapi|api)$/i, "");
 }
 
-function parseExecutorSourcePath(path: string): {
+function parseWorkspaceMcpServerPath(path: string): {
   namespace: string;
   kind: "mcp" | "openapi";
   operation: string;
@@ -70,11 +70,11 @@ function parseExecutorSourcePath(path: string): {
   };
 }
 
-function extractExecutorSourceNamespace(path: string): string | null {
-  return parseExecutorSourcePath(path)?.namespace ?? null;
+function extractWorkspaceMcpServerNamespace(path: string): string | null {
+  return parseWorkspaceMcpServerPath(path)?.namespace ?? null;
 }
 
-function buildSourceAliases(source: ExecutorSourceLike): string[] {
+function buildSourceAliases(source: WorkspaceMcpServerLike): string[] {
   const rawValues = [source.namespace, source.name ?? ""].filter(Boolean);
   const aliases = new Set<string>();
 
@@ -84,7 +84,7 @@ function buildSourceAliases(source: ExecutorSourceLike): string[] {
       aliases.add(normalized);
     }
 
-    const stripped = normalizeExecutorMatchKey(stripExecutorSourceSuffix(rawValue));
+    const stripped = normalizeExecutorMatchKey(stripWorkspaceMcpServerSuffix(rawValue));
     if (stripped) {
       aliases.add(stripped);
     }
@@ -94,14 +94,14 @@ function buildSourceAliases(source: ExecutorSourceLike): string[] {
 }
 
 function detectIntegrationFromSource(
-  source: ExecutorSourceLike | undefined,
+  source: WorkspaceMcpServerLike | undefined,
   sourceNamespace: string | null,
 ): DisplayIntegrationType | undefined {
   const candidates = new Set<string>();
 
   if (sourceNamespace) {
     candidates.add(normalizeExecutorMatchKey(sourceNamespace));
-    candidates.add(normalizeExecutorMatchKey(stripExecutorSourceSuffix(sourceNamespace)));
+    candidates.add(normalizeExecutorMatchKey(stripWorkspaceMcpServerSuffix(sourceNamespace)));
   }
 
   if (source) {
@@ -123,23 +123,23 @@ function detectIntegrationFromSource(
 function findSourceMention(
   code: string,
   toolPaths: readonly string[],
-  sources: readonly ExecutorSourceLike[],
-): ExecutorSourceLike | undefined {
+  sources: readonly WorkspaceMcpServerLike[],
+): WorkspaceMcpServerLike | undefined {
   const codeKeys = new Set<string>();
   codeKeys.add(normalizeExecutorMatchKey(code));
 
   for (const toolPath of toolPaths) {
-    const parsed = parseExecutorSourcePath(toolPath);
+    const parsed = parseWorkspaceMcpServerPath(toolPath);
     if (!parsed) {
       continue;
     }
 
     codeKeys.add(normalizeExecutorMatchKey(parsed.namespace));
-    codeKeys.add(normalizeExecutorMatchKey(stripExecutorSourceSuffix(parsed.namespace)));
+    codeKeys.add(normalizeExecutorMatchKey(stripWorkspaceMcpServerSuffix(parsed.namespace)));
   }
 
   let bestScore = -1;
-  let bestSource: ExecutorSourceLike | undefined;
+  let bestSource: WorkspaceMcpServerLike | undefined;
 
   for (const source of sources) {
     let score = -1;
@@ -170,7 +170,7 @@ function findSourceMention(
 }
 
 function buildExecutorDisplayName(
-  source: ExecutorSourceLike | undefined,
+  source: WorkspaceMcpServerLike | undefined,
   toolPath: string | null,
 ): string {
   if (!toolPath) {
@@ -178,7 +178,7 @@ function buildExecutorDisplayName(
     return source ? `${sourceLabel} ${source.kind.toUpperCase()}` : sourceLabel;
   }
 
-  const parsedSourcePath = parseExecutorSourcePath(toolPath);
+  const parsedSourcePath = parseWorkspaceMcpServerPath(toolPath);
   if (parsedSourcePath) {
     const sourceLabel =
       source?.name?.trim() || source?.namespace || humanizeSourceName(parsedSourcePath.namespace);
@@ -243,7 +243,7 @@ function extractExecutorToolPaths(code: string): string[] {
 
 export function getExecutorDisplayMetadata(
   input: unknown,
-  sources: readonly ExecutorSourceLike[] = [],
+  sources: readonly WorkspaceMcpServerLike[] = [],
 ): ExecutorDisplayMetadata {
   const code = getExecutorCode(input);
   const metadataInput = getExecutorMetadataInput(input);
@@ -257,12 +257,12 @@ export function getExecutorDisplayMetadata(
 
   const toolPaths = extractExecutorToolPaths(code);
   const toolPath =
-    toolPaths.find((candidate) => extractExecutorSourceNamespace(candidate) !== null) ??
+    toolPaths.find((candidate) => extractWorkspaceMcpServerNamespace(candidate) !== null) ??
     toolPaths[0] ??
     null;
   const source = findSourceMention(code, toolPaths, sources);
   const sourceNamespace =
-    source?.namespace ?? (toolPath ? extractExecutorSourceNamespace(toolPath) : null);
+    source?.namespace ?? (toolPath ? extractWorkspaceMcpServerNamespace(toolPath) : null);
   const integration =
     detectIntegrationFromSource(source, sourceNamespace) ??
     (sourceNamespace && isDisplayIntegrationType(sourceNamespace) ? sourceNamespace : undefined);

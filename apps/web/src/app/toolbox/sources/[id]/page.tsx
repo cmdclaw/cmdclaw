@@ -6,19 +6,19 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { ExecutorSourceListItem } from "@/components/executor-source-form";
-import { ExecutorSourceLogo } from "@/components/executor-source-logo";
+import type { WorkspaceMcpServerListItem } from "@/components/executor-source-form";
+import { WorkspaceMcpServerLogo } from "@/components/executor-source-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { formatOAuthConnectionError } from "@/lib/oauth-error-message";
 import {
-  useExecutorSourceList,
-  useDeleteExecutorSource,
-  useStartExecutorSourceOAuth,
-  useUpdateExecutorSource,
-  useSetExecutorSourceCredential,
-  useDisconnectExecutorSourceCredential,
+  useWorkspaceMcpServerList,
+  useDeleteWorkspaceMcpServer,
+  useStartWorkspaceMcpServerOAuth,
+  useUpdateWorkspaceMcpServer,
+  useSetWorkspaceMcpServerCredential,
+  useDisconnectWorkspaceMcpServerCredential,
   useGalienStatus,
   useConnectGalien,
   useDisconnectGalien,
@@ -29,19 +29,19 @@ function SourceDetailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { data, isLoading } = useExecutorSourceList();
-  const updateSource = useUpdateExecutorSource();
-  const deleteSource = useDeleteExecutorSource();
-  const startOAuth = useStartExecutorSourceOAuth();
-  const setCredential = useSetExecutorSourceCredential();
-  const disconnectCredential = useDisconnectExecutorSourceCredential();
+  const { data, isLoading } = useWorkspaceMcpServerList();
+  const updateSource = useUpdateWorkspaceMcpServer();
+  const deleteSource = useDeleteWorkspaceMcpServer();
+  const startOAuth = useStartWorkspaceMcpServerOAuth();
+  const setCredential = useSetWorkspaceMcpServerCredential();
+  const disconnectCredential = useDisconnectWorkspaceMcpServerCredential();
   const { data: galienStatus } = useGalienStatus();
   const connectGalien = useConnectGalien();
   const disconnectGalien = useDisconnectGalien();
 
   const isWorkspaceAdmin = data?.membershipRole === "admin" || data?.membershipRole === "owner";
   const source = useMemo(
-    () => data?.sources?.find((s: ExecutorSourceListItem) => s.id === id) ?? null,
+    () => data?.sources?.find((s: WorkspaceMcpServerListItem) => s.id === id) ?? null,
     [data?.sources, id],
   );
 
@@ -181,7 +181,7 @@ function SourceDetailContent() {
     }
     try {
       await setCredential.mutateAsync({
-        workspaceExecutorSourceId: source.id,
+        workspaceMcpServerId: source.id,
         secret: trimmedSecret,
         displayName: credDisplayName.trim(),
       });
@@ -199,7 +199,7 @@ function SourceDetailContent() {
 
     try {
       const result = await startOAuth.mutateAsync({
-        workspaceExecutorSourceId: source.id,
+        workspaceMcpServerId: source.id,
         redirectUrl: window.location.href,
       });
       window.location.assign(result.authUrl);
@@ -282,7 +282,7 @@ function SourceDetailContent() {
       <section className="bg-card rounded-xl border p-6 shadow-sm">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-4">
-            <ExecutorSourceLogo
+            <WorkspaceMcpServerLogo
               kind={source.kind}
               endpoint={source.endpoint}
               className="h-14 w-14 shrink-0 rounded-xl"
@@ -290,9 +290,7 @@ function SourceDetailContent() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">{source.name}</h1>
-                <span className="text-muted-foreground text-sm">
-                  {source.kind === "openapi" ? "OpenAPI" : "MCP"}
-                </span>
+                <span className="text-muted-foreground text-sm">MCP</span>
                 <span className="text-muted-foreground text-sm">·</span>
                 <span className="text-muted-foreground font-mono text-sm">{source.namespace}</span>
               </div>

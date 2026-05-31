@@ -14,8 +14,6 @@
  * Attach mode reconnects to an existing Daytona sandbox without creating a new one.
  */
 
-import type { SandboxHandle } from "../../../packages/core/src/server/sandbox/core/types";
-import { prepareExecutorInSandbox } from "../../../packages/core/src/server/sandbox/prep/executor-prep";
 import { closePool, db } from "@cmdclaw/db/client";
 import * as schema from "@cmdclaw/db/schema";
 import { Daytona } from "@daytonaio/sdk";
@@ -31,10 +29,7 @@ const SNAPSHOT_NAME =
   process.env.DAYTONA_SNAPSHOT_DEV ||
   "cmdclaw-agent-dev";
 const DEFAULT_WORKDIR = "/app";
-const EXECUTOR_WEB_PORT = 8788;
-const EXECUTOR_WEB_LOG_PATH = "/tmp/executor-web.log";
 const COMMAND_TIMEOUT_MS = 60 * 1000;
-const EXECUTOR_TIMEOUT_MS = 30 * 1000;
 const START_TIMEOUT_SECONDS = 60;
 export const DEFAULT_CREATE_USER_EMAIL = "baptiste@heybap.com";
 export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
@@ -204,30 +199,6 @@ function getCommandStdout(result: DaytonaProcessResult): string {
 
 function getCommandStderr(result: DaytonaProcessResult): string {
   return result.stderr ?? result.artifacts?.stderr ?? "";
-}
-
-function appendDaytonaAuth(url: string, token?: string): string {
-  if (!token) {
-    return url;
-  }
-
-  const parsed = new URL(url);
-  if (!parsed.searchParams.has("DAYTONA_SANDBOX_AUTH_KEY")) {
-    parsed.searchParams.set("DAYTONA_SANDBOX_AUTH_KEY", token);
-  }
-  return parsed.toString();
-}
-
-function shouldTreatExecutorFinalizeErrorAsWarning(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
-
-  return (
-    message.includes("Executor MCP native update failed") ||
-    message.includes("Executor source refresh failed") ||
-    message.includes("ExecutorScopeConfigDecodeError") ||
-    message.includes("ControlPlaneStorageError")
-  );
 }
 
 function isDaytonaNoAvailableRunnersError(error: unknown): boolean {
@@ -714,66 +685,6 @@ async function resolveCreateWorkspace(workspaceSlug: string): Promise<CreateWork
   return workspace;
 }
 
-async function getEnabledExecutorSourceIds(workspaceId: string): Promise<string[]> {
-  const rows = await db.query.workspaceExecutorSource.findMany({
-    where: and(
-      eq(schema.workspaceExecutorSource.workspaceId, workspaceId),
-      eq(schema.workspaceExecutorSource.enabled, true),
-    ),
-    columns: {
-      id: true,
-    },
-  });
-
-  return rows.map((row) => row.id);
-}
-
-function createDaytonaSandboxHandle(sandbox: DaytonaSandbox): SandboxHandle {
-  return {
-    provider: "daytona",
-    sandboxId: sandbox.id,
-    async exec(command, opts) {
-      const timeoutSeconds = opts?.timeoutMs ? Math.max(1, Math.ceil(opts.timeoutMs / 1000)) : undefined;
-      const result = await sandbox.process.executeCommand(
-        command,
-        DEFAULT_WORKDIR,
-        opts?.env,
-        timeoutSeconds,
-      );
-
-      return {
-        exitCode: result.exitCode ?? 0,
-        stdout: getCommandStdout(result),
-        stderr: getCommandStderr(result),
-      };
-    },
-    async writeFile(path, content) {
-      const normalizedContent =
-        typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
-      await sandbox.fs.uploadFile(normalizedContent, path);
-    },
-    async readFile(path) {
-      const content = await sandbox.fs.downloadFile(path);
-      if (typeof content === "string") {
-        return content;
-      }
-      return Buffer.from(content).toString("utf8");
-    },
-    async ensureDir(path) {
-      const result = await sandbox.process.executeCommand(
-        `mkdir -p ${escapeShell(path)}`,
-        DEFAULT_WORKDIR,
-        undefined,
-        15,
-      );
-
-      if ((result.exitCode ?? 0) !== 0) {
-        throw new Error(getCommandStderr(result).trim() || `Failed to create sandbox directory: ${path}`);
-      }
-    },
-  };
-}
-
 async function getRuntimeTargetByConversationId(
   conversationId: string,
 ): Promise<ExistingSandboxTarget | null> {
@@ -987,52 +898,8 @@ async function printPublicAccessInfo(sandbox: DaytonaSandbox): Promise<void> {
     return;
   }
 
-  if (sandbox.getSignedPreviewUrl) {
-    const signedPreview = await sandbox.getSignedPreviewUrl(EXECUTOR_WEB_PORT, 3600);
-    console.log(`  executor web: ${signedPreview.url}`);
-  } else if (sandbox.getPreviewLink) {
-    const executorPreview = await sandbox.getPreviewLink(EXECUTOR_WEB_PORT);
-    console.log(`  executor web: ${appendDaytonaAuth(executorPreview.url, executorPreview.token)}`);
-  }
+  console.log("  public services: use Daytona preview links for any server you start manually");
   console.log("  note: bind your debug server to 0.0.0.0:<port> inside the sandbox");
-}
-
-async function ensureExecutorWebStarted(
-  sandbox: DaytonaSandbox,
-): Promise<"already_running" | "started"> {
-  const result = await sandbox.process.executeCommand(
-    `bash -lc '
-if curl -fsS http://127.0.0.1:${EXECUTOR_WEB_PORT} >/dev/null 2>&1; then
-  echo already_running
-  exit 0
-fi
-nohup executor web --port ${EXECUTOR_WEB_PORT} >${EXECUTOR_WEB_LOG_PATH} 2>&1 &
-for i in $(seq 1 40); do
-  if curl -fsS http://127.0.0.1:${EXECUTOR_WEB_PORT} >/dev/null 2>&1; then
-    echo started
-    exit 0
-  fi
-  sleep 0.25
-done
-echo "executor web did not become ready; see ${EXECUTOR_WEB_LOG_PATH}" >&2
-tail -n 40 ${EXECUTOR_WEB_LOG_PATH} >&2 || true
-exit 1
-'`,
-    DEFAULT_WORKDIR,
-    undefined,
-    Math.max(1, Math.ceil(EXECUTOR_TIMEOUT_MS / 1000)),
-  );
-
-  if ((result.exitCode ?? 0) !== 0) {
-    throw new Error(getCommandStderr(result).trim() || "Failed to start executor web.");
-  }
-
-  const state = getCommandStdout(result).trim();
-  if (state === "already_running" || state === "started") {
-    return state;
-  }
-
-  throw new Error(`Unexpected executor state: ${state}`);
 }
 
 async function startRepl(
@@ -1215,12 +1082,6 @@ async function main(): Promise<void> {
     console.log(`Connecting to existing sandbox ${target.sandboxId}...`);
     const sandbox = await connectSandboxById(target.sandboxId);
     console.log(`✓ Connected to sandbox: ${sandbox.id}`);
-    const executorState = await ensureExecutorWebStarted(sandbox);
-    console.log(
-      executorState === "already_running"
-        ? `✓ Executor web already running on port ${EXECUTOR_WEB_PORT}`
-        : `✓ Started executor web on port ${EXECUTOR_WEB_PORT}`,
-    );
     printSandboxInfo(target, "attach");
     await printPublicAccessInfo(sandbox);
     printAvailableCommands();
@@ -1241,14 +1102,6 @@ async function main(): Promise<void> {
 
   console.log(`Loading integration tokens for ${args.userEmail}...`);
   const userContext = await getCreateUserContext(args.userEmail);
-  const enabledExecutorSourceIds = await getEnabledExecutorSourceIds(workspace.id);
-
-  if (enabledExecutorSourceIds.length === 0) {
-    throw new Error(
-      `Workspace ${workspace.slug} (${workspace.name}) has no enabled executor sources.`,
-    );
-  }
-
   const envVars: Record<string, string> = {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     ...userContext.integrationEnvs,
@@ -1311,44 +1164,7 @@ async function main(): Promise<void> {
 
   console.log(`✓ Sandbox created: ${sandbox.id}`);
   console.log(`✓ Sandbox boot time: ${formatDuration(bootDurationMs)}`);
-  const executorBootstrap = await prepareExecutorInSandbox({
-    sandbox: createDaytonaSandboxHandle(sandbox),
-    workspaceId: workspace.id,
-    workspaceName: workspace.name,
-    userId: userContext.id,
-    allowedSourceIds: enabledExecutorSourceIds,
-  });
-
-  if (!executorBootstrap) {
-    throw new Error(
-      `Workspace ${workspace.slug} (${workspace.name}) did not produce any executor bootstrap sources.`,
-    );
-  }
-
-  let executorFinalizeWarning: string | null = null;
-  try {
-    await executorBootstrap.finalize;
-  } catch (error) {
-    if (!shouldTreatExecutorFinalizeErrorAsWarning(error)) {
-      throw error;
-    }
-    executorFinalizeWarning = error instanceof Error ? error.message : String(error);
-  }
-
-  console.log(
-    `✓ Bootstrapped executor workspace with ${executorBootstrap.sourceCount} source(s) from ${workspace.name}`,
-  );
-  console.log(`✓ Executor revision: ${executorBootstrap.revisionHash}`);
-  if (executorFinalizeWarning) {
-    console.warn(`[warn] Executor OAuth reconcile did not complete: ${executorFinalizeWarning}`);
-  }
   await closePool().catch(() => undefined);
-  const executorState = await ensureExecutorWebStarted(sandbox);
-  console.log(
-    executorState === "already_running"
-      ? `✓ Executor web already running on port ${EXECUTOR_WEB_PORT}`
-      : `✓ Started executor web on port ${EXECUTOR_WEB_PORT}`,
-  );
   printSandboxInfo(target, "create");
   await printPublicAccessInfo(sandbox);
   printAvailableCommands();

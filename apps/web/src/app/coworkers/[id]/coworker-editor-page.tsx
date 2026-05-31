@@ -115,7 +115,7 @@ import {
   useCoworkerRunImpersonationTarget,
   useCoworkerRuns,
   useEnqueueConversationMessage,
-  useExecutorSourceList,
+  useWorkspaceMcpServerList,
   useTriggerCoworker,
   useGetOrCreateBuilderConversation,
   usePlatformSkillList,
@@ -197,7 +197,7 @@ type CoworkerEditorPayload = {
   autoApprove: boolean;
   toolAccessMode: CoworkerToolAccessMode;
   allowedIntegrations: IntegrationType[];
-  allowedExecutorSourceIds: string[];
+  allowedWorkspaceMcpServerIds: string[];
   allowedSkillSlugs: string[];
   schedule: CoworkerSchedule | null;
   requiresUserInput: boolean;
@@ -448,7 +448,7 @@ export default function CoworkerEditorPage() {
   const { data: coworker, isLoading, refetch: refetchCoworker } = useCoworker(coworkerId);
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
   const { data: accessibleSkills, isLoading: isAccessibleSkillsLoading } = useSkillList();
-  const { data: executorSourceData } = useExecutorSourceList();
+  const { data: executorSourceData } = useWorkspaceMcpServerList();
   const { data: providerAuthStatus } = useProviderAuthStatus();
   const { data: remoteIntegrationTargetsData } = useRemoteIntegrationTargets({
     enabled: isAdmin,
@@ -476,7 +476,7 @@ export default function CoworkerEditorPage() {
   const [modelAuthSource, setModelAuthSource] = useState<ProviderAuthSource | null>("shared");
   const [toolAccessMode, setToolAccessMode] = useState<CoworkerToolAccessMode>("all");
   const [allowedIntegrations, setAllowedIntegrations] = useState<IntegrationType[]>([]);
-  const [allowedExecutorSourceIds, setAllowedExecutorSourceIds] = useState<string[]>([]);
+  const [allowedWorkspaceMcpServerIds, setAllowedWorkspaceMcpServerIds] = useState<string[]>([]);
   const [allowedSkillSlugs, setAllowedSkillSlugs] = useState<string[]>([]);
   const [status, setStatus] = useState<"on" | "off">("off");
   const [autoApprove, setAutoApprove] = useState(true);
@@ -816,7 +816,7 @@ export default function CoworkerEditorPage() {
       setUserInputPrompt(payload.userInputPrompt ?? "");
       setToolAccessMode(payload.toolAccessMode);
       setAllowedIntegrations(payload.allowedIntegrations);
-      setAllowedExecutorSourceIds(payload.allowedExecutorSourceIds);
+      setAllowedWorkspaceMcpServerIds(payload.allowedWorkspaceMcpServerIds);
       setAllowedSkillSlugs(payload.allowedSkillSlugs);
       applyScheduleState(payload.schedule);
     },
@@ -840,7 +840,7 @@ export default function CoworkerEditorPage() {
       autoApprove,
       toolAccessMode,
       allowedIntegrations,
-      allowedExecutorSourceIds,
+      allowedWorkspaceMcpServerIds,
       allowedSkillSlugs,
       schedule: buildSchedule(),
       requiresUserInput,
@@ -848,7 +848,7 @@ export default function CoworkerEditorPage() {
     };
   }, [
     allowedIntegrations,
-    allowedExecutorSourceIds,
+    allowedWorkspaceMcpServerIds,
     allowedSkillSlugs,
     autoApprove,
     buildSchedule,
@@ -871,7 +871,7 @@ export default function CoworkerEditorPage() {
       JSON.stringify({
         ...input,
         allowedIntegrations: [...input.allowedIntegrations].toSorted(),
-        allowedExecutorSourceIds: [...input.allowedExecutorSourceIds].toSorted(),
+        allowedWorkspaceMcpServerIds: [...input.allowedWorkspaceMcpServerIds].toSorted(),
         allowedSkillSlugs: [...input.allowedSkillSlugs].toSorted(),
         schedule: normalizeScheduleForComparison(input.schedule),
       }),
@@ -933,7 +933,7 @@ export default function CoworkerEditorPage() {
       autoApprove: coworker.autoApprove ?? true,
       toolAccessMode: coworker.toolAccessMode,
       allowedIntegrations: coworkerAllowedIntegrations,
-      allowedExecutorSourceIds: coworker.allowedExecutorSourceIds ?? [],
+      allowedWorkspaceMcpServerIds: coworker.allowedWorkspaceMcpServerIds ?? [],
       allowedSkillSlugs: coworker.allowedSkillSlugs ?? [],
       schedule: (coworker.schedule as CoworkerSchedule | null) ?? null,
       requiresUserInput: coworker.requiresUserInput ?? false,
@@ -1011,11 +1011,11 @@ export default function CoworkerEditorPage() {
       }
       if (
         stringArraysEqual(
-          currentLocalPayload.allowedExecutorSourceIds,
-          lastSavedPayload.allowedExecutorSourceIds,
+          currentLocalPayload.allowedWorkspaceMcpServerIds,
+          lastSavedPayload.allowedWorkspaceMcpServerIds,
         )
       ) {
-        setAllowedExecutorSourceIds(payloadFromCoworker.allowedExecutorSourceIds);
+        setAllowedWorkspaceMcpServerIds(payloadFromCoworker.allowedWorkspaceMcpServerIds);
       }
       if (
         stringArraysEqual(currentLocalPayload.allowedSkillSlugs, lastSavedPayload.allowedSkillSlugs)
@@ -1420,15 +1420,15 @@ export default function CoworkerEditorPage() {
     },
     [selectedSkillKeys],
   );
-  const handleToggleExecutorSourceChecked = useCallback((sourceId: string) => {
-    setAllowedExecutorSourceIds((current) =>
+  const handleToggleWorkspaceMcpServerChecked = useCallback((sourceId: string) => {
+    setAllowedWorkspaceMcpServerIds((current) =>
       current.includes(sourceId)
         ? current.filter((value) => value !== sourceId)
         : [...current, sourceId],
     );
   }, []);
-  const handleClearExecutorSources = useCallback(() => {
-    setAllowedExecutorSourceIds([]);
+  const handleClearWorkspaceMcpServers = useCallback(() => {
+    setAllowedWorkspaceMcpServerIds([]);
   }, []);
   const handleClearSkills = useCallback(() => {
     setAllowedSkillSlugs([]);
@@ -1523,7 +1523,7 @@ export default function CoworkerEditorPage() {
     };
   }, [
     allowedIntegrations,
-    allowedExecutorSourceIds,
+    allowedWorkspaceMcpServerIds,
     autoApprove,
     buildSchedule,
     description,
@@ -1851,7 +1851,7 @@ export default function CoworkerEditorPage() {
         availableSkills={availableSkills}
         selectedSkillKeys={selectedSkillKeys}
         executorSourceEntries={executorSourceEntries}
-        selectedExecutorSourceIds={allowedExecutorSourceIds}
+        selectedWorkspaceMcpServerIds={allowedWorkspaceMcpServerIds}
         isSkillsLoading={isPlatformSkillsLoading || isAccessibleSkillsLoading}
         restrictTools={restrictTools}
         allowedIntegrations={allowedIntegrations}
@@ -1901,8 +1901,8 @@ export default function CoworkerEditorPage() {
         onModelChange={handleModelSelectionChange}
         onClearSkills={handleClearSkills}
         onToggleSkillChecked={handleToggleSkillChecked}
-        onClearExecutorSources={handleClearExecutorSources}
-        onToggleExecutorSourceChecked={handleToggleExecutorSourceChecked}
+        onClearWorkspaceMcpServers={handleClearWorkspaceMcpServers}
+        onToggleWorkspaceMcpServerChecked={handleToggleWorkspaceMcpServerChecked}
         onRestrictToolsChange={handleRestrictToolsChange}
         onSelectAllIntegrations={handleSelectAllIntegrations}
         onClearIntegrations={handleClearIntegrations}
@@ -1942,7 +1942,7 @@ export default function CoworkerEditorPage() {
       availableSkills,
       selectedSkillKeys,
       executorSourceEntries,
-      allowedExecutorSourceIds,
+      allowedWorkspaceMcpServerIds,
       isPlatformSkillsLoading,
       isAccessibleSkillsLoading,
       restrictTools,
@@ -1991,8 +1991,8 @@ export default function CoworkerEditorPage() {
       setModel,
       handleClearSkills,
       handleToggleSkillChecked,
-      handleClearExecutorSources,
-      handleToggleExecutorSourceChecked,
+      handleClearWorkspaceMcpServers,
+      handleToggleWorkspaceMcpServerChecked,
       handleRestrictToolsChange,
       handleSelectAllIntegrations,
       handleClearIntegrations,
@@ -2117,7 +2117,7 @@ export default function CoworkerEditorPage() {
               availableSkills={availableSkills}
               selectedSkillKeys={selectedSkillKeys}
               executorSourceEntries={executorSourceEntries}
-              selectedExecutorSourceIds={allowedExecutorSourceIds}
+              selectedWorkspaceMcpServerIds={allowedWorkspaceMcpServerIds}
               isSkillsLoading={isPlatformSkillsLoading || isAccessibleSkillsLoading}
               restrictTools={restrictTools}
               allowedIntegrations={allowedIntegrations}
@@ -2167,8 +2167,8 @@ export default function CoworkerEditorPage() {
               onModelChange={handleModelSelectionChange}
               onClearSkills={handleClearSkills}
               onToggleSkillChecked={handleToggleSkillChecked}
-              onClearExecutorSources={handleClearExecutorSources}
-              onToggleExecutorSourceChecked={handleToggleExecutorSourceChecked}
+              onClearWorkspaceMcpServers={handleClearWorkspaceMcpServers}
+              onToggleWorkspaceMcpServerChecked={handleToggleWorkspaceMcpServerChecked}
               onRestrictToolsChange={handleRestrictToolsChange}
               onSelectAllIntegrations={handleSelectAllIntegrations}
               onClearIntegrations={handleClearIntegrations}
@@ -2663,7 +2663,7 @@ type CoworkerSettingsPanelProps = {
     kind: string;
     connected: boolean;
   }[];
-  selectedExecutorSourceIds: string[];
+  selectedWorkspaceMcpServerIds: string[];
   isSkillsLoading: boolean;
   restrictTools: boolean;
   allowedIntegrations: IntegrationType[];
@@ -2727,8 +2727,8 @@ type CoworkerSettingsPanelProps = {
   onModelChange: (input: { model: string; authSource?: ProviderAuthSource | null }) => void;
   onClearSkills: () => void;
   onToggleSkillChecked: (skillKey: string) => void;
-  onClearExecutorSources: () => void;
-  onToggleExecutorSourceChecked: (sourceId: string) => void;
+  onClearWorkspaceMcpServers: () => void;
+  onToggleWorkspaceMcpServerChecked: (sourceId: string) => void;
   onRestrictToolsChange: (checked: boolean) => void;
   onSelectAllIntegrations: () => void;
   onClearIntegrations: () => void;
@@ -2771,7 +2771,7 @@ function CoworkerSettingsPanel({
   availableSkills,
   selectedSkillKeys,
   executorSourceEntries,
-  selectedExecutorSourceIds,
+  selectedWorkspaceMcpServerIds,
   isSkillsLoading,
   restrictTools,
   allowedIntegrations,
@@ -2821,8 +2821,8 @@ function CoworkerSettingsPanel({
   onModelChange,
   onClearSkills,
   onToggleSkillChecked,
-  onClearExecutorSources,
-  onToggleExecutorSourceChecked,
+  onClearWorkspaceMcpServers,
+  onToggleWorkspaceMcpServerChecked,
   onRestrictToolsChange,
   onSelectAllIntegrations,
   onClearIntegrations,
@@ -2902,15 +2902,15 @@ function CoworkerSettingsPanel({
     },
     [onToggleSkillChecked],
   );
-  const handleExecutorSourceButtonClick = useCallback(
+  const handleWorkspaceMcpServerButtonClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       const sourceId = event.currentTarget.dataset.executorSourceId;
       if (!sourceId) {
         return;
       }
-      onToggleExecutorSourceChecked(sourceId);
+      onToggleWorkspaceMcpServerChecked(sourceId);
     },
-    [onToggleExecutorSourceChecked],
+    [onToggleWorkspaceMcpServerChecked],
   );
 
   const handleOpenDeleteDialog = useCallback(() => {
@@ -3896,12 +3896,12 @@ function CoworkerSettingsPanel({
                     </h3>
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[10px]">
-                        {selectedExecutorSourceIds.length}/{executorSourceEntries.length}
+                        {selectedWorkspaceMcpServerIds.length}/{executorSourceEntries.length}
                       </span>
-                      {selectedExecutorSourceIds.length > 0 && (
+                      {selectedWorkspaceMcpServerIds.length > 0 && (
                         <button
                           type="button"
-                          onClick={onClearExecutorSources}
+                          onClick={onClearWorkspaceMcpServers}
                           className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors"
                         >
                           Clear
@@ -3916,13 +3916,13 @@ function CoworkerSettingsPanel({
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
                       {executorSourceEntries.map((source) => {
-                        const isActive = selectedExecutorSourceIds.includes(source.id);
+                        const isActive = selectedWorkspaceMcpServerIds.includes(source.id);
                         return (
                           <button
                             key={source.id}
                             type="button"
                             data-executor-source-id={source.id}
-                            onClick={handleExecutorSourceButtonClick}
+                            onClick={handleWorkspaceMcpServerButtonClick}
                             className={cn(
                               "group relative flex items-center gap-2.5 rounded-lg border p-3 text-left transition-all duration-150",
                               isActive

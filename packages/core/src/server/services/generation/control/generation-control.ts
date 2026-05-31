@@ -33,7 +33,7 @@ export function getExecutionPolicyFromRecord(
 ): {
   allowedIntegrations?: IntegrationType[];
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   remoteIntegrationSource?: RemoteIntegrationSource;
   autoApprove?: boolean;
@@ -63,7 +63,7 @@ export function getExecutionPolicyFromRecord(
   return {
     allowedIntegrations,
     allowedCustomIntegrations: policy?.allowedCustomIntegrations,
-    allowedExecutorSourceIds: policy?.allowedExecutorSourceIds,
+    allowedWorkspaceMcpServerIds: policy?.allowedWorkspaceMcpServerIds,
     allowedSkillSlugs: normalizeCoworkerAllowedSkillSlugs(
       policy?.allowedSkillSlugs,
     ),

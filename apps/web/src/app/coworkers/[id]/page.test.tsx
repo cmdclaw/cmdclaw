@@ -364,7 +364,7 @@ vi.mock("@/orpc/hooks", () => ({
     mutate: mockGetOrCreateBuilderConversationMutate,
     mutateAsync: mockGetOrCreateBuilderConversationMutateAsync,
   }),
-  useExecutorSourceList: () => ({ data: { sources: [] } }),
+  useWorkspaceMcpServerList: () => ({ data: { sources: [] } }),
   usePlatformSkillList: () => ({ data: [], isLoading: false }),
   useProviderAuthStatus: () => ({
     data: {

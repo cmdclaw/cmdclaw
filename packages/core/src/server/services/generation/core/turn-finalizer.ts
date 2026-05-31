@@ -183,40 +183,10 @@ function buildMessageTiming(ctx: GenerationContext): MessageTiming {
     "pre_prompt_runtime_context_write_started",
     "pre_prompt_runtime_context_write_completed",
   );
-  const prePromptExecutorPrepareMs = phaseDurationMs(
+  const prePromptWorkspaceMcpResolveMs = phaseDurationMs(
     phaseMarks,
-    "pre_prompt_executor_prepare_started",
-    "pre_prompt_executor_prepare_completed",
-  );
-  const prePromptExecutorBootstrapLoadMs = phaseDurationMs(
-    phaseMarks,
-    "pre_prompt_executor_bootstrap_load_started",
-    "pre_prompt_executor_bootstrap_load_completed",
-  );
-  const prePromptExecutorConfigWriteMs = phaseDurationMs(
-    phaseMarks,
-    "pre_prompt_executor_config_write_started",
-    "pre_prompt_executor_config_write_completed",
-  );
-  const prePromptExecutorServerProbeMs = phaseDurationMs(
-    phaseMarks,
-    "pre_prompt_executor_server_probe_started",
-    "pre_prompt_executor_server_probe_completed",
-  );
-  const prePromptExecutorServerWaitReadyMs = phaseDurationMs(
-    phaseMarks,
-    "pre_prompt_executor_server_wait_ready_started",
-    "pre_prompt_executor_server_wait_ready_completed",
-  );
-  const prePromptExecutorStatusCheckMs = phaseDurationMs(
-    phaseMarks,
-    "pre_prompt_executor_status_check_started",
-    "pre_prompt_executor_status_check_completed",
-  );
-  const prePromptExecutorOauthReconcileMs = phaseDurationMs(
-    phaseMarks,
-    "pre_prompt_executor_oauth_reconcile_started",
-    "pre_prompt_executor_oauth_reconcile_completed",
+    "pre_prompt_workspace_mcp_resolve_started",
+    "pre_prompt_workspace_mcp_resolve_completed",
   );
   const prePromptSkillsAndCredsLoadMs = phaseDurationMs(
     phaseMarks,
@@ -317,13 +287,7 @@ function buildMessageTiming(ctx: GenerationContext): MessageTiming {
     prePromptSetupMs,
     prePromptMemorySyncMs,
     prePromptRuntimeContextWriteMs,
-    prePromptExecutorPrepareMs,
-    prePromptExecutorBootstrapLoadMs,
-    prePromptExecutorConfigWriteMs,
-    prePromptExecutorServerProbeMs,
-    prePromptExecutorServerWaitReadyMs,
-    prePromptExecutorStatusCheckMs,
-    prePromptExecutorOauthReconcileMs,
+    prePromptWorkspaceMcpResolveMs,
     prePromptSkillsAndCredsLoadMs,
     prePromptCacheReadMs,
     prePromptSkillsWriteMs,

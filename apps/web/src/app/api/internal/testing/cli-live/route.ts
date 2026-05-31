@@ -1,5 +1,9 @@
 import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
 import {
+  computeWorkspaceMcpServerRevisionHash,
+  setWorkspaceMcpServerCredential,
+} from "@cmdclaw/core/server/executor/workspace-sources";
+import {
   getValidConnectedAccountTokensForUser,
   getValidTokensForUser,
 } from "@cmdclaw/core/server/integrations/token-refresh";
@@ -13,6 +17,9 @@ import {
   integrationToken,
   message,
   user,
+  workspaceMember,
+  workspaceMcpAuthorization,
+  workspaceMcpServer,
   type ContentPart,
 } from "@cmdclaw/db/schema";
 import { Daytona } from "@daytonaio/sdk";
@@ -113,6 +120,14 @@ const requestSchema = z.discriminatedUnion("action", [
     action: z.literal("user:exists"),
     email: z.email(),
   }),
+  z.object({
+    action: z.literal("workspace-mcp:linear-api-key:apply"),
+    email: z.email(),
+  }),
+  z.object({
+    action: z.literal("workspace-mcp:linear-api-key:restore"),
+    backup: z.unknown(),
+  }),
 ]);
 
 function isAuthorized(request: Request): boolean {
@@ -122,6 +137,10 @@ function isAuthorized(request: Request): boolean {
 
 function uniqueNonEmpty(values: Iterable<string> | undefined): string[] {
   return Array.from(new Set(Array.from(values ?? []).filter((value) => value.trim().length > 0)));
+}
+
+function toNullableDate(value: unknown): Date | null {
+  return value instanceof Date ? value : typeof value === "string" ? new Date(value) : null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -135,6 +154,146 @@ async function findUserByEmail(email: string): Promise<{ id: string } | null> {
   });
 
   return dbUser ?? null;
+}
+
+async function applyLinearMcpApiKeyForLiveTest(email: string): Promise<unknown> {
+  const apiKey = env.LINEAR_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("LINEAR_API_KEY is required for Linear MCP live testing.");
+  }
+
+  const dbUser = await findUserByEmail(email);
+  if (!dbUser) {
+    throw new Error(`Live e2e user not found: ${email}`);
+  }
+  const memberships = await db.query.workspaceMember.findMany({
+    where: eq(workspaceMember.userId, dbUser.id),
+    columns: { workspaceId: true },
+  });
+  const workspaceIds = memberships.map((membership) => membership.workspaceId);
+  if (workspaceIds.length === 0) {
+    throw new Error(`Live e2e user has no workspace: ${email}`);
+  }
+
+  const source = await db.query.workspaceMcpServer.findFirst({
+    where: and(
+      inArray(workspaceMcpServer.workspaceId, workspaceIds),
+      eq(workspaceMcpServer.namespace, "linear"),
+    ),
+  });
+  if (!source) {
+    throw new Error(`Linear workspace MCP server not found for live e2e user ${email}.`);
+  }
+
+  const credential = await db.query.workspaceMcpAuthorization.findFirst({
+    where: and(
+      eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+      eq(workspaceMcpAuthorization.userId, dbUser.id),
+    ),
+  });
+
+  const nextAuthType = "bearer" as const;
+  const nextAuthHeaderName = "Authorization";
+  const nextAuthPrefix = "Bearer ";
+  await db
+    .update(workspaceMcpServer)
+    .set({
+      authType: nextAuthType,
+      authHeaderName: nextAuthHeaderName,
+      authPrefix: nextAuthPrefix,
+      revisionHash: computeWorkspaceMcpServerRevisionHash({
+        kind: source.kind,
+        internalKey: source.internalKey,
+        name: source.name,
+        namespace: source.namespace,
+        endpoint: source.endpoint,
+        specUrl: source.specUrl,
+        transport: source.transport,
+        headers: source.headers,
+        queryParams: source.queryParams,
+        defaultHeaders: source.defaultHeaders,
+        authType: nextAuthType,
+        authHeaderName: nextAuthHeaderName,
+        authQueryParam: source.authQueryParam,
+        authPrefix: nextAuthPrefix,
+        enabled: source.enabled,
+      }),
+      updatedByUserId: dbUser.id,
+    })
+    .where(eq(workspaceMcpServer.id, source.id));
+
+  await setWorkspaceMcpServerCredential({
+    workspaceMcpServerId: source.id,
+    userId: dbUser.id,
+    secret: apiKey,
+    displayName: "Linear live E2E",
+    enabled: true,
+  });
+
+  return { source, credential: credential ?? null, userId: dbUser.id };
+}
+
+async function restoreLinearMcpApiKeyLiveTestBackup(backup: unknown): Promise<{ restored: true }> {
+  const parsed = z
+    .object({
+      userId: z.string(),
+      source: z.record(z.string(), z.unknown()),
+      credential: z.record(z.string(), z.unknown()).nullable(),
+    })
+    .parse(backup);
+  const source = parsed.source as typeof workspaceMcpServer.$inferSelect;
+  const credential = parsed.credential as typeof workspaceMcpAuthorization.$inferSelect | null;
+
+  await db
+    .update(workspaceMcpServer)
+    .set({
+      kind: source.kind,
+      internalKey: source.internalKey,
+      name: source.name,
+      namespace: source.namespace,
+      endpoint: source.endpoint,
+      specUrl: source.specUrl,
+      transport: source.transport,
+      headers: source.headers,
+      queryParams: source.queryParams,
+      defaultHeaders: source.defaultHeaders,
+      authType: source.authType,
+      authHeaderName: source.authHeaderName,
+      authQueryParam: source.authQueryParam,
+      authPrefix: source.authPrefix,
+      enabled: source.enabled,
+      revisionHash: source.revisionHash,
+      updatedByUserId: source.updatedByUserId,
+    })
+    .where(eq(workspaceMcpServer.id, source.id));
+
+  await db
+    .delete(workspaceMcpAuthorization)
+    .where(
+      and(
+        eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+        eq(workspaceMcpAuthorization.userId, parsed.userId),
+      ),
+    );
+
+  if (credential) {
+    await db.insert(workspaceMcpAuthorization).values({
+      id: credential.id,
+      workspaceMcpServerId: credential.workspaceMcpServerId,
+      userId: credential.userId,
+      secret: credential.secret,
+      accessToken: credential.accessToken,
+      refreshToken: credential.refreshToken,
+      expiresAt: toNullableDate(credential.expiresAt),
+      oauthMetadata: credential.oauthMetadata,
+      enabled: credential.enabled,
+      displayName: credential.displayName,
+      createdAt: toNullableDate(credential.createdAt) ?? new Date(),
+      updatedAt: toNullableDate(credential.updatedAt) ?? new Date(),
+    });
+  }
+
+  return { restored: true };
 }
 
 async function findIntegration(args: {
@@ -572,6 +731,13 @@ async function handleAction(payload: z.infer<typeof requestSchema>): Promise<unk
     case "user:exists": {
       const dbUser = await findUserByEmail(payload.email);
       return { exists: Boolean(dbUser) };
+    }
+    case "workspace-mcp:linear-api-key:apply": {
+      const backup = await applyLinearMcpApiKeyForLiveTest(payload.email);
+      return { backup };
+    }
+    case "workspace-mcp:linear-api-key:restore": {
+      return restoreLinearMcpApiKeyLiveTestBackup(payload.backup);
     }
   }
 }

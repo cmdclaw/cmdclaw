@@ -95,7 +95,7 @@ describe("chat perfetto trace export", () => {
       "pre_prompt_skills",
       "pre_prompt_integration",
       "pre_prompt_runtime",
-      "executor_prepare",
+      "workspace_mcp",
     ]);
   });
 

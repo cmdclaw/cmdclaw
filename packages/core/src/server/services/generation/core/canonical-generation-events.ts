@@ -428,19 +428,8 @@ export async function emitGenerationTerminalCanonicalEvent(generationId: string)
         "cmdclaw.phase.pre_prompt_memory_sync_ms": phaseDurationsMs.prePromptMemorySyncMs,
         "cmdclaw.phase.pre_prompt_runtime_context_write_ms":
           phaseDurationsMs.prePromptRuntimeContextWriteMs,
-        "cmdclaw.phase.pre_prompt_executor_prepare_ms": phaseDurationsMs.prePromptExecutorPrepareMs,
-        "cmdclaw.phase.pre_prompt_executor_bootstrap_load_ms":
-          phaseDurationsMs.prePromptExecutorBootstrapLoadMs,
-        "cmdclaw.phase.pre_prompt_executor_config_write_ms":
-          phaseDurationsMs.prePromptExecutorConfigWriteMs,
-        "cmdclaw.phase.pre_prompt_executor_server_probe_ms":
-          phaseDurationsMs.prePromptExecutorServerProbeMs,
-        "cmdclaw.phase.pre_prompt_executor_server_wait_ready_ms":
-          phaseDurationsMs.prePromptExecutorServerWaitReadyMs,
-        "cmdclaw.phase.pre_prompt_executor_status_check_ms":
-          phaseDurationsMs.prePromptExecutorStatusCheckMs,
-        "cmdclaw.phase.pre_prompt_executor_oauth_reconcile_ms":
-          phaseDurationsMs.prePromptExecutorOauthReconcileMs,
+        "cmdclaw.phase.pre_prompt_workspace_mcp_resolve_ms":
+          phaseDurationsMs.prePromptWorkspaceMcpResolveMs,
         "cmdclaw.phase.pre_prompt_skills_and_creds_load_ms":
           phaseDurationsMs.prePromptSkillsAndCredsLoadMs,
         "cmdclaw.phase.pre_prompt_cache_read_ms": phaseDurationsMs.prePromptCacheReadMs,

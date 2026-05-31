@@ -1,4 +1,4 @@
-import { listWorkspaceExecutorSources } from "@cmdclaw/core/server/executor/workspace-sources";
+import { listWorkspaceMcpServers } from "@cmdclaw/core/server/executor/workspace-sources";
 import {
   addModulrWorkspaceAccess,
   canUserUseModulrInWorkspace,
@@ -87,7 +87,7 @@ const connect = protectedProcedure.input(connectionInput).handler(async ({ input
       message: "Modulr is not enabled for this user in this workspace.",
     });
   }
-  await listWorkspaceExecutorSources({
+  await listWorkspaceMcpServers({
     database: context.db,
     workspaceId: access.workspace.id,
     userId: context.user.id,

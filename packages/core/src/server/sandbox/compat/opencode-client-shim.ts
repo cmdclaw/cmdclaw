@@ -20,6 +20,7 @@ export function createRuntimeHarnessClientFromOpencodeClient(
         parts: input.parts as never,
         ...(input.agent ? { agent: input.agent } : {}),
         ...(input.system ? { system: input.system } : {}),
+        ...(input.tools ? { tools: input.tools } : {}),
         ...(input.model ? { model: input.model as never } : {}),
         ...(input.noReply ? { noReply: input.noReply } : {}),
       });

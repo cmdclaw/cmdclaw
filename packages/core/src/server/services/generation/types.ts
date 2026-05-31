@@ -173,7 +173,7 @@ export type StartCoworkerGenerationInput = {
   sandboxProvider?: "e2b" | "daytona" | "docker";
   allowedIntegrations: IntegrationType[];
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   fileAttachments?: UserFileAttachment[];
   debugRuntimeNoProgressTimeoutMs?: number;
@@ -296,7 +296,7 @@ export interface GenerationContext {
   allowedIntegrations?: IntegrationType[];
   autoApprove: boolean;
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   remoteIntegrationSource?: RemoteIntegrationSource;
   coworkerPrompt?: string;

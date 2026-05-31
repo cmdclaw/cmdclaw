@@ -245,8 +245,8 @@ export const workspaceMembershipRoleEnum = pgEnum("workspace_membership_role", [
 
 export const billingOwnerTypeEnum = pgEnum("billing_owner_type", ["user", "workspace"]);
 export const providerAuthSourceEnum = pgEnum("provider_auth_source", ["user", "shared"]);
-export const executorSourceKindEnum = pgEnum("executor_source_kind", ["mcp", "openapi"]);
-export const executorSourceAuthTypeEnum = pgEnum("executor_source_auth_type", [
+export const workspaceMcpServerKindEnum = pgEnum("executor_source_kind", ["mcp"]);
+export const workspaceMcpServerAuthTypeEnum = pgEnum("executor_source_auth_type", [
   "none",
   "api_key",
   "bearer",
@@ -347,13 +347,13 @@ export const userRelations = relations(user, ({ many }) => ({
   devices: many(device),
   customIntegrations: many(customIntegration),
   customIntegrationCredentials: many(customIntegrationCredential),
-  executorSourcesCreated: many(workspaceExecutorSource, {
-    relationName: "workspaceExecutorSourceCreatedByUser",
+  executorSourcesCreated: many(workspaceMcpServer, {
+    relationName: "workspaceMcpServerCreatedByUser",
   }),
-  executorSourcesUpdated: many(workspaceExecutorSource, {
-    relationName: "workspaceExecutorSourceUpdatedByUser",
+  executorSourcesUpdated: many(workspaceMcpServer, {
+    relationName: "workspaceMcpServerUpdatedByUser",
   }),
-  executorSourceCredentials: many(workspaceExecutorSourceCredential),
+  executorSourceCredentials: many(workspaceMcpAuthorization),
   integrationSkillsCreated: many(integrationSkill),
   integrationSkillPreferences: many(integrationSkillPreference),
   whatsappLinks: many(whatsappUserLink),
@@ -385,8 +385,7 @@ export const workspaceRelations = relations(workspace, ({ one, many }) => ({
   billingLedgers: many(billingLedger),
   billingTopUps: many(billingTopUp),
   skills: many(skill),
-  executorSources: many(workspaceExecutorSource),
-  executorPackages: many(workspaceExecutorPackage),
+  workspaceMcpServers: many(workspaceMcpServer),
 }));
 
 export const workspaceMemberRelations = relations(workspaceMember, ({ one }) => ({
@@ -754,20 +753,8 @@ export type MessageTiming = {
     prePromptMemorySyncMs?: number;
     // Time spent writing runtime callback/context metadata into the sandbox.
     prePromptRuntimeContextWriteMs?: number;
-    // Time spent preparing the sandbox-local executor and its source configuration.
-    prePromptExecutorPrepareMs?: number;
-    // Time spent loading executor bootstrap config and OAuth bootstrap sources.
-    prePromptExecutorBootstrapLoadMs?: number;
-    // Time spent writing executor config/state files into the sandbox.
-    prePromptExecutorConfigWriteMs?: number;
-    // Time spent probing whether the sandbox-local executor server is already reachable.
-    prePromptExecutorServerProbeMs?: number;
-    // Time spent waiting for the sandbox-local executor server to become ready.
-    prePromptExecutorServerWaitReadyMs?: number;
-    // Time spent validating the executor server with a live status call.
-    prePromptExecutorStatusCheckMs?: number;
-    // Time spent reconciling native MCP OAuth sources inside the sandbox-local executor.
-    prePromptExecutorOauthReconcileMs?: number;
+    // Time spent resolving Workspace MCP Servers before prompt dispatch.
+    prePromptWorkspaceMcpResolveMs?: number;
     // Time spent loading enabled skill metadata and custom integration credentials.
     prePromptSkillsAndCredsLoadMs?: number;
     // Time spent reading the reusable sandbox pre-prompt cache.
@@ -871,7 +858,7 @@ export type PendingAuth = {
 export type GenerationExecutionPolicy = {
   allowedIntegrations?: string[];
   allowedCustomIntegrations?: string[];
-  allowedExecutorSourceIds?: string[];
+  allowedWorkspaceMcpServerIds?: string[];
   allowedSkillSlugs?: string[];
   remoteIntegrationSource?: {
     targetEnv: "staging" | "prod";
@@ -1223,7 +1210,7 @@ export const coworker = pgTable(
     toolAccessMode: coworkerToolAccessModeEnum("tool_access_mode"),
     allowedIntegrations: integrationTypeEnum("allowed_integrations").array().notNull(),
     allowedCustomIntegrations: text("allowed_custom_integrations").array().notNull().default([]),
-    allowedExecutorSourceIds: text("allowed_executor_source_ids").array().notNull().default([]),
+    allowedWorkspaceMcpServerIds: text("allowed_workspace_mcp_server_ids").array().notNull().default([]),
     allowedSkillSlugs: text("allowed_skill_slugs").array().notNull().default([]),
     // Schedule configuration for time-based triggers (JSON object)
     schedule: jsonb("schedule"),
@@ -2667,7 +2654,7 @@ export const customIntegrationCredentialRelations = relations(
   }),
 );
 
-export const workspaceExecutorSource = pgTable(
+export const workspaceMcpServer = pgTable(
   "workspace_executor_source",
   {
     id: text("id")
@@ -2676,7 +2663,7 @@ export const workspaceExecutorSource = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
-    kind: executorSourceKindEnum("kind").notNull(),
+    kind: workspaceMcpServerKindEnum("kind").notNull(),
     internalKey: text("internal_key"),
     name: text("name").notNull(),
     namespace: text("namespace").notNull(),
@@ -2686,7 +2673,7 @@ export const workspaceExecutorSource = pgTable(
     headers: jsonb("headers").$type<Record<string, string>>(),
     queryParams: jsonb("query_params").$type<Record<string, string>>(),
     defaultHeaders: jsonb("default_headers").$type<Record<string, string>>(),
-    authType: executorSourceAuthTypeEnum("auth_type").default("none").notNull(),
+    authType: workspaceMcpServerAuthTypeEnum("auth_type").default("none").notNull(),
     authHeaderName: text("auth_header_name"),
     authQueryParam: text("auth_query_param"),
     authPrefix: text("auth_prefix"),
@@ -2714,15 +2701,15 @@ export const workspaceExecutorSource = pgTable(
   ],
 );
 
-export const workspaceExecutorSourceCredential = pgTable(
+export const workspaceMcpAuthorization = pgTable(
   "workspace_executor_source_credential",
   {
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    workspaceExecutorSourceId: text("workspace_executor_source_id")
+    workspaceMcpServerId: text("workspace_executor_source_id")
       .notNull()
-      .references(() => workspaceExecutorSource.id, { onDelete: "cascade" }),
+      .references(() => workspaceMcpServer.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -2750,74 +2737,48 @@ export const workspaceExecutorSourceCredential = pgTable(
   },
   (table) => [
     index("workspace_executor_source_credential_user_idx").on(table.userId),
-    index("workspace_executor_source_credential_source_idx").on(table.workspaceExecutorSourceId),
+    index("workspace_executor_source_credential_source_idx").on(table.workspaceMcpServerId),
     unique("workspace_executor_source_credential_user_source_idx").on(
       table.userId,
-      table.workspaceExecutorSourceId,
+      table.workspaceMcpServerId,
     ),
   ],
 );
 
-export const workspaceExecutorPackage = pgTable(
-  "workspace_executor_package",
-  {
-    workspaceId: text("workspace_id")
-      .primaryKey()
-      .references(() => workspace.id, { onDelete: "cascade" }),
-    revisionHash: text("revision_hash").notNull(),
-    configJson: text("config_json").notNull(),
-    workspaceStateJson: text("workspace_state_json").notNull(),
-    builtAt: timestamp("built_at").defaultNow().notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [index("workspace_executor_package_revision_idx").on(table.revisionHash)],
-);
-
-export const workspaceExecutorSourceRelations = relations(
-  workspaceExecutorSource,
+export const workspaceMcpServerRelations = relations(
+  workspaceMcpServer,
   ({ one, many }) => ({
     workspace: one(workspace, {
-      fields: [workspaceExecutorSource.workspaceId],
+      fields: [workspaceMcpServer.workspaceId],
       references: [workspace.id],
     }),
     createdByUser: one(user, {
-      relationName: "workspaceExecutorSourceCreatedByUser",
-      fields: [workspaceExecutorSource.createdByUserId],
+      relationName: "workspaceMcpServerCreatedByUser",
+      fields: [workspaceMcpServer.createdByUserId],
       references: [user.id],
     }),
     updatedByUser: one(user, {
-      relationName: "workspaceExecutorSourceUpdatedByUser",
-      fields: [workspaceExecutorSource.updatedByUserId],
+      relationName: "workspaceMcpServerUpdatedByUser",
+      fields: [workspaceMcpServer.updatedByUserId],
       references: [user.id],
     }),
-    credentials: many(workspaceExecutorSourceCredential),
+    credentials: many(workspaceMcpAuthorization),
   }),
 );
 
-export const workspaceExecutorSourceCredentialRelations = relations(
-  workspaceExecutorSourceCredential,
+export const workspaceMcpAuthorizationRelations = relations(
+  workspaceMcpAuthorization,
   ({ one }) => ({
     user: one(user, {
-      fields: [workspaceExecutorSourceCredential.userId],
+      fields: [workspaceMcpAuthorization.userId],
       references: [user.id],
     }),
-    workspaceExecutorSource: one(workspaceExecutorSource, {
-      fields: [workspaceExecutorSourceCredential.workspaceExecutorSourceId],
-      references: [workspaceExecutorSource.id],
+    workspaceMcpServer: one(workspaceMcpServer, {
+      fields: [workspaceMcpAuthorization.workspaceMcpServerId],
+      references: [workspaceMcpServer.id],
     }),
   }),
 );
-
-export const workspaceExecutorPackageRelations = relations(workspaceExecutorPackage, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [workspaceExecutorPackage.workspaceId],
-    references: [workspace.id],
-  }),
-}));
 
 export const integrationSkillSourceEnum = pgEnum("integration_skill_source", [
   "official",

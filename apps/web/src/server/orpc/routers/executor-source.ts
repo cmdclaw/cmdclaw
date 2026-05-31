@@ -3,28 +3,22 @@ import {
   startMcpOAuthAuthorization,
 } from "@cmdclaw/core/server/executor/mcp-oauth";
 import {
-  computeWorkspaceExecutorSourceRevisionHash,
-  ensureWorkspaceExecutorPackage,
-  listWorkspaceExecutorSources,
+  computeWorkspaceMcpServerRevisionHash,
+  listWorkspaceMcpServers,
   normalizeExecutorNamespace,
-  setWorkspaceExecutorSourceCredential,
+  setWorkspaceMcpServerCredential,
 } from "@cmdclaw/core/server/executor/workspace-sources";
-import {
-  user,
-  workspace,
-  workspaceExecutorSource,
-  workspaceExecutorSourceCredential,
-} from "@cmdclaw/db/schema";
+import { user, workspace, workspaceMcpServer, workspaceMcpAuthorization } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { storeExecutorSourceOAuthPending } from "@/server/executor-source-oauth";
+import { storeWorkspaceMcpServerOAuthPending } from "@/server/executor-source-oauth";
 import type { AuthenticatedContext } from "../middleware";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 
 const stringMapSchema = z.record(z.string(), z.string()).default({});
-const executorSourceKindSchema = z.enum(["mcp", "openapi"]);
+const executorSourceKindSchema = z.enum(["mcp"]);
 const executorSourceAuthTypeSchema = z.enum(["none", "api_key", "bearer", "oauth2"]);
 const workspaceIdSchema = z.object({ workspaceId: z.string() });
 
@@ -53,52 +47,28 @@ const executorSourceBaseSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
-function validateExecutorSourceInput(
-  value: z.infer<typeof executorSourceBaseSchema>,
-  ctx: z.RefinementCtx,
-) {
-  if (value.kind === "openapi" && !value.specUrl) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["specUrl"],
-      message: "specUrl is required for OpenAPI sources.",
-    });
-  }
-
-  if (value.kind === "openapi" && value.authQueryParam?.trim()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["authQueryParam"],
-      message: "OpenAPI sources currently support header-based auth only.",
-    });
-  }
-
-  if (value.kind === "openapi" && value.authType === "oauth2") {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["authType"],
-      message: "OpenAPI sources do not support OAuth 2.0 executor auth.",
-    });
-  }
-}
+function validateWorkspaceMcpServerInput(
+  _value: z.infer<typeof executorSourceBaseSchema>,
+  _ctx: z.RefinementCtx,
+) {}
 
 export const executorSourceInputSchema = executorSourceBaseSchema.superRefine(
-  validateExecutorSourceInput,
+  validateWorkspaceMcpServerInput,
 );
 
-const adminExecutorSourceBaseSchema = workspaceIdSchema.extend(executorSourceBaseSchema.shape);
+const adminWorkspaceMcpServerBaseSchema = workspaceIdSchema.extend(executorSourceBaseSchema.shape);
 
-const adminExecutorSourceInputSchema = adminExecutorSourceBaseSchema.superRefine(
-  validateExecutorSourceInput,
+const adminWorkspaceMcpServerInputSchema = adminWorkspaceMcpServerBaseSchema.superRefine(
+  validateWorkspaceMcpServerInput,
 );
 
 const executorSourceUpdateInputSchema = executorSourceBaseSchema
   .extend({ id: z.string() })
-  .superRefine(validateExecutorSourceInput);
+  .superRefine(validateWorkspaceMcpServerInput);
 
-const adminExecutorSourceUpdateInputSchema = adminExecutorSourceBaseSchema
+const adminWorkspaceMcpServerUpdateInputSchema = adminWorkspaceMcpServerBaseSchema
   .extend({ id: z.string() })
-  .superRefine(validateExecutorSourceInput);
+  .superRefine(validateWorkspaceMcpServerInput);
 
 function normalizeStringMap(
   value: Record<string, string> | undefined,
@@ -172,10 +142,10 @@ async function getAdminSource(
 ) {
   await getAdminWorkspace(context, workspaceId);
 
-  const source = await context.db.query.workspaceExecutorSource.findFirst({
+  const source = await context.db.query.workspaceMcpServer.findFirst({
     where: and(
-      eq(workspaceExecutorSource.id, sourceId),
-      eq(workspaceExecutorSource.workspaceId, workspaceId),
+      eq(workspaceMcpServer.id, sourceId),
+      eq(workspaceMcpServer.workspaceId, workspaceId),
     ),
   });
 
@@ -186,8 +156,8 @@ async function getAdminSource(
   return source;
 }
 
-function assertMutableExecutorSource(
-  source: Pick<typeof workspaceExecutorSource.$inferSelect, "internalKey">,
+function assertMutableWorkspaceMcpServer(
+  source: Pick<typeof workspaceMcpServer.$inferSelect, "internalKey">,
 ) {
   if (source.internalKey) {
     throw new ORPCError("BAD_REQUEST", {
@@ -197,7 +167,7 @@ function assertMutableExecutorSource(
 }
 
 function assertManualCredentialSource(
-  source: Pick<typeof workspaceExecutorSource.$inferSelect, "internalKey">,
+  source: Pick<typeof workspaceMcpServer.$inferSelect, "internalKey">,
 ) {
   if (source.internalKey) {
     throw new ORPCError("BAD_REQUEST", {
@@ -209,21 +179,15 @@ function assertManualCredentialSource(
 
 const list = protectedProcedure.handler(async ({ context }) => {
   const access = await requireActiveWorkspaceAccess(context.user.id);
-  const sources = await listWorkspaceExecutorSources({
+  const sources = await listWorkspaceMcpServers({
     database: context.db,
     workspaceId: access.workspace.id,
     userId: context.user.id,
-  });
-  const packageRow = await ensureWorkspaceExecutorPackage({
-    database: context.db,
-    workspaceId: access.workspace.id,
-    workspaceName: access.workspace.name,
   });
 
   return {
     workspaceId: access.workspace.id,
     membershipRole: access.membership.role,
-    packageRevisionHash: packageRow.revisionHash,
     sources,
   };
 });
@@ -232,21 +196,15 @@ const adminList = protectedProcedure
   .input(workspaceIdSchema)
   .handler(async ({ input, context }) => {
     const selectedWorkspace = await getAdminWorkspace(context, input.workspaceId);
-    const sources = await listWorkspaceExecutorSources({
+    const sources = await listWorkspaceMcpServers({
       database: context.db,
       workspaceId: selectedWorkspace.id,
       userId: context.user.id,
-    });
-    const packageRow = await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: selectedWorkspace.id,
-      workspaceName: selectedWorkspace.name,
     });
 
     return {
       workspaceId: selectedWorkspace.id,
       membershipRole: "admin" as const,
-      packageRevisionHash: packageRow.revisionHash,
       sources,
     };
   });
@@ -254,16 +212,16 @@ const adminList = protectedProcedure
 const startOAuth = protectedProcedure
   .input(
     z.object({
-      workspaceExecutorSourceId: z.string(),
+      workspaceMcpServerId: z.string(),
       redirectUrl: z.string().url(),
     }),
   )
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAccess(context.user.id);
-    const source = await context.db.query.workspaceExecutorSource.findFirst({
+    const source = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.workspaceExecutorSourceId),
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.id, input.workspaceMcpServerId),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
       ),
     });
 
@@ -289,7 +247,7 @@ const startOAuth = protectedProcedure
       state,
     });
 
-    await storeExecutorSourceOAuthPending({
+    await storeWorkspaceMcpServerOAuthPending({
       state,
       userId: context.user.id,
       sourceId: source.id,
@@ -305,10 +263,10 @@ const create = protectedProcedure
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAdmin(context.user.id);
     const namespace = normalizeExecutorNamespace(input.namespace);
-    const existing = await context.db.query.workspaceExecutorSource.findFirst({
+    const existing = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
-        eq(workspaceExecutorSource.namespace, namespace),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.namespace, namespace),
       ),
     });
 
@@ -318,7 +276,7 @@ const create = protectedProcedure
       });
     }
 
-    const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
+    const revisionHash = computeWorkspaceMcpServerRevisionHash({
       kind: input.kind,
       name: input.name,
       namespace,
@@ -334,18 +292,18 @@ const create = protectedProcedure
     });
 
     const [created] = await context.db
-      .insert(workspaceExecutorSource)
+      .insert(workspaceMcpServer)
       .values({
         workspaceId: access.workspace.id,
         kind: input.kind,
         name: input.name.trim(),
         namespace,
         endpoint: input.endpoint.trim(),
-        specUrl: input.kind === "openapi" ? (input.specUrl?.trim() ?? null) : null,
-        transport: input.kind === "mcp" ? (input.transport?.trim() ?? null) : null,
-        headers: input.kind === "mcp" ? normalizeStringMap(input.headers) : null,
-        queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
-        defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
+        specUrl: null,
+        transport: input.transport?.trim() ?? null,
+        headers: normalizeStringMap(input.headers),
+        queryParams: normalizeStringMap(input.queryParams),
+        defaultHeaders: null,
         authType: input.authType,
         ...normalizeAuthSettings(input),
         enabled: input.enabled,
@@ -355,24 +313,18 @@ const create = protectedProcedure
       })
       .returning();
 
-    await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: access.workspace.id,
-      workspaceName: access.workspace.name,
-    });
-
     return { id: created.id };
   });
 
 const adminCreate = protectedProcedure
-  .input(adminExecutorSourceInputSchema)
+  .input(adminWorkspaceMcpServerInputSchema)
   .handler(async ({ input, context }) => {
     const selectedWorkspace = await getAdminWorkspace(context, input.workspaceId);
     const namespace = normalizeExecutorNamespace(input.namespace);
-    const existing = await context.db.query.workspaceExecutorSource.findFirst({
+    const existing = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.workspaceId, selectedWorkspace.id),
-        eq(workspaceExecutorSource.namespace, namespace),
+        eq(workspaceMcpServer.workspaceId, selectedWorkspace.id),
+        eq(workspaceMcpServer.namespace, namespace),
       ),
     });
 
@@ -382,7 +334,7 @@ const adminCreate = protectedProcedure
       });
     }
 
-    const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
+    const revisionHash = computeWorkspaceMcpServerRevisionHash({
       kind: input.kind,
       name: input.name,
       namespace,
@@ -398,18 +350,18 @@ const adminCreate = protectedProcedure
     });
 
     const [created] = await context.db
-      .insert(workspaceExecutorSource)
+      .insert(workspaceMcpServer)
       .values({
         workspaceId: selectedWorkspace.id,
         kind: input.kind,
         name: input.name.trim(),
         namespace,
         endpoint: input.endpoint.trim(),
-        specUrl: input.kind === "openapi" ? (input.specUrl?.trim() ?? null) : null,
-        transport: input.kind === "mcp" ? (input.transport?.trim() ?? null) : null,
-        headers: input.kind === "mcp" ? normalizeStringMap(input.headers) : null,
-        queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
-        defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
+        specUrl: null,
+        transport: input.transport?.trim() ?? null,
+        headers: normalizeStringMap(input.headers),
+        queryParams: normalizeStringMap(input.queryParams),
+        defaultHeaders: null,
         authType: input.authType,
         ...normalizeAuthSettings(input),
         enabled: input.enabled,
@@ -418,12 +370,6 @@ const adminCreate = protectedProcedure
         updatedByUserId: context.user.id,
       })
       .returning();
-
-    await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: selectedWorkspace.id,
-      workspaceName: selectedWorkspace.name,
-    });
 
     return { id: created.id };
   });
@@ -432,10 +378,10 @@ const update = protectedProcedure
   .input(executorSourceUpdateInputSchema)
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAdmin(context.user.id);
-    const current = await context.db.query.workspaceExecutorSource.findFirst({
+    const current = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.id),
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.id, input.id),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
       ),
     });
 
@@ -444,13 +390,13 @@ const update = protectedProcedure
         message: "Executor source not found.",
       });
     }
-    assertMutableExecutorSource(current);
+    assertMutableWorkspaceMcpServer(current);
 
     const namespace = normalizeExecutorNamespace(input.namespace);
-    const duplicate = await context.db.query.workspaceExecutorSource.findFirst({
+    const duplicate = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
-        eq(workspaceExecutorSource.namespace, namespace),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.namespace, namespace),
       ),
     });
 
@@ -460,7 +406,7 @@ const update = protectedProcedure
       });
     }
 
-    const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
+    const revisionHash = computeWorkspaceMcpServerRevisionHash({
       kind: input.kind,
       name: input.name,
       namespace,
@@ -476,42 +422,36 @@ const update = protectedProcedure
     });
 
     await context.db
-      .update(workspaceExecutorSource)
+      .update(workspaceMcpServer)
       .set({
         kind: input.kind,
         name: input.name.trim(),
         namespace,
         endpoint: input.endpoint.trim(),
-        specUrl: input.kind === "openapi" ? (input.specUrl?.trim() ?? null) : null,
-        transport: input.kind === "mcp" ? (input.transport?.trim() ?? null) : null,
-        headers: input.kind === "mcp" ? normalizeStringMap(input.headers) : null,
-        queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
-        defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
+        specUrl: null,
+        transport: input.transport?.trim() ?? null,
+        headers: normalizeStringMap(input.headers),
+        queryParams: normalizeStringMap(input.queryParams),
+        defaultHeaders: null,
         authType: input.authType,
         ...normalizeAuthSettings(input),
         enabled: input.enabled,
         revisionHash,
         updatedByUserId: context.user.id,
       })
-      .where(eq(workspaceExecutorSource.id, input.id));
-
-    await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: access.workspace.id,
-      workspaceName: access.workspace.name,
-    });
+      .where(eq(workspaceMcpServer.id, input.id));
 
     return { success: true };
   });
 
 const adminUpdate = protectedProcedure
-  .input(adminExecutorSourceUpdateInputSchema)
+  .input(adminWorkspaceMcpServerUpdateInputSchema)
   .handler(async ({ input, context }) => {
     const selectedWorkspace = await getAdminWorkspace(context, input.workspaceId);
-    const current = await context.db.query.workspaceExecutorSource.findFirst({
+    const current = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.id),
-        eq(workspaceExecutorSource.workspaceId, selectedWorkspace.id),
+        eq(workspaceMcpServer.id, input.id),
+        eq(workspaceMcpServer.workspaceId, selectedWorkspace.id),
       ),
     });
 
@@ -520,13 +460,13 @@ const adminUpdate = protectedProcedure
         message: "Executor source not found.",
       });
     }
-    assertMutableExecutorSource(current);
+    assertMutableWorkspaceMcpServer(current);
 
     const namespace = normalizeExecutorNamespace(input.namespace);
-    const duplicate = await context.db.query.workspaceExecutorSource.findFirst({
+    const duplicate = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.workspaceId, selectedWorkspace.id),
-        eq(workspaceExecutorSource.namespace, namespace),
+        eq(workspaceMcpServer.workspaceId, selectedWorkspace.id),
+        eq(workspaceMcpServer.namespace, namespace),
       ),
     });
 
@@ -536,7 +476,7 @@ const adminUpdate = protectedProcedure
       });
     }
 
-    const revisionHash = computeWorkspaceExecutorSourceRevisionHash({
+    const revisionHash = computeWorkspaceMcpServerRevisionHash({
       kind: input.kind,
       name: input.name,
       namespace,
@@ -552,30 +492,24 @@ const adminUpdate = protectedProcedure
     });
 
     await context.db
-      .update(workspaceExecutorSource)
+      .update(workspaceMcpServer)
       .set({
         kind: input.kind,
         name: input.name.trim(),
         namespace,
         endpoint: input.endpoint.trim(),
-        specUrl: input.kind === "openapi" ? (input.specUrl?.trim() ?? null) : null,
-        transport: input.kind === "mcp" ? (input.transport?.trim() ?? null) : null,
-        headers: input.kind === "mcp" ? normalizeStringMap(input.headers) : null,
-        queryParams: input.kind === "mcp" ? normalizeStringMap(input.queryParams) : null,
-        defaultHeaders: input.kind === "openapi" ? normalizeStringMap(input.defaultHeaders) : null,
+        specUrl: null,
+        transport: input.transport?.trim() ?? null,
+        headers: normalizeStringMap(input.headers),
+        queryParams: normalizeStringMap(input.queryParams),
+        defaultHeaders: null,
         authType: input.authType,
         ...normalizeAuthSettings(input),
         enabled: input.enabled,
         revisionHash,
         updatedByUserId: context.user.id,
       })
-      .where(eq(workspaceExecutorSource.id, input.id));
-
-    await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: selectedWorkspace.id,
-      workspaceName: selectedWorkspace.name,
-    });
+      .where(eq(workspaceMcpServer.id, input.id));
 
     return { success: true };
   });
@@ -584,10 +518,10 @@ const remove = protectedProcedure
   .input(z.object({ id: z.string() }))
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAdmin(context.user.id);
-    const current = await context.db.query.workspaceExecutorSource.findFirst({
+    const current = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.id),
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.id, input.id),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
       ),
     });
     if (!current) {
@@ -595,28 +529,22 @@ const remove = protectedProcedure
         message: "Executor source not found.",
       });
     }
-    assertMutableExecutorSource(current);
+    assertMutableWorkspaceMcpServer(current);
     const deleted = await context.db
-      .delete(workspaceExecutorSource)
+      .delete(workspaceMcpServer)
       .where(
         and(
-          eq(workspaceExecutorSource.id, input.id),
-          eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+          eq(workspaceMcpServer.id, input.id),
+          eq(workspaceMcpServer.workspaceId, access.workspace.id),
         ),
       )
-      .returning({ id: workspaceExecutorSource.id });
+      .returning({ id: workspaceMcpServer.id });
 
     if (deleted.length === 0) {
       throw new ORPCError("NOT_FOUND", {
         message: "Executor source not found.",
       });
     }
-
-    await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: access.workspace.id,
-      workspaceName: access.workspace.name,
-    });
 
     return { success: true };
   });
@@ -625,10 +553,10 @@ const adminDelete = protectedProcedure
   .input(z.object({ workspaceId: z.string(), id: z.string() }))
   .handler(async ({ input, context }) => {
     const selectedWorkspace = await getAdminWorkspace(context, input.workspaceId);
-    const current = await context.db.query.workspaceExecutorSource.findFirst({
+    const current = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.id),
-        eq(workspaceExecutorSource.workspaceId, selectedWorkspace.id),
+        eq(workspaceMcpServer.id, input.id),
+        eq(workspaceMcpServer.workspaceId, selectedWorkspace.id),
       ),
     });
     if (!current) {
@@ -636,16 +564,16 @@ const adminDelete = protectedProcedure
         message: "Executor source not found.",
       });
     }
-    assertMutableExecutorSource(current);
+    assertMutableWorkspaceMcpServer(current);
     const deleted = await context.db
-      .delete(workspaceExecutorSource)
+      .delete(workspaceMcpServer)
       .where(
         and(
-          eq(workspaceExecutorSource.id, input.id),
-          eq(workspaceExecutorSource.workspaceId, selectedWorkspace.id),
+          eq(workspaceMcpServer.id, input.id),
+          eq(workspaceMcpServer.workspaceId, selectedWorkspace.id),
         ),
       )
-      .returning({ id: workspaceExecutorSource.id });
+      .returning({ id: workspaceMcpServer.id });
 
     if (deleted.length === 0) {
       throw new ORPCError("NOT_FOUND", {
@@ -653,19 +581,13 @@ const adminDelete = protectedProcedure
       });
     }
 
-    await ensureWorkspaceExecutorPackage({
-      database: context.db,
-      workspaceId: selectedWorkspace.id,
-      workspaceName: selectedWorkspace.name,
-    });
-
     return { success: true };
   });
 
 const setCredential = protectedProcedure
   .input(
     z.object({
-      workspaceExecutorSourceId: z.string(),
+      workspaceMcpServerId: z.string(),
       secret: z.string().min(1),
       displayName: z.string().max(120).nullish(),
       enabled: z.boolean().default(true),
@@ -673,10 +595,10 @@ const setCredential = protectedProcedure
   )
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAccess(context.user.id);
-    const source = await context.db.query.workspaceExecutorSource.findFirst({
+    const source = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.workspaceExecutorSourceId),
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.id, input.workspaceMcpServerId),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
       ),
     });
 
@@ -693,9 +615,9 @@ const setCredential = protectedProcedure
       });
     }
 
-    await setWorkspaceExecutorSourceCredential({
+    await setWorkspaceMcpServerCredential({
       database: context.db,
-      workspaceExecutorSourceId: source.id,
+      workspaceMcpServerId: source.id,
       userId: context.user.id,
       secret: input.secret,
       displayName: input.displayName,
@@ -709,18 +631,14 @@ const adminSetCredential = protectedProcedure
   .input(
     z.object({
       workspaceId: z.string(),
-      workspaceExecutorSourceId: z.string(),
+      workspaceMcpServerId: z.string(),
       secret: z.string().min(1),
       displayName: z.string().max(120).nullish(),
       enabled: z.boolean().default(true),
     }),
   )
   .handler(async ({ input, context }) => {
-    const source = await getAdminSource(
-      context,
-      input.workspaceId,
-      input.workspaceExecutorSourceId,
-    );
+    const source = await getAdminSource(context, input.workspaceId, input.workspaceMcpServerId);
     assertManualCredentialSource(source);
 
     if (source.authType === "oauth2") {
@@ -729,9 +647,9 @@ const adminSetCredential = protectedProcedure
       });
     }
 
-    await setWorkspaceExecutorSourceCredential({
+    await setWorkspaceMcpServerCredential({
       database: context.db,
-      workspaceExecutorSourceId: source.id,
+      workspaceMcpServerId: source.id,
       userId: context.user.id,
       secret: input.secret,
       displayName: input.displayName,
@@ -742,13 +660,13 @@ const adminSetCredential = protectedProcedure
   });
 
 const disconnectCredential = protectedProcedure
-  .input(z.object({ workspaceExecutorSourceId: z.string() }))
+  .input(z.object({ workspaceMcpServerId: z.string() }))
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAccess(context.user.id);
-    const source = await context.db.query.workspaceExecutorSource.findFirst({
+    const source = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.workspaceExecutorSourceId),
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.id, input.workspaceMcpServerId),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
       ),
     });
 
@@ -760,11 +678,11 @@ const disconnectCredential = protectedProcedure
     assertManualCredentialSource(source);
 
     await context.db
-      .delete(workspaceExecutorSourceCredential)
+      .delete(workspaceMcpAuthorization)
       .where(
         and(
-          eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-          eq(workspaceExecutorSourceCredential.userId, context.user.id),
+          eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+          eq(workspaceMcpAuthorization.userId, context.user.id),
         ),
       );
 
@@ -775,23 +693,19 @@ const adminDisconnectCredential = protectedProcedure
   .input(
     z.object({
       workspaceId: z.string(),
-      workspaceExecutorSourceId: z.string(),
+      workspaceMcpServerId: z.string(),
     }),
   )
   .handler(async ({ input, context }) => {
-    const source = await getAdminSource(
-      context,
-      input.workspaceId,
-      input.workspaceExecutorSourceId,
-    );
+    const source = await getAdminSource(context, input.workspaceId, input.workspaceMcpServerId);
     assertManualCredentialSource(source);
 
     await context.db
-      .delete(workspaceExecutorSourceCredential)
+      .delete(workspaceMcpAuthorization)
       .where(
         and(
-          eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-          eq(workspaceExecutorSourceCredential.userId, context.user.id),
+          eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+          eq(workspaceMcpAuthorization.userId, context.user.id),
         ),
       );
 
@@ -801,16 +715,16 @@ const adminDisconnectCredential = protectedProcedure
 const toggleCredential = protectedProcedure
   .input(
     z.object({
-      workspaceExecutorSourceId: z.string(),
+      workspaceMcpServerId: z.string(),
       enabled: z.boolean(),
     }),
   )
   .handler(async ({ input, context }) => {
     const access = await requireActiveWorkspaceAccess(context.user.id);
-    const source = await context.db.query.workspaceExecutorSource.findFirst({
+    const source = await context.db.query.workspaceMcpServer.findFirst({
       where: and(
-        eq(workspaceExecutorSource.id, input.workspaceExecutorSourceId),
-        eq(workspaceExecutorSource.workspaceId, access.workspace.id),
+        eq(workspaceMcpServer.id, input.workspaceMcpServerId),
+        eq(workspaceMcpServer.workspaceId, access.workspace.id),
       ),
     });
 
@@ -822,18 +736,18 @@ const toggleCredential = protectedProcedure
     assertManualCredentialSource(source);
 
     const updated = await context.db
-      .update(workspaceExecutorSourceCredential)
+      .update(workspaceMcpAuthorization)
       .set({
         enabled: input.enabled,
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-          eq(workspaceExecutorSourceCredential.userId, context.user.id),
+          eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+          eq(workspaceMcpAuthorization.userId, context.user.id),
         ),
       )
-      .returning({ id: workspaceExecutorSourceCredential.id });
+      .returning({ id: workspaceMcpAuthorization.id });
 
     if (updated.length === 0) {
       throw new ORPCError("NOT_FOUND", {
@@ -848,31 +762,27 @@ const adminToggleCredential = protectedProcedure
   .input(
     z.object({
       workspaceId: z.string(),
-      workspaceExecutorSourceId: z.string(),
+      workspaceMcpServerId: z.string(),
       enabled: z.boolean(),
     }),
   )
   .handler(async ({ input, context }) => {
-    const source = await getAdminSource(
-      context,
-      input.workspaceId,
-      input.workspaceExecutorSourceId,
-    );
+    const source = await getAdminSource(context, input.workspaceId, input.workspaceMcpServerId);
     assertManualCredentialSource(source);
 
     const updated = await context.db
-      .update(workspaceExecutorSourceCredential)
+      .update(workspaceMcpAuthorization)
       .set({
         enabled: input.enabled,
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-          eq(workspaceExecutorSourceCredential.userId, context.user.id),
+          eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+          eq(workspaceMcpAuthorization.userId, context.user.id),
         ),
       )
-      .returning({ id: workspaceExecutorSourceCredential.id });
+      .returning({ id: workspaceMcpAuthorization.id });
 
     if (updated.length === 0) {
       throw new ORPCError("NOT_FOUND", {

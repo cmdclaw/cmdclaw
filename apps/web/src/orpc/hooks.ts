@@ -784,21 +784,21 @@ export function useLinkLinkedIn() {
   });
 }
 
-// ========== EXECUTOR SOURCE HOOKS ==========
+// ========== WORKSPACE MCP SERVER HOOKS ==========
 
-export function useExecutorSourceList() {
+export function useWorkspaceMcpServerList() {
   return useQuery({
     queryKey: ["executorSource", "list"],
     queryFn: () => client.executorSource.list(),
   });
 }
 
-export function useCreateExecutorSource() {
+export function useCreateWorkspaceMcpServer() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: {
-      kind: "mcp" | "openapi";
+      kind: "mcp";
       name: string;
       namespace: string;
       endpoint: string;
@@ -819,13 +819,13 @@ export function useCreateExecutorSource() {
   });
 }
 
-export function useUpdateExecutorSource() {
+export function useUpdateWorkspaceMcpServer() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: {
       id: string;
-      kind: "mcp" | "openapi";
+      kind: "mcp";
       name: string;
       namespace: string;
       endpoint: string;
@@ -846,7 +846,7 @@ export function useUpdateExecutorSource() {
   });
 }
 
-export function useDeleteExecutorSource() {
+export function useDeleteWorkspaceMcpServer() {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -857,11 +857,11 @@ export function useDeleteExecutorSource() {
   });
 }
 
-export function useStartExecutorSourceOAuth() {
+export function useStartWorkspaceMcpServerOAuth() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { workspaceExecutorSourceId: string; redirectUrl: string }) =>
+    mutationFn: (input: { workspaceMcpServerId: string; redirectUrl: string }) =>
       client.executorSource.startOAuth(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
@@ -869,12 +869,12 @@ export function useStartExecutorSourceOAuth() {
   });
 }
 
-export function useSetExecutorSourceCredential() {
+export function useSetWorkspaceMcpServerCredential() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: {
-      workspaceExecutorSourceId: string;
+      workspaceMcpServerId: string;
       secret: string;
       displayName?: string | null;
       enabled?: boolean;
@@ -885,12 +885,12 @@ export function useSetExecutorSourceCredential() {
   });
 }
 
-export function useDisconnectExecutorSourceCredential() {
+export function useDisconnectWorkspaceMcpServerCredential() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workspaceExecutorSourceId: string) =>
-      client.executorSource.disconnectCredential({ workspaceExecutorSourceId }),
+    mutationFn: (workspaceMcpServerId: string) =>
+      client.executorSource.disconnectCredential({ workspaceMcpServerId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["executorSource"] });
     },
@@ -1192,7 +1192,7 @@ export function useCreateCoworker() {
         | "reddit"
         | "twitter"
       )[];
-      allowedExecutorSourceIds?: string[];
+      allowedWorkspaceMcpServerIds?: string[];
       allowedSkillSlugs?: string[];
     }) => client.coworker.create(input),
     onSuccess: () => {
@@ -1245,7 +1245,7 @@ export function useUpdateCoworker() {
         | "reddit"
         | "twitter"
       )[];
-      allowedExecutorSourceIds?: string[];
+      allowedWorkspaceMcpServerIds?: string[];
       allowedSkillSlugs?: string[];
       schedule?: CoworkerSchedule | null;
       requiresUserInput?: boolean;

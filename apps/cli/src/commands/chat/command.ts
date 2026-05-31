@@ -22,6 +22,13 @@ export const chatCommand = buildCommand({
         optional: true,
         brief: "Send an initial message",
       },
+      mesage: {
+        kind: "parsed",
+        parse: (input: string) => input,
+        optional: true,
+        hidden: true,
+        brief: "Send an initial message",
+      },
       model: {
         kind: "parsed",
         parse: (input: string) => input,

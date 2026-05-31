@@ -56,7 +56,7 @@ type LinkedCoworkerRecord = Pick<
   typeof coworker.$inferSelect,
   | "allowedIntegrations"
   | "allowedCustomIntegrations"
-  | "allowedExecutorSourceIds"
+  | "allowedWorkspaceMcpServerIds"
   | "allowedSkillSlugs"
   | "prompt"
   | "promptDo"
@@ -189,9 +189,9 @@ export class TurnRunnerContextLoader {
         loaded.linkedCoworker?.allowedCustomIntegrations ??
         undefined,
       remoteIntegrationSource: loaded.executionPolicy.remoteIntegrationSource,
-      allowedExecutorSourceIds:
-        loaded.executionPolicy.allowedExecutorSourceIds ??
-        loaded.linkedCoworker?.allowedExecutorSourceIds ??
+      allowedWorkspaceMcpServerIds:
+        loaded.executionPolicy.allowedWorkspaceMcpServerIds ??
+        loaded.linkedCoworker?.allowedWorkspaceMcpServerIds ??
         undefined,
       allowedSkillSlugs:
         loaded.executionPolicy.allowedSkillSlugs ??
@@ -250,7 +250,7 @@ export class TurnRunnerContextLoader {
           columns: {
             allowedIntegrations: true,
             allowedCustomIntegrations: true,
-            allowedExecutorSourceIds: true,
+            allowedWorkspaceMcpServerIds: true,
             allowedSkillSlugs: true,
             prompt: true,
             promptDo: true,

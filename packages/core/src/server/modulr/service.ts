@@ -1,8 +1,8 @@
 import { db } from "@cmdclaw/db/client";
 import {
   modulrWorkspaceAccess,
-  workspaceExecutorSource,
-  workspaceExecutorSourceCredential,
+  workspaceMcpServer,
+  workspaceMcpAuthorization,
   workspaceMember,
 } from "@cmdclaw/db/schema";
 import { and, desc, eq, ne } from "drizzle-orm";
@@ -169,10 +169,10 @@ async function findModulrManagedSource(input: {
   workspaceId: string;
 }) {
   const database = input.database ?? db;
-  return database.query.workspaceExecutorSource.findFirst({
+  return database.query.workspaceMcpServer.findFirst({
     where: and(
-      eq(workspaceExecutorSource.workspaceId, input.workspaceId),
-      eq(workspaceExecutorSource.internalKey, MODULR_INTERNAL_KEY),
+      eq(workspaceMcpServer.workspaceId, input.workspaceId),
+      eq(workspaceMcpServer.internalKey, MODULR_INTERNAL_KEY),
     ),
   });
 }
@@ -187,10 +187,10 @@ async function findModulrCredential(input: {
     return { source: null, credential: null };
   }
 
-  const credential = await database.query.workspaceExecutorSourceCredential.findFirst({
+  const credential = await database.query.workspaceMcpAuthorization.findFirst({
     where: and(
-      eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-      eq(workspaceExecutorSourceCredential.enabled, true),
+      eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+      eq(workspaceMcpAuthorization.enabled, true),
     ),
     orderBy: (record) => [desc(record.updatedAt)],
   });
@@ -356,9 +356,9 @@ export async function setModulrWorkspaceConnection(input: {
   await validateModulrWorkspaceConnection(connection);
 
   await database
-    .insert(workspaceExecutorSourceCredential)
+    .insert(workspaceMcpAuthorization)
     .values({
-      workspaceExecutorSourceId: source.id,
+      workspaceMcpServerId: source.id,
       userId: input.userId,
       secret: encrypt(JSON.stringify(connection)),
       accessToken: null,
@@ -370,8 +370,8 @@ export async function setModulrWorkspaceConnection(input: {
     })
     .onConflictDoUpdate({
       target: [
-        workspaceExecutorSourceCredential.userId,
-        workspaceExecutorSourceCredential.workspaceExecutorSourceId,
+        workspaceMcpAuthorization.userId,
+        workspaceMcpAuthorization.workspaceMcpServerId,
       ],
       set: {
         secret: encrypt(JSON.stringify(connection)),
@@ -386,11 +386,11 @@ export async function setModulrWorkspaceConnection(input: {
     });
 
   await database
-    .delete(workspaceExecutorSourceCredential)
+    .delete(workspaceMcpAuthorization)
     .where(
       and(
-        eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id),
-        ne(workspaceExecutorSourceCredential.userId, input.userId),
+        eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id),
+        ne(workspaceMcpAuthorization.userId, input.userId),
       ),
     );
 }
@@ -409,6 +409,6 @@ export async function deleteModulrWorkspaceConnection(input: {
   }
 
   await database
-    .delete(workspaceExecutorSourceCredential)
-    .where(eq(workspaceExecutorSourceCredential.workspaceExecutorSourceId, source.id));
+    .delete(workspaceMcpAuthorization)
+    .where(eq(workspaceMcpAuthorization.workspaceMcpServerId, source.id));
 }

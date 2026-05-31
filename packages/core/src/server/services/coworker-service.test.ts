@@ -15,7 +15,7 @@ process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
 const coworkerFindFirstMock = vi.fn();
 const coworkerRunFindManyMock = vi.fn();
 const coworkerRunFindFirstMock = vi.fn();
-const workspaceExecutorSourceFindManyMock = vi.fn();
+const workspaceMcpServerFindManyMock = vi.fn();
 const getEnabledIntegrationTypesMock = vi.fn();
 const getRemoteIntegrationCredentialsMock = vi.fn();
 const emitPreGenerationCoworkerRunFailureSloEventMock = vi.fn();
@@ -36,8 +36,8 @@ const dbMock = {
       findMany: coworkerRunFindManyMock,
       findFirst: coworkerRunFindFirstMock,
     },
-    workspaceExecutorSource: {
-      findMany: workspaceExecutorSourceFindManyMock,
+    workspaceMcpServer: {
+      findMany: workspaceMcpServerFindManyMock,
     },
     customIntegrationCredential: {
       findMany: vi.fn(),
@@ -100,7 +100,7 @@ describe("triggerCoworkerRun", () => {
       toolAccessMode: "all",
       allowedIntegrations: ["slack"],
       allowedCustomIntegrations: ["custom-crm"],
-      allowedExecutorSourceIds: [],
+      allowedWorkspaceMcpServerIds: [],
       allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "Do the coworker",
@@ -112,7 +112,7 @@ describe("triggerCoworkerRun", () => {
 
     coworkerRunFindManyMock.mockResolvedValue([]);
     coworkerRunFindFirstMock.mockResolvedValue(null);
-    workspaceExecutorSourceFindManyMock.mockResolvedValue([]);
+    workspaceMcpServerFindManyMock.mockResolvedValue([]);
     dbMock.query.customIntegrationCredential.findMany.mockResolvedValue([]);
     getEnabledIntegrationTypesMock.mockResolvedValue(["slack"]);
     getRemoteIntegrationCredentialsMock.mockResolvedValue({
@@ -204,7 +204,7 @@ describe("triggerCoworkerRun", () => {
       toolAccessMode: "all",
       allowedIntegrations: [],
       allowedCustomIntegrations: [],
-      allowedExecutorSourceIds: [],
+      allowedWorkspaceMcpServerIds: [],
       allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "",
@@ -233,7 +233,7 @@ describe("triggerCoworkerRun", () => {
       toolAccessMode: "all",
       allowedIntegrations: [],
       allowedCustomIntegrations: [],
-      allowedExecutorSourceIds: [],
+      allowedWorkspaceMcpServerIds: [],
       allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "",
@@ -260,7 +260,7 @@ describe("triggerCoworkerRun", () => {
       toolAccessMode: "all",
       allowedIntegrations: [],
       allowedCustomIntegrations: [],
-      allowedExecutorSourceIds: [],
+      allowedWorkspaceMcpServerIds: [],
       allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "",
@@ -441,7 +441,7 @@ describe("triggerCoworkerRun", () => {
       toolAccessMode: "all",
       allowedIntegrations: [],
       allowedCustomIntegrations: [],
-      allowedExecutorSourceIds: [],
+      allowedWorkspaceMcpServerIds: [],
       allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "Draft an email",
@@ -514,7 +514,7 @@ describe("triggerCoworkerRun", () => {
       toolAccessMode: "all",
       allowedIntegrations: [],
       allowedCustomIntegrations: [],
-      allowedExecutorSourceIds: [],
+      allowedWorkspaceMcpServerIds: [],
       allowedSkillSlugs: [],
       model: "anthropic/claude-sonnet-4-6",
       prompt: "Draft an email",
@@ -591,7 +591,7 @@ describe("triggerCoworkerRun", () => {
         toolAccessMode: "all",
         allowedIntegrations: [],
         allowedCustomIntegrations: [],
-        allowedExecutorSourceIds: [],
+        allowedWorkspaceMcpServerIds: [],
         allowedSkillSlugs: [],
         model: "anthropic/claude-sonnet-4-6",
         prompt: "Review files",
@@ -693,7 +693,7 @@ describe("triggerCoworkerRun", () => {
         toolAccessMode: "all",
         allowedIntegrations: [],
         allowedCustomIntegrations: [],
-        allowedExecutorSourceIds: [],
+        allowedWorkspaceMcpServerIds: [],
         allowedSkillSlugs: [],
         model: "anthropic/claude-sonnet-4-6",
         prompt: "Draft an email",
