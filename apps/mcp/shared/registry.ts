@@ -1,4 +1,4 @@
-export type McpServerSlug = "internal" | "gmail" | "galien" | "modulr";
+export type McpServerSlug = "cmdclaw" | "gmail" | "galien" | "modulr";
 
 export type McpServerDefinition = {
   slug: McpServerSlug;
@@ -14,16 +14,16 @@ export type McpServerDefinition = {
 };
 
 export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
-  internal: {
-    slug: "internal",
-    name: "CmdClaw Internal MCP",
-    publicBasePath: "/internal",
-    internalTargetEnvVar: "CMDCLAW_INTERNAL_MCP_TARGET",
+  cmdclaw: {
+    slug: "cmdclaw",
+    name: "CmdClaw MCP",
+    publicBasePath: "/cmdclaw",
+    internalTargetEnvVar: "CMDCLAW_CMDCLAW_MCP_TARGET",
     authStrategy: "oauth",
-    childRoot: "servers/internal",
+    childRoot: "servers/cmdclaw",
     installMetadata: {
-      title: "Internal MCP",
-      description: "CmdClaw internal app tools",
+      title: "CmdClaw MCP",
+      description: "CmdClaw app tools",
     },
   },
   gmail: {

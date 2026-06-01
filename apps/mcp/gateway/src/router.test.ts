@@ -3,14 +3,14 @@ import { matchProtectedResourceMetadataRequest, routeMcpRequest } from "./router
 
 describe("routeMcpRequest", () => {
   const env = {
-    CMDCLAW_INTERNAL_MCP_TARGET: "http://127.0.0.1:4101",
+    CMDCLAW_CMDCLAW_MCP_TARGET: "http://127.0.0.1:4101",
     CMDCLAW_GMAIL_MCP_TARGET: "http://127.0.0.1:4102",
     CMDCLAW_GALIEN_MCP_TARGET: "http://127.0.0.1:4103",
   };
 
-  it("routes internal MCP requests", () => {
-    const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/internal"), env);
-    expect(routed?.slug).toBe("internal");
+  it("routes CmdClaw MCP requests", () => {
+    const routed = routeMcpRequest(new URL("https://mcp.cmdclaw.ai/cmdclaw"), env);
+    expect(routed?.slug).toBe("cmdclaw");
     expect(routed?.target.toString()).toBe("http://127.0.0.1:4101/mcp");
   });
 

@@ -10,11 +10,11 @@ export function createMcpClient(extra?: ToolExtraArguments, serverUrl?: string) 
   const token = extra?.authInfo?.token;
   const audience = (extra?.authInfo?.extra as { audience?: string } | undefined)?.audience;
 
-  if (!token || audience !== "internal") {
+  if (!token || audience !== "cmdclaw") {
     return {
       status: "needs_auth" as const,
       serverUrl: resolvedServerUrl,
-      message: "Authenticate with CmdClaw OAuth before using the internal MCP server.",
+      message: "Authenticate with CmdClaw OAuth before using the CmdClaw MCP server.",
     };
   }
 

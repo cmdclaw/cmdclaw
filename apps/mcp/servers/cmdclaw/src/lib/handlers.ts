@@ -1,3 +1,4 @@
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { createCoworkerRunner, runChatSession, type CmdclawApiClient } from "@cmdclaw/client";
 
 export async function handleChatRun(params: {
@@ -40,15 +41,64 @@ export async function handleCoworkerGet(client: CmdclawApiClient, reference: str
   };
 }
 
+export async function handleCoworkerCreate(params: {
+  client: CmdclawApiClient;
+  name?: string;
+  trigger?: string;
+  prompt?: string;
+  promptDo?: string;
+  promptDont?: string;
+  autoApprove?: boolean;
+  model?: string;
+  authSource?: "user" | "shared";
+  integrations?: string[];
+  folderPath?: string;
+}) {
+  const runner = createCoworkerRunner(params.client);
+  const created = await runner.create({
+    name: params.name,
+    triggerType: params.trigger ?? "manual",
+    prompt: params.prompt ?? "",
+    promptDo: params.promptDo,
+    promptDont: params.promptDont,
+    autoApprove: params.autoApprove,
+    model: params.model ?? DEFAULT_CONNECTED_CHATGPT_MODEL,
+    authSource: params.authSource,
+    allowedIntegrations: params.integrations,
+  });
+
+  const trimmedFolderPath = params.folderPath?.trim();
+  const folder = trimmedFolderPath
+    ? await params.client.coworkerFolder.createPath({ path: trimmedFolderPath })
+    : null;
+  if (folder) {
+    await params.client.coworkerFolder.moveCoworker({
+      coworkerId: created.id,
+      folderId: folder.id,
+    });
+  }
+
+  return {
+    status: "completed" as const,
+    coworker: created,
+    folder: folder ?? undefined,
+  };
+}
+
 export async function handleCoworkerRun(params: {
   client: CmdclawApiClient;
   reference: string;
   payload?: unknown;
+  userInput?: string;
 }) {
   const runner = createCoworkerRunner(params.client);
+  const trustedUserInput = params.userInput?.trim();
   return {
     status: "completed" as const,
-    run: await runner.run(params.reference, params.payload),
+    run: await runner.run(params.reference, params.payload, {
+      trustedUserInput:
+        trustedUserInput && trustedUserInput.length > 0 ? trustedUserInput : undefined,
+    }),
   };
 }
 

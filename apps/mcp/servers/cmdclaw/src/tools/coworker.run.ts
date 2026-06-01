@@ -7,6 +7,10 @@ import { handleCoworkerRun } from "../lib/handlers";
 export const schema = {
   reference: z.string().describe("Coworker ID or @username"),
   payload: z.record(z.string(), z.unknown()).optional().describe("Optional run payload"),
+  userInput: z
+    .string()
+    .optional()
+    .describe("Trusted first user input for coworkers that need it"),
   serverUrl: z.string().url().optional().describe("Override the CmdClaw server URL"),
 };
 
@@ -32,6 +36,7 @@ export default async function coworkerRun(
     client: clientState.client,
     reference: params.reference,
     payload: params.payload,
+    userInput: params.userInput,
   });
   return toMcpToolResult(result);
 }
