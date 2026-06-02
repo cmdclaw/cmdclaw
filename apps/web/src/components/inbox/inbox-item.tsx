@@ -3,7 +3,8 @@
 import {
   AlertTriangle,
   Check,
-  ExternalLink,
+  ChevronDown,
+  ChevronUp,
   KeyRound,
   Loader2,
   Pencil,
@@ -14,7 +15,10 @@ import {
   TimerReset,
   Wrench,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState, type ComponentPropsWithoutRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { AuthRequestCard } from "@/components/chat/auth-request-card";
 import { ToolApprovalCard } from "@/components/chat/tool-approval-card";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -45,6 +49,9 @@ const STATUS_LABELS: Record<InboxItemType["status"], string> = {
   cancelled: "cancelled",
 };
 
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+const EXPANDABLE_MESSAGE_LENGTH = 360;
+
 function formatRelative(date: Date): string {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 60) {
@@ -74,6 +81,88 @@ function StatusDot({ status }: { status: InboxItemType["status"] }) {
       ) : null}
       <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", config.color)} />
     </span>
+  );
+}
+
+function AgentMessagePreview({ content }: { content: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isExpandable =
+    content.length > EXPANDABLE_MESSAGE_LENGTH ||
+    content.includes("\n") ||
+    content.includes("|") ||
+    content.includes("```");
+  const markdownComponents = useMemo(
+    () => ({
+      a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
+        <a {...props} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      ),
+      table: ({ children }: ComponentPropsWithoutRef<"table">) => (
+        <div className="my-2 overflow-x-auto">
+          <table className="w-full min-w-max border-collapse text-left">{children}</table>
+        </div>
+      ),
+      th: ({ children }: ComponentPropsWithoutRef<"th">) => (
+        <th className="border-border border-b px-2 py-1 text-left font-medium whitespace-nowrap">
+          {children}
+        </th>
+      ),
+      td: ({ children }: ComponentPropsWithoutRef<"td">) => (
+        <td className="border-border border-b px-2 py-1 align-top whitespace-nowrap">{children}</td>
+      ),
+    }),
+    [],
+  );
+
+  const handleToggleExpanded = useCallback(() => {
+    setIsExpanded((current) => !current);
+  }, []);
+
+  return (
+    <div className="min-w-0 space-y-1">
+      <div className="relative min-w-0">
+        <div
+          className={cn(
+            "prose prose-sm dark:prose-invert prose-p:my-2 prose-headings:my-2 prose-headings:text-sm prose-headings:font-semibold prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:my-2 prose-pre:whitespace-pre-wrap prose-code:text-xs text-muted-foreground max-w-none break-words text-[12px] leading-5",
+            isExpandable && !isExpanded && "max-h-32 overflow-hidden",
+          )}
+        >
+          <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={markdownComponents}>
+            {content}
+          </ReactMarkdown>
+        </div>
+        {isExpandable && !isExpanded ? (
+          <div className="from-card pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-start bg-gradient-to-t to-transparent pt-8">
+            <span aria-hidden="true" className="text-muted-foreground bg-card pr-1 text-[12px]">
+              ...
+            </span>
+          </div>
+        ) : null}
+      </div>
+      {isExpandable ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground h-7 px-0 text-[12px]"
+          aria-expanded={isExpanded}
+          onClick={handleToggleExpanded}
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp className="mr-1 h-3.5 w-3.5" />
+              Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="mr-1 h-3.5 w-3.5" />
+              Show full message
+            </>
+          )}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -181,100 +270,104 @@ export function InboxItem({
 
   return (
     <div className="border-border bg-card group/item overflow-hidden rounded-lg border shadow-sm transition-colors">
-      <div className="bg-muted/10 min-w-0 space-y-4 overflow-hidden px-5 py-4">
-        <div className="flex items-start gap-3.5">
-          <StatusDot status={item.status} />
-
-          {item.kind === "coworker" ? (
-            <CoworkerAvatar username={item.coworkerName} size={28} className="rounded-full" />
-          ) : null}
-
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="min-w-0 truncate text-sm font-semibold">{item.title}</span>
-              <span className="bg-secondary text-secondary-foreground rounded-full px-2 py-0.5 text-[10px] uppercase">
-                {item.kind}
-              </span>
-            </div>
+      <div className="bg-muted/10 min-w-0 overflow-hidden px-5 py-4">
+        <div className="grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-x-3.5 gap-y-4">
+          <div className="flex h-7 items-center justify-center">
+            <StatusDot status={item.status} />
           </div>
-        </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-[12px]">
-              <StatusIcon
-                className={cn(
-                  "h-3.5 w-3.5",
-                  item.status === "awaiting_approval" && "text-amber-400",
-                  item.status === "needs_user_input" && "text-emerald-400",
-                  item.status === "running" && "text-sky-400",
-                  item.status === "awaiting_auth" && "text-orange-400",
-                  item.status === "paused" && "text-blue-400",
-                  item.status === "completed" && "text-emerald-400",
-                  item.status === "error" && "text-red-400",
-                  item.status === "cancelled" && "text-muted-foreground",
-                )}
-              />
-              <span className="font-mono text-[11px] tracking-wide uppercase">
-                {STATUS_LABELS[item.status]}
-              </span>
-            </div>
-            <div className="text-muted-foreground/70 text-[12px] tabular-nums">
-              Updated {formatRelative(item.updatedAt)} ago
+          <div className="flex min-w-0 items-center gap-3">
+            {item.kind === "coworker" ? (
+              <CoworkerAvatar username={item.coworkerName} size={28} className="rounded-full" />
+            ) : null}
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <span className="min-w-0 truncate text-sm font-semibold">{item.title}</span>
+                <span className="text-muted-foreground/70 shrink-0 text-[12px] tabular-nums">
+                  {formatRelative(item.updatedAt)}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              className="bg-foreground text-background hover:bg-foreground/90 h-8 border-transparent px-3 text-[12px] shadow-sm"
-              onClick={onOpenTarget}
-            >
-              <ExternalLink className="mr-1 h-3.5 w-3.5" />
-              Open run
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
-              onClick={onMarkAsRead}
-            >
-              <Check className="mr-1 h-3.5 w-3.5" />
-              Mark read
-            </Button>
-            {showBuilder && onOpenBuilder ? (
+          <div className="flex justify-center pt-0.5">
+            <StatusIcon
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                item.status === "awaiting_approval" && "text-amber-400",
+                item.status === "needs_user_input" && "text-emerald-400",
+                item.status === "running" && "text-sky-400",
+                item.status === "awaiting_auth" && "text-orange-400",
+                item.status === "paused" && "text-blue-400",
+                item.status === "completed" && "text-emerald-400",
+                item.status === "error" && "text-red-400",
+                item.status === "cancelled" && "text-muted-foreground",
+              )}
+            />
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="text-muted-foreground min-w-0 text-[12px]">
+              {item.lastAgentMessage ? (
+                <AgentMessagePreview content={item.lastAgentMessage} />
+              ) : (
+                <span className="min-w-0 break-words font-mono text-[11px] leading-5 tracking-wide uppercase">
+                  {STATUS_LABELS[item.status]}
+                </span>
+              )}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                className="bg-foreground text-background hover:bg-foreground/90 h-8 border-transparent px-3 text-[12px] shadow-sm"
+                onClick={onOpenTarget}
+              >
+                Chat
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
                 className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
-                onClick={onOpenBuilder}
+                onClick={onMarkAsRead}
               >
-                <Wrench className="mr-1 h-3.5 w-3.5" />
-                Builder
+                Mark read
               </Button>
-            ) : null}
-            {showStop ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
-                onClick={onStop}
-              >
-                <Square className="mr-1 h-3.5 w-3.5" />
-                {item.status === "needs_user_input" ? "Dismiss" : "Stop"}
-              </Button>
-            ) : null}
-            {showContinue ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
-                onClick={onContinue}
-              >
-                <TimerReset className="mr-1 h-3.5 w-3.5" />
-                Continue
-              </Button>
-            ) : null}
+              {showBuilder && onOpenBuilder ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
+                  onClick={onOpenBuilder}
+                >
+                  <Wrench className="mr-1 h-3.5 w-3.5" />
+                  Builder
+                </Button>
+              ) : null}
+              {showStop ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
+                  onClick={onStop}
+                >
+                  <Square className="mr-1 h-3.5 w-3.5" />
+                  {item.status === "needs_user_input" ? "Dismiss" : "Stop"}
+                </Button>
+              ) : null}
+              {showContinue ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
+                  onClick={onContinue}
+                >
+                  <TimerReset className="mr-1 h-3.5 w-3.5" />
+                  Continue
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
 

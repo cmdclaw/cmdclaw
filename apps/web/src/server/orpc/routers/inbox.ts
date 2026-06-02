@@ -7,10 +7,11 @@ import {
   generation,
   generationInterrupt,
   inboxReadState,
+  message,
   user,
 } from "@cmdclaw/db/schema";
 import { ORPCError } from "@orpc/server";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, type AuthenticatedContext } from "../middleware";
 import { requireActiveWorkspaceAccess } from "../workspace-access";
@@ -60,6 +61,7 @@ type InboxListItem =
       createdAt: Date;
       generationId: string | null;
       conversationId: string | null;
+      lastAgentMessage: string | null;
       errorMessage: string | null;
       pauseReason?: string | null;
       pendingApproval?: InboxPendingApproval;
@@ -75,6 +77,7 @@ type InboxListItem =
       updatedAt: Date;
       createdAt: Date;
       generationId: string | null;
+      lastAgentMessage: string | null;
       errorMessage: string | null;
       pauseReason?: string | null;
       pendingApproval?: InboxPendingApproval;
@@ -113,15 +116,18 @@ function decodeInboxCursor(value: string | undefined): InboxCursor | undefined {
   }
 }
 
-function formatCoworkerTitle(coworkerName: string, startedAt: Date): string {
-  const formattedDate = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(startedAt);
-  return `${coworkerName} · ${formattedDate}`;
+function formatCoworkerTitle(coworkerName: string): string {
+  return coworkerName;
+}
+
+function normalizeAgentMessagePreview(content: string | null | undefined): string | null {
+  const normalized = content
+    ?.replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
+  return normalized && normalized.length > 0 ? normalized : null;
 }
 
 function normalizePendingApproval(
@@ -419,6 +425,40 @@ const list = protectedProcedure
       }
 
       const generationById = new Map(chatGenerations.map((item) => [item.id, item]));
+      const runConversationIds = [
+        ...new Set(
+          coworkerRuns
+            .map((run) => run.conversationId ?? run.generation?.conversationId ?? null)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const latestAssistantMessages =
+        runConversationIds.length === 0
+          ? []
+          : ((
+              await context.db.execute(sql`
+                select distinct on (${message.conversationId})
+                  ${message.conversationId} as "conversationId",
+                  ${message.content} as "content"
+                from ${message}
+                where ${message.conversationId} in (${sql.join(
+                  runConversationIds.map((id) => sql`${id}`),
+                  sql`, `,
+                )})
+                  and ${message.role} = 'assistant'
+                order by ${message.conversationId}, ${message.createdAt} desc
+              `)
+            ).rows as Array<{ conversationId: string; content: string | null }>);
+      const lastAgentMessageByConversationId = new Map<string, string>();
+      for (const assistantMessage of latestAssistantMessages) {
+        if (lastAgentMessageByConversationId.has(assistantMessage.conversationId)) {
+          continue;
+        }
+        const preview = normalizeAgentMessagePreview(assistantMessage.content);
+        if (preview) {
+          lastAgentMessageByConversationId.set(assistantMessage.conversationId, preview);
+        }
+      }
 
       const sourceOptions = [
         ...new Map(
@@ -439,6 +479,7 @@ const list = protectedProcedure
           ? interruptByGenerationId.get(run.generationId)
           : undefined;
         const updatedAt = run.events[0]?.createdAt ?? run.finishedAt ?? run.startedAt;
+        const conversationId = run.conversationId ?? run.generation?.conversationId ?? null;
         items.push({
           kind: "coworker",
           id: run.id,
@@ -446,12 +487,15 @@ const list = protectedProcedure
           coworkerId: run.coworkerId,
           coworkerName: run.coworker?.name ?? "Coworker",
           builderAvailable: true,
-          title: formatCoworkerTitle(run.coworker?.name ?? "Coworker", run.startedAt),
+          title: formatCoworkerTitle(run.coworker?.name ?? "Coworker"),
           status: run.status as InboxStatus,
           updatedAt,
           createdAt: run.startedAt,
           generationId: run.generationId,
-          conversationId: run.conversationId ?? run.generation?.conversationId ?? null,
+          conversationId,
+          lastAgentMessage: conversationId
+            ? (lastAgentMessageByConversationId.get(conversationId) ?? null)
+            : null,
           errorMessage: run.errorMessage ?? null,
           pauseReason:
             run.status === "paused" && generationById.get(run.generationId ?? "")?.completionReason
@@ -474,6 +518,7 @@ const list = protectedProcedure
             const haystack = [
               item.title,
               item.kind === "coworker" ? item.coworkerName : item.conversationTitle,
+              item.lastAgentMessage ?? "",
               item.errorMessage ?? "",
             ]
               .join(" ")

@@ -13,6 +13,7 @@ import type {
 import { InboxAgentFilter } from "@/components/inbox/inbox-agent-filter";
 import { InboxList } from "@/components/inbox/inbox-list";
 import { useIsAdmin } from "@/hooks/use-is-admin";
+import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { client } from "@/orpc/client";
 import {
   useCancelGeneration,
@@ -60,6 +61,7 @@ function normalizeInboxItems(items: InboxItem[] | undefined): InboxItem[] {
         createdAt: toDate(item.createdAt),
         generationId: item.generationId,
         conversationId: item.conversationId,
+        lastAgentMessage: item.lastAgentMessage,
         errorMessage: item.errorMessage,
         pauseReason: item.pauseReason,
         pendingApproval: item.pendingApproval,
@@ -426,10 +428,13 @@ function InboxPageContent() {
     async (item: InboxCoworkerItem) => {
       await runItemAction(item.id, async () => {
         await getOrCreateBuilderConversation.mutateAsync(item.coworkerId);
-        router.push(`/agents/edit/${item.coworkerId}`);
+        const coworker = (
+          (coworkersQuery.data ?? []) as Array<{ id: string; username?: string | null }>
+        ).find((candidate) => candidate.id === item.coworkerId);
+        router.push(getCoworkerEditHref(coworker ?? { id: item.coworkerId }));
       });
     },
-    [getOrCreateBuilderConversation, router, runItemAction],
+    [coworkersQuery.data, getOrCreateBuilderConversation, router, runItemAction],
   );
   const handleMarkAsRead = useCallback(
     async (item: InboxItem) => {
@@ -535,25 +540,29 @@ function InboxPageContent() {
   return (
     <div className="bg-background min-h-screen">
       <main className="mx-auto w-full max-w-[960px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
-        <div className="mb-5 space-y-3">
-          <div className="relative">
-            <Search className="text-muted-foreground/50 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Search inbox..."
-              className="bg-background text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:ring-ring/50 h-9 w-full rounded-lg border pr-3 pl-9 text-sm transition-colors outline-none focus:ring-1"
-            />
+        <div className="border-border bg-card/60 mb-5 rounded-xl border p-3">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="text-muted-foreground/50 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search inbox..."
+                className="bg-background text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:ring-ring/50 h-10 w-full rounded-lg border pr-3 pl-9 text-sm transition-colors outline-none focus:ring-1"
+              />
+            </div>
+            <div className="border-border/70 border-t pt-3">
+              <InboxAgentFilter
+                statusFilters={statusFilters}
+                onToggleStatus={toggleStatus}
+                sourceCoworkerId={sourceCoworkerId}
+                onSourceCoworkerChange={setSourceCoworkerId}
+                coworkers={coworkers}
+                isLoadingCoworkers={coworkersQuery.isLoading}
+              />
+            </div>
           </div>
-          <InboxAgentFilter
-            statusFilters={statusFilters}
-            onToggleStatus={toggleStatus}
-            sourceCoworkerId={sourceCoworkerId}
-            onSourceCoworkerChange={setSourceCoworkerId}
-            coworkers={coworkers}
-            isLoadingCoworkers={coworkersQuery.isLoading}
-          />
         </div>
 
         <InboxList

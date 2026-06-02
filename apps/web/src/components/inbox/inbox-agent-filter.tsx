@@ -19,10 +19,10 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium transition-colors",
+        "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors",
         active
-          ? "bg-foreground text-background"
-          : "bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "border-foreground/20 bg-muted text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
       {label}
@@ -73,8 +73,8 @@ export function InboxAgentFilter({
   }, [onToggleStatus]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
         <FilterChip
           label="Needs your input"
           active={statusFilters.includes("needs_user_input")}
@@ -115,7 +115,8 @@ export function InboxAgentFilter({
           active={statusFilters.includes("cancelled")}
           onClick={handleCancelledToggle}
         />
-
+      </div>
+      <div className="w-full shrink-0 lg:w-[320px]">
         <InboxCoworkerSelector
           coworkers={coworkers}
           selectedCoworkerId={sourceCoworkerId}

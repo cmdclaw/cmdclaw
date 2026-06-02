@@ -38,6 +38,7 @@ export type InboxCoworkerItem = {
   createdAt: Date;
   generationId: string | null;
   conversationId: string | null;
+  lastAgentMessage: string | null;
   errorMessage: string | null;
   pauseReason?: string | null;
   pendingApproval?: ToolApprovalData;
@@ -54,6 +55,7 @@ export type InboxChatItem = {
   updatedAt: Date;
   createdAt: Date;
   generationId: string | null;
+  lastAgentMessage: string | null;
   errorMessage: string | null;
   pauseReason?: string | null;
   pendingApproval?: ToolApprovalData;

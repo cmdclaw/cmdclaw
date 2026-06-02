@@ -28,6 +28,7 @@ const {
   updateMock,
   updateSetMock,
   updateReturningMock,
+  executeMock,
   dbMock,
   generationManagerMock,
 } = vi.hoisted(() => {
@@ -41,6 +42,7 @@ const {
   const generationInterruptFindManyMock = vi.fn();
   const generationInterruptFindFirstMock = vi.fn();
   const inboxReadStateFindManyMock = vi.fn();
+  const executeMock = vi.fn();
   const insertOnConflictDoUpdateMock = vi.fn();
   const insertValuesMock = vi.fn(() => ({
     onConflictDoUpdate: insertOnConflictDoUpdateMock,
@@ -86,6 +88,7 @@ const {
     },
     insert: insertMock,
     update: updateMock,
+    execute: executeMock,
   };
 
   const generationManagerMock = {
@@ -111,6 +114,7 @@ const {
     updateSetMock,
     updateWhereMock,
     updateReturningMock,
+    executeMock,
     dbMock,
     generationManagerMock,
   };
@@ -151,6 +155,7 @@ describe("inboxRouter", () => {
     generationManagerMock.submitApproval.mockResolvedValue(true);
     generationManagerMock.enqueueConversationMessage.mockResolvedValue({ queuedMessageId: "qm-1" });
     inboxReadStateFindManyMock.mockResolvedValue([]);
+    executeMock.mockResolvedValue({ rows: [] });
     updateReturningMock.mockResolvedValue([{ id: "run-pending" }]);
   });
 
@@ -230,6 +235,22 @@ describe("inboxRouter", () => {
       },
     ]);
     generationFindManyMock.mockResolvedValue([{ id: "gen-1", errorMessage: null }]);
+    executeMock.mockResolvedValue({
+      rows: [
+        {
+          conversationId: "conv-cw-1",
+          content: "I found the lead and drafted the Slack update.\n\n## Next step\nSend it today.",
+        },
+        {
+          conversationId: "conv-cw-completed",
+          content: "Completed the inbox review.",
+        },
+        {
+          conversationId: "conv-cw-1",
+          content: "Older agent update.",
+        },
+      ],
+    });
 
     const result = (await inboxRouterAny.list({
       input: {
@@ -254,6 +275,7 @@ describe("inboxRouter", () => {
       runId: "run-completed",
       status: "completed",
       conversationId: "conv-cw-completed",
+      lastAgentMessage: "Completed the inbox review.",
     });
     expect(result.items[1]).toMatchObject({
       kind: "coworker",
@@ -261,6 +283,8 @@ describe("inboxRouter", () => {
       status: "awaiting_approval",
       coworkerId: "cw-1",
       conversationId: "conv-cw-1",
+      lastAgentMessage:
+        "I found the lead and drafted the Slack update.\n\n## Next step\nSend it today.",
       pendingApproval: {
         interruptId: "interrupt-1",
         toolUseId: "tool-1",
@@ -342,6 +366,50 @@ describe("inboxRouter", () => {
           connectedIntegrations: [],
           reason: "Need Gmail",
         },
+      }),
+    ]);
+  });
+
+  it("matches search against the latest agent message preview", async () => {
+    coworkerRunFindManyMock.mockResolvedValue([
+      {
+        id: "run-1",
+        coworkerId: "cw-1",
+        generationId: "gen-1",
+        status: "completed",
+        startedAt: new Date("2026-03-30T14:32:00.000Z"),
+        finishedAt: new Date("2026-03-30T14:40:00.000Z"),
+        errorMessage: null,
+        coworker: { id: "cw-1", name: "Inbox Triage" },
+        generation: { id: "gen-1", conversationId: "conv-cw-1" },
+        events: [],
+      },
+    ]);
+    generationInterruptFindManyMock.mockResolvedValue([]);
+    generationFindManyMock.mockResolvedValue([{ id: "gen-1", errorMessage: null }]);
+    executeMock.mockResolvedValue({
+      rows: [
+        {
+          conversationId: "conv-cw-1",
+          content: "Qualified the renewal request and sent the customer note.",
+        },
+      ],
+    });
+
+    const result = (await inboxRouterAny.list({
+      input: {
+        limit: 20,
+        type: "coworkers",
+        statuses: ["completed"],
+        query: "renewal",
+      },
+      context,
+    })) as { items: Array<Record<string, unknown>> };
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        runId: "run-1",
+        lastAgentMessage: "Qualified the renewal request and sent the customer note.",
       }),
     ]);
   });

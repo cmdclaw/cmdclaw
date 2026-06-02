@@ -16,6 +16,8 @@ export type InboxCoworkerSelectorItem = CoworkerCardData & {
   id: string;
 };
 
+const emptyFooter = <></>;
+
 type Props = {
   coworkers: InboxCoworkerSelectorItem[];
   selectedCoworkerId?: string;
@@ -54,7 +56,7 @@ export function InboxCoworkerSelector({
         <Button
           type="button"
           variant="outline"
-          className="bg-background hover:bg-accent min-h-11 w-full justify-between rounded-lg px-3 py-2 text-left sm:w-[360px]"
+          className="bg-background hover:bg-accent min-h-10 w-full justify-between rounded-lg px-3 py-2 text-left"
           disabled={isLoading && coworkers.length === 0}
         >
           <span className="flex min-w-0 items-center gap-2">
@@ -131,12 +133,13 @@ function CoworkerSelectorRow({
     <button
       type="button"
       onClick={handleClick}
+      data-coworker-id={coworker.id}
       className={cn(
         "hover:bg-muted/50 relative w-full rounded-xl border p-3 text-left transition-colors",
         selected ? "border-foreground/30 bg-muted/40" : "border-border",
       )}
     >
-      <CoworkerCardContent coworker={coworker} footerSlot={null} />
+      <CoworkerCardContent coworker={coworker} footerSlot={emptyFooter} />
       {selected ? (
         <span className="bg-background border-border absolute right-3 bottom-3 flex size-6 items-center justify-center rounded-full border">
           <Check className="size-3.5" />

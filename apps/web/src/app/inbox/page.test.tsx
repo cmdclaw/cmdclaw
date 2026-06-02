@@ -118,12 +118,13 @@ describe("InboxPage", () => {
             coworkerId: "cw-1",
             coworkerName: "Inbox Triage",
             builderAvailable: true,
-            title: "Inbox Triage · Mar 30, 16:32",
+            title: "Inbox Triage",
             status: "completed",
             updatedAt: new Date("2026-03-30T16:40:00.000Z"),
             createdAt: new Date("2026-03-30T16:32:00.000Z"),
             generationId: "gen-completed",
             conversationId: "conv-completed",
+            lastAgentMessage: "I reviewed the inbox and archived the resolved items.",
             errorMessage: null,
           },
           {
@@ -133,7 +134,7 @@ describe("InboxPage", () => {
             coworkerId: "cw-1",
             coworkerName: "Inbox Triage",
             builderAvailable: true,
-            title: "Inbox Triage · Mar 30, 14:32",
+            title: "Inbox Triage",
             status: "awaiting_approval",
             updatedAt: new Date("2026-03-30T14:40:00.000Z"),
             createdAt: new Date("2026-03-30T14:32:00.000Z"),
@@ -157,7 +158,7 @@ describe("InboxPage", () => {
             coworkerId: "cw-1",
             coworkerName: "Inbox Triage",
             builderAvailable: true,
-            title: "Inbox Triage · Mar 30, 15:00",
+            title: "Inbox Triage",
             status: "paused",
             updatedAt: new Date("2026-03-30T15:35:00.000Z"),
             createdAt: new Date("2026-03-30T15:00:00.000Z"),
@@ -218,9 +219,8 @@ describe("InboxPage", () => {
   it("renders coworker inbox rows and queries coworkers only", () => {
     render(<InboxPage />);
 
-    expect(screen.getByText("Inbox Triage · Mar 30, 16:32")).toBeTruthy();
-    expect(screen.getByText("Inbox Triage · Mar 30, 15:00")).toBeTruthy();
-    expect(screen.getByText("Inbox Triage · Mar 30, 14:32")).toBeTruthy();
+    expect(screen.getAllByText("Inbox Triage").length).toBeGreaterThan(0);
+    expect(screen.getByText("I reviewed the inbox and archived the resolved items.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Chats" })).toBeNull();
     expect(screen.queryByPlaceholderText("Trigger a coworker manually...")).toBeNull();
     expect(mockUseInboxItems).toHaveBeenCalledWith(
@@ -312,7 +312,7 @@ describe("InboxPage", () => {
             coworkerId: "cw-1",
             coworkerName: "Email Drafter",
             builderAvailable: true,
-            title: "Email Drafter · Mar 30, 14:32",
+            title: "Email Drafter",
             status: "needs_user_input",
             updatedAt: new Date("2026-03-30T14:40:00.000Z"),
             createdAt: new Date("2026-03-30T14:32:00.000Z"),
@@ -331,7 +331,7 @@ describe("InboxPage", () => {
 
     render(<InboxPage />);
 
-    expect(screen.getByText("Email Drafter · Mar 30, 14:32")).toBeTruthy();
+    expect(screen.getByText("Email Drafter")).toBeTruthy();
     expect(screen.getAllByText("Needs your input").length).toBeGreaterThan(0);
     fireEvent.click(await screen.findByRole("button", { name: /Dismiss/i }));
 
