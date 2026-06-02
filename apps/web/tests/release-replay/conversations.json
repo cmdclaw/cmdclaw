@@ -19,7 +19,7 @@
         "apps/web",
         "vitest",
         "run",
-        "src/app/coworkers/coworker-builder.cli.live.test.ts"
+        "src/app/agents/coworker-builder.cli.live.test.ts"
       ]
     }
   ]
