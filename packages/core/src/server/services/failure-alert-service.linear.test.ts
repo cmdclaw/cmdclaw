@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { failureAlertGroup, failureAlertOccurrence } from "@cmdclaw/db/schema";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { syncFailureAlertGroupToLinear as syncFailureAlertGroupToLinearType } from "./failure-alert-service";
 
 const { dbMock } = vi.hoisted(() => ({
   dbMock: {
@@ -11,24 +13,32 @@ vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
+let syncFailureAlertGroupToLinear: typeof syncFailureAlertGroupToLinearType;
+
 function mockSelects(group: Record<string, unknown>, occurrences: Array<Record<string, unknown>>) {
-  dbMock.select
-    .mockReturnValueOnce({
-      from: () => ({
-        where: () => ({
-          limit: async () => [group],
-        }),
-      }),
-    })
-    .mockReturnValueOnce({
-      from: () => ({
-        where: () => ({
-          orderBy: () => ({
-            limit: async () => occurrences,
+  dbMock.select.mockImplementation(() => ({
+    from: (table: unknown) => {
+      if (table === failureAlertGroup) {
+        return {
+          where: () => ({
+            limit: async () => [group],
           }),
-        }),
-      }),
-    });
+        };
+      }
+
+      if (table === failureAlertOccurrence) {
+        return {
+          where: () => ({
+            orderBy: () => ({
+              limit: async () => occurrences,
+            }),
+          }),
+        };
+      }
+
+      throw new Error("Unexpected failure alert select table");
+    },
+  }));
 }
 
 function mockUpdate() {
@@ -127,24 +137,31 @@ function createLinearFetchRecorder() {
   return { fetchImpl, operations };
 }
 
+function configureLinearEnv() {
+  process.env.LINEAR_API_KEY = "lin_api_test";
+  delete process.env.LINEAR_TEAM_ID;
+  process.env.LINEAR_TEAM_KEY = "OPS";
+  process.env.LINEAR_FAILURE_ALERT_ENV = "prod";
+  process.env.APP_URL = "https://app.cmdclaw.test";
+}
+
 describe("failure alert Linear sync", () => {
+  beforeAll(async () => {
+    configureLinearEnv();
+    ({ syncFailureAlertGroupToLinear } = await import("./failure-alert-service"));
+  });
+
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
     dbMock.select.mockReset();
     dbMock.update.mockReset();
-    process.env.LINEAR_API_KEY = "lin_api_test";
-    delete process.env.LINEAR_TEAM_ID;
-    process.env.LINEAR_TEAM_KEY = "OPS";
-    process.env.LINEAR_FAILURE_ALERT_ENV = "prod";
-    process.env.APP_URL = "https://app.cmdclaw.test";
+    configureLinearEnv();
   });
 
   it("creates one Linear issue for a new failure group with recent cases", async () => {
     mockSelects(buildGroup(), [buildOccurrence()]);
     const update = mockUpdate();
     const { fetchImpl, operations } = createLinearFetchRecorder();
-    const { syncFailureAlertGroupToLinear } = await import("./failure-alert-service");
 
     const result = await syncFailureAlertGroupToLinear(
       { groupId: "group-1" },
@@ -178,7 +195,6 @@ describe("failure alert Linear sync", () => {
     );
     const update = mockUpdate();
     const { fetchImpl, operations } = createLinearFetchRecorder();
-    const { syncFailureAlertGroupToLinear } = await import("./failure-alert-service");
 
     const result = await syncFailureAlertGroupToLinear(
       { groupId: "group-1" },
