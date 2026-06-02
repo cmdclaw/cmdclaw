@@ -225,7 +225,7 @@ export function InteractiveCoworkerCard({
     if (onClick) {
       onClick();
     } else {
-      router.push(`/agents/${coworker.id}`);
+      router.push(`/agents/edit/${coworker.id}`);
     }
   }, [onClick, router, coworker.id]);
 
@@ -599,7 +599,7 @@ export function InteractiveCoworkerCard({
       </span>
       <div className="flex items-center gap-0.5">
         <Link
-          href={`/agents/${coworker.id}`}
+          href={`/agents/edit/${coworker.id}`}
           onClick={handleStopPropagation}
           className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors"
           title="Edit coworker"

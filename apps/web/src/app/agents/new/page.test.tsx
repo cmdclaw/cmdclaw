@@ -104,7 +104,7 @@ describe("NewCoworkerPage", () => {
           },
         ],
       });
-      expect(assignMock).toHaveBeenCalledWith("/agents/cw-1");
+      expect(assignMock).toHaveBeenCalledWith("/agents/edit/cw-1");
     });
   });
 });

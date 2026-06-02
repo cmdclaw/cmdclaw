@@ -34,7 +34,7 @@ const {
   mockTriggerCoworkerMutateAsync: vi.fn(),
   mockRouterPush: vi.fn(),
   mockRouterReplace: vi.fn(),
-  mockPathnameData: { current: "/agents/cw-1" },
+  mockPathnameData: { current: "/agents/edit/cw-1" },
   mockParamsData: { current: { id: "cw-1" } as { id: string; runId?: string } },
   mockSearchParamsData: { current: "" },
   mockCoworkerData: {
@@ -410,7 +410,7 @@ describe("CoworkerEditorPage", () => {
     mockTriggerCoworkerMutateAsync.mockReset();
     mockRouterPush.mockReset();
     mockRouterReplace.mockReset();
-    mockPathnameData.current = "/agents/cw-1";
+    mockPathnameData.current = "/agents/edit/cw-1";
     mockParamsData.current = { id: "cw-1" };
     mockSearchParamsData.current = "";
     mockCoworkerData.current = {
@@ -534,7 +534,7 @@ describe("CoworkerEditorPage", () => {
     expect(replaceStateSpy).toHaveBeenCalledWith(
       window.history.state,
       "",
-      "/agents/cw-1/runs/run-1",
+      "/agents/edit/cw-1/runs/run-1",
     );
   });
 
@@ -555,12 +555,12 @@ describe("CoworkerEditorPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /completed/i }));
 
     expect(mockRouterPush).not.toHaveBeenCalled();
-    expect(pushStateSpy).toHaveBeenCalledWith(window.history.state, "", "/agents/cw-1/runs/run-1");
+    expect(pushStateSpy).toHaveBeenCalledWith(window.history.state, "", "/agents/edit/cw-1/runs/run-1");
     expect(screen.getByText("Run not found.")).toBeInTheDocument();
   });
 
   it("opens the inline run viewer when loaded on a coworker run route", async () => {
-    mockPathnameData.current = "/agents/cw-1/runs/run-1";
+    mockPathnameData.current = "/agents/edit/cw-1/runs/run-1";
     mockParamsData.current = { id: "cw-1", runId: "run-1" };
 
     render(<CoworkerEditorPage />);
@@ -593,7 +593,7 @@ describe("CoworkerEditorPage", () => {
   });
 
   it("shows the remote integration source banner for persisted remote runs", async () => {
-    mockPathnameData.current = "/agents/cw-1/runs/run-remote";
+    mockPathnameData.current = "/agents/edit/cw-1/runs/run-remote";
     mockParamsData.current = { id: "cw-1", runId: "run-remote" };
     mockCoworkerRunData.current = {
       id: "run-remote",
@@ -634,7 +634,7 @@ describe("CoworkerEditorPage", () => {
   });
 
   it("describes cancelled inline runs as cancelled instead of failed", async () => {
-    mockPathnameData.current = "/agents/cw-1/runs/run-cancelled";
+    mockPathnameData.current = "/agents/edit/cw-1/runs/run-cancelled";
     mockParamsData.current = { id: "cw-1", runId: "run-cancelled" };
     mockCoworkerRunData.current = {
       id: "run-cancelled",
@@ -872,7 +872,7 @@ describe("CoworkerEditorPage", () => {
 
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(mockRouterReplace).not.toHaveBeenCalled();
-    expect(replaceStateSpy).toHaveBeenCalledWith(window.history.state, "", "/agents/cw-1?tab=docs");
+    expect(replaceStateSpy).toHaveBeenCalledWith(window.history.state, "", "/agents/edit/cw-1?tab=docs");
     expect(screen.getByText("Chat")).toBeInTheDocument();
   });
 

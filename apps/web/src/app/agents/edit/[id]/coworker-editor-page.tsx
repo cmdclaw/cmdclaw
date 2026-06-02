@@ -526,7 +526,7 @@ export default function CoworkerEditorPage({
       return null;
     }
 
-    const prefix = `/agents/${coworkerId}/runs/`;
+    const prefix = `/agents/edit/${coworkerId}/runs/`;
     if (!pathname.startsWith(prefix)) {
       return null;
     }
@@ -535,7 +535,7 @@ export default function CoworkerEditorPage({
     return runId.length > 0 ? runId : null;
   }, [coworkerId, embedded, pathname]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(routeRunId);
-  const isRunsRoute = !embedded && (pathname?.startsWith(`/agents/${coworkerId}/runs`) ?? false);
+  const isRunsRoute = !embedded && (pathname?.startsWith(`/agents/edit/${coworkerId}/runs`) ?? false);
   const baseTabParam = searchParams.get("tab");
   const routeBaseTab: CoworkerTab | null =
     baseTabParam === "chat" ||
@@ -550,7 +550,7 @@ export default function CoworkerEditorPage({
       return `/agents?agent=${encodeURIComponent(coworkerId)}`;
     }
     const query = searchParams.toString();
-    return query && pathname ? `${pathname}?${query}` : (pathname ?? `/agents/${coworkerId}`);
+    return query && pathname ? `${pathname}?${query}` : (pathname ?? `/agents/edit/${coworkerId}`);
   }, [coworkerId, embedded, pathname, searchParams]);
   const shouldLoadCoworkerImpersonationTarget = Boolean(
     coworkerId && !routeRunId && !isLoading && !coworker,
@@ -1642,10 +1642,10 @@ export default function CoworkerEditorPage({
       }
 
       if (!tab || tab === "instruction") {
-        return `/agents/${coworkerId}`;
+        return `/agents/edit/${coworkerId}`;
       }
 
-      return `/agents/${coworkerId}?tab=${tab}`;
+      return `/agents/edit/${coworkerId}?tab=${tab}`;
     },
     [coworkerId, embedded],
   );
@@ -1665,10 +1665,10 @@ export default function CoworkerEditorPage({
       }
 
       if (options?.runId) {
-        return `/agents/${coworkerId}/runs/${options.runId}`;
+        return `/agents/edit/${coworkerId}/runs/${options.runId}`;
       }
 
-      return `/agents/${coworkerId}/runs`;
+      return `/agents/edit/${coworkerId}/runs`;
     },
     [coworkerId, embedded],
   );
@@ -2365,7 +2365,7 @@ function InlineRunViewer({
         <ImpersonationRequiredPage
           target={impersonationTarget}
           redirectPath={
-            coworkerId ? `/agents/${coworkerId}/runs/${runId}` : `/agents/runs/${runId}`
+            coworkerId ? `/agents/edit/${coworkerId}/runs/${runId}` : `/agents/runs/${runId}`
           }
           onBack={onBack}
         />

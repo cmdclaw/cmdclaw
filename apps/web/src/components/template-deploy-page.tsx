@@ -67,7 +67,7 @@ export function TemplateDeployPage({ template }: { template: TemplateCatalogTemp
           return;
         }
 
-        window.location.assign(`/agents/${result.id}`);
+        window.location.assign(`/agents/edit/${result.id}`);
       } catch (deployError) {
         console.error("Failed to deploy coworker from template:", deployError);
         if (cancelled) {

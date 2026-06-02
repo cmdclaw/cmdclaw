@@ -426,7 +426,7 @@ function InboxPageContent() {
     async (item: InboxCoworkerItem) => {
       await runItemAction(item.id, async () => {
         await getOrCreateBuilderConversation.mutateAsync(item.coworkerId);
-        router.push(`/agents/${item.coworkerId}`);
+        router.push(`/agents/edit/${item.coworkerId}`);
       });
     },
     [getOrCreateBuilderConversation, router, runItemAction],

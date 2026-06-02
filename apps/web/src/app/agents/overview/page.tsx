@@ -18,7 +18,7 @@ export default function CoworkerOverviewPage() {
           <ArrowLeft className="size-5" />
         </Link>
       </div>
-      <CoworkerOverviewDashboard data={data} isLoading={isLoading} coworkerLinkPrefix="/agents/" />
+      <CoworkerOverviewDashboard data={data} isLoading={isLoading} coworkerLinkPrefix="/agents/edit/" />
     </div>
   );
 }

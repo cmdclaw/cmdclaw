@@ -190,7 +190,7 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
         <div className="flex flex-wrap items-center gap-2">
           <CoworkerAvatar username={entry.coworker.username} size={24} className="rounded-md" />
           <Link
-            href={`/agents/${entry.coworker.id}`}
+            href={`/agents/edit/${entry.coworker.id}`}
             className="group/name flex items-center gap-1 text-sm font-medium hover:underline"
           >
             {entry.coworker.name}
@@ -201,7 +201,7 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
           </span>
           <div className="ml-auto flex items-center gap-2">
             <Link
-              href={`/agents/${entry.coworker.id}`}
+              href={`/agents/edit/${entry.coworker.id}`}
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[11px] font-medium transition-colors"
             >
               View in editor

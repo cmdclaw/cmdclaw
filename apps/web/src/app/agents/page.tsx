@@ -500,7 +500,7 @@ export default function CoworkersPage() {
       try {
         const created = await importSharedCoworker.mutateAsync(sourceCoworkerId);
         toast.success("Coworker imported.");
-        router.push(`/agents/${created.id}`);
+        router.push(`/agents/edit/${created.id}`);
       } catch (error) {
         console.error("Failed to import coworker:", error);
         toast.error("Failed to import coworker.");
@@ -533,7 +533,7 @@ export default function CoworkersPage() {
         const definitionJson = await file.text();
         const created = await importCoworkerDefinition.mutateAsync(definitionJson);
         toast.success("Coworker imported in the off state.");
-        router.push(`/agents/${created.id}`);
+        router.push(`/agents/edit/${created.id}`);
       } catch (error) {
         console.error("Failed to import coworker definition:", error);
         toast.error("Failed to import coworker.");
@@ -681,7 +681,7 @@ export default function CoworkersPage() {
         }
       }
 
-      window.location.assign(`/agents/${result.id}`);
+      window.location.assign(`/agents/edit/${result.id}`);
     },
     [createCoworker, model, modelAuthSource],
   );

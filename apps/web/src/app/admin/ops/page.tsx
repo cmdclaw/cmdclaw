@@ -326,7 +326,7 @@ export default function AdminOpsPage() {
                         <div className="text-muted-foreground text-xs">@{row.username}</div>
                       ) : null}
                       <Link
-                        href={`/agents/${row.id}`}
+                        href={`/agents/edit/${row.id}`}
                         className="inline-flex text-xs underline underline-offset-2"
                       >
                         Open builder

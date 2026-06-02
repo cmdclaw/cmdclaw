@@ -68,7 +68,7 @@ export default function CoworkerRunLayout({ children }: { children: React.ReactN
           </DropdownMenu>
           {run?.coworkerId && (
             <Link
-              href={`/agents/${run.coworkerId}`}
+              href={`/agents/edit/${run.coworkerId}`}
               className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
               title="Open in Builder"
             >

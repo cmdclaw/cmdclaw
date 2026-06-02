@@ -9,22 +9,8 @@ export default function CoworkersLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [recentDrawerOpen, setRecentDrawerOpen] = useState(false);
   const isRunsRoute = pathname?.startsWith("/agents/runs");
-  const isGridRoute = pathname === "/agents/grid";
-  const isDeployRoute = pathname?.startsWith("/agents/deploy/");
-  const isOverviewRoute = pathname === "/agents/overview";
-  const isHistoryRoute = pathname === "/agents/history";
-  const isUsageRoute = pathname === "/agents/usage";
   const isOrgChartRoute = pathname === "/agents/org-chart";
-  const isCoworkerEditorRoute =
-    pathname?.startsWith("/agents/") &&
-    pathname !== "/agents" &&
-    !isDeployRoute &&
-    !isRunsRoute &&
-    !isGridRoute &&
-    !isOverviewRoute &&
-    !isHistoryRoute &&
-    !isUsageRoute &&
-    !isOrgChartRoute;
+  const isCoworkerEditorRoute = pathname?.startsWith("/agents/edit/");
 
   useEffect(() => {
     const handleOpenDrawer = () => setRecentDrawerOpen(true);

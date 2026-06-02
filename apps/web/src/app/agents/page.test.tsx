@@ -453,6 +453,6 @@ describe("CoworkersPage", () => {
       );
     });
     expect(mockToastSuccess).toHaveBeenCalledWith("Coworker imported in the off state.");
-    expect(mockRouterPush).toHaveBeenCalledWith("/agents/cw-imported");
+    expect(mockRouterPush).toHaveBeenCalledWith("/agents/edit/cw-imported");
   });
 });

@@ -68,7 +68,7 @@ export default function NewCoworkerPage() {
         }
 
         clearPendingCoworkerPrompt();
-        window.location.assign(`/agents/${result.id}`);
+        window.location.assign(`/agents/edit/${result.id}`);
       } catch (error) {
         console.error("Failed to resume coworker builder creation:", error);
         clearPendingCoworkerPrompt();

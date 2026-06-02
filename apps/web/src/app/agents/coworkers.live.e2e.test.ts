@@ -27,9 +27,9 @@ test.describe("@live coworkers", () => {
     await expect
       .poll(async () => page.url(), {
         timeout: responseTimeoutMs,
-        message: "Coworker creation did not navigate to /agents/:id",
+        message: "Coworker creation did not navigate to /agents/edit/:id",
       })
-      .toMatch(/\/agents\/[^/?#]+/);
+      .toMatch(/\/agents\/edit\/[^/?#]+/);
 
     const promptInput = page.locator("textarea").first();
     await expect(promptInput).toBeVisible();
@@ -40,7 +40,7 @@ test.describe("@live coworkers", () => {
     await expect(runNowButton).toBeEnabled({ timeout: responseTimeoutMs });
 
     await runNowButton.click();
-    await expect(page).toHaveURL(/\/agents\/[^/?#]+(?:\?.*)?$/);
+    await expect(page).toHaveURL(/\/agents\/edit\/[^/?#]+(?:\?.*)?$/);
     await expect(page.getByText("Test run started.")).toBeVisible({ timeout: responseTimeoutMs });
 
     const assistantMessages = page.getByTestId("chat-message-assistant");

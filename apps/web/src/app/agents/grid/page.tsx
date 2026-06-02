@@ -67,7 +67,7 @@ function CoworkerCard({ coworker }: { coworker: CoworkerItem }) {
 
   return (
     <Link
-      href={`/agents/${coworker.id}`}
+      href={`/agents/edit/${coworker.id}`}
       className="border-border/40 bg-card hover:border-border hover:bg-muted/30 group flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition-all duration-150"
     >
       <div className="flex items-start justify-between gap-2">

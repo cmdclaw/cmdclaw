@@ -468,7 +468,7 @@ export function CoworkerLanding({
           }
         }
 
-        window.location.href = `/agents/${result.id}`;
+        window.location.href = `/agents/edit/${result.id}`;
       } catch {
         return false;
       }
