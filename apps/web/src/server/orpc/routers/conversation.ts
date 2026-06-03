@@ -9,6 +9,7 @@ import { requireAppAdminActor } from "../app-admin-access";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
 import { loadOutputHtmlPreview, OutputHtmlPreviewError } from "../../services/output-html-preview";
+import { buildSandboxFileDownloadUrl } from "../../api/sandbox-files/download";
 
 const conversationListCursorSchema = z.object({
   updatedAt: z.coerce.date(),
@@ -659,11 +660,8 @@ const downloadSandboxFile = protectedProcedure
       throw new ORPCError("NOT_FOUND", { message: "File not uploaded" });
     }
 
-    const { getPresignedDownloadUrl } = await import("@cmdclaw/core/server/storage/s3-client");
-    const url = await getPresignedDownloadUrl(file.storageKey);
-
     return {
-      url,
+      url: buildSandboxFileDownloadUrl(file.id),
       filename: file.filename,
       mimeType: file.mimeType,
       path: file.path,

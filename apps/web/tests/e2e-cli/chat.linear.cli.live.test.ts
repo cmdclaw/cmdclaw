@@ -41,6 +41,7 @@ describe.runIf(liveEnabled)("@live CLI chat linear", () => {
       const result = await runChatMessage({
         message: linearPrompt,
         model: linearModel,
+        questionAnswers: ["Use BAP-310"],
         timeoutMs: linearMcpTimeoutMs,
       });
 

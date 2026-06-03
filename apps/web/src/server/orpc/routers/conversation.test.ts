@@ -419,3 +419,50 @@ describe("conversationRouter.previewSandboxOutputHtml", () => {
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 });
+
+describe("conversationRouter.downloadSandboxFile", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.APP_URL = "https://app.example.com";
+    process.env.CMDCLAW_SERVER_SECRET = "test-download-secret";
+  });
+
+  it("returns an app-hosted signed download URL for an owned sandbox file", async () => {
+    sandboxFileFindFirstMock.mockResolvedValue({
+      id: "file-1",
+      filename: "hello.txt",
+      mimeType: "text/plain",
+      path: "/app/hello.txt",
+      storageKey: "sandbox-files/conv-1/hello.txt",
+      sizeBytes: 5,
+      conversation: {
+        userId: "user-1",
+        workspaceId: "ws-1",
+      },
+    });
+
+    const result = (await conversationRouterAny.downloadSandboxFile({
+      input: { fileId: "file-1" },
+      context,
+    })) as {
+      url: string;
+      filename: string;
+      mimeType: string;
+      path: string;
+      sizeBytes: number;
+    };
+
+    const url = new URL(result.url);
+    expect(url.origin).toBe("https://app.example.com");
+    expect(url.pathname).toBe("/api/sandbox-files/file-1/download");
+    expect(url.searchParams.get("expiresAt")).toMatch(/^\d+$/);
+    expect(url.searchParams.get("token")).toEqual(expect.any(String));
+    expect(result).toEqual({
+      url: result.url,
+      filename: "hello.txt",
+      mimeType: "text/plain",
+      path: "/app/hello.txt",
+      sizeBytes: 5,
+    });
+  });
+});
