@@ -25,7 +25,31 @@ type RenderDeploy = {
 type RenderService = {
   id: string;
   name: string;
+  ownerId?: string;
   type?: string;
+  dashboardUrl?: string;
+};
+
+type RenderServiceEvent = {
+  id: string;
+  timestamp?: string;
+  type?: string;
+  details?: Record<string, unknown>;
+};
+
+type RenderLogLabel = {
+  name: string;
+  value: string;
+};
+
+type RenderLog = {
+  timestamp?: string;
+  message?: string;
+  labels?: RenderLogLabel[];
+};
+
+type RenderLogsResponse = {
+  logs?: RenderLog[];
 };
 
 type RenderApiError = {
@@ -75,7 +99,11 @@ function getApiKey(): string {
   return apiKey;
 }
 
-async function renderFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+function describeUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function renderRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${renderApiBaseUrl}${path}`, {
     ...init,
     headers: {
@@ -91,7 +119,7 @@ async function renderFetch<T>(path: string, init: RequestInit = {}): Promise<T> 
 
   if (!response.ok) {
     const error = body as RenderApiError | null;
-    fail(
+    throw new Error(
       `Render API ${init.method ?? "GET"} ${path} failed with ${response.status}: ${
         error?.message ?? error?.error ?? text
       }`,
@@ -99,6 +127,14 @@ async function renderFetch<T>(path: string, init: RequestInit = {}): Promise<T> 
   }
 
   return body as T;
+}
+
+async function renderFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await renderRequest<T>(path, init);
+  } catch (error) {
+    fail(describeUnknownError(error));
+  }
 }
 
 function unwrapDeploy(value: unknown): RenderDeploy {
@@ -200,6 +236,197 @@ async function getDeploy(serviceId: string, deployId: string): Promise<RenderDep
   return unwrapDeploy(await renderFetch(`/services/${serviceId}/deploys/${deployId}`));
 }
 
+async function getService(serviceId: string): Promise<RenderService> {
+  return unwrapService(await renderRequest(`/services/${serviceId}`));
+}
+
+function groupStart(title: string): void {
+  if (process.env.GITHUB_ACTIONS) {
+    console.error(`::group::${title}`);
+    return;
+  }
+  console.error(`[render-deploy] ${title}`);
+}
+
+function groupEnd(): void {
+  if (process.env.GITHUB_ACTIONS) {
+    console.error("::endgroup::");
+  }
+}
+
+function buildDiagnosticsWindow(deploy: RenderDeploy): { startTime: string; endTime: string } {
+  const fallbackEnd = new Date();
+  const deployStart = deploy.createdAt ? new Date(deploy.createdAt) : fallbackEnd;
+  const deployEnd = deploy.finishedAt ? new Date(deploy.finishedAt) : fallbackEnd;
+  const startTime = new Date(deployStart.getTime() - 5 * 60 * 1000).toISOString();
+  const endTime = new Date(deployEnd.getTime() + 5 * 60 * 1000).toISOString();
+  return { startTime, endTime };
+}
+
+function appendQuery(path: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+function formatJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+function getLabel(log: RenderLog, labelName: string): string | null {
+  return log.labels?.find((label) => label.name === labelName)?.value ?? null;
+}
+
+function printLogs(logs: RenderLog[]): void {
+  if (logs.length === 0) {
+    console.error("[render-deploy] No Render logs returned for this deploy window.");
+    return;
+  }
+
+  for (const log of logs) {
+    const timestamp = log.timestamp ?? "unknown-time";
+    const type = getLabel(log, "type") ?? "log";
+    const level = getLabel(log, "level");
+    const levelSuffix = level ? `/${level}` : "";
+    console.error(`${timestamp} [${type}${levelSuffix}] ${log.message ?? ""}`);
+  }
+}
+
+function unwrapServiceEvents(value: unknown): RenderServiceEvent[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Render API event list response was not an array");
+  }
+
+  return value.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) {
+      return [];
+    }
+    const record = entry as Record<string, unknown>;
+    const candidate = "event" in record ? record.event : entry;
+    if (typeof candidate !== "object" || candidate === null) {
+      return [];
+    }
+    return [candidate as RenderServiceEvent];
+  });
+}
+
+function eventMentionsDeploy(event: RenderServiceEvent, deployId: string): boolean {
+  return formatJson(event.details ?? {}).includes(deployId);
+}
+
+async function printDeployDiagnostics(serviceId: string, deploy: RenderDeploy): Promise<void> {
+  groupStart("Render deploy diagnostics");
+  try {
+    const { startTime, endTime } = buildDiagnosticsWindow(deploy);
+    let service: RenderService | null = null;
+
+    try {
+      service = await getService(serviceId);
+    } catch (error) {
+      console.error(
+        `[render-deploy] Failed to fetch Render service: ${describeUnknownError(error)}`,
+      );
+    }
+
+    console.error(
+      `[render-deploy] service=${service?.name ?? "unknown"} id=${serviceId} deploy=${deploy.id} status=${
+        deploy.status ?? "unknown"
+      }`,
+    );
+    if (service?.dashboardUrl) {
+      console.error(`[render-deploy] dashboard=${service.dashboardUrl}`);
+    }
+    console.error(`[render-deploy] diagnostics_window=${startTime}..${endTime}`);
+
+    try {
+      await printRecentEvents(serviceId, deploy.id, startTime, endTime);
+    } catch (error) {
+      console.error(
+        `[render-deploy] Failed to fetch Render events: ${describeUnknownError(error)}`,
+      );
+    }
+
+    try {
+      if (service) {
+        await printRecentLogs(service, startTime, endTime);
+      } else {
+        console.error(
+          "[render-deploy] Cannot fetch Render logs because service metadata is missing.",
+        );
+      }
+    } catch (error) {
+      console.error(`[render-deploy] Failed to fetch Render logs: ${describeUnknownError(error)}`);
+    }
+  } catch (error) {
+    console.error(
+      `[render-deploy] Failed to fetch Render diagnostics: ${describeUnknownError(error)}`,
+    );
+  } finally {
+    groupEnd();
+  }
+}
+
+async function printRecentEvents(
+  serviceId: string,
+  deployId: string,
+  startTime: string,
+  endTime: string,
+): Promise<void> {
+  const params = new URLSearchParams({
+    limit: "30",
+    startTime,
+    endTime,
+  });
+  const events = unwrapServiceEvents(
+    await renderRequest(appendQuery(`/services/${serviceId}/events`, params)),
+  );
+  const visibleEvents = events.filter(
+    (event) =>
+      eventMentionsDeploy(event, deployId) ||
+      event.type === "server_failed" ||
+      event.type === "image_pull_failed",
+  );
+
+  console.error("[render-deploy] Recent Render events:");
+  if (visibleEvents.length === 0) {
+    console.error("[render-deploy] No matching Render events returned for this deploy window.");
+    return;
+  }
+
+  for (const event of visibleEvents) {
+    console.error(
+      `${event.timestamp ?? "unknown-time"} [${event.type ?? "unknown-event"}] ${
+        event.details ? formatJson(event.details) : "{}"
+      }`,
+    );
+  }
+}
+
+async function printRecentLogs(
+  service: RenderService,
+  startTime: string,
+  endTime: string,
+): Promise<void> {
+  if (!service.ownerId) {
+    console.error("[render-deploy] Cannot fetch Render logs because service ownerId is missing.");
+    return;
+  }
+
+  const params = new URLSearchParams({
+    ownerId: service.ownerId,
+    startTime,
+    endTime,
+    direction: "forward",
+    limit: "100",
+  });
+  params.append("resource", service.id);
+  params.append("type", "build");
+  params.append("type", "app");
+
+  const body = await renderRequest<RenderLogsResponse>(appendQuery("/logs", params));
+  console.error("[render-deploy] Recent Render logs:");
+  printLogs(body.logs ?? []);
+}
+
 async function waitForDeploy(serviceId: string, deployId: string): Promise<RenderDeploy> {
   const timeoutMs = Number(readArg("--timeout-ms") ?? "1800000");
   const pollMs = Number(readArg("--poll-ms") ?? "15000");
@@ -215,10 +442,12 @@ async function waitForDeploy(serviceId: string, deployId: string): Promise<Rende
     }
 
     if (failedStatuses.has(status)) {
+      await printDeployDiagnostics(serviceId, deploy);
       fail(`Deploy ${deployId} for service ${serviceId} failed with status ${status}`);
     }
 
     if (Date.now() - startedAt > timeoutMs) {
+      await printDeployDiagnostics(serviceId, deploy);
       fail(`Timed out waiting for deploy ${deployId} for service ${serviceId}`);
     }
 
