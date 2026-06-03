@@ -93,6 +93,8 @@ function request(body: unknown): Request {
 
 describe("client observation intake", () => {
   beforeEach(() => {
+    delete (globalThis as typeof globalThis & { cmdclawClientObservationRedis?: unknown })
+      .cmdclawClientObservationRedis;
     vi.clearAllMocks();
     getSessionMock.mockResolvedValue({
       user: { id: "user-1" },
