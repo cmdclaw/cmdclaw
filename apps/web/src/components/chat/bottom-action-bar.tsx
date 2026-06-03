@@ -1,5 +1,3 @@
-"use client";
-
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { AttachmentData } from "@/components/prompt-bar";

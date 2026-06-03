@@ -1,5 +1,3 @@
-"use client";
-
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { create } from "zustand";

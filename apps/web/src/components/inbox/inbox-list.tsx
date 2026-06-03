@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback } from "react";
 import type { InboxCoworkerItem, InboxItem as InboxItemType, ToolApprovalData } from "./types";
 import { InboxItem } from "./inbox-item";

@@ -1,5 +1,3 @@
-"use client";
-
 import type { AnchorHTMLAttributes, FC, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 

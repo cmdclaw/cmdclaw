@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, AlertCircle, ChevronRight, Eye, StopCircle, Timer } from "lucide-react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useCallback, useMemo, useState } from "react";

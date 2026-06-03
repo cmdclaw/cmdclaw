@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
@@ -16,7 +14,8 @@ type ConversationSearch = {
 export const Route = createFileRoute("/_app/chat/$conversationId")({
   // OAuth completion flags drive the post-auth resume flow; validate them at the boundary.
   validateSearch: (search: Record<string, unknown>): ConversationSearch => {
-    const authComplete = typeof search.auth_complete === "string" ? search.auth_complete : undefined;
+    const authComplete =
+      typeof search.auth_complete === "string" ? search.auth_complete : undefined;
     const interruptId = typeof search.interrupt_id === "string" ? search.interrupt_id : undefined;
     return {
       ...(authComplete ? { auth_complete: authComplete } : {}),

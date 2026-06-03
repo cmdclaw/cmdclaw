@@ -1,5 +1,3 @@
-"use client";
-
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";

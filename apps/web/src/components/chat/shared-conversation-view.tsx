@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, Copy, Globe } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { formatPersistedChatTranscript } from "@/components/chat/chat-transcript";

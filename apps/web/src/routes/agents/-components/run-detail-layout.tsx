@@ -1,5 +1,3 @@
-"use client";
-
 import { BarChart3, MoreHorizontal, Pencil } from "lucide-react";
 import { Outlet } from "@tanstack/react-router";
 import { AppLink as Link } from "../-lib/app-link";

@@ -1,5 +1,3 @@
-"use client";
-
 import { Loader2 } from "lucide-react";
 import { useParams, usePathname, useSearchParams } from "../-lib/next-navigation-compat";
 import { useMemo } from "react";

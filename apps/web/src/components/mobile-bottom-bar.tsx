@@ -1,5 +1,3 @@
-"use client";
-
 import { LayoutTemplate, Menu, MessageSquare, WandSparkles, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { AppLink } from "@/components/app-link";

@@ -1,5 +1,3 @@
-"use client";
-
 import {
   DEFAULT_CONNECTED_CHATGPT_MODEL,
   resolveDefaultChatModel,

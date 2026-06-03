@@ -1,5 +1,3 @@
-"use client";
-
 import { Editor, defaultValueCtx, rootCtx } from "@milkdown/kit/core";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import {

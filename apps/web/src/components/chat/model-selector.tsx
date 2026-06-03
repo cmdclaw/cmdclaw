@@ -1,5 +1,3 @@
-"use client";
-
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import {
   getEmptyProviderAuthAvailability,

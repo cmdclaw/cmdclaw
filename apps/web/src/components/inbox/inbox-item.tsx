@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable jsx-a11y/control-has-associated-label react/no-unstable-nested-components
 
 import {

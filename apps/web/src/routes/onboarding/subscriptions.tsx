@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, ClipboardCopy, ExternalLink, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";

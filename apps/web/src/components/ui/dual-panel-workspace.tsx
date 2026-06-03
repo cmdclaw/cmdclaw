@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable jsx-a11y/prefer-tag-over-role
 
 import { ChevronLeft, ChevronRight, PanelRight } from "lucide-react";

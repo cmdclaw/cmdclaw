@@ -1,5 +1,3 @@
-"use client";
-
 import type React from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";

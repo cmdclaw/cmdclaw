@@ -1,5 +1,3 @@
-"use client";
-
 import { Puzzle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppImage } from "@/components/app-image";

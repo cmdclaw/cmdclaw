@@ -1,5 +1,3 @@
-"use client";
-
 import type { ChangeEvent, FormEvent } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";

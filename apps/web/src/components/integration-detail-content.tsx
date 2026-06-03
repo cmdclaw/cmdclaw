@@ -1,5 +1,3 @@
-"use client";
-
 import type React from "react";
 import { Check, ExternalLink, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";

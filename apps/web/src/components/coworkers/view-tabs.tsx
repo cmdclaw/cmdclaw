@@ -1,5 +1,3 @@
-"use client";
-
 import { Bookmark, Ellipsis, Pencil, Trash2, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {

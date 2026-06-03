@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable jsx-a11y/control-has-associated-label
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";

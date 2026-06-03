@@ -1,5 +1,3 @@
-"use client";
-
 import posthogClientLib from "posthog-js";
 import { PostHogProvider, usePostHog } from "posthog-js/react";
 import { Suspense, useEffect, useState } from "react";

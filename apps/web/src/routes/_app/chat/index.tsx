@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute } from "@tanstack/react-router";
 import { ChatArea } from "@/components/chat/chat-area";
 

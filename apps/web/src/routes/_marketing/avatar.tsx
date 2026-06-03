@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute } from "@tanstack/react-router";
 import { Copy, Download, Dices, FileImage, FileText, RotateCcw, Shuffle } from "lucide-react";
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";

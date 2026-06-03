@@ -1,5 +1,3 @@
-"use client";
-
 import { X } from "lucide-react";
 import { useCallback } from "react";
 import { BugReportForm } from "@/components/bug-report-form";

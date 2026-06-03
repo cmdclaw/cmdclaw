@@ -1,5 +1,3 @@
-"use client";
-
 import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo } from "react";

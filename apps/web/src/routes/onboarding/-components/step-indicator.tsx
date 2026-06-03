@@ -1,5 +1,3 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 
 export function StepIndicator({ current, total }: { current: number; total: number }) {

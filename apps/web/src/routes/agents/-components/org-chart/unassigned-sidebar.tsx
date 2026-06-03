@@ -1,5 +1,3 @@
-"use client";
-
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState, type DragEvent } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";

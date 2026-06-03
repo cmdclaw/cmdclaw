@@ -1,5 +1,3 @@
-"use client";
-
 import type { ClientObservationPayload } from "@cmdclaw/core/lib/client-observation";
 
 function getBrowserState(): Pick<ClientObservationPayload, "pageVisibility" | "online"> {

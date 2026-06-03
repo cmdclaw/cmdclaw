@@ -1,5 +1,3 @@
-"use client";
-
 import { type NodeProps, type Node } from "@xyflow/react";
 import { X } from "lucide-react";
 import { useCallback } from "react";

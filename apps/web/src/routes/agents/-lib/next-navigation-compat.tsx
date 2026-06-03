@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Thin TanStack Router adapters that expose the small slice of the old `next/navigation`
  * surface the large agents editor / info components depend on.
@@ -16,7 +14,11 @@
  */
 
 import { useMemo } from "react";
-import { useNavigate, useParams as useTanStackParams, useRouterState } from "@tanstack/react-router";
+import {
+  useNavigate,
+  useParams as useTanStackParams,
+  useRouterState,
+} from "@tanstack/react-router";
 
 export function usePathname(): string {
   return useRouterState({ select: (state) => state.location.pathname });

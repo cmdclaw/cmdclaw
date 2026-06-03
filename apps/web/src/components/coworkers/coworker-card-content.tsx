@@ -1,5 +1,3 @@
-"use client";
-
 import { Pin } from "lucide-react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";

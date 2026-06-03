@@ -1,5 +1,3 @@
-"use client";
-
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import {

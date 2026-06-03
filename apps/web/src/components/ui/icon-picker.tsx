@@ -1,5 +1,3 @@
-"use client";
-
 import { FileText } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch } from "@/components/ui/emoji-picker";

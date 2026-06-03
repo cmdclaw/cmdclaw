@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
+import { authClient } from "@/lib/auth-client";
 
 /**
  * Clears the React Query cache when the signed-in principal changes.
@@ -22,7 +23,6 @@ export function SessionPrincipalCacheGuard() {
 
     const syncSessionUserState = async () => {
       try {
-        const { authClient } = await import("@/lib/auth-client");
         const sessionResult = await authClient.getSession();
         if (!active) {
           return;

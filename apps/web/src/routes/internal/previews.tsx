@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { useMemo } from "react";

@@ -1,5 +1,3 @@
-"use client";
-
 import { BarChart3, Bug, Settings, Shield, Toolbox } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppImage } from "@/components/app-image";

@@ -1,5 +1,3 @@
-"use client";
-
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
 import { ArrowUp, Check, Inbox, KeyRound, Loader2, Plus, ShieldCheck } from "lucide-react";

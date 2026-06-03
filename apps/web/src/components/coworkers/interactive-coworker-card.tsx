@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable jsx-a11y/no-noninteractive-tabindex
 
 import {

@@ -1,5 +1,3 @@
-"use client";
-
 import type { MessageTiming } from "./chat-performance-metrics";
 import { MessageItem } from "./message-item";
 

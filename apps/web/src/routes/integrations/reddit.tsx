@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminComingSoonPage } from "@/components/integrations/admin-coming-soon-page";
 

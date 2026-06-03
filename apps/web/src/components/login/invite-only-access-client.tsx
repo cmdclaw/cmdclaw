@@ -1,5 +1,3 @@
-"use client";
-
 import { Link } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";

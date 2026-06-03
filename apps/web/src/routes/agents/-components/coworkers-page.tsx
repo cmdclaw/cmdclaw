@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable eslint/no-underscore-dangle
 
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";

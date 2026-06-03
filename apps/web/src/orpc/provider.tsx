@@ -1,8 +1,7 @@
-"use client";
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 
 type ORPCProviderProps = {
   children: ReactNode;
@@ -33,7 +32,6 @@ export function ORPCProvider({ children, syncSessionUser = true }: ORPCProviderP
 
     const syncSessionUserState = async () => {
       try {
-        const { authClient } = await import("@/lib/auth-client");
         const sessionResult = await authClient.getSession();
         if (!active) {
           return;

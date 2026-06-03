@@ -1,5 +1,3 @@
-"use client";
-
 import { Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";

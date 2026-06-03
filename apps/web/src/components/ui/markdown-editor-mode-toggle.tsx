@@ -1,5 +1,3 @@
-"use client";
-
 import { Code, Eye } from "lucide-react";
 import { useCallback, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";

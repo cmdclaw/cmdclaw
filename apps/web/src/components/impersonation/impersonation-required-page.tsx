@@ -1,5 +1,3 @@
-"use client";
-
 import { Loader2, LogIn, ShieldCheck } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { getImpersonationErrorMessage } from "@/routes/admin/-lib/impersonation-errors";

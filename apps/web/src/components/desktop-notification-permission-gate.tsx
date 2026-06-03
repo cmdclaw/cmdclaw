@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect } from "react";
 import { setupBrowserPushNotifications } from "@/lib/browser-push";
 import { useCurrentUser } from "@/orpc/hooks";

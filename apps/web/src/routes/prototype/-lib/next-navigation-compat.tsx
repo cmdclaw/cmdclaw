@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Thin TanStack Router adapters that expose the small slice of the old `next/navigation`
  * surface the prototype info component depends on.

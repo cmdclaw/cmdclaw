@@ -1,5 +1,3 @@
-"use client";
-
 import { ChevronDown, ChevronRight, Check, X, Loader2, Link2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AppImage } from "@/components/chat/app-image";

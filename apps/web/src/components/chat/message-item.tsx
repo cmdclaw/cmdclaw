@@ -1,5 +1,3 @@
-"use client";
-
 import { Paperclip, Download, FileIcon, Eye } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AppImage } from "@/components/chat/app-image";

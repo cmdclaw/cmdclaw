@@ -1,5 +1,3 @@
-"use client";
-
 const PENDING_COWORKER_PROMPT_KEY = "cmdclaw.pendingCoworkerPrompt";
 const MAX_PENDING_PROMPT_AGE_MS = 10 * 60 * 1000;
 const ATTACHMENT_ONLY_INITIAL_MESSAGE =

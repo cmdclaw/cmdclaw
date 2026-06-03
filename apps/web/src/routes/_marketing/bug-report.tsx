@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useCallback } from "react";

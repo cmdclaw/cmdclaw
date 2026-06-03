@@ -1,5 +1,3 @@
-"use client";
-
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { Loader2 } from "lucide-react";

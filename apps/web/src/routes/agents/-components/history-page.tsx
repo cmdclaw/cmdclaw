@@ -1,5 +1,3 @@
-"use client";
-
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import {

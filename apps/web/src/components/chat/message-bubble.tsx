@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable react/no-unstable-nested-components
 
 import { Download } from "lucide-react";

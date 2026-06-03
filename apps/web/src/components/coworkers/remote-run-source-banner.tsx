@@ -1,5 +1,3 @@
-"use client";
-
 import { Shield } from "lucide-react";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

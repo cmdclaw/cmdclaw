@@ -1,5 +1,3 @@
-"use client";
-
 import { X } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";

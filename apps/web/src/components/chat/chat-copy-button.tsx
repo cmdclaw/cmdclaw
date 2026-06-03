@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversation } from "@/orpc/hooks";

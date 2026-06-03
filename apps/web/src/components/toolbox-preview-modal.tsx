@@ -1,5 +1,3 @@
-"use client";
-
 import { Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { AppLink } from "@/components/app-link";

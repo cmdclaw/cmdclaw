@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, Globe2, Link2, Lock, Share2, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";

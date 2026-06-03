@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, X, Loader2, Wrench, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { AppImage } from "@/components/chat/app-image";
@@ -670,7 +668,13 @@ export function ToolApprovalCard({
     >
       <div className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm">
         {logo ? (
-          <AppImage src={logo} alt={displayName ?? ""} width={16} height={16} className="h-4 w-auto" />
+          <AppImage
+            src={logo}
+            alt={displayName ?? ""}
+            width={16}
+            height={16}
+            className="h-4 w-auto"
+          />
         ) : IntegrationIcon ? (
           <IntegrationIcon className="text-muted-foreground h-4 w-4" />
         ) : (

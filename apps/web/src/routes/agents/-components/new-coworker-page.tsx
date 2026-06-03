@@ -1,5 +1,3 @@
-"use client";
-
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "../-lib/next-navigation-compat";

@@ -1,5 +1,3 @@
-"use client";
-
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import type { AnchorHTMLAttributes, FC, ReactNode } from "react";

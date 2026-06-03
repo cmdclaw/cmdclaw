@@ -1,5 +1,3 @@
-"use client";
-
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Eye, Wrench } from "lucide-react";
 

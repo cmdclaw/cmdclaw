@@ -1,5 +1,3 @@
-"use client";
-
 export type QuestionOption = {
   label: string;
   description?: string;

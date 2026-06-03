@@ -1,5 +1,3 @@
-"use client";
-
 import { ArrowLeft } from "lucide-react";
 import { AppLink as Link } from "../-lib/app-link";
 import { CoworkerOverviewDashboard } from "@/components/coworker-overview-dashboard";
@@ -18,7 +16,11 @@ export default function CoworkerOverviewPage() {
           <ArrowLeft className="size-5" />
         </Link>
       </div>
-      <CoworkerOverviewDashboard data={data} isLoading={isLoading} coworkerLinkPrefix="/agents/edit/" />
+      <CoworkerOverviewDashboard
+        data={data}
+        isLoading={isLoading}
+        coworkerLinkPrefix="/agents/edit/"
+      />
     </div>
   );
 }

@@ -1,5 +1,3 @@
-"use client";
-
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";

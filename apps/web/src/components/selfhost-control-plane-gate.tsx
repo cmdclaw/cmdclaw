@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
 import { AppLink } from "@/components/app-link";
 import { usePathname } from "@/components/next-navigation-compat";

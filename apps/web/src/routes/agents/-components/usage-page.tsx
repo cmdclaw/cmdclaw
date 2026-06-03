@@ -1,5 +1,3 @@
-"use client";
-
 import { ArrowLeft } from "lucide-react";
 import { AppLink as Link } from "../-lib/app-link";
 import { UsageDashboard } from "@/components/usage-dashboard";

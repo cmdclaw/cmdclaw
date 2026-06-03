@@ -1,5 +1,3 @@
-"use client";
-
 // oxlint-disable jsx-a11y/control-has-associated-label unicorn/consistent-function-scoping
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
