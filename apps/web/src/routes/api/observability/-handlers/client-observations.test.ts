@@ -94,8 +94,29 @@ function request(body: unknown): Request {
 describe("client observation intake", () => {
   beforeEach(async () => {
     vi.resetModules();
-    delete (globalThis as typeof globalThis & { cmdclawClientObservationRedis?: unknown })
-      .cmdclawClientObservationRedis;
+    const redisState = globalThis as typeof globalThis & {
+      cmdclawClientObservationRedis?: unknown;
+      cmdclawClientObservationRedisFactory?: () => unknown;
+    };
+    delete redisState.cmdclawClientObservationRedis;
+    redisState.cmdclawClientObservationRedisFactory = () => ({
+      pexpire: redisPexpireMock,
+      set: redisSetMock,
+      multi: () => {
+        const chain = {
+          incrby: (...args: unknown[]) => {
+            redisIncrbyMock(...args);
+            return chain;
+          },
+          pttl: (...args: unknown[]) => {
+            redisPttlMock(...args);
+            return chain;
+          },
+          exec: redisExecMock,
+        };
+        return chain;
+      },
+    });
     vi.clearAllMocks();
     getSessionMock.mockResolvedValue({
       user: { id: "user-1" },
