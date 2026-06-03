@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   exchangeCloudAccountLinkMock,
   getCloudManagedIntegrationConnectUrlMock,
@@ -11,15 +16,15 @@ const {
   getValidLinkRequestMock,
   requireCloudSessionMock,
 } = vi.hoisted(() => ({
-  exchangeCloudAccountLinkMock: vi.fn(),
-  getCloudManagedIntegrationConnectUrlMock: vi.fn(),
-  consumeCloudAccountLinkStateMock: vi.fn(),
-  upsertCloudAccountLinkForUserMock: vi.fn(),
-  getSessionMock: vi.fn(),
-  assertCloudControlPlaneEnabledMock: vi.fn(),
-  assertValidInstanceApiKeyMock: vi.fn(),
-  getValidLinkRequestMock: vi.fn(),
-  requireCloudSessionMock: vi.fn(),
+  exchangeCloudAccountLinkMock: vi.fn<VitestProcedure>(),
+  getCloudManagedIntegrationConnectUrlMock: vi.fn<VitestProcedure>(),
+  consumeCloudAccountLinkStateMock: vi.fn<VitestProcedure>(),
+  upsertCloudAccountLinkForUserMock: vi.fn<VitestProcedure>(),
+  getSessionMock: vi.fn<VitestProcedure>(),
+  assertCloudControlPlaneEnabledMock: vi.fn<VitestProcedure>(),
+  assertValidInstanceApiKeyMock: vi.fn<VitestProcedure>(),
+  getValidLinkRequestMock: vi.fn<VitestProcedure>(),
+  requireCloudSessionMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/control-plane/client", () => ({

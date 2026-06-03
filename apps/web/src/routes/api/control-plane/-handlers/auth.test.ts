@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   requireCloudSessionMock,
   getValidAuthRequestMock,
@@ -13,17 +18,17 @@ const {
   resolveOrCreateLocalUserMock,
   createLocalSessionRedirectResponseMock,
 } = vi.hoisted(() => ({
-  requireCloudSessionMock: vi.fn(),
-  getValidAuthRequestMock: vi.fn(),
-  updateWhereMock: vi.fn(),
-  assertCloudMock: vi.fn(),
-  assertInstanceKeyMock: vi.fn(),
-  userFindFirstMock: vi.fn(),
-  isControlPlaneEnabledMock: vi.fn(),
-  consumeControlPlaneAuthStateMock: vi.fn(),
-  exchangeCloudAuthMock: vi.fn(),
-  resolveOrCreateLocalUserMock: vi.fn(),
-  createLocalSessionRedirectResponseMock: vi.fn(),
+  requireCloudSessionMock: vi.fn<VitestProcedure>(),
+  getValidAuthRequestMock: vi.fn<VitestProcedure>(),
+  updateWhereMock: vi.fn<VitestProcedure>(),
+  assertCloudMock: vi.fn<VitestProcedure>(),
+  assertInstanceKeyMock: vi.fn<VitestProcedure>(),
+  userFindFirstMock: vi.fn<VitestProcedure>(),
+  isControlPlaneEnabledMock: vi.fn<VitestProcedure>(),
+  consumeControlPlaneAuthStateMock: vi.fn<VitestProcedure>(),
+  exchangeCloudAuthMock: vi.fn<VitestProcedure>(),
+  resolveOrCreateLocalUserMock: vi.fn<VitestProcedure>(),
+  createLocalSessionRedirectResponseMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/server/control-plane/auth", () => ({
@@ -40,10 +45,10 @@ vi.mock("@cmdclaw/db/client", () => ({
         findFirst: userFindFirstMock,
       },
     },
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({ where: updateWhereMock })),
+    update: vi.fn<VitestProcedure>(() => ({
+      set: vi.fn<VitestProcedure>(() => ({ where: updateWhereMock })),
     })),
-    insert: vi.fn(() => ({ values: vi.fn() })),
+    insert: vi.fn<VitestProcedure>(() => ({ values: vi.fn<VitestProcedure>() })),
   },
 }));
 
@@ -154,7 +159,9 @@ describe("callbackHandler (GET /api/control-plane/auth/callback)", () => {
     consumeControlPlaneAuthStateMock.mockResolvedValue(null);
 
     const response = await callbackHandler(
-      new Request("http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1"),
+      new Request(
+        "http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1",
+      ),
     );
 
     expect(response.status).toBe(307);
@@ -179,7 +186,9 @@ describe("callbackHandler (GET /api/control-plane/auth/callback)", () => {
 
   it("creates a local session and redirects to the requested page", async () => {
     const response = await callbackHandler(
-      new Request("http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1"),
+      new Request(
+        "http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1",
+      ),
     );
 
     expect(exchangeCloudAuthMock).toHaveBeenCalledWith("code-1");
@@ -209,7 +218,9 @@ describe("callbackHandler (GET /api/control-plane/auth/callback)", () => {
     resolveOrCreateLocalUserMock.mockRejectedValueOnce(new Error("invite_only"));
 
     const response = await callbackHandler(
-      new Request("http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1"),
+      new Request(
+        "http://selfhost.local/api/control-plane/auth/callback?code=code-1&state=state-1",
+      ),
     );
 
     expect(response.status).toBe(307);

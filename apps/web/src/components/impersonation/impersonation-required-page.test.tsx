@@ -4,16 +4,21 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { ImpersonationRequiredPage, type ImpersonationTarget } from "./impersonation-required-page";
 
 void jestDomVitest;
 
 const { getSessionMock, stopImpersonatingMock, impersonateUserMock, assignMock } = vi.hoisted(
   () => ({
-    getSessionMock: vi.fn(),
-    stopImpersonatingMock: vi.fn(),
-    impersonateUserMock: vi.fn(),
-    assignMock: vi.fn(),
+    getSessionMock: vi.fn<VitestProcedure>(),
+    stopImpersonatingMock: vi.fn<VitestProcedure>(),
+    impersonateUserMock: vi.fn<VitestProcedure>(),
+    assignMock: vi.fn<VitestProcedure>(),
   }),
 );
 

@@ -2,22 +2,27 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { InboxItem } from "./inbox-item";
 import type { InboxCoworkerItem } from "./types";
 
 const baseHandlers = {
-  onToggle: vi.fn(),
-  onToggleEditing: vi.fn(),
-  onApprove: vi.fn(),
-  onDeny: vi.fn(),
-  onStop: vi.fn(),
-  onContinue: vi.fn(),
-  onAuthConnect: vi.fn(),
-  onAuthCancel: vi.fn(),
-  onSaveEdit: vi.fn(),
-  onReply: vi.fn(),
-  onOpenTarget: vi.fn(),
-  onMarkAsRead: vi.fn(),
+  onToggle: vi.fn<VitestProcedure>(),
+  onToggleEditing: vi.fn<VitestProcedure>(),
+  onApprove: vi.fn<VitestProcedure>(),
+  onDeny: vi.fn<VitestProcedure>(),
+  onStop: vi.fn<VitestProcedure>(),
+  onContinue: vi.fn<VitestProcedure>(),
+  onAuthConnect: vi.fn<VitestProcedure>(),
+  onAuthCancel: vi.fn<VitestProcedure>(),
+  onSaveEdit: vi.fn<VitestProcedure>(),
+  onReply: vi.fn<VitestProcedure>(),
+  onOpenTarget: vi.fn<VitestProcedure>(),
+  onMarkAsRead: vi.fn<VitestProcedure>(),
 };
 
 function buildPendingItem(): InboxCoworkerItem {
@@ -74,8 +79,8 @@ describe("InboxItem", () => {
   it("labels pending starts as Needs your input and exposes Dismiss separately from Mark as read", () => {
     const handlers = {
       ...baseHandlers,
-      onStop: vi.fn(),
-      onMarkAsRead: vi.fn(),
+      onStop: vi.fn<VitestProcedure>(),
+      onMarkAsRead: vi.fn<VitestProcedure>(),
     };
 
     render(<InboxItem item={buildPendingItem()} isEditing={false} isBusy={false} {...handlers} />);

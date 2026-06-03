@@ -1,10 +1,15 @@
 import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { queueAddMock, getQueueMock, buildQueueJobIdMock } = vi.hoisted(() => ({
-  queueAddMock: vi.fn(),
-  getQueueMock: vi.fn(),
-  buildQueueJobIdMock: vi.fn((parts: string[]) => parts.join(":")),
+  queueAddMock: vi.fn<VitestProcedure>(),
+  getQueueMock: vi.fn<VitestProcedure>(),
+  buildQueueJobIdMock: vi.fn<VitestProcedure>((parts: string[]) => parts.join(":")),
 }));
 
 const SIGNING_SECRET = "test-signing-secret";
@@ -88,7 +93,10 @@ describe("handleSlackEvents", () => {
     expect(queueAddMock).toHaveBeenCalledTimes(1);
     const [jobName, data, opts] = queueAddMock.mock.calls[0];
     expect(jobName).toBe("slack-event");
-    expect(data).toEqual({ payload: expect.objectContaining({ event_id: "Ev123" }), eventId: "Ev123" });
+    expect(data).toEqual({
+      payload: expect.objectContaining({ event_id: "Ev123" }),
+      eventId: "Ev123",
+    });
     expect(opts.jobId).toBe("slack-event:Ev123");
   });
 

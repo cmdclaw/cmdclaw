@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { startCloudAuthMock, isSelfHostedEditionMock, getSessionMock, getInstanceHealthStatusMock } =
   vi.hoisted(() => ({
-    startCloudAuthMock: vi.fn(),
-    isSelfHostedEditionMock: vi.fn(),
-    getSessionMock: vi.fn(),
-    getInstanceHealthStatusMock: vi.fn(),
+    startCloudAuthMock: vi.fn<VitestProcedure>(),
+    isSelfHostedEditionMock: vi.fn<VitestProcedure>(),
+    getSessionMock: vi.fn<VitestProcedure>(),
+    getInstanceHealthStatusMock: vi.fn<VitestProcedure>(),
   }));
 
 vi.mock("@cmdclaw/core/server/control-plane/client", () => ({

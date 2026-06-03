@@ -1,16 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { runGenerationStream } from "./generation-stream";
 
 describe("runGenerationStream", () => {
   it("forwards authSource to startGeneration", async () => {
-    const startGeneration = vi.fn().mockResolvedValue({
+    const startGeneration = vi.fn<VitestProcedure>().mockResolvedValue({
       generationId: "gen-1",
       conversationId: "conv-1",
     });
     const client = {
       generation: {
         startGeneration,
-        subscribeGeneration: vi.fn().mockResolvedValue((async function* () {})()),
+        subscribeGeneration: vi.fn<VitestProcedure>().mockResolvedValue((async function* () {})()),
       },
     };
 
@@ -32,14 +37,14 @@ describe("runGenerationStream", () => {
   });
 
   it("forwards status metadata to onStatusChange", async () => {
-    const onStatusChange = vi.fn();
+    const onStatusChange = vi.fn<VitestProcedure>();
     const client = {
       generation: {
-        startGeneration: vi.fn().mockResolvedValue({
+        startGeneration: vi.fn<VitestProcedure>().mockResolvedValue({
           generationId: "gen-1",
           conversationId: "conv-1",
         }),
-        subscribeGeneration: vi.fn().mockResolvedValue(
+        subscribeGeneration: vi.fn<VitestProcedure>().mockResolvedValue(
           (async function* () {
             yield {
               type: "status_change" as const,
@@ -79,7 +84,7 @@ describe("runGenerationStream", () => {
 
   it("reconnects automatically when the server returns a replay cursor", async () => {
     const subscribeGeneration = vi
-      .fn()
+      .fn<VitestProcedure>()
       .mockResolvedValueOnce(
         (async function* () {
           yield {
@@ -114,12 +119,12 @@ describe("runGenerationStream", () => {
           };
         })(),
       );
-    const onStatusChange = vi.fn();
-    const onDone = vi.fn();
-    const onError = vi.fn();
+    const onStatusChange = vi.fn<VitestProcedure>();
+    const onDone = vi.fn<VitestProcedure>();
+    const onError = vi.fn<VitestProcedure>();
     const client = {
       generation: {
-        startGeneration: vi.fn().mockResolvedValue({
+        startGeneration: vi.fn<VitestProcedure>().mockResolvedValue({
           generationId: "gen-2",
           conversationId: "conv-2",
         }),

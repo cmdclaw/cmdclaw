@@ -1,6 +1,11 @@
 import { templateCatalogSchema } from "@cmdclaw/db/template-catalog";
 import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { callFollowUpTemplate, templateCatalogFixture } from "@/test/template-catalog-fixtures";
 import {
   deleteTemplateCatalogEntry,
@@ -10,26 +15,26 @@ import {
 } from "./template-catalog";
 
 function createDatabase() {
-  const insertOnConflictDoUpdateMock = vi.fn();
-  const insertValuesMock = vi.fn(() => ({
+  const insertOnConflictDoUpdateMock = vi.fn<VitestProcedure>();
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({
     onConflictDoUpdate: insertOnConflictDoUpdateMock,
   }));
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const insertMock = vi.fn<VitestProcedure>(() => ({ values: insertValuesMock }));
 
-  const deleteReturningMock = vi.fn();
-  const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
-  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+  const deleteReturningMock = vi.fn<VitestProcedure>();
+  const deleteWhereMock = vi.fn<VitestProcedure>(() => ({ returning: deleteReturningMock }));
+  const deleteMock = vi.fn<VitestProcedure>(() => ({ where: deleteWhereMock }));
 
-  const updateReturningMock = vi.fn();
-  const updateWhereMock = vi.fn(() => ({ returning: updateReturningMock }));
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+  const updateReturningMock = vi.fn<VitestProcedure>();
+  const updateWhereMock = vi.fn<VitestProcedure>(() => ({ returning: updateReturningMock }));
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: updateSetMock }));
 
   const database = {
     query: {
       templateCatalog: {
-        findMany: vi.fn(),
-        findFirst: vi.fn(),
+        findMany: vi.fn<VitestProcedure>(),
+        findFirst: vi.fn<VitestProcedure>(),
       },
     },
     insert: insertMock,

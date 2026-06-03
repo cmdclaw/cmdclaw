@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -19,16 +24,16 @@ const {
   validateIntegrationSkillFilePathMock,
   dbMock,
 } = vi.hoisted(() => {
-  const createCommunityIntegrationSkillMock = vi.fn();
-  const getOfficialIntegrationSkillIndexMock = vi.fn();
-  const normalizeIntegrationSkillSlugMock = vi.fn();
-  const resolveIntegrationSkillForUserMock = vi.fn();
-  const validateIntegrationSkillFilePathMock = vi.fn();
+  const createCommunityIntegrationSkillMock = vi.fn<VitestProcedure>();
+  const getOfficialIntegrationSkillIndexMock = vi.fn<VitestProcedure>();
+  const normalizeIntegrationSkillSlugMock = vi.fn<VitestProcedure>();
+  const resolveIntegrationSkillForUserMock = vi.fn<VitestProcedure>();
+  const validateIntegrationSkillFilePathMock = vi.fn<VitestProcedure>();
 
   const dbMock = {
     query: {
       integrationSkill: {
-        findMany: vi.fn(),
+        findMany: vi.fn<VitestProcedure>(),
       },
     },
   };
@@ -66,29 +71,29 @@ const integrationSkillRouterAny = integrationSkillRouter as unknown as Record<
 >;
 
 function createContext() {
-  const insertOnConflictDoUpdateMock = vi.fn().mockResolvedValue(undefined);
-  const insertValuesMock = vi.fn(() => ({
+  const insertOnConflictDoUpdateMock = vi.fn<VitestProcedure>().mockResolvedValue(undefined);
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({
     onConflictDoUpdate: insertOnConflictDoUpdateMock,
   }));
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const insertMock = vi.fn<VitestProcedure>(() => ({ values: insertValuesMock }));
 
-  const updateWhereMock = vi.fn().mockResolvedValue(undefined);
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+  const updateWhereMock = vi.fn<VitestProcedure>().mockResolvedValue(undefined);
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: updateSetMock }));
 
-  const deleteWhereMock = vi.fn().mockResolvedValue(undefined);
-  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+  const deleteWhereMock = vi.fn<VitestProcedure>().mockResolvedValue(undefined);
+  const deleteMock = vi.fn<VitestProcedure>(() => ({ where: deleteWhereMock }));
 
   const context = {
     user: { id: "user-1" },
     db: {
       query: {
         integrationSkill: {
-          findMany: vi.fn(),
-          findFirst: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         integrationSkillPreference: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
       },
       insert: insertMock,

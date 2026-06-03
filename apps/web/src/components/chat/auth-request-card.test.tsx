@@ -3,6 +3,11 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { AuthRequestCard } from "./auth-request-card";
 
 void jestDomVitest;
@@ -12,8 +17,8 @@ const CONNECTED_INTEGRATIONS: string[] = [];
 
 describe("AuthRequestCard", () => {
   it("shows connection actions for pending integrations", () => {
-    const onConnect = vi.fn();
-    const onCancel = vi.fn();
+    const onConnect = vi.fn<VitestProcedure>();
+    const onCancel = vi.fn<VitestProcedure>();
 
     render(
       <AuthRequestCard

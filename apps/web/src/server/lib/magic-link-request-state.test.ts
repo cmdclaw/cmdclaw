@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { hashMagicLinkToken } from "@/lib/magic-link-request";
 
 const {
@@ -12,23 +17,23 @@ const {
   updateSetMock,
   updateMock,
 } = vi.hoisted(() => {
-  const deleteWhereMock = vi.fn();
-  const onConflictDoUpdateMock = vi.fn();
-  const insertValuesMock = vi.fn(() => ({
+  const deleteWhereMock = vi.fn<VitestProcedure>();
+  const onConflictDoUpdateMock = vi.fn<VitestProcedure>();
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({
     onConflictDoUpdate: onConflictDoUpdateMock,
   }));
-  const deleteMock = vi.fn(() => ({
+  const deleteMock = vi.fn<VitestProcedure>(() => ({
     where: deleteWhereMock,
   }));
-  const insertMock = vi.fn(() => ({
+  const insertMock = vi.fn<VitestProcedure>(() => ({
     values: insertValuesMock,
   }));
-  const findFirstMock = vi.fn();
-  const updateWhereMock = vi.fn();
-  const updateSetMock = vi.fn(() => ({
+  const findFirstMock = vi.fn<VitestProcedure>();
+  const updateWhereMock = vi.fn<VitestProcedure>();
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({
     where: updateWhereMock,
   }));
-  const updateMock = vi.fn(() => ({
+  const updateMock = vi.fn<VitestProcedure>(() => ({
     set: updateSetMock,
   }));
 

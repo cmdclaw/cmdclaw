@@ -944,8 +944,6 @@ async function runGeneration(
     console.error(`\nRequest failed: ${message}\n`);
     return null;
   }
-
-  return null;
 }
 
 function createSingleMessagePrompt(): readline.Interface | null {

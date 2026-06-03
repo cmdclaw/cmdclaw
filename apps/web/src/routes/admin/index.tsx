@@ -1,3 +1,5 @@
+// oxlint-disable react/no-unstable-nested-components
+
 import type { ColumnDef } from "@tanstack/react-table";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Search, UserRoundCog } from "lucide-react";

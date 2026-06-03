@@ -3,6 +3,11 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import type { SandboxFileData } from "./message-list";
 import { MessageBubble } from "./message-bubble";
 
@@ -26,7 +31,7 @@ describe("MessageBubble", () => {
   });
 
   it("renders assistant messages with clickable sandbox file paths", () => {
-    const onFileClick = vi.fn();
+    const onFileClick = vi.fn<VitestProcedure>();
     render(
       <MessageBubble
         role="assistant"

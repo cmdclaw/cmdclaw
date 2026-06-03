@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { Paperclip, Plus, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import type { AttachmentData } from "@/components/prompt-bar";

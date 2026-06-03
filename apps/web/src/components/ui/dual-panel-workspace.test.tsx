@@ -1,3 +1,5 @@
+// oxlint-disable unicorn/consistent-function-scoping
+
 // @vitest-environment jsdom
 
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";

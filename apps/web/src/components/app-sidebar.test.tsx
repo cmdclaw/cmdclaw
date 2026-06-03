@@ -4,14 +4,19 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { AppSidebar } from "./app-sidebar";
 
 void jestDomVitest;
 
 const mocks = vi.hoisted(() => ({
   pathname: "/inbox",
-  push: vi.fn(),
-  getSession: vi.fn(),
+  push: vi.fn<VitestProcedure>(),
+  getSession: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/components/next-navigation-compat", () => ({
@@ -47,9 +52,9 @@ vi.mock("@/components/app-image", () => ({
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     getSession: mocks.getSession,
-    signOut: vi.fn(),
+    signOut: vi.fn<VitestProcedure>(),
     admin: {
-      stopImpersonating: vi.fn(),
+      stopImpersonating: vi.fn<VitestProcedure>(),
     },
   },
 }));

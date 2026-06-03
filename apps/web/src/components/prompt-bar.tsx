@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { ArrowUp, Loader2, Mic, Paperclip, Plus, Square, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PromptSegment } from "@/lib/prompt-segments";

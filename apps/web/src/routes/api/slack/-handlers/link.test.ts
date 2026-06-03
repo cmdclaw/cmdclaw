@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { getSessionMock, insertMock, valuesMock, onConflictDoUpdateMock } = vi.hoisted(() => {
-  const onConflictDoUpdateMock = vi.fn().mockResolvedValue(undefined);
-  const valuesMock = vi.fn(() => ({ onConflictDoUpdate: onConflictDoUpdateMock }));
-  const insertMock = vi.fn(() => ({ values: valuesMock }));
+  const onConflictDoUpdateMock = vi.fn<VitestProcedure>().mockResolvedValue(undefined);
+  const valuesMock = vi.fn<VitestProcedure>(() => ({ onConflictDoUpdate: onConflictDoUpdateMock }));
+  const insertMock = vi.fn<VitestProcedure>(() => ({ values: valuesMock }));
   return {
-    getSessionMock: vi.fn(),
+    getSessionMock: vi.fn<VitestProcedure>(),
     insertMock,
     valuesMock,
     onConflictDoUpdateMock,

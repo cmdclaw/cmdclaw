@@ -6,6 +6,7 @@ import {
   Controls,
   useNodesState,
   type Node,
+  type OnNodeDrag,
   type OnNodesChange,
   useReactFlow,
 } from "@xyflow/react";
@@ -159,8 +160,8 @@ export function OrgChartCanvas({
     [onNodesChangeBase],
   );
 
-  const onNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+  const onNodeDragStop: OnNodeDrag = useCallback(
+    (_event, node) => {
       updatePosition.mutate({
         id: node.id,
         positionX: Math.round(node.position.x),

@@ -1,13 +1,18 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const authorizeRuntimeTurnMock = vi.fn();
-const coworkerFindFirstMock = vi.fn();
-const coworkerFindManyMock = vi.fn();
-const userFindFirstMock = vi.fn();
-const triggerCoworkerRunMock = vi.fn();
-const uploadCoworkerDocumentMock = vi.fn();
-const resolveCoworkerBuilderContextByConversationMock = vi.fn();
-const applyCoworkerEditMock = vi.fn();
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
+const authorizeRuntimeTurnMock = vi.fn<VitestProcedure>();
+const coworkerFindFirstMock = vi.fn<VitestProcedure>();
+const coworkerFindManyMock = vi.fn<VitestProcedure>();
+const userFindFirstMock = vi.fn<VitestProcedure>();
+const triggerCoworkerRunMock = vi.fn<VitestProcedure>();
+const uploadCoworkerDocumentMock = vi.fn<VitestProcedure>();
+const resolveCoworkerBuilderContextByConversationMock = vi.fn<VitestProcedure>();
+const applyCoworkerEditMock = vi.fn<VitestProcedure>();
 
 vi.mock("@/server/internal/runtime-auth", () => ({
   authorizeRuntimeTurn: authorizeRuntimeTurnMock,

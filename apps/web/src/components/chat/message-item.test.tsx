@@ -3,14 +3,19 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import type { SandboxFileData } from "./message-list";
 import { MessageItem } from "./message-item";
 
 void jestDomVitest;
 
 vi.mock("@/orpc/hooks", () => ({
-  useDownloadAttachment: () => ({ mutateAsync: vi.fn() }),
-  useDownloadSandboxFile: () => ({ mutateAsync: vi.fn() }),
+  useDownloadAttachment: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
+  useDownloadSandboxFile: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
 }));
 
 afterEach(() => {

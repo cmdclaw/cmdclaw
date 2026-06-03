@@ -3,6 +3,11 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { callFollowUpTemplate } from "@/test/template-catalog-fixtures";
 
@@ -15,11 +20,11 @@ const {
   fetchMock,
   assignMock,
 } = vi.hoisted(() => ({
-  mockCreateCoworkerMutateAsync: vi.fn(),
-  mockGetOrCreateBuilderConversation: vi.fn(),
-  mockStartGeneration: vi.fn(),
-  fetchMock: vi.fn(),
-  assignMock: vi.fn(),
+  mockCreateCoworkerMutateAsync: vi.fn<VitestProcedure>(),
+  mockGetOrCreateBuilderConversation: vi.fn<VitestProcedure>(),
+  mockStartGeneration: vi.fn<VitestProcedure>(),
+  fetchMock: vi.fn<VitestProcedure>(),
+  assignMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/orpc/hooks", () => ({

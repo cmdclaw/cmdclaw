@@ -3,12 +3,17 @@ import { zipSync, strToU8 } from "fflate";
 import { Buffer } from "node:buffer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { ensureBucketMock, generateStorageKeyMock, uploadToS3Mock, resolveUniqueSkillNameMock } =
   vi.hoisted(() => ({
-    ensureBucketMock: vi.fn(),
-    generateStorageKeyMock: vi.fn(),
-    uploadToS3Mock: vi.fn(),
-    resolveUniqueSkillNameMock: vi.fn(),
+    ensureBucketMock: vi.fn<VitestProcedure>(),
+    generateStorageKeyMock: vi.fn<VitestProcedure>(),
+    uploadToS3Mock: vi.fn<VitestProcedure>(),
+    resolveUniqueSkillNameMock: vi.fn<VitestProcedure>(),
   }));
 
 vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
@@ -29,7 +34,7 @@ function createDatabase() {
   const insertedDocuments: Array<Array<Record<string, unknown>>> = [];
 
   const tx = {
-    insert: vi.fn((table: unknown) => {
+    insert: vi.fn<VitestProcedure>((table: unknown) => {
       if (table === skill) {
         return {
           values: (values: Record<string, unknown>) => ({
@@ -63,7 +68,7 @@ function createDatabase() {
   };
 
   const db = {
-    transaction: vi.fn(
+    transaction: vi.fn<VitestProcedure>(
       async (callback: (input: typeof tx) => Promise<unknown>) => await callback(tx),
     ),
   };

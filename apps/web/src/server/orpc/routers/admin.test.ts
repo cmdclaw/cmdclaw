@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -26,19 +31,21 @@ const {
   isApprovedLoginEmailMock,
   normalizeApprovedLoginEmailMock,
 } = vi.hoisted(() => ({
-  queueAddMock: vi.fn(),
-  getQueueMock: vi.fn(),
-  updateSetMock: vi.fn(),
-  updateWhereMock: vi.fn(),
-  updateReturningMock: vi.fn(),
-  insertValuesMock: vi.fn(),
-  insertOnConflictDoNothingMock: vi.fn(),
-  findAuthUserByEmailMock: vi.fn(),
-  findAuthUserByIdMock: vi.fn(),
-  resolveOrCreateAuthUserByEmailMock: vi.fn(),
-  setCredentialPasswordMock: vi.fn(),
-  isApprovedLoginEmailMock: vi.fn(),
-  normalizeApprovedLoginEmailMock: vi.fn((email: string) => email.trim().toLowerCase()),
+  queueAddMock: vi.fn<VitestProcedure>(),
+  getQueueMock: vi.fn<VitestProcedure>(),
+  updateSetMock: vi.fn<VitestProcedure>(),
+  updateWhereMock: vi.fn<VitestProcedure>(),
+  updateReturningMock: vi.fn<VitestProcedure>(),
+  insertValuesMock: vi.fn<VitestProcedure>(),
+  insertOnConflictDoNothingMock: vi.fn<VitestProcedure>(),
+  findAuthUserByEmailMock: vi.fn<VitestProcedure>(),
+  findAuthUserByIdMock: vi.fn<VitestProcedure>(),
+  resolveOrCreateAuthUserByEmailMock: vi.fn<VitestProcedure>(),
+  setCredentialPasswordMock: vi.fn<VitestProcedure>(),
+  isApprovedLoginEmailMock: vi.fn<VitestProcedure>(),
+  normalizeApprovedLoginEmailMock: vi.fn<VitestProcedure>((email: string) =>
+    email.trim().toLowerCase(),
+  ),
 }));
 
 vi.mock("../middleware", () => ({
@@ -47,7 +54,7 @@ vi.mock("../middleware", () => ({
 
 vi.mock("@cmdclaw/core/server/queues", () => ({
   SCHEDULED_COWORKER_JOB_NAME: "coworker:scheduled-trigger",
-  buildQueueJobId: vi.fn((parts: Array<string | number>) => parts.join("-")),
+  buildQueueJobId: vi.fn<VitestProcedure>((parts: Array<string | number>) => parts.join("-")),
   getQueue: getQueueMock,
 }));
 
@@ -76,19 +83,19 @@ function createContext() {
     db: {
       query: {
         user: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         coworker: {
-          findMany: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
         },
       },
-      insert: vi.fn(() => ({
+      insert: vi.fn<VitestProcedure>(() => ({
         values: insertValuesMock,
       })),
-      update: vi.fn(() => ({
+      update: vi.fn<VitestProcedure>(() => ({
         set: updateSetMock,
       })),
-      execute: vi.fn(),
+      execute: vi.fn<VitestProcedure>(),
     },
   };
 }

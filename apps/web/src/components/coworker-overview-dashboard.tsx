@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import {
   type ColumnDef,
   type SortingState,

@@ -108,12 +108,19 @@ function formatStatus(snapshot: ChatDebugSnapshot): string {
   return snapshot.status;
 }
 
+const DEFAULT_ENABLED_SCENARIOS: readonly DebugScenarioKey[] = [
+  "approval",
+  "auth",
+  "question",
+  "runtime",
+];
+
 export function ChatDebugPopover({
   armedPreset,
   snapshot,
   disabled = false,
   triggerClassName,
-  enabledScenarios = ["approval", "auth", "question", "runtime"],
+  enabledScenarios = DEFAULT_ENABLED_SCENARIOS,
   introText = "Admin-only debug controls for approval, auth, question, and runtime recovery.",
   promptOverrides,
   labelOverrides,

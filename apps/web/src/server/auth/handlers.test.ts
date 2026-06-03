@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   authHandlerMock,
   getSessionMock,
@@ -12,16 +17,18 @@ const {
   storeProviderTokensMock,
   isOAuthProviderConfigMock,
 } = vi.hoisted(() => ({
-  authHandlerMock: vi.fn(),
-  getSessionMock: vi.fn(),
-  requestPasswordResetMock: vi.fn(),
-  hasCredentialPasswordByEmailMock: vi.fn(),
-  isApprovedLoginEmailMock: vi.fn(),
-  normalizeApprovedLoginEmailMock: vi.fn((email: string) => email.trim().toLowerCase()),
-  resolveOrCreateAuthUserByEmailMock: vi.fn(),
-  consumePendingMock: vi.fn(),
-  storeProviderTokensMock: vi.fn(),
-  isOAuthProviderConfigMock: vi.fn(),
+  authHandlerMock: vi.fn<VitestProcedure>(),
+  getSessionMock: vi.fn<VitestProcedure>(),
+  requestPasswordResetMock: vi.fn<VitestProcedure>(),
+  hasCredentialPasswordByEmailMock: vi.fn<VitestProcedure>(),
+  isApprovedLoginEmailMock: vi.fn<VitestProcedure>(),
+  normalizeApprovedLoginEmailMock: vi.fn<VitestProcedure>((email: string) =>
+    email.trim().toLowerCase(),
+  ),
+  resolveOrCreateAuthUserByEmailMock: vi.fn<VitestProcedure>(),
+  consumePendingMock: vi.fn<VitestProcedure>(),
+  storeProviderTokensMock: vi.fn<VitestProcedure>(),
+  isOAuthProviderConfigMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -42,7 +49,7 @@ vi.mock("@/env", () => ({
 }));
 
 vi.mock("@/lib/trusted-origins", () => ({
-  getTrustedOrigins: vi.fn(() => ["https://cmdclaw.ai"]),
+  getTrustedOrigins: vi.fn<VitestProcedure>(() => ["https://cmdclaw.ai"]),
 }));
 
 vi.mock("@/server/lib/credential-accounts", () => ({
@@ -363,14 +370,12 @@ describe("handleProviderCallback (/api/auth/provider/:provider/callback)", () =>
   it("exchanges the code and stores tokens on success", async () => {
     consumePendingMock.mockResolvedValueOnce({ userId: "owner", codeVerifier: "verifier" });
     getSessionMock.mockResolvedValueOnce({ user: { id: "owner" } });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 60 }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 60 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
 
     const response = await handleProviderCallback(
       new Request("https://cmdclaw.ai/api/auth/provider/openai/callback?code=c&state=s"),

@@ -1,13 +1,18 @@
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { UNIPILE_MISSING_CREDENTIALS_MESSAGE } from "@/lib/integration-errors";
 import { mswServer } from "@/test/msw/server";
 
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -22,12 +27,12 @@ const {
   encryptMock,
   decryptMock,
 } = vi.hoisted(() => ({
-  getOAuthConfigMock: vi.fn(),
-  generateLinkedInAuthUrlMock: vi.fn(),
-  deleteUnipileAccountMock: vi.fn(),
-  getUnipileAccountMock: vi.fn(),
-  encryptMock: vi.fn((value: string) => `enc:${value}`),
-  decryptMock: vi.fn((value: string) => value.replace(/^enc:/, "")),
+  getOAuthConfigMock: vi.fn<VitestProcedure>(),
+  generateLinkedInAuthUrlMock: vi.fn<VitestProcedure>(),
+  deleteUnipileAccountMock: vi.fn<VitestProcedure>(),
+  getUnipileAccountMock: vi.fn<VitestProcedure>(),
+  encryptMock: vi.fn<VitestProcedure>((value: string) => `enc:${value}`),
+  decryptMock: vi.fn<VitestProcedure>((value: string) => value.replace(/^enc:/, "")),
 }));
 
 vi.mock("../middleware", () => ({
@@ -60,53 +65,53 @@ function encodeState(state: Record<string, unknown>) {
 }
 
 function createContext() {
-  const insertReturningMock = vi.fn();
-  const insertOnConflictDoUpdateMock = vi.fn().mockResolvedValue(undefined);
-  const insertValuesMock = vi.fn(() => ({
+  const insertReturningMock = vi.fn<VitestProcedure>();
+  const insertOnConflictDoUpdateMock = vi.fn<VitestProcedure>().mockResolvedValue(undefined);
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({
     returning: insertReturningMock,
     onConflictDoUpdate: insertOnConflictDoUpdateMock,
   }));
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const insertMock = vi.fn<VitestProcedure>(() => ({ values: insertValuesMock }));
 
-  const updateReturningMock = vi.fn().mockResolvedValue([]);
-  const updateWhereMock = vi.fn(() => ({ returning: updateReturningMock }));
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+  const updateReturningMock = vi.fn<VitestProcedure>().mockResolvedValue([]);
+  const updateWhereMock = vi.fn<VitestProcedure>(() => ({ returning: updateReturningMock }));
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: updateSetMock }));
 
-  const deleteReturningMock = vi.fn().mockResolvedValue([]);
-  const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
-  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+  const deleteReturningMock = vi.fn<VitestProcedure>().mockResolvedValue([]);
+  const deleteWhereMock = vi.fn<VitestProcedure>(() => ({ returning: deleteReturningMock }));
+  const deleteMock = vi.fn<VitestProcedure>(() => ({ where: deleteWhereMock }));
 
   return {
     user: { id: "user-1", email: "user@example.com" },
     db: {
       query: {
         user: {
-          findFirst: vi.fn().mockResolvedValue({
+          findFirst: vi.fn<VitestProcedure>().mockResolvedValue({
             role: "admin",
             email: "user@example.com",
             name: "Test User",
           }),
         },
         integration: {
-          findMany: vi.fn(),
-          findFirst: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         connectedIdentity: {
-          findMany: vi.fn().mockResolvedValue([]),
-          findFirst: vi.fn(),
+          findMany: vi.fn<VitestProcedure>().mockResolvedValue([]),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         googleIntegrationAccessAllowlist: {
-          findFirst: vi.fn().mockResolvedValue(null),
-          findMany: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>().mockResolvedValue(null),
+          findMany: vi.fn<VitestProcedure>(),
         },
         customIntegration: {
-          findFirst: vi.fn(),
-          findMany: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
+          findMany: vi.fn<VitestProcedure>(),
         },
         customIntegrationCredential: {
-          findFirst: vi.fn(),
-          findMany: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
+          findMany: vi.fn<VitestProcedure>(),
         },
       },
       insert: insertMock,
@@ -145,7 +150,7 @@ describe("integrationRouter", () => {
       tokenUrl: "https://oauth.example.com/token",
       redirectUri: "https://app.example.com/api/oauth/callback",
       scopes: ["scope:read", "scope:write"],
-      getUserInfo: vi.fn(async () => ({
+      getUserInfo: vi.fn<VitestProcedure>(async () => ({
         id: "provider-user",
         displayName: "Provider User",
         metadata: { team: "alpha" },
@@ -1022,7 +1027,7 @@ describe("integrationRouter", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(
+      vi.fn<VitestProcedure>(
         async () =>
           new Response(
             JSON.stringify({

@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { findFirstMock, insertMock, insertValuesMock, updateMock, updateSetMock, updateWhereMock } =
   vi.hoisted(() => ({
-    findFirstMock: vi.fn(),
-    insertMock: vi.fn(),
-    insertValuesMock: vi.fn(),
-    updateMock: vi.fn(),
-    updateSetMock: vi.fn(),
-    updateWhereMock: vi.fn(),
+    findFirstMock: vi.fn<VitestProcedure>(),
+    insertMock: vi.fn<VitestProcedure>(),
+    insertValuesMock: vi.fn<VitestProcedure>(),
+    updateMock: vi.fn<VitestProcedure>(),
+    updateSetMock: vi.fn<VitestProcedure>(),
+    updateWhereMock: vi.fn<VitestProcedure>(),
   }));
 
 vi.mock("@/env", () => ({

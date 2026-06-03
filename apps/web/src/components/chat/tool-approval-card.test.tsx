@@ -3,6 +3,11 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { ToolApprovalCard } from "./tool-approval-card";
 
 void jestDomVitest;
@@ -57,7 +62,7 @@ afterEach(() => {
 
 describe("ToolApprovalCard", () => {
   it("submits a typed custom answer with the submit button", () => {
-    const onApprove = vi.fn();
+    const onApprove = vi.fn<VitestProcedure>();
 
     render(
       <ToolApprovalCard
@@ -67,7 +72,7 @@ describe("ToolApprovalCard", () => {
         integration="cmdclaw"
         operation="question"
         onApprove={onApprove}
-        onDeny={vi.fn()}
+        onDeny={vi.fn<VitestProcedure>()}
         status="pending"
       />,
     );
@@ -91,8 +96,8 @@ describe("ToolApprovalCard", () => {
         operation="question"
         command="Question: undefined"
         questionAnswers={APPROVED_QUESTION_ANSWERS}
-        onApprove={vi.fn()}
-        onDeny={vi.fn()}
+        onApprove={vi.fn<VitestProcedure>()}
+        onDeny={vi.fn<VitestProcedure>()}
         status="approved"
       />,
     );
@@ -112,8 +117,8 @@ describe("ToolApprovalCard", () => {
           toolInput={MULTI_QUESTION_TOOL_INPUT}
           integration="cmdclaw"
           operation="question"
-          onApprove={vi.fn()}
-          onDeny={vi.fn()}
+          onApprove={vi.fn<VitestProcedure>()}
+          onDeny={vi.fn<VitestProcedure>()}
           status="pending"
         />,
       );
@@ -127,7 +132,7 @@ describe("ToolApprovalCard", () => {
     });
 
     it("auto-advances to next question on single-select click", () => {
-      const onApprove = vi.fn();
+      const onApprove = vi.fn<VitestProcedure>();
 
       render(
         <ToolApprovalCard
@@ -137,7 +142,7 @@ describe("ToolApprovalCard", () => {
           integration="cmdclaw"
           operation="question"
           onApprove={onApprove}
-          onDeny={vi.fn()}
+          onDeny={vi.fn<VitestProcedure>()}
           status="pending"
         />,
       );
@@ -154,7 +159,7 @@ describe("ToolApprovalCard", () => {
     });
 
     it("can go back to a previous question and change the saved answer", () => {
-      const onApprove = vi.fn();
+      const onApprove = vi.fn<VitestProcedure>();
 
       render(
         <ToolApprovalCard
@@ -164,7 +169,7 @@ describe("ToolApprovalCard", () => {
           integration="cmdclaw"
           operation="question"
           onApprove={onApprove}
-          onDeny={vi.fn()}
+          onDeny={vi.fn<VitestProcedure>()}
           status="pending"
         />,
       );
@@ -184,7 +189,7 @@ describe("ToolApprovalCard", () => {
     });
 
     it("submits all answers after answering the last question", () => {
-      const onApprove = vi.fn();
+      const onApprove = vi.fn<VitestProcedure>();
 
       render(
         <ToolApprovalCard
@@ -194,7 +199,7 @@ describe("ToolApprovalCard", () => {
           integration="cmdclaw"
           operation="question"
           onApprove={onApprove}
-          onDeny={vi.fn()}
+          onDeny={vi.fn<VitestProcedure>()}
           status="pending"
         />,
       );
@@ -221,8 +226,8 @@ describe("ToolApprovalCard", () => {
           integration="cmdclaw"
           operation="question"
           questionAnswers={MULTI_APPROVED_ANSWERS}
-          onApprove={vi.fn()}
-          onDeny={vi.fn()}
+          onApprove={vi.fn<VitestProcedure>()}
+          onDeny={vi.fn<VitestProcedure>()}
           status="approved"
         />,
       );
@@ -244,8 +249,8 @@ describe("ToolApprovalCard", () => {
         integration="cmdclaw"
         operation="patch"
         command='coworker invoke --username linkedin-digest --message "Review this inbox" --json'
-        onApprove={vi.fn()}
-        onDeny={vi.fn()}
+        onApprove={vi.fn<VitestProcedure>()}
+        onDeny={vi.fn<VitestProcedure>()}
         status="pending"
       />,
     );
@@ -265,8 +270,8 @@ describe("ToolApprovalCard", () => {
         integration="cmdclaw"
         operation="patch"
         command="agent-browser screenshot --full /tmp/example.png"
-        onApprove={vi.fn()}
-        onDeny={vi.fn()}
+        onApprove={vi.fn<VitestProcedure>()}
+        onDeny={vi.fn<VitestProcedure>()}
         status="pending"
       />,
     );

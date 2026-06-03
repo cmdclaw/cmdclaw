@@ -1,10 +1,14 @@
 import type { ReactNode } from "react";
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { TanStackDevtools } from "@tanstack/react-devtools";
+import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import type { RouterAppContext } from "@/router";
+import { AppRootShell } from "@/components/app-root-shell";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { RootNotFound } from "@/components/root-not-found";
 import { SessionPrincipalCacheGuard } from "@/components/session-principal-cache-guard";
 import { env } from "@/env";
+import { fetchSessionContext } from "@/lib/route-guards";
 // Local font assets (replaces next/font Geist / Geist_Mono). These set the
 // "Geist" / "Geist Mono" font-family names that the Tailwind font tokens resolve to
 // via the --font-geist-sans / --font-geist-mono CSS variables in globals.css.
@@ -24,6 +28,13 @@ import "@/styles/globals.css";
 // on the server and the client.
 const edition = env.NEXT_PUBLIC_CMDCLAW_EDITION ?? "cloud";
 const isSelfHost = edition === "selfhost";
+const TANSTACK_DEVTOOLS_CONFIG = { position: "bottom-right" } as const;
+const TANSTACK_DEVTOOLS_PLUGINS = [
+  {
+    name: "TanStack Router",
+    render: <TanStackRouterDevtoolsPanel />,
+  },
+];
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
@@ -56,13 +67,21 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       <RootNotFound />
     </RootDocument>
   ),
+  loader: async () => {
+    const context = await fetchSessionContext();
+    return { hasSession: Boolean(context.principal) };
+  },
   component: RootComponent,
 });
 
 function RootComponent() {
+  const { hasSession } = Route.useLoaderData();
+
   return (
     <RootDocument>
-      <Outlet />
+      <AppRootShell hasSession={hasSession}>
+        <Outlet />
+      </AppRootShell>
     </RootDocument>
   );
 }
@@ -80,6 +99,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <body className="antialiased" data-edition={edition}>
         <SessionPrincipalCacheGuard />
         {children}
+        {import.meta.env.DEV ? (
+          <TanStackDevtools config={TANSTACK_DEVTOOLS_CONFIG} plugins={TANSTACK_DEVTOOLS_PLUGINS} />
+        ) : null}
         <Scripts />
       </body>
     </html>

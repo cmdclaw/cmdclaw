@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   getSessionMock,
   conversationFindFirstMock,
@@ -12,16 +17,16 @@ const {
   redisPexpireMock,
   redisSetMock,
 } = vi.hoisted(() => ({
-  getSessionMock: vi.fn(),
-  conversationFindFirstMock: vi.fn(),
-  generationFindFirstMock: vi.fn(),
-  emitClientObservationMock: vi.fn(),
-  requireActiveWorkspaceAccessMock: vi.fn(),
-  redisExecMock: vi.fn(),
-  redisIncrbyMock: vi.fn(),
-  redisPttlMock: vi.fn(),
-  redisPexpireMock: vi.fn(),
-  redisSetMock: vi.fn(),
+  getSessionMock: vi.fn<VitestProcedure>(),
+  conversationFindFirstMock: vi.fn<VitestProcedure>(),
+  generationFindFirstMock: vi.fn<VitestProcedure>(),
+  emitClientObservationMock: vi.fn<VitestProcedure>(),
+  requireActiveWorkspaceAccessMock: vi.fn<VitestProcedure>(),
+  redisExecMock: vi.fn<VitestProcedure>(),
+  redisIncrbyMock: vi.fn<VitestProcedure>(),
+  redisPttlMock: vi.fn<VitestProcedure>(),
+  redisPexpireMock: vi.fn<VitestProcedure>(),
+  redisSetMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/lib/auth", () => ({

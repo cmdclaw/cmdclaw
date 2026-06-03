@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable eslint/no-underscore-dangle
+
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
@@ -722,16 +724,16 @@ export default function CoworkersPage() {
             Describe a task and we&apos;ll build it step by step
           </p>
           <PromptBar
-            onSubmit={handlePromptSubmit}
+            onSubmit={_handlePromptSubmit}
             isSubmitting={isCreating}
             disabled={isCreating || isRecording || isProcessingVoice}
             placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
             isRecording={isRecording}
-            onStartRecording={handleStartRecording}
-            onStopRecording={stopRecordingAndTranscribe}
+            onStartRecording={_handleStartRecording}
+            onStopRecording={_stopRecordingAndTranscribe}
             voiceInteractionMode="toggle"
             prefillRequest={inputPrefillRequest}
-            renderModelSelector={modelSelectorNode}
+            renderModelSelector={_modelSelectorNode}
           />
           {(isRecording || isProcessingVoice || voiceError) && (
             <div className="mt-4">

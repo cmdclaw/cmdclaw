@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { getSessionMock, envMock } = vi.hoisted(() => ({
-  getSessionMock: vi.fn(),
+  getSessionMock: vi.fn<VitestProcedure>(),
   envMock: { SLACK_BOT_TOKEN: "xoxb-test" } as { SLACK_BOT_TOKEN: string | undefined },
 }));
 
@@ -57,9 +62,11 @@ describe("handleReport", () => {
   });
 
   it("returns 400 when the JSON body has no message", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      Response.json({ ok: true, channels: [{ id: "C1", name: "bugs" }] }),
-    ) as unknown as typeof fetch;
+    globalThis.fetch = vi
+      .fn<VitestProcedure>()
+      .mockResolvedValue(
+        Response.json({ ok: true, channels: [{ id: "C1", name: "bugs" }] }),
+      ) as unknown as typeof fetch;
 
     const response = await handleReport(jsonRequest({ message: "   " }));
 
@@ -68,9 +75,11 @@ describe("handleReport", () => {
   });
 
   it("returns 400 on an invalid JSON payload", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      Response.json({ ok: true, channels: [{ id: "C1", name: "bugs" }] }),
-    ) as unknown as typeof fetch;
+    globalThis.fetch = vi
+      .fn<VitestProcedure>()
+      .mockResolvedValue(
+        Response.json({ ok: true, channels: [{ id: "C1", name: "bugs" }] }),
+      ) as unknown as typeof fetch;
 
     const request = new Request("https://cmdclaw.ai/api/report", {
       method: "POST",
@@ -85,9 +94,11 @@ describe("handleReport", () => {
   });
 
   it("returns 500 when the bugs channel cannot be resolved", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      Response.json({ ok: true, channels: [{ id: "C9", name: "general" }] }),
-    ) as unknown as typeof fetch;
+    globalThis.fetch = vi
+      .fn<VitestProcedure>()
+      .mockResolvedValue(
+        Response.json({ ok: true, channels: [{ id: "C9", name: "general" }] }),
+      ) as unknown as typeof fetch;
 
     const response = await handleReport(jsonRequest({ message: "broken" }));
 
@@ -99,7 +110,7 @@ describe("handleReport", () => {
 
   it("posts a text message to the resolved bugs channel and returns ok", async () => {
     const fetchMock = vi
-      .fn()
+      .fn<VitestProcedure>()
       .mockResolvedValueOnce(
         Response.json({ ok: true, channels: [{ id: "C1", name_normalized: "bugs" }] }),
       )
@@ -123,7 +134,7 @@ describe("handleReport", () => {
   it("uploads a multipart attachment preserving the raw bytes and length", async () => {
     const fileContents = "log line\nsecond line";
     const fetchMock = vi
-      .fn()
+      .fn<VitestProcedure>()
       // conversations.list
       .mockResolvedValueOnce(
         Response.json({ ok: true, channels: [{ id: "C1", name_normalized: "bugs" }] }),
@@ -140,10 +151,7 @@ describe("handleReport", () => {
 
     const formData = new FormData();
     formData.append("message", "with attachment");
-    formData.append(
-      "attachment",
-      new File([fileContents], "trace.txt", { type: "text/plain" }),
-    );
+    formData.append("attachment", new File([fileContents], "trace.txt", { type: "text/plain" }));
     const request = new Request("https://cmdclaw.ai/api/report", {
       method: "POST",
       body: formData,
@@ -179,7 +187,7 @@ describe("handleReport", () => {
 
   it("returns 502 when Slack rejects the message", async () => {
     const fetchMock = vi
-      .fn()
+      .fn<VitestProcedure>()
       .mockResolvedValueOnce(
         Response.json({ ok: true, channels: [{ id: "C1", name_normalized: "bugs" }] }),
       )

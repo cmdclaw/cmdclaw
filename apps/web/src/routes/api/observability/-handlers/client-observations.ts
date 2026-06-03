@@ -29,17 +29,17 @@ const DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const LOW_VALUE_SUCCESS_SAMPLE_RATE = 0.25;
 
 const redisState = globalThis as typeof globalThis & {
-  __cmdclawClientObservationRedis?: IORedis;
+  cmdclawClientObservationRedis?: IORedis;
 };
 
 function getClientObservationRedis(): IORedis {
-  redisState.__cmdclawClientObservationRedis ??= new IORedis(
+  redisState.cmdclawClientObservationRedis ??= new IORedis(
     buildRedisOptions(process.env.REDIS_URL ?? "redis://localhost:6379", {
       maxRetriesPerRequest: 1,
       enableReadyCheck: false,
     }),
   );
-  return redisState.__cmdclawClientObservationRedis;
+  return redisState.cmdclawClientObservationRedis;
 }
 
 function getClientIp(request: Request): string {

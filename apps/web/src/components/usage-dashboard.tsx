@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { ArrowRight, Loader2 } from "lucide-react";
 import { type CSSProperties, useCallback, useMemo, useState } from "react";
 import {

@@ -1,11 +1,16 @@
 import { ORPCError } from "@orpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -20,11 +25,11 @@ const {
   downloadFromS3Mock,
   dbMock,
 } = vi.hoisted(() => {
-  const conversationFindFirstMock = vi.fn();
-  const conversationFindManyMock = vi.fn();
-  const sandboxFileFindFirstMock = vi.fn();
-  const userFindFirstMock = vi.fn();
-  const downloadFromS3Mock = vi.fn();
+  const conversationFindFirstMock = vi.fn<VitestProcedure>();
+  const conversationFindManyMock = vi.fn<VitestProcedure>();
+  const sandboxFileFindFirstMock = vi.fn<VitestProcedure>();
+  const userFindFirstMock = vi.fn<VitestProcedure>();
+  const downloadFromS3Mock = vi.fn<VitestProcedure>();
 
   const dbMock = {
     query: {
@@ -56,11 +61,11 @@ vi.mock("../middleware", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/services/memory-service", () => ({
-  writeSessionTranscriptFromConversation: vi.fn(),
+  writeSessionTranscriptFromConversation: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/services/opencode-session-snapshot-service", () => ({
-  clearConversationSessionSnapshot: vi.fn(),
+  clearConversationSessionSnapshot: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
@@ -68,11 +73,11 @@ vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
 }));
 
 vi.mock("../workspace-access", () => ({
-  requireActiveWorkspaceAccess: vi.fn(async () => ({
+  requireActiveWorkspaceAccess: vi.fn<VitestProcedure>(async () => ({
     workspace: { id: "ws-1" },
     membership: { role: "member" },
   })),
-  requireActiveWorkspaceAdmin: vi.fn(async () => ({
+  requireActiveWorkspaceAdmin: vi.fn<VitestProcedure>(async () => ({
     workspace: { id: "ws-1" },
     membership: { role: "admin" },
   })),

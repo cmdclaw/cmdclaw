@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { z } from "zod";
 
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -28,20 +33,20 @@ const {
   listConfiguredRemoteIntegrationTargetsMock,
   searchRemoteIntegrationUsersMock,
 } = vi.hoisted(() => ({
-  triggerCoworkerRunMock: vi.fn(),
-  reconcileStaleCoworkerRunsForCoworkerMock: vi.fn(),
-  reconcileStaleCoworkerRunsForCoworkersMock: vi.fn(),
-  syncCoworkerScheduleJobMock: vi.fn(),
-  removeCoworkerScheduleJobMock: vi.fn(),
-  generateCoworkerMetadataOnFirstPromptFillMock: vi.fn(),
-  normalizeAndEnsureUniqueCoworkerUsernameMock: vi.fn(),
-  applyCoworkerEditMock: vi.fn(),
-  uploadCoworkerDocumentMock: vi.fn(),
-  deleteCoworkerDocumentMock: vi.fn(),
-  downloadFromS3Mock: vi.fn(),
-  getPresignedDownloadUrlMock: vi.fn(),
-  listConfiguredRemoteIntegrationTargetsMock: vi.fn(),
-  searchRemoteIntegrationUsersMock: vi.fn(),
+  triggerCoworkerRunMock: vi.fn<VitestProcedure>(),
+  reconcileStaleCoworkerRunsForCoworkerMock: vi.fn<VitestProcedure>(),
+  reconcileStaleCoworkerRunsForCoworkersMock: vi.fn<VitestProcedure>(),
+  syncCoworkerScheduleJobMock: vi.fn<VitestProcedure>(),
+  removeCoworkerScheduleJobMock: vi.fn<VitestProcedure>(),
+  generateCoworkerMetadataOnFirstPromptFillMock: vi.fn<VitestProcedure>(),
+  normalizeAndEnsureUniqueCoworkerUsernameMock: vi.fn<VitestProcedure>(),
+  applyCoworkerEditMock: vi.fn<VitestProcedure>(),
+  uploadCoworkerDocumentMock: vi.fn<VitestProcedure>(),
+  deleteCoworkerDocumentMock: vi.fn<VitestProcedure>(),
+  downloadFromS3Mock: vi.fn<VitestProcedure>(),
+  getPresignedDownloadUrlMock: vi.fn<VitestProcedure>(),
+  listConfiguredRemoteIntegrationTargetsMock: vi.fn<VitestProcedure>(),
+  searchRemoteIntegrationUsersMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -100,11 +105,11 @@ vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
 });
 
 vi.mock("../workspace-access", () => ({
-  requireActiveWorkspaceAccess: vi.fn(async () => ({
+  requireActiveWorkspaceAccess: vi.fn<VitestProcedure>(async () => ({
     workspace: { id: "ws-1" },
     membership: { role: "member" },
   })),
-  requireActiveWorkspaceAdmin: vi.fn(async () => ({
+  requireActiveWorkspaceAdmin: vi.fn<VitestProcedure>(async () => ({
     workspace: { id: "ws-1" },
     membership: { role: "admin" },
   })),
@@ -119,18 +124,18 @@ const coworkerRouterAny = coworkerRouter as unknown as Record<
 const DEFAULT_MODEL = "openai/gpt-5.4";
 
 function createContext() {
-  const insertReturningMock = vi.fn();
-  const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const insertReturningMock = vi.fn<VitestProcedure>();
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({ returning: insertReturningMock }));
+  const insertMock = vi.fn<VitestProcedure>(() => ({ values: insertValuesMock }));
 
-  const updateReturningMock = vi.fn();
-  const updateWhereMock = vi.fn(() => ({ returning: updateReturningMock }));
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+  const updateReturningMock = vi.fn<VitestProcedure>();
+  const updateWhereMock = vi.fn<VitestProcedure>(() => ({ returning: updateReturningMock }));
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: updateSetMock }));
 
-  const deleteReturningMock = vi.fn();
-  const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
-  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+  const deleteReturningMock = vi.fn<VitestProcedure>();
+  const deleteWhereMock = vi.fn<VitestProcedure>(() => ({ returning: deleteReturningMock }));
+  const deleteMock = vi.fn<VitestProcedure>(() => ({ where: deleteWhereMock }));
 
   const selectResultQueue: unknown[][] = [];
   const enqueueSelectResult = (...rows: unknown[][]) => {
@@ -139,18 +144,18 @@ function createContext() {
   const buildSelectQuery = (shape: Record<string, unknown>, rows: unknown[]) => {
     const resolvedRows = Promise.resolve(rows);
     const result = Object.assign(resolvedRows, {
-      orderBy: vi.fn(() => resolvedRows),
-      as: vi.fn((alias: string) => ({ ...shape, __alias: alias })),
+      orderBy: vi.fn<VitestProcedure>(() => resolvedRows),
+      as: vi.fn<VitestProcedure>((alias: string) => ({ ...shape, __alias: alias })),
     });
     const query = {
-      from: vi.fn(() => query),
-      innerJoin: vi.fn(() => query),
-      leftJoin: vi.fn(() => query),
-      where: vi.fn(() => result),
+      from: vi.fn<VitestProcedure>(() => query),
+      innerJoin: vi.fn<VitestProcedure>(() => query),
+      leftJoin: vi.fn<VitestProcedure>(() => query),
+      where: vi.fn<VitestProcedure>(() => result),
     };
     return query;
   };
-  const selectMock = vi.fn((shape: Record<string, unknown>) =>
+  const selectMock = vi.fn<VitestProcedure>((shape: Record<string, unknown>) =>
     buildSelectQuery(shape, selectResultQueue.shift() ?? []),
   );
 
@@ -160,31 +165,31 @@ function createContext() {
     db: {
       query: {
         coworker: {
-          findFirst: vi.fn(),
-          findMany: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
+          findMany: vi.fn<VitestProcedure>(),
         },
         coworkerDocument: {
-          findFirst: vi.fn(),
-          findMany: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
+          findMany: vi.fn<VitestProcedure>(),
         },
         coworkerRun: {
-          findMany: vi.fn(),
-          findFirst: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         coworkerRunEvent: {
-          findMany: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
         },
         generation: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         conversation: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         user: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         workspaceMcpServer: {
-          findMany: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
         },
       },
       insert: insertMock,

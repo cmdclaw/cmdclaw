@@ -3,6 +3,11 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { useChatDraftStore } from "./chat-draft-store";
 import { ChatInput } from "./chat-input";
 
@@ -21,7 +26,7 @@ describe("ChatInput", () => {
   });
 
   it("queues a message while streaming", () => {
-    const onSend = vi.fn();
+    const onSend = vi.fn<VitestProcedure>();
 
     render(<ChatInput onSend={onSend} isStreaming />);
 
@@ -35,7 +40,7 @@ describe("ChatInput", () => {
   });
 
   it("keeps textarea editable while streaming", () => {
-    render(<ChatInput onSend={vi.fn()} isStreaming disabled={false} />);
+    render(<ChatInput onSend={vi.fn<VitestProcedure>()} isStreaming disabled={false} />);
 
     const [input] = screen.getAllByTestId("chat-input") as HTMLTextAreaElement[];
     fireEvent.change(input, { target: { value: "Draft while generating" } });
@@ -47,7 +52,7 @@ describe("ChatInput", () => {
   it("restores a saved draft for a conversation", () => {
     useChatDraftStore.getState().upsertDraft("conv-1", "Saved draft");
 
-    render(<ChatInput onSend={vi.fn()} conversationId="conv-1" />);
+    render(<ChatInput onSend={vi.fn<VitestProcedure>()} conversationId="conv-1" />);
 
     const inputs = screen.getAllByTestId("chat-input") as HTMLTextAreaElement[];
     const input = inputs[inputs.length - 1];
@@ -59,17 +64,17 @@ describe("ChatInput", () => {
     store.upsertDraft("__new_chat__", "New draft");
     store.upsertDraft("conv-1", "Conv 1 draft");
 
-    const view = render(<ChatInput onSend={vi.fn()} />);
+    const view = render(<ChatInput onSend={vi.fn<VitestProcedure>()} />);
     let inputs = screen.getAllByTestId("chat-input") as HTMLTextAreaElement[];
     expect(inputs[inputs.length - 1]?.value).toBe("New draft");
 
-    view.rerender(<ChatInput onSend={vi.fn()} conversationId="conv-1" />);
+    view.rerender(<ChatInput onSend={vi.fn<VitestProcedure>()} conversationId="conv-1" />);
     inputs = screen.getAllByTestId("chat-input") as HTMLTextAreaElement[];
     expect(inputs[inputs.length - 1]?.value).toBe("Conv 1 draft");
   });
 
   it("appends prefilled text when append mode is requested", async () => {
-    const onSend = vi.fn();
+    const onSend = vi.fn<VitestProcedure>();
     const view = render(<ChatInput onSend={onSend} />);
     const input = view.container.querySelector('[data-testid="chat-input"]') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "Draft" } });
@@ -85,7 +90,7 @@ describe("ChatInput", () => {
   });
 
   it("caps long drafts and makes the textarea scroll internally", () => {
-    const view = render(<ChatInput onSend={vi.fn()} />);
+    const view = render(<ChatInput onSend={vi.fn<VitestProcedure>()} />);
     const input = view.container.querySelector('[data-testid="chat-input"]') as HTMLTextAreaElement;
 
     Object.defineProperty(input, "scrollHeight", {

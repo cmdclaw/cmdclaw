@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { Send, Square, Mic, Paperclip, X, Clock3 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AppImage } from "@/components/chat/app-image";

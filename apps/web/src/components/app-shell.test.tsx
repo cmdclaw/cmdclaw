@@ -3,6 +3,11 @@
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { AppShell } from "./app-shell";
 
 void jestDomVitest;
@@ -36,7 +41,7 @@ vi.mock("@/components/selfhost-control-plane-gate", () => ({
 
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
-    getSession: vi.fn(),
+    getSession: vi.fn<VitestProcedure>(),
   },
 }));
 

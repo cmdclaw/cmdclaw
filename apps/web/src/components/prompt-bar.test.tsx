@@ -4,6 +4,11 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import type { PromptSegment } from "@/lib/prompt-segments";
 import { useChatDraftStore } from "@/components/chat/chat-draft-store";
 import { PromptBar } from "./prompt-bar";
@@ -56,7 +61,7 @@ describe("PromptBar", () => {
   });
 
   it("clears the composer after a successful async submit", async () => {
-    const onSubmit = vi.fn().mockResolvedValue(true);
+    const onSubmit = vi.fn<VitestProcedure>().mockResolvedValue(true);
 
     render(<PromptBar onSubmit={onSubmit} />);
 
@@ -73,7 +78,7 @@ describe("PromptBar", () => {
   });
 
   it("keeps the composer text when submit returns false", async () => {
-    const onSubmit = vi.fn().mockResolvedValue(false);
+    const onSubmit = vi.fn<VitestProcedure>().mockResolvedValue(false);
 
     render(<PromptBar onSubmit={onSubmit} />);
 
@@ -88,7 +93,7 @@ describe("PromptBar", () => {
   });
 
   it("exposes a labeled send button that submits on click", async () => {
-    const onSubmit = vi.fn().mockResolvedValue(true);
+    const onSubmit = vi.fn<VitestProcedure>().mockResolvedValue(true);
 
     render(<PromptBar onSubmit={onSubmit} />);
 
@@ -112,9 +117,9 @@ describe("PromptBar", () => {
 
     render(
       <PromptBar
-        onSubmit={vi.fn()}
-        onStartRecording={vi.fn()}
-        onStopRecording={vi.fn()}
+        onSubmit={vi.fn<VitestProcedure>()}
+        onStartRecording={vi.fn<VitestProcedure>()}
+        onStopRecording={vi.fn<VitestProcedure>()}
         renderDebugControls={debugControls}
       />,
     );
@@ -132,7 +137,7 @@ describe("PromptBar", () => {
   it("reserves two lines of height for the hero rich placeholder", () => {
     const { container } = render(
       <PromptBar
-        onSubmit={vi.fn()}
+        onSubmit={vi.fn<VitestProcedure>()}
         variant="hero"
         richAnimatedPlaceholders={heroRichAnimatedPlaceholders}
       />,

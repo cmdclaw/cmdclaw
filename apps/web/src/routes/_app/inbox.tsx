@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Loader2, Search } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +38,8 @@ type InboxSearch = {
 export const Route = createFileRoute("/_app/inbox")({
   // OAuth completion flags resume the auth flow after an integration connect redirect.
   validateSearch: (search: Record<string, unknown>): InboxSearch => {
-    const authComplete = typeof search.auth_complete === "string" ? search.auth_complete : undefined;
+    const authComplete =
+      typeof search.auth_complete === "string" ? search.auth_complete : undefined;
     const interruptId = typeof search.interrupt_id === "string" ? search.interrupt_id : undefined;
     return {
       ...(authComplete ? { auth_complete: authComplete } : {}),

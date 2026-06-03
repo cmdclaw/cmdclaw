@@ -3,8 +3,13 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { useCurrentUserMock } = vi.hoisted(() => ({
-  useCurrentUserMock: vi.fn(),
+  useCurrentUserMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/orpc/hooks", () => ({
@@ -12,7 +17,7 @@ vi.mock("@/orpc/hooks", () => ({
 }));
 
 vi.mock("@/lib/browser-push", () => ({
-  setupBrowserPushNotifications: vi.fn(),
+  setupBrowserPushNotifications: vi.fn<VitestProcedure>(),
 }));
 
 import { DesktopNotificationPermissionGate } from "./desktop-notification-permission-gate";

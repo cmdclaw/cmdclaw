@@ -4,15 +4,20 @@ import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 void jestDomVitest;
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  signInMagicLink: vi.fn(),
-  signInEmail: vi.fn(),
-  signInSocial: vi.fn(),
-  getLastUsedLoginMethod: vi.fn(),
-  fetchMock: vi.fn(),
+  navigate: vi.fn<VitestProcedure>(),
+  signInMagicLink: vi.fn<VitestProcedure>(),
+  signInEmail: vi.fn<VitestProcedure>(),
+  signInSocial: vi.fn<VitestProcedure>(),
+  getLastUsedLoginMethod: vi.fn<VitestProcedure>(),
+  fetchMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({

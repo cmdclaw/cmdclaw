@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -32,32 +37,32 @@ const {
   dbMock,
   generationManagerMock,
 } = vi.hoisted(() => {
-  const coworkerRunFindManyMock = vi.fn();
-  const coworkerRunFindFirstMock = vi.fn();
-  const conversationFindManyMock = vi.fn();
-  const conversationFindFirstMock = vi.fn();
-  const userFindFirstMock = vi.fn();
-  const generationFindManyMock = vi.fn();
-  const generationFindFirstMock = vi.fn();
-  const generationInterruptFindManyMock = vi.fn();
-  const generationInterruptFindFirstMock = vi.fn();
-  const inboxReadStateFindManyMock = vi.fn();
-  const executeMock = vi.fn();
-  const insertOnConflictDoUpdateMock = vi.fn();
-  const insertValuesMock = vi.fn(() => ({
+  const coworkerRunFindManyMock = vi.fn<VitestProcedure>();
+  const coworkerRunFindFirstMock = vi.fn<VitestProcedure>();
+  const conversationFindManyMock = vi.fn<VitestProcedure>();
+  const conversationFindFirstMock = vi.fn<VitestProcedure>();
+  const userFindFirstMock = vi.fn<VitestProcedure>();
+  const generationFindManyMock = vi.fn<VitestProcedure>();
+  const generationFindFirstMock = vi.fn<VitestProcedure>();
+  const generationInterruptFindManyMock = vi.fn<VitestProcedure>();
+  const generationInterruptFindFirstMock = vi.fn<VitestProcedure>();
+  const inboxReadStateFindManyMock = vi.fn<VitestProcedure>();
+  const executeMock = vi.fn<VitestProcedure>();
+  const insertOnConflictDoUpdateMock = vi.fn<VitestProcedure>();
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({
     onConflictDoUpdate: insertOnConflictDoUpdateMock,
   }));
-  const insertMock = vi.fn(() => ({
+  const insertMock = vi.fn<VitestProcedure>(() => ({
     values: insertValuesMock,
   }));
-  const updateReturningMock = vi.fn();
-  const updateWhereMock = vi.fn(() => ({
+  const updateReturningMock = vi.fn<VitestProcedure>();
+  const updateWhereMock = vi.fn<VitestProcedure>(() => ({
     returning: updateReturningMock,
   }));
-  const updateSetMock = vi.fn(() => ({
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({
     where: updateWhereMock,
   }));
-  const updateMock = vi.fn(() => ({
+  const updateMock = vi.fn<VitestProcedure>(() => ({
     set: updateSetMock,
   }));
 
@@ -92,8 +97,8 @@ const {
   };
 
   const generationManagerMock = {
-    submitApproval: vi.fn(),
-    enqueueConversationMessage: vi.fn(),
+    submitApproval: vi.fn<VitestProcedure>(),
+    enqueueConversationMessage: vi.fn<VitestProcedure>(),
   };
 
   return {
@@ -125,7 +130,7 @@ vi.mock("../middleware", () => ({
 }));
 
 vi.mock("../workspace-access", () => ({
-  requireActiveWorkspaceAccess: vi.fn(async () => ({
+  requireActiveWorkspaceAccess: vi.fn<VitestProcedure>(async () => ({
     workspace: { id: "ws-1" },
     membership: { role: "member" },
   })),

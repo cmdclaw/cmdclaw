@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -26,45 +31,45 @@ vi.mock("../middleware", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/billing/service", () => ({
-  addWorkspaceMembers: vi.fn(),
+  addWorkspaceMembers: vi.fn<VitestProcedure>(),
   attachPlanToOwner: (() => {
-    attachPlanToOwnerMock = vi.fn();
+    attachPlanToOwnerMock = vi.fn<VitestProcedure>();
     return attachPlanToOwnerMock;
   })(),
   cancelPlanForOwner: (() => {
-    cancelPlanForOwnerMock = vi.fn();
+    cancelPlanForOwnerMock = vi.fn<VitestProcedure>();
     return cancelPlanForOwnerMock;
   })(),
   createManualTopUp: (() => {
-    createManualTopUpMock = vi.fn();
+    createManualTopUpMock = vi.fn<VitestProcedure>();
     return createManualTopUpMock;
   })(),
-  createWorkspaceForUser: vi.fn(),
+  createWorkspaceForUser: vi.fn<VitestProcedure>(),
   getAdminBillingOverviewForUser: (() => {
-    getAdminBillingOverviewForUserMock = vi.fn();
+    getAdminBillingOverviewForUserMock = vi.fn<VitestProcedure>();
     return getAdminBillingOverviewForUserMock;
   })(),
   ensureWorkspaceForUser: (() => {
-    ensureWorkspaceForUserMock = vi.fn();
+    ensureWorkspaceForUserMock = vi.fn<VitestProcedure>();
     return ensureWorkspaceForUserMock;
   })(),
   getBillingOverviewForUser: (() => {
-    getBillingOverviewForUserMock = vi.fn();
+    getBillingOverviewForUserMock = vi.fn<VitestProcedure>();
     return getBillingOverviewForUserMock;
   })(),
   getExistingBillingOwnerForUser: (() => {
-    getExistingBillingOwnerForUserMock = vi.fn();
+    getExistingBillingOwnerForUserMock = vi.fn<VitestProcedure>();
     return getExistingBillingOwnerForUserMock;
   })(),
   getWorkspaceMembershipForUser: (() => {
-    getWorkspaceMembershipForUserMock = vi.fn();
+    getWorkspaceMembershipForUserMock = vi.fn<VitestProcedure>();
     return getWorkspaceMembershipForUserMock;
   })(),
   openBillingPortalForOwner: (() => {
-    openBillingPortalForOwnerMock = vi.fn();
+    openBillingPortalForOwnerMock = vi.fn<VitestProcedure>();
     return openBillingPortalForOwnerMock;
   })(),
-  setActiveWorkspace: vi.fn(),
+  setActiveWorkspace: vi.fn<VitestProcedure>(),
 }));
 
 import { billingRouter } from "./billing";
@@ -84,13 +89,13 @@ function createContext(role = "admin") {
     db: {
       query: {
         user: {
-          findFirst: vi.fn().mockResolvedValue({
+          findFirst: vi.fn<VitestProcedure>().mockResolvedValue({
             role,
             activeWorkspaceId: "ws-1",
           }),
         },
         workspace: {
-          findFirst: vi.fn().mockResolvedValue({
+          findFirst: vi.fn<VitestProcedure>().mockResolvedValue({
             id: "ws-1",
             autumnCustomerId: "cus-ws-1",
             billingPlanId: "free",

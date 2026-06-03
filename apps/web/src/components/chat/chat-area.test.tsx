@@ -1,9 +1,16 @@
+// oxlint-disable jsx-a11y/control-has-associated-label unicorn/consistent-function-scoping
+
 // @vitest-environment jsdom
 
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { ChatHeaderActionsProvider } from "@/components/chat/chat-header-actions-context";
 
 void jestDomVitest;
@@ -28,17 +35,17 @@ const {
   mockSubmitApprovalMutateAsync,
   mockSubmitAuthResultMutateAsync,
 } = vi.hoisted(() => ({
-  mockStartGeneration: vi.fn(),
-  mockSubscribeToGeneration: vi.fn(),
-  mockAbort: vi.fn(),
-  mockPosthogCapture: vi.fn(),
-  mockInvalidateQueries: vi.fn(),
-  mockRefetchQueries: vi.fn(),
-  mockSetQueryData: vi.fn(),
-  mockSetSelection: vi.fn(),
-  mockUseHotkeys: vi.fn(),
-  mockEnqueueConversationMessageMutateAsync: vi.fn(),
-  mockUpdateConversationQueuedMessageMutateAsync: vi.fn(),
+  mockStartGeneration: vi.fn<VitestProcedure>(),
+  mockSubscribeToGeneration: vi.fn<VitestProcedure>(),
+  mockAbort: vi.fn<VitestProcedure>(),
+  mockPosthogCapture: vi.fn<VitestProcedure>(),
+  mockInvalidateQueries: vi.fn<VitestProcedure>(),
+  mockRefetchQueries: vi.fn<VitestProcedure>(),
+  mockSetQueryData: vi.fn<VitestProcedure>(),
+  mockSetSelection: vi.fn<VitestProcedure>(),
+  mockUseHotkeys: vi.fn<VitestProcedure>(),
+  mockEnqueueConversationMessageMutateAsync: vi.fn<VitestProcedure>(),
+  mockUpdateConversationQueuedMessageMutateAsync: vi.fn<VitestProcedure>(),
   mockConversationQueuedMessagesState: {
     data: undefined as
       | Array<{
@@ -72,9 +79,9 @@ const {
     } | null,
     isLoading: false,
   },
-  mockSubmitApprovalMutateAsync: vi.fn(),
-  mockSubmitAuthResultMutateAsync: vi.fn(),
-  mockCancelGenerationMutateAsync: vi.fn(),
+  mockSubmitApprovalMutateAsync: vi.fn<VitestProcedure>(),
+  mockSubmitAuthResultMutateAsync: vi.fn<VitestProcedure>(),
+  mockCancelGenerationMutateAsync: vi.fn<VitestProcedure>(),
   mockAdminState: {
     isAdmin: false,
     isLoading: false,
@@ -129,12 +136,12 @@ vi.mock("motion/react", () => ({
 }));
 
 vi.mock("@/hooks/use-voice-recording", () => ({
-  blobToBase64: vi.fn(),
+  blobToBase64: vi.fn<VitestProcedure>(),
   useVoiceRecording: () => ({
     isRecording: false,
     error: null,
-    startRecording: vi.fn(),
-    stopRecording: vi.fn(),
+    startRecording: vi.fn<VitestProcedure>(),
+    stopRecording: vi.fn<VitestProcedure>(),
   }),
 }));
 
@@ -193,10 +200,10 @@ vi.mock("@/lib/generation-runtime", () => ({
       get snapshot() {
         return snapshot;
       },
-      handleText: vi.fn(),
-      handleSystem: vi.fn(),
-      handleThinking: vi.fn(),
-      handleToolUse: vi.fn(
+      handleText: vi.fn<VitestProcedure>(),
+      handleSystem: vi.fn<VitestProcedure>(),
+      handleThinking: vi.fn<VitestProcedure>(),
+      handleToolUse: vi.fn<VitestProcedure>(
         (data: { toolUseId?: string; toolName: string; integration?: string }) => {
           const segment = ensureSegment();
           segment.items.push({
@@ -211,8 +218,8 @@ vi.mock("@/lib/generation-runtime", () => ({
           });
         },
       ),
-      handleToolResult: vi.fn(),
-      handlePendingApproval: vi.fn(
+      handleToolResult: vi.fn<VitestProcedure>(),
+      handlePendingApproval: vi.fn<VitestProcedure>(
         (data: {
           interruptId: string;
           toolUseId: string;
@@ -236,9 +243,9 @@ vi.mock("@/lib/generation-runtime", () => ({
           snapshot.traceStatus = "waiting_approval";
         },
       ),
-      handleApprovalResult: vi.fn(),
-      handleApproval: vi.fn(),
-      handleAuthNeeded: vi.fn(
+      handleApprovalResult: vi.fn<VitestProcedure>(),
+      handleApproval: vi.fn<VitestProcedure>(),
+      handleAuthNeeded: vi.fn<VitestProcedure>(
         (data: { interruptId: string; integrations: string[]; reason?: string }) => {
           const segment = ensureSegment();
           segment.auth = {
@@ -251,14 +258,14 @@ vi.mock("@/lib/generation-runtime", () => ({
           snapshot.traceStatus = "waiting_auth";
         },
       ),
-      handleAuthProgress: vi.fn(),
-      handleAuthResult: vi.fn(),
-      handleSandboxFile: vi.fn(),
-      handleDone: vi.fn(),
-      handleCancelled: vi.fn(),
-      handleError: vi.fn(),
-      setStatus: vi.fn(),
-      setApprovalStatus: vi.fn(
+      handleAuthProgress: vi.fn<VitestProcedure>(),
+      handleAuthResult: vi.fn<VitestProcedure>(),
+      handleSandboxFile: vi.fn<VitestProcedure>(),
+      handleDone: vi.fn<VitestProcedure>(),
+      handleCancelled: vi.fn<VitestProcedure>(),
+      handleError: vi.fn<VitestProcedure>(),
+      setStatus: vi.fn<VitestProcedure>(),
+      setApprovalStatus: vi.fn<VitestProcedure>(
         (toolUseId: string, status: "approved" | "denied", questionAnswers?: string[][]) => {
           const segment = snapshot.segments.find(
             (value) => value.approval?.toolUseId === toolUseId,
@@ -273,10 +280,10 @@ vi.mock("@/lib/generation-runtime", () => ({
           snapshot.traceStatus = "streaming";
         },
       ),
-      setAuthConnecting: vi.fn(),
-      setAuthPending: vi.fn(),
-      setAuthCancelled: vi.fn(),
-      resolveAuthSuccess: vi.fn((integration: string) => {
+      setAuthConnecting: vi.fn<VitestProcedure>(),
+      setAuthPending: vi.fn<VitestProcedure>(),
+      setAuthCancelled: vi.fn<VitestProcedure>(),
+      resolveAuthSuccess: vi.fn<VitestProcedure>((integration: string) => {
         const segment = snapshot.segments.find(
           (value) =>
             value.auth &&
@@ -317,7 +324,7 @@ vi.mock("@/lib/generation-runtime", () => ({
 vi.mock("@/orpc/client", () => ({
   client: {
     conversation: {
-      get: vi.fn(),
+      get: vi.fn<VitestProcedure>(),
     },
   },
 }));
@@ -331,22 +338,22 @@ vi.mock("@/orpc/hooks", () => ({
   }),
   useSubmitApproval: () => ({ mutateAsync: mockSubmitApprovalMutateAsync, isPending: false }),
   useSubmitAuthResult: () => ({ mutateAsync: mockSubmitAuthResultMutateAsync, isPending: false }),
-  useGetAuthUrl: () => ({ mutateAsync: vi.fn() }),
+  useGetAuthUrl: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
   useActiveGeneration: () => mockActiveGenerationState,
   useCancelGeneration: () => ({ mutateAsync: mockCancelGenerationMutateAsync }),
-  useDetectUserMessageLanguage: () => ({ mutateAsync: vi.fn() }),
+  useDetectUserMessageLanguage: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
   useConversationQueuedMessages: () => ({ data: mockConversationQueuedMessagesState.data }),
   useEnqueueConversationMessage: () => ({ mutateAsync: mockEnqueueConversationMessageMutateAsync }),
-  useRemoveConversationQueuedMessage: () => ({ mutateAsync: vi.fn() }),
+  useRemoveConversationQueuedMessage: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
   useUpdateConversationQueuedMessage: () => ({
     mutateAsync: mockUpdateConversationQueuedMessageMutateAsync,
   }),
   usePlatformSkillList: () => ({ data: [], isLoading: false }),
   useSkillList: () => ({ data: [], isLoading: false }),
-  useUpdateAutoApprove: () => ({ mutateAsync: vi.fn() }),
+  useUpdateAutoApprove: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
   useProviderAuthStatus: () => ({ data: { connected: {}, shared: {} } }),
   useOpencodeFreeModels: () => ({ data: { models: [] } }),
-  useTranscribe: () => ({ mutateAsync: vi.fn() }),
+  useTranscribe: () => ({ mutateAsync: vi.fn<VitestProcedure>() }),
 }));
 
 vi.mock("./activity-feed", () => ({
@@ -466,8 +473,8 @@ vi.mock("./chat-skill-store", () => ({
   useChatSkillStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       selectedSkillSlugsByScope: {},
-      toggleSelectedSkillSlug: vi.fn(),
-      clearSelectedSkillSlugs: vi.fn(),
+      toggleSelectedSkillSlug: vi.fn<VitestProcedure>(),
+      clearSelectedSkillSlugs: vi.fn<VitestProcedure>(),
     }),
 }));
 
@@ -593,15 +600,15 @@ describe("ChatArea generation errors", () => {
     mockActiveGenerationState.data = null;
     Object.defineProperty(Element.prototype, "scrollIntoView", {
       configurable: true,
-      value: vi.fn(),
+      value: vi.fn<VitestProcedure>(),
     });
     Object.defineProperty(window, "localStorage", {
       configurable: true,
       value: {
-        getItem: vi.fn(() => null),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
-        clear: vi.fn(),
+        getItem: vi.fn<VitestProcedure>(() => null),
+        setItem: vi.fn<VitestProcedure>(),
+        removeItem: vi.fn<VitestProcedure>(),
+        clear: vi.fn<VitestProcedure>(),
       },
     });
   });
@@ -697,7 +704,7 @@ describe("ChatArea generation errors", () => {
   });
 
   it("syncs coworker queries when a coworker edit tool completes", async () => {
-    const onCoworkerSync = vi.fn();
+    const onCoworkerSync = vi.fn<VitestProcedure>();
 
     mockStartGeneration.mockImplementationOnce(async (_input, callbacks) => {
       callbacks.onStarted?.("gen-1", "conv-1");

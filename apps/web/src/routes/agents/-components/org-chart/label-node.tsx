@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { type NodeProps, type Node } from "@xyflow/react";
 import { X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";

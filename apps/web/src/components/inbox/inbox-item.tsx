@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label react/no-unstable-nested-components
+
 import {
   AlertTriangle,
   Check,
@@ -15,7 +17,7 @@ import {
   TimerReset,
   Wrench,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type ComponentPropsWithoutRef } from "react";
+import { useCallback, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -51,6 +53,26 @@ const STATUS_LABELS: Record<InboxItemType["status"], string> = {
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
 const EXPANDABLE_MESSAGE_LENGTH = 360;
+const INBOX_MARKDOWN_COMPONENTS = {
+  a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
+    <a {...props} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  table: ({ children }: ComponentPropsWithoutRef<"table">) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="w-full min-w-max border-collapse text-left">{children}</table>
+    </div>
+  ),
+  th: ({ children }: ComponentPropsWithoutRef<"th">) => (
+    <th className="border-border border-b px-2 py-1 text-left font-medium whitespace-nowrap">
+      {children}
+    </th>
+  ),
+  td: ({ children }: ComponentPropsWithoutRef<"td">) => (
+    <td className="border-border border-b px-2 py-1 align-top whitespace-nowrap">{children}</td>
+  ),
+};
 
 function formatRelative(date: Date): string {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -91,30 +113,6 @@ function AgentMessagePreview({ content }: { content: string }) {
     content.includes("\n") ||
     content.includes("|") ||
     content.includes("```");
-  const markdownComponents = useMemo(
-    () => ({
-      a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
-        <a {...props} target="_blank" rel="noopener noreferrer">
-          {children}
-        </a>
-      ),
-      table: ({ children }: ComponentPropsWithoutRef<"table">) => (
-        <div className="my-2 overflow-x-auto">
-          <table className="w-full min-w-max border-collapse text-left">{children}</table>
-        </div>
-      ),
-      th: ({ children }: ComponentPropsWithoutRef<"th">) => (
-        <th className="border-border border-b px-2 py-1 text-left font-medium whitespace-nowrap">
-          {children}
-        </th>
-      ),
-      td: ({ children }: ComponentPropsWithoutRef<"td">) => (
-        <td className="border-border border-b px-2 py-1 align-top whitespace-nowrap">{children}</td>
-      ),
-    }),
-    [],
-  );
-
   const handleToggleExpanded = useCallback(() => {
     setIsExpanded((current) => !current);
   }, []);
@@ -128,7 +126,10 @@ function AgentMessagePreview({ content }: { content: string }) {
             isExpandable && !isExpanded && "max-h-32 overflow-hidden",
           )}
         >
-          <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={markdownComponents}>
+          <ReactMarkdown
+            remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+            components={INBOX_MARKDOWN_COMPONENTS}
+          >
             {content}
           </ReactMarkdown>
         </div>

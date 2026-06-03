@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   getSessionMock,
   coworkerDocumentFindFirstMock,
@@ -7,11 +12,11 @@ const {
   downloadFromS3Mock,
   requireActiveWorkspaceAccessMock,
 } = vi.hoisted(() => ({
-  getSessionMock: vi.fn(),
-  coworkerDocumentFindFirstMock: vi.fn(),
-  coworkerFindFirstMock: vi.fn(),
-  downloadFromS3Mock: vi.fn(),
-  requireActiveWorkspaceAccessMock: vi.fn(),
+  getSessionMock: vi.fn<VitestProcedure>(),
+  coworkerDocumentFindFirstMock: vi.fn<VitestProcedure>(),
+  coworkerFindFirstMock: vi.fn<VitestProcedure>(),
+  downloadFromS3Mock: vi.fn<VitestProcedure>(),
+  requireActiveWorkspaceAccessMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/lib/auth", () => ({

@@ -2,6 +2,11 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { InboxCoworkerSelector, type InboxCoworkerSelectorItem } from "./inbox-coworker-selector";
 
 const coworkers: InboxCoworkerSelectorItem[] = [
@@ -22,7 +27,7 @@ describe("InboxCoworkerSelector", () => {
   });
 
   it("selects a coworker and omits the redundant coworker footer badge", () => {
-    const handleSelect = vi.fn();
+    const handleSelect = vi.fn<VitestProcedure>();
 
     render(
       <InboxCoworkerSelector

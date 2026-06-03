@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { getSessionMock, updateMock, setMock, whereMock } = vi.hoisted(() => {
-  const whereMock = vi.fn().mockResolvedValue(undefined);
-  const setMock = vi.fn(() => ({ where: whereMock }));
-  const updateMock = vi.fn(() => ({ set: setMock }));
-  return { getSessionMock: vi.fn(), updateMock, setMock, whereMock };
+  const whereMock = vi.fn<VitestProcedure>().mockResolvedValue(undefined);
+  const setMock = vi.fn<VitestProcedure>(() => ({ where: whereMock }));
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: setMock }));
+  return { getSessionMock: vi.fn<VitestProcedure>(), updateMock, setMock, whereMock };
 });
 
 vi.mock("@/lib/auth", () => ({

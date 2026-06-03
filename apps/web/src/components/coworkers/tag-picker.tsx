@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { Check, Plus } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";

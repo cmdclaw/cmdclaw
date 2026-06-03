@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -17,10 +22,10 @@ const {
   requireActiveWorkspaceAccessMock,
   requireActiveWorkspaceAdminMock,
 } = vi.hoisted(() => ({
-  startMcpOAuthAuthorizationMock: vi.fn(),
-  storeWorkspaceMcpServerOAuthPendingMock: vi.fn(),
-  requireActiveWorkspaceAccessMock: vi.fn(),
-  requireActiveWorkspaceAdminMock: vi.fn(),
+  startMcpOAuthAuthorizationMock: vi.fn<VitestProcedure>(),
+  storeWorkspaceMcpServerOAuthPendingMock: vi.fn<VitestProcedure>(),
+  requireActiveWorkspaceAccessMock: vi.fn<VitestProcedure>(),
+  requireActiveWorkspaceAdminMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -33,14 +38,14 @@ vi.mock("../workspace-access", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
-  computeWorkspaceMcpServerRevisionHash: vi.fn(() => "hash"),
-  listWorkspaceMcpServers: vi.fn(() => []),
-  normalizeExecutorNamespace: vi.fn((value: string) => value),
-  setWorkspaceMcpServerCredential: vi.fn(),
+  computeWorkspaceMcpServerRevisionHash: vi.fn<VitestProcedure>(() => "hash"),
+  listWorkspaceMcpServers: vi.fn<VitestProcedure>(() => []),
+  normalizeExecutorNamespace: vi.fn<VitestProcedure>((value: string) => value),
+  setWorkspaceMcpServerCredential: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
-  resolveMcpEndpoint: vi.fn(
+  resolveMcpEndpoint: vi.fn<VitestProcedure>(
     ({
       endpoint,
       queryParams,
@@ -69,18 +74,18 @@ function createContext() {
     db: {
       query: {
         user: {
-          findFirst: vi.fn().mockResolvedValue({ role: "admin" }),
+          findFirst: vi.fn<VitestProcedure>().mockResolvedValue({ role: "admin" }),
         },
         workspace: {
-          findFirst: vi.fn().mockResolvedValue({ id: "ws-1", name: "Workspace" }),
+          findFirst: vi.fn<VitestProcedure>().mockResolvedValue({ id: "ws-1", name: "Workspace" }),
         },
         workspaceMcpServer: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
       },
-      insert: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
+      insert: vi.fn<VitestProcedure>(),
+      update: vi.fn<VitestProcedure>(),
+      delete: vi.fn<VitestProcedure>(),
     },
   };
 }
@@ -202,8 +207,8 @@ describe("workspaceMcpServerRouter", () => {
   it("creates new MCP OAuth servers for native OpenCode MCP resolution", async () => {
     const context = createContext();
     context.db.query.workspaceMcpServer.findFirst.mockResolvedValue(null);
-    const returningMock = vi.fn().mockResolvedValue([{ id: "src-1" }]);
-    const valuesMock = vi.fn(() => ({ returning: returningMock }));
+    const returningMock = vi.fn<VitestProcedure>().mockResolvedValue([{ id: "src-1" }]);
+    const valuesMock = vi.fn<VitestProcedure>(() => ({ returning: returningMock }));
     context.db.insert.mockReturnValue({ values: valuesMock });
 
     const result = await workspaceMcpServerRouterAny.create({

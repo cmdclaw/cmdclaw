@@ -1,8 +1,13 @@
 import type { Session, User } from "better-auth";
 import { describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 vi.mock("@cmdclaw/core/server/services/user-telemetry", () => ({
-  recordUserActiveToday: vi.fn(),
+  recordUserActiveToday: vi.fn<VitestProcedure>(),
 }));
 
 import { resolveDailyActivityUserId } from "./middleware";

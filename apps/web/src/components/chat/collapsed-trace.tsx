@@ -19,6 +19,7 @@ const COLLAPSED_TRACE_EXPANDED_TRANSITION: Transition = {
   duration: 0.2,
   ease: "easeInOut",
 };
+const EMPTY_ACTIVITY_ITEMS: ActivityItemData[] = [];
 
 type Props = {
   messageId: string;
@@ -34,7 +35,7 @@ type Props = {
 export function CollapsedTrace({
   integrationsUsed,
   hasError,
-  activityItems = [],
+  activityItems = EMPTY_ACTIVITY_ITEMS,
   timing,
   className,
   defaultExpanded = false,

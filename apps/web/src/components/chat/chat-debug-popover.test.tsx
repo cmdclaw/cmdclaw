@@ -4,6 +4,11 @@ import type React from "react";
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { ChatDebugPopover, type DebugScenarioKey } from "./chat-debug-popover";
 
 void jestDomVitest;
@@ -35,7 +40,7 @@ describe("ChatDebugPopover", () => {
   });
 
   it("can render create-specific question and runtime presets", () => {
-    const onArmPreset = vi.fn();
+    const onArmPreset = vi.fn<VitestProcedure>();
 
     render(
       <ChatDebugPopover
@@ -46,8 +51,8 @@ describe("ChatDebugPopover", () => {
         labelOverrides={CREATE_LABEL_OVERRIDES}
         descriptionOverrides={CREATE_DESCRIPTION_OVERRIDES}
         onArmPreset={onArmPreset}
-        onClearPreset={vi.fn()}
-        onResumeRunDeadline={vi.fn()}
+        onClearPreset={vi.fn<VitestProcedure>()}
+        onResumeRunDeadline={vi.fn<VitestProcedure>()}
       />,
     );
 

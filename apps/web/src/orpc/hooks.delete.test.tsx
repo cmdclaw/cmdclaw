@@ -6,12 +6,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { deleteConversationMock } = vi.hoisted(() => ({
-  deleteConversationMock: vi.fn(),
+  deleteConversationMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/lib/generation-stream", () => ({
-  runGenerationStream: vi.fn(),
+  runGenerationStream: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("./client", () => ({

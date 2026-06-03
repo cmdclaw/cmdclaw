@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { getSessionMock } = vi.hoisted(() => ({
-  getSessionMock: vi.fn(),
+  getSessionMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -53,7 +58,7 @@ describe("handleNangoProviders", () => {
   });
 
   it("normalizes, filters, and sorts the Nango provider catalog", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
+    globalThis.fetch = vi.fn<VitestProcedure>().mockResolvedValue(
       new Response(
         JSON.stringify({
           data: [
@@ -106,7 +111,7 @@ describe("handleNangoProviders", () => {
 
   it("returns 502 when the Nango API responds with an error", async () => {
     globalThis.fetch = vi
-      .fn()
+      .fn<VitestProcedure>()
       .mockResolvedValue(new Response("nope", { status: 500 })) as unknown as typeof fetch;
 
     const response = await handleNangoProviders(makeRequest());

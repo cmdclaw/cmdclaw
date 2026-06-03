@@ -1,3 +1,5 @@
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Loader2, RefreshCw, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

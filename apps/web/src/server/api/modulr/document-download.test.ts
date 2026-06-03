@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { signModulrDocumentDownloadToken } from "@cmdclaw/core/server/modulr/download-token";
 
 const { downloadFromS3Mock } = vi.hoisted(() => ({
-  downloadFromS3Mock: vi.fn(),
+  downloadFromS3Mock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/env", () => ({

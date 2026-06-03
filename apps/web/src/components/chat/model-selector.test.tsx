@@ -5,10 +5,15 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 void jestDomVitest;
 
 const { mockIsAdmin } = vi.hoisted(() => ({
-  mockIsAdmin: vi.fn(() => false),
+  mockIsAdmin: vi.fn<VitestProcedure>(() => false),
 }));
 
 afterEach(() => {
@@ -73,7 +78,7 @@ const USER_ONLY_AUTH = {
 
 describe("ModelSelector", () => {
   it("shows shared GPT-5.4 variants and hides Claude Sonnet 4.6 for non-admins", () => {
-    const onSelectionChange = vi.fn();
+    const onSelectionChange = vi.fn<VitestProcedure>();
     mockIsAdmin.mockReturnValue(false);
 
     render(
@@ -97,7 +102,7 @@ describe("ModelSelector", () => {
   });
 
   it("shows Claude Sonnet 4.6 for admins", () => {
-    const onSelectionChange = vi.fn();
+    const onSelectionChange = vi.fn<VitestProcedure>();
     mockIsAdmin.mockReturnValue(true);
 
     render(
@@ -115,7 +120,7 @@ describe("ModelSelector", () => {
   });
 
   it("does not allow selecting shared GPT-5.4 when shared auth is unavailable", () => {
-    const onSelectionChange = vi.fn();
+    const onSelectionChange = vi.fn<VitestProcedure>();
     mockIsAdmin.mockReturnValue(false);
 
     render(
@@ -133,7 +138,7 @@ describe("ModelSelector", () => {
   });
 
   it("selects shared GPT-5.4 when shared auth is available", () => {
-    const onSelectionChange = vi.fn();
+    const onSelectionChange = vi.fn<VitestProcedure>();
     mockIsAdmin.mockReturnValue(false);
 
     render(
@@ -154,7 +159,7 @@ describe("ModelSelector", () => {
   });
 
   it("selects shared Gemini when shared auth is available", () => {
-    const onSelectionChange = vi.fn();
+    const onSelectionChange = vi.fn<VitestProcedure>();
     mockIsAdmin.mockReturnValue(false);
 
     render(
@@ -175,7 +180,7 @@ describe("ModelSelector", () => {
   });
 
   it("selects personal GPT-5.4 Mini when user auth is available", () => {
-    const onSelectionChange = vi.fn();
+    const onSelectionChange = vi.fn<VitestProcedure>();
     mockIsAdmin.mockReturnValue(false);
 
     render(

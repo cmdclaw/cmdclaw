@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   clientFindFirstMock,
   refreshTokenFindFirstMock,
@@ -11,18 +16,18 @@ const {
   updatePayloads,
   signHostedMcpAccessTokenMock,
 } = vi.hoisted(() => {
-  const clientFindFirstMock = vi.fn();
-  const refreshTokenFindFirstMock = vi.fn();
-  const grantFindFirstMock = vi.fn();
-  const insertMock = vi.fn();
-  const updateWhereMock = vi.fn();
+  const clientFindFirstMock = vi.fn<VitestProcedure>();
+  const refreshTokenFindFirstMock = vi.fn<VitestProcedure>();
+  const grantFindFirstMock = vi.fn<VitestProcedure>();
+  const insertMock = vi.fn<VitestProcedure>();
+  const updateWhereMock = vi.fn<VitestProcedure>();
   const updatePayloads: Array<Record<string, unknown>> = [];
-  const updateSetMock = vi.fn((payload: Record<string, unknown>) => {
+  const updateSetMock = vi.fn<VitestProcedure>((payload: Record<string, unknown>) => {
     updatePayloads.push(payload);
     return { where: updateWhereMock };
   });
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
-  const signHostedMcpAccessTokenMock = vi.fn();
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: updateSetMock }));
+  const signHostedMcpAccessTokenMock = vi.fn<VitestProcedure>();
 
   return {
     clientFindFirstMock,
@@ -62,16 +67,16 @@ vi.mock("@cmdclaw/db/client", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/billing/service", () => ({
-  getWorkspaceMembershipForUser: vi.fn(),
-  listWorkspacesForUser: vi.fn(),
+  getWorkspaceMembershipForUser: vi.fn<VitestProcedure>(),
+  listWorkspacesForUser: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/galien/service", () => ({
-  canUserUseGalienInWorkspace: vi.fn(),
+  canUserUseGalienInWorkspace: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/modulr/service", () => ({
-  canUserUseModulrInWorkspace: vi.fn(),
+  canUserUseModulrInWorkspace: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/hosted-mcp-oauth", () => ({

@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import {
   loadOutputHtmlPreview,
   OUTPUT_HTML_PREVIEW_MAX_BYTES,
@@ -6,7 +11,7 @@ import {
 } from "./output-html-preview";
 
 const { downloadFromS3Mock } = vi.hoisted(() => ({
-  downloadFromS3Mock: vi.fn(),
+  downloadFromS3Mock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({

@@ -1,4 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import {
   aggregateSloBuckets,
   buildCumulativeSloSamples,
@@ -162,7 +167,7 @@ describe("slo backfill", () => {
   });
 
   test("posts import rows to VictoriaMetrics", async () => {
-    const fetchImpl = vi.fn(async () => new Response("", { status: 200 }));
+    const fetchImpl = vi.fn<VitestProcedure>(async () => new Response("", { status: 200 }));
 
     await importSloBucketsToVictoriaMetrics("rows", {
       victoriaMetricsUrl: "http://victoria.example/",
@@ -177,7 +182,7 @@ describe("slo backfill", () => {
   });
 
   test("aggregation query classifies terminal events and omits initial coworker run generations", async () => {
-    const query = vi.fn(async (_sql: string, _values?: unknown[]) => ({
+    const query = vi.fn<VitestProcedure>(async (_sql: string, _values?: unknown[]) => ({
       rows: [] as RawSloBucket[],
     }));
     const db = {

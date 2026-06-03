@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const {
   assertCloudControlPlaneEnabledMock,
   assertValidInstanceApiKeyMock,
@@ -7,11 +12,11 @@ const {
   getOAuthConfigMock,
   generateLinkedInAuthUrlMock,
 } = vi.hoisted(() => ({
-  assertCloudControlPlaneEnabledMock: vi.fn(),
-  assertValidInstanceApiKeyMock: vi.fn(),
-  requireCloudSessionMock: vi.fn(),
-  getOAuthConfigMock: vi.fn(),
-  generateLinkedInAuthUrlMock: vi.fn(),
+  assertCloudControlPlaneEnabledMock: vi.fn<VitestProcedure>(),
+  assertValidInstanceApiKeyMock: vi.fn<VitestProcedure>(),
+  requireCloudSessionMock: vi.fn<VitestProcedure>(),
+  getOAuthConfigMock: vi.fn<VitestProcedure>(),
+  generateLinkedInAuthUrlMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@/server/control-plane/auth", () => ({
@@ -55,7 +60,7 @@ describe("connectHandler (GET /api/control-plane/integrations/connect)", () => {
       tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
       redirectUri: "https://app.example.com/api/oauth/callback",
       scopes: ["openid", "offline_access"],
-      getUserInfo: vi.fn(),
+      getUserInfo: vi.fn<VitestProcedure>(),
     });
   });
 

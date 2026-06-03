@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  findFirstMock,
-  insertValuesMock,
-  updateSetMock,
-  updateWhereMock,
-  getUnipileAccountMock,
-} = vi.hoisted(() => ({
-  findFirstMock: vi.fn(),
-  insertValuesMock: vi.fn(),
-  updateSetMock: vi.fn(),
-  updateWhereMock: vi.fn(),
-  getUnipileAccountMock: vi.fn(),
-}));
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
+const { findFirstMock, insertValuesMock, updateSetMock, updateWhereMock, getUnipileAccountMock } =
+  vi.hoisted(() => ({
+    findFirstMock: vi.fn<VitestProcedure>(),
+    insertValuesMock: vi.fn<VitestProcedure>(),
+    updateSetMock: vi.fn<VitestProcedure>(),
+    updateWhereMock: vi.fn<VitestProcedure>(),
+    getUnipileAccountMock: vi.fn<VitestProcedure>(),
+  }));
 
 vi.mock("@cmdclaw/db/client", () => ({
   db: {
@@ -67,7 +67,11 @@ describe("handleLinkedInWebhook", () => {
   it("acknowledges CREATION_SUCCESS without userId and does not write", async () => {
     const response = await handleLinkedInWebhook(
       makeRequest({
-        AccountStatus: { message: "CREATION_SUCCESS", account_id: "acc-1", account_type: "LINKEDIN" },
+        AccountStatus: {
+          message: "CREATION_SUCCESS",
+          account_id: "acc-1",
+          account_type: "LINKEDIN",
+        },
       }),
     );
 

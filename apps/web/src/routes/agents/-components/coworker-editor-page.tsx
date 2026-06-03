@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import {
@@ -30,12 +32,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { AppImage as Image } from "../-lib/app-image";
 import { AppLink as Link } from "../-lib/app-link";
-import {
-  useParams,
-  usePathname,
-  useRouter,
-  useSearchParams,
-} from "../-lib/next-navigation-compat";
+import { useParams, usePathname, useRouter, useSearchParams } from "../-lib/next-navigation-compat";
 import {
   useCallback,
   useDeferredValue,

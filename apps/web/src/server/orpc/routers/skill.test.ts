@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -23,16 +28,16 @@ const {
   resolveUniqueSkillNameInWorkspaceMock,
   copySkillToWorkspaceOwnerMock,
 } = vi.hoisted(() => ({
-  uploadToS3Mock: vi.fn(),
-  deleteFromS3Mock: vi.fn(),
-  getPresignedDownloadUrlMock: vi.fn(),
-  generateStorageKeyMock: vi.fn(),
-  ensureBucketMock: vi.fn(),
-  validateFileUploadMock: vi.fn(),
-  importSkillMock: vi.fn(),
-  requireActiveWorkspaceAccessMock: vi.fn(),
-  resolveUniqueSkillNameInWorkspaceMock: vi.fn(),
-  copySkillToWorkspaceOwnerMock: vi.fn(),
+  uploadToS3Mock: vi.fn<VitestProcedure>(),
+  deleteFromS3Mock: vi.fn<VitestProcedure>(),
+  getPresignedDownloadUrlMock: vi.fn<VitestProcedure>(),
+  generateStorageKeyMock: vi.fn<VitestProcedure>(),
+  ensureBucketMock: vi.fn<VitestProcedure>(),
+  validateFileUploadMock: vi.fn<VitestProcedure>(),
+  importSkillMock: vi.fn<VitestProcedure>(),
+  requireActiveWorkspaceAccessMock: vi.fn<VitestProcedure>(),
+  resolveUniqueSkillNameInWorkspaceMock: vi.fn<VitestProcedure>(),
+  copySkillToWorkspaceOwnerMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("../middleware", () => ({
@@ -52,8 +57,8 @@ vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/services/workspace-skill-service", () => ({
-  buildAccessibleSkillWhere: vi.fn(() => "accessible-where"),
-  buildOwnedSkillWhere: vi.fn(() => "owned-where"),
+  buildAccessibleSkillWhere: vi.fn<VitestProcedure>(() => "accessible-where"),
+  buildOwnedSkillWhere: vi.fn<VitestProcedure>(() => "owned-where"),
   copySkillToWorkspaceOwner: copySkillToWorkspaceOwnerMock,
   resolveUniqueSkillNameInWorkspace: resolveUniqueSkillNameInWorkspaceMock,
 }));
@@ -74,43 +79,45 @@ const skillRouterAny = skillRouter as unknown as Record<
 >;
 
 function createContext() {
-  const insertReturningMock = vi.fn();
-  const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
-  const insertMock = vi.fn(() => ({ values: insertValuesMock }));
+  const insertReturningMock = vi.fn<VitestProcedure>();
+  const insertValuesMock = vi.fn<VitestProcedure>(() => ({ returning: insertReturningMock }));
+  const insertMock = vi.fn<VitestProcedure>(() => ({ values: insertValuesMock }));
 
-  const updateReturningMock = vi.fn();
-  const updateWhereMock = vi.fn(() => ({ returning: updateReturningMock }));
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-  const updateMock = vi.fn(() => ({ set: updateSetMock }));
+  const updateReturningMock = vi.fn<VitestProcedure>();
+  const updateWhereMock = vi.fn<VitestProcedure>(() => ({ returning: updateReturningMock }));
+  const updateSetMock = vi.fn<VitestProcedure>(() => ({ where: updateWhereMock }));
+  const updateMock = vi.fn<VitestProcedure>(() => ({ set: updateSetMock }));
 
-  const deleteReturningMock = vi.fn();
-  const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
-  const deleteMock = vi.fn(() => ({ where: deleteWhereMock }));
+  const deleteReturningMock = vi.fn<VitestProcedure>();
+  const deleteWhereMock = vi.fn<VitestProcedure>(() => ({ returning: deleteReturningMock }));
+  const deleteMock = vi.fn<VitestProcedure>(() => ({ where: deleteWhereMock }));
 
-  const selectWhereMock = vi.fn();
-  const selectFromMock = vi.fn(() => ({ where: selectWhereMock }));
-  const selectMock = vi.fn(() => ({ from: selectFromMock }));
+  const selectWhereMock = vi.fn<VitestProcedure>();
+  const selectFromMock = vi.fn<VitestProcedure>(() => ({ where: selectWhereMock }));
+  const selectMock = vi.fn<VitestProcedure>(() => ({ from: selectFromMock }));
 
   return {
     user: { id: "user-1" },
     db: {
       query: {
         skill: {
-          findMany: vi.fn(),
-          findFirst: vi.fn(),
+          findMany: vi.fn<VitestProcedure>(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         skillFile: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
         skillDocument: {
-          findFirst: vi.fn(),
+          findFirst: vi.fn<VitestProcedure>(),
         },
       },
       insert: insertMock,
       update: updateMock,
       delete: deleteMock,
       select: selectMock,
-      transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback({})),
+      transaction: vi.fn<VitestProcedure>(
+        async (callback: (tx: unknown) => Promise<unknown>) => await callback({}),
+      ),
     },
     mocks: {
       insertReturningMock,

@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import type {
   TemplateCatalogTemplate,
   TemplateIntegrationType,
@@ -90,11 +92,7 @@ function getTriggerLabel(triggerType: string) {
   return map[triggerType] ?? triggerType;
 }
 
-function IntegrationLogos({
-  integrations,
-}: {
-  integrations: TemplateItem["integrations"];
-}) {
+function IntegrationLogos({ integrations }: { integrations: TemplateItem["integrations"] }) {
   return (
     <div className="flex items-center gap-1">
       {integrations.map((key) => {

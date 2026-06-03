@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable react/no-unstable-nested-components
+
 import {
   Wrench,
   Puzzle,
@@ -96,6 +98,32 @@ const TOOL_DETAILS_ANIMATE = { height: "auto", opacity: 1, y: 0 };
 const TOOL_DETAILS_EXIT = { height: 0, opacity: 0, y: -2 };
 const TOOL_DETAILS_TRANSITION: Transition = { duration: 0.2, ease: "easeInOut" };
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm];
+const EMPTY_EXECUTOR_SOURCES: readonly WorkspaceMcpServerLike[] = [];
+const ACTIVITY_MARKDOWN_COMPONENTS = {
+  table: ({ children }: { children?: ReactNode }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="w-full min-w-max border-collapse text-left text-xs">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: { children?: ReactNode }) => (
+    <thead className="border-border border-b">{children}</thead>
+  ),
+  tbody: ({ children }: { children?: ReactNode }) => <tbody>{children}</tbody>,
+  tr: ({ children }: { children?: ReactNode }) => (
+    <tr className="border-border border-b last:border-b-0">{children}</tr>
+  ),
+  th: ({ children }: { children?: ReactNode }) => (
+    <th className="px-2 py-1 text-left font-semibold whitespace-nowrap">{children}</th>
+  ),
+  td: ({ children }: { children?: ReactNode }) => (
+    <td className="px-2 py-1 align-top whitespace-nowrap">{children}</td>
+  ),
+  a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
+    <a {...props} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+};
 const ANSI_CSI_PATTERN = new RegExp(String.raw`\u001B\[[0-?]*[ -/]*[@-~]`, "g");
 const ANSI_OSC_PATTERN = new RegExp(String.raw`\u001B\][^\u0007]*(?:\u0007|\u001B\\)`, "g");
 
@@ -146,7 +174,7 @@ function getInputDescription(input: unknown): string | null {
   return trimmedDescription.length > 0 ? trimmedDescription : null;
 }
 
-export function ActivityItem({ item, executorSources = [] }: Props) {
+export function ActivityItem({ item, executorSources = EMPTY_EXECUTOR_SOURCES }: Props) {
   const { type, content, toolName, integration, operation, status, input, result } = item;
   const [showDetails, setShowDetails] = useState(false);
   const parsedCommand = useMemo(() => {
@@ -170,35 +198,6 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
   const handleToggleDetails = useCallback(() => {
     setShowDetails((prev) => !prev);
   }, []);
-  const markdownComponents = useMemo(
-    () => ({
-      table: ({ children }: { children?: ReactNode }) => (
-        <div className="my-2 overflow-x-auto">
-          <table className="w-full min-w-max border-collapse text-left text-xs">{children}</table>
-        </div>
-      ),
-      thead: ({ children }: { children?: ReactNode }) => (
-        <thead className="border-border border-b">{children}</thead>
-      ),
-      tbody: ({ children }: { children?: ReactNode }) => <tbody>{children}</tbody>,
-      tr: ({ children }: { children?: ReactNode }) => (
-        <tr className="border-border border-b last:border-b-0">{children}</tr>
-      ),
-      th: ({ children }: { children?: ReactNode }) => (
-        <th className="px-2 py-1 text-left font-semibold whitespace-nowrap">{children}</th>
-      ),
-      td: ({ children }: { children?: ReactNode }) => (
-        <td className="px-2 py-1 align-top whitespace-nowrap">{children}</td>
-      ),
-      a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
-        <a {...props} target="_blank" rel="noopener noreferrer">
-          {children}
-        </a>
-      ),
-    }),
-    [],
-  );
-
   // Get icon for tool calls only
   const getIcon = () => {
     if (type !== "tool_call" && type !== "tool_result") {
@@ -277,7 +276,10 @@ export function ActivityItem({ item, executorSources = [] }: Props) {
   if (type === "text") {
     return (
       <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 text-foreground max-w-none py-0.5 text-xs">
-        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={markdownComponents}>
+        <ReactMarkdown
+          remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+          components={ACTIVITY_MARKDOWN_COMPONENTS}
+        >
           {content}
         </ReactMarkdown>
       </div>

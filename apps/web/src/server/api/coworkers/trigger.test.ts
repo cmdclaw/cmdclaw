@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { triggerCoworkerRunMock } = vi.hoisted(() => ({
-  triggerCoworkerRunMock: vi.fn(),
+  triggerCoworkerRunMock: vi.fn<VitestProcedure>(),
 }));
 
 vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
@@ -60,9 +65,7 @@ describe("triggerCoworker (POST /api/coworkers/trigger)", () => {
   });
 
   it("rejects requests with a missing or wrong bearer token", async () => {
-    const response = await triggerCoworker(
-      makeRequest({ coworkerId: "cw-1" }, "Bearer wrong"),
-    );
+    const response = await triggerCoworker(makeRequest({ coworkerId: "cw-1" }, "Bearer wrong"));
 
     expect(response.status).toBe(401);
     expect(triggerCoworkerRunMock).not.toHaveBeenCalled();

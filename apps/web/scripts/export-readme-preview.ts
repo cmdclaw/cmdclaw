@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const repoRoot = resolve(__dirname, "../../..");
+const currentFilename = fileURLToPath(import.meta.url);
+const currentDirname = dirname(currentFilename);
+const repoRoot = resolve(currentDirname, "../../..");
 const outputDir = resolve(repoRoot, ".github/assets/readme");
 const mp4Path = join(outputDir, "cmdclaw-agent-inbox.mp4");
 const gifPath = join(outputDir, "cmdclaw-agent-inbox.gif");

@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { isApprovedLoginEmailMock, postInviteOnlyAccessRequestSlackNotificationMock } = vi.hoisted(
   () => ({
-    isApprovedLoginEmailMock: vi.fn(),
-    postInviteOnlyAccessRequestSlackNotificationMock: vi.fn(),
+    isApprovedLoginEmailMock: vi.fn<VitestProcedure>(),
+    postInviteOnlyAccessRequestSlackNotificationMock: vi.fn<VitestProcedure>(),
   }),
 );
 

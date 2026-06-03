@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { z } from "zod";
 
 const { getLocalRemoteIntegrationCredentialsMock, listLocalRemoteIntegrationUsersMock } =
   vi.hoisted(() => ({
-    getLocalRemoteIntegrationCredentialsMock: vi.fn(),
-    listLocalRemoteIntegrationUsersMock: vi.fn(),
+    getLocalRemoteIntegrationCredentialsMock: vi.fn<VitestProcedure>(),
+    listLocalRemoteIntegrationUsersMock: vi.fn<VitestProcedure>(),
   }));
 
 vi.mock("@/env", () => ({

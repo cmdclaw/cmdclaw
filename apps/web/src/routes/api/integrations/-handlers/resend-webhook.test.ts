@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
 const { verifyMock, queueAddMock, getQueueMock, buildQueueJobIdMock } = vi.hoisted(() => ({
-  verifyMock: vi.fn(),
-  queueAddMock: vi.fn(),
-  getQueueMock: vi.fn(),
-  buildQueueJobIdMock: vi.fn((parts: string[]) => parts.join(":")),
+  verifyMock: vi.fn<VitestProcedure>(),
+  queueAddMock: vi.fn<VitestProcedure>(),
+  getQueueMock: vi.fn<VitestProcedure>(),
+  buildQueueJobIdMock: vi.fn<VitestProcedure>((parts: string[]) => parts.join(":")),
 }));
 
 vi.mock("@/env", () => ({
@@ -78,7 +83,10 @@ describe("handleResendWebhook", () => {
     expect(queueAddMock).toHaveBeenCalledTimes(1);
     const [jobName, data, opts] = queueAddMock.mock.calls[0];
     expect(jobName).toBe("email-forwarded-coworker");
-    expect(data).toEqual({ webhookId: "msg_1", event: expect.objectContaining({ type: "email.received" }) });
+    expect(data).toEqual({
+      webhookId: "msg_1",
+      event: expect.objectContaining({ type: "email.received" }),
+    });
     expect(opts.jobId).toBe("email-forwarded-coworker:msg_1");
   });
 

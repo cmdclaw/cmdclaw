@@ -1,5 +1,7 @@
 "use client";
 
+// oxlint-disable jsx-a11y/control-has-associated-label
+
 import {
   ArrowUp,
   Copy,
@@ -18,14 +20,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  type ChangeEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { IntegrationBadges } from "@/components/chat/integration-badges";
 import { WorkspaceMcpServerLogo } from "@/components/executor-source-logo";

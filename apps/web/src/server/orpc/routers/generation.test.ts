@@ -6,11 +6,18 @@ import { GenerationStartError } from "@cmdclaw/core/server/services/generation-s
 import { emitCanonicalServiceEvent } from "@cmdclaw/core/server/utils/observability";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
+
+// oxlint-disable eslint/no-underscore-dangle
+
 function createProcedureStub() {
   const stub = {
-    input: vi.fn(),
-    output: vi.fn(),
-    handler: vi.fn((fn: unknown) => fn),
+    input: vi.fn<VitestProcedure>(),
+    output: vi.fn<VitestProcedure>(),
+    handler: vi.fn<VitestProcedure>((fn: unknown) => fn),
   };
   stub.input.mockReturnValue(stub);
   stub.output.mockReturnValue(stub);
@@ -26,10 +33,10 @@ const {
   generationManagerMock,
   startPendingCoworkerRunMock,
 } = vi.hoisted(() => {
-  const generationFindFirstMock = vi.fn();
-  const conversationFindFirstMock = vi.fn();
-  const coworkerRunFindFirstMock = vi.fn();
-  const generationInterruptFindFirstMock = vi.fn();
+  const generationFindFirstMock = vi.fn<VitestProcedure>();
+  const conversationFindFirstMock = vi.fn<VitestProcedure>();
+  const coworkerRunFindFirstMock = vi.fn<VitestProcedure>();
+  const generationInterruptFindFirstMock = vi.fn<VitestProcedure>();
 
   const dbMock = {
     query: {
@@ -49,22 +56,22 @@ const {
   };
 
   const generationManagerMock = {
-    startGeneration: vi.fn(),
-    enqueueConversationMessage: vi.fn(),
-    listConversationQueuedMessages: vi.fn(),
-    removeConversationQueuedMessage: vi.fn(),
-    updateConversationQueuedMessage: vi.fn(),
-    subscribeToGeneration: vi.fn(),
-    cancelGeneration: vi.fn(),
-    submitApproval: vi.fn(),
-    submitApprovalByInterrupt: vi.fn(),
-    submitAuthResult: vi.fn(),
-    submitAuthResultByInterrupt: vi.fn(),
-    getGenerationStatus: vi.fn(),
-    getGenerationForConversation: vi.fn(),
-    getStreamCountersSnapshot: vi.fn(),
+    startGeneration: vi.fn<VitestProcedure>(),
+    enqueueConversationMessage: vi.fn<VitestProcedure>(),
+    listConversationQueuedMessages: vi.fn<VitestProcedure>(),
+    removeConversationQueuedMessage: vi.fn<VitestProcedure>(),
+    updateConversationQueuedMessage: vi.fn<VitestProcedure>(),
+    subscribeToGeneration: vi.fn<VitestProcedure>(),
+    cancelGeneration: vi.fn<VitestProcedure>(),
+    submitApproval: vi.fn<VitestProcedure>(),
+    submitApprovalByInterrupt: vi.fn<VitestProcedure>(),
+    submitAuthResult: vi.fn<VitestProcedure>(),
+    submitAuthResultByInterrupt: vi.fn<VitestProcedure>(),
+    getGenerationStatus: vi.fn<VitestProcedure>(),
+    getGenerationForConversation: vi.fn<VitestProcedure>(),
+    getStreamCountersSnapshot: vi.fn<VitestProcedure>(),
   };
-  const startPendingCoworkerRunMock = vi.fn();
+  const startPendingCoworkerRunMock = vi.fn<VitestProcedure>();
 
   return {
     generationFindFirstMock,
@@ -94,19 +101,19 @@ vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
 }));
 
 vi.mock("@cmdclaw/core/server/utils/observability", () => ({
-  emitCanonicalServiceEvent: vi.fn(),
-  logServerEvent: vi.fn(),
-  createTraceId: vi.fn(() => "trace-test"),
+  emitCanonicalServiceEvent: vi.fn<VitestProcedure>(),
+  logServerEvent: vi.fn<VitestProcedure>(),
+  createTraceId: vi.fn<VitestProcedure>(() => "trace-test"),
   logger: {
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
+    error: vi.fn<VitestProcedure>(),
+    info: vi.fn<VitestProcedure>(),
+    warn: vi.fn<VitestProcedure>(),
+    debug: vi.fn<VitestProcedure>(),
   },
 }));
 
 vi.mock("../workspace-access", () => ({
-  requireActiveWorkspaceAccess: vi.fn(async () => ({
+  requireActiveWorkspaceAccess: vi.fn<VitestProcedure>(async () => ({
     workspace: { id: "ws-1" },
     membership: { role: "member" },
   })),

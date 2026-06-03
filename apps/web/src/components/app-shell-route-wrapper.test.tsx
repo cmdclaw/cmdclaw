@@ -4,6 +4,11 @@ import type React from "react";
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type VitestProcedure = Extract<
+  NonNullable<Parameters<typeof vi.fn>[0]>,
+  (...args: never[]) => unknown
+>;
 import { AppShellRouteWrapper } from "./app-shell-route-wrapper";
 
 void jestDomVitest;
@@ -16,7 +21,7 @@ type MockCurrentUserState = {
 
 const mocks = vi.hoisted(() => ({
   pathname: "/chat",
-  replace: vi.fn(),
+  replace: vi.fn<VitestProcedure>(),
   currentUser: {
     data: { onboardedAt: null },
     isLoading: false,
