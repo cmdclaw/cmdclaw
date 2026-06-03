@@ -1,7 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { createBrowserJsonStorage } from "./browser-json-storage";
 
 const STORAGE_KEY = "chat-platform-skill-v1";
 const EMPTY_SELECTED_SKILLS: string[] = [];
@@ -57,7 +58,7 @@ export const useChatSkillStore = create<ChatSkillState>()(
     }),
     {
       name: STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      storage: createBrowserJsonStorage(),
       partialize: (state) => ({ selectedSkillSlugsByScope: state.selectedSkillSlugsByScope }),
     },
   ),

@@ -3,8 +3,9 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
+import { createBrowserJsonStorage } from "./browser-json-storage";
 
 const STORAGE_KEY = "chat-selected-model-v2";
 
@@ -36,7 +37,7 @@ export const useChatModelStore = create<ChatModelState>()(
     }),
     {
       name: STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      storage: createBrowserJsonStorage(),
       partialize: (state) => ({
         selectedModel: state.selectedModel,
         selectedAuthSource: state.selectedAuthSource,

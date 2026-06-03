@@ -5,7 +5,9 @@ import { NEW_CHAT_DRAFT_KEY, getChatDraftKey, useChatDraftStore } from "./chat-d
 
 describe("chat-draft-store", () => {
   beforeEach(() => {
-    globalThis.localStorage?.clear();
+    if (typeof globalThis.localStorage?.clear === "function") {
+      globalThis.localStorage.clear();
+    }
     useChatDraftStore.setState({ drafts: {} });
   });
 

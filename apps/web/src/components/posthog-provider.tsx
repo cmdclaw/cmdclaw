@@ -2,7 +2,7 @@
 
 import posthogClientLib from "posthog-js";
 import { PostHogProvider, usePostHog } from "posthog-js/react";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "@/components/next-navigation-compat";
 import { env } from "@/env";
 import { authClient } from "@/lib/auth-client";
@@ -10,8 +10,13 @@ import { authClient } from "@/lib/auth-client";
 const posthogKey = env.NEXT_PUBLIC_POSTHOG_KEY;
 const posthogProxyPath = env.NEXT_PUBLIC_POSTHOG_HOST;
 const isPosthogEnabled = Boolean(posthogKey);
+let posthogInitialized = false;
 
-if (isPosthogEnabled) {
+function initializePosthog() {
+  if (!isPosthogEnabled || posthogInitialized) {
+    return;
+  }
+
   posthogClientLib.init(posthogKey!, {
     api_host: posthogProxyPath,
     defaults: "2026-01-30",
@@ -23,6 +28,8 @@ if (isPosthogEnabled) {
     },
     enable_recording_console_log: true,
   });
+
+  posthogInitialized = true;
 }
 
 function PostHogPageView() {
@@ -90,7 +97,18 @@ type PostHogClientProviderProps = {
 };
 
 export function PostHogClientProvider({ children }: PostHogClientProviderProps) {
+  const [isInitialized, setIsInitialized] = useState(posthogInitialized);
+
+  useEffect(() => {
+    initializePosthog();
+    setIsInitialized(posthogInitialized);
+  }, []);
+
   if (!isPosthogEnabled) {
+    return <>{children}</>;
+  }
+
+  if (!isInitialized) {
     return <>{children}</>;
   }
 
