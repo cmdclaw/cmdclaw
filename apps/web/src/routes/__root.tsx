@@ -4,12 +4,9 @@ import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanst
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import type { RouterAppContext } from "@/router";
-import { AppRootShell } from "@/components/app-root-shell";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { RootNotFound } from "@/components/root-not-found";
-import { SessionPrincipalCacheGuard } from "@/components/session-principal-cache-guard";
 import { env } from "@/env";
-import { fetchSessionContext } from "@/lib/route-guards";
 // Local font assets (replaces next/font Geist / Geist_Mono). These set the
 // "Geist" / "Geist Mono" font-family names that the Tailwind font tokens resolve to
 // via the --font-geist-sans / --font-geist-mono CSS variables in globals.css.
@@ -38,10 +35,6 @@ const TANSTACK_DEVTOOLS_PLUGINS: Array<TanStackDevtoolsReactPlugin> = [
 ];
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
-  loader: async () => {
-    const context = await fetchSessionContext();
-    return { hasSession: Boolean(context.principal) };
-  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -76,13 +69,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootComponent() {
-  const { hasSession } = Route.useLoaderData();
-
   return (
     <RootDocument>
-      <AppRootShell hasSession={hasSession}>
-        <Outlet />
-      </AppRootShell>
+      <Outlet />
     </RootDocument>
   );
 }
@@ -98,7 +87,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <HeadContent />
       </head>
       <body className="antialiased" data-edition={edition}>
-        <SessionPrincipalCacheGuard />
         {children}
         <TanStackDevtools config={TANSTACK_DEVTOOLS_CONFIG} plugins={TANSTACK_DEVTOOLS_PLUGINS} />
         <Scripts />

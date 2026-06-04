@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { requireSession } from "@/lib/route-guards";
 
 /**
@@ -13,16 +14,22 @@ import { requireSession } from "@/lib/route-guards";
  * returns them to the originally requested integrations path after sign-in.
  */
 export const Route = createFileRoute("/integrations")({
-  beforeLoad: ({ location }) => requireSession(location.href),
+  beforeLoad: async ({ location }) => ({
+    sessionContext: await requireSession(location.href),
+  }),
   component: IntegrationsLayout,
 });
 
 function IntegrationsLayout() {
+  const { sessionContext } = Route.useRouteContext();
+
   return (
-    <div className="bg-background min-h-screen">
-      <main className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">
-        <Outlet />
-      </main>
-    </div>
+    <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
+      <div className="bg-background min-h-screen">
+        <main className="mx-auto w-full max-w-[1400px] px-8 pt-10 pb-16">
+          <Outlet />
+        </main>
+      </div>
+    </AuthenticatedAppRootShell>
   );
 }

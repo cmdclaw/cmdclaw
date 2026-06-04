@@ -3,10 +3,12 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "@/components/next-navigation-compat";
 import { AppShell, type SidebarVisibility } from "@/components/app-shell";
 import { useCurrentUser } from "@/orpc/hooks/user";
+import type { SessionPrincipal } from "@/lib/route-guards";
 
 type AppShellRouteWrapperProps = {
   children: React.ReactNode;
   initialHasSession: boolean;
+  initialPrincipal?: SessionPrincipal | null;
 };
 
 function getSidebarVisibility(pathname: string | null): SidebarVisibility | null {
@@ -69,7 +71,11 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   return children;
 }
 
-export function AppShellRouteWrapper({ children, initialHasSession }: AppShellRouteWrapperProps) {
+export function AppShellRouteWrapper({
+  children,
+  initialHasSession,
+  initialPrincipal = null,
+}: AppShellRouteWrapperProps) {
   const pathname = usePathname();
   const sidebarVisibility = getSidebarVisibility(pathname);
 
@@ -81,14 +87,22 @@ export function AppShellRouteWrapper({ children, initialHasSession }: AppShellRo
   // enforce onboarding completion before rendering
   if (sidebarVisibility === "always") {
     return (
-      <AppShell sidebarVisibility={sidebarVisibility} initialHasSession={initialHasSession}>
+      <AppShell
+        sidebarVisibility={sidebarVisibility}
+        initialHasSession={initialHasSession}
+        initialPrincipal={initialPrincipal}
+      >
         <OnboardingGuard>{children}</OnboardingGuard>
       </AppShell>
     );
   }
 
   return (
-    <AppShell sidebarVisibility={sidebarVisibility} initialHasSession={initialHasSession}>
+    <AppShell
+      sidebarVisibility={sidebarVisibility}
+      initialHasSession={initialHasSession}
+      initialPrincipal={initialPrincipal}
+    >
       {children}
     </AppShell>
   );

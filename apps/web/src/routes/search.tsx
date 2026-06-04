@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { requireSession } from "@/lib/route-guards";
 
 /**
@@ -14,20 +15,26 @@ import { requireSession } from "@/lib/route-guards";
  * `/search` after sign-in.
  */
 export const Route = createFileRoute("/search")({
-  beforeLoad: ({ location }) => requireSession(location.href),
+  beforeLoad: async ({ location }) => ({
+    sessionContext: await requireSession(location.href),
+  }),
   head: () => ({ meta: [{ title: "Search - CmdClaw" }] }),
   component: SearchPage,
 });
 
 function SearchPage() {
+  const { sessionContext } = Route.useRouteContext();
+
   return (
-    <div className="bg-background min-h-screen">
-      <div className="mx-auto w-full max-w-4xl px-6 py-10">
-        <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Search across coworkers, skills, and integrations.
-        </p>
+    <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
+      <div className="bg-background min-h-screen">
+        <div className="mx-auto w-full max-w-4xl px-6 py-10">
+          <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Search across coworkers, skills, and integrations.
+          </p>
+        </div>
       </div>
-    </div>
+    </AuthenticatedAppRootShell>
   );
 }

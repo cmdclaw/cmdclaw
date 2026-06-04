@@ -2,9 +2,11 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { AppShellRouteWrapper } from "@/components/app-shell-route-wrapper";
 import { DesktopNotificationPermissionGate } from "@/components/desktop-notification-permission-gate";
 import { PostHogClientProvider } from "@/components/posthog-provider";
+import { SessionPrincipalCacheGuard } from "@/components/session-principal-cache-guard";
 import { Toaster } from "@/components/ui/sonner";
 import { env } from "@/env";
 import { ORPCProvider } from "@/orpc/provider";
+import type { SessionPrincipal } from "@/lib/route-guards";
 
 const isSelfHostedEdition = env.NEXT_PUBLIC_CMDCLAW_EDITION === "selfhost";
 
@@ -59,16 +61,21 @@ function BillingProviderWrapper({ children }: { children: ReactNode }) {
 export function AppRootShell({
   children,
   hasSession,
+  initialPrincipal = null,
 }: {
   children: ReactNode;
   hasSession: boolean;
+  initialPrincipal?: SessionPrincipal | null;
 }) {
   return (
     <PostHogClientProvider>
       <ORPCProvider>
         <BillingProviderWrapper>
+          <SessionPrincipalCacheGuard />
           <DesktopNotificationPermissionGate enabled={hasSession} />
-          <AppShellRouteWrapper initialHasSession={hasSession}>{children}</AppShellRouteWrapper>
+          <AppShellRouteWrapper initialHasSession={hasSession} initialPrincipal={initialPrincipal}>
+            {children}
+          </AppShellRouteWrapper>
           <Toaster />
         </BillingProviderWrapper>
       </ORPCProvider>

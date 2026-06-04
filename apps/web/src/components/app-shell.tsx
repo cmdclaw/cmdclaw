@@ -5,6 +5,7 @@ import { MobileBottomBar } from "@/components/mobile-bottom-bar";
 import { SelfhostControlPlaneGate } from "@/components/selfhost-control-plane-gate";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import type { SessionPrincipal } from "@/lib/route-guards";
 
 const APP_SHELL_CONTENT_STYLE: React.CSSProperties = { transform: "translateZ(0)" };
 
@@ -14,12 +15,14 @@ type AppShellProps = {
   children: React.ReactNode;
   sidebarVisibility?: SidebarVisibility;
   initialHasSession?: boolean;
+  initialPrincipal?: SessionPrincipal | null;
 };
 
 export function AppShell({
   children,
   sidebarVisibility = "always",
   initialHasSession = false,
+  initialPrincipal = null,
 }: AppShellProps) {
   const pathname = useLocation({ select: (location) => location.pathname });
   const [showAuthenticatedSidebar, setShowAuthenticatedSidebar] = useState(initialHasSession);
@@ -66,7 +69,7 @@ export function AppShell({
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden">
       <SelfhostControlPlaneGate />
-      {showNav ? <AppSidebar /> : null}
+      {showNav ? <AppSidebar initialPrincipal={initialPrincipal} /> : null}
       <div
         className={cn(
           "app-shell-scroll-container relative h-full min-w-0 flex-1",

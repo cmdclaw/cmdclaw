@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
 import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/lib/coworkers-events";
 import { requireSession } from "@/lib/route-guards";
@@ -14,11 +15,14 @@ import { requireSession } from "@/lib/route-guards";
  * presentational concern reading TanStack Router location rather than a global pathname switch.
  */
 export const Route = createFileRoute("/agents")({
-  beforeLoad: ({ location }) => requireSession(location.href),
+  beforeLoad: async ({ location }) => ({
+    sessionContext: await requireSession(location.href),
+  }),
   component: AgentsLayout,
 });
 
 function AgentsLayout() {
+  const { sessionContext } = Route.useRouteContext();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [recentDrawerOpen, setRecentDrawerOpen] = useState(false);
   const isRunsRoute = pathname.startsWith("/agents/runs");
@@ -33,7 +37,7 @@ function AgentsLayout() {
   }, []);
 
   return (
-    <>
+    <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
       {isRunsRoute || isOrgChartRoute || isCoworkerInfoRoute ? (
         <Outlet />
       ) : isCoworkerEditorRoute ? (
@@ -53,6 +57,6 @@ function AgentsLayout() {
         onOpenChange={setRecentDrawerOpen}
         mode="coworkers"
       />
-    </>
+    </AuthenticatedAppRootShell>
   );
 }

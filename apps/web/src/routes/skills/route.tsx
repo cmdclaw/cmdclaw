@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { requireSession } from "@/lib/route-guards";
 
 /**
@@ -13,16 +14,22 @@ import { requireSession } from "@/lib/route-guards";
  *   /skills/community/$skillId     — community skill detail
  */
 export const Route = createFileRoute("/skills")({
-  beforeLoad: ({ location }) => requireSession(location.href),
+  beforeLoad: async ({ location }) => ({
+    sessionContext: await requireSession(location.href),
+  }),
   component: SkillsLayout,
 });
 
 function SkillsLayout() {
+  const { sessionContext } = Route.useRouteContext();
+
   return (
-    <div className="bg-background min-h-screen">
-      <main className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 sm:px-8 sm:pt-10">
-        <Outlet />
-      </main>
-    </div>
+    <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
+      <div className="bg-background min-h-screen">
+        <main className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 sm:px-8 sm:pt-10">
+          <Outlet />
+        </main>
+      </div>
+    </AuthenticatedAppRootShell>
   );
 }

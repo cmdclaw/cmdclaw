@@ -93,6 +93,14 @@ function mockAdminSession() {
   });
 }
 
+const INITIAL_ADMIN_PRINCIPAL = {
+  userId: "user-1",
+  email: "admin@example.com",
+  image: "/avatar.png",
+  name: "Admin User",
+  role: "admin",
+} as const;
+
 describe("AppSidebar", () => {
   beforeEach(() => {
     installLocalStorageStub();
@@ -144,6 +152,20 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: "Toolbox" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bug report" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument();
+  });
+
+  it("renders admin navigation and avatar from the initial principal before client session resolves", () => {
+    mocks.getSession.mockReturnValue(new Promise(() => undefined));
+
+    render(<AppSidebar initialPrincipal={INITIAL_ADMIN_PRINCIPAL} />);
+
+    expect(screen.getByRole("link", { name: "Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Admin view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTitle("admin@example.com")).toBeInTheDocument();
+    expect(document.querySelector('img[src="/avatar.png"]')).toBeInTheDocument();
   });
 
   it("routes between sidebar views from the toggle", async () => {

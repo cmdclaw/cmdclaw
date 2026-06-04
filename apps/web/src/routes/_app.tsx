@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { requireSession } from "@/lib/route-guards";
 
 /**
@@ -18,6 +19,18 @@ import { requireSession } from "@/lib/route-guards";
  * router/root scaffold, so this layout only owns the protected app chrome.
  */
 export const Route = createFileRoute("/_app")({
-  beforeLoad: ({ location }) => requireSession(location.href),
-  component: () => <Outlet />,
+  beforeLoad: async ({ location }) => ({
+    sessionContext: await requireSession(location.href),
+  }),
+  component: AppLayout,
 });
+
+function AppLayout() {
+  const { sessionContext } = Route.useRouteContext();
+
+  return (
+    <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
+      <Outlet />
+    </AuthenticatedAppRootShell>
+  );
+}

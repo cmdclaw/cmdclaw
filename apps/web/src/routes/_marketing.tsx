@@ -1,4 +1,6 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { AppRootShell } from "@/components/app-root-shell";
+import { fetchSessionContext } from "@/lib/route-guards";
 
 /**
  * Pathless layout route for public marketing pages (access = public, no auth).
@@ -7,13 +9,30 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
  * `_marketing/*` renders inside this layout while keeping its exact public URL (the
  * `_marketing` segment is pathless, so `/pricing`, `/avatar`, etc. are unchanged).
  *
- * The app providers and toast surface come from the root shell, so this layout only keeps
- * public marketing pages grouped under a pathless route boundary.
+ * Authenticated visitors keep the sidebar chrome on public product-facing pages such as
+ * `/` and `/templates`; anonymous visitors get the bare marketing pages.
  */
 export const Route = createFileRoute("/_marketing")({
+  loader: async () => {
+    const context = await fetchSessionContext();
+    return {
+      hasSession: Boolean(context.principal),
+      principal: context.principal,
+    };
+  },
   component: MarketingLayout,
 });
 
 function MarketingLayout() {
-  return <Outlet />;
+  const { hasSession, principal } = Route.useLoaderData();
+
+  if (!hasSession) {
+    return <Outlet />;
+  }
+
+  return (
+    <AppRootShell hasSession initialPrincipal={principal}>
+      <Outlet />
+    </AppRootShell>
+  );
 }

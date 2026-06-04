@@ -40,6 +40,7 @@ import { authClient } from "@/lib/auth-client";
 import { clientEditionCapabilities } from "@/lib/edition";
 import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
+import type { SessionPrincipal } from "@/lib/route-guards";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 type SidebarMode = "user" | "admin";
@@ -51,6 +52,19 @@ type NavItem = {
   href: string;
   onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 };
+
+function readStoredSidebarMode(): SidebarMode {
+  if (typeof window === "undefined") {
+    return "admin";
+  }
+
+  try {
+    const savedMode = window.localStorage.getItem(SIDEBAR_MODE_STORAGE_KEY);
+    return savedMode === "user" || savedMode === "admin" ? savedMode : "admin";
+  } catch {
+    return "admin";
+  }
+}
 
 function McpLogoIcon({ className }: { className?: string }) {
   return (
@@ -207,11 +221,15 @@ function SidebarModeToggleButton({
   );
 }
 
-export function AppSidebar() {
+type AppSidebarProps = {
+  initialPrincipal?: SessionPrincipal | null;
+};
+
+export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [session, setSession] = useState<SessionData>(null);
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("admin");
+  const [session, setSession] = useState<SessionData | undefined>(undefined);
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(readStoredSidebarMode);
   const [reportOpen, setReportOpen] = useState(false);
   const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
 
@@ -234,17 +252,6 @@ export function AppSidebar() {
     return () => {
       mounted = false;
     };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const savedMode = window.localStorage.getItem(SIDEBAR_MODE_STORAGE_KEY);
-      if (savedMode === "user" || savedMode === "admin") {
-        setSidebarMode(savedMode);
-      }
-    } catch {
-      setSidebarMode("admin");
-    }
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -324,9 +331,16 @@ export function AppSidebar() {
     return pathname === href || pathname.startsWith(href + "/");
   };
 
-  const userEmail = session?.user?.email ?? "";
+  const effectiveUser = session?.user ?? null;
+  const initialPrincipalActive = session === undefined && initialPrincipal;
+  const userEmail = effectiveUser?.email ?? (initialPrincipalActive ? initialPrincipal.email : "");
   const avatarInitial = userEmail ? userEmail.charAt(0).toUpperCase() : "";
-  const isAdmin = session?.user?.role === "admin";
+  const userRole =
+    (effectiveUser as { role?: string | null } | null)?.role ??
+    (initialPrincipalActive ? initialPrincipal.role : null);
+  const avatarImage =
+    effectiveUser?.image ?? (initialPrincipalActive ? initialPrincipal.image : null);
+  const isAdmin = userRole === "admin";
   const isAdminRoute = pathname?.startsWith("/admin") || pathname?.startsWith("/instance");
   const activeSidebarMode: SidebarMode = !isAdmin || isAdminRoute ? "admin" : sidebarMode;
   const impersonatedBy = (
@@ -497,9 +511,9 @@ export function AppSidebar() {
                 className="border-sidebar-border bg-sidebar-accent/80 hover:bg-sidebar-accent focus-visible:ring-sidebar-ring/45 flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border text-[13px] transition-colors focus-visible:ring-3 focus-visible:outline-none"
                 title={userEmail || "Account"}
               >
-                {session?.user?.image ? (
+                {avatarImage ? (
                   <AppImage
-                    src={session.user.image}
+                    src={avatarImage}
                     alt=""
                     width={40}
                     height={40}
@@ -546,7 +560,7 @@ export function AppSidebar() {
                   </span>
                 </DropdownMenuItem>
               ) : null}
-              {session?.user ? (
+              {session?.user || initialPrincipalActive ? (
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="text-destructive focus:text-destructive"

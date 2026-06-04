@@ -23,6 +23,8 @@ import { isWorktreeAutoLoginConfigured } from "@/lib/worktree-auto-login";
 export interface SessionPrincipal {
   userId: string;
   email: string;
+  image: string | null;
+  name: string | null;
   role: string | null;
 }
 
@@ -51,6 +53,8 @@ export const fetchSessionContext = createServerFn({ method: "GET" }).handler(
         ? {
             userId: user.id,
             email: user.email,
+            image: user.image ?? null,
+            name: user.name ?? null,
             role: (user as { role?: string | null }).role ?? null,
           }
         : null;

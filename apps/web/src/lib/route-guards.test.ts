@@ -74,6 +74,8 @@ describe("route guards", () => {
       principal: {
         userId: "user-1",
         email: "baptiste@heybap.com",
+        image: null,
+        name: null,
         role: "admin",
       },
       edition: "cloud",
