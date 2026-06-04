@@ -24,7 +24,7 @@ This repository is organized into several top-level folders. Each folder can hav
 
 ## Lint policy
 - Every lint setting modification requires explicit user approval.
-- Do not change lint rules or lint configuration without explicit user approval.
+- Do not change lint rules or lint configuration without explicit user approval, if you think this would lead to an imporvement in the codebase surface it to the user (teach him).
 
 ## Commit policy
 -  Do not commit unless the user explicitly asks.
