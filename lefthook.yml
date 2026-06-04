@@ -16,6 +16,8 @@ pre-commit:
 pre-push:
   parallel: false
   commands:
+    fallow:
+      run: bunx --bun fallow@2.88.3 audit --format compact --fail-on-issues --changed-since origin/main
     check:
       run: bun run check
     test:

@@ -501,6 +501,20 @@
         "count": 1
       }
     },
+    "apps/web/scripts/gt-codemod.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
     "apps/web/scripts/lib/question-approval.ts": {
       "complexity_high": {
         "count": 1
@@ -800,10 +814,10 @@
     },
     "apps/web/src/components/landing/coworker-landing.tsx": {
       "crap_critical": {
-        "count": 2
+        "count": 3
       },
       "crap_high": {
-        "count": 3
+        "count": 5
       },
       "crap_moderate": {
         "count": 1
@@ -1260,7 +1274,7 @@
       }
     },
     "apps/web/src/routes/agents/route.tsx": {
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -1334,10 +1348,7 @@
     },
     "apps/web/src/routes/integrations/$type.tsx": {
       "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
+        "count": 3
       }
     },
     "apps/web/src/routes/integrations/whatsapp.tsx": {
@@ -2335,6 +2346,14 @@
         "count": 2
       }
     },
+    "scripts/release/render-staging-lifecycle.ts": {
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
     "scripts/validate-generation-observability.ts": {
       "complexity_critical": {
         "count": 1
@@ -2375,16 +2394,16 @@
     "apps/web/src/components/inbox/inbox-item.tsx:complexity",
     "apps/web/src/components/chat/browser-json-storage.ts:high impact",
     "apps/web/src/components/chat/question-approval-utils.ts:complexity",
+    "apps/web/src/components/app-sidebar.tsx:complexity",
     "apps/web/src/orpc/hooks/inbox.ts:untested risk",
     "apps/cli/src/commands/chat/impl.ts:complexity",
-    "apps/web/src/components/app-sidebar.tsx:complexity",
     "packages/core/src/server/services/memory-service.ts:complexity",
     "packages/core/src/server/sandbox/runtime/runtime-client/opencode.ts:high impact",
+    "apps/web/src/components/ui/dual-panel-workspace.tsx:complexity",
     "apps/web/src/components/prompt-bar.tsx:complexity",
     "apps/web/src/components/chat/chat-message-sync.ts:high impact",
-    "apps/web/src/components/ui/dual-panel-workspace.tsx:complexity",
-    "apps/web/src/server/orpc/routers/coworker.ts:complexity",
     "apps/web/src/components/integration-detail-content.tsx:complexity",
+    "apps/web/src/server/orpc/routers/coworker.ts:complexity",
     "packages/core/src/server/services/generation/core/canonical-generation-events.ts:complexity",
     "apps/web/src/routes/agents/-components/coworker-editor-page.tsx:complexity",
     "apps/web/src/components/coworkers/interactive-coworker-card.tsx:complexity",
@@ -2392,24 +2411,25 @@
     "packages/core/src/server/services/generation/core/turn-finalizer.ts:complexity",
     "apps/web/src/routes/prototype/coworker/info/-components/coworker-info-prototype.tsx:complexity",
     "apps/web/scripts/coworker.ts:complexity",
-    "apps/web/src/routes/agents/-components/coworker-info-page.tsx:complexity",
-    "apps/web/scripts/chat.ts:complexity",
-    "packages/message-format/src/index.ts:complexity",
-    "apps/web/src/routes/skills/$id.tsx:complexity",
-    "packages/core/src/server/runtime/opencode/opencode-normal-runner.ts:complexity",
-    "apps/cli/src/commands/coworker/logs.ts:complexity",
-    "apps/web/src/routes/toolbox/-components/toolbox-page.tsx:complexity",
-    "apps/sandbox/src/common/skills/coworker/src/coworker.ts:complexity",
     "apps/web/src/routes/agents/-components/coworkers-page.tsx:complexity",
+    "apps/web/scripts/chat.ts:complexity",
+    "apps/web/src/routes/skills/$id.tsx:complexity",
+    "packages/message-format/src/index.ts:complexity",
+    "apps/web/src/routes/agents/-components/coworker-info-page.tsx:complexity",
+    "packages/core/src/server/runtime/opencode/opencode-normal-runner.ts:complexity",
+    "apps/web/src/routes/toolbox/-components/toolbox-page.tsx:complexity",
+    "apps/cli/src/commands/coworker/logs.ts:complexity",
+    "apps/sandbox/src/common/skills/coworker/src/coworker.ts:complexity",
     "apps/web/src/server/orpc/shared/overview-queries.ts:complexity",
     "packages/core/src/server/services/generation/turn-intake.ts:complexity",
     "packages/core/src/server/services/generation/streams/generation-event-log.ts:complexity",
     "apps/cli/src/lib/question-approval.ts:complexity",
+    "apps/web/scripts/gt-codemod.ts:untested risk",
     "apps/web/src/server/orpc/routers/inbox.ts:complexity",
     "apps/web/public/sw.js:untested risk",
     "apps/worktree/src/cli.ts:complexity",
-    "apps/sandbox/src/common/plugins/integration-permissions.ts:complexity",
     "apps/web/src/components/login/cloud-login-client.tsx:complexity",
+    "apps/sandbox/src/common/plugins/integration-permissions.ts:complexity",
     "apps/web/src/routes/admin/performance.tsx:complexity",
     "apps/sandbox/scripts/daytona-sandbox.ts:complexity",
     "packages/core/src/server/sandbox/runtime/runtime-client/agent-sdk.ts:complexity",

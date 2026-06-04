@@ -15,7 +15,8 @@
     "packages/core/src/server/execution/providers/docker-environment.ts",
     "packages/core/src/server/execution/providers/e2b-environment.ts",
     "scripts/check-render-observability-config.ts",
-    "scripts/release/render-deploy.ts"
+    "scripts/release/render-deploy.ts",
+    "scripts/release/render-staging-lifecycle.ts"
   ],
   "unused_exports": [
     "apps/mcp/servers/galien/src/lib/tool-helpers.ts:requestCurrentGalienUserPathParamGet",
@@ -119,7 +120,8 @@
     "apps/worktree/package.json:@cmdclaw/core"
   ],
   "unused_dev_dependencies": [
-    "apps/web/package.json:@t3-oss/env-core"
+    "apps/web/package.json:@t3-oss/env-core",
+    "apps/web/package.json:gt"
   ],
   "circular_dependencies": [],
   "re_export_cycles": [],
