@@ -4,6 +4,7 @@ import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-s
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
 import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/lib/coworkers-events";
 import { requireSession } from "@/lib/route-guards";
+import CoworkersPage from "./-components/coworkers-page";
 
 /**
  * Agents shell layout (was src/app/agents/layout.tsx).
@@ -29,6 +30,7 @@ function AgentsLayout() {
   const isOrgChartRoute = pathname === "/agents/org-chart";
   const isCoworkerEditorRoute = pathname.startsWith("/agents/edit/");
   const isCoworkerInfoRoute = pathname.startsWith("/agents/info/");
+  const isAgentsIndexRoute = pathname === "/agents" || pathname === "/agents/";
 
   useEffect(() => {
     const handleOpenDrawer = () => setRecentDrawerOpen(true);
@@ -47,7 +49,7 @@ function AgentsLayout() {
       ) : (
         <div className="bg-background min-h-screen">
           <main className="mx-auto w-full max-w-[1400px] px-4 pt-4 pb-16 md:px-8 md:pt-10">
-            <Outlet />
+            {isAgentsIndexRoute ? <CoworkersPage /> : <Outlet />}
           </main>
         </div>
       )}
