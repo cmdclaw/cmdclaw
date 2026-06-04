@@ -18,7 +18,14 @@ import {
 } from "lucide-react";
 import { AppLink as Link } from "../-lib/app-link";
 import { useRouter, useSearchParams } from "../-lib/next-navigation-compat";
-import { useCallback, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ChatArea } from "@/components/chat/chat-area";
 import { MessageBubble } from "@/components/chat/message-bubble";
@@ -57,6 +64,25 @@ type Props = {
 };
 
 type InfoTab = "summary" | "chat";
+type MobilePanel = "app" | InfoTab;
+
+const MOBILE_PANEL_ORDER: MobilePanel[] = ["summary", "app", "chat"];
+const MOBILE_PANEL_SWIPE_THRESHOLD = 48;
+const MOBILE_PANEL_TRANSITION = { duration: 0.18, ease: [0.22, 1, 0.36, 1] } as const;
+const MOBILE_PANEL_VARIANTS = {
+  enter: (direction: number) => ({
+    opacity: 0,
+    x: direction >= 0 ? 32 : -32,
+  }),
+  center: {
+    opacity: 1,
+    x: 0,
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: direction >= 0 ? -32 : 32,
+  }),
+} as const;
 
 type HistoryRunItem = {
   id: string;
@@ -109,31 +135,26 @@ function formatRunDate(value?: Date | string | null) {
   }).format(date);
 }
 
-function getStatusClassName(status?: string) {
-  if (status === "completed" || status === "success") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (
-    status === "running" ||
-    status === "awaiting_approval" ||
-    status === "awaiting_auth" ||
-    status === "needs_user_input"
-  ) {
-    return "border-brand-muted bg-brand-light text-brand-dark";
-  }
-  if (status === "error" || status === "cancelled") {
-    return "border-destructive/20 bg-destructive/10 text-destructive";
-  }
-
-  return "border-border bg-muted text-muted-foreground";
-}
-
 function isCompletedStatus(status?: string | null) {
   return status === "completed" || status === "success";
 }
 
 function getInfoTab(value: string | null): InfoTab {
   return value === "chat" ? "chat" : "summary";
+}
+
+function getMobilePanel(value: string): MobilePanel {
+  return value === "summary" || value === "chat" ? value : "app";
+}
+
+function getAdjacentMobilePanel(current: MobilePanel, direction: "next" | "previous") {
+  const currentIndex = MOBILE_PANEL_ORDER.indexOf(current);
+  const nextIndex =
+    direction === "next"
+      ? Math.min(MOBILE_PANEL_ORDER.length - 1, currentIndex + 1)
+      : Math.max(0, currentIndex - 1);
+
+  return MOBILE_PANEL_ORDER[nextIndex] ?? current;
 }
 
 function toDate(value?: Date | string | null) {
@@ -378,7 +399,7 @@ function OutputHtmlFrame({
               type="button"
               variant="secondary"
               size="icon"
-              className="absolute top-3 right-3 z-10 h-8 w-8 border bg-background/90 shadow-sm"
+              className="absolute top-3 right-3 z-10 hidden h-8 w-8 border bg-background/90 shadow-sm md:inline-flex"
               onClick={handleOpenFullscreen}
               aria-label="Open output preview fullscreen"
             >
@@ -462,25 +483,33 @@ function RunSummaryPanel({
   const tools = useMemo(() => collectToolSummary(messages, events), [events, messages]);
   const files = useMemo(() => collectSandboxFiles(messages), [messages]);
   const duration = useMemo(() => formatDuration(startedAt, finishedAt), [finishedAt, startedAt]);
+  const launched = useMemo(() => formatRunDate(startedAt), [startedAt]);
 
   return (
     <div className="space-y-5 p-4">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="border-border/70 rounded-lg border p-3">
-          <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
-            <CheckCircle2 className="h-3.5 w-3.5" />
+      <div className="grid grid-cols-3 gap-2">
+        <div className="border-border/70 rounded-md border px-2.5 py-1.5">
+          <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+            <CheckCircle2 className={cn("h-3 w-3", completed && "text-emerald-600")} />
             Status
           </div>
-          <p className="mt-2 truncate text-sm font-medium">
+          <p className={cn("mt-0.5 truncate text-sm font-medium", completed && "text-emerald-700")}>
             {completed ? "Completed" : (status ?? "Unknown")}
           </p>
         </div>
-        <div className="border-border/70 rounded-lg border p-3">
-          <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
-            <Timer className="h-3.5 w-3.5" />
+        <div className="border-border/70 rounded-md border px-2.5 py-1.5">
+          <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+            <Clock className="h-3 w-3" />
+            Launched
+          </div>
+          <p className="mt-0.5 truncate text-sm font-medium">{launched}</p>
+        </div>
+        <div className="border-border/70 rounded-md border px-2.5 py-1.5">
+          <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+            <Timer className="h-3 w-3" />
             Time taken
           </div>
-          <p className="mt-2 truncate text-sm font-medium">{duration}</p>
+          <p className="mt-0.5 truncate text-sm font-medium">{duration}</p>
         </div>
       </div>
 
@@ -639,6 +668,11 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
   });
   const coworker = useCoworker(resolvedCoworkerId);
   const activeTab = getInfoTab(searchParams.get("tab"));
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(() =>
+    getMobilePanel(searchParams.get("tab") ?? "app"),
+  );
+  const [mobilePanelDirection, setMobilePanelDirection] = useState(0);
+  const mobileSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [definitionOpen, setDefinitionOpen] = useState(false);
   const handleDefinitionOpenChange = useCallback((open: boolean) => {
     setDefinitionOpen(open);
@@ -712,6 +746,70 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
     },
     [resolvedCoworkerSlug, router, searchParams],
   );
+
+  const handleMobilePanelChange = useCallback(
+    (nextPanelValue: string) => {
+      const nextPanel = getMobilePanel(nextPanelValue);
+      const currentIndex = MOBILE_PANEL_ORDER.indexOf(mobilePanel);
+      const nextIndex = MOBILE_PANEL_ORDER.indexOf(nextPanel);
+      setMobilePanelDirection(Math.sign(nextIndex - currentIndex));
+      setMobilePanel(nextPanel);
+
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextPanel === "app") {
+        params.delete("tab");
+      } else {
+        params.set("tab", nextPanel);
+      }
+      const query = params.toString();
+      router.push(`/agents/info/${resolvedCoworkerSlug}${query ? `?${query}` : ""}`);
+    },
+    [mobilePanel, resolvedCoworkerSlug, router, searchParams],
+  );
+  const handleMobilePanelPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    mobileSwipeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }, []);
+  const handleMobilePanelPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const start = mobileSwipeStartRef.current;
+      mobileSwipeStartRef.current = null;
+
+      if (!start) {
+        return;
+      }
+
+      const deltaX = event.clientX - start.x;
+      const deltaY = event.clientY - start.y;
+      if (
+        Math.abs(deltaX) < MOBILE_PANEL_SWIPE_THRESHOLD ||
+        Math.abs(deltaX) < Math.abs(deltaY) * 1.2
+      ) {
+        return;
+      }
+
+      handleMobilePanelChange(
+        getAdjacentMobilePanel(mobilePanel, deltaX < 0 ? "next" : "previous"),
+      );
+    },
+    [handleMobilePanelChange, mobilePanel],
+  );
+  const handleMobilePanelPointerCancel = useCallback(() => {
+    mobileSwipeStartRef.current = null;
+  }, []);
+  const handleSummaryPanelClick = useCallback(() => {
+    handleMobilePanelChange("summary");
+  }, [handleMobilePanelChange]);
+  const handleAppPanelClick = useCallback(() => {
+    handleMobilePanelChange("app");
+  }, [handleMobilePanelChange]);
+  const handleChatPanelClick = useCallback(() => {
+    handleMobilePanelChange("chat");
+  }, [handleMobilePanelChange]);
 
   const handleRunNow = useCallback(async () => {
     if (!resolvedCoworkerId || triggerCoworker.isPending) {
@@ -788,14 +886,12 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
     coworker.data?.username ?? coworkerListItem?.username ?? run.data?.coworkerUsername;
   const coworkerDefinition =
     coworker.data?.description?.trim() || coworkerListItem?.description?.trim();
-  const status = run.data?.status ?? coworkerRuns.data?.[0]?.status;
-  const startedAt = formatRunDate(run.data?.startedAt ?? coworkerRuns.data?.[0]?.startedAt);
 
   return (
-    <main className="bg-background flex h-dvh min-h-0 flex-col overflow-hidden">
-      <section className="bg-background/95 z-10 shrink-0 px-4 py-3 backdrop-blur-sm md:px-6">
-        <div className="flex min-h-10 items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
+    <main className="bg-background flex h-[calc(100dvh-4rem-var(--safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden md:h-dvh">
+      <section className="bg-background/95 z-10 hidden shrink-0 px-3 pt-[max(0.5rem,var(--safe-area-inset-top))] pb-2 backdrop-blur-sm md:block md:px-6 md:py-3">
+        <div className="flex min-h-10 items-center gap-2 md:gap-4">
+          <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-visible">
               <CoworkerAvatar
                 username={coworkerUsername}
@@ -830,23 +926,14 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
             </Popover>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {status ? (
-              <span
-                className={cn(
-                  "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                  getStatusClassName(status),
-                )}
-              >
-                {status}
-              </span>
-            ) : null}
-            <span className="text-muted-foreground hidden items-center gap-1 text-xs sm:inline-flex">
-              <Clock className="h-3.5 w-3.5" />
-              Launched {startedAt}
-            </span>
-
-            <Button type="button" variant="ghost" size="sm" asChild>
+          <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 md:w-auto md:px-3"
+              asChild
+            >
               <Link
                 href={getCoworkerEditHref({
                   id: resolvedCoworkerId,
@@ -854,14 +941,19 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                 })}
               >
                 <Pencil className="h-4 w-4" />
-                Configure
+                <span className="hidden md:inline">Configure</span>
               </Link>
             </Button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="ghost" size="sm">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 md:w-auto md:px-3"
+                >
                   <History className="h-4 w-4" />
-                  History
+                  <span className="hidden md:inline">History</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-72 p-2">
@@ -886,23 +978,23 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
             <Button
               type="button"
               variant="brand"
-              size="sm"
+              size="icon"
               onClick={handleRunNow}
               disabled={triggerCoworker.isPending}
-              className="w-fit"
+              className="h-8 w-8 shrink-0 md:w-auto md:px-3"
             >
               {triggerCoworker.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              Run now
+              <span className="hidden md:inline">Run now</span>
             </Button>
           </div>
         </div>
       </section>
 
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden px-4 pt-2 pb-4 md:px-6 md:pt-3 md:pb-6">
+      <div className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden px-0 pt-[max(0.25rem,var(--safe-area-inset-top))] pb-0 md:gap-4 md:px-6 md:pt-3 md:pb-6">
         <RemoteRunSourceBanner source={remoteRunSource} />
 
         {(run.data?.status === "error" || run.data?.status === "cancelled") && (
@@ -919,21 +1011,237 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
           </section>
         )}
 
-        <DualPanelWorkspace
-          storageKey="agent-info-details-output-width-v3"
-          defaultRightWidth={75}
-          minLeftWidth={25}
-          minRightWidth={40}
-          showTitles={false}
-          leftTitle="Details"
-          rightTitle="Output"
-          leftPanelClassName="border-0 bg-background rounded-none"
-          rightPanelClassName="bg-card rounded-xl"
-          separatorClassName="bg-muted/40"
-          allowLeftPanelDragCollapse
-          left={detailsPanel}
-          right={outputPanel}
-        />
+        <div className="flex min-h-0 flex-1 flex-col md:hidden">
+          <div
+            role="tablist"
+            className="border-border bg-background grid shrink-0 grid-cols-3 border-b"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobilePanel === "summary"}
+              onClick={handleSummaryPanelClick}
+              className={cn(
+                "relative flex h-12 items-center justify-center text-sm font-medium transition-colors",
+                mobilePanel === "summary"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Summary
+              {mobilePanel === "summary" ? (
+                <span className="bg-foreground absolute inset-x-6 bottom-0 h-px" />
+              ) : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobilePanel === "app"}
+              onClick={handleAppPanelClick}
+              className={cn(
+                "relative flex h-12 items-center justify-center text-sm font-medium transition-colors",
+                mobilePanel === "app"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              App
+              {mobilePanel === "app" ? (
+                <span className="bg-foreground absolute inset-x-6 bottom-0 h-px" />
+              ) : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobilePanel === "chat"}
+              onClick={handleChatPanelClick}
+              className={cn(
+                "relative flex h-12 items-center justify-center text-sm font-medium transition-colors",
+                mobilePanel === "chat"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Chat
+              {mobilePanel === "chat" ? (
+                <span className="bg-foreground absolute inset-x-6 bottom-0 h-px" />
+              ) : null}
+            </button>
+          </div>
+
+          <section
+            data-testid="coworker-info-mobile-panel"
+            className="bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden"
+            onPointerDown={handleMobilePanelPointerDown}
+            onPointerUp={handleMobilePanelPointerUp}
+            onPointerCancel={handleMobilePanelPointerCancel}
+          >
+            {mobilePanel === "app" ? (
+              <>
+                <div
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 z-10 w-6 touch-pan-y"
+                  onPointerDown={handleMobilePanelPointerDown}
+                  onPointerUp={handleMobilePanelPointerUp}
+                  onPointerCancel={handleMobilePanelPointerCancel}
+                />
+                <div
+                  aria-hidden
+                  className="absolute inset-y-0 right-0 z-10 w-6 touch-pan-y"
+                  onPointerDown={handleMobilePanelPointerDown}
+                  onPointerUp={handleMobilePanelPointerUp}
+                  onPointerCancel={handleMobilePanelPointerCancel}
+                />
+              </>
+            ) : null}
+            <AnimatePresence custom={mobilePanelDirection} initial={false} mode="wait">
+              <motion.div
+                key={mobilePanel}
+                custom={mobilePanelDirection}
+                variants={MOBILE_PANEL_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={MOBILE_PANEL_TRANSITION}
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
+              >
+                {mobilePanel === "app" ? (
+                  outputPanel
+                ) : mobilePanel === "summary" ? (
+                  <div className="h-full overflow-auto">
+                    <div className="space-y-3 px-4 pt-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-visible">
+                          <CoworkerAvatar
+                            username={coworkerUsername}
+                            size={50}
+                            scale={82}
+                            className="rounded-none"
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h1 className="truncate text-lg leading-tight font-semibold">
+                            {coworkerName}
+                          </h1>
+                          {coworkerUsername ? (
+                            <p className="text-muted-foreground mt-0.5 truncate font-mono text-xs">
+                              @{coworkerUsername}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-foreground h-8 w-8 shrink-0"
+                              aria-label="Show full coworker description"
+                            >
+                              <Info className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-80 p-3">
+                            <p className="text-sm font-medium">Coworker description</p>
+                            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                              {coworkerDefinition || "No definition set."}
+                            </p>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button type="button" variant="outline" size="sm" asChild>
+                          <Link
+                            href={getCoworkerEditHref({
+                              id: resolvedCoworkerId,
+                              username: coworkerUsername,
+                            })}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </Link>
+                        </Button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button type="button" variant="outline" size="sm">
+                              <History className="h-4 w-4" />
+                              History
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="center" className="w-72 p-2">
+                            <div className="px-2 py-1.5">
+                              <p className="text-sm font-medium">Previous Generations</p>
+                              <p className="text-muted-foreground text-xs">
+                                Switch this page to an older Generation.
+                              </p>
+                            </div>
+                            <div className="mt-1 max-h-80 space-y-1 overflow-auto">
+                              {(coworkerRuns.data ?? []).map((historyRun) => (
+                                <HistoryRunButton
+                                  key={historyRun.id}
+                                  run={historyRun}
+                                  selected={historyRun.id === selectedRunId}
+                                  onSelect={handleHistorySelect}
+                                />
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        <Button
+                          type="button"
+                          variant="brand"
+                          size="sm"
+                          onClick={handleRunNow}
+                          disabled={triggerCoworker.isPending}
+                        >
+                          {triggerCoworker.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                          Run
+                        </Button>
+                      </div>
+                    </div>
+                    <RunSummaryPanel
+                      status={detailsRun.status}
+                      startedAt={detailsRun.startedAt}
+                      finishedAt={detailsRun.finishedAt}
+                      events={detailsRun.events}
+                      messages={messages}
+                    />
+                  </div>
+                ) : conversationId ? (
+                  <div className="flex h-full min-h-0 overflow-hidden">
+                    <ChatArea conversationId={conversationId} compact />
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-sm">
+                    No linked chat messages.
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </section>
+        </div>
+
+        <div className="hidden min-h-0 flex-1 md:flex">
+          <DualPanelWorkspace
+            storageKey="agent-info-details-output-width-v3"
+            defaultRightWidth={75}
+            minLeftWidth={25}
+            minRightWidth={40}
+            showTitles={false}
+            leftTitle="Details"
+            rightTitle="Output"
+            leftPanelClassName="border-0 bg-background rounded-none"
+            rightPanelClassName="bg-card rounded-xl"
+            separatorClassName="bg-muted/40"
+            allowLeftPanelDragCollapse
+            left={detailsPanel}
+            right={outputPanel}
+          />
+        </div>
       </div>
     </main>
   );

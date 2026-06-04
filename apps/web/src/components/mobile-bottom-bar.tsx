@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { AppLink } from "@/components/app-link";
 import { BrickIcon } from "@/components/icons/brick-icon";
 import { MobileMenuPanel } from "@/components/mobile-menu-sheet";
-import { usePathname, useRouter } from "@/components/next-navigation-compat";
+import { usePathname, useRouter, useSearchParams } from "@/components/next-navigation-compat";
 import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +26,11 @@ const mobileBottomNavStyle = {
 
 export function MobileBottomBar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const infoTab = searchParams.get("tab");
+  const isFlatBottomBar = pathname.startsWith("/agents/info/") && (!infoTab || infoTab === "app");
 
   const isActive = useCallback(
     (href: string) => {
@@ -67,7 +70,12 @@ export function MobileBottomBar() {
       {/* Menu panel - positioned above the bottom bar */}
       <MobileMenuPanel open={menuOpen} onOpenChange={setMenuOpen} />
 
-      <div className="bg-background/95 fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border-t backdrop-blur-sm md:hidden">
+      <div
+        className={cn(
+          "border-border bg-background/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-sm md:hidden",
+          !isFlatBottomBar && "rounded-t-2xl",
+        )}
+      >
         <nav className="flex items-stretch justify-around" style={mobileBottomNavStyle}>
           {/* Menu button */}
           <button
