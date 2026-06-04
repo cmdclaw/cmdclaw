@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
 import type { TanStackDevtoolsReactPlugin } from "@tanstack/react-devtools";
-import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { TanStackDevtools } from "@tanstack/react-devtools";
+import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import type { RouterAppContext } from "@/router";
+import { GeneralTranslationProvider } from "@/components/general-translation-provider";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { RootNotFound } from "@/components/root-not-found";
 import { env } from "@/env";
@@ -87,7 +88,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <HeadContent />
       </head>
       <body className="antialiased" data-edition={edition}>
-        {children}
+        <GeneralTranslationProvider>{children}</GeneralTranslationProvider>
         <TanStackDevtools config={TANSTACK_DEVTOOLS_CONFIG} plugins={TANSTACK_DEVTOOLS_PLUGINS} />
         <Scripts />
       </body>

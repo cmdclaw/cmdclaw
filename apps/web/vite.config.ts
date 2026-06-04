@@ -1,3 +1,4 @@
+import { vite as gtCompiler } from "@generaltranslation/compiler";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -17,113 +18,127 @@ const srcDir = fileURLToPath(new URL("./src", import.meta.url));
 const SELF_HOST_PORT = 3001;
 const DEFAULT_PORT = 3000;
 const nodeModulesPathPattern = /(^|[/\\])node_modules([/\\]|$)/;
-const reactPackagePathPattern = /[/\\]node_modules[/\\](?:\.bun[/\\])?(?:react|react-dom|scheduler)@?[/\\]/;
-const radixPackagePathPattern = /[/\\]node_modules[/\\](?:\.bun[/\\])?(?:@radix-ui[+/\\]|radix-ui@?[/\\])/;
+const reactPackagePathPattern =
+	/[/\\]node_modules[/\\](?:\.bun[/\\])?(?:react|react-dom|scheduler)@?[/\\]/;
+const radixPackagePathPattern =
+	/[/\\]node_modules[/\\](?:\.bun[/\\])?(?:@radix-ui[+/\\]|radix-ui@?[/\\])/;
 const zodPackagePathPattern = /[/\\]node_modules[/\\](?:\.bun[/\\])?zod@?[/\\]/;
 const uiVendorPackagePathPattern =
-  /[/\\]node_modules[/\\](?:\.bun[/\\])?(?:sonner|tailwind-merge|lucide-react|@floating-ui[+/\\])@?[/\\]/;
+	/[/\\]node_modules[/\\](?:\.bun[/\\])?(?:sonner|tailwind-merge|lucide-react|@floating-ui[+/\\])@?[/\\]/;
 
 // Self-host dev runs on 3001 via `dev:selfhost`, everything else stays on 3000.
-const devPort = process.env.CMDCLAW_EDITION === "selfhost" ? SELF_HOST_PORT : DEFAULT_PORT;
+const devPort =
+	process.env.CMDCLAW_EDITION === "selfhost" ? SELF_HOST_PORT : DEFAULT_PORT;
 
 function isNodeModulesPath(value: string | undefined): boolean {
-  return value !== undefined && nodeModulesPathPattern.test(value);
+	return value !== undefined && nodeModulesPathPattern.test(value);
 }
 
-function isNodeModulesUseClientWarning(log: { code?: string; id?: string; loc?: { file?: string }; message: string }): boolean {
-  return (
-    log.code === "MODULE_LEVEL_DIRECTIVE" &&
-    log.message.includes('"use client"') &&
-    (isNodeModulesPath(log.id) || isNodeModulesPath(log.loc?.file))
-  );
+function isNodeModulesUseClientWarning(log: {
+	code?: string;
+	id?: string;
+	loc?: { file?: string };
+	message: string;
+}): boolean {
+	return (
+		log.code === "MODULE_LEVEL_DIRECTIVE" &&
+		log.message.includes('"use client"') &&
+		(isNodeModulesPath(log.id) || isNodeModulesPath(log.loc?.file))
+	);
 }
 
 function getManualChunk(id: string): string | undefined {
-  if (!isNodeModulesPath(id)) {
-    return undefined;
-  }
+	if (!isNodeModulesPath(id)) {
+		return undefined;
+	}
 
-  if (reactPackagePathPattern.test(id)) {
-    return "vendor-react";
-  }
+	if (reactPackagePathPattern.test(id)) {
+		return "vendor-react";
+	}
 
-  if (zodPackagePathPattern.test(id)) {
-    return "vendor-zod";
-  }
+	if (zodPackagePathPattern.test(id)) {
+		return "vendor-zod";
+	}
 
-  if (radixPackagePathPattern.test(id) || uiVendorPackagePathPattern.test(id)) {
-    return "vendor-ui";
-  }
+	if (radixPackagePathPattern.test(id) || uiVendorPackagePathPattern.test(id)) {
+		return "vendor-ui";
+	}
 
-  return undefined;
+	return undefined;
 }
 
 export default defineConfig(({ isSsrBuild }) => ({
-  /**
-   * Only expose client env vars under the `VITE_*` and `NEXT_PUBLIC_*` prefixes.
-   * `NEXT_PUBLIC_*` is preserved for v1 of the migration; unprefixed server env vars
-   * (DATABASE_URL, secrets, OAuth credentials, etc.) are never bundled to the client.
-   */
-  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
-  resolve: {
-    alias: {
-      "@": srcDir,
-    },
-  },
-  server: {
-    port: devPort,
-  },
-  // Dev only: Vite's esbuild dep pre-bundling crawls from routes into the @cmdclaw/core
-  // workspace source and hits server-only code that the production Rollup build externalizes
-  // for SSR. Two failure modes to keep out of esbuild:
-  //  1. @tanstack/start-server-core uses virtual `#tanstack-*` entries only the Vite plugin
-  //     can resolve, so it must never be pre-bundled by esbuild.
-  //  2. dockerode -> docker-modem -> ssh2 -> cpu-features ship native `.node` binaries that
-  //     esbuild has no loader for; they must stay external (server-only sandbox code).
-  optimizeDeps: {
-    exclude: [
-      "@tanstack/react-start",
-      "@tanstack/start-server-core",
-      "dockerode",
-      "docker-modem",
-      "ssh2",
-      "cpu-features",
-    ],
-  },
-  ssr: {
-    external: ["dockerode", "docker-modem", "ssh2", "cpu-features"],
-  },
-  build: {
-    rollupOptions: {
-      output: isSsrBuild ? undefined : { manualChunks: getManualChunk },
-      onLog(level, log, defaultHandler) {
-        if (level === "warn" && isNodeModulesUseClientWarning(log)) {
-          return;
-        }
-        defaultHandler(level, log);
-      },
-    },
-  },
-  plugins: [
-    devtools(),
-    // Nitro owns the production Node server output (`.output/server/index.mjs`), matching
-    // the current TanStack Start starter shape.
-    nitro({
-      rollupConfig: {
-        external: [/^dockerode$/, /^docker-modem$/, /^ssh2($|\/)/, /^cpu-features($|\/)/],
-      },
-    }),
-    tailwindcss(),
-    // TanStack Start: file-based routing (generates src/routeTree.gen.ts) and the SSR
-    // server build consumed by Nitro.
-    tanstackStart(),
-    // We own @vitejs/plugin-react (TanStack Start does not bundle it), which is where
-    // React Fast Refresh AND the React Compiler run. React Compiler MUST stay enabled in
-    // the Vite build — this is a hard migration requirement.
-    react({
-      babel: {
-        plugins: [["babel-plugin-react-compiler", {}]],
-      },
-    }),
-  ],
+	/**
+	 * Only expose client env vars under the `VITE_*` and `NEXT_PUBLIC_*` prefixes.
+	 * `NEXT_PUBLIC_*` is preserved for v1 of the migration; unprefixed server env vars
+	 * (DATABASE_URL, secrets, OAuth credentials, etc.) are never bundled to the client.
+	 */
+	envPrefix: ["VITE_", "NEXT_PUBLIC_"],
+	resolve: {
+		alias: {
+			"@": srcDir,
+		},
+	},
+	server: {
+		port: devPort,
+	},
+	// Dev only: Vite's esbuild dep pre-bundling crawls from routes into the @cmdclaw/core
+	// workspace source and hits server-only code that the production Rollup build externalizes
+	// for SSR. Two failure modes to keep out of esbuild:
+	//  1. @tanstack/start-server-core uses virtual `#tanstack-*` entries only the Vite plugin
+	//     can resolve, so it must never be pre-bundled by esbuild.
+	//  2. dockerode -> docker-modem -> ssh2 -> cpu-features ship native `.node` binaries that
+	//     esbuild has no loader for; they must stay external (server-only sandbox code).
+	optimizeDeps: {
+		exclude: [
+			"@tanstack/react-start",
+			"@tanstack/start-server-core",
+			"dockerode",
+			"docker-modem",
+			"ssh2",
+			"cpu-features",
+		],
+	},
+	ssr: {
+		external: ["dockerode", "docker-modem", "ssh2", "cpu-features"],
+	},
+	build: {
+		rollupOptions: {
+			output: isSsrBuild ? undefined : { manualChunks: getManualChunk },
+			onLog(level, log, defaultHandler) {
+				if (level === "warn" && isNodeModulesUseClientWarning(log)) {
+					return;
+				}
+				defaultHandler(level, log);
+			},
+		},
+	},
+	plugins: [
+		gtCompiler(),
+		devtools(),
+		// Nitro owns the production Node server output (`.output/server/index.mjs`), matching
+		// the current TanStack Start starter shape.
+		nitro({
+			rollupConfig: {
+				external: [
+					/^dockerode$/,
+					/^docker-modem$/,
+					/^ssh2($|\/)/,
+					/^cpu-features($|\/)/,
+				],
+			},
+		}),
+		tailwindcss(),
+		// TanStack Start: file-based routing (generates src/routeTree.gen.ts) and the SSR
+		// server build consumed by Nitro.
+		tanstackStart(),
+		// We own @vitejs/plugin-react (TanStack Start does not bundle it), which is where
+		// React Fast Refresh AND the React Compiler run. React Compiler MUST stay enabled in
+		// the Vite build — this is a hard migration requirement.
+		react({
+			babel: {
+				plugins: [["babel-plugin-react-compiler", {}]],
+			},
+		}),
+	],
 }));

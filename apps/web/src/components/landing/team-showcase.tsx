@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
+import { T } from "gt-react";
 import { Check, Loader2, ShieldCheck, KeyRound, Inbox } from "lucide-react";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -216,7 +217,7 @@ function AgentMiniCard({ agent, isPulsing }: { agent: ShowcaseAgent; isPulsing: 
               <span
                 className={`size-1.5 rounded-full bg-green-500 ${isPulsing ? "animate-ping" : "animate-pulse"}`}
               />
-              On
+              <T>On</T>
             </div>
           </div>
           <p className="text-muted-foreground mt-0.5 line-clamp-1 text-[10px]">
@@ -554,11 +555,13 @@ export function TeamShowcaseSection() {
           className="mb-14 md:mb-20"
         >
           <h2 className="text-foreground max-w-md text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
-            Coworkers that handle the work for you
+            <T>Coworkers that handle the work for you</T>
           </h2>
           <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed">
-            Your agents work autonomously and surface what matters to your inbox — approvals, auth
-            requests, and results. You stay in control.
+            <T>
+              Your agents work autonomously and surface what matters to your inbox — approvals, auth
+              requests, and results. You stay in control.
+            </T>
           </p>
         </motion.div>
 
@@ -589,7 +592,9 @@ export function TeamShowcaseSection() {
             {/* Header */}
             <div className="border-border/40 flex items-center gap-2.5 border-b px-4 py-3">
               <Inbox className="text-muted-foreground size-4" />
-              <span className="text-foreground text-sm font-semibold">Inbox</span>
+              <span className="text-foreground text-sm font-semibold">
+                <T>Inbox</T>
+              </span>
               <AnimatePresence>
                 {pendingCount > 0 && (
                   <motion.span

@@ -3,8 +3,10 @@ import type {
   TemplateCatalogTemplate,
   TemplateIntegrationType,
 } from "@cmdclaw/db/template-catalog";
+import type { ChangeEvent, FormEvent } from "react";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { ClientOnly, Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { ArrowUp } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +19,7 @@ import {
 } from "@/components/chat/chat-debug-popover";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { VoiceIndicator } from "@/components/chat/voice-indicator";
+import { useAppLocale } from "@/components/general-translation-provider";
 import { AnimatedHowItWorksSection } from "@/components/landing/animated-how-it-works";
 import { BentoFeaturesSection } from "@/components/landing/bento-features";
 import { OrgChartShowcaseSection } from "@/components/landing/org-chart-showcase";
@@ -28,13 +31,13 @@ import {
 } from "@/components/landing/pending-coworker-prompt";
 import { TeamShowcaseSection } from "@/components/landing/team-showcase";
 import { TemplatePreviewModal } from "@/components/template-preview-modal";
-import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { Button } from "@/components/ui/button";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { authClient } from "@/lib/auth-client";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
+import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import { INTEGRATION_LOGOS, COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
@@ -54,6 +57,10 @@ const TEMPLATE_INTEGRATION_LOGOS: Record<TemplateIntegrationType, string> = {
   ...INTEGRATION_LOGOS,
   linear: "/integrations/linear.svg",
 };
+const LANDING_LOCALE_NAMES = {
+  en: "English",
+  fr: "Français",
+} as const;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -198,14 +205,117 @@ const HERO_BACKGROUND_PLACEHOLDER_STYLE = {
   backgroundSize: "cover",
 } as const;
 
-function getTriggerLabel(triggerType: string) {
+function getTriggerLabel(triggerType: string, gt: ReturnType<typeof useGT>) {
   const map: Record<string, string> = {
-    manual: "Manual",
-    schedule: "Scheduled",
-    email: "Email",
-    webhook: "Webhook",
+    manual: gt("Manual"),
+    schedule: gt("Scheduled"),
+    email: gt("Email"),
+    webhook: gt("Webhook"),
   };
   return map[triggerType] ?? triggerType;
+}
+
+function translatePromptSegments(segments: PromptSegment[], gt: ReturnType<typeof useGT>) {
+  return segments.map((segment) => {
+    if (segment.type !== "text") {
+      return segment;
+    }
+    return {
+      ...segment,
+      content: translateHeroSegmentText(segment.content, gt),
+    };
+  });
+}
+
+function translateHeroDepartment(department: string | undefined, gt: ReturnType<typeof useGT>) {
+  switch (department) {
+    case "Sales":
+      return gt("Sales");
+    case "Marketing":
+      return gt("Marketing");
+    case "HR":
+      return gt("HR");
+    case "Legal":
+      return gt("Legal");
+    case "Finance":
+      return gt("Finance");
+    case "Support":
+      return gt("Support");
+    default:
+      return gt("your team");
+  }
+}
+
+function translateHeroPrompt(prompt: string, gt: ReturnType<typeof useGT>) {
+  switch (prompt) {
+    case "When a deal in Salesforce moves to Proposal Sent, draft follow-ups in Outreach and schedule reminders in Google Calendar.":
+      return gt(
+        "When a deal in Salesforce moves to Proposal Sent, draft follow-ups in Outreach and schedule reminders in Google Calendar.",
+      );
+    case "Every morning, compare Meta Ads and Google Ads CAC vs yesterday and send a performance digest to Slack.":
+      return gt(
+        "Every morning, compare Meta Ads and Google Ads CAC vs yesterday and send a performance digest to Slack.",
+      );
+    case "When a candidate is marked Hired in Greenhouse, create onboarding tasks in BambooHR, Jira, and Google Workspace.":
+      return gt(
+        "When a candidate is marked Hired in Greenhouse, create onboarding tasks in BambooHR, Jira, and Google Workspace.",
+      );
+    case "When a new MSA is uploaded to Ironclad, extract renewal and termination dates and add reminders to Google Calendar.":
+      return gt(
+        "When a new MSA is uploaded to Ironclad, extract renewal and termination dates and add reminders to Google Calendar.",
+      );
+    case "Every business day, reconcile Stripe and Brex transactions in QuickBooks and send mismatch reports to Slack.":
+      return gt(
+        "Every business day, reconcile Stripe and Brex transactions in QuickBooks and send mismatch reports to Slack.",
+      );
+    case "Every hour, triage new Zendesk tickets by sentiment, auto-tag priority, and route critical ones to on-call in Slack.":
+      return gt(
+        "Every hour, triage new Zendesk tickets by sentiment, auto-tag priority, and route critical ones to on-call in Slack.",
+      );
+    default:
+      return prompt;
+  }
+}
+
+function translateHeroSegmentText(content: string, gt: ReturnType<typeof useGT>) {
+  switch (content) {
+    case "When a deal in ":
+      return gt("When a deal in ");
+    case " moves to Proposal Sent, draft follow-ups in ":
+      return gt(" moves to Proposal Sent, draft follow-ups in ");
+    case " and schedule reminders in ":
+      return gt(" and schedule reminders in ");
+    case "Every morning, compare ":
+      return gt("Every morning, compare ");
+    case " and ":
+      return gt(" and ");
+    case " CAC vs yesterday and send a performance digest to ":
+      return gt(" CAC vs yesterday and send a performance digest to ");
+    case "When a candidate is marked Hired in ":
+      return gt("When a candidate is marked Hired in ");
+    case ", create onboarding tasks in ":
+      return gt(", create onboarding tasks in ");
+    case ", and ":
+      return gt(", and ");
+    case ", ":
+      return gt(", ");
+    case "When a new MSA is uploaded to ":
+      return gt("When a new MSA is uploaded to ");
+    case ", extract renewal and termination dates and add reminders to ":
+      return gt(", extract renewal and termination dates and add reminders to ");
+    case "Every business day, reconcile ":
+      return gt("Every business day, reconcile ");
+    case " transactions in ":
+      return gt(" transactions in ");
+    case " and send mismatch reports to ":
+      return gt(" and send mismatch reports to ");
+    case "Every hour, triage new ":
+      return gt("Every hour, triage new ");
+    case " tickets by sentiment, auto-tag priority, and route critical ones to on-call in ":
+      return gt(" tickets by sentiment, auto-tag priority, and route critical ones to on-call in ");
+    default:
+      return content;
+  }
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -242,6 +352,8 @@ function TemplateCard({
   template: TemplateCatalogTemplate;
   isMobile: boolean;
 }) {
+  const gt = useGT();
+
   return (
     <Link
       to={isMobile ? "/template/$templateId" : "/"}
@@ -256,7 +368,7 @@ function TemplateCard({
         <div className="min-w-0">
           <p className="text-sm leading-tight font-medium text-slate-900">{template.title}</p>
           <span className="mt-1 inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-            {getTriggerLabel(template.triggerType)}
+            {getTriggerLabel(template.triggerType, gt)}
           </span>
         </div>
         <ArrowUp className="mt-0.5 size-3.5 shrink-0 rotate-45 text-slate-500 transition-colors group-hover:text-slate-700" />
@@ -266,6 +378,45 @@ function TemplateCard({
         <IntegrationLogos integrations={template.integrations} />
       </div>
     </Link>
+  );
+}
+
+function LandingLocaleSelector() {
+  const { locale, locales, setLocale } = useAppLocale();
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const handleChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement> | FormEvent<HTMLSelectElement>) => {
+      setLocale(event.currentTarget.value);
+    },
+    [setLocale],
+  );
+
+  useEffect(() => {
+    const select = selectRef.current;
+    if (!select) {
+      return;
+    }
+
+    const handleNativeChange = () => setLocale(select.value);
+    select.addEventListener("change", handleNativeChange);
+    return () => select.removeEventListener("change", handleNativeChange);
+  }, [setLocale]);
+
+  return (
+    <select
+      ref={selectRef}
+      aria-label="Language"
+      className="h-8 rounded-md border border-white/45 bg-white/80 px-2 text-xs font-medium text-slate-900 shadow-sm hover:bg-white"
+      value={locale}
+      onChange={handleChange}
+      onInput={handleChange}
+    >
+      {locales.map((option) => (
+        <option key={option} value={option}>
+          {LANDING_LOCALE_NAMES[option as keyof typeof LANDING_LOCALE_NAMES] ?? option}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -349,6 +500,7 @@ export function CoworkerLanding({
   initialFirstName = null,
   featuredTemplates,
 }: CoworkerLandingProps) {
+  const gt = useGT();
   const navigate = useNavigate();
   const previewId = useLocation({
     select: (location) => (location.search as { preview?: string }).preview ?? null,
@@ -375,8 +527,14 @@ export function CoworkerLanding({
   const [userFirstName, setUserFirstName] = useState<string | null>(initialFirstName);
   const resumePendingPromptRef = useRef(false);
   const isRecordingRef = useRef(false);
-  const heroAnimatedPrompts = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.prompt), []);
-  const heroRichSegments = useMemo(() => HERO_PROMPT_EXAMPLES.map((item) => item.segments), []);
+  const heroAnimatedPrompts = useMemo(
+    () => HERO_PROMPT_EXAMPLES.map((item) => translateHeroPrompt(item.prompt, gt)),
+    [gt],
+  );
+  const heroRichSegments = useMemo(
+    () => HERO_PROMPT_EXAMPLES.map((item) => translatePromptSegments(item.segments, gt)),
+    [gt],
+  );
   const providerAvailability = useMemo(
     () =>
       buildProviderAuthAvailabilityByProvider({
@@ -388,8 +546,8 @@ export function CoworkerLanding({
 
   const activeExample = HERO_PROMPT_EXAMPLES[activePromptIndex % HERO_PROMPT_EXAMPLES.length];
   const loggedInHeadline = userFirstName
-    ? `What do you want to automate ${userFirstName}?`
-    : "What do you want to automate today?";
+    ? gt("What do you want to automate {name}?", { name: userFirstName })
+    : gt("What do you want to automate today?");
   const handleModelChange = useCallback(
     (input: { model: string; authSource?: ProviderAuthSource | null }) => {
       const normalized = normalizeChatModelSelection(input);
@@ -706,13 +864,16 @@ export function CoworkerLanding({
           {/* ── Top bar ── */}
           {isAnonymous ? (
             <div className="flex items-center justify-end gap-2 pt-5">
+              <LandingLocaleSelector />
               <Button
                 variant="outline"
                 size="sm"
                 asChild
                 className="border-white/45 bg-white/80 hover:bg-white"
               >
-                <Link to="/login">Log in</Link>
+                <Link to="/login">
+                  <T>Log in</T>
+                </Link>
               </Button>
               <Button
                 size="sm"
@@ -721,7 +882,7 @@ export function CoworkerLanding({
               >
                 {/* oxlint-disable-next-line react-perf/jsx-no-new-object-as-prop -- TanStack Router search requires an inline object */}
                 <Link to="/login" search={{ mode: "getting-started" }}>
-                  Get Started
+                  <T>Get Started</T>
                 </Link>
               </Button>
             </div>
@@ -733,9 +894,9 @@ export function CoworkerLanding({
               <h1 className="mb-3 text-center text-3xl font-semibold tracking-tight text-white drop-shadow-[0_0_30px_rgba(56,189,248,0.25)] md:text-4xl lg:text-5xl">
                 {isAnonymous ? (
                   <>
-                    What do you want to automate in{" "}
+                    <T>What do you want to automate in</T>{" "}
                     <AnimatedDepartment
-                      department={activeExample?.department ?? "your team"}
+                      department={translateHeroDepartment(activeExample?.department, gt)}
                       color={activeExample?.color ?? "#3B82F6"}
                       isActive
                     />
@@ -746,7 +907,7 @@ export function CoworkerLanding({
                 )}
               </h1>
               <p className="mx-auto mb-8 max-w-md text-center text-base text-white/70 md:text-lg">
-                Describe a task and we&apos;ll build it step by step
+                <T>Describe a task and we&apos;ll build it step by step</T>
               </p>
               <ClientOnly>
                 <Suspense fallback={null}>
@@ -755,7 +916,9 @@ export function CoworkerLanding({
                     isSubmitting={isCreating}
                     disabled={isCreating || isRecording || isProcessingVoice}
                     variant="hero"
-                    placeholder="e.g. Every morning, summarize my unread emails and send me a digest…"
+                    placeholder={gt(
+                      "e.g. Every morning, summarize my unread emails and send me a digest...",
+                    )}
                     animatedPlaceholders={heroAnimatedPrompts}
                     richAnimatedPlaceholders={heroRichSegments}
                     onAnimatedPlaceholderIndexChange={setActivePromptIndex}
@@ -776,7 +939,7 @@ export function CoworkerLanding({
                     isProcessing={isProcessingVoice}
                     error={voiceError}
                     variant="hero"
-                    recordingLabel="Recording... Click the mic again to stop"
+                    recordingLabel={gt("Recording... Click the mic again to stop")}
                   />
                 </div>
               )}
@@ -787,8 +950,12 @@ export function CoworkerLanding({
           <section className="mt-6 pb-10 md:mt-8 md:pb-16 lg:mt-10">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-white">Templates</h2>
-                <p className="mt-0.5 text-xs text-white">Start from a pre-built coworker</p>
+                <h2 className="text-sm font-semibold text-white">
+                  <T>Templates</T>
+                </h2>
+                <p className="mt-0.5 text-xs text-white">
+                  <T>Start from a pre-built coworker</T>
+                </p>
               </div>
               <Button
                 variant="outline"
@@ -796,7 +963,9 @@ export function CoworkerLanding({
                 asChild
                 className="gap-1.5 border-white/45 bg-white/80 hover:bg-white"
               >
-                <Link to="/templates">Browse all</Link>
+                <Link to="/templates">
+                  <T>Browse all</T>
+                </Link>
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -827,10 +996,10 @@ export function CoworkerLanding({
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08),transparent_70%)]" />
             <div className="relative mx-auto max-w-xl text-center">
               <h2 className="mb-5 text-3xl font-bold tracking-tight text-white md:text-[2.75rem] md:leading-[1.15]">
-                Deploy your first AI coworker today
+                <T>Deploy your first AI coworker today</T>
               </h2>
               <p className="mx-auto mb-10 max-w-sm text-base leading-relaxed text-slate-400">
-                Start free. Build your first AI coworker in minutes.
+                <T>Start free. Build your first AI coworker in minutes.</T>
               </p>
               <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                 <Button
@@ -843,7 +1012,7 @@ export function CoworkerLanding({
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Book a Demo
+                    <T>Book a Demo</T>
                   </a>
                 </Button>
               </div>
@@ -857,7 +1026,7 @@ export function CoworkerLanding({
                   <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
                   </svg>
-                  Star us on GitHub
+                  <T>Star us on GitHub</T>
                 </a>
               </div>
             </div>
@@ -874,7 +1043,7 @@ export function CoworkerLanding({
               <div className="max-w-xs">
                 <p className="text-foreground text-sm font-semibold">CmdClaw</p>
                 <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
-                  AI coworkers that connect to your tools and automate work across your team.
+                  <T>AI coworkers that connect to your tools and automate work across your team.</T>
                 </p>
                 <div className="mt-4 flex items-center gap-3">
                   <a
@@ -906,7 +1075,7 @@ export function CoworkerLanding({
               <div className="flex gap-12 md:gap-16">
                 <div>
                   <p className="text-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
-                    Product
+                    <T>Product</T>
                   </p>
                   <nav className="text-muted-foreground flex flex-col gap-2 text-xs">
                     <a
@@ -915,32 +1084,32 @@ export function CoworkerLanding({
                       rel="noopener noreferrer"
                       className="hover:text-foreground transition-colors"
                     >
-                      Docs
+                      <T>Docs</T>
                     </a>
                     <Link to="/pricing" className="hover:text-foreground transition-colors">
-                      Pricing
+                      <T>Pricing</T>
                     </Link>
                     <Link to="/templates" className="hover:text-foreground transition-colors">
-                      Templates
+                      <T>Templates</T>
                     </Link>
                   </nav>
                 </div>
                 <div>
                   <p className="text-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
-                    Company
+                    <T>Company</T>
                   </p>
                   <nav className="text-muted-foreground flex flex-col gap-2 text-xs">
                     <Link to="/support" className="hover:text-foreground transition-colors">
-                      Support
+                      <T>Support</T>
                     </Link>
                     <Link to="/legal/terms" className="hover:text-foreground transition-colors">
-                      Terms
+                      <T>Terms</T>
                     </Link>
                     <Link
                       to="/legal/privacy-policy"
                       className="hover:text-foreground transition-colors"
                     >
-                      Privacy
+                      <T>Privacy</T>
                     </Link>
                   </nav>
                 </div>
@@ -949,7 +1118,7 @@ export function CoworkerLanding({
 
             {/* Bottom line */}
             <div className="border-border/40 text-muted-foreground/60 mt-10 border-t pt-6 text-xs">
-              &copy; {new Date().getFullYear()} CmdClaw. All rights reserved.
+              &copy; {new Date().getFullYear()} <T>CmdClaw. All rights reserved.</T>
             </div>
           </div>
         </footer>

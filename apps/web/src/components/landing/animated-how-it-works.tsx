@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
+import { T } from "gt-react";
 import { Check, Loader2 } from "lucide-react";
 import {
   motion,
@@ -120,7 +121,11 @@ function TypingPrompt({ prompt, onTypingDone }: { prompt: string; onTypingDone: 
   return (
     <div className="bg-muted/40 border-border/40 min-h-[72px] rounded-lg border px-3 py-2.5">
       <span className="text-foreground text-sm leading-relaxed">{text}</span>
-      {!text && <span className="text-muted-foreground/50 text-sm">Start typing...</span>}
+      {!text && (
+        <span className="text-muted-foreground/50 text-sm">
+          <T>Start typing...</T>
+        </span>
+      )}
     </div>
   );
 }
@@ -251,7 +256,7 @@ function BuildingAgent({ agent, started }: { agent: Example["agent"]; started: b
             className="size-1.5 rounded-full"
           />
           <span className={isOn ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
-            {isOn ? "On" : "Off"}
+            {isOn ? <T>On</T> : <T>Off</T>}
           </span>
         </motion.div>
       </div>
@@ -347,7 +352,9 @@ function DeployDashboard({
         <span className="text-foreground text-2xl font-semibold tabular-nums">
           <AnimatedCounter target={dashboard.runs} started={started} />
         </span>
-        <span className="text-muted-foreground text-xs">runs this week</span>
+        <span className="text-muted-foreground text-xs">
+          <T>runs this week</T>
+        </span>
       </div>
 
       {/* Status rows */}
@@ -366,16 +373,16 @@ function DeployDashboard({
               {row.status === "running" && (
                 <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                   <Loader2 className="size-2.5 animate-spin" />
-                  Running
+                  <T>Running</T>
                 </span>
               )}
               {row.status === "completed" && (
                 <span className="flex items-center gap-1">
                   <Check className="size-2.5 text-green-500" />
-                  2m ago
+                  <T>2m ago</T>
                 </span>
               )}
-              {row.status === "scheduled" && "9:00 AM"}
+              {row.status === "scheduled" && <T>9:00 AM</T>}
             </span>
           </motion.div>
         ))}
@@ -502,10 +509,10 @@ export function AnimatedHowItWorksSection() {
           className="mb-14 md:mb-20 md:ml-auto md:max-w-xl md:text-right"
         >
           <h2 className="text-foreground text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
-            From idea to production in minutes
+            <T>From idea to production in minutes</T>
           </h2>
           <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed md:ml-auto">
-            Describe what you need. CmdClaw builds it, secures it, and deploys it.
+            <T>Describe what you need. CmdClaw builds it, secures it, and deploys it.</T>
           </p>
         </motion.div>
 
@@ -517,11 +524,13 @@ export function AnimatedHowItWorksSection() {
               <span className="bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-lg text-sm font-bold">
                 1
               </span>
-              <span className="text-foreground text-sm font-semibold">Describe</span>
+              <span className="text-foreground text-sm font-semibold">
+                <T>Describe</T>
+              </span>
             </div>
             <div className="border-border/60 bg-background rounded-2xl border p-5">
               <div className="text-muted-foreground mb-3 text-[10px] font-medium tracking-wider uppercase">
-                Describe your agent
+                <T>Describe your agent</T>
               </div>
               <AnimatePresence mode="wait">
                 <motion.div
@@ -545,11 +554,13 @@ export function AnimatedHowItWorksSection() {
               <span className="bg-muted text-foreground flex size-8 items-center justify-center rounded-lg text-sm font-bold">
                 2
               </span>
-              <span className="text-foreground text-sm font-semibold">Configure</span>
+              <span className="text-foreground text-sm font-semibold">
+                <T>Configure</T>
+              </span>
             </div>
             <div className="border-border/80 bg-background space-y-3 rounded-2xl border p-5 shadow-sm">
               <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wider uppercase">
-                Configure & approve
+                <T>Configure & approve</T>
               </div>
               <AnimatePresence mode="wait">
                 <motion.div
@@ -574,11 +585,13 @@ export function AnimatedHowItWorksSection() {
               <span className="bg-foreground text-background flex size-8 items-center justify-center rounded-lg text-sm font-bold shadow-sm">
                 3
               </span>
-              <span className="text-foreground text-sm font-bold">Deploy</span>
+              <span className="text-foreground text-sm font-bold">
+                <T>Deploy</T>
+              </span>
             </div>
             <div className="border-border bg-background space-y-3 rounded-2xl border p-5 shadow-md">
               <div className="text-foreground mb-1 text-[10px] font-semibold tracking-wider uppercase">
-                Deploy to your team
+                <T>Deploy to your team</T>
               </div>
               <AnimatePresence mode="wait">
                 <motion.div

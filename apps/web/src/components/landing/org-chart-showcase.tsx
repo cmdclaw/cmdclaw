@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
+import { T } from "gt-react";
 import { motion, useInView } from "motion/react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -300,7 +301,7 @@ function DeptSelector({
             : "text-muted-foreground hover:text-foreground"
         }`}
       >
-        All
+        <T>All</T>
       </button>
       {departments.map((dept, i) => (
         <button
@@ -501,10 +502,10 @@ export function OrgChartShowcaseSection() {
           className="mb-14 text-center md:mb-20"
         >
           <h2 className="text-foreground mx-auto max-w-2xl text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
-            Meet your new AI team
+            <T>Meet your new AI team</T>
           </h2>
           <p className="text-muted-foreground mx-auto mt-4 max-w-lg text-base leading-relaxed">
-            Every department powered by agents that run 24/7. No repetitive work left behind.
+            <T>Every department powered by agents that run 24/7. No repetitive work left behind.</T>
           </p>
         </motion.div>
 

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://assets.gtx.dev/config-schema.json",
+  "framework": "vite",
+  "defaultLocale": "en",
+  "files": {
+    "gt": {
+      "output": "src/_gt/[locale].json"
+    }
+  },
+  "locales": [
+    "fr"
+  ]
+}

@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
+import { T } from "gt-react";
 import { Activity, Check, Loader2, Timer, Shield, Users, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -156,7 +157,7 @@ function LiveDemoCard() {
           <div>
             <h3 className="text-foreground text-lg font-semibold">Real-time execution</h3>
             <p className="text-muted-foreground mt-1 text-sm">
-              Watch your agents work across tools autonomously
+              <T>Watch your agents work across tools autonomously</T>
             </p>
           </div>
           <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -174,7 +175,7 @@ function LiveDemoCard() {
           </div>
           <div className="ml-auto inline-flex h-6 items-center gap-1.5 rounded-full border border-green-500/20 bg-green-500/10 px-2.5 text-[10px] font-medium text-green-600 dark:text-green-400">
             <span className="size-1.5 animate-pulse rounded-full bg-green-500" />
-            Running
+            <T>Running</T>
           </div>
         </div>
 
@@ -182,7 +183,9 @@ function LiveDemoCard() {
         <div className="border-border/50 bg-muted/20 flex-1 overflow-hidden rounded-xl border">
           <div className="border-border/30 flex items-center gap-2 border-b px-4 py-2.5">
             <Activity className="text-muted-foreground size-4" />
-            <span className="text-muted-foreground text-xs font-medium">Activity</span>
+            <span className="text-muted-foreground text-xs font-medium">
+              <T>Activity</T>
+            </span>
             <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium">
               {visibleItems.length}
             </span>
@@ -199,7 +202,9 @@ function LiveDemoCard() {
             </AnimatePresence>
             {visibleItems.length === 0 && (
               <div className="flex items-center gap-2 py-3">
-                <span className="text-muted-foreground text-xs">Starting agent...</span>
+                <span className="text-muted-foreground text-xs">
+                  <T>Starting agent...</T>
+                </span>
                 <div className="ml-auto flex gap-1">
                   <span className="bg-muted-foreground/50 size-1.5 animate-bounce rounded-full [animation-delay:-0.3s]" />
                   <span className="bg-muted-foreground/50 size-1.5 animate-bounce rounded-full [animation-delay:-0.15s]" />
@@ -239,10 +244,14 @@ function ApprovalWorkflowsCard() {
         <div className="bg-muted/60 border-border/40 mb-4 inline-flex size-10 items-center justify-center rounded-xl border">
           <Shield className="text-foreground/70 size-5" />
         </div>
-        <h3 className="text-foreground text-[15px] font-semibold">Approval workflows</h3>
+        <h3 className="text-foreground text-[15px] font-semibold">
+          <T>Approval workflows</T>
+        </h3>
         <p className="text-muted-foreground mt-1.5 max-w-xs text-sm leading-relaxed">
-          Every sensitive action goes through human review. Your agent asks before sending emails,
-          updating CRM records, or posting messages.
+          <T>
+            Every sensitive action goes through human review. Your agent asks before sending emails,
+            updating CRM records, or posting messages.
+          </T>
         </p>
       </div>
     </BentoCard>
@@ -272,8 +281,12 @@ function IntegrationsCard() {
   return (
     <BentoCard gradient="bg-[radial-gradient(ellipse_at_top_right,rgba(139,92,246,0.04),transparent_60%)]">
       <div className="p-6">
-        <h3 className="text-foreground text-[15px] font-semibold">Integrate with all your tools</h3>
-        <p className="text-muted-foreground mt-1 mb-5 text-sm">Connect your tools in one click.</p>
+        <h3 className="text-foreground text-[15px] font-semibold">
+          <T>Integrate with all your tools</T>
+        </h3>
+        <p className="text-muted-foreground mt-1 mb-5 text-sm">
+          <T>Connect your tools in one click.</T>
+        </p>
         <div className="grid grid-cols-4 gap-2.5">
           {FEATURED_INTEGRATIONS.map((key, i) => (
             <motion.div
@@ -361,11 +374,13 @@ export function BentoFeaturesSection() {
           className="mb-14 md:mb-20"
         >
           <h2 className="text-foreground max-w-lg text-3xl font-bold tracking-tight md:text-[2.75rem] md:leading-[1.15]">
-            Ship AI agents that actually work
+            <T>Ship AI agents that actually work</T>
           </h2>
           <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed">
-            Build, configure, and deploy autonomous coworkers that connect to your tools and run
-            around the clock.
+            <T>
+              Build, configure, and deploy autonomous coworkers that connect to your tools and run
+              around the clock.
+            </T>
           </p>
         </motion.div>
 
