@@ -38,7 +38,7 @@ vi.mock("@cmdclaw/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("../queues", () => ({
+vi.mock("../queues/queue-client", () => ({
   SCHEDULED_COWORKER_JOB_NAME: "coworker:scheduled-trigger",
   getQueue: getQueueMock,
 }));

@@ -1,10 +1,35 @@
-import { Queue, QueueEvents, Worker, type ConnectionOptions, type Processor } from "bullmq";
+import { QueueEvents, Worker, type Processor } from "bullmq";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "../../lib/email-forwarding";
-import { buildRedisOptions } from "../redis/connection-options";
 import { processForwardedEmailEvent } from "../services/coworker-email-forwarding";
 import { isDisabledCoworkerTriggerError, triggerCoworkerRun } from "../services/coworker-service";
+import { syncFailureAlertGroupToLinear } from "../services/failure-alert-linear-sync-service";
 import {
-  attachTraceContext,
+  CHAT_GENERATION_JOB_NAME,
+  CONVERSATION_LOADING_CLEANUP_JOB_NAME,
+  CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME,
+  COWORKER_GENERATION_JOB_NAME,
+  DAILY_TELEMETRY_DIGEST_JOB_NAME,
+  EMAIL_FORWARDED_COWORKER_JOB_NAME,
+  FAILURE_ALERT_LINEAR_SYNC_JOB_NAME,
+  GENERATION_APPROVAL_TIMEOUT_JOB_NAME,
+  GENERATION_AUTH_TIMEOUT_JOB_NAME,
+  GENERATION_PREPARING_STUCK_CHECK_JOB_NAME,
+  GENERATION_STALE_REAPER_JOB_NAME,
+  GMAIL_COWORKER_JOB_NAME,
+  LEGACY_SCHEDULED_COWORKER_JOB_NAME,
+  PAUSED_SANDBOX_CLEANUP_JOB_NAME,
+  SCHEDULED_COWORKER_JOB_NAME,
+  SLACK_EVENT_JOB_NAME,
+  X_DM_COWORKER_JOB_NAME,
+  closeQueue,
+  createRedisConnectionOptions,
+  getCurrentQueue,
+  getQueue,
+  queueName,
+  redisUrl,
+  type QueueJobPayload,
+} from "./queue-client";
+import {
   extractTraceContextFromPayload,
   registerObservableGauge,
   recordCounter,
@@ -14,42 +39,31 @@ import {
   withTraceIdContext,
 } from "../utils/observability";
 
-const rawQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
-export const queueName = rawQueueName.replaceAll(":", "-");
-export const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
-const redisOptions = {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-} as const;
+export {
+  CHAT_GENERATION_JOB_NAME,
+  CONVERSATION_LOADING_CLEANUP_JOB_NAME,
+  CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME,
+  COWORKER_GENERATION_JOB_NAME,
+  DAILY_TELEMETRY_DIGEST_JOB_NAME,
+  EMAIL_FORWARDED_COWORKER_JOB_NAME,
+  FAILURE_ALERT_LINEAR_SYNC_JOB_NAME,
+  GENERATION_APPROVAL_TIMEOUT_JOB_NAME,
+  GENERATION_AUTH_TIMEOUT_JOB_NAME,
+  GENERATION_PREPARING_STUCK_CHECK_JOB_NAME,
+  GENERATION_STALE_REAPER_JOB_NAME,
+  GMAIL_COWORKER_JOB_NAME,
+  LEGACY_SCHEDULED_COWORKER_JOB_NAME,
+  PAUSED_SANDBOX_CLEANUP_JOB_NAME,
+  SCHEDULED_COWORKER_JOB_NAME,
+  SLACK_EVENT_JOB_NAME,
+  X_DM_COWORKER_JOB_NAME,
+  buildQueueJobId,
+  getQueue,
+  queueName,
+  redisUrl,
+} from "./queue-client";
 
-export const SCHEDULED_COWORKER_JOB_NAME = "coworker:scheduled-trigger";
-export const LEGACY_SCHEDULED_COWORKER_JOB_NAME = "workflow:scheduled-trigger";
-export const GMAIL_COWORKER_JOB_NAME = "coworker:gmail-trigger";
-export const X_DM_COWORKER_JOB_NAME = "coworker:x-dm-trigger";
-export const EMAIL_FORWARDED_COWORKER_JOB_NAME = "coworker:email-forwarded-trigger";
-export const CHAT_GENERATION_JOB_NAME = "generation:chat-run";
-export const COWORKER_GENERATION_JOB_NAME = "generation:coworker-run";
-export const GENERATION_APPROVAL_TIMEOUT_JOB_NAME = "generation:approval-timeout";
-export const GENERATION_AUTH_TIMEOUT_JOB_NAME = "generation:auth-timeout";
-export const GENERATION_PREPARING_STUCK_CHECK_JOB_NAME = "generation:preparing-stuck-check";
-export const GENERATION_STALE_REAPER_JOB_NAME = "generation:stale-reaper";
-export const PAUSED_SANDBOX_CLEANUP_JOB_NAME = "sandbox:paused-cleanup";
-export const CONVERSATION_LOADING_CLEANUP_JOB_NAME = "conversation:loading-cleanup";
-export const CONVERSATION_QUEUED_MESSAGE_PROCESS_JOB_NAME = "conversation:queued-message-process";
-export const SLACK_EVENT_JOB_NAME = "slack:event-callback";
-export const DAILY_TELEMETRY_DIGEST_JOB_NAME = "telemetry:daily-digest";
-export const FAILURE_ALERT_LINEAR_SYNC_JOB_NAME = "failure-alert:linear-sync";
-
-export function buildQueueJobId(parts: Array<string | number | null | undefined>): string {
-  const joined = parts
-    .map((part) => String(part ?? "").trim())
-    .filter((part) => part.length > 0)
-    .join("-");
-  const normalized = joined.replaceAll(":", "-").replaceAll(/\s+/g, "-").replaceAll(/-+/g, "-");
-  return normalized.length > 0 ? normalized : "job";
-}
-
-type JobPayload = Record<string, unknown> & { coworkerId?: string };
+type JobPayload = QueueJobPayload;
 type JobHandler = Processor<JobPayload, unknown, string>;
 type QueueMetricSnapshot = {
   waiting: number;
@@ -262,7 +276,6 @@ const handlers: Record<string, JobHandler> = {
       throw new Error(`Missing groupId in failure alert Linear sync job "${job.id}"`);
     }
 
-    const { syncFailureAlertGroupToLinear } = await import("../services/failure-alert-service");
     const result = await syncFailureAlertGroupToLinear({ groupId });
     console.info("[worker] synced failure alert group to Linear", {
       groupId,
@@ -365,7 +378,6 @@ const processor: Processor<JobPayload, unknown, string> = async (job) => {
   return withExtractedTraceContext(extractTraceContextFromPayload(job.data), runWithSpan);
 };
 
-let queue: Queue<JobPayload, unknown, string> | null = null;
 let queueMetricPoller: ReturnType<typeof setInterval> | null = null;
 let queueMetricsRegistered = false;
 const queueMetricSnapshot: QueueMetricSnapshot = {
@@ -376,11 +388,8 @@ const queueMetricSnapshot: QueueMetricSnapshot = {
   oldestWaitingAgeSeconds: 0,
 };
 
-function createRedisConnectionOptions(): ConnectionOptions {
-  return buildRedisOptions(redisUrl, redisOptions) as ConnectionOptions;
-}
-
 async function refreshQueueMetricSnapshot(): Promise<void> {
+  const queue = getCurrentQueue();
   if (!queue) {
     return;
   }
@@ -456,31 +465,6 @@ function stopQueueMetricsPolling(): void {
   queueMetricPoller = null;
 }
 
-function patchQueueAdd(targetQueue: Queue<JobPayload, unknown, string>): void {
-  const queueWithPatchFlag = targetQueue as Queue<JobPayload, unknown, string> & {
-    __cmdclawTracedAddPatched?: boolean;
-  };
-  if (queueWithPatchFlag.__cmdclawTracedAddPatched) {
-    return;
-  }
-
-  const originalAdd = targetQueue.add.bind(targetQueue);
-  targetQueue.add = ((name, data, opts) =>
-    originalAdd(name, attachTraceContext(data), opts)) as typeof targetQueue.add;
-  queueWithPatchFlag.__cmdclawTracedAddPatched = true;
-}
-
-export const getQueue = (): Queue<JobPayload, unknown, string> => {
-  if (!queue) {
-    queue = new Queue<JobPayload, unknown, string>(queueName, {
-      connection: createRedisConnectionOptions(),
-    });
-    patchQueueAdd(queue);
-  }
-
-  return queue!;
-};
-
 export const startQueues = () => {
   getQueue();
   startQueueMetricsPolling();
@@ -522,9 +506,6 @@ export const startQueues = () => {
 export const stopQueues = async (worker: Worker, queueEvents: QueueEvents) => {
   const closers: Promise<unknown>[] = [worker.close(), queueEvents.close()];
   stopQueueMetricsPolling();
-  if (queue) {
-    closers.push(queue.close());
-    queue = null;
-  }
+  closers.push(closeQueue());
   await Promise.allSettled(closers);
 };

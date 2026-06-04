@@ -10,6 +10,8 @@ import {
   type CoworkerToolAccessMode,
 } from "../../lib/coworker-tool-policy";
 import { coworker } from "@cmdclaw/db/schema";
+import { generateCoworkerMetadataOnFirstPromptFill } from "./coworker-metadata";
+import { syncCoworkerScheduleJob } from "./coworker-scheduler";
 import { logger } from "../utils/observability";
 
 const BUILDER_ALLOWED_TRIGGER_TYPES = ["manual", "schedule", "twitter.new_dm"] as const;
@@ -555,7 +557,6 @@ export async function applyCoworkerEdit(params: {
     requiresUserInput: nextRequiresUserInput,
     userInputPrompt: nextUserInputPrompt,
   };
-  const { generateCoworkerMetadataOnFirstPromptFill } = await import("./coworker-metadata");
   const metadataUpdates = await generateCoworkerMetadataOnFirstPromptFill({
     database,
     current: {
@@ -778,7 +779,6 @@ export async function applyCoworkerEdit(params: {
 
   if (changedFields.includes("triggerType") || changedFields.includes("schedule")) {
     try {
-      const { syncCoworkerScheduleJob } = await import("./coworker-scheduler");
       await syncCoworkerScheduleJob({
         id: verified.id,
         status: verified.status,

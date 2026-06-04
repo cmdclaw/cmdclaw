@@ -5,7 +5,7 @@ import { coworker } from "@cmdclaw/db/schema";
 import {
   SCHEDULED_COWORKER_JOB_NAME,
   getQueue,
-} from "../queues";
+} from "../queues/queue-client";
 
 type CoworkerSchedule =
   | { type: "interval"; intervalMinutes: number }

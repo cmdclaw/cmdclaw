@@ -1,6 +1,6 @@
 import { failureAlertGroup, failureAlertOccurrence } from "@cmdclaw/db/schema";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { syncFailureAlertGroupToLinear as syncFailureAlertGroupToLinearType } from "./failure-alert-service";
+import type { syncFailureAlertGroupToLinear as syncFailureAlertGroupToLinearType } from "./failure-alert-linear-sync-service";
 
 const { dbMock } = vi.hoisted(() => ({
   dbMock: {
@@ -148,7 +148,7 @@ function configureLinearEnv() {
 describe("failure alert Linear sync", () => {
   beforeAll(async () => {
     configureLinearEnv();
-    ({ syncFailureAlertGroupToLinear } = await import("./failure-alert-service"));
+    ({ syncFailureAlertGroupToLinear } = await import("./failure-alert-linear-sync-service"));
   });
 
   beforeEach(() => {
