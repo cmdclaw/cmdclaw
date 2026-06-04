@@ -1,0 +1,2425 @@
+{
+  "finding_counts": {
+    "apps/cli/src/commands/chat/command.test.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/commands/chat/impl.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/cli/src/commands/coworker/build.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/commands/coworker/create.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/commands/coworker/logs.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/commands/coworker/routes.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/commands/coworker/run.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/lib/auth.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/cli/src/lib/question-approval.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "apps/mcp/gateway/src/index.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/mcp/servers/cmdclaw/src/lib/client.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/mcp/servers/gmail/src/lib/gmail-auth.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/mcp/servers/modulr/src/lib/modulr-client.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/mcp/shared/auth.ts": {
+      "crap_high": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/scripts/daytona-cleanup.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/scripts/daytona-sandbox.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/sandbox/scripts/daytona-sandboxes.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/scripts/daytona-selfhost-smoke.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/scripts/e2b-sandboxes.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/scripts/test-sandbox.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/src/common/opencode-agents.live.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/common/plugins/integration-permissions.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/src/common/skills/airtable/src/airtable.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/src/common/skills/coworker/src/coworker.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/src/common/skills/discord/src/discord.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/common/skills/dynamics/src/dynamics.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/common/skills/github/src/github.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/src/common/skills/google-calendar/src/google-calendar-lib.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/sandbox/src/common/skills/google-docs/src/google-docs.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/src/common/skills/google-drive/src/google-drive.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/common/skills/google-gmail/src/google-gmail.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/src/common/skills/google-sheets/src/google-sheets.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/sandbox/src/common/skills/hubspot/src/hubspot.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/sandbox/src/common/skills/linkedin/src/linkedin.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/src/common/skills/notion/src/notion.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/common/skills/outlook-calendar/src/outlook-calendar.ts": {
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/sandbox/src/common/skills/outlook-mail/src/outlook-mail.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/sandbox/src/common/skills/reddit/src/reddit.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "apps/sandbox/src/common/skills/salesforce/src/salesforce.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/common/skills/slack/src/slack.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/src/common/skills/twitter/src/twitter.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/sandbox/src/common/tools/send_file.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/sandbox/src/daytona/build.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/experiments/sandbox-agent-e2b-trace.ts": {
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "apps/web/experiments/sandbox-agent-quickstart.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/public/sw.js": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/scripts/auth-inspect.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/chat-auth.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/chat.ts": {
+      "complexity_critical": {
+        "count": 4
+      },
+      "crap_critical": {
+        "count": 6
+      },
+      "crap_high": {
+        "count": 7
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/coworker.ts": {
+      "complexity_critical": {
+        "count": 9
+      },
+      "crap_critical": {
+        "count": 10
+      },
+      "crap_high": {
+        "count": 8
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/web/scripts/e2e-auth.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/scripts/e2e-interactive.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/scripts/e2e-live.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/export-readme-preview.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/lib/question-approval.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/monitoring-playwright-kuma.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/profiler.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/scripts/slack-relay-check.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/slo-backfill.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/slo-replay.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/scripts/tool.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/animate-ui/components/radix/sheet.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/app-shell-route-wrapper.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/app-sidebar.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/activity-item.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/chat-area.tsx": {
+      "complexity_critical": {
+        "count": 3
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 7
+      }
+    },
+    "apps/web/src/components/chat/chat-copy-button.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/chat-debug-popover.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/chat-draft-store.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/chat-performance-metrics.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/chat-share-controls.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/chat-transcript.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/chat/collapsed-trace.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/message-item.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/model-selector.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/chat/output-html-preview-panel.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/previews/hubspot-preview.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/question-approval-utils.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/chat/tool-approval-card.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/web/src/components/community-skill-detail-content.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/conversation-usage-dialog.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/coworker-overview-dashboard.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/coworkers/interactive-coworker-card.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/coworkers/remote-run-source-banner.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/coworkers/tag-badge.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/coworkers/tag-picker.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/coworkers/view-tabs.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/executor-source-form.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/executor-source-logo.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/inbox/inbox-create-input.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/inbox/inbox-item.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/integration-detail-content.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/landing/animated-how-it-works.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/landing/coworker-landing.tsx": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/landing/org-chart-showcase.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/landing/team-showcase.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/login/cloud-login-client.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/login/invite-only-access-client.tsx": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/mobile-recent-drawer.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/prompt-bar.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/recent-chats-sidebar.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/template-detail-content.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/toolbox-preview-modal.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/ui/data-table.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/components/ui/dual-panel-workspace.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/components/usage-dashboard.tsx": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/hooks/use-voice-recording.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/lib/brandfetch.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/lib/executor-tool.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/lib/generation-runtime.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/lib/generation-stream.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/lib/parse-cli-command.ts": {
+      "complexity_moderate": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/lib/route-guards.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/lib/skill-markdown.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/orpc/hooks/generation.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/orpc/hooks/inbox.ts": {
+      "crap_critical": {
+        "count": 4
+      }
+    },
+    "apps/web/src/routes/_app/chat.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_app/chat/$conversationId.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_app/inbox.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/_auth/login.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_auth/reset-password.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_auth/sign-in.$token.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_marketing/-landing-data.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_marketing/-templates/templates-filters.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_marketing/-templates/templates-page-client.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/_marketing/pricing.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/accounts.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/admin/chat-overview.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/admin/credits.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/admin/index.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/admin/mcp.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/admin/ops.tsx": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/admin/performance.tsx": {
+      "complexity_critical": {
+        "count": 3
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "apps/web/src/routes/admin/sandboxes.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/web/src/routes/admin/subscriptions.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/admin/templates.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/admin/whatsapp.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/admin/workspaces.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/agents/-components/coworker-editor-page.tsx": {
+      "complexity_critical": {
+        "count": 7
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 10
+      },
+      "crap_high": {
+        "count": 8
+      },
+      "crap_moderate": {
+        "count": 11
+      }
+    },
+    "apps/web/src/routes/agents/-components/coworker-info-page.tsx": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 6
+      }
+    },
+    "apps/web/src/routes/agents/-components/coworkers-page.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/web/src/routes/agents/-components/grid-page.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/agents/-components/history-page.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/agents/-components/new-coworker-page.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/agents/-components/org-chart-page.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/agents/-components/org-chart/org-chart-canvas.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/agents/-components/run-detail-layout.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/agents/-components/run-detail-page.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/agents/route.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/control-plane/-handlers/auth.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/control-plane/-handlers/integrations.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/control-plane/-handlers/provider-auth.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/control-plane/-handlers/runtime-credentials.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/integrations/-handlers/nango-providers.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/integrations/-handlers/resend-webhook.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/mcp/oauth/-handlers/authorize.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/mcp/oauth/-handlers/token.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/oauth/-handlers/callback.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/api/observability/-handlers/client-observations.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/integrations/$type.tsx": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/integrations/whatsapp.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/internal/-readme-preview-demo.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/onboarding/integrations.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/onboarding/subscriptions.tsx": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/web/src/routes/prototype/coworker/info/-components/coworker-info-prototype.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/settings/-account-contact-fields.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/routes/settings/billing.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/web/src/routes/settings/index.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/settings/subscriptions.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/settings/usage.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/settings/workspace.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/skills/$id.tsx": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 6
+      }
+    },
+    "apps/web/src/routes/toolbox/-components/new-source-page.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/toolbox/-components/source-detail-page.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "apps/web/src/routes/toolbox/-components/toolbox-page.tsx": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 7
+      }
+    },
+    "apps/web/src/routes/toolbox/index.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/routes/toolbox/sources/$id.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/auth/handlers.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/hosted-mcp-oauth.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/web/src/server/internal/coworker-runtime.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/internal/mcp-credentials.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "apps/web/src/server/internal/memory.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/internal/runtime-interrupts.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "apps/web/src/server/internal/slack-post-as-bot.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "apps/web/src/server/internal/testing-cli-live.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "apps/web/src/server/orpc/routers/admin-shared-provider-auth.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/orpc/routers/admin.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/orpc/routers/coworker.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/orpc/routers/coworker.ts": {
+      "complexity_critical": {
+        "count": 3
+      },
+      "complexity_moderate": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "apps/web/src/server/orpc/routers/generation.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "apps/web/src/server/orpc/routers/inbox.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/orpc/routers/integration-skill.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/web/src/server/orpc/routers/integration.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/web/src/server/orpc/routers/provider-auth.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/orpc/routers/user.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/orpc/shared/overview-queries.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "apps/web/src/server/orpc/shared/usage-queries.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/report/handler.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/src/server/services/output-html-preview.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/tests/e2e/live-fixtures.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/tests/e2e/live/chat.fill-pdf.live.e2e.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/tests/e2e/live/chat.sandbox-file.live.e2e.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/tests/e2e/live/chat.slack.live.e2e.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/web/vite.config.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "apps/worktree/src/cli.ts": {
+      "complexity_critical": {
+        "count": 4
+      },
+      "crap_critical": {
+        "count": 9
+      },
+      "crap_high": {
+        "count": 12
+      },
+      "crap_moderate": {
+        "count": 17
+      }
+    },
+    "apps/worktree/src/coordination.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/worktree/src/process-cleanup.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "apps/worktree/src/proxy.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "apps/worktree/src/stack.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/client/src/generation-runtime.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/client/src/generation-stream.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/client/src/perfetto-trace.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/lib/coworker-runtime-cli.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/ai/permission-checker.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/control-plane/subscription-providers.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/execution/providers/conversation-environment.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/executor/workspace-sources.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/integrations/cli-env.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/integrations/token-refresh.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/modulr/download-token.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/modulr/service.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/oauth/config.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/queues/daytona-runaway-cleanup.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/queues/index.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/queues/sandbox-usage-snapshot.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/redis/generation-event-bus.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/runtime/opencode/opencode-event-translator.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/runtime/opencode/opencode-normal-runner.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/runtime/opencode/opencode-reattach.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/runtime/opencode/opencode-recovery-runner.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/runtime/opencode/opencode-runtime-driver.ts": {
+      "complexity_critical": {
+        "count": 3
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/sandbox/adapters/opencode-event-adapter.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/sandbox/compat/opencode-client-shim.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/sandbox/e2b.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/sandbox/opencode-mcp-reconciliation.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/sandbox/opencode-session.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 6
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "packages/core/src/server/sandbox/runtime/runtime-client/agent-sdk.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/core/src/server/sandbox/runtime/runtime-client/opencode.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/coworker-builder-service.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/coworker-email-forwarding.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/services/coworker-metadata.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/coworker-scheduler.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/coworker-service.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/services/coworker-x-dm-watcher.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/services/daytona-runaway-cleanup.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/daytona-stopped-sandbox-delete.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/device-auth.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/failure-alert-service.linear.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation-manager.test.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/control/generation-control.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/core/canonical-generation-events.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/core/src/server/services/generation/core/lifecycle-store.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/core/turn-finalizer.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/services/generation/core/turn-suspension.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/decisions/decision-flow.ts": {
+      "complexity_critical": {
+        "count": 5
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 5
+      },
+      "crap_high": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/core/src/server/services/generation/maintenance/generation-maintenance.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/model-access.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/queue/generation-run-queue.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/runtime/generation-context-state.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/runtime/generation-resume-runner.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/skills/integration-skill-drafts.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/streams/generation-event-log.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/streams/replay-events.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/turn-intake.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/generation/turn-runner.ts": {
+      "complexity_critical": {
+        "count": 4
+      },
+      "crap_critical": {
+        "count": 4
+      }
+    },
+    "packages/core/src/server/services/memory-service.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/core/src/server/services/opencode-session-snapshot-service.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/runtime-diagnostic-snapshot-service.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/sandbox-slot-manager.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/sandbox-slot-manager.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/sandbox-usage-snapshot.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/services/slack-bot.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/storage/s3-client.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/utils/logger.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/core/src/server/utils/observability.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/core/src/server/ws/server.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/core/src/worker-runtime.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/message-format/src/index.ts": {
+      "complexity_high": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "scripts/release/render-deploy.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 6
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "scripts/validate-generation-observability.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": [
+    "apps/mcp/servers/modulr/src/resources/(modulr)/documents/[documentId]/index.ts:dead code",
+    "packages/core/src/server/services/runtime-diagnostic-snapshot-service.ts:complexity",
+    "packages/core/src/server/integrations/account-labels.ts:dead code",
+    "apps/web/src/lib/generation-stream.ts:complexity",
+    "packages/core/src/server/runtime/opencode/opencode-reattach.ts:complexity",
+    "packages/core/src/server/sandbox/opencode-session.ts:dead code",
+    "packages/core/src/server/integrations/connected-identities.ts:dead code",
+    "packages/core/src/server/services/slo-journey.ts:dead code",
+    "packages/core/src/server/runtime/opencode/opencode-event-translator.ts:dead code",
+    "packages/core/src/server/integrations/cli-env.ts:complexity",
+    "apps/web/src/orpc/hooks/inbox.ts:untested risk",
+    "packages/core/src/server/services/coworker-builder-service.ts:complexity",
+    "packages/core/src/server/executor/workspace-sources.ts:complexity",
+    "packages/core/src/server/services/opencode-session-snapshot-service.ts:complexity",
+    "packages/core/src/server/queues/sandbox-usage-snapshot.ts:dead code",
+    "packages/core/src/server/runtime/opencode/opencode-runtime-driver.ts:complexity",
+    "apps/web/src/routes/toolbox/-components/source-detail-page.tsx:complexity",
+    "packages/client/src/generation-stream.ts:complexity",
+    "apps/web/src/lib/brandfetch.ts:high impact",
+    "apps/web/src/routes/api/oauth/-handlers/callback.ts:complexity",
+    "apps/web/src/components/chat/tool-approval-card.tsx:complexity",
+    "packages/core/src/server/runtime/opencode/opencode-recovery-runner.ts:complexity",
+    "apps/web/src/components/inbox/inbox-item.tsx:complexity",
+    "packages/core/src/server/services/generation/model-access.ts:complexity",
+    "packages/core/src/server/redis/connection-options.ts:high impact",
+    "apps/web/src/components/chat/browser-json-storage.ts:high impact",
+    "packages/core/src/server/sandbox/runtime/runtime-client/opencode.ts:high impact",
+    "apps/web/src/components/prompt-bar.tsx:complexity",
+    "apps/cli/src/commands/chat/impl.ts:complexity",
+    "packages/core/src/server/services/memory-service.ts:complexity",
+    "apps/web/src/components/integration-detail-content.tsx:complexity",
+    "apps/web/src/components/app-sidebar.tsx:complexity",
+    "apps/web/src/components/chat/question-approval-utils.ts:complexity",
+    "apps/web/src/server/orpc/routers/coworker.ts:complexity",
+    "packages/core/src/server/services/generation/core/turn-finalizer.ts:complexity",
+    "apps/web/src/routes/agents/-components/coworker-editor-page.tsx:complexity",
+    "apps/web/scripts/lib/question-approval.ts:complexity",
+    "apps/web/src/components/coworkers/interactive-coworker-card.tsx:complexity",
+    "packages/core/src/server/services/generation/core/canonical-generation-events.ts:complexity",
+    "apps/web/src/routes/agents/-components/coworker-info-page.tsx:complexity",
+    "apps/web/src/routes/prototype/coworker/info/-components/coworker-info-prototype.tsx:complexity",
+    "apps/web/scripts/coworker.ts:complexity",
+    "apps/web/scripts/chat.ts:complexity",
+    "apps/web/src/routes/skills/$id.tsx:complexity",
+    "packages/core/src/server/runtime/opencode/opencode-normal-runner.ts:complexity",
+    "apps/cli/src/commands/coworker/logs.ts:complexity",
+    "packages/message-format/src/index.ts:complexity",
+    "apps/sandbox/src/common/skills/coworker/src/coworker.ts:complexity",
+    "apps/web/src/server/orpc/shared/overview-queries.ts:complexity",
+    "apps/web/src/routes/toolbox/-components/toolbox-page.tsx:complexity",
+    "packages/core/src/server/services/generation/streams/generation-event-log.ts:complexity",
+    "apps/web/src/routes/agents/-components/coworkers-page.tsx:complexity",
+    "packages/core/src/server/services/generation/turn-intake.ts:complexity",
+    "apps/cli/src/lib/question-approval.ts:complexity",
+    "apps/worktree/src/cli.ts:complexity",
+    "apps/web/public/sw.js:untested risk",
+    "apps/web/src/server/orpc/routers/inbox.ts:complexity",
+    "apps/web/src/components/login/cloud-login-client.tsx:complexity",
+    "apps/sandbox/src/common/plugins/integration-permissions.ts:complexity",
+    "apps/web/src/routes/admin/performance.tsx:complexity",
+    "apps/sandbox/scripts/daytona-sandbox.ts:complexity",
+    "apps/web/src/routes/admin/sandboxes.tsx:complexity",
+    "packages/core/src/server/sandbox/runtime/runtime-client/agent-sdk.ts:complexity",
+    "apps/sandbox/scripts/test-sandbox.ts:complexity",
+    "apps/sandbox/src/common/skills/linkedin/src/linkedin.ts:complexity",
+    "apps/sandbox/src/common/skills/dynamics/src/dynamics.ts:complexity",
+    "apps/sandbox/src/common/skills/twitter/src/twitter.ts:complexity"
+  ]
+}

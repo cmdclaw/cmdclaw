@@ -42,6 +42,11 @@
     //   "**/generated/**"     // OpenAPI, Protobuf codegen
     // ]
   },
+  "audit": {
+    "deadCodeBaseline": "fallow-baselines/dead-code.json",
+    "healthBaseline": "fallow-baselines/health.json",
+    "dupesBaseline": "fallow-baselines/dupes.json"
+  },
   "rules": {
     "unused-dependencies": "warn"
   }
