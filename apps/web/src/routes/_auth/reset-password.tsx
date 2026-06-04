@@ -1,5 +1,6 @@
 import type React from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,7 +56,7 @@ function PasswordResetCard({
     <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          CmdClaw
+          <T>CmdClaw</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
@@ -95,6 +96,8 @@ export function ResetPasswordView({
   search: ResetPasswordSearch;
   navigate: (href: string) => void;
 }) {
+  const t = useGT();
+
   const token = search.token ?? null;
   const searchError = search.error ?? null;
   const email = search.email?.trim().toLowerCase() ?? "";
@@ -211,13 +214,13 @@ export function ResetPasswordView({
         {!isBlockedTokenState ? (
           <form onSubmit={submitReset} className="space-y-3">
             <label className="text-muted-foreground text-sm font-medium" htmlFor="new-password">
-              New password
+              <T>New password</T>
             </label>
             <Input
               id="new-password"
               type="password"
               autoComplete="new-password"
-              placeholder="Enter a new password"
+              placeholder={t("Enter a new password")}
               value={password}
               onChange={handlePasswordChange}
               required
@@ -225,13 +228,13 @@ export function ResetPasswordView({
             />
 
             <label className="text-muted-foreground text-sm font-medium" htmlFor="confirm-password">
-              Confirm password
+              <T>Confirm password</T>
             </label>
             <Input
               id="confirm-password"
               type="password"
               autoComplete="new-password"
-              placeholder="Confirm your password"
+              placeholder={t("Confirm your password")}
               value={confirmPassword}
               onChange={handleConfirmPasswordChange}
               required
@@ -254,7 +257,7 @@ export function ResetPasswordView({
           </form>
         ) : (
           <Button type="button" className="w-full" onClick={handleBackToLogin}>
-            Back to login
+            <T>Back to login</T>
           </Button>
         )}
       </PasswordResetCard>

@@ -1,7 +1,6 @@
-import { BarChart3, MoreHorizontal, Pencil } from "lucide-react";
 import { Outlet } from "@tanstack/react-router";
-import { AppLink as Link } from "../-lib/app-link";
-import { useParams } from "../-lib/next-navigation-compat";
+import { T, useGT } from "gt-react";
+import { BarChart3, MoreHorizontal, Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
@@ -15,8 +14,12 @@ import {
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { useCoworkerRun } from "@/orpc/hooks/coworkers";
+import { AppLink as Link } from "../-lib/app-link";
+import { useParams } from "../-lib/next-navigation-compat";
 
 export default function CoworkerRunLayout() {
+  const t = useGT();
+
   const { isAdmin } = useIsAdmin();
   const params = useParams<{ id: string }>();
   const runId = params?.id;
@@ -54,7 +57,7 @@ export default function CoworkerRunLayout() {
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
-                aria-label="Run actions"
+                aria-label={t("Run actions")}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
@@ -62,7 +65,9 @@ export default function CoworkerRunLayout() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={handleUsageMenuSelect}>
                 <BarChart3 className="h-4 w-4" />
-                <span>Show usage</span>
+                <span>
+                  <T>Show usage</T>
+                </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -73,7 +78,7 @@ export default function CoworkerRunLayout() {
                 username: run.coworkerUsername,
               })}
               className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
-              title="Open in Builder"
+              title={t("Open in Builder")}
             >
               <Pencil className="h-4 w-4" />
             </Link>

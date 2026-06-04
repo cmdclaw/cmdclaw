@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { useEffect, useState } from "react";
 import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,8 @@ function InfoRow({ label, value }: InfoRowProps) {
 }
 
 function AccountsPage() {
+  const t = useGT();
+
   const { sessionContext } = Route.useRouteContext();
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -69,13 +72,17 @@ function AccountsPage() {
         <div className="bg-card rounded-xl border p-6 shadow-sm">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                <T>Account</T>
+              </h1>
               <p className="text-muted-foreground text-sm">
-                Quick snapshot of who is signed in right now.
+                <T>Quick snapshot of who is signed in right now.</T>
               </p>
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link to="/login">Open login</Link>
+              <Link to="/login">
+                <T>Open login</T>
+              </Link>
             </Button>
           </div>
 
@@ -83,13 +90,13 @@ function AccountsPage() {
             {status === "loading" && (
               <div
                 className="bg-muted/70 h-28 animate-pulse rounded-lg"
-                aria-label="Loading session"
+                aria-label={t("Loading session")}
               />
             )}
 
             {status === "error" && (
               <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
-                Unable to load your session right now. Please try again in a moment.
+                <T>Unable to load your session right now. Please try again in a moment.</T>
               </div>
             )}
 
@@ -97,7 +104,7 @@ function AccountsPage() {
               <div className="bg-muted/50 space-y-4 rounded-xl border p-4">
                 <div>
                   <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
-                    Signed in as
+                    <T>Signed in as</T>
                   </p>
                   <p className="text-lg leading-tight font-semibold">
                     {user.name || user.email || "Current user"}
@@ -108,11 +115,14 @@ function AccountsPage() {
                 <Separator />
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <InfoRow label="User ID" value={user.id ?? "Not available"} />
-                  <InfoRow label="Session ID" value={activeSession?.id ?? "Not available"} />
-                  <InfoRow label="Session status" value={activeSession ? "Active" : "Missing"} />
+                  <InfoRow label={t("User ID")} value={user.id ?? "Not available"} />
+                  <InfoRow label={t("Session ID")} value={activeSession?.id ?? "Not available"} />
                   <InfoRow
-                    label="Expires at"
+                    label={t("Session status")}
+                    value={activeSession ? "Active" : "Missing"}
+                  />
+                  <InfoRow
+                    label={t("Expires at")}
                     value={
                       activeSession?.expiresAt
                         ? typeof activeSession.expiresAt === "string"
@@ -128,10 +138,12 @@ function AccountsPage() {
             {status === "ready" && !user && (
               <div className="bg-muted/50 space-y-3 rounded-lg border p-4">
                 <p className="text-muted-foreground text-sm">
-                  No user is currently signed in. Use the login link to start a session.
+                  <T>No user is currently signed in. Use the login link to start a session.</T>
                 </p>
                 <Button asChild size="sm">
-                  <Link to="/login">Go to login</Link>
+                  <Link to="/login">
+                    <T>Go to login</T>
+                  </Link>
                 </Button>
               </div>
             )}

@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { PreviewProps, IntegrationLogo } from "./preview-styles";
 
 function toBasename(value: string): string {
@@ -59,29 +60,39 @@ function GmailSendPreview({
       {/* Email header style */}
       <div className="bg-muted/50 rounded-t border border-b-0 p-3 text-sm">
         <div className="grid grid-cols-[60px_1fr] gap-1">
-          <span className="text-muted-foreground">To:</span>
+          <span className="text-muted-foreground">
+            <T>To:</T>
+          </span>
           <span className="font-medium">{to || "—"}</span>
 
           {cc && (
             <>
-              <span className="text-muted-foreground">Cc:</span>
+              <span className="text-muted-foreground">
+                <T>Cc:</T>
+              </span>
               <span>{cc}</span>
             </>
           )}
 
           {bcc && (
             <>
-              <span className="text-muted-foreground">Bcc:</span>
+              <span className="text-muted-foreground">
+                <T>Bcc:</T>
+              </span>
               <span>{bcc}</span>
             </>
           )}
 
-          <span className="text-muted-foreground">Subject:</span>
+          <span className="text-muted-foreground">
+            <T>Subject:</T>
+          </span>
           <span className="font-medium">{subject || "(no subject)"}</span>
 
           {attachmentNames.length > 0 && (
             <>
-              <span className="text-muted-foreground">Files:</span>
+              <span className="text-muted-foreground">
+                <T>Files:</T>
+              </span>
               <span>{attachmentNames.join(", ")}</span>
             </>
           )}

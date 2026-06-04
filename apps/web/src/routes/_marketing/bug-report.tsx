@@ -1,4 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { T } from "gt-react";
 import { ArrowLeft } from "lucide-react";
 import { useCallback } from "react";
 import { BugReportForm } from "@/components/bug-report-form";
@@ -31,8 +32,12 @@ function BugReportPage() {
           <ArrowLeft className="size-5" />
         </button>
         <div>
-          <h1 className="text-lg font-semibold">Bug report</h1>
-          <p className="text-muted-foreground text-sm">Send a message to the CmdClaw team.</p>
+          <h1 className="text-lg font-semibold">
+            <T>Bug report</T>
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            <T>Send a message to the CmdClaw team.</T>
+          </p>
         </div>
       </div>
       <BugReportForm onSuccess={handleBack} />

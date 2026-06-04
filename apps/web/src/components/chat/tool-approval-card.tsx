@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Check, X, Loader2, Wrench, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { AppImage } from "@/components/chat/app-image";
@@ -104,6 +105,7 @@ export function ToolApprovalCard({
   status,
   isLoading,
 }: ToolApprovalCardProps) {
+  const t = useGT();
   const isQuestionRequest = isQuestionApprovalRequest({ toolName, integration, operation });
   const questionPayload = useMemo(
     () => (isQuestionRequest ? parseQuestionRequestPayload(toolInput) : null),
@@ -609,6 +611,7 @@ export function ToolApprovalCard({
           <div className="space-y-2">
             <button
               type="button"
+              aria-label={t("Type your own answer")}
               data-question-index={String(index)}
               data-testid={`question-typed-toggle-${index}`}
               className={cn(
@@ -617,7 +620,9 @@ export function ToolApprovalCard({
               )}
               onClick={handleEnableTypedMode}
             >
-              <div className="font-medium">Type your own answer</div>
+              <div className="font-medium">
+                <T>Type your own answer</T>
+              </div>
             </button>
             {useTypedAnswer && (
               <div className="flex items-center gap-2">
@@ -627,7 +632,7 @@ export function ToolApprovalCard({
                   value={typedAnswers[index] ?? ""}
                   onChange={handleTypedAnswerChange}
                   onKeyDown={handleTypedAnswerKeyDown}
-                  placeholder="Type your answer"
+                  placeholder={t("Type your answer")}
                   onClick={handleStopPropagation}
                   className="focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
                 />
@@ -642,7 +647,7 @@ export function ToolApprovalCard({
                   >
                     {isMultiQuestion && currentStep < totalQuestions - 1 ? (
                       <>
-                        Next
+                        <T>Next</T>
                         <ChevronRight className="ml-1 h-3 w-3" />
                       </>
                     ) : (
@@ -681,11 +686,15 @@ export function ToolApprovalCard({
           <Wrench className="text-muted-foreground h-4 w-4" />
         )}
         {isQuestionRequest ? (
-          <span className="font-medium">CmdClaw wants to ask a question</span>
+          <span className="font-medium">
+            <T>CmdClaw wants to ask a question</T>
+          </span>
         ) : (
           <>
             <span className="font-medium">{displayName}</span>
-            <span className="text-muted-foreground">wants to</span>
+            <span className="text-muted-foreground">
+              <T>wants to</T>
+            </span>
             <span className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
               {displayOperation}
             </span>
@@ -697,19 +706,19 @@ export function ToolApprovalCard({
         {status === "pending" && (
           <span className="flex items-center gap-1 text-xs text-amber-500">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Waiting for approval
+            <T>Waiting for approval</T>
           </span>
         )}
         {status === "approved" && (
           <span className="flex items-center gap-1 text-xs text-green-500">
             <Check className="h-3 w-3" />
-            Approved
+            <T>Approved</T>
           </span>
         )}
         {status === "denied" && (
           <span className="flex items-center gap-1 text-xs text-red-500">
             <X className="h-3 w-3" />
-            Denied
+            <T>Denied</T>
           </span>
         )}
       </div>
@@ -750,13 +759,13 @@ export function ToolApprovalCard({
                 >
                   {currentStep < totalQuestions - 1 ? (
                     <>
-                      Next
+                      <T>Next</T>
                       <ChevronRight className="ml-1 h-3 w-3" />
                     </>
                   ) : (
                     <>
                       <Check className="h-4 w-4" />
-                      Submit
+                      <T>Submit</T>
                     </>
                   )}
                 </Button>
@@ -787,7 +796,7 @@ export function ToolApprovalCard({
                   {savedAnswers.length > 0 && (
                     <div className="bg-muted/60 rounded-md border px-3 py-2">
                       <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                        Saved answer
+                        <T>Saved answer</T>
                       </p>
                       <p className="mt-1 text-sm">{savedAnswers.join(", ")}</p>
                     </div>
@@ -802,7 +811,7 @@ export function ToolApprovalCard({
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={handleDenyClick} disabled={isLoading}>
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-              Deny
+              <T>Deny</T>
             </Button>
             <Button size="sm" onClick={handleApproveClick} disabled={isLoading}>
               {isLoading ? (
@@ -810,7 +819,7 @@ export function ToolApprovalCard({
               ) : (
                 <Check className="h-4 w-4" />
               )}
-              Approve
+              <T>Approve</T>
             </Button>
           </div>
         )}
@@ -821,7 +830,7 @@ export function ToolApprovalCard({
               {isMultiQuestion && currentStep > 0 && (
                 <Button variant="outline" size="sm" onClick={handleWizardBack} disabled={isLoading}>
                   <ChevronLeft className="h-4 w-4" />
-                  Back
+                  <T>Back</T>
                 </Button>
               )}
             </div>
@@ -832,7 +841,7 @@ export function ToolApprovalCard({
                 ) : (
                   <X className="h-4 w-4" />
                 )}
-                Dismiss
+                <T>Dismiss</T>
               </Button>
               {requiresExplicitSubmit && !isMultiQuestion && (
                 <Button
@@ -845,7 +854,7 @@ export function ToolApprovalCard({
                   ) : (
                     <Check className="h-4 w-4" />
                   )}
-                  Submit
+                  <T>Submit</T>
                 </Button>
               )}
             </div>

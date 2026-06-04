@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Check, ChevronsUpDown, Users } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -89,9 +90,11 @@ export function InboxCoworkerSelector({
               <Users className="text-muted-foreground size-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">All coworkers</span>
+              <span className="block text-sm font-medium">
+                <T>All coworkers</T>
+              </span>
               <span className="text-muted-foreground block text-xs">
-                Show every coworker run in the recent history window.
+                <T>Show every coworker run in the recent history window.</T>
               </span>
             </span>
             {!selectedCoworkerId ? <Check className="size-4 shrink-0" /> : null}

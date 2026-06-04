@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { ArrowLeft } from "lucide-react";
 import { lazy, Suspense, type ReactNode } from "react";
 import { COMMUNITY_SKILL_METADATA } from "@/lib/community-skill-metadata";
@@ -40,7 +41,9 @@ export const Route = createFileRoute("/skills/community/$skillId")({
 function CommunitySkillNotFound() {
   return (
     <CommunitySkillPageFrame>
-      <p className="text-muted-foreground text-sm">Skill not found.</p>
+      <p className="text-muted-foreground text-sm">
+        <T>Skill not found.</T>
+      </p>
     </CommunitySkillPageFrame>
   );
 }
@@ -56,9 +59,11 @@ function CommunitySkillRoute() {
 }
 
 function CommunitySkillLoading() {
+  const t = useGT();
+
   return (
     <CommunitySkillPageFrame>
-      <div className="space-y-4" aria-busy="true" aria-label="Loading skill details">
+      <div className="space-y-4" aria-busy="true" aria-label={t("Loading skill details")}>
         <div className="bg-muted h-6 w-40 rounded" />
         <div className="bg-muted h-4 w-full max-w-xl rounded" />
         <div className="bg-muted h-4 w-2/3 rounded" />
@@ -75,7 +80,7 @@ function CommunitySkillPageFrame({ children }: { children: ReactNode }) {
         className="text-muted-foreground hover:text-foreground mb-8 inline-flex items-center gap-1.5 text-xs transition-colors"
       >
         <ArrowLeft className="size-3" />
-        Back to Toolbox
+        <T>Back to Toolbox</T>
       </Link>
       {children}
     </div>

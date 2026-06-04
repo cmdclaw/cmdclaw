@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { T, msg, useMessages } from "gt-react";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useState } from "react";
@@ -29,87 +30,87 @@ function isOAuthIntegrationType(type: string): type is OAuthIntegrationType {
 const integrationConfig: Record<string, { name: string; description: string; icon: string }> = {
   google_gmail: {
     name: "Google Gmail",
-    description: "Read and send emails",
+    description: msg("Read and send emails"),
     icon: "/integrations/google-gmail.svg",
   },
   outlook: {
     name: "Outlook Mail",
-    description: "Read and send emails",
+    description: msg("Read and send emails"),
     icon: "/integrations/outlook.svg",
   },
   outlook_calendar: {
     name: "Outlook Calendar",
-    description: "Manage events and calendars",
+    description: msg("Manage events and calendars"),
     icon: "/integrations/outlook-calendar.svg",
   },
   google_calendar: {
     name: "Google Calendar",
-    description: "Manage events and calendars",
+    description: msg("Manage events and calendars"),
     icon: "/integrations/google-calendar.svg",
   },
   google_docs: {
     name: "Google Docs",
-    description: "Read and edit documents",
+    description: msg("Read and edit documents"),
     icon: "/integrations/google-docs.svg",
   },
   google_sheets: {
     name: "Google Sheets",
-    description: "Read and edit spreadsheets",
+    description: msg("Read and edit spreadsheets"),
     icon: "/integrations/google-sheets.svg",
   },
   google_drive: {
     name: "Google Drive",
-    description: "Access and manage files",
+    description: msg("Access and manage files"),
     icon: "/integrations/google-drive.svg",
   },
   notion: {
     name: "Notion",
-    description: "Search and create pages",
+    description: msg("Search and create pages"),
     icon: "/integrations/notion.svg",
   },
   airtable: {
     name: "Airtable",
-    description: "Read and update bases",
+    description: msg("Read and update bases"),
     icon: "/integrations/airtable.svg",
   },
   slack: {
     name: "Slack",
-    description: "Send messages and read channels",
+    description: msg("Send messages and read channels"),
     icon: "/integrations/slack.svg",
   },
   hubspot: {
     name: "HubSpot",
-    description: "Manage CRM contacts, deals, and tickets",
+    description: msg("Manage CRM contacts, deals, and tickets"),
     icon: "/integrations/hubspot.svg",
   },
   linkedin: {
     name: "LinkedIn",
-    description: "Send messages, manage connections, and post content",
+    description: msg("Send messages, manage connections, and post content"),
     icon: "/integrations/linkedin.svg",
   },
   salesforce: {
     name: "Salesforce",
-    description: "Query and manage CRM records and contacts",
+    description: msg("Query and manage CRM records and contacts"),
     icon: "/integrations/salesforce.svg",
   },
   dynamics: {
     name: "Microsoft Dynamics 365",
-    description: "Manage Dataverse tables and CRM rows",
+    description: msg("Manage Dataverse tables and CRM rows"),
     icon: "/integrations/dynamics.svg",
   },
   reddit: {
     name: "Reddit",
-    description: "Browse, vote, comment, and post on Reddit",
+    description: msg("Browse, vote, comment, and post on Reddit"),
     icon: "/integrations/reddit.svg",
   },
   twitter: {
     name: "X (Twitter)",
-    description: "Post tweets, manage followers, and search content",
+    description: msg("Post tweets, manage followers, and search content"),
     icon: "/integrations/twitter.svg",
   },
   whatsapp: {
     name: "WhatsApp",
-    description: "Link WhatsApp and pair the bridge with QR",
+    description: msg("Link WhatsApp and pair the bridge with QR"),
     icon: "/integrations/whatsapp.svg",
   },
 };
@@ -134,11 +135,12 @@ function isGoogleIntegrationType(type: string): type is GoogleIntegrationType {
 // ─── Route ─────────────────────────────────────────────────────────────────────
 
 export const Route = createFileRoute("/integrations/$type")({
-  head: () => ({ meta: [{ title: "Integration - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: msg("Integration - CmdClaw") }] }),
   component: IntegrationDetailPage,
 });
 
 function IntegrationDetailPage() {
+  const m = useMessages();
   const { type } = Route.useParams();
   const config = integrationConfig[type];
 
@@ -164,6 +166,10 @@ function IntegrationDetailPage() {
   const integrationsForType = useMemo(
     () => integrationsList.filter((i) => i.type === type),
     [integrationsList, type],
+  );
+  const translatedConfig = useMemo(
+    () => (config ? { ...config, description: m(config.description) } : undefined),
+    [config, m],
   );
 
   const isWhatsApp = type === "whatsapp";
@@ -283,9 +289,11 @@ function IntegrationDetailPage() {
           className="text-muted-foreground hover:text-foreground mb-8 inline-flex items-center gap-1.5 text-xs transition-colors"
         >
           <ArrowLeft className="size-3" />
-          Back to Toolbox
+          <T>Back to Toolbox</T>
         </Link>
-        <p className="text-muted-foreground text-sm">Integration not found.</p>
+        <p className="text-muted-foreground text-sm">
+          <T>Integration not found.</T>
+        </p>
       </div>
     );
   }
@@ -297,12 +305,12 @@ function IntegrationDetailPage() {
         className="text-muted-foreground hover:text-foreground mb-8 inline-flex items-center gap-1.5 text-xs transition-colors"
       >
         <ArrowLeft className="size-3" />
-        Back to Toolbox
+        <T>Back to Toolbox</T>
       </Link>
 
       <IntegrationDetailContent
         type={type}
-        config={config}
+        config={translatedConfig ?? config}
         integration={integration}
         integrations={integrationsForType}
         isWhatsApp={isWhatsApp}

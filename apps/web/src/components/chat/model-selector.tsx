@@ -3,6 +3,7 @@ import {
   getEmptyProviderAuthAvailability,
   type ProviderAuthSource,
 } from "@cmdclaw/core/lib/provider-auth-source";
+import { T } from "gt-react";
 import { Check, ChevronDown, Lock } from "lucide-react";
 import { useCallback } from "react";
 import type { ProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
@@ -216,7 +217,9 @@ export function ModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel>CmdClaw Models</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          <T>CmdClaw Models</T>
+        </DropdownMenuLabel>
         <ModelSection
           models={visibleCmdClawModels}
           selectedModel={selectedModel}
@@ -229,7 +232,9 @@ export function ModelSelector({
 
         {openAIAvailability.user ? (
           <>
-            <DropdownMenuLabel>Your ChatGPT</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              <T>Your ChatGPT</T>
+            </DropdownMenuLabel>
             <ModelSection
               models={SORTED_PERSONAL_CHATGPT_MODELS}
               selectedModel={selectedModel}
@@ -241,7 +246,7 @@ export function ModelSelector({
         ) : (
           <>
             <DropdownMenuLabel className="flex items-center gap-1.5">
-              Your ChatGPT
+              <T>Your ChatGPT</T>
               <Lock className="text-muted-foreground h-3 w-3" />
             </DropdownMenuLabel>
             <DropdownMenuItem
@@ -249,7 +254,7 @@ export function ModelSelector({
               onClick={openSubscriptions}
               data-testid="chat-model-open-subscriptions"
             >
-              Connect in Settings to unlock
+              <T>Connect in Settings to unlock</T>
             </DropdownMenuItem>
           </>
         )}

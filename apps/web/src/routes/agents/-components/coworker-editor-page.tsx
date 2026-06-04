@@ -8,6 +8,7 @@ import {
 } from "@cmdclaw/core/lib/coworker-tool-policy";
 import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@cmdclaw/core/lib/email-forwarding";
 import { formatDistanceToNowStrict } from "date-fns";
+import { T, msg, useGT, useMessages } from "gt-react";
 import {
   Loader2,
   Play,
@@ -28,9 +29,6 @@ import {
   Save,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { AppImage as Image } from "../-lib/app-image";
-import { AppLink as Link } from "../-lib/app-link";
-import { useParams, usePathname, useRouter, useSearchParams } from "../-lib/next-navigation-compat";
 import {
   useCallback,
   useDeferredValue,
@@ -127,14 +125,17 @@ import { useEnqueueConversationMessage } from "@/orpc/hooks/generation";
 import { useProviderAuthStatus } from "@/orpc/hooks/provider-auth";
 import { usePlatformSkillList, useSkillList } from "@/orpc/hooks/skills";
 import { useWorkspaceMcpServerList } from "@/orpc/hooks/workspace-mcp-servers";
+import { AppImage as Image } from "../-lib/app-image";
+import { AppLink as Link } from "../-lib/app-link";
+import { useParams, usePathname, useRouter, useSearchParams } from "../-lib/next-navigation-compat";
 
 const BASE_TRIGGERS = [
-  { value: "manual", label: "Manual only" },
-  { value: "schedule", label: "Run on a schedule" },
-  { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: "Email forwarded to CmdClaw" },
+  { value: "manual", label: msg("Manual only") },
+  { value: "schedule", label: msg("Run on a schedule") },
+  { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: msg("Email forwarded to CmdClaw") },
 ];
 
-const LEGACY_HIDDEN_TRIGGERS = [{ value: "gmail.new_email", label: "New Gmail email" }];
+const LEGACY_HIDDEN_TRIGGERS = [{ value: "gmail.new_email", label: msg("New Gmail email") }];
 
 const scheduleMotionInitial = { opacity: 0, y: -8, height: 0 } as const;
 const scheduleMotionAnimate = { opacity: 1, y: 0, height: "auto" } as const;
@@ -408,10 +409,12 @@ function CoworkerChatPanel({
       return (
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <p className="text-sm font-medium">Failed to load builder chat</p>
+            <p className="text-sm font-medium">
+              <T>Failed to load builder chat</T>
+            </p>
             <p className="text-muted-foreground text-xs">{errorMessage}</p>
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-              Retry
+              <T>Retry</T>
             </Button>
           </div>
         </div>
@@ -451,6 +454,8 @@ export default function CoworkerEditorPage({
   coworkerIdOverride,
   embedded = false,
 }: CoworkerEditorPageProps = {}) {
+  const t = useGT();
+
   const params = useParams<{ id: string }>();
   const routeCoworkerSlug = params?.id;
   const coworkerList = useCoworkerList();
@@ -652,14 +657,14 @@ export default function CoworkerEditorPage({
     }
     deleteCoworker.mutate(coworkerId, {
       onSuccess: () => {
-        toast.success("Coworker deleted");
+        toast.success(t("Coworker deleted"));
         router.push(embedded ? "/agents" : "/agents");
       },
       onError: () => {
-        toast.error("Failed to delete coworker");
+        toast.error(t("Failed to delete coworker"));
       },
     });
-  }, [coworkerId, deleteCoworker, embedded, router]);
+  }, [coworkerId, deleteCoworker, embedded, router, t]);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedEditorRef = useRef(false);
   const initializedCoworkerIdRef = useRef<string | null>(null);
@@ -719,7 +724,7 @@ export default function CoworkerEditorPage({
       ...BASE_TRIGGERS,
       ...persistedLegacyTriggers,
       ...(isAdmin || !isComingSoonIntegration("twitter")
-        ? ([{ value: "twitter.new_dm", label: "New X (Twitter) DM" }] as const)
+        ? ([{ value: "twitter.new_dm", label: msg("New X (Twitter) DM") }] as const)
         : []),
     ],
     [isAdmin, persistedLegacyTriggers],
@@ -932,13 +937,13 @@ export default function CoworkerEditorPage({
         return true;
       } catch (error) {
         console.error("Failed to update coworker:", error);
-        toast.error("Failed to save coworker.");
+        toast.error(t("Failed to save coworker."));
         return false;
       } finally {
         setIsSaving(false);
       }
     },
-    [getCoworkerPayloadSignature, getCoworkerUpdateInput, updateCoworker],
+    [getCoworkerPayloadSignature, getCoworkerUpdateInput, updateCoworker, t],
   );
 
   useEffect(() => {
@@ -1500,12 +1505,12 @@ export default function CoworkerEditorPage({
 
     try {
       await createForwardingAlias.mutateAsync(coworkerId);
-      toast.success("Forwarding address created.");
+      toast.success(t("Forwarding address created."));
     } catch (error) {
       console.error("Failed to create forwarding alias:", error);
-      toast.error("Failed to create forwarding address.");
+      toast.error(t("Failed to create forwarding address."));
     }
-  }, [createForwardingAlias, coworkerId]);
+  }, [createForwardingAlias, coworkerId, t]);
 
   const handleRotateCoworkerAlias = useCallback(async () => {
     if (!coworkerId) {
@@ -1514,12 +1519,12 @@ export default function CoworkerEditorPage({
 
     try {
       await rotateForwardingAlias.mutateAsync(coworkerId);
-      toast.success("Forwarding address rotated.");
+      toast.success(t("Forwarding address rotated."));
     } catch (error) {
       console.error("Failed to rotate forwarding alias:", error);
-      toast.error("Failed to rotate forwarding address.");
+      toast.error(t("Failed to rotate forwarding address."));
     }
-  }, [rotateForwardingAlias, coworkerId]);
+  }, [rotateForwardingAlias, coworkerId, t]);
 
   const handleDisableCoworkerAlias = useCallback(async () => {
     if (!coworkerId) {
@@ -1528,12 +1533,12 @@ export default function CoworkerEditorPage({
 
     try {
       await disableForwardingAlias.mutateAsync(coworkerId);
-      toast.success("Forwarding address disabled.");
+      toast.success(t("Forwarding address disabled."));
     } catch (error) {
       console.error("Failed to disable forwarding alias:", error);
-      toast.error("Failed to disable forwarding address.");
+      toast.error(t("Failed to disable forwarding address."));
     }
-  }, [disableForwardingAlias, coworkerId]);
+  }, [disableForwardingAlias, coworkerId, t]);
 
   useEffect(() => {
     if (!hasInitializedEditorRef.current) {
@@ -1597,7 +1602,7 @@ export default function CoworkerEditorPage({
         }
         const saveSucceeded = await persistCoworker({ force: true });
         if (!saveSucceeded) {
-          toast.error("Failed to save coworker before test run.");
+          toast.error(t("Failed to save coworker before test run."));
           return null;
         }
 
@@ -1617,7 +1622,7 @@ export default function CoworkerEditorPage({
         setIsStartingRun(false);
       }
     },
-    [isStartingRun, persistCoworker, refetchRuns, triggerCoworker, coworkerId],
+    [isStartingRun, persistCoworker, refetchRuns, triggerCoworker, coworkerId, t],
   );
 
   const handleSaveInstructions = useCallback(async () => {
@@ -1627,9 +1632,9 @@ export default function CoworkerEditorPage({
 
     const saveSucceeded = await persistCoworker({ force: true });
     if (saveSucceeded) {
-      toast.success("Instructions saved.");
+      toast.success(t("Instructions saved."));
     }
-  }, [persistCoworker]);
+  }, [persistCoworker, t]);
 
   const hasAgentInstructions = prompt.trim().length > 0;
   const coworkerDisplayName = coworker?.name?.trim().length ? coworker.name : "New Coworker";
@@ -1726,7 +1731,7 @@ export default function CoworkerEditorPage({
 
   const handleRemoteRunClick = useCallback(async () => {
     if (!remoteTargetEnv || !selectedRemoteUser) {
-      toast.error("Select a remote environment and a remote user first.");
+      toast.error(t("Select a remote environment and a remote user first."));
       return;
     }
 
@@ -1763,6 +1768,7 @@ export default function CoworkerEditorPage({
     remoteTargetEnv,
     router,
     selectedRemoteUser,
+    t,
   ]);
 
   const isRunDisabled = !hasAgentInstructions || triggerCoworker.isPending || isStartingRun;
@@ -2133,23 +2139,23 @@ export default function CoworkerEditorPage({
         <div className="border-border/40 flex items-center justify-between gap-1 border-b px-2 py-1.5">
           <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange} className="gap-0">
             <AnimatedTab value="chat" className="px-2.5">
-              <MessageSquare className="h-4 w-4" aria-label="Chat" />
+              <MessageSquare className="h-4 w-4" aria-label={t("Chat")} />
             </AnimatedTab>
             <AnimatedTab value="instruction" className="px-2.5">
-              <Pencil className="h-4 w-4" aria-label="Instruction" />
+              <Pencil className="h-4 w-4" aria-label={t("Instruction")} />
             </AnimatedTab>
             <AnimatedTab value="runs" className="px-2.5">
-              <Play className="h-4 w-4" aria-label="Runs" />
+              <Play className="h-4 w-4" aria-label={t("Runs")} />
             </AnimatedTab>
             <AnimatedTab value="docs" className="px-2.5">
-              <FileText className="h-4 w-4" aria-label="Docs" />
+              <FileText className="h-4 w-4" aria-label={t("Docs")} />
             </AnimatedTab>
             <AnimatedTab value="toolbox" className="px-2.5">
-              <Wrench className="h-4 w-4" aria-label="Toolbox" />
+              <Wrench className="h-4 w-4" aria-label={t("Toolbox")} />
             </AnimatedTab>
             {isAdmin ? (
               <AnimatedTab value="admin" className="px-2.5">
-                <Shield className="h-4 w-4" aria-label="Admin" />
+                <Shield className="h-4 w-4" aria-label={t("Admin")} />
               </AnimatedTab>
             ) : null}
           </AnimatedTabs>
@@ -2160,7 +2166,7 @@ export default function CoworkerEditorPage({
               onClick={handleRunClick}
               disabled={isRunDisabled}
               className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:opacity-40"
-              aria-label="Run now"
+              aria-label={t("Run now")}
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -2172,7 +2178,7 @@ export default function CoworkerEditorPage({
               type="button"
               onClick={handleOpenDeleteDialog}
               className="text-muted-foreground hover:text-destructive hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-              aria-label="Delete coworker"
+              aria-label={t("Delete coworker")}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -2284,29 +2290,43 @@ export default function CoworkerEditorPage({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Turn off auto-approve?</AlertDialogTitle>
+              <AlertDialogTitle>
+                <T>Turn off auto-approve?</T>
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                If you turn this off, coworker runs can stop and wait for manual approval on write
-                actions. The coworker might stay stuck until someone approves in the UI.
+                <T>
+                  If you turn this off, coworker runs can stop and wait for manual approval on write
+                  actions. The coworker might stay stuck until someone approves in the UI.
+                </T>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep on</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDisableAutoApprove}>Turn off</AlertDialogAction>
+              <AlertDialogCancel>
+                <T>Keep on</T>
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleDisableAutoApprove}>
+                <T>Turn off</T>
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
         <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
+              <AlertDialogTitle>
+                <T>Delete coworker?</T>
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete this coworker and all of its run history. This action
-                cannot be undone.
+                <T>
+                  This will permanently delete this coworker and all of its run history. This action
+                  cannot be undone.
+                </T>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>
+                <T>Cancel</T>
+              </AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDelete}
                 disabled={deleteCoworker.isPending}
@@ -2315,7 +2335,7 @@ export default function CoworkerEditorPage({
                 {deleteCoworker.isPending ? (
                   <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                 ) : null}
-                Delete
+                <T>Delete</T>
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -2351,15 +2371,23 @@ export default function CoworkerEditorPage({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Turn off auto-approve?</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>Turn off auto-approve?</T>
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              If you turn this off, coworker runs can stop and wait for manual approval on write
-              actions. The coworker might stay stuck until someone approves in the UI.
+              <T>
+                If you turn this off, coworker runs can stop and wait for manual approval on write
+                actions. The coworker might stay stuck until someone approves in the UI.
+              </T>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep on</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDisableAutoApprove}>Turn off</AlertDialogAction>
+            <AlertDialogCancel>
+              <T>Keep on</T>
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisableAutoApprove}>
+              <T>Turn off</T>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -2417,10 +2445,12 @@ function InlineRunViewer({
             className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors"
           >
             <ArrowLeft className="h-3 w-3" />
-            Runs
+            <T>Runs</T>
           </button>
         </div>
-        <div className="text-muted-foreground px-4 text-xs">Run not found.</div>
+        <div className="text-muted-foreground px-4 text-xs">
+          <T>Run not found.</T>
+        </div>
       </div>
     );
   }
@@ -2437,13 +2467,13 @@ function InlineRunViewer({
             className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors"
           >
             <ArrowLeft className="h-3 w-3" />
-            Runs
+            <T>Runs</T>
           </button>
         </div>
         <RemoteRunSourceBanner source={remoteRunSource} />
         <div className="px-4 py-2">
           <p className="text-muted-foreground text-xs">
-            This run does not have a linked conversation.
+            <T>This run does not have a linked conversation.</T>
           </p>
           <RunDebugDetails debugInfo={run.debugInfo} />
         </div>
@@ -2460,7 +2490,7 @@ function InlineRunViewer({
           className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
-          Runs
+          <T>Runs</T>
         </button>
         <Circle
           className={cn(
@@ -2534,6 +2564,8 @@ function RemoteIntegrationAdminPanel({
   onSelectRemoteUser: (user: RemoteIntegrationUserOption) => void;
   onRun: () => void | Promise<void>;
 }) {
+  const t = useGT();
+
   const handleRemoteUserButtonClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       const remoteUserId = event.currentTarget.dataset.remoteUserId;
@@ -2562,10 +2594,14 @@ function RemoteIntegrationAdminPanel({
             <Shield className="h-4 w-4" />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-medium">Run with remote integrations</p>
+            <p className="text-sm font-medium">
+              <T>Run with remote integrations</T>
+            </p>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              This admin-only test path keeps the coworker local but borrows built-in OAuth
-              integrations from a remote user in staging or prod for a single manual run.
+              <T>
+                This admin-only test path keeps the coworker local but borrows built-in OAuth
+                integrations from a remote user in staging or prod for a single manual run.
+              </T>
             </p>
           </div>
         </div>
@@ -2573,7 +2609,7 @@ function RemoteIntegrationAdminPanel({
 
       {availableTargets.length === 0 ? (
         <div className="text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-xs">
-          No remote integration targets are configured for this environment.
+          <T>No remote integration targets are configured for this environment.</T>
         </div>
       ) : null}
 
@@ -2581,11 +2617,11 @@ function RemoteIntegrationAdminPanel({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-              Source environment
+              <T>Source environment</T>
             </label>
             <Select value={selectedTargetEnv ?? undefined} onValueChange={onTargetEnvChange}>
               <SelectTrigger className="h-9 w-full bg-transparent text-sm">
-                <SelectValue placeholder="Select a remote environment" />
+                <SelectValue placeholder={t("Select a remote environment")} />
               </SelectTrigger>
               <SelectContent>
                 {availableTargets.map((target) => (
@@ -2599,19 +2635,21 @@ function RemoteIntegrationAdminPanel({
 
           {selectedTargetEnv === "prod" ? (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
-              Production is selected. This run can mutate real client data through the remote
-              user&apos;s integrations.
+              <T>
+                Production is selected. This run can mutate real client data through the remote
+                user&apos;s integrations.
+              </T>
             </div>
           ) : null}
 
           <div className="space-y-1.5">
             <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-              Remote user email
+              <T>Remote user email</T>
             </label>
             <Input
               value={remoteUserQuery}
               onChange={onRemoteUserQueryChange}
-              placeholder="Search by email"
+              placeholder={t("Search by email")}
               className="bg-transparent text-sm"
             />
           </div>
@@ -2619,7 +2657,7 @@ function RemoteIntegrationAdminPanel({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Matching users
+                <T>Matching users</T>
               </span>
               {isSearching ? (
                 <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
@@ -2660,7 +2698,7 @@ function RemoteIntegrationAdminPanel({
                         </div>
                         {isSelected ? (
                           <span className="text-primary text-[10px] font-semibold tracking-[0.14em] uppercase">
-                            Selected
+                            <T>Selected</T>
                           </span>
                         ) : null}
                       </div>
@@ -2685,7 +2723,7 @@ function RemoteIntegrationAdminPanel({
             <div className="border-border/40 bg-muted/20 rounded-xl border px-4 py-3">
               <div className="space-y-1">
                 <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                  Selected remote user
+                  <T>Selected remote user</T>
                 </p>
                 <p className="text-sm font-medium">
                   {selectedRemoteUser.name?.trim() || selectedRemoteUser.email}
@@ -2719,7 +2757,7 @@ function RemoteIntegrationAdminPanel({
               ) : (
                 <Play className="h-3 w-3" />
               )}
-              Run with remote integrations
+              <T>Run with remote integrations</T>
             </Button>
           </div>
         </div>
@@ -2937,6 +2975,9 @@ function CoworkerSettingsPanel({
   showAdminTab = false,
   adminContent,
 }: CoworkerSettingsPanelProps) {
+  const t = useGT();
+  const m = useMessages();
+
   const [instructionModalOpen, setInstructionModalOpen] = useState(false);
   const [instructionEditorMode, setInstructionEditorMode] = useState<MarkdownEditorMode>("wysiwyg");
   const [triggerExpanded, setTriggerExpanded] = useState(false);
@@ -3111,15 +3152,31 @@ function CoworkerSettingsPanel({
         <div className="flex items-center justify-between gap-3 px-3 py-1.5">
           <div className="min-w-0 flex-1 overflow-x-auto">
             <AnimatedTabs activeKey={activeTab} onTabChange={handleTabChange}>
-              <AnimatedTab value="instruction">Instruction</AnimatedTab>
-              <AnimatedTab value="runs">Runs</AnimatedTab>
-              <AnimatedTab value="docs">Docs</AnimatedTab>
-              <AnimatedTab value="toolbox">Toolbox</AnimatedTab>
-              {showAdminTab ? <AnimatedTab value="admin">Admin</AnimatedTab> : null}
+              <AnimatedTab value="instruction">
+                <T>Instruction</T>
+              </AnimatedTab>
+              <AnimatedTab value="runs">
+                <T>Runs</T>
+              </AnimatedTab>
+              <AnimatedTab value="docs">
+                <T>Docs</T>
+              </AnimatedTab>
+              <AnimatedTab value="toolbox">
+                <T>Toolbox</T>
+              </AnimatedTab>
+              {showAdminTab ? (
+                <AnimatedTab value="admin">
+                  <T>Admin</T>
+                </AnimatedTab>
+              ) : null}
             </AnimatedTabs>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {isSaving && <span className="text-muted-foreground shrink-0 text-xs">Saving…</span>}
+            {isSaving && (
+              <span className="text-muted-foreground shrink-0 text-xs">
+                <T>Saving…</T>
+              </span>
+            )}
             <div className="flex items-center gap-1.5">
               <AnimatePresence mode="wait">
                 <motion.span
@@ -3152,13 +3209,13 @@ function CoworkerSettingsPanel({
               ) : (
                 <Play className="h-3 w-3" />
               )}
-              Run now
+              <T>Run now</T>
             </Button>
             <button
               type="button"
               onClick={handleOpenDeleteDialog}
               className="text-muted-foreground hover:text-destructive hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-              aria-label="Delete coworker"
+              aria-label={t("Delete coworker")}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -3167,7 +3224,7 @@ function CoworkerSettingsPanel({
                 type="button"
                 onClick={onClose}
                 className="text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-                aria-label="Close panel"
+                aria-label={t("Close panel")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -3175,21 +3232,27 @@ function CoworkerSettingsPanel({
             <AlertDialog open={showDeleteDialog} onOpenChange={onShowDeleteDialogChange}>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    <T>Delete coworker?</T>
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will permanently delete this coworker and all of its run history. This
-                    action cannot be undone.
+                    <T>
+                      This will permanently delete this coworker and all of its run history. This
+                      action cannot be undone.
+                    </T>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>
+                    <T>Cancel</T>
+                  </AlertDialogCancel>
                   <AlertDialogAction
                     onClick={onDelete}
                     disabled={isDeleting}
                     className="bg-destructive hover:bg-destructive/90 text-white"
                   >
                     {isDeleting ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
-                    Delete
+                    <T>Delete</T>
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -3212,25 +3275,25 @@ function CoworkerSettingsPanel({
             <div className={cn("gap-3", hideHeader ? "flex flex-col" : "grid grid-cols-2")}>
               <div className="px-1 py-1">
                 <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                  Name
+                  <T>Name</T>
                 </label>
                 <Input
                   value={name}
                   onChange={onNameChange}
-                  placeholder="New Coworker"
+                  placeholder={t("New Coworker")}
                   className="mt-1.5 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
                 />
               </div>
               <div className="px-1 py-1">
                 <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                  Username
+                  <T>Username</T>
                 </label>
                 <div className="mt-1.5 flex items-center">
                   <span className="text-muted-foreground text-sm">@</span>
                   <Input
                     value={username}
                     onChange={onUsernameChange}
-                    placeholder="my-coworker"
+                    placeholder={t("my-coworker")}
                     className="border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -3245,11 +3308,11 @@ function CoworkerSettingsPanel({
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                  Instructions
+                  <T>Instructions</T>
                 </span>
                 <span className="text-muted-foreground group-hover:text-foreground flex items-center gap-1 text-xs transition-colors">
                   <Pencil className="h-3 w-3" />
-                  Edit
+                  <T>Edit</T>
                 </span>
               </div>
               {prompt ? (
@@ -3260,7 +3323,7 @@ function CoworkerSettingsPanel({
                 </div>
               ) : (
                 <p className="text-muted-foreground/60 text-sm italic">
-                  Your new coworker’s instructions will appear here
+                  <T>Your new coworker’s instructions will appear here</T>
                 </p>
               )}
             </button>
@@ -3269,23 +3332,25 @@ function CoworkerSettingsPanel({
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                    Require parameter
+                    <T>Require parameter</T>
                   </span>
                 </div>
                 <Switch
                   checked={requiresUserInput}
                   onCheckedChange={onRequiresUserInputChange}
-                  aria-label="Require parameter"
+                  aria-label={t("Require parameter")}
                 />
               </div>
               {requiresUserInput && (
                 <label className="mt-2 flex items-start gap-1.5 text-sm leading-relaxed">
-                  <span className="text-muted-foreground shrink-0">Parameter prompt:</span>
+                  <span className="text-muted-foreground shrink-0">
+                    <T>Parameter prompt:</T>
+                  </span>
                   <textarea
                     value={userInputPrompt}
                     onChange={handleUserInputPromptChange}
                     maxLength={1000}
-                    placeholder="What name should I use for the greeting?"
+                    placeholder={t("What name should I use for the greeting?")}
                     className="text-foreground placeholder:text-muted-foreground/60 min-h-[44px] flex-1 resize-none bg-transparent leading-relaxed focus:outline-none"
                   />
                 </label>
@@ -3304,7 +3369,9 @@ function CoworkerSettingsPanel({
                 showCloseButton={false}
               >
                 <DialogHeader className="border-border/40 flex-row items-center justify-between border-b px-5 py-3.5">
-                  <DialogTitle className="text-sm font-semibold">Edit instructions</DialogTitle>
+                  <DialogTitle className="text-sm font-semibold">
+                    <T>Edit instructions</T>
+                  </DialogTitle>
                   <div className="flex items-center gap-1.5">
                     <Button
                       type="button"
@@ -3350,7 +3417,7 @@ function CoworkerSettingsPanel({
                     <MilkdownEditor
                       value={prompt}
                       onChange={onPromptChange}
-                      placeholder="Your new coworker’s instructions will appear here..."
+                      placeholder={t("Your new coworker’s instructions will appear here...")}
                       autoFocus
                       className="h-full"
                     />
@@ -3368,10 +3435,13 @@ function CoworkerSettingsPanel({
               >
                 <div>
                   <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                    Trigger
+                    <T>Trigger</T>
                   </span>
                   <p className="text-foreground mt-0.5 text-sm">
-                    {triggers.find((t) => t.value === triggerType)?.label ?? "Manual only"}
+                    {m(
+                      triggers.find((trigger) => trigger.value === triggerType)?.label ??
+                        "Manual only",
+                    )}
                   </p>
                 </div>
                 <ChevronDown
@@ -3393,12 +3463,12 @@ function CoworkerSettingsPanel({
                     <div className="border-border/40 space-y-3 border-t px-4 pt-3 pb-4">
                       <Select value={triggerType} onValueChange={onTriggerTypeChange}>
                         <SelectTrigger className="h-9 w-full bg-transparent text-sm">
-                          <SelectValue placeholder="Select a trigger" />
+                          <SelectValue placeholder={t("Select a trigger")} />
                         </SelectTrigger>
                         <SelectContent>
                           {triggers.map((trigger) => (
                             <SelectItem key={trigger.value} value={trigger.value}>
-                              {trigger.label}
+                              {m(trigger.label)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -3416,23 +3486,35 @@ function CoworkerSettingsPanel({
                             style={scheduleMotionStyle}
                           >
                             <div className="space-y-1.5">
-                              <label className="text-xs font-medium">Frequency</label>
+                              <label className="text-xs font-medium">
+                                <T>Frequency</T>
+                              </label>
                               <Select value={scheduleType} onValueChange={onScheduleTypeChange}>
                                 <SelectTrigger className="bg-background h-9 w-full text-sm">
-                                  <SelectValue placeholder="Select frequency" />
+                                  <SelectValue placeholder={t("Select frequency")} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="interval">Every X hours</SelectItem>
-                                  <SelectItem value="daily">Daily</SelectItem>
-                                  <SelectItem value="weekly">Weekly</SelectItem>
-                                  <SelectItem value="monthly">Monthly</SelectItem>
+                                  <SelectItem value="interval">
+                                    <T>Every X hours</T>
+                                  </SelectItem>
+                                  <SelectItem value="daily">
+                                    <T>Daily</T>
+                                  </SelectItem>
+                                  <SelectItem value="weekly">
+                                    <T>Weekly</T>
+                                  </SelectItem>
+                                  <SelectItem value="monthly">
+                                    <T>Monthly</T>
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
 
                             {scheduleType === "interval" && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium">Run every</label>
+                                <label className="text-xs font-medium">
+                                  <T>Run every</T>
+                                </label>
                                 <div className="flex items-center gap-2">
                                   <input
                                     type="number"
@@ -3442,7 +3524,9 @@ function CoworkerSettingsPanel({
                                     value={Math.max(1, Math.round(intervalMinutes / 60))}
                                     onChange={onIntervalHoursChange}
                                   />
-                                  <span className="text-muted-foreground text-xs">hours</span>
+                                  <span className="text-muted-foreground text-xs">
+                                    <T>hours</T>
+                                  </span>
                                 </div>
                               </div>
                             )}
@@ -3452,7 +3536,8 @@ function CoworkerSettingsPanel({
                               scheduleType === "monthly") && (
                               <div className="space-y-1.5">
                                 <label className="text-xs font-medium">
-                                  Time ({localTimezone})
+                                  <T>Time (</T>
+                                  {localTimezone})
                                 </label>
                                 <Input
                                   type="time"
@@ -3466,7 +3551,9 @@ function CoworkerSettingsPanel({
 
                             {scheduleType === "weekly" && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium">Days of the week</label>
+                                <label className="text-xs font-medium">
+                                  <T>Days of the week</T>
+                                </label>
                                 <div className="flex flex-wrap gap-1.5">
                                   {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, index) => (
                                     <button
@@ -3490,7 +3577,9 @@ function CoworkerSettingsPanel({
 
                             {scheduleType === "monthly" && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium">Day of the month</label>
+                                <label className="text-xs font-medium">
+                                  <T>Day of the month</T>
+                                </label>
                                 <Select
                                   value={String(scheduleDayOfMonth)}
                                   onValueChange={onScheduleDayOfMonthChange}
@@ -3515,7 +3604,9 @@ function CoworkerSettingsPanel({
                       {triggerType === EMAIL_FORWARDED_TRIGGER_TYPE && (
                         <div className="bg-muted/20 space-y-3 rounded-lg border p-3">
                           <div className="space-y-1.5">
-                            <label className="text-xs font-medium">Forwarding address</label>
+                            <label className="text-xs font-medium">
+                              <T>Forwarding address</T>
+                            </label>
                             {hasActiveForwardingAlias ? (
                               <div className="flex flex-col gap-2">
                                 <Input
@@ -3523,7 +3614,9 @@ function CoworkerSettingsPanel({
                                   value={coworkerForwardingAddress ?? ""}
                                   disabled
                                   className="bg-background/60 font-mono text-xs"
-                                  placeholder="Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases"
+                                  placeholder={t(
+                                    "Set RESEND_RECEIVING_DOMAIN to enable forwarding aliases",
+                                  )}
                                 />
                                 <div className="flex gap-1.5">
                                   <Button
@@ -3544,7 +3637,7 @@ function CoworkerSettingsPanel({
                                     onClick={onRotateCoworkerAlias}
                                     disabled={rotateForwardingAlias.isPending}
                                   >
-                                    Rotate
+                                    <T>Rotate</T>
                                   </Button>
                                   <Button
                                     type="button"
@@ -3554,7 +3647,7 @@ function CoworkerSettingsPanel({
                                     onClick={onDisableCoworkerAlias}
                                     disabled={disableForwardingAlias.isPending}
                                   >
-                                    Disable
+                                    <T>Disable</T>
                                   </Button>
                                 </div>
                               </div>
@@ -3565,7 +3658,7 @@ function CoworkerSettingsPanel({
                                   value=""
                                   disabled
                                   className="bg-background/60 font-mono text-xs"
-                                  placeholder="No forwarding address yet"
+                                  placeholder={t("No forwarding address yet")}
                                 />
                                 <Button
                                   type="button"
@@ -3579,7 +3672,7 @@ function CoworkerSettingsPanel({
                                     !isEmailTriggerPersisted
                                   }
                                 >
-                                  Create email
+                                  <T>Create email</T>
                                 </Button>
                               </div>
                             )}
@@ -3590,9 +3683,11 @@ function CoworkerSettingsPanel({
                       <div className="border-border/40 space-y-3 rounded-lg border p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <label className="text-xs font-medium">Needs your input</label>
+                            <label className="text-xs font-medium">
+                              <T>Needs your input</T>
+                            </label>
                             <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                              Ask a first question in chat before this trigger starts a run.
+                              <T>Ask a first question in chat before this trigger starts a run.</T>
                             </p>
                           </div>
                           <Switch
@@ -3611,13 +3706,15 @@ function CoworkerSettingsPanel({
                               className="overflow-hidden"
                             >
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium">Question to ask</label>
+                                <label className="text-xs font-medium">
+                                  <T>Question to ask</T>
+                                </label>
                                 <textarea
                                   value={userInputPrompt}
                                   onChange={handleUserInputPromptChange}
                                   maxLength={1000}
-                                  placeholder="Which email address should I send the draft to?"
-                                  className="bg-background text-foreground placeholder:text-muted-foreground/60 min-h-[78px] w-full resize-none rounded-md border px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring/40"
+                                  placeholder={t("Which email address should I send the draft to?")}
+                                  className="bg-background text-foreground placeholder:text-muted-foreground/60 focus:ring-ring/40 min-h-[78px] w-full resize-none rounded-md border px-3 py-2 text-sm leading-relaxed focus:ring-2 focus:outline-none"
                                 />
                               </div>
                             </motion.div>
@@ -3634,10 +3731,14 @@ function CoworkerSettingsPanel({
             <div className="flex items-center justify-between px-4 py-3">
               <div>
                 <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                  Approval policy
+                  <T>Approval policy</T>
                 </span>
                 <p className="text-foreground mt-0.5 text-sm">
-                  {autoApprove ? "Auto-approve all write actions" : "Manual approval required"}
+                  {autoApprove ? (
+                    <T>Auto-approve all write actions</T>
+                  ) : (
+                    <T>Manual approval required</T>
+                  )}
                 </p>
               </div>
               <Switch checked={autoApprove} onCheckedChange={onAutoApproveChange} />
@@ -3646,20 +3747,20 @@ function CoworkerSettingsPanel({
             {/* Description card */}
             <div className="px-4 py-3">
               <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Description
+                <T>Description</T>
               </label>
               <textarea
                 className="text-foreground placeholder:text-muted-foreground/60 mt-1.5 min-h-[80px] w-full resize-none bg-transparent text-sm leading-relaxed focus:outline-none"
                 value={description}
                 onChange={onDescriptionChange}
-                placeholder="What does this coworker do?"
+                placeholder={t("What does this coworker do?")}
               />
             </div>
 
             {/* Model card */}
             <div className="flex items-center justify-between px-4 py-3">
               <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Model
+                <T>Model</T>
               </span>
               <ModelSelector
                 selectedModel={model}
@@ -3736,7 +3837,9 @@ function CoworkerSettingsPanel({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-xs">No runs yet.</p>
+                  <p className="text-muted-foreground text-xs">
+                    <T>No runs yet.</T>
+                  </p>
                 )}
               </motion.div>
             )}
@@ -3791,12 +3894,14 @@ function CoworkerSettingsPanel({
                         : "Drop files here or browse from your machine"}
                     </p>
                     <p className="text-muted-foreground text-xs">
-                      PDF, Office docs, text, CSV, and images. Uploaded files are stored for future
-                      coworker runs and sent to the builder chat.
+                      <T>
+                        PDF, Office docs, text, CSV, and images. Uploaded files are stored for
+                        future coworker runs and sent to the builder chat.
+                      </T>
                     </p>
                   </div>
                   <span className="border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground mt-1 inline-flex h-8 items-center justify-center rounded-full border px-4 text-xs font-medium">
-                    Browse files
+                    <T>Browse files</T>
                   </span>
                 </div>
               </button>
@@ -3821,7 +3926,9 @@ function CoworkerSettingsPanel({
                         </div>
                         <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
                           <span>{formatFileSize(document.sizeBytes)}</span>
-                          <span>Added {formatRelativeTime(document.createdAt)}</span>
+                          <span>
+                            <T>Added</T> {formatRelativeTime(document.createdAt)}
+                          </span>
                         </div>
                         {document.description ? (
                           <p className="text-muted-foreground text-xs">{document.description}</p>
@@ -3867,7 +3974,9 @@ function CoworkerSettingsPanel({
               ) : (
                 <div className="flex items-center gap-2 py-4">
                   <FileText className="text-muted-foreground h-4 w-4" />
-                  <p className="text-muted-foreground text-xs">No documents added yet.</p>
+                  <p className="text-muted-foreground text-xs">
+                    <T>No documents added yet.</T>
+                  </p>
                 </div>
               )}
             </div>
@@ -3879,9 +3988,11 @@ function CoworkerSettingsPanel({
             {/* All tools toggle */}
             <div className="border-border/40 bg-muted/20 flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
               <div className="space-y-0.5">
-                <span className="text-sm font-medium">All tools allowed</span>
+                <span className="text-sm font-medium">
+                  <T>All tools allowed</T>
+                </span>
                 <p className="text-muted-foreground text-[11px]">
-                  When enabled, this coworker can use any connected tool
+                  <T>When enabled, this coworker can use any connected tool</T>
                 </p>
               </div>
               <Switch checked={!restrictTools} onCheckedChange={onRestrictToolsChange} />
@@ -3898,7 +4009,7 @@ function CoworkerSettingsPanel({
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                      Integrations
+                      <T>Integrations</T>
                     </h3>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -3907,7 +4018,7 @@ function CoworkerSettingsPanel({
                         disabled={allowedIntegrations.length === allIntegrationTypes.length}
                         className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors disabled:opacity-40"
                       >
-                        All
+                        <T>All</T>
                       </button>
                       <span className="text-muted-foreground/30 text-[10px]">·</span>
                       <button
@@ -3916,7 +4027,7 @@ function CoworkerSettingsPanel({
                         disabled={allowedIntegrations.length === 0}
                         className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors disabled:opacity-40"
                       >
-                        None
+                        <T>None</T>
                       </button>
                     </div>
                   </div>
@@ -3983,7 +4094,7 @@ function CoworkerSettingsPanel({
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                      Integrations
+                      <T>Integrations</T>
                     </h3>
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[10px]">
@@ -3995,14 +4106,14 @@ function CoworkerSettingsPanel({
                           onClick={onClearWorkspaceMcpServers}
                           className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors"
                         >
-                          Clear
+                          <T>Clear</T>
                         </button>
                       )}
                     </div>
                   </div>
                   {executorSourceEntries.length === 0 ? (
                     <p className="text-muted-foreground py-4 text-center text-xs">
-                      No workspace integrations available.
+                      <T>No workspace integrations available.</T>
                     </p>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -4059,7 +4170,7 @@ function CoworkerSettingsPanel({
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                      Skills
+                      <T>Skills</T>
                     </h3>
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[10px]">
@@ -4071,7 +4182,7 @@ function CoworkerSettingsPanel({
                           onClick={onClearSkills}
                           className="text-muted-foreground hover:text-foreground text-[10px] font-medium transition-colors"
                         >
-                          Clear
+                          <T>Clear</T>
                         </button>
                       )}
                     </div>
@@ -4082,7 +4193,7 @@ function CoworkerSettingsPanel({
                     </div>
                   ) : availableSkills.length === 0 ? (
                     <p className="text-muted-foreground py-4 text-center text-xs">
-                      No skills available.
+                      <T>No skills available.</T>
                     </p>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -4150,7 +4261,9 @@ function CoworkerSettingsPanel({
               href="/toolbox"
               className="border-border/40 bg-card hover:bg-muted/30 hover:border-border/70 flex items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium transition-colors"
             >
-              <span className="text-muted-foreground">Manage in Toolbox</span>
+              <span className="text-muted-foreground">
+                <T>Manage in Toolbox</T>
+              </span>
               <ArrowRight className="text-muted-foreground h-3.5 w-3.5" />
             </Link>
           </div>
@@ -4158,7 +4271,11 @@ function CoworkerSettingsPanel({
 
         {activeTab === "admin" && (
           <div className="px-4 py-3">
-            {adminContent ?? <p className="text-xs">No admin actions.</p>}
+            {adminContent ?? (
+              <p className="text-xs">
+                <T>No admin actions.</T>
+              </p>
+            )}
           </div>
         )}
       </div>

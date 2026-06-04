@@ -9,9 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * them through the route-local navigation compat layer.
  */
 export const Route = createFileRoute("/agents/edit/$id")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { tab?: string; run?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { tab?: string; run?: string } => ({
     tab: typeof search.tab === "string" ? search.tab : undefined,
     run: typeof search.run === "string" ? search.run : undefined,
   }),

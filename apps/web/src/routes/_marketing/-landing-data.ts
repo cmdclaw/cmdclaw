@@ -40,8 +40,7 @@ export const fetchLandingData = createServerFn({ method: "GET" }).handler(
     }
 
     const featuredTemplates = await listFeaturedTemplateCatalogEntries({ limit: 8 });
-    const initialFirstName =
-      sessionData?.user?.name?.trim().split(/\s+/, 1).find(Boolean) ?? null;
+    const initialFirstName = sessionData?.user?.name?.trim().split(/\s+/, 1).find(Boolean) ?? null;
 
     return {
       initialHasSession: hasSession,

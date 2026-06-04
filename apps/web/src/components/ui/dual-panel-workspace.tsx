@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/prefer-tag-over-role
 
+import { useGT } from "gt-react";
 import { ChevronLeft, ChevronRight, PanelRight } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -73,6 +74,8 @@ export function DualPanelWorkspace({
   hideMobileToggle = false,
   allowLeftPanelDragCollapse = false,
 }: DualPanelWorkspaceProps) {
+  const t = useGT();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [mobilePanel, setMobilePanel] = useState<"left" | "right">("right");
   const [isDragging, setIsDragging] = useState(false);
@@ -311,7 +314,7 @@ export function DualPanelWorkspace({
           <div
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize panels"
+            aria-label={t("Resize panels")}
             tabIndex={collapsible ? -1 : 0}
             onPointerDown={isCollapsed ? undefined : startDrag}
             onKeyDown={isCollapsed ? undefined : handleSeparatorKeyDown}
@@ -347,7 +350,7 @@ export function DualPanelWorkspace({
                     type="button"
                     onClick={handleCollapseToggle}
                     className="hover:bg-muted bg-background absolute top-3 right-2 z-10 flex items-center gap-1.5 rounded-lg border py-1.5 pr-2 pl-2.5 text-xs font-medium shadow-sm transition-colors"
-                    aria-label="Expand right panel"
+                    aria-label={t("Expand right panel")}
                   >
                     <PanelRight className="h-3.5 w-3.5" />
                     {collapsedLabel}
@@ -380,7 +383,7 @@ export function DualPanelWorkspace({
               type="button"
               onClick={handleCollapseToggle}
               className="text-muted-foreground hover:text-foreground hover:bg-muted/80 mt-3 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
-              aria-label="Expand right panel"
+              aria-label={t("Expand right panel")}
             >
               <PanelRight className="h-5 w-5" />
             </button>

@@ -1,6 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
-import { T } from "gt-react";
+import { T, msg, useMessages } from "gt-react";
 import { Check, Loader2, ShieldCheck, KeyRound, Inbox } from "lucide-react";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -23,29 +23,29 @@ const AGENTS: ShowcaseAgent[] = [
   {
     name: "Lead Qualifier",
     username: "lead-qualifier",
-    description: "Scores incoming leads from HubSpot and routes hot leads",
-    trigger: "On new lead",
+    description: msg("Scores incoming leads from HubSpot and routes hot leads"),
+    trigger: msg("On new lead"),
     integrations: ["hubspot", "salesforce", "slack"],
   },
   {
     name: "Ticket Triage",
     username: "ticket-triage",
-    description: "Reads support emails, creates tickets in Notion",
-    trigger: "Email",
+    description: msg("Reads support emails, creates tickets in Notion"),
+    trigger: msg("Email"),
     integrations: ["google_gmail", "notion", "slack"],
   },
   {
     name: "Deal Closer",
     username: "deal-closer",
-    description: "Drafts follow-up emails for stale pipeline deals",
-    trigger: "Scheduled",
+    description: msg("Drafts follow-up emails for stale pipeline deals"),
+    trigger: msg("Scheduled"),
     integrations: ["salesforce", "google_gmail", "slack"],
   },
   {
     name: "Social Monitor",
     username: "social-monitor",
-    description: "Tracks LinkedIn mentions and competitor posts",
-    trigger: "Scheduled",
+    description: msg("Tracks LinkedIn mentions and competitor posts"),
+    trigger: msg("Scheduled"),
     integrations: ["linkedin", "slack"],
   },
 ];
@@ -79,7 +79,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "a",
       agentUsername: "lead-qualifier",
-      title: "Send email → james@acme.com",
+      title: msg("Send email → james@acme.com"),
       status: "awaiting_approval",
       integration: "google_gmail",
     },
@@ -90,7 +90,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "b",
       agentUsername: "ticket-triage",
-      title: "Create page → Ticket #413",
+      title: msg("Create page → Ticket #413"),
       status: "awaiting_approval",
       integration: "notion",
     },
@@ -101,7 +101,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "c",
       agentUsername: "deal-closer",
-      title: "Connect Salesforce",
+      title: msg("Connect Salesforce"),
       status: "awaiting_auth",
       integration: "salesforce",
     },
@@ -114,7 +114,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "d",
       agentUsername: "lead-qualifier",
-      title: "Update deal score → Acme Corp",
+      title: msg("Update deal score → Acme Corp"),
       status: "completed",
       integration: "hubspot",
     },
@@ -126,7 +126,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "e",
       agentUsername: "social-monitor",
-      title: "Listed mentions → 6 new",
+      title: msg("Listed mentions → 6 new"),
       status: "running",
       integration: "linkedin",
     },
@@ -139,7 +139,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "f",
       agentUsername: "ticket-triage",
-      title: "Send message → #support-urgent",
+      title: msg("Send message → #support-urgent"),
       status: "completed",
       integration: "slack",
     },
@@ -151,7 +151,7 @@ const TIMELINE: TimelineEvent[] = [
     item: {
       id: "g",
       agentUsername: "deal-closer",
-      title: "Send email → Re: Q2 Renewal",
+      title: msg("Send email → Re: Q2 Renewal"),
       status: "awaiting_approval",
       integration: "google_gmail",
     },
@@ -174,25 +174,25 @@ const STATUS_META: Record<
   awaiting_approval: {
     color: "text-amber-500",
     dotColor: "bg-amber-500",
-    label: "Approve",
+    label: msg("Approve"),
     icon: ShieldCheck,
   },
   awaiting_auth: {
     color: "text-orange-500",
     dotColor: "bg-orange-500",
-    label: "Connect",
+    label: msg("Connect"),
     icon: KeyRound,
   },
   completed: {
     color: "text-green-500",
     dotColor: "bg-green-500",
-    label: "Done",
+    label: msg("Done"),
     icon: Check,
   },
   running: {
     color: "text-blue-500",
     dotColor: "bg-blue-500",
-    label: "Running",
+    label: msg("Running"),
     icon: Loader2,
   },
 };
@@ -202,6 +202,8 @@ const STATUS_META: Record<
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 function AgentMiniCard({ agent, isPulsing }: { agent: ShowcaseAgent; isPulsing: boolean }) {
+  const m = useMessages();
+
   return (
     <div
       className={`border-border/80 bg-background rounded-xl border p-3.5 transition-all duration-500 ${
@@ -221,11 +223,11 @@ function AgentMiniCard({ agent, isPulsing }: { agent: ShowcaseAgent; isPulsing: 
             </div>
           </div>
           <p className="text-muted-foreground mt-0.5 line-clamp-1 text-[10px]">
-            {agent.description}
+            {m(agent.description)}
           </p>
           <div className="mt-1.5 flex items-center gap-1.5">
             <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[8px] font-medium">
-              {agent.trigger}
+              {m(agent.trigger)}
             </span>
             <div className="ml-auto flex items-center gap-0.5">
               {agent.integrations.map((key) => (
@@ -254,12 +256,12 @@ function AgentMiniCard({ agent, isPulsing }: { agent: ShowcaseAgent; isPulsing: 
 
 const ACTION_DISPLAY: Record<DismissAction, { label: string; color: string; dotColor: string }> = {
   approve: {
-    label: "Approved",
+    label: msg("Approved"),
     color: "text-green-600 dark:text-green-400",
     dotColor: "bg-green-500",
   },
-  deny: { label: "Denied", color: "text-red-500", dotColor: "bg-red-500" },
-  connect: { label: "Connected", color: "text-blue-500", dotColor: "bg-blue-500" },
+  deny: { label: msg("Denied"), color: "text-red-500", dotColor: "bg-red-500" },
+  connect: { label: msg("Connected"), color: "text-blue-500", dotColor: "bg-blue-500" },
 };
 
 // Shared ref map for status button positions
@@ -280,6 +282,7 @@ function InboxRow({
   inboxRef: React.RefObject<HTMLDivElement | null>;
   buttonPositions: ButtonPositionMap;
 }) {
+  const m = useMessages();
   const meta = STATUS_META[item.status];
   const StatusIcon = meta.icon;
   const actionDisplay = resolvedAction ? ACTION_DISPLAY[resolvedAction] : null;
@@ -349,7 +352,7 @@ function InboxRow({
         {/* Content */}
         <div className="min-w-0 flex-1">
           <span className="text-foreground block truncate text-[11px] font-medium">
-            {item.title}
+            {m(item.title)}
           </span>
           <div className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-[9px]">
             <img
@@ -379,14 +382,14 @@ function InboxRow({
                 className="flex items-center gap-1"
               >
                 <Check className="size-3" />
-                <span>{actionDisplay.label}</span>
+                <span>{m(actionDisplay.label)}</span>
               </motion.span>
             ) : (
               <motion.span key="status" className="flex items-center gap-1">
                 <StatusIcon
                   className={`size-3 ${item.status === "running" ? "animate-spin" : ""}`}
                 />
-                <span className="hidden sm:inline">{meta.label}</span>
+                <span className="hidden sm:inline">{m(meta.label)}</span>
               </motion.span>
             )}
           </AnimatePresence>
@@ -405,14 +408,14 @@ const INITIAL_INBOX_ITEMS: InboxItemData[] = [
   {
     id: "init-1",
     agentUsername: "lead-qualifier",
-    title: "Update deal score → Globex Inc",
+    title: msg("Update deal score → Globex Inc"),
     status: "completed",
     integration: "hubspot",
   },
   {
     id: "init-2",
     agentUsername: "ticket-triage",
-    title: "Send message → #support-triage",
+    title: msg("Send message → #support-triage"),
     status: "completed",
     integration: "slack",
   },

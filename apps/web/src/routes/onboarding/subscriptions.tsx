@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { CheckCircle2, ClipboardCopy, ExternalLink, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -69,7 +70,9 @@ function DeviceFlowPanel({
   return (
     <div className="bg-card rounded-2xl border p-4 sm:p-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Enter this code to connect</p>
+        <p className="text-sm font-medium">
+          <T>Enter this code to connect</T>
+        </p>
         <button
           onClick={onCancel}
           className="text-muted-foreground hover:text-foreground -mr-1 rounded-lg p-1 transition-colors"
@@ -79,7 +82,7 @@ function DeviceFlowPanel({
       </div>
 
       <p className="text-muted-foreground mt-2 text-sm">
-        Open the verification page below and paste this code to authorize CmdClaw.
+        <T>Open the verification page below and paste this code to authorize CmdClaw.</T>
       </p>
 
       <div className="bg-muted/60 mt-4 flex items-center justify-between rounded-xl px-3 py-3 sm:px-5 sm:py-4">
@@ -98,12 +101,12 @@ function DeviceFlowPanel({
           {copySuccess ? (
             <>
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Copied
+              <T>Copied</T>
             </>
           ) : (
             <>
               <ClipboardCopy className="h-3.5 w-3.5" />
-              Copy
+              <T>Copy</T>
             </>
           )}
         </button>
@@ -116,12 +119,12 @@ function DeviceFlowPanel({
           rel="noopener noreferrer"
           className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4 transition-opacity hover:opacity-80"
         >
-          Open verification page
+          <T>Open verification page</T>
           <ExternalLink className="h-3 w-3" />
         </a>
         <div className="text-muted-foreground flex items-center gap-2 text-xs">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Waiting for authorization…
+          <T>Waiting for authorization…</T>
         </div>
       </div>
     </div>
@@ -165,7 +168,7 @@ function ProviderCard({
             {isConnected && (
               <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
                 <CheckCircle2 className="h-3 w-3" />
-                Connected
+                <T>Connected</T>
               </span>
             )}
           </div>
@@ -179,7 +182,7 @@ function ProviderCard({
             ) : (
               <ExternalLink className="mr-2 h-3.5 w-3.5" />
             )}
-            Connect
+            <T>Connect</T>
           </Button>
         )}
       </div>
@@ -201,6 +204,7 @@ function ProviderCard({
 }
 
 function OnboardingSubscriptionsPage() {
+  const t = useGT();
   const navigate = useNavigate();
   const { data, isLoading, refetch } = useProviderAuthStatus();
   const connectProvider = useConnectProvider();
@@ -224,7 +228,7 @@ function OnboardingSubscriptionsPage() {
     }
 
     if (Date.now() >= deviceFlow.expiresAt) {
-      toast.error("Device code expired. Please reconnect to generate a new code.");
+      toast.error(t("Device code expired. Please reconnect to generate a new code."));
       setDeviceFlow(null);
       setConnectingProvider(null);
       return;
@@ -240,7 +244,7 @@ function OnboardingSubscriptionsPage() {
 
           if (result.status === "connected") {
             await refetch();
-            toast.success("ChatGPT connected successfully!");
+            toast.success(t("ChatGPT connected successfully!"));
             setDeviceFlow(null);
             setConnectingProvider(null);
             return;
@@ -263,7 +267,7 @@ function OnboardingSubscriptionsPage() {
     }, deviceFlow.interval * 1000);
 
     return () => clearTimeout(timeout);
-  }, [deviceFlow, pollProvider, refetch]);
+  }, [deviceFlow, pollProvider, refetch, t]);
 
   const handleConnect = useCallback(async () => {
     setConnectingProvider("openai");
@@ -292,10 +296,10 @@ function OnboardingSubscriptionsPage() {
       setConnectingProvider(null);
     } catch (error) {
       console.error("Failed to start OAuth flow:", error);
-      toast.error("Failed to start connection. Please try again.");
+      toast.error(t("Failed to start connection. Please try again."));
       setConnectingProvider(null);
     }
-  }, [connectProvider]);
+  }, [connectProvider, t]);
 
   const handleCopyDeviceCode = useCallback(() => {
     if (!deviceFlow) {
@@ -344,10 +348,13 @@ function OnboardingSubscriptionsPage() {
     <>
       <div className="mb-6 text-center sm:mb-8">
         <h1 className="mb-2 text-xl font-semibold tracking-tight sm:text-2xl">
-          Bring your AI subscription
+          <T>Bring your AI subscription</T>
         </h1>
         <p className="text-muted-foreground">
-          Connect your existing AI account to unlock additional models at no extra cost on CmdClaw.
+          <T>
+            Connect your existing AI account to unlock additional models at no extra cost on
+            CmdClaw.
+          </T>
         </p>
       </div>
 
@@ -370,9 +377,11 @@ function OnboardingSubscriptionsPage() {
 
       <div className="flex justify-center gap-3">
         <Button variant="ghost" onClick={handleSkip}>
-          Skip for now
+          <T>Skip for now</T>
         </Button>
-        <Button onClick={handleContinue}>Continue</Button>
+        <Button onClick={handleContinue}>
+          <T>Continue</T>
+        </Button>
       </div>
     </>
   );

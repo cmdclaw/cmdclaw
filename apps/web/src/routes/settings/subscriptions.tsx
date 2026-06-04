@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Loader2, CheckCircle2, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -124,7 +125,7 @@ function ProviderConnectButton({
         disabled={isDisconnecting}
       >
         {isDisconnecting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-        Disconnect
+        <T>Disconnect</T>
       </Button>
     );
   }
@@ -136,12 +137,13 @@ function ProviderConnectButton({
       ) : (
         <ExternalLink className="mr-2 h-3 w-3" />
       )}
-      Connect
+      <T>Connect</T>
     </Button>
   );
 }
 
 function SubscriptionsPage() {
+  const t = useGT();
   const { data, isLoading, refetch } = useProviderAuthStatus();
   const connectProvider = useConnectProvider();
   const pollProvider = usePollProviderConnection();
@@ -164,7 +166,7 @@ function SubscriptionsPage() {
     }
 
     if (Date.now() >= deviceFlow.expiresAt) {
-      toast.error("Device code expired. Please reconnect to generate a new code.");
+      toast.error(t("Device code expired. Please reconnect to generate a new code."));
       setDeviceFlow(null);
       setConnectingProvider(null);
       return;
@@ -203,7 +205,7 @@ function SubscriptionsPage() {
     }, deviceFlow.interval * 1000);
 
     return () => clearTimeout(timeout);
-  }, [deviceFlow, pollProvider, refetch]);
+  }, [deviceFlow, pollProvider, refetch, t]);
 
   const handleConnect = useCallback(
     async (provider: ProviderID) => {
@@ -233,11 +235,11 @@ function SubscriptionsPage() {
         setConnectingProvider(null);
       } catch (error) {
         console.error("Failed to start OAuth flow:", error);
-        toast.error("Failed to start connection. Please try again.");
+        toast.error(t("Failed to start connection. Please try again."));
         setConnectingProvider(null);
       }
     },
-    [connectProvider],
+    [connectProvider, t],
   );
 
   const handleDisconnect = useCallback(
@@ -247,10 +249,10 @@ function SubscriptionsPage() {
         toast.success(`${getProviderLabel(provider)} disconnected.`);
       } catch (error) {
         console.error("Failed to disconnect:", error);
-        toast.error("Failed to disconnect. Please try again.");
+        toast.error(t("Failed to disconnect. Please try again."));
       }
     },
-    [disconnectProvider],
+    [disconnectProvider, t],
   );
 
   const handleCopyDeviceCode = useCallback(() => {
@@ -295,21 +297,27 @@ function SubscriptionsPage() {
     <div>
       <SearchParamsHandler />
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Connected AI Account</h2>
+        <h2 className="text-xl font-semibold">
+          <T>Connected AI Account</T>
+        </h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Connect your existing AI account to use provider-backed models without consuming CmdClaw
-          credits.
+          <T>
+            Connect your existing AI account to use provider-backed models without consuming CmdClaw
+            credits.
+          </T>
         </p>
       </div>
 
       {deviceFlow && (
         <div className="mb-6 rounded-lg border p-4">
-          <p className="text-sm font-medium">ChatGPT Pro/Plus (Device Code)</p>
+          <p className="text-sm font-medium">
+            <T>ChatGPT Pro/Plus (Device Code)</T>
+          </p>
           <p className="text-muted-foreground mt-2 text-sm">
-            Open the verification page and enter the code below.
+            <T>Open the verification page and enter the code below.</T>
           </p>
           <p className="mt-2 text-sm">
-            Go to this link:{" "}
+            <T>Go to this link:</T>{" "}
             <a
               href="https://auth.openai.com/codex/device"
               target="_blank"
@@ -330,7 +338,7 @@ function SubscriptionsPage() {
               )}
             >
               <CheckCircle2 className="h-3.5 w-3.5 animate-pulse" />
-              Code copied
+              <T>Code copied</T>
             </div>
           </div>
           <div className="mt-3 flex gap-2">
@@ -346,18 +354,18 @@ function SubscriptionsPage() {
               {copySuccess ? (
                 <>
                   <CheckCircle2 className="mr-2 h-3.5 w-3.5 animate-pulse" />
-                  Copied
+                  <T>Copied</T>
                 </>
               ) : (
                 "Copy code"
               )}
             </Button>
             <Button variant="outline" size="sm" onClick={handleCancelDeviceFlow}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <div className="text-muted-foreground ml-auto flex items-center text-xs">
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              Waiting for authorization...
+              <T>Waiting for authorization...</T>
             </div>
           </div>
         </div>
@@ -387,7 +395,7 @@ function SubscriptionsPage() {
                     {isConnected && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
                         <CheckCircle2 className="h-3 w-3" />
-                        Connected
+                        <T>Connected</T>
                       </span>
                     )}
                   </div>

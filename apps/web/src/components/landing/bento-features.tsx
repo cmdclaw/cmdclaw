@@ -1,6 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
-import { T } from "gt-react";
+import { T, msg, useMessages } from "gt-react";
 import { Activity, Check, Loader2, Timer, Shield, Users, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -49,18 +49,18 @@ type DemoItem = {
 };
 
 const DEMO_ITEMS: DemoItem[] = [
-  { id: "1", integration: "hubspot", label: "Listing deals" },
-  { id: "2", integration: "hubspot", label: "Getting deal → Acme Corp" },
-  { id: "3", integration: "hubspot", label: "Listing contacts" },
-  { id: "4", integration: "google_gmail", label: "Listing emails" },
-  { id: "5", integration: "google_gmail", label: "Reading email → Re: Q2 proposal" },
-  { id: "6", integration: "slack", label: "Searching messages → #sales-pipeline" },
-  { id: "7", integration: "hubspot", label: "Updating deal → Acme Corp" },
-  { id: "8", integration: "slack", label: "Sending message → #sales-alerts" },
-  { id: "9", integration: "google_gmail", label: "Sending email → Follow-up: Acme Corp" },
-  { id: "10", integration: "hubspot", label: "Creating task → Call with James" },
-  { id: "11", integration: "salesforce", label: "Updating contact → James Miller" },
-  { id: "12", integration: "slack", label: "Sending message → @sarah" },
+  { id: "1", integration: "hubspot", label: msg("Listing deals") },
+  { id: "2", integration: "hubspot", label: msg("Getting deal → Acme Corp") },
+  { id: "3", integration: "hubspot", label: msg("Listing contacts") },
+  { id: "4", integration: "google_gmail", label: msg("Listing emails") },
+  { id: "5", integration: "google_gmail", label: msg("Reading email → Re: Q2 proposal") },
+  { id: "6", integration: "slack", label: msg("Searching messages → #sales-pipeline") },
+  { id: "7", integration: "hubspot", label: msg("Updating deal → Acme Corp") },
+  { id: "8", integration: "slack", label: msg("Sending message → #sales-alerts") },
+  { id: "9", integration: "google_gmail", label: msg("Sending email → Follow-up: Acme Corp") },
+  { id: "10", integration: "hubspot", label: msg("Creating task → Call with James") },
+  { id: "11", integration: "salesforce", label: msg("Updating contact → James Miller") },
+  { id: "12", integration: "slack", label: msg("Sending message → @sarah") },
 ];
 
 const COWORKER_INTEGRATIONS: IntegrationType[] = ["hubspot", "google_gmail", "slack", "salesforce"];
@@ -76,6 +76,8 @@ function formatElapsed(ms: number) {
 }
 
 function DemoActivityItem({ item, isLatest }: { item: DemoItem; isLatest: boolean }) {
+  const m = useMessages();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -92,7 +94,7 @@ function DemoActivityItem({ item, isLatest }: { item: DemoItem; isLatest: boolea
         decoding="async"
         className="size-4 shrink-0"
       />
-      <span className="text-foreground/90 font-mono text-[13px]">{item.label}</span>
+      <span className="text-foreground/90 font-mono text-[13px]">{m(item.label)}</span>
       <div className="flex-1" />
       {isLatest ? (
         <Loader2 className="text-muted-foreground size-3.5 shrink-0 animate-spin" />
@@ -155,7 +157,9 @@ function LiveDemoCard() {
         {/* Card header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h3 className="text-foreground text-lg font-semibold">Real-time execution</h3>
+            <h3 className="text-foreground text-lg font-semibold">
+              <T>Real-time execution</T>
+            </h3>
             <p className="text-muted-foreground mt-1 text-sm">
               <T>Watch your agents work across tools autonomously</T>
             </p>
@@ -170,8 +174,12 @@ function LiveDemoCard() {
         <div className="mb-4 flex items-center gap-3">
           <CoworkerAvatar username="sales-pipeline" size={32} className="shrink-0 rounded-full" />
           <div className="min-w-0">
-            <p className="text-sm font-medium">Sales Pipeline Agent</p>
-            <p className="text-muted-foreground font-mono text-[10px]">@sales-pipeline</p>
+            <p className="text-sm font-medium">
+              <T>Sales Pipeline Agent</T>
+            </p>
+            <p className="text-muted-foreground font-mono text-[10px]">
+              <T>@sales-pipeline</T>
+            </p>
           </div>
           <div className="ml-auto inline-flex h-6 items-center gap-1.5 rounded-full border border-green-500/20 bg-green-500/10 px-2.5 text-[10px] font-medium text-green-600 dark:text-green-400">
             <span className="size-1.5 animate-pulse rounded-full bg-green-500" />
@@ -325,33 +333,37 @@ function IntegrationsCard() {
 const FEATURE_CARDS = [
   {
     icon: Shield,
-    title: "Full visibility",
-    desc: "Every action logged. Every tool call traced. Complete audit trail for your team.",
+    title: msg("Full visibility"),
+    desc: msg("Every action logged. Every tool call traced. Complete audit trail for your team."),
     gradient: "bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.05),transparent_60%)]",
   },
   {
     icon: Users,
-    title: "Team collaboration",
-    desc: "Share agents across your team. Control who can edit, run, or approve.",
+    title: msg("Team collaboration"),
+    desc: msg("Share agents across your team. Control who can edit, run, or approve."),
     gradient: "bg-[radial-gradient(ellipse_at_top_center,rgba(245,158,11,0.05),transparent_60%)]",
   },
   {
     icon: Clock,
-    title: "Runs without you",
-    desc: "Run every Monday at 9am, on every new CRM deal, or when an email arrives. They never stop.",
+    title: msg("Runs without you"),
+    desc: msg(
+      "Run every Monday at 9am, on every new CRM deal, or when an email arrives. They never stop.",
+    ),
     gradient: "bg-[radial-gradient(ellipse_at_top_right,rgba(16,185,129,0.05),transparent_60%)]",
   },
 ] as const;
 
 function FeatureCard({ icon: Icon, title, desc, gradient }: (typeof FEATURE_CARDS)[number]) {
+  const m = useMessages();
+
   return (
     <BentoCard gradient={gradient}>
       <div className="p-6">
         <div className="bg-muted/60 border-border/40 mb-4 inline-flex size-10 items-center justify-center rounded-xl border">
           <Icon className="text-foreground/70 size-5" />
         </div>
-        <h3 className="text-foreground text-[15px] font-semibold">{title}</h3>
-        <p className="text-muted-foreground mt-1.5 max-w-xs text-sm leading-relaxed">{desc}</p>
+        <h3 className="text-foreground text-[15px] font-semibold">{m(title)}</h3>
+        <p className="text-muted-foreground mt-1.5 max-w-xs text-sm leading-relaxed">{m(desc)}</p>
       </div>
     </BentoCard>
   );

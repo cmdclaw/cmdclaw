@@ -1,6 +1,7 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Loader2, Search } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -97,6 +98,8 @@ function normalizeInboxItems(items: InboxItem[] | undefined): InboxItem[] {
 }
 
 function InboxPageContent() {
+  const t = useGT();
+
   const navigate = useNavigate();
   const search = Route.useSearch();
   const authCallbackHandledRef = useRef<string | null>(null);
@@ -298,13 +301,13 @@ function InboxPageContent() {
   const handleContinue = useCallback(
     async (item: InboxItem) => {
       if (!item.generationId) {
-        toast.error("This item cannot be continued because it has no paused generation.");
+        toast.error(t("This item cannot be continued because it has no paused generation."));
         return;
       }
 
       const conversationId = item.kind === "chat" ? item.conversationId : item.conversationId;
       if (!conversationId) {
-        toast.error("This item cannot be continued because it has no linked conversation.");
+        toast.error(t("This item cannot be continued because it has no linked conversation."));
         return;
       }
 
@@ -320,7 +323,7 @@ function InboxPageContent() {
         });
       });
     },
-    [navigate, runItemAction],
+    [navigate, runItemAction, t],
   );
 
   const handleAuthConnect = useCallback(
@@ -417,7 +420,7 @@ function InboxPageContent() {
     async (item: InboxItem, message: string) => {
       const conversationId = item.conversationId;
       if (!conversationId) {
-        toast.error("This item does not have a linked conversation yet.");
+        toast.error(t("This item does not have a linked conversation yet."));
         return;
       }
 
@@ -432,7 +435,7 @@ function InboxPageContent() {
         });
       });
     },
-    [enqueueConversationMessage, navigate, runItemAction],
+    [enqueueConversationMessage, navigate, runItemAction, t],
   );
 
   const handleOpenTarget = useCallback(
@@ -571,7 +574,7 @@ function InboxPageContent() {
                 type="text"
                 value={searchQuery}
                 onChange={handleSearchChange}
-                placeholder="Search inbox..."
+                placeholder={t("Search inbox...")}
                 className="bg-background text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:ring-ring/50 h-10 w-full rounded-lg border pr-3 pl-9 text-sm transition-colors outline-none focus:ring-1"
               />
             </div>
@@ -609,7 +612,7 @@ function InboxPageContent() {
           {isFetchingNextPage ? (
             <div className="text-muted-foreground inline-flex items-center gap-2 text-xs">
               <Loader2 className="size-3 animate-spin" />
-              Loading older runs
+              <T>Loading older runs</T>
             </div>
           ) : hasNextPage ? (
             <button
@@ -617,11 +620,11 @@ function InboxPageContent() {
               onClick={handleLoadMoreClick}
               className="text-muted-foreground hover:text-foreground rounded-md px-3 py-1.5 text-xs transition-colors"
             >
-              Load older runs
+              <T>Load older runs</T>
             </button>
           ) : items.length > 0 ? (
             <p className="text-muted-foreground/60 text-xs">
-              Showing coworker runs from the last 90 days
+              <T>Showing coworker runs from the last 90 days</T>
             </p>
           ) : null}
         </div>
@@ -645,7 +648,7 @@ function InboxPage() {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8">
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-950">
-          Inbox is currently in beta and limited to admin users.
+          <T>Inbox is currently in beta and limited to admin users.</T>
         </div>
       </div>
     );

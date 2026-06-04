@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { T, useGT } from "gt-react";
 import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { requireSelfHostInstance } from "@/lib/route-guards";
 import { getInstanceHealthStatus, type InstanceHealthStatus } from "@/server/instance/health";
@@ -59,6 +60,8 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean; detail?: 
 }
 
 function InstancePage() {
+  const t = useGT();
+
   const { sessionContext } = Route.useRouteContext();
   const health = Route.useLoaderData();
 
@@ -68,9 +71,11 @@ function InstancePage() {
         <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold">Instance</h1>
+              <h1 className="text-xl font-semibold">
+                <T>Instance</T>
+              </h1>
               <p className="text-muted-foreground mt-1 text-sm">
-                Deployment health and control-plane status for this self-hosted instance.
+                <T>Deployment health and control-plane status for this self-hosted instance.</T>
               </p>
             </div>
             <span
@@ -86,23 +91,23 @@ function InstancePage() {
 
           <div className="space-y-3">
             <CheckRow
-              label="Database"
+              label={t("Database")}
               ok={health.checks.database.ok}
               detail={health.checks.database.detail}
             />
             <CheckRow
-              label="Redis"
+              label={t("Redis")}
               ok={health.checks.redis.ok}
               detail={health.checks.redis.detail}
             />
             <CheckRow
-              label="S3 storage"
+              label={t("S3 storage")}
               ok={health.checks.s3.ok}
               detail={health.checks.s3.detail}
             />
             <CheckRow label="E2B" ok={health.checks.e2b.ok} detail={health.checks.e2b.detail} />
             <CheckRow
-              label="Cloud control plane"
+              label={t("Cloud control plane")}
               ok={health.checks.controlPlane.ok}
               detail={health.checks.controlPlane.detail}
             />
@@ -111,14 +116,22 @@ function InstancePage() {
           <div className="mt-6 rounded-lg border px-4 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
               <span>
-                <span className="text-muted-foreground">Edition:</span> {health.edition}
+                <span className="text-muted-foreground">
+                  <T>Edition:</T>
+                </span>{" "}
+                {health.edition}
               </span>
               <span>
-                <span className="text-muted-foreground">Checked:</span>{" "}
+                <span className="text-muted-foreground">
+                  <T>Checked:</T>
+                </span>{" "}
                 {new Date(health.checkedAt).toLocaleString()}
               </span>
               <span>
-                <span className="text-muted-foreground">Sandbox backend:</span> E2B
+                <span className="text-muted-foreground">
+                  <T>Sandbox backend:</T>
+                </span>{" "}
+                E2B
               </span>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   BarChart3,
   Check,
@@ -88,8 +89,13 @@ function formatRelativeShort(date: Date) {
 }
 
 function HumanInputDot() {
+  const t = useGT();
+
   return (
-    <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" aria-label="Needs human input" />
+    <span
+      className="h-2 w-2 shrink-0 rounded-full bg-orange-500"
+      aria-label={t("Needs human input")}
+    />
   );
 }
 
@@ -110,6 +116,8 @@ function ConversationRow({
   onRename,
   onUsage,
 }: ConversationRowProps) {
+  const t = useGT();
+
   const isRunning = RUNNING_CONVERSATION_STATUSES.has(conversation.generationStatus);
   const needsHumanInput = HUMAN_INPUT_CONVERSATION_STATUSES.has(conversation.generationStatus);
   const hasUnread = hasUnreadConversationResults({
@@ -151,7 +159,10 @@ function ConversationRow({
         ) : needsHumanInput ? (
           <HumanInputDot />
         ) : hasUnread ? (
-          <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" aria-label="Unread results" />
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-blue-500"
+            aria-label={t("Unread results")}
+          />
         ) : null}
         <span className="min-w-0 flex-1 truncate">{conversation.title || "Untitled"}</span>
         <span className="text-sidebar-foreground/45 shrink-0 text-[11px] group-hover:hidden">
@@ -163,7 +174,7 @@ function ConversationRow({
           <button
             type="button"
             className="text-sidebar-foreground/50 hover:text-sidebar-foreground ml-1 hidden h-6 w-6 shrink-0 items-center justify-center rounded-sm group-hover:flex"
-            aria-label="Conversation actions"
+            aria-label={t("Conversation actions")}
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
@@ -175,18 +186,24 @@ function ConversationRow({
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleUsage}>
             <BarChart3 className="h-4 w-4" />
-            <span>Show usage</span>
+            <span>
+              <T>Show usage</T>
+            </span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleRename}>
             <Pencil className="h-4 w-4" />
-            <span>Rename</span>
+            <span>
+              <T>Rename</T>
+            </span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleDelete}
             className="text-destructive focus:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
-            <span>Delete</span>
+            <span>
+              <T>Delete</T>
+            </span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -199,6 +216,8 @@ type RecentChatsSidebarProps = {
 };
 
 export function RecentChatsSidebar({ className }: RecentChatsSidebarProps) {
+  const t = useGT();
+
   const pathname = usePathname();
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -367,7 +386,9 @@ export function RecentChatsSidebar({ className }: RecentChatsSidebarProps) {
         )}
       >
         <div className="border-sidebar-border flex h-14 shrink-0 items-center justify-between gap-2 border-b px-3">
-          <h2 className="text-[13px] font-semibold">Recent chats</h2>
+          <h2 className="text-[13px] font-semibold">
+            <T>Recent chats</T>
+          </h2>
           {unreadCount > 0 ? (
             <button
               type="button"
@@ -380,7 +401,9 @@ export function RecentChatsSidebar({ className }: RecentChatsSidebarProps) {
               ) : (
                 <CheckCheck className="h-3.5 w-3.5" />
               )}
-              <span>Read</span>
+              <span>
+                <T>Read</T>
+              </span>
             </button>
           ) : null}
         </div>
@@ -391,10 +414,12 @@ export function RecentChatsSidebar({ className }: RecentChatsSidebarProps) {
           className="min-h-0 flex-1 overflow-y-auto py-2"
         >
           {isLoading ? (
-            <p className="text-sidebar-foreground/55 px-4 py-3 text-xs">Loading...</p>
+            <p className="text-sidebar-foreground/55 px-4 py-3 text-xs">
+              <T>Loading...</T>
+            </p>
           ) : conversations.length === 0 ? (
             <p className="text-sidebar-foreground/45 px-4 py-6 text-center text-xs">
-              No conversations yet
+              <T>No conversations yet</T>
             </p>
           ) : (
             <>
@@ -422,19 +447,21 @@ export function RecentChatsSidebar({ className }: RecentChatsSidebarProps) {
       <AlertDialog open={isRenameModalOpen} onOpenChange={handleRenameModalOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rename chat</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>Rename chat</T>
+            </AlertDialogTitle>
           </AlertDialogHeader>
           <form className="space-y-4" onSubmit={handleRenameFormSubmit}>
             <Input
               value={renameTitle}
               onChange={handleRenameTitleChange}
-              placeholder="Chat title"
+              placeholder={t("Chat title")}
               autoFocus
               maxLength={200}
             />
             <AlertDialogFooter>
               <AlertDialogCancel type="button" disabled={updateConversationTitle.isPending}>
-                Cancel
+                <T>Cancel</T>
               </AlertDialogCancel>
               <Button
                 type="submit"
@@ -443,12 +470,12 @@ export function RecentChatsSidebar({ className }: RecentChatsSidebarProps) {
                 {updateConversationTitle.isPending ? (
                   <span className="inline-flex items-center gap-1.5">
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                    Renaming...
+                    <T>Renaming...</T>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5" />
-                    Rename
+                    <T>Rename</T>
                   </span>
                 )}
               </Button>

@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { CheckIcon, ChevronsUpDown } from "lucide-react";
 import * as React from "react";
 import * as RPNInput from "react-phone-number-input";
@@ -71,6 +72,8 @@ const CountrySelect = ({
   options: countryList,
   onChange,
 }: CountrySelectProps) => {
+  const t = useGT();
+
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const [searchValue, setSearchValue] = React.useState("");
   const [isOpen, setIsOpen] = React.useState(false);
@@ -120,11 +123,13 @@ const CountrySelect = ({
           <CommandInput
             value={searchValue}
             onValueChange={handleSearchChange}
-            placeholder="Search country..."
+            placeholder={t("Search country...")}
           />
           <CommandList>
             <ScrollArea ref={scrollAreaRef} className="h-72">
-              <CommandEmpty>No country found.</CommandEmpty>
+              <CommandEmpty>
+                <T>No country found.</T>
+              </CommandEmpty>
               <CommandGroup>
                 {countryList.map(({ value, label }) =>
                   value ? (

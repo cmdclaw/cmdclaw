@@ -1,3 +1,4 @@
+import { T, msg, useMessages } from "gt-react";
 import { LayoutTemplate, Menu, MessageSquare, WandSparkles, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { AppLink } from "@/components/app-link";
@@ -14,10 +15,10 @@ type BottomTab = {
 };
 
 const tabs: BottomTab[] = [
-  { icon: MessageSquare, label: "Chat", href: "/chat" },
-  { icon: WandSparkles, label: "Create", href: "/" },
-  { icon: BrickIcon, label: "Agents", href: "/agents" },
-  { icon: LayoutTemplate, label: "Templates", href: "/templates" },
+  { icon: MessageSquare, label: msg("Chat"), href: "/chat" },
+  { icon: WandSparkles, label: msg("Create"), href: "/" },
+  { icon: BrickIcon, label: msg("Agents"), href: "/agents" },
+  { icon: LayoutTemplate, label: msg("Templates"), href: "/templates" },
 ];
 
 const mobileBottomNavStyle = {
@@ -25,6 +26,7 @@ const mobileBottomNavStyle = {
 };
 
 export function MobileBottomBar() {
+  const m = useMessages();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -87,7 +89,9 @@ export function MobileBottomBar() {
             )}
           >
             {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            <span>Menu</span>
+            <span>
+              <T>Menu</T>
+            </span>
           </button>
 
           {/* Nav tabs */}
@@ -104,7 +108,7 @@ export function MobileBottomBar() {
                 )}
               >
                 <tab.icon className="h-6 w-6" />
-                <span>{tab.label}</span>
+                <span>{m(tab.label)}</span>
               </AppLink>
             );
           })}

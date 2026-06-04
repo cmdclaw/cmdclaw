@@ -1,6 +1,6 @@
+import type { AnchorHTMLAttributes, FC, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import type { AnchorHTMLAttributes, FC, ReactNode } from "react";
 import * as React from "react";
 import { useId, useRef } from "react";
 import { cn } from "@/lib/utils";

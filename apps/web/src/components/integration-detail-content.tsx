@@ -1,4 +1,5 @@
 import type React from "react";
+import { T, useGT } from "gt-react";
 import { Check, ExternalLink, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppImage } from "@/components/app-image";
@@ -126,7 +127,9 @@ export function IntegrationDetailContent({
                 )}
               </>
             ) : (
-              <span className="text-muted-foreground text-xs font-medium">Not connected</span>
+              <span className="text-muted-foreground text-xs font-medium">
+                <T>Not connected</T>
+              </span>
             )}
           </div>
 
@@ -155,7 +158,7 @@ export function IntegrationDetailContent({
                     ) : (
                       <Plus className="size-3.5" />
                     )}
-                    Add account
+                    <T>Add account</T>
                   </Button>
                 ) : null}
                 {connectedAccounts.length === 0 ? (
@@ -165,14 +168,14 @@ export function IntegrationDetailContent({
                     className="text-muted-foreground hover:text-destructive"
                     onClick={onDisconnect}
                   >
-                    Disconnect
+                    <T>Disconnect</T>
                   </Button>
                 ) : null}
               </>
             ) : isWhatsApp ? (
               <Button className="gap-1.5 rounded-lg px-5" asChild>
                 <AppLink href="/integrations/whatsapp">
-                  Setup
+                  <T>Setup</T>
                   <ExternalLink className="size-3.5" />
                 </AppLink>
               </Button>
@@ -182,7 +185,7 @@ export function IntegrationDetailContent({
                 className="gap-1.5 rounded-lg px-5"
                 onClick={onRequestGoogleAccess}
               >
-                Request access
+                <T>Request access</T>
               </Button>
             ) : (
               <Button
@@ -210,7 +213,7 @@ export function IntegrationDetailContent({
           {connectedAccounts.length > 0 ? (
             <div className="mt-8">
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Connected Accounts
+                <T>Connected Accounts</T>
               </p>
               <div className="divide-border bg-background overflow-hidden rounded-lg border">
                 {connectedAccounts.map((account) => (
@@ -230,19 +233,20 @@ export function IntegrationDetailContent({
           <div className="mt-12 space-y-6">
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Type
+                <T>Type</T>
               </p>
               <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
-                Integration
+                <T>Integration</T>
               </span>
             </div>
 
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Capabilities
+                <T>Capabilities</T>
               </p>
               <p className="text-sm">
-                {actions.length} action{actions.length !== 1 ? "s" : ""}
+                {actions.length} <T>action</T>
+                {actions.length !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -252,9 +256,11 @@ export function IntegrationDetailContent({
         <div>
           <section>
             <div className="mb-5">
-              <h2 className="text-sm font-semibold">Available actions</h2>
+              <h2 className="text-sm font-semibold">
+                <T>Available actions</T>
+              </h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                What your coworker can do with this integration
+                <T>What your coworker can do with this integration</T>
               </p>
             </div>
 
@@ -272,7 +278,7 @@ export function IntegrationDetailContent({
             ) : (
               <div className="border-border/40 bg-card rounded-xl border p-6 shadow-sm">
                 <p className="text-muted-foreground text-sm">
-                  No capabilities are listed for this integration yet.
+                  <T>No capabilities are listed for this integration yet.</T>
                 </p>
               </div>
             )}
@@ -294,6 +300,8 @@ function ConnectedAccountRow({
   onToggleAccount?: (id: string, enabled: boolean) => void;
   onRenameAccountLabel?: (input: { id: string; accountLabel: string }) => void;
 }) {
+  const t = useGT();
+
   const [draft, setDraft] = useState(account.accountLabel ?? "");
   const [isEditing, setIsEditing] = useState(false);
 
@@ -355,7 +363,7 @@ function ConnectedAccountRow({
               className="size-8 shrink-0"
               onClick={handleSave}
               disabled={!account.accountLabelId || !draft.trim() || draft === account.accountLabel}
-              title="Save Account Label"
+              title={t("Save Account Label")}
             >
               <Check className="size-3.5" />
             </Button>
@@ -365,7 +373,7 @@ function ConnectedAccountRow({
               size="icon"
               className="size-8 shrink-0"
               onClick={handleCancel}
-              title="Cancel"
+              title={t("Cancel")}
             >
               <X className="size-3.5" />
             </Button>
@@ -373,7 +381,7 @@ function ConnectedAccountRow({
         ) : (
           <div className="min-w-0">
             <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-widest uppercase">
-              Account Label
+              <T>Account Label</T>
             </p>
             <div className="flex min-w-0 items-center gap-2">
               <span className="bg-muted text-foreground inline-flex max-w-full rounded-md px-2 py-1 text-sm font-medium">
@@ -386,7 +394,7 @@ function ConnectedAccountRow({
                 className="text-muted-foreground size-7 shrink-0"
                 onClick={handleEdit}
                 disabled={!account.accountLabelId}
-                title="Rename Account Label"
+                title={t("Rename Account Label")}
               >
                 <Pencil className="size-3.5" />
               </Button>
@@ -420,7 +428,7 @@ function ConnectedAccountRow({
             size="icon"
             className="text-muted-foreground hover:text-destructive size-8"
             onClick={handleDisconnect}
-            title="Disconnect Connected Account"
+            title={t("Disconnect Connected Account")}
           >
             <Trash2 className="size-3.5" />
           </Button>

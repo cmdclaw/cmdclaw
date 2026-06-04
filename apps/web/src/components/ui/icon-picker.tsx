@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { FileText } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch } from "@/components/ui/emoji-picker";
@@ -19,6 +20,8 @@ export function IconDisplay({ icon, className }: { icon?: string | null; classNa
 }
 
 export function IconPicker({ value, onChange, children }: IconPickerProps) {
+  const t = useGT();
+
   const [open, setOpen] = useState(false);
 
   const handleEmojiSelect = useCallback(
@@ -55,13 +58,15 @@ export function IconPicker({ value, onChange, children }: IconPickerProps) {
       </PopoverTrigger>
       <PopoverContent className="w-[320px] p-0" align="start">
         <div className="flex items-center justify-between border-b px-3 py-2">
-          <span className="text-sm font-medium">Pick an emoji</span>
+          <span className="text-sm font-medium">
+            <T>Pick an emoji</T>
+          </span>
           {value && (
             <button
               onClick={handleRemove}
               className="text-muted-foreground hover:text-foreground text-xs"
             >
-              Remove
+              <T>Remove</T>
             </button>
           )}
         </div>
@@ -69,7 +74,7 @@ export function IconPicker({ value, onChange, children }: IconPickerProps) {
           className="h-[280px] w-full border-none"
           onEmojiSelect={handleEmojiPickerSelect}
         >
-          <EmojiPickerSearch placeholder="Search emoji..." />
+          <EmojiPickerSearch placeholder={t("Search emoji...")} />
           <EmojiPickerContent />
         </EmojiPicker>
       </PopoverContent>

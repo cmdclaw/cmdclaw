@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useState, type ReactNode } from "react";
-import { PostHogProvider, usePostHog } from "posthog-js/react";
 import type { PostHog } from "posthog-js";
+import { PostHogProvider, usePostHog } from "posthog-js/react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useSearchParams } from "@/components/next-navigation-compat";
 import { env } from "@/env";
 import { authClient } from "@/lib/auth-client";

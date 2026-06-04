@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T, useGT } from "gt-react";
 import { Check, Plus } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,8 @@ function PresetColorButton({
  * No wrapper (no Popover, no Dropdown). The caller provides the container.
  */
 export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerContentProps) {
+  const t = useGT();
+
   const { data: tags } = useCoworkerTagList();
   const createTag = useCreateCoworkerTag();
   const assignTag = useAssignCoworkerTag();
@@ -156,7 +159,9 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
       {/* Tag list */}
       <div className="max-h-48 overflow-y-auto p-1.5">
         {(tags ?? []).length === 0 && !showCreate && (
-          <p className="text-muted-foreground px-2 py-3 text-center text-xs">No tags yet</p>
+          <p className="text-muted-foreground px-2 py-3 text-center text-xs">
+            <T>No tags yet</T>
+          </p>
         )}
         {(tags ?? []).map((tag) => {
           const isAssigned = currentTagIds.includes(tag.id);
@@ -198,7 +203,7 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
               value={newTagName}
               onChange={handleNameChange}
               onKeyDown={handleNameKeyDown}
-              placeholder="Tag name..."
+              placeholder={t("Tag name...")}
               className="h-7 text-xs"
               autoFocus
             />
@@ -219,14 +224,14 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
                 disabled={!newTagName.trim() || createTag.isPending}
                 className="bg-foreground text-background hover:bg-foreground/90 flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50"
               >
-                Create
+                <T>Create</T>
               </button>
               <button
                 type="button"
                 onClick={handleCancelCreate}
                 className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1 text-xs transition-colors"
               >
-                Cancel
+                <T>Cancel</T>
               </button>
             </div>
           </div>
@@ -237,7 +242,7 @@ export function TagManagerContent({ coworkerId, currentTagIds }: TagManagerConte
             className="text-muted-foreground hover:text-foreground hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
           >
             <Plus className="size-3.5" />
-            Create new tag
+            <T>Create new tag</T>
           </button>
         )}
       </div>

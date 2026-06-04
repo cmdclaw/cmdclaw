@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Copy, Download, Dices, FileImage, FileText, RotateCcw, Shuffle } from "lucide-react";
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
@@ -142,7 +143,7 @@ function Swatch({ option }: { option: Option }) {
 
   return (
     <svg
-      className="size-3 rounded-sm border border-foreground/10"
+      className="border-foreground/10 size-3 rounded-sm border"
       aria-hidden="true"
       viewBox="0 0 12 12"
     >
@@ -152,6 +153,8 @@ function Swatch({ option }: { option: Option }) {
 }
 
 function SeedInput({ value, onUpdate }: { value: string; onUpdate: (nextSeed: string) => void }) {
+  const t = useGT();
+
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       onUpdate(event.target.value);
@@ -160,7 +163,12 @@ function SeedInput({ value, onUpdate }: { value: string; onUpdate: (nextSeed: st
   );
 
   return (
-    <Input value={value} onChange={handleChange} placeholder="agent-name" className="font-mono" />
+    <Input
+      value={value}
+      onChange={handleChange}
+      placeholder={t("agent-name")}
+      className="font-mono"
+    />
   );
 }
 
@@ -245,6 +253,8 @@ function AttributeGallery({
 }
 
 function AvatarPage() {
+  const t = useGT();
+
   const [seed, setSeed] = useState("ops-brick");
   const [options, setOptions] = useState<BrickAvatarOptions>(() =>
     buildSeededBrickAvatarOptions("ops-brick"),
@@ -263,8 +273,8 @@ function AvatarPage() {
 
   const resetFromSeed = useCallback(() => {
     setOptions(buildSeededBrickAvatarOptions(seed));
-    toast.success("Avatar reset from seed");
-  }, [seed]);
+    toast.success(t("Avatar reset from seed"));
+  }, [seed, t]);
 
   const shuffleSeed = useCallback(() => {
     updateSeed(randomSeed());
@@ -288,8 +298,8 @@ function AvatarPage() {
 
   const copySvg = useCallback(async () => {
     await navigator.clipboard.writeText(svg);
-    toast.success("SVG copied");
-  }, [svg]);
+    toast.success(t("SVG copied"));
+  }, [svg, t]);
 
   return (
     <main className="min-h-screen bg-[oklch(0.985_0.006_35)]">
@@ -298,15 +308,17 @@ function AvatarPage() {
           <div className="max-w-2xl space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-[oklch(0.74_0.04_42)] bg-[oklch(0.94_0.025_35)] px-2.5 py-1 text-xs font-medium text-[oklch(0.34_0.06_35)]">
               <Dices className="size-3.5" />
-              Coworker Avatar Playground
+              <T>Coworker Avatar Playground</T>
             </div>
             <div className="space-y-1">
               <h1 className="text-2xl leading-tight font-semibold tracking-normal text-[oklch(0.19_0.018_35)]">
-                Build a brick with a job to do.
+                <T>Build a brick with a job to do.</T>
               </h1>
               <p className="max-w-[68ch] text-sm leading-6 text-[oklch(0.42_0.025_35)]">
-                Generate a stable brick avatar from a seed, tune the costume, then download it as
-                SVG or JPG.
+                <T>
+                  Generate a stable brick avatar from a seed, tune the costume, then download it as
+                  SVG or JPG.
+                </T>
               </p>
             </div>
           </div>
@@ -318,16 +330,18 @@ function AvatarPage() {
                   variant="outline"
                   size="icon"
                   onClick={resetFromSeed}
-                  aria-label="Reset from seed"
+                  aria-label={t("Reset from seed")}
                 >
                   <RotateCcw className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Reset from seed</TooltipContent>
+              <TooltipContent>
+                <T>Reset from seed</T>
+              </TooltipContent>
             </Tooltip>
             <Button variant="outline" onClick={copySvg}>
               <Copy className="size-4" />
-              Copy SVG
+              <T>Copy SVG</T>
             </Button>
             <Button variant="outline" onClick={downloadSvg}>
               <FileText className="size-4" />
@@ -364,9 +378,11 @@ function AvatarPage() {
             <section className="rounded-xl border border-[oklch(0.78_0.025_45)] bg-[oklch(0.995_0.003_35)] p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-[oklch(0.19_0.018_35)]">Seed</h2>
+                  <h2 className="text-sm font-semibold text-[oklch(0.19_0.018_35)]">
+                    <T>Seed</T>
+                  </h2>
                   <p className="text-xs text-[oklch(0.48_0.02_35)]">
-                    Stable defaults for each Coworker.
+                    <T>Stable defaults for each Coworker.</T>
                   </p>
                 </div>
                 <Tooltip>
@@ -375,12 +391,14 @@ function AvatarPage() {
                       variant="outline"
                       size="icon"
                       onClick={shuffleSeed}
-                      aria-label="Shuffle seed"
+                      aria-label={t("Shuffle seed")}
                     >
                       <Shuffle className="size-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Shuffle seed</TooltipContent>
+                  <TooltipContent>
+                    <T>Shuffle seed</T>
+                  </TooltipContent>
                 </Tooltip>
               </div>
               <SeedInput value={seed} onUpdate={updateSeed} />
@@ -417,11 +435,13 @@ function AvatarPage() {
                 </div>
                 <div className="space-y-1">
                   <h2 className="text-sm font-semibold text-[oklch(0.19_0.018_35)]">
-                    Export-ready
+                    <T>Export-ready</T>
                   </h2>
                   <p className="text-xs leading-5 text-[oklch(0.42_0.025_35)]">
-                    SVG keeps the brick editable. JPG gives you a flat image for tools that do not
-                    accept vector files.
+                    <T>
+                      SVG keeps the brick editable. JPG gives you a flat image for tools that do not
+                      accept vector files.
+                    </T>
                   </p>
                 </div>
               </div>

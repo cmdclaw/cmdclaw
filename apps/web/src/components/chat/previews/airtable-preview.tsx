@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   PreviewProps,
   PreviewField,
@@ -20,6 +21,8 @@ export function AirtablePreview({ operation, args }: PreviewProps) {
 }
 
 function AirtableCreatePreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const baseId = args.b || args.base;
   const table = args.t || args.table;
   const fields = args.fields;
@@ -28,7 +31,9 @@ function AirtableCreatePreview({ args }: { args: Record<string, string | undefin
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="airtable" size={16} />
-        <span className="text-sm font-medium">Create Record</span>
+        <span className="text-sm font-medium">
+          <T>Create Record</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -41,7 +46,7 @@ function AirtableCreatePreview({ args }: { args: Record<string, string | undefin
       </PreviewSection>
 
       {fields && (
-        <PreviewSection title="Fields">
+        <PreviewSection title={t("Fields")}>
           <FieldsPreview fields={fields} />
         </PreviewSection>
       )}
@@ -50,6 +55,8 @@ function AirtableCreatePreview({ args }: { args: Record<string, string | undefin
 }
 
 function AirtableUpdatePreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const baseId = args.b || args.base;
   const table = args.t || args.table;
   const recordId = args.r || args.record;
@@ -59,7 +66,9 @@ function AirtableUpdatePreview({ args }: { args: Record<string, string | undefin
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="airtable" size={16} />
-        <span className="text-sm font-medium">Update Record</span>
+        <span className="text-sm font-medium">
+          <T>Update Record</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -69,11 +78,11 @@ function AirtableUpdatePreview({ args }: { args: Record<string, string | undefin
           <span>/</span>
           <span>{table}</span>
         </div>
-        <PreviewField label="Record" value={recordId} mono />
+        <PreviewField label={t("Record")} value={recordId} mono />
       </PreviewSection>
 
       {fields && (
-        <PreviewSection title="Updated Fields">
+        <PreviewSection title={t("Updated Fields")}>
           <FieldsPreview fields={fields} />
         </PreviewSection>
       )}
@@ -82,6 +91,8 @@ function AirtableUpdatePreview({ args }: { args: Record<string, string | undefin
 }
 
 function AirtableDeletePreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const baseId = args.b || args.base;
   const table = args.t || args.table;
   const recordId = args.r || args.record;
@@ -90,8 +101,12 @@ function AirtableDeletePreview({ args }: { args: Record<string, string | undefin
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="airtable" size={16} />
-        <span className="text-sm font-medium">Delete Record</span>
-        <PreviewBadge variant="danger">Destructive</PreviewBadge>
+        <span className="text-sm font-medium">
+          <T>Delete Record</T>
+        </span>
+        <PreviewBadge variant="danger">
+          <T>Destructive</T>
+        </PreviewBadge>
       </div>
 
       <PreviewSection>
@@ -101,7 +116,7 @@ function AirtableDeletePreview({ args }: { args: Record<string, string | undefin
           <span>/</span>
           <span>{table}</span>
         </div>
-        <PreviewField label="Record" value={recordId} mono />
+        <PreviewField label={t("Record")} value={recordId} mono />
       </PreviewSection>
     </div>
   );

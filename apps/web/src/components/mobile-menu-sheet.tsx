@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { BarChart3, Bug, Settings, Shield, Toolbox } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppImage } from "@/components/app-image";
@@ -53,6 +54,8 @@ type MobileMenuPanelProps = {
 };
 
 export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
+  const t = useGT();
+
   const router = useRouter();
   const [session, setSession] = useState<SessionData>(null);
 
@@ -135,7 +138,9 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
               </span>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-medium">My Account</p>
+              <p className="text-sm font-medium">
+                <T>My Account</T>
+              </p>
               {userEmail && <p className="text-muted-foreground truncate text-xs">{userEmail}</p>}
             </div>
           </div>
@@ -145,7 +150,7 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
               onClick={handleSignOut}
               className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
             >
-              Log Out
+              <T>Log Out</T>
             </button>
           ) : (
             <AppLink
@@ -153,28 +158,38 @@ export function MobileMenuPanel({ open, onOpenChange }: MobileMenuPanelProps) {
               className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
               onClick={handleItemClick}
             >
-              Log In
+              <T>Log In</T>
             </AppLink>
           )}
         </div>
 
         {/* Menu items */}
         <div className="flex flex-col gap-0.5 px-1 py-2">
-          <MenuItem icon={Toolbox} label="Toolbox" href="/toolbox" onClick={handleItemClick} />
-          <MenuItem icon={Settings} label="Settings" href="/settings" onClick={handleItemClick} />
+          <MenuItem icon={Toolbox} label={t("Toolbox")} href="/toolbox" onClick={handleItemClick} />
+          <MenuItem
+            icon={Settings}
+            label={t("Settings")}
+            href="/settings"
+            onClick={handleItemClick}
+          />
           {clientEditionCapabilities.hasBilling ? (
             <MenuItem
               icon={BarChart3}
-              label="Usage"
+              label={t("Usage")}
               href="/settings/usage"
               onClick={handleItemClick}
             />
           ) : null}
-          <MenuItem icon={Bug} label="Bug report" onClick={handleBugReportClick} />
+          <MenuItem icon={Bug} label={t("Bug report")} onClick={handleBugReportClick} />
           {clientEditionCapabilities.hasSupportAdmin && isAdmin ? (
-            <MenuItem icon={Shield} label="Admin" href="/admin" onClick={handleItemClick} />
+            <MenuItem icon={Shield} label={t("Admin")} href="/admin" onClick={handleItemClick} />
           ) : clientEditionCapabilities.hasInstanceAdmin ? (
-            <MenuItem icon={Shield} label="Instance" href="/instance" onClick={handleItemClick} />
+            <MenuItem
+              icon={Shield}
+              label={t("Instance")}
+              href="/instance"
+              onClick={handleItemClick}
+            />
           ) : null}
         </div>
       </div>

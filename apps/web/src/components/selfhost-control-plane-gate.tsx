@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppLink } from "@/components/app-link";
 import { usePathname } from "@/components/next-navigation-compat";
@@ -73,10 +74,14 @@ export function SelfhostControlPlaneGate() {
   return (
     <div className="bg-background/95 fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl dark:bg-neutral-950">
-        <h2 className="text-lg font-semibold">Cloud control plane unavailable</h2>
+        <h2 className="text-lg font-semibold">
+          <T>Cloud control plane unavailable</T>
+        </h2>
         <p className="text-muted-foreground mt-2 text-sm">
-          This self-hosted deployment depends on the CmdClaw cloud control plane for account links,
-          provider auth, and runtime credentials.
+          <T>
+            This self-hosted deployment depends on the CmdClaw cloud control plane for account
+            links, provider auth, and runtime credentials.
+          </T>
         </p>
         <p className="text-muted-foreground mt-3 text-sm">{detail}</p>
         <div className="mt-4 flex gap-3">
@@ -84,14 +89,14 @@ export function SelfhostControlPlaneGate() {
             href="/instance"
             className="inline-flex h-9 items-center justify-center rounded-md border px-4 text-sm font-medium"
           >
-            Open instance status
+            <T>Open instance status</T>
           </AppLink>
           <button
             type="button"
             onClick={handleRetry}
             className="inline-flex h-9 items-center justify-center rounded-md bg-neutral-900 px-4 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
           >
-            Retry
+            <T>Retry</T>
           </button>
         </div>
       </div>

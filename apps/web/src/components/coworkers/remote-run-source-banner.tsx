@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Shield } from "lucide-react";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,13 +80,13 @@ export function RemoteRunSourceBanner({ source }: { source: RemoteRunSourceDetai
         </div>
         <div className="min-w-0 space-y-1">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
-            Remote integration source
+            <T>Remote integration source</T>
           </p>
           <p className="text-sm font-medium">
-            Environment: {formatRemoteTargetEnvLabel(source.targetEnv)}
+            <T>Environment:</T> {formatRemoteTargetEnvLabel(source.targetEnv)}
           </p>
           <p className="text-muted-foreground truncate text-xs">
-            User: {source.remoteUserEmail ?? source.remoteUserId ?? "Unknown user"}
+            <T>User:</T> {source.remoteUserEmail ?? source.remoteUserId ?? "Unknown user"}
           </p>
         </div>
       </div>

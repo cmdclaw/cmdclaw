@@ -1,6 +1,6 @@
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import { T } from "gt-react";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "../-lib/next-navigation-compat";
 import { useEffect, useRef, useState } from "react";
 import {
   clearPendingCoworkerPrompt,
@@ -12,6 +12,7 @@ import { normalizeGenerationError } from "@/lib/generation-errors";
 import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@/lib/integration-icons";
 import { client } from "@/orpc/client";
 import { useCreateCoworker } from "@/orpc/hooks/coworkers";
+import { useRouter } from "../-lib/next-navigation-compat";
 
 const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 
@@ -85,7 +86,9 @@ export default function NewCoworkerPage() {
       ) : (
         <div className="flex flex-col items-center gap-3 text-center">
           <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
-          <p className="text-muted-foreground text-sm">Preparing your coworker builder...</p>
+          <p className="text-muted-foreground text-sm">
+            <T>Preparing your coworker builder...</T>
+          </p>
         </div>
       )}
     </div>

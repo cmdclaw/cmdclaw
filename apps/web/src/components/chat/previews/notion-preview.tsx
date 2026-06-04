@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   PreviewProps,
   PreviewField,
@@ -26,7 +27,9 @@ function NotionCreatePreview({ args }: { args: Record<string, string | undefined
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="notion" size={16} />
-        <span className="text-sm font-medium">Create Page</span>
+        <span className="text-sm font-medium">
+          <T>Create Page</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -35,7 +38,7 @@ function NotionCreatePreview({ args }: { args: Record<string, string | undefined
 
           {parent && (
             <div className="text-muted-foreground mb-2 text-xs">
-              In: <span className="font-mono">{parent}</span>
+              <T>In:</T> <span className="font-mono">{parent}</span>
             </div>
           )}
 
@@ -57,6 +60,8 @@ function NotionAppendPreview({
   args: Record<string, string | undefined>;
   positionalArgs: string[];
 }) {
+  const t = useGT();
+
   const pageId = positionalArgs[0];
   const content = args.content;
 
@@ -64,15 +69,17 @@ function NotionAppendPreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="notion" size={16} />
-        <span className="text-sm font-medium">Append to Page</span>
+        <span className="text-sm font-medium">
+          <T>Append to Page</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Page ID" value={pageId} mono />
+        <PreviewField label={t("Page ID")} value={pageId} mono />
       </PreviewSection>
 
       {content && (
-        <PreviewSection title="Content to Append">
+        <PreviewSection title={t("Content to Append")}>
           <PreviewContent>{content}</PreviewContent>
         </PreviewSection>
       )}

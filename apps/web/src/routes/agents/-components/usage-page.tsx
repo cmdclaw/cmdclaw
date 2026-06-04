@@ -1,7 +1,8 @@
+import { T } from "gt-react";
 import { ArrowLeft } from "lucide-react";
-import { AppLink as Link } from "../-lib/app-link";
 import { UsageDashboard } from "@/components/usage-dashboard";
 import { useWorkspaceUsageDashboard } from "@/orpc/hooks/coworkers";
+import { AppLink as Link } from "../-lib/app-link";
 
 export default function CoworkerUsagePage() {
   const usageQuery = useWorkspaceUsageDashboard();
@@ -15,7 +16,9 @@ export default function CoworkerUsagePage() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          <T>Usage</T>
+        </h1>
       </div>
       <UsageDashboard
         data={usageQuery.data}

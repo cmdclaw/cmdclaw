@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Mic, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,9 @@ export function VoiceIndicator({
         )}
       >
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Transcribing...</span>
+        <span>
+          <T>Transcribing...</T>
+        </span>
       </div>
     );
   }

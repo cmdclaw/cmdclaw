@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { T } from "gt-react";
 import { SharedConversationView } from "@/components/chat/shared-conversation-view";
 import {
   getSharedConversationByToken,
@@ -27,13 +28,7 @@ import {
  * is plain JSON at runtime. We declare the boundary as an explicit JSON value type (which the
  * validator accepts) and re-attach the real `SharedConversation` type on consumption.
  */
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 type SerializedSharedConversation = {
   title: string;
@@ -62,9 +57,11 @@ export const Route = createFileRoute("/shared/$shareToken")({
 function SharedConversationNotFound() {
   return (
     <div className="bg-background flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
-      <p className="text-sm font-medium">Shared conversation not found</p>
+      <p className="text-sm font-medium">
+        <T>Shared conversation not found</T>
+      </p>
       <p className="text-muted-foreground text-sm">
-        This conversation may have been unshared or the link is invalid.
+        <T>This conversation may have been unshared or the link is invalid.</T>
       </p>
     </div>
   );

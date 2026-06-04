@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState, type DragEvent } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -80,6 +81,8 @@ export function UnassignedSidebarContent({
   coworkers: CoworkerSummary[];
   onAdd?: (coworkerId: string) => void;
 }) {
+  const t = useGT();
+
   const [search, setSearch] = useState("");
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,7 +98,7 @@ export function UnassignedSidebarContent({
     <>
       <div className="flex items-center gap-2 px-4 py-3.5">
         <h3 className="text-foreground/80 text-xs font-semibold tracking-widest uppercase">
-          Unassigned
+          <T>Unassigned</T>
         </h3>
         <span className="bg-muted text-muted-foreground/70 rounded-md px-1.5 py-px text-[10px] font-medium tabular-nums">
           {coworkers.length}
@@ -107,7 +110,7 @@ export function UnassignedSidebarContent({
           <Input
             value={search}
             onChange={handleSearchChange}
-            placeholder="Filter coworkers..."
+            placeholder={t("Filter coworkers...")}
             className="border-border/20 bg-muted/30 focus-visible:border-border/50 h-8 pl-7 text-xs"
           />
         </div>

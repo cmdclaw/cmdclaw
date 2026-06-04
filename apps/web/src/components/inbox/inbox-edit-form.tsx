@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T, msg, useMessages } from "gt-react";
 import { Check, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,35 +19,35 @@ function getEditableFields(integration: string, operation: string): EditableFiel
     case "slack":
       if (operation === "send") {
         return [
-          { key: "channel", label: "Channel", type: "text" },
-          { key: "text", label: "Message", type: "textarea" },
+          { key: "channel", label: msg("Channel"), type: "text" },
+          { key: "text", label: msg("Message"), type: "textarea" },
         ];
       }
-      return [{ key: "text", label: "Text", type: "textarea" }];
+      return [{ key: "text", label: msg("Text"), type: "textarea" }];
 
     case "google_gmail":
     case "outlook":
       return [
-        { key: "to", label: "To", type: "text" },
-        { key: "cc", label: "Cc", type: "text" },
-        { key: "subject", label: "Subject", type: "text" },
-        { key: "body", label: "Body", type: "textarea" },
+        { key: "to", label: msg("To"), type: "text" },
+        { key: "cc", label: msg("Cc"), type: "text" },
+        { key: "subject", label: msg("Subject"), type: "text" },
+        { key: "body", label: msg("Body"), type: "textarea" },
       ];
 
     case "github":
       if (operation === "create-issue") {
         return [
-          { key: "title", label: "Title", type: "text" },
-          { key: "body", label: "Body", type: "textarea" },
-          { key: "labels", label: "Labels", type: "text" },
+          { key: "title", label: msg("Title"), type: "text" },
+          { key: "body", label: msg("Body"), type: "textarea" },
+          { key: "labels", label: msg("Labels"), type: "text" },
         ];
       }
-      return [{ key: "body", label: "Body", type: "textarea" }];
+      return [{ key: "body", label: msg("Body"), type: "textarea" }];
 
     case "notion":
       return [
-        { key: "title", label: "Title", type: "text" },
-        { key: "content", label: "Content", type: "textarea" },
+        { key: "title", label: msg("Title"), type: "text" },
+        { key: "content", label: msg("Content"), type: "textarea" },
       ];
 
     default: {
@@ -153,8 +154,12 @@ export function InboxEditForm({ toolApproval, onSave, onCancel }: Props) {
             className="h-4 w-auto"
           />
         )}
-        <span className="font-medium">Edit {displayName}</span>
-        <span className="text-muted-foreground">action before approving</span>
+        <span className="font-medium">
+          <T>Edit</T> {displayName}
+        </span>
+        <span className="text-muted-foreground">
+          <T>action before approving</T>
+        </span>
       </div>
 
       {/* Fields */}
@@ -173,11 +178,11 @@ export function InboxEditForm({ toolApproval, onSave, onCancel }: Props) {
       <div className="border-border/30 flex justify-end gap-2 border-t px-3 py-2">
         <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={onCancel}>
           <X className="mr-1 h-3.5 w-3.5" />
-          Cancel
+          <T>Cancel</T>
         </Button>
         <Button size="sm" className="h-7 text-[12px]" onClick={handleSave}>
           <Check className="mr-1 h-3.5 w-3.5" />
-          Save changes
+          <T>Save changes</T>
         </Button>
       </div>
     </div>
@@ -193,6 +198,7 @@ function EditField({
   value: string;
   onChange: (key: string, value: string) => void;
 }) {
+  const m = useMessages();
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       onChange(field.key, e.target.value);
@@ -208,7 +214,7 @@ function EditField({
   return (
     <div className="space-y-1">
       <label className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-        {field.label}
+        {m(field.label)}
       </label>
       {field.type === "textarea" ? (
         <textarea

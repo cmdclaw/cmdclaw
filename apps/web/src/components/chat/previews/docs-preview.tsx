@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   PreviewProps,
   PreviewField,
@@ -25,7 +26,9 @@ function DocsCreatePreview({ args }: { args: Record<string, string | undefined> 
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_docs" size={16} />
-        <span className="text-sm font-medium">Create Document</span>
+        <span className="text-sm font-medium">
+          <T>Create Document</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -38,7 +41,11 @@ function DocsCreatePreview({ args }: { args: Record<string, string | undefined> 
             <div className="text-muted-foreground text-sm whitespace-pre-wrap">{content}</div>
           )}
 
-          {!content && <div className="text-muted-foreground text-sm italic">Empty document</div>}
+          {!content && (
+            <div className="text-muted-foreground text-sm italic">
+              <T>Empty document</T>
+            </div>
+          )}
         </div>
       </PreviewSection>
     </div>
@@ -52,6 +59,8 @@ function DocsAppendPreview({
   args: Record<string, string | undefined>;
   positionalArgs: string[];
 }) {
+  const t = useGT();
+
   const documentId = positionalArgs[0];
   const text = args.text;
 
@@ -59,15 +68,17 @@ function DocsAppendPreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_docs" size={16} />
-        <span className="text-sm font-medium">Append to Document</span>
+        <span className="text-sm font-medium">
+          <T>Append to Document</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Document ID" value={documentId} mono />
+        <PreviewField label={t("Document ID")} value={documentId} mono />
       </PreviewSection>
 
       {text && (
-        <PreviewSection title="Content to Append">
+        <PreviewSection title={t("Content to Append")}>
           <PreviewContent>{text}</PreviewContent>
         </PreviewSection>
       )}

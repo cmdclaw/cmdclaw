@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useGT } from "gt-react";
 import { AdminComingSoonPage } from "@/components/integrations/admin-coming-soon-page";
 
 export const Route = createFileRoute("/integrations/twitter")({
@@ -7,9 +8,11 @@ export const Route = createFileRoute("/integrations/twitter")({
 });
 
 function TwitterIntegrationPage() {
+  const t = useGT();
+
   return (
     <AdminComingSoonPage
-      title="X (Twitter)"
+      title={t("X (Twitter)")}
       description="X (Twitter) integration is in progress and will be available soon."
     />
   );

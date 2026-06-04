@@ -1,6 +1,7 @@
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { T } from "gt-react";
 import { ArrowLeft } from "lucide-react";
 import { TemplateDetailContent } from "@/components/template-detail-content";
 import { getTemplateCatalogEntryById } from "@/server/services/template-catalog";
@@ -50,7 +51,7 @@ function BackToTemplates() {
       className="text-muted-foreground hover:text-foreground mb-8 inline-flex items-center gap-1.5 text-xs transition-colors"
     >
       <ArrowLeft className="size-3" />
-      Back to Templates
+      <T>Back to Templates</T>
     </Link>
   );
 }
@@ -59,7 +60,9 @@ function TemplateNotFound() {
   return (
     <div className="mx-auto max-w-3xl pb-8">
       <BackToTemplates />
-      <p className="text-muted-foreground text-sm">Template not found.</p>
+      <p className="text-muted-foreground text-sm">
+        <T>Template not found.</T>
+      </p>
     </div>
   );
 }

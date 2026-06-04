@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   PreviewProps,
   PreviewField,
@@ -21,6 +22,8 @@ export function SlackPreview({ operation, args }: PreviewProps) {
 }
 
 function SlackSendPreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const channel = args.c || args.channel;
   const text = args.t || args.text;
   const thread = args.thread;
@@ -30,16 +33,20 @@ function SlackSendPreview({ args }: { args: Record<string, string | undefined> }
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="slack" size={16} />
         <span className="text-sm font-medium">{thread ? "Reply to Thread" : "Send Message"}</span>
-        {thread && <PreviewBadge>In Thread</PreviewBadge>}
+        {thread && (
+          <PreviewBadge>
+            <T>In Thread</T>
+          </PreviewBadge>
+        )}
       </div>
 
       <PreviewSection>
-        <PreviewField label="Channel" value={channel} mono />
-        {thread && <PreviewField label="Thread" value={thread} mono />}
+        <PreviewField label={t("Channel")} value={channel} mono />
+        {thread && <PreviewField label={t("Thread")} value={thread} mono />}
       </PreviewSection>
 
       {text && (
-        <PreviewSection title="Message">
+        <PreviewSection title={t("Message")}>
           <PreviewContent>{text}</PreviewContent>
         </PreviewSection>
       )}
@@ -48,6 +55,8 @@ function SlackSendPreview({ args }: { args: Record<string, string | undefined> }
 }
 
 function SlackReactPreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const channel = args.c || args.channel;
   const timestamp = args.ts;
   const emoji = args.e || args.emoji;
@@ -56,14 +65,18 @@ function SlackReactPreview({ args }: { args: Record<string, string | undefined> 
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="slack" size={16} />
-        <span className="text-sm font-medium">Add Reaction</span>
+        <span className="text-sm font-medium">
+          <T>Add Reaction</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Channel" value={channel} mono />
-        <PreviewField label="Message" value={timestamp} mono />
+        <PreviewField label={t("Channel")} value={channel} mono />
+        <PreviewField label={t("Message")} value={timestamp} mono />
         <div className="mt-2">
-          <span className="text-muted-foreground text-xs font-medium">Emoji: </span>
+          <span className="text-muted-foreground text-xs font-medium">
+            <T>Emoji:</T>{" "}
+          </span>
           <span className="text-lg">:{emoji}:</span>
         </div>
       </PreviewSection>
@@ -72,6 +85,8 @@ function SlackReactPreview({ args }: { args: Record<string, string | undefined> 
 }
 
 function SlackUploadPreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const channel = args.c || args.channel;
   const file = args.file;
   const comment = args.comment;
@@ -80,16 +95,18 @@ function SlackUploadPreview({ args }: { args: Record<string, string | undefined>
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="slack" size={16} />
-        <span className="text-sm font-medium">Upload File</span>
+        <span className="text-sm font-medium">
+          <T>Upload File</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Channel" value={channel} mono />
-        <PreviewField label="File" value={file} />
+        <PreviewField label={t("Channel")} value={channel} mono />
+        <PreviewField label={t("File")} value={file} />
       </PreviewSection>
 
       {comment && (
-        <PreviewSection title="Comment">
+        <PreviewSection title={t("Comment")}>
           <PreviewContent>{comment}</PreviewContent>
         </PreviewSection>
       )}

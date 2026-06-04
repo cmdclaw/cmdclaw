@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T, useGT } from "gt-react";
 import { X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ type BugReportFormProps = {
 };
 
 export function BugReportForm({ onSuccess }: BugReportFormProps) {
+  const t = useGT();
+
   const [reportMessage, setReportMessage] = useState("");
   const [reportAttachment, setReportAttachment] = useState<File | null>(null);
   const [reportError, setReportError] = useState("");
@@ -95,7 +98,7 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
         <textarea
           value={reportMessage}
           onChange={handleMessageChange}
-          placeholder="Describe the bug..."
+          placeholder={t("Describe the bug...")}
           autoFocus
           className="border-input bg-background text-foreground placeholder:text-muted-foreground/80 focus:border-foreground/20 min-h-[180px] w-full resize-none rounded-xl border px-4 py-3 text-[15px] leading-relaxed transition-[border-color,background-color] outline-none sm:min-h-[220px]"
         />
@@ -128,7 +131,7 @@ export function BugReportForm({ onSuccess }: BugReportFormProps) {
           onClick={openAttachmentPicker}
           className="h-11 flex-1 rounded-xl"
         >
-          Add attachment
+          <T>Add attachment</T>
         </Button>
         <Button onClick={handleSubmit} disabled={isSubmitting} className="h-11 flex-1 rounded-xl">
           {isSubmitting ? "Sending..." : "Send"}

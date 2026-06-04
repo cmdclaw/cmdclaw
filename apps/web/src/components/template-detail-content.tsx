@@ -2,6 +2,7 @@ import type {
   TemplateCatalogTemplate,
   TemplateIntegrationType,
 } from "@cmdclaw/db/template-catalog";
+import { T } from "gt-react";
 import { ArrowRight, Check, Link2, Play, Share2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppImage } from "@/components/app-image";
@@ -112,7 +113,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
           <div className="mt-12 space-y-6">
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Category
+                <T>Category</T>
               </p>
               <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
                 {template.industry}
@@ -121,16 +122,17 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
 
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Steps
+                <T>Steps</T>
               </p>
               <p className="text-sm">
-                {template.summaryBlocks.length} steps · {template.connectedApps.length} apps
+                {template.summaryBlocks.length} <T>steps ·</T> {template.connectedApps.length}{" "}
+                <T>apps</T>
               </p>
             </div>
 
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Share
+                <T>Share</T>
               </p>
               <div className="flex items-center gap-3">
                 <button
@@ -147,7 +149,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
                   className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
                 >
                   <Share2 className="size-4" />
-                  Share
+                  <T>Share</T>
                 </button>
               </div>
             </div>
@@ -159,8 +161,12 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
           <section>
             <div className="mb-5">
               <div>
-                <h2 className="text-sm font-semibold">What this coworker does</h2>
-                <p className="text-muted-foreground mt-1 text-xs">Step-by-step breakdown</p>
+                <h2 className="text-sm font-semibold">
+                  <T>What this coworker does</T>
+                </h2>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  <T>Step-by-step breakdown</T>
+                </p>
               </div>
             </div>
 
@@ -204,15 +210,17 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
         {/* ── Coworker instructions ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">Coworker Instructions</h2>
+            <h2 className="text-sm font-semibold">
+              <T>Coworker Instructions</T>
+            </h2>
             <p className="text-muted-foreground mt-1 text-xs">
-              Trigger details and execution steps
+              <T>Trigger details and execution steps</T>
             </p>
           </div>
           <div className="border-border/40 bg-card space-y-6 rounded-xl border p-6 shadow-sm">
             <div>
               <p className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
-                Trigger
+                <T>Trigger</T>
               </p>
               <p className="mt-3 text-base font-semibold">{template.triggerTitle}</p>
               <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
@@ -221,7 +229,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
             </div>
             <div className="border-border/30 border-t pt-6">
               <p className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
-                Instructions
+                <T>Instructions</T>
               </p>
               <ol className="mt-3 space-y-3 pl-5 text-sm leading-relaxed">
                 {template.agentInstructions.map((instruction) => (
@@ -237,9 +245,11 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
         {/* ── Coworker diagram ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">Coworker Diagram</h2>
+            <h2 className="text-sm font-semibold">
+              <T>Coworker Diagram</T>
+            </h2>
             <p className="text-muted-foreground mt-1 text-xs">
-              Visual overview of the automation flow
+              <T>Visual overview of the automation flow</T>
             </p>
           </div>
           <MermaidDiagram imageUrl={mermaidImage} source={template.mermaid} />
@@ -248,10 +258,12 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
         {/* ── Connected Apps ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">Connected Apps</h2>
+            <h2 className="text-sm font-semibold">
+              <T>Connected Apps</T>
+            </h2>
             <p className="text-muted-foreground mt-1 text-xs">
-              {template.connectedApps.length} app{template.connectedApps.length === 1 ? "" : "s"}{" "}
-              used by this coworker
+              {template.connectedApps.length} <T>app</T>
+              {template.connectedApps.length === 1 ? "" : "s"} <T>used by this coworker</T>
             </p>
           </div>
           <div className="border-border/40 bg-card rounded-xl border shadow-sm">
@@ -281,7 +293,8 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
                   <span className="text-sm font-medium">{app.name}</span>
                 </div>
                 <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                  {app.tools} tool{app.tools === 1 ? "" : "s"}
+                  {app.tools} <T>tool</T>
+                  {app.tools === 1 ? "" : "s"}
                   <ArrowRight className="size-3" />
                 </span>
               </div>
@@ -293,7 +306,7 @@ export function TemplateDetailContent({ template }: { template: TemplateCatalogT
         <section className="flex justify-center pt-2 pb-4">
           <Button asChild className="gap-1.5 rounded-lg px-8">
             <AppLink href={`/agents/deploy/${template.id}`}>
-              Deploy the coworker
+              <T>Deploy the coworker</T>
               <ArrowRight className="size-3.5" />
             </AppLink>
           </Button>

@@ -9,9 +9,7 @@ import { CoworkerInfoPage } from "../-components/coworker-info-page";
  * the route-local navigation compat layer.
  */
 export const Route = createFileRoute("/agents/info/$slug")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { run?: string; tab?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { run?: string; tab?: string } => ({
     run: typeof search.run === "string" ? search.run : undefined,
     tab: typeof search.tab === "string" ? search.tab : undefined,
   }),

@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { T } from "gt-react";
 
 /**
  * Root error boundary fallback. Kept intentionally minimal for v1 of the TanStack Start
@@ -12,10 +13,12 @@ export function RootErrorBoundary({ error }: { error: unknown }) {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-2xl font-semibold">Something went wrong</h1>
+      <h1 className="text-2xl font-semibold">
+        <T>Something went wrong</T>
+      </h1>
       <p className="text-muted-foreground max-w-md text-sm">{message}</p>
       <Link to="/" className="text-brand text-sm font-medium underline-offset-4 hover:underline">
-        Return home
+        <T>Return home</T>
       </Link>
     </main>
   );

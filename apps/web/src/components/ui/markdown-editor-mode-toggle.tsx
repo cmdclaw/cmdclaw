@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Code, Eye } from "lucide-react";
 import { useCallback, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ export function MarkdownEditorModeToggle({ mode, onModeChange }: MarkdownEditorM
         )}
       >
         <Eye className="h-3 w-3" />
-        Preview
+        <T>Preview</T>
       </button>
       <button
         type="button"
@@ -52,7 +53,7 @@ export function MarkdownEditorModeToggle({ mode, onModeChange }: MarkdownEditorM
         )}
       >
         <Code className="h-3 w-3" />
-        Code
+        <T>Code</T>
       </button>
     </div>
   );

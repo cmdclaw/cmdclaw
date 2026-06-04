@@ -1,5 +1,6 @@
 // oxlint-disable react/no-unstable-nested-components
 
+import { T } from "gt-react";
 import {
   Wrench,
   Puzzle,
@@ -27,8 +28,8 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AppImage } from "@/components/chat/app-image";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { AppImage } from "@/components/chat/app-image";
 import { getBrandfetchLogoUrl } from "@/lib/brandfetch";
 import { type WorkspaceMcpServerLike, getExecutorDisplayMetadata } from "@/lib/executor-tool";
 import {
@@ -382,7 +383,7 @@ export function ActivityItem({ item, executorSources = EMPTY_EXECUTOR_SOURCES }:
               {formattedResult && (
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-                    Response
+                    <T>Response</T>
                   </p>
                   <pre className="bg-muted/40 text-muted-foreground overflow-x-auto rounded-sm px-2 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
                     {formattedResult}

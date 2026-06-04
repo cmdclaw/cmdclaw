@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ export function InviteOnlyAccessClient({
   initialEmail?: string;
   initialSource?: string;
 }) {
+  const t = useGT();
+
   const [email, setEmail] = useState(initialEmail ?? "");
   const [status, setStatus] = useState<RequestState>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -83,24 +86,26 @@ export function InviteOnlyAccessClient({
       <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
         <div className="space-y-1 text-center">
           <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-            CmdClaw
+            <T>CmdClaw</T>
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">Request access</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            <T>Request access</T>
+          </h1>
           <p className="text-muted-foreground text-sm">
-            CmdClaw is invite-only. Enter your email to request access.
+            <T>CmdClaw is invite-only. Enter your email to request access.</T>
           </p>
         </div>
 
         <form onSubmit={handleRequestAccess} className="space-y-3">
           <label className="text-muted-foreground text-sm font-medium" htmlFor="invite-email">
-            Email
+            <T>Email</T>
           </label>
           <Input
             id="invite-email"
             type="email"
             value={email}
             onChange={handleEmailChange}
-            placeholder="you@example.com"
+            placeholder={t("you@example.com")}
             autoComplete="email"
             required
             aria-invalid={status === "error"}
@@ -130,11 +135,15 @@ export function InviteOnlyAccessClient({
 
         <div className="flex items-center justify-center gap-3">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/login">Back to login</Link>
+            <Link to="/login">
+              <T>Back to login</T>
+            </Link>
           </Button>
           {status === "already-approved" ? (
             <Button asChild size="sm">
-              <Link to="/login">Log in</Link>
+              <Link to="/login">
+                <T>Log in</T>
+              </Link>
             </Button>
           ) : null}
         </div>

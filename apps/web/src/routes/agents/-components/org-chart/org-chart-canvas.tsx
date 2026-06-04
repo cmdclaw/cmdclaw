@@ -10,8 +10,8 @@ import {
 } from "@xyflow/react";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
+import { T } from "gt-react";
 import { StickyNote, ArrowLeft, Users } from "lucide-react";
-import { AppLink as Link } from "../../-lib/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
@@ -22,6 +22,7 @@ import {
   useDeleteOrgChartNode,
   useUpdateOrgChartNodePosition,
 } from "@/orpc/hooks/org-chart";
+import { AppLink as Link } from "../../-lib/app-link";
 import { CoworkerNode, type CoworkerNodeData } from "./coworker-node";
 import { LabelNode, type LabelNodeData } from "./label-node";
 import { UnassignedSidebarContent } from "./unassigned-sidebar";
@@ -254,7 +255,7 @@ export function OrgChartCanvas({
             className="text-muted-foreground hover:text-foreground h-7 gap-1.5 rounded-md px-2.5 text-xs font-medium"
           >
             <ArrowLeft className="size-3" />
-            Back
+            <T>Back</T>
           </Button>
         </Link>
         <div className="bg-border/40 mx-0.5 h-4 w-px" />
@@ -265,7 +266,7 @@ export function OrgChartCanvas({
           onClick={handleAddLabel}
         >
           <StickyNote className="size-3" />
-          Add Label
+          <T>Add Label</T>
         </Button>
         {isMobile && (
           <>
@@ -277,7 +278,7 @@ export function OrgChartCanvas({
               onClick={handleOpenSheet}
             >
               <Users className="size-3" />
-              Coworkers
+              <T>Coworkers</T>
               {unassignedCoworkers.length > 0 && (
                 <span className="bg-muted text-muted-foreground/70 rounded-md px-1.5 py-px text-[10px] font-medium tabular-nums">
                   {unassignedCoworkers.length}

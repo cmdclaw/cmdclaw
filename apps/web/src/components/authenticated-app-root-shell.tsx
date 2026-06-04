@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { AppRootShell } from "@/components/app-root-shell";
 import type { SessionPrincipal } from "@/lib/route-guards";
+import { AppRootShell } from "@/components/app-root-shell";
 
 export function AuthenticatedAppRootShell({
   children,

@@ -13,12 +13,12 @@
  * speaks TanStack Router under the hood. No `next/*` import exists here.
  */
 
-import { useMemo } from "react";
 import {
   useNavigate,
   useParams as useTanStackParams,
   useRouterState,
 } from "@tanstack/react-router";
+import { useMemo } from "react";
 
 export function usePathname(): string {
   return useRouterState({ select: (state) => state.location.pathname });

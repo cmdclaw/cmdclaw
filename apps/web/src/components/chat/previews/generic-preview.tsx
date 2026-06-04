@@ -1,7 +1,10 @@
+import { T, useGT } from "gt-react";
 import { getFlagLabel } from "@/lib/parse-cli-command";
 import { PreviewProps, PreviewField, PreviewSection } from "./preview-styles";
 
 export function GenericPreview({ operation, args, positionalArgs }: PreviewProps) {
+  const t = useGT();
+
   const hasArgs = Object.keys(args).length > 0;
   const hasPositional = positionalArgs.length > 0;
 
@@ -9,7 +12,7 @@ export function GenericPreview({ operation, args, positionalArgs }: PreviewProps
     return (
       <PreviewSection>
         <p className="text-muted-foreground text-sm">
-          Operation: <span className="font-mono">{operation}</span>
+          <T>Operation:</T> <span className="font-mono">{operation}</span>
         </p>
       </PreviewSection>
     );
@@ -18,7 +21,7 @@ export function GenericPreview({ operation, args, positionalArgs }: PreviewProps
   return (
     <div>
       {hasPositional && (
-        <PreviewSection title="Arguments">
+        <PreviewSection title={t("Arguments")}>
           {positionalArgs.map((arg) => (
             <span
               key={arg}
@@ -31,7 +34,7 @@ export function GenericPreview({ operation, args, positionalArgs }: PreviewProps
       )}
 
       {hasArgs && (
-        <PreviewSection title="Options">
+        <PreviewSection title={t("Options")}>
           {Object.entries(args).map(([key, value]) => (
             <PreviewField
               key={key}

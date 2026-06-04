@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Check, Globe2, Link2, Lock, Share2, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ function getShareUrl(token: string): string {
 }
 
 export function ChatShareControls({ conversationId }: Props) {
+  const t = useGT();
+
   const { data: conversation } = useConversation(conversationId);
   const shareConversation = useShareConversation();
   const unshareConversation = useUnshareConversation();
@@ -80,8 +83,8 @@ export function ChatShareControls({ conversationId }: Props) {
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
-          title="Share"
-          aria-label="Share conversation"
+          title={t("Share")}
+          aria-label={t("Share conversation")}
         >
           <Share2 className="h-4 w-4" />
         </button>
@@ -90,9 +93,11 @@ export function ChatShareControls({ conversationId }: Props) {
         <div className="space-y-4 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold">Share conversation</p>
+              <p className="text-sm font-semibold">
+                <T>Share conversation</T>
+              </p>
               <p className="text-muted-foreground mt-0.5 text-xs">
-                Anyone with the link can view this chat.
+                <T>Anyone with the link can view this chat.</T>
               </p>
             </div>
             <div
@@ -109,7 +114,9 @@ export function ChatShareControls({ conversationId }: Props) {
 
           {isShared && shareUrl ? (
             <div className="space-y-2">
-              <label className="text-muted-foreground text-xs">Shared link</label>
+              <label className="text-muted-foreground text-xs">
+                <T>Shared link</T>
+              </label>
               <div className="bg-muted/40 border-border/70 flex items-center gap-2 rounded-xl border p-1.5 pl-3">
                 <div className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
                   {shareUrl}

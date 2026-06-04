@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { T } from "gt-react";
 import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { requireSession } from "@/lib/route-guards";
 
@@ -29,9 +30,11 @@ function SearchPage() {
     <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
       <div className="bg-background min-h-screen">
         <div className="mx-auto w-full max-w-4xl px-6 py-10">
-          <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            <T>Search</T>
+          </h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Search across coworkers, skills, and integrations.
+            <T>Search across coworkers, skills, and integrations.</T>
           </p>
         </div>
       </div>

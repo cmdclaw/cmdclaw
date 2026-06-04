@@ -1,8 +1,9 @@
+import { T } from "gt-react";
 import { Loader2, LogIn, ShieldCheck } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { getImpersonationErrorMessage } from "@/routes/admin/-lib/impersonation-errors";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { getImpersonationErrorMessage } from "@/routes/admin/-lib/impersonation-errors";
 
 export type ImpersonationTarget = {
   resourceType: "chat" | "coworker" | "coworker_run";
@@ -101,10 +102,13 @@ export function ImpersonationRequiredPage({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <ShieldCheck className="text-muted-foreground h-4 w-4" />
-              <h2 className="text-foreground text-sm font-semibold">Impersonation required</h2>
+              <h2 className="text-foreground text-sm font-semibold">
+                <T>Impersonation required</T>
+              </h2>
             </div>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              {resourceLabel} belongs to {ownerLabel}. Impersonate {target.owner.email} to continue.
+              {resourceLabel} <T>belongs to</T> {ownerLabel}
+              <T>. Impersonate</T> {target.owner.email} <T>to continue.</T>
             </p>
             {errorMessage ? (
               <p className="text-destructive mt-3 text-sm" role="alert">
@@ -114,7 +118,7 @@ export function ImpersonationRequiredPage({
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {onBack ? (
                 <Button type="button" variant="outline" onClick={onBack}>
-                  Back
+                  <T>Back</T>
                 </Button>
               ) : null}
               <Button type="button" onClick={handleContinue} disabled={isImpersonating}>

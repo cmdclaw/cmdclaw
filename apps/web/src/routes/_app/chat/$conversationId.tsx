@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { T } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
@@ -85,7 +86,11 @@ function ConversationPage() {
       return <ImpersonationRequiredPage target={impersonationTarget} redirectPath={redirectPath} />;
     }
 
-    return <div className="text-muted-foreground p-6 text-sm">Conversation not found.</div>;
+    return (
+      <div className="text-muted-foreground p-6 text-sm">
+        <T>Conversation not found.</T>
+      </div>
+    );
   }
 
   return (

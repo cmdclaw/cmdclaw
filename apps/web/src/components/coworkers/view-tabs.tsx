@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Bookmark, Ellipsis, Pencil, Trash2, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -47,6 +48,8 @@ export function ViewTabs({
   onToggleTag,
   onClearAll,
 }: ViewTabsProps) {
+  const t = useGT();
+
   const { data: tags } = useCoworkerTagList();
   const { data: views } = useCoworkerViewList();
   const createView = useCreateCoworkerView();
@@ -179,7 +182,7 @@ export function ViewTabs({
   }, []);
 
   return (
-    <div className="border-border/40 scrollbar-none inline-flex w-fit items-center gap-1.5 overflow-x-auto rounded-lg border p-1">
+    <div className="border-border/40 inline-flex w-fit scrollbar-none items-center gap-1.5 overflow-x-auto rounded-lg border p-1">
       {/* All tab */}
       <button
         type="button"
@@ -191,7 +194,7 @@ export function ViewTabs({
             : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
         )}
       >
-        All
+        <T>All</T>
       </button>
 
       <div className="bg-border/60 h-4 w-px shrink-0" />
@@ -273,7 +276,7 @@ export function ViewTabs({
                 className="text-xs"
               >
                 <Pencil className="mr-1.5 size-3" />
-                Rename
+                <T>Rename</T>
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-view-id={view.id}
@@ -281,7 +284,7 @@ export function ViewTabs({
                 className="text-destructive focus:text-destructive text-xs"
               >
                 <Trash2 className="mr-1.5 size-3" />
-                Delete
+                <T>Delete</T>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -299,7 +302,7 @@ export function ViewTabs({
                 value={saveName}
                 onChange={handleSaveNameChange}
                 onKeyDown={handleSaveNameKeyDown}
-                placeholder="View name..."
+                placeholder={t("View name...")}
                 className="h-6 w-28 rounded-md px-2 text-xs"
                 autoFocus
               />
@@ -309,7 +312,7 @@ export function ViewTabs({
                 disabled={!saveName.trim() || createView.isPending}
                 className="bg-foreground/10 text-foreground shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50"
               >
-                Save
+                <T>Save</T>
               </button>
             </div>
           ) : (
@@ -319,7 +322,7 @@ export function ViewTabs({
               className="text-muted-foreground/60 hover:text-muted-foreground flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors"
             >
               <Bookmark className="size-3" />
-              Save view
+              <T>Save view</T>
             </button>
           )}
         </>

@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversation } from "@/orpc/hooks/conversation";
@@ -54,6 +55,8 @@ type Props = {
 };
 
 export function ChatCopyButton({ conversationId, className }: Props) {
+  const t = useGT();
+
   const { data: conversation } = useConversation(conversationId);
   const [isCopied, setIsCopied] = useState(false);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,7 +112,7 @@ export function ChatCopyButton({ conversationId, className }: Props) {
       data-testid="chat-copy-transcript-button"
       disabled={!hasTranscript}
       onClick={handleCopy}
-      title="Copy chat as text"
+      title={t("Copy chat as text")}
       aria-label={isCopied ? "Copied" : "Copy chat as text"}
     >
       {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}

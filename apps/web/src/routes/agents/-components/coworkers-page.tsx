@@ -3,6 +3,7 @@
 import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
 import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
+import { T, msg, useGT, useMessages } from "gt-react";
 import {
   Activity,
   BarChart3,
@@ -24,16 +25,12 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { AppImage as Image } from "../-lib/app-image";
-import { AppLink as Link } from "../-lib/app-link";
-import { useRouter } from "../-lib/next-navigation-compat";
 import { type ChangeEvent, useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { getCoworkerDisplayName } from "@/components/coworkers/coworker-card-content";
-import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { InteractiveCoworkerCard } from "@/components/coworkers/interactive-coworker-card";
 import { ViewTabs } from "@/components/coworkers/view-tabs";
 // Commented out — prompt bar removed from coworkers page
@@ -62,6 +59,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { blobToBase64, useVoiceRecording } from "@/hooks/use-voice-recording";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";
+import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { COWORKERS_OPEN_RECENT_DRAWER_EVENT } from "@/lib/coworkers-events";
 import { normalizeGenerationError } from "@/lib/generation-errors";
 import {
@@ -84,6 +82,9 @@ import {
 import { useIntegrationList } from "@/orpc/hooks/integrations";
 import { useProviderAuthStatus } from "@/orpc/hooks/provider-auth";
 import { useTranscribe } from "@/orpc/hooks/voice";
+import { AppImage as Image } from "../-lib/app-image";
+import { AppLink as Link } from "../-lib/app-link";
+import { useRouter } from "../-lib/next-navigation-compat";
 
 type CoworkerItem = {
   id: string;
@@ -129,10 +130,10 @@ const DEFAULT_COWORKER_BUILDER_MODEL = DEFAULT_CONNECTED_CHATGPT_MODEL;
 const MAX_VISIBLE_TOOL_INDICATORS = 3;
 
 const TRIGGER_TYPE_OPTIONS = [
-  { value: "manual", label: "Manual", icon: Play },
-  { value: "schedule", label: "Scheduled", icon: Clock },
-  { value: "email", label: "Email", icon: Mail },
-  { value: "webhook", label: "Webhook", icon: Webhook },
+  { value: "manual", label: msg("Manual"), icon: Play },
+  { value: "schedule", label: msg("Scheduled"), icon: Clock },
+  { value: "email", label: msg("Email"), icon: Mail },
+  { value: "webhook", label: msg("Webhook"), icon: Webhook },
 ] as const;
 
 const CARD_MOTION = {
@@ -233,7 +234,7 @@ function SharedCoworkerCard({
             {getCoworkerDisplayName(coworker.name)}
           </p>
           <p className="text-muted-foreground text-xs">
-            Shared by {coworker.owner.name?.trim() || coworker.owner.email || "A teammate"}
+            <T>Shared by</T> {coworker.owner.name?.trim() || coworker.owner.email || "A teammate"}
           </p>
         </div>
       </div>
@@ -270,7 +271,8 @@ function SharedCoworkerCard({
         )}
         {toolSummary.showSkillBadge ? (
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
+            {toolSummary.skillCount} <T>skill</T>
+            {toolSummary.skillCount === 1 ? "" : "s"}
           </span>
         ) : null}
         {toolSummary.overflowCount > 0 ? (
@@ -281,7 +283,8 @@ function SharedCoworkerCard({
       </div>
 
       <div className="text-muted-foreground/70 text-xs">
-        {coworker.documentCount} document{coworker.documentCount === 1 ? "" : "s"} · shared{" "}
+        {coworker.documentCount} <T>document</T>
+        {coworker.documentCount === 1 ? "" : "s"} <T>· shared</T>{" "}
         {formatDate(coworker.sharedAt) ?? "recently"}
       </div>
       <div className="mt-auto flex items-center gap-1.5">
@@ -297,21 +300,21 @@ function SharedCoworkerCard({
           ) : (
             <Download className="size-3" />
           )}
-          Install
+          <T>Install</T>
         </Button>
         {coworker.prompt ? (
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
                 <Eye className="size-3" />
-                View instructions
+                <T>View instructions</T>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>{getCoworkerDisplayName(coworker.name)}</DialogTitle>
                 <DialogDescription>
-                  Instructions shared by{" "}
+                  <T>Instructions shared by</T>{" "}
                   {coworker.owner.name?.trim() || coworker.owner.email || "a teammate"}
                 </DialogDescription>
               </DialogHeader>
@@ -327,6 +330,9 @@ function SharedCoworkerCard({
 }
 
 export default function CoworkersPage() {
+  const t = useGT();
+  const m = useMessages();
+
   const router = useRouter();
   const { data: coworkers, isLoading } = useCoworkerList();
   const { data: sharedCoworkers } = useSharedCoworkerList();
@@ -500,16 +506,16 @@ export default function CoworkersPage() {
       setImportingSharedCoworkerId(sourceCoworkerId);
       try {
         const created = await importSharedCoworker.mutateAsync(sourceCoworkerId);
-        toast.success("Coworker imported.");
+        toast.success(t("Coworker imported."));
         router.push(getCoworkerEditHref(created));
       } catch (error) {
         console.error("Failed to import coworker:", error);
-        toast.error("Failed to import coworker.");
+        toast.error(t("Failed to import coworker."));
       } finally {
         setImportingSharedCoworkerId(null);
       }
     },
-    [importSharedCoworker, router],
+    [importSharedCoworker, router, t],
   );
   const handleImportCoworkerClick = useCallback(() => {
     if (importCoworkerDefinition.isPending) {
@@ -526,21 +532,21 @@ export default function CoworkersPage() {
         return;
       }
       if (!file.name.toLowerCase().endsWith(".json")) {
-        toast.error("Select a .json coworker export.");
+        toast.error(t("Select a .json coworker export."));
         return;
       }
 
       try {
         const definitionJson = await file.text();
         const created = await importCoworkerDefinition.mutateAsync(definitionJson);
-        toast.success("Coworker imported in the off state.");
+        toast.success(t("Coworker imported in the off state."));
         router.push(getCoworkerEditHref(created));
       } catch (error) {
         console.error("Failed to import coworker definition:", error);
-        toast.error("Failed to import coworker.");
+        toast.error(t("Failed to import coworker."));
       }
     },
-    [importCoworkerDefinition, router],
+    [importCoworkerDefinition, router, t],
   );
   const handleDeleteDialogChange = useCallback(
     (open: boolean) => {
@@ -557,15 +563,15 @@ export default function CoworkersPage() {
     setDeletingCoworkerId(coworkerPendingDelete.id);
     try {
       await deleteCoworker.mutateAsync(coworkerPendingDelete.id);
-      toast.success("Coworker deleted.");
+      toast.success(t("Coworker deleted."));
       setCoworkerPendingDelete(null);
     } catch (error) {
       console.error("Failed to delete coworker:", error);
-      toast.error("Failed to delete coworker.");
+      toast.error(t("Failed to delete coworker."));
     } finally {
       setDeletingCoworkerId(null);
     }
-  }, [coworkerPendingDelete, deleteCoworker]);
+  }, [coworkerPendingDelete, deleteCoworker, t]);
 
   const _stopRecordingAndTranscribe = useCallback(async () => {
     if (!isRecordingRef.current) {
@@ -755,16 +761,16 @@ export default function CoworkersPage() {
         <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
           <Image src="/tools/lobster.svg" alt="" width={64} height={64} className="mb-6" />
           <h2 className="text-foreground mb-1.5 text-center text-xl font-semibold tracking-tight">
-            Build your first coworker
+            <T>Build your first coworker</T>
           </h2>
           <p className="text-muted-foreground mb-8 max-w-sm text-center text-sm">
-            Put repetitive tasks on autopilot.
+            <T>Put repetitive tasks on autopilot.</T>
           </p>
           <Link
             href="/"
             className="bg-foreground text-background hover:bg-foreground/90 inline-flex h-10 items-center justify-center rounded-lg px-6 text-sm font-medium transition-colors"
           >
-            Start building
+            <T>Start building</T>
           </Link>
         </div>
       ) : (
@@ -775,12 +781,12 @@ export default function CoworkersPage() {
                 type="button"
                 onClick={openRecentDrawer}
                 className="text-muted-foreground hover:text-foreground -ml-1 flex h-8 w-8 items-center justify-center rounded-md md:hidden"
-                aria-label="Recent runs"
+                aria-label={t("Recent runs")}
               >
                 <Menu className="h-5 w-5" />
               </button>
               <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
-                My coworkers
+                <T>My coworkers</T>
                 <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium tabular-nums">
                   {coworkerList.length}
                 </span>
@@ -790,28 +796,36 @@ export default function CoworkersPage() {
                 className="text-muted-foreground hover:text-foreground ml-1 flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
               >
                 <Activity className="size-3.5" />
-                <span className="hidden sm:inline">Overview</span>
+                <span className="hidden sm:inline">
+                  <T>Overview</T>
+                </span>
               </Link>
               <Link
                 href="/agents/history"
                 className="text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
               >
                 <History className="size-3.5" />
-                <span className="hidden sm:inline">History</span>
+                <span className="hidden sm:inline">
+                  <T>History</T>
+                </span>
               </Link>
               <Link
                 href="/agents/usage"
                 className="text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
               >
                 <BarChart3 className="size-3.5" />
-                <span className="hidden sm:inline">Usage</span>
+                <span className="hidden sm:inline">
+                  <T>Usage</T>
+                </span>
               </Link>
               <Link
                 href="/agents/org-chart"
                 className="text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors"
               >
                 <Network className="size-3.5" />
-                <span className="hidden sm:inline">Org Chart</span>
+                <span className="hidden sm:inline">
+                  <T>Org Chart</T>
+                </span>
               </Link>
             </div>
             <div className="flex items-center gap-1.5">
@@ -820,7 +834,7 @@ export default function CoworkersPage() {
                 <Input
                   value={searchQuery}
                   onChange={handleSearchChange}
-                  placeholder="Search coworkers..."
+                  placeholder={t("Search coworkers...")}
                   className="h-8 pl-8 text-xs"
                 />
               </div>
@@ -841,13 +855,15 @@ export default function CoworkersPage() {
                         {selectedTriggerTypes.size}
                       </span>
                     ) : (
-                      <span className="hidden sm:inline">Trigger</span>
+                      <span className="hidden sm:inline">
+                        <T>Trigger</T>
+                      </span>
                     )}
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-40 p-1.5">
                   <p className="text-muted-foreground px-2 py-1 text-[10px] font-medium tracking-wider uppercase">
-                    Trigger
+                    <T>Trigger</T>
                   </p>
                   {TRIGGER_TYPE_OPTIONS.map((trigger) => {
                     const isActive = selectedTriggerTypes.has(trigger.value);
@@ -871,7 +887,7 @@ export default function CoworkersPage() {
                           {isActive && <X className="size-2.5" />}
                         </div>
                         <Icon className="text-muted-foreground size-3" />
-                        <span className="text-foreground">{trigger.label}</span>
+                        <span className="text-foreground">{m(trigger.label)}</span>
                       </button>
                     );
                   })}
@@ -892,7 +908,7 @@ export default function CoworkersPage() {
                 )}
               >
                 <Share2 className="size-3" />
-                Shared with workspace
+                <T>Shared with workspace</T>
                 <span
                   className={cn(
                     "tabular-nums rounded-full px-1.5 text-[10px]",
@@ -908,7 +924,7 @@ export default function CoworkersPage() {
               type="file"
               accept=".json,application/json"
               className="hidden"
-              aria-label="Import coworker JSON file"
+              aria-label={t("Import coworker JSON file")}
               onChange={handleImportCoworkerFileChange}
             />
             <button
@@ -922,7 +938,7 @@ export default function CoworkersPage() {
               ) : (
                 <Upload className="size-3" />
               )}
-              Import coworker
+              <T>Import coworker</T>
             </button>
           </div>
 
@@ -940,7 +956,9 @@ export default function CoworkersPage() {
           {displayedCoworkerList.length === 0 ? (
             <div className="border-border rounded-xl border border-dashed p-10 text-center">
               <p className="text-muted-foreground text-sm">
-                No coworkers match &ldquo;{searchQuery}&rdquo;
+                <T>No coworkers match &ldquo;</T>
+                {searchQuery}
+                <T>&rdquo;</T>
               </p>
             </div>
           ) : (
@@ -963,7 +981,7 @@ export default function CoworkersPage() {
                       <Plus className="text-muted-foreground size-5" />
                     </div>
                     <span className="text-muted-foreground text-sm font-medium">
-                      Create new coworker
+                      <T>Create new coworker</T>
                     </span>
                   </Link>
                 </motion.div>
@@ -988,9 +1006,11 @@ export default function CoworkersPage() {
       {displayedSharedCoworkerList.length > 0 ? (
         <section className="space-y-4">
           <div>
-            <h2 className="text-base font-semibold">Shared by teammates</h2>
+            <h2 className="text-base font-semibold">
+              <T>Shared by teammates</T>
+            </h2>
             <p className="text-muted-foreground text-sm">
-              Install a coworker into your own workspace environment.
+              <T>Install a coworker into your own workspace environment.</T>
             </p>
           </div>
           <motion.div layout className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -1020,7 +1040,9 @@ export default function CoworkersPage() {
       <AlertDialog open={coworkerPendingDelete !== null} onOpenChange={handleDeleteDialogChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete coworker?</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>Delete coworker?</T>
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {coworkerPendingDelete
                 ? `Delete ${getCoworkerDisplayName(coworkerPendingDelete.name)} and its run history? This action cannot be undone.`
@@ -1028,14 +1050,16 @@ export default function CoworkersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingCoworkerId !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingCoworkerId !== null}>
+              <T>Cancel</T>
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               disabled={deletingCoworkerId !== null}
               className="bg-destructive hover:bg-destructive/90 text-white"
             >
               {deletingCoworkerId !== null ? <Loader2 className="size-3 animate-spin" /> : null}
-              Delete
+              <T>Delete</T>
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

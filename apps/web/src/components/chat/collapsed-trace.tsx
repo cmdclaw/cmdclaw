@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Check, AlertCircle, ChevronRight, Eye, StopCircle, Timer } from "lucide-react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useCallback, useMemo, useState } from "react";
@@ -135,12 +136,16 @@ export function CollapsedTrace({
         {hasInterrupted ? (
           <>
             <StopCircle className="h-4 w-4 text-orange-500" />
-            <span className="text-muted-foreground">Interrupted by user</span>
+            <span className="text-muted-foreground">
+              <T>Interrupted by user</T>
+            </span>
           </>
         ) : hasError ? (
           <>
             <AlertCircle className="h-4 w-4 text-amber-500" />
-            <span className="text-muted-foreground">Completed with error</span>
+            <span className="text-muted-foreground">
+              <T>Completed with error</T>
+            </span>
           </>
         ) : (
           <>
@@ -162,7 +167,9 @@ export function CollapsedTrace({
 
         <div className="text-muted-foreground/60 ml-2 flex items-center gap-1 text-xs">
           <Eye className="h-3 w-3" />
-          <span>View</span>
+          <span>
+            <T>View</T>
+          </span>
         </div>
       </button>
 
@@ -185,7 +192,7 @@ export function CollapsedTrace({
                 </div>
               ) : (
                 <p className="text-muted-foreground text-xs italic">
-                  Activity details not available
+                  <T>Activity details not available</T>
                 </p>
               )}
             </div>

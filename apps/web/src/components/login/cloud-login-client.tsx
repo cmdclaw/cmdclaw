@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,7 @@ function LastUsedBadge({ variant = "brand" }: { variant?: "brand" | "inverted" }
         variant === "inverted" ? "bg-white/12 text-white" : "bg-brand/10 text-brand"
       }`}
     >
-      Last used
+      <T>Last used</T>
     </span>
   );
 }
@@ -118,6 +119,8 @@ export function CloudLoginClient({
   initialError?: string | null;
   initialScreen?: InitialScreen;
 }) {
+  const t = useGT();
+
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -366,7 +369,7 @@ export function CloudLoginClient({
       {/* Header */}
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          CmdClaw
+          <T>CmdClaw</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm text-balance">{description}</p>
@@ -377,12 +380,16 @@ export function CloudLoginClient({
         <div className="flex flex-col gap-2">
           <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
             <GoogleIcon />
-            <span className="ml-2">Continue with Google</span>
+            <span className="ml-2">
+              <T>Continue with Google</T>
+            </span>
             {lastMethod === "google" && <LastUsedBadge />}
           </Button>
           <Button type="button" variant="outline" className="w-full" onClick={handleAppleSignIn}>
             <AppleIcon />
-            <span className="ml-2">Continue with Apple</span>
+            <span className="ml-2">
+              <T>Continue with Apple</T>
+            </span>
             {lastMethod === "apple" && <LastUsedBadge />}
           </Button>
         </div>
@@ -395,7 +402,9 @@ export function CloudLoginClient({
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card text-muted-foreground px-2">Or with email</span>
+            <span className="bg-card text-muted-foreground px-2">
+              <T>Or with email</T>
+            </span>
           </div>
         </div>
       )}
@@ -416,8 +425,8 @@ export function CloudLoginClient({
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="you@example.com"
-                aria-label="Email"
+                placeholder={t("you@example.com")}
+                aria-label={t("Email")}
                 value={email}
                 onChange={handleEmailChange}
                 required
@@ -434,7 +443,7 @@ export function CloudLoginClient({
                   disabled={!email || submitting}
                   onClick={handleUsePassword}
                 >
-                  Password
+                  <T>Password</T>
                 </Button>
               </div>
             </form>
@@ -453,9 +462,11 @@ export function CloudLoginClient({
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               <MailCheckIcon />
               <div className="space-y-1">
-                <p className="text-sm font-medium">Check your inbox</p>
+                <p className="text-sm font-medium">
+                  <T>Check your inbox</T>
+                </p>
                 <p className="text-muted-foreground text-sm">
-                  We sent a magic link to{" "}
+                  <T>We sent a magic link to</T>{" "}
                   <span className="text-foreground font-medium">{email}</span>
                 </p>
               </div>
@@ -464,7 +475,7 @@ export function CloudLoginClient({
                 onClick={handleBack}
                 className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors"
               >
-                Back to login
+                <T>Back to login</T>
               </button>
             </div>
           </motion.div>
@@ -488,7 +499,7 @@ export function CloudLoginClient({
                   onClick={handleBack}
                   className="text-brand hover:text-brand-dark ml-2 shrink-0 text-sm font-medium"
                 >
-                  Change
+                  <T>Change</T>
                 </button>
               </div>
 
@@ -510,8 +521,8 @@ export function CloudLoginClient({
                       id="password"
                       type="password"
                       autoComplete="current-password"
-                      placeholder="Enter your password"
-                      aria-label="Password"
+                      placeholder={t("Enter your password")}
+                      aria-label={t("Password")}
                       value={password}
                       onChange={handlePasswordChange}
                       required
@@ -530,7 +541,7 @@ export function CloudLoginClient({
                       disabled={submitting}
                       className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors disabled:opacity-50"
                     >
-                      Forgot password?
+                      <T>Forgot password?</T>
                     </button>
                   </div>
                 </>
@@ -557,7 +568,8 @@ export function CloudLoginClient({
                     : "Password reset link sent"}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  We sent a link to <span className="text-foreground font-medium">{email}</span>{" "}
+                  <T>We sent a link to</T>{" "}
+                  <span className="text-foreground font-medium">{email}</span>{" "}
                   {passwordEmailMode === "create"
                     ? "to create your password."
                     : "to reset your password."}
@@ -568,7 +580,7 @@ export function CloudLoginClient({
                 onClick={handleBack}
                 className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors"
               >
-                Back to login
+                <T>Back to login</T>
               </button>
             </div>
           </motion.div>

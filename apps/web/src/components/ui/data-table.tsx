@@ -8,6 +8,7 @@ import {
   getFilteredRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { T, useGT } from "gt-react";
 import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function DataTable<TData>({
   globalFilter,
   onGlobalFilterChange,
 }: DataTableProps<TData>) {
+  const t = useGT();
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
   const table = useReactTable({
@@ -70,9 +72,9 @@ export function DataTable<TData>({
         </thead>
         <tbody>
           {table.getRowModel().rows.length === 0 ? (
-            <tr>
+            <tr aria-label={t("No data")}>
               <td colSpan={columns.length} className="text-muted-foreground px-4 py-8 text-center">
-                No data
+                <T>No data</T>
               </td>
             </tr>
           ) : (
@@ -105,9 +107,12 @@ function DataTableRow<TData>({
   renderSubRow?: (row: Row<TData>) => ReactNode;
   colSpan: number;
 }) {
+  const t = useGT();
+
   return (
     <>
       <tr
+        aria-label={expandable ? t("Toggle row details") : undefined}
         className={cn("border-b last:border-b-0 hover:bg-muted/30", expandable && "cursor-pointer")}
         onClick={expandable ? row.getToggleExpandedHandler() : undefined}
       >

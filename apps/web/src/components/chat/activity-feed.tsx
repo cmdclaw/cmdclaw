@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { ChevronDown, ChevronUp, Activity, Timer } from "lucide-react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
@@ -101,7 +102,9 @@ export function ActivityFeed({
       <div className="border-border/50 bg-muted/30 rounded-lg border">
         <div className="flex items-center gap-2 px-3 py-2">
           <Activity className="text-muted-foreground h-4 w-4" />
-          <span className="text-muted-foreground text-sm">Processing...</span>
+          <span className="text-muted-foreground text-sm">
+            <T>Processing...</T>
+          </span>
           <div className="ml-auto flex gap-1">
             <span className="bg-muted-foreground/50 h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]" />
             <span className="bg-muted-foreground/50 h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.15s]" />
@@ -120,7 +123,9 @@ export function ActivityFeed({
         className="hover:bg-muted/50 border-border/30 flex w-full items-center gap-2 border-b px-3 py-2 text-left text-sm transition-colors"
       >
         <Activity className="text-muted-foreground h-4 w-4" />
-        <span className="text-muted-foreground font-medium">Activity</span>
+        <span className="text-muted-foreground font-medium">
+          <T>Activity</T>
+        </span>
         {isStreaming && (
           <div className="ml-1 flex gap-1">
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-500 [animation-delay:-0.3s]" />
@@ -135,7 +140,9 @@ export function ActivityFeed({
             <span>{elapsedLabel}</span>
           </div>
         )}
-        <span className="text-muted-foreground/60 text-xs">{items.length} items</span>
+        <span className="text-muted-foreground/60 text-xs">
+          {items.length} <T>items</T>
+        </span>
         {isExpanded ? (
           <ChevronUp className="text-muted-foreground h-4 w-4" />
         ) : (

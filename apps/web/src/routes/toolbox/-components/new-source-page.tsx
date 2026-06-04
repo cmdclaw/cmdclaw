@@ -1,4 +1,5 @@
 import type { ChangeEvent, FormEvent } from "react";
+import { T, useGT } from "gt-react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ import { AppLink } from "../-lib/app-link";
 import { useRouter } from "../-lib/next-navigation-compat";
 
 export function NewSourcePage() {
+  const t = useGT();
+
   const router = useRouter();
   const { data, isLoading: listLoading } = useWorkspaceMcpServerList();
   const createSource = useCreateWorkspaceMcpServer();
@@ -98,13 +101,13 @@ export function NewSourcePage() {
           });
         }
 
-        toast.success("Source added.");
+        toast.success(t("Source added."));
         router.push(`/toolbox/sources/${result.id}`);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to connect source.");
       }
     },
-    [createSource, form, inferredName, isMcpCreate, router, setCredential, startOAuth],
+    [createSource, form, inferredName, isMcpCreate, router, setCredential, startOAuth, t],
   );
 
   if (listLoading) {
@@ -119,10 +122,10 @@ export function NewSourcePage() {
     return (
       <div className="py-24 text-center">
         <p className="text-muted-foreground text-sm">
-          You need workspace admin access to add sources.
+          <T>You need workspace admin access to add sources.</T>
         </p>
         <AppLink href="/toolbox" className="text-brand mt-4 inline-block text-sm hover:underline">
-          Back to Toolbox
+          <T>Back to Toolbox</T>
         </AppLink>
       </div>
     );
@@ -135,10 +138,12 @@ export function NewSourcePage() {
         className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1.5 text-sm transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Toolbox
+        <T>Back to Toolbox</T>
       </AppLink>
 
-      <h1 className="mb-6 text-xl font-semibold">Add MCP Server</h1>
+      <h1 className="mb-6 text-xl font-semibold">
+        <T>Add MCP Server</T>
+      </h1>
 
       <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 shadow-sm">
         {isMcpCreate ? (
@@ -158,7 +163,7 @@ export function NewSourcePage() {
 
             <div className="space-y-2">
               <label htmlFor="new-source-endpoint" className="text-sm font-medium">
-                Endpoint URL
+                <T>Endpoint URL</T>
               </label>
               <Input
                 id="new-source-endpoint"
@@ -174,13 +179,13 @@ export function NewSourcePage() {
             {form.endpoint.trim() ? (
               <div className="space-y-2">
                 <label htmlFor="new-source-name" className="text-sm font-medium">
-                  Server name
+                  <T>Server name</T>
                 </label>
                 <Input
                   id="new-source-name"
                   value={form.name}
                   onChange={handleNameChange}
-                  placeholder="Linear, Salesforce, Notion..."
+                  placeholder={t("Linear, Salesforce, Notion...")}
                 />
               </div>
             ) : null}
@@ -189,7 +194,9 @@ export function NewSourcePage() {
 
         <div className="mt-8 flex justify-end gap-3">
           <Button type="button" variant="ghost" asChild>
-            <AppLink href="/toolbox">Cancel</AppLink>
+            <AppLink href="/toolbox">
+              <T>Cancel</T>
+            </AppLink>
           </Button>
           <Button
             type="submit"
@@ -202,7 +209,7 @@ export function NewSourcePage() {
             {createSource.isPending || startOAuth.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            Connect
+            <T>Connect</T>
           </Button>
         </div>
       </form>

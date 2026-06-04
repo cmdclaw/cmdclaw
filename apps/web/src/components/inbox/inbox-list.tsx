@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { useCallback } from "react";
 import type { InboxCoworkerItem, InboxItem as InboxItemType, ToolApprovalData } from "./types";
 import { InboxItem } from "./inbox-item";
@@ -41,9 +42,11 @@ export function InboxList({
     return (
       <div className="flex flex-1 items-center justify-center rounded-lg border p-16">
         <div className="space-y-2 text-center">
-          <p className="text-muted-foreground text-sm font-medium">No items in inbox</p>
+          <p className="text-muted-foreground text-sm font-medium">
+            <T>No items in inbox</T>
+          </p>
           <p className="text-muted-foreground/60 text-[13px]">
-            Coworker runs will appear here as they move through the workflow.
+            <T>Coworker runs will appear here as they move through the workflow.</T>
           </p>
         </div>
       </div>

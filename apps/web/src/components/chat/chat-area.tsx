@@ -5,6 +5,7 @@ import {
 } from "@cmdclaw/core/lib/chat-model-defaults";
 import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import { useQueryClient } from "@tanstack/react-query";
+import { T, msg, useGT, useMessages } from "gt-react";
 import {
   AlertCircle,
   Activity,
@@ -45,7 +46,6 @@ import {
   resolveDefaultChatModelSelection,
 } from "@/lib/chat-model-selection";
 import { normalizeGenerationError, type NormalizedGenerationError } from "@/lib/generation-errors";
-import { cn } from "@/lib/utils";
 import {
   createGenerationRuntime,
   type GenerationRuntime,
@@ -58,6 +58,7 @@ import {
   UNIPILE_MISSING_CREDENTIALS_MESSAGE,
 } from "@/lib/integration-errors";
 import { buildProviderAuthAvailabilityByProvider } from "@/lib/provider-auth-availability";
+import { cn } from "@/lib/utils";
 import { client } from "@/orpc/client";
 import { useConversation, useUpdateAutoApprove } from "@/orpc/hooks/conversation";
 import {
@@ -293,7 +294,7 @@ function QueuedMessageRow({
             onClick={handleSend}
             disabled={!isQueued}
           >
-            Steer
+            <T>Steer</T>
           </Button>
         ) : null}
         <Button
@@ -380,8 +381,8 @@ function buildRunDeadlineResumeSegment(
             question: `This run hit the ${runtimeLimitLabel} max runtime and stopped. Do you want to continue from where it left off?`,
             options: [
               {
-                label: "Yes",
-                description: "Resume this run in a new sandbox.",
+                label: msg("Yes"),
+                description: msg("Resume this run in a new sandbox."),
               },
             ],
           },
@@ -838,22 +839,22 @@ const CHAT_PLACEHOLDER_PROMPTS = [
 
 const CHAT_QUICK_STARTERS: ChatStarter[] = [
   {
-    label: "Latest emails",
+    label: msg("Latest emails"),
     prompt:
       "What are my latest unread emails? Group them by urgency and tell me what needs a reply first.",
   },
   {
-    label: "Unread Slack",
+    label: msg("Unread Slack"),
     prompt:
       "Show unread Slack messages and mentions that likely need my attention. Summarize each thread in one line.",
   },
   {
-    label: "Today's meetings",
+    label: msg("Today's meetings"),
     prompt:
       "What meetings do I have today? List the time, attendees, and any preparation I should do before each one.",
   },
   {
-    label: "Daily digest",
+    label: msg("Daily digest"),
     prompt:
       "Create a daily digest workflow that sends me a morning summary of unread emails, important Slack threads, and today's meetings.",
   },
@@ -861,52 +862,52 @@ const CHAT_QUICK_STARTERS: ChatStarter[] = [
 
 const CHAT_DISCOVER_SECTIONS: ChatStarterSection[] = [
   {
-    title: "Ask Right Now",
-    description: "One-shot prompts that pull from connected tools immediately.",
+    title: msg("Ask Right Now"),
+    description: msg("One-shot prompts that pull from connected tools immediately."),
     items: [
       {
-        label: "Inbox triage",
+        label: msg("Inbox triage"),
         prompt:
           "Review my latest unread emails, highlight the critical ones, and draft short reply points for the top 3.",
       },
       {
-        label: "Slack catch-up",
+        label: msg("Slack catch-up"),
         prompt:
           "Catch me up on unread Slack threads, especially anything blocking me or asking for a decision.",
       },
       {
-        label: "Meeting prep",
+        label: msg("Meeting prep"),
         prompt:
           "Look at today's calendar and give me a prep brief for each meeting with likely action items.",
       },
       {
-        label: "Follow-up list",
+        label: msg("Follow-up list"),
         prompt:
           "Find emails and messages from the last 48 hours that I should follow up on but have not answered yet.",
       },
     ],
   },
   {
-    title: "Automate For Me",
-    description: "Recurring or triggered workflows you can turn into a coworker.",
+    title: msg("Automate For Me"),
+    description: msg("Recurring or triggered workflows you can turn into a coworker."),
     items: [
       {
-        label: "Morning brief",
+        label: msg("Morning brief"),
         prompt:
           "Every morning at 8am, send me a digest of unread emails, urgent Slack threads, and today's meetings.",
       },
       {
-        label: "Urgent email routing",
+        label: msg("Urgent email routing"),
         prompt:
           "When a new email sounds urgent or frustrated, summarize it, suggest a reply, and alert me in Slack.",
       },
       {
-        label: "Post-meeting recap",
+        label: msg("Post-meeting recap"),
         prompt:
           "After each calendar event ends, generate a recap draft with next steps and send it to me for review.",
       },
       {
-        label: "End-of-day wrap-up",
+        label: msg("End-of-day wrap-up"),
         prompt:
           "Every weekday at 5pm, summarize what changed across email, Slack, and calendar and list unresolved items.",
       },
@@ -957,6 +958,8 @@ export function ChatArea({
   enableOutputPreview = false,
   compact = false,
 }: Props) {
+  const t = useGT();
+  const m = useMessages();
   const { setHeaderActions } = useChatHeaderActions();
   const queryClient = useQueryClient();
   const posthog = usePostHog();
@@ -3656,9 +3659,13 @@ export function ChatArea({
           <DropdownMenuSeparator />
           <div className="min-h-0 flex-1 overflow-y-auto p-1">
             {isPlatformSkillsLoading || isAccessibleSkillsLoading ? (
-              <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <T>Loading...</T>
+              </DropdownMenuItem>
             ) : filteredSelectableSkills.length === 0 ? (
-              <DropdownMenuItem disabled>No skills found</DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <T>No skills found</T>
+              </DropdownMenuItem>
             ) : (
               filteredSelectableSkills.map((skill) => {
                 const isSelected = selectedSkillKeys.includes(skill.key);
@@ -3689,7 +3696,7 @@ export function ChatArea({
               disabled={selectedSkillKeys.length === 0}
               className="h-10 rounded-md"
             >
-              Clear
+              <T>Clear</T>
             </Button>
             <Button
               type="button"
@@ -3697,7 +3704,7 @@ export function ChatArea({
               onClick={handleCloseSkillsMenu}
               className="h-10 rounded-md"
             >
-              Close
+              <T>Close</T>
             </Button>
           </div>
         </DropdownMenuContent>
@@ -3744,7 +3751,9 @@ export function ChatArea({
           className="text-muted-foreground flex cursor-pointer items-center gap-1 text-xs select-none"
         >
           <CircleCheck className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Auto-approve</span>
+          <span className="hidden sm:inline">
+            <T>Auto-approve</T>
+          </span>
         </label>
       </div>
     ),
@@ -3972,7 +3981,9 @@ export function ChatArea({
             {showModelSwitchWarning && (
               <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>Changing model mid-conversation can degrade performance.</span>
+                <span>
+                  <T>Changing model mid-conversation can degrade performance.</T>
+                </span>
               </div>
             )}
             {streamError && (
@@ -4110,7 +4121,7 @@ export function ChatArea({
                         data-prompt={starter.prompt}
                         onClick={handleStarterButtonClick}
                       >
-                        {starter.label}
+                        {m(starter.label)}
                       </Button>
                     </motion.div>
                   ))}
@@ -4128,7 +4139,7 @@ export function ChatArea({
                       onClick={handleToggleDiscover}
                     >
                       <Sparkles className="h-3.5 w-3.5" />
-                      Discover
+                      <T>Discover</T>
                     </Button>
                   </motion.div>
                 </div>
@@ -4151,7 +4162,7 @@ export function ChatArea({
                             className="text-muted-foreground hover:text-foreground -mr-1 h-7 rounded-full px-2 text-xs"
                             onClick={handleCloseDiscover}
                           >
-                            Close
+                            <T>Close</T>
                           </Button>
                         </div>
 
@@ -4159,7 +4170,7 @@ export function ChatArea({
                           {CHAT_DISCOVER_SECTIONS.map((section, sectionIdx) => (
                             <div key={section.title}>
                               <p className="mb-1.5 text-xs font-medium tracking-wide text-stone-500 uppercase">
-                                {section.title}
+                                {m(section.title)}
                               </p>
                               <div className="flex flex-col gap-1">
                                 {section.items.map((item, itemIdx) => (
@@ -4174,9 +4185,11 @@ export function ChatArea({
                                     data-prompt={item.prompt}
                                     onClick={handleStarterButtonClick}
                                   >
-                                    <span className="block text-sm font-medium">{item.label}</span>
+                                    <span className="block text-sm font-medium">
+                                      {m(item.label)}
+                                    </span>
                                     <span className="text-muted-foreground mt-0.5 line-clamp-1 block text-xs leading-relaxed">
-                                      {item.prompt}
+                                      {m(item.prompt)}
                                     </span>
                                   </motion.button>
                                 ))}
@@ -4207,13 +4220,13 @@ export function ChatArea({
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm leading-none font-medium">
-                        {normalizedQueuedMessages.length} queued message
+                        {normalizedQueuedMessages.length} <T>queued message</T>
                         {normalizedQueuedMessages.length === 1 ? "" : "s"}
                       </p>
                       <p className="text-muted-foreground mt-1 text-xs">
                         {queueingEnabled
-                          ? "They run in order as soon as the current response finishes."
-                          : "Queueing is off for new messages."}
+                          ? t("They run in order as soon as the current response finishes.")
+                          : t("Queueing is off for new messages.")}
                       </p>
                     </div>
                   </div>
@@ -4301,6 +4314,8 @@ export function ChatArea({
       stopRecordingAndTranscribe,
       streamElapsedMs,
       streamError,
+      m,
+      t,
       transcriptNodes,
       visibleActivityItemsBySegmentId,
       voiceError,
@@ -4322,7 +4337,9 @@ export function ChatArea({
   if (conversationId && isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <div className="text-muted-foreground">Loading conversation...</div>
+        <div className="text-muted-foreground">
+          <T>Loading conversation...</T>
+        </div>
       </div>
     );
   }

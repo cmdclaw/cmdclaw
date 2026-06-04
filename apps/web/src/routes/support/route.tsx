@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { T } from "gt-react";
 
 /**
  * Support shell layout. Replaces the Next `src/app/support/layout.tsx` as a TanStack
@@ -22,7 +23,7 @@ function SupportLayout() {
       <header className="border-b">
         <div className="container flex h-14 items-center px-4">
           <Link to="/" className="text-sm font-medium">
-            CmdClaw
+            <T>CmdClaw</T>
           </Link>
         </div>
       </header>
@@ -31,19 +32,21 @@ function SupportLayout() {
       </main>
       <footer className="border-t px-4 py-6">
         <div className="text-muted-foreground flex flex-col items-center gap-4 text-center text-sm md:flex-row md:justify-between md:text-left">
-          <p>&copy; {new Date().getFullYear()} CmdClaw. All rights reserved.</p>
+          <p>
+            <T>&copy;</T> {new Date().getFullYear()} <T>CmdClaw. All rights reserved.</T>
+          </p>
           <nav className="flex gap-4">
             <Link to="/pricing" className="hover:underline">
-              Pricing
+              <T>Pricing</T>
             </Link>
             <Link to="/legal/terms" className="hover:underline">
-              Terms
+              <T>Terms</T>
             </Link>
             <Link to="/legal/privacy-policy" className="hover:underline">
-              Privacy
+              <T>Privacy</T>
             </Link>
             <Link to="/support" className="hover:underline">
-              Support
+              <T>Support</T>
             </Link>
           </nav>
         </div>

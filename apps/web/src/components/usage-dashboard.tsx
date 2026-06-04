@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T } from "gt-react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { type CSSProperties, useCallback, useMemo, useState } from "react";
 import {
@@ -319,7 +320,9 @@ export function UsageDashboard({
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="text-muted-foreground size-6 animate-spin" />
-        <span className="sr-only">Loading usage dashboard</span>
+        <span className="sr-only">
+          <T>Loading usage dashboard</T>
+        </span>
       </div>
     );
   }
@@ -328,9 +331,11 @@ export function UsageDashboard({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Token Usage</h2>
+          <h2 className="text-xl font-semibold">
+            <T>Token Usage</T>
+          </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Token consumption across chat, coworker builder, and coworker runners.
+            <T>Token consumption across chat, coworker builder, and coworker runners.</T>
           </p>
         </div>
 
@@ -340,7 +345,9 @@ export function UsageDashboard({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Workspaces</SelectItem>
+              <SelectItem value="all">
+                <T>All Workspaces</T>
+              </SelectItem>
               {workspaces!.map((ws) => (
                 <SelectItem key={ws.id} value={ws.id}>
                   {ws.name}
@@ -360,7 +367,7 @@ export function UsageDashboard({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="bg-muted/40 rounded-lg border px-4 py-3">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
-            Total tokens in
+            <T>Total tokens in</T>
           </p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             {formatFull(summary.inputTokens)}
@@ -368,7 +375,7 @@ export function UsageDashboard({
         </div>
         <div className="bg-muted/40 rounded-lg border px-4 py-3">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
-            Total tokens out
+            <T>Total tokens out</T>
           </p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             {formatFull(summary.outputTokens)}
@@ -376,7 +383,7 @@ export function UsageDashboard({
         </div>
         <div className="bg-muted/40 rounded-lg border px-4 py-3">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.14em] uppercase">
-            Total tokens
+            <T>Total tokens</T>
           </p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             {formatFull(summary.totalTokens)}
@@ -387,28 +394,40 @@ export function UsageDashboard({
       <section className="bg-card rounded-lg border p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Usage over time</h3>
+            <h3 className="text-base font-semibold">
+              <T>Usage over time</T>
+            </h3>
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Includes both input and output tokens.
+              <T>Includes both input and output tokens.</T>
             </p>
           </div>
           <Select value={groupBy} onValueChange={handleGroupByChange}>
             <SelectTrigger size="sm">
-              <span className="text-muted-foreground mr-1 text-xs">Group by:</span>
+              <span className="text-muted-foreground mr-1 text-xs">
+                <T>Group by:</T>
+              </span>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {isAllWorkspaces ? <SelectItem value="workspace">Workspace</SelectItem> : null}
-              <SelectItem value="model">Model</SelectItem>
-              <SelectItem value="type">Type</SelectItem>
+              {isAllWorkspaces ? (
+                <SelectItem value="workspace">
+                  <T>Workspace</T>
+                </SelectItem>
+              ) : null}
+              <SelectItem value="model">
+                <T>Model</T>
+              </SelectItem>
+              <SelectItem value="type">
+                <T>Type</T>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {chartData.length === 0 ? (
           <div className="text-muted-foreground flex h-[380px] items-center justify-center text-sm">
-            No usage data {!isAllWorkspaces && isMultiWorkspace ? "for this workspace " : ""}in the
-            last 30 days.
+            <T>No usage data</T> {!isAllWorkspaces && isMultiWorkspace ? "for this workspace " : ""}
+            <T>in the last 30 days.</T>
           </div>
         ) : (
           <div className="h-[380px] w-full">
@@ -452,9 +471,11 @@ export function UsageDashboard({
       {isAllWorkspaces && workspaceBreakdown.length > 0 ? (
         <section className="bg-card rounded-lg border p-5">
           <div className="mb-4">
-            <h3 className="text-base font-semibold">Usage by Workspace</h3>
+            <h3 className="text-base font-semibold">
+              <T>Usage by Workspace</T>
+            </h3>
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Token consumption broken down by workspace. Click a row to view details.
+              <T>Token consumption broken down by workspace. Click a row to view details.</T>
             </p>
           </div>
 
@@ -462,10 +483,18 @@ export function UsageDashboard({
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium">Workspace</th>
-                  <th className="px-3 py-2 text-right font-medium">Input</th>
-                  <th className="px-3 py-2 text-right font-medium">Output</th>
-                  <th className="px-3 py-2 text-right font-medium">Total</th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    <T>Workspace</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Input</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Output</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Total</T>
+                  </th>
                   <th className="px-3 py-2 text-right font-medium">%</th>
                   <th className="hidden px-3 py-2 sm:table-cell" />
                 </tr>
@@ -487,9 +516,11 @@ export function UsageDashboard({
 
       <section className="bg-card rounded-lg border p-5">
         <div className="mb-4">
-          <h3 className="text-base font-semibold">Usage by Coworker</h3>
+          <h3 className="text-base font-semibold">
+            <T>Usage by Coworker</T>
+          </h3>
           <p className="text-muted-foreground mt-0.5 text-sm">
-            Token consumption broken down by individual coworker and chat.
+            <T>Token consumption broken down by individual coworker and chat.</T>
           </p>
         </div>
 
@@ -497,11 +528,21 @@ export function UsageDashboard({
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Coworker</th>
-                <th className="px-3 py-2 text-left font-medium">Type</th>
-                <th className="px-3 py-2 text-right font-medium">Input</th>
-                <th className="px-3 py-2 text-right font-medium">Output</th>
-                <th className="px-3 py-2 text-right font-medium">Total</th>
+                <th className="px-3 py-2 text-left font-medium">
+                  <T>Coworker</T>
+                </th>
+                <th className="px-3 py-2 text-left font-medium">
+                  <T>Type</T>
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  <T>Input</T>
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  <T>Output</T>
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  <T>Total</T>
+                </th>
                 <th className="px-3 py-2 text-right font-medium">%</th>
                 <th className="hidden px-3 py-2 sm:table-cell" />
               </tr>
@@ -510,9 +551,9 @@ export function UsageDashboard({
               {coworkerBreakdown.length === 0 ? (
                 <tr className="border-t">
                   <td colSpan={7} className="text-muted-foreground px-3 py-8 text-center">
-                    No usage data{" "}
-                    {!isAllWorkspaces && isMultiWorkspace ? "for this workspace " : ""}in the last
-                    30 days.
+                    <T>No usage data</T>{" "}
+                    {!isAllWorkspaces && isMultiWorkspace ? "for this workspace " : ""}
+                    <T>in the last 30 days.</T>
                   </td>
                 </tr>
               ) : (

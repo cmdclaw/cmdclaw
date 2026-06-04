@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useCallback, useState } from "react";
 import { AppImage } from "@/components/app-image";
@@ -48,12 +49,12 @@ export function MermaidDiagram({
           {expanded ? (
             <>
               <ChevronUp className="size-3.5" />
-              Collapse diagram
+              <T>Collapse diagram</T>
             </>
           ) : (
             <>
               <ChevronDown className="size-3.5" />
-              Show full diagram
+              <T>Show full diagram</T>
             </>
           )}
         </button>

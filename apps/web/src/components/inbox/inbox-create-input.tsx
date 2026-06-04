@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T, useGT } from "gt-react";
 import { Paperclip, Plus, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import type { AttachmentData } from "@/components/prompt-bar";
@@ -33,6 +34,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export function InboxCreateInput({ coworkers, onSubmit, isSubmitting }: Props) {
+  const t = useGT();
+
   const [message, setMessage] = useState("");
   const [selectedCoworkerId, setSelectedCoworkerId] = useState(coworkers[0]?.id ?? "");
   const [attachments, setAttachments] = useState<AttachmentData[]>([]);
@@ -116,7 +119,7 @@ export function InboxCreateInput({ coworkers, onSubmit, isSubmitting }: Props) {
           value={message}
           onChange={handleMessageChange}
           onKeyDown={handleKeyDown}
-          placeholder="Trigger a coworker manually..."
+          placeholder={t("Trigger a coworker manually...")}
           className="text-foreground placeholder:text-muted-foreground/40 h-7 flex-1 bg-transparent text-sm outline-none"
           disabled={isSubmitting || coworkers.length === 0}
         />
@@ -126,7 +129,11 @@ export function InboxCreateInput({ coworkers, onSubmit, isSubmitting }: Props) {
           disabled={isSubmitting || coworkers.length === 0}
           className="bg-background text-foreground border-border/50 h-8 rounded-md border px-2.5 text-[12px] outline-none"
         >
-          {coworkers.length === 0 ? <option value="">No active coworkers</option> : null}
+          {coworkers.length === 0 ? (
+            <option value="">
+              <T>No active coworkers</T>
+            </option>
+          ) : null}
           {coworkers.map((coworker) => (
             <option key={coworker.id} value={coworker.id}>
               {coworker.name}
@@ -152,7 +159,7 @@ export function InboxCreateInput({ coworkers, onSubmit, isSubmitting }: Props) {
             isSubmitting || coworkers.length === 0 || !message.trim() || !selectedCoworkerId
           }
         >
-          Run
+          <T>Run</T>
         </Button>
         <input
           ref={fileInputRef}

@@ -1,6 +1,7 @@
 import type React from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { T } from "gt-react";
 import { Button } from "@/components/ui/button";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { buildSignInMagicLinkPath } from "@/lib/magic-link-request";
@@ -61,7 +62,7 @@ function SignInCard({
     <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          CmdClaw
+          <T>CmdClaw</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
@@ -124,7 +125,7 @@ export function SignInTokenView({
       <SignInCard title={title} description={description}>
         {hasResentBanner ? (
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-900 dark:text-emerald-100">
-            We sent a new sign-in link to {state.email}.
+            <T>We sent a new sign-in link to</T> {state.email}.
           </div>
         ) : null}
 
@@ -137,11 +138,13 @@ export function SignInTokenView({
         {state.status === "pending" ? (
           <form action={confirmPath} method="post" className="space-y-3">
             <div className="rounded-xl border p-4 text-sm">
-              <div className="text-muted-foreground">Email</div>
+              <div className="text-muted-foreground">
+                <T>Email</T>
+              </div>
               <div className="mt-1 font-medium">{state.email}</div>
             </div>
             <Button type="submit" className="w-full">
-              Continue
+              <T>Continue</T>
             </Button>
           </form>
         ) : null}
@@ -149,14 +152,16 @@ export function SignInTokenView({
         {(state.status === "expired" || state.status === "consumed") && state.email ? (
           <form action={resendPath} method="post" className="space-y-3">
             <Button type="submit" variant="outline" className="w-full">
-              Resend link
+              <T>Resend link</T>
             </Button>
           </form>
         ) : null}
 
         {state.status === "invalid" ? (
           <Button asChild className="w-full">
-            <Link to="/login">Back to login</Link>
+            <Link to="/login">
+              <T>Back to login</T>
+            </Link>
           </Button>
         ) : null}
       </SignInCard>

@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
+import { useGT } from "gt-react";
 import { useMemo } from "react";
 import { AuthenticatedAppRootShell } from "@/components/authenticated-app-root-shell";
 import { AnimatedTabs, AnimatedTab } from "@/components/ui/tabs";
@@ -42,30 +43,35 @@ function getActiveKey(pathname: string) {
 }
 
 function SettingsLayout() {
+  const t = useGT();
   const { sessionContext } = Route.useRouteContext();
   const pathname = useLocation({ select: (location) => location.pathname });
   const activeKey = getActiveKey(pathname);
   const { isAdmin } = useIsAdmin();
   const settingsTabs = useMemo(
     () => [
-      { key: "general", label: "General", href: "/settings" },
-      { key: "workspace", label: "Workspace", href: "/settings/workspace" },
+      { key: "general", label: t("General"), href: "/settings" },
+      { key: "workspace", label: t("Workspace"), href: "/settings/workspace" },
       ...(clientEditionCapabilities.hasBilling && isAdmin
         ? [
-            { key: "usage", label: "Usage", href: "/settings/usage" },
-            { key: "billing", label: "Billing", href: "/settings/billing" },
+            { key: "usage", label: t("Usage"), href: "/settings/usage" },
+            { key: "billing", label: t("Billing"), href: "/settings/billing" },
           ]
         : []),
-      { key: "subscriptions", label: "Connected AI Account", href: "/settings/subscriptions" },
+      {
+        key: "subscriptions",
+        label: t("Connected AI Account"),
+        href: "/settings/subscriptions",
+      },
     ],
-    [isAdmin],
+    [isAdmin, t],
   );
 
   return (
     <AuthenticatedAppRootShell initialPrincipal={sessionContext.principal}>
       <div className="bg-background min-h-full">
         <main className="mx-auto w-full max-w-4xl px-4 pt-8 pb-10 md:px-6 md:pt-10">
-          <div className="-mx-4 mb-6 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-x-visible md:px-0 [&::-webkit-scrollbar]:hidden">
+          <div className="-mx-4 mb-6 [scrollbar-width:none] overflow-x-auto px-4 [-ms-overflow-style:none] md:mx-0 md:overflow-x-visible md:px-0 [&::-webkit-scrollbar]:hidden">
             <AnimatedTabs activeKey={activeKey}>
               {settingsTabs.map((tab) => (
                 <AnimatedTab key={tab.key} value={tab.key} href={tab.href}>

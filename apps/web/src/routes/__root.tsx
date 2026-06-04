@@ -4,7 +4,11 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import type { RouterAppContext } from "@/router";
-import { GeneralTranslationProvider } from "@/components/general-translation-provider";
+import {
+  GeneralTranslationProvider,
+  getInitialAppLocale,
+  localizedText,
+} from "@/components/general-translation-provider";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { RootNotFound } from "@/components/root-not-found";
 import { env } from "@/env";
@@ -41,11 +45,17 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       {
-        title: isSelfHost ? "CmdClaw Self-hosted" : "CmdClaw",
+        title: isSelfHost
+          ? localizedText("CmdClaw Self-hosted", { fr: "CmdClaw auto-hébergé" })
+          : "CmdClaw",
       },
       {
         name: "description",
-        content: isSelfHost ? "Your self-hosted CmdClaw deployment" : "Your AI Assistant",
+        content: isSelfHost
+          ? localizedText("Your self-hosted CmdClaw deployment", {
+              fr: "Votre déploiement CmdClaw auto-hébergé",
+            })
+          : localizedText("Your AI Assistant", { fr: "Votre assistant IA" }),
       },
     ],
     links: [
@@ -79,7 +89,7 @@ function RootComponent() {
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang={getInitialAppLocale()}>
       {/* TanStack Start owns the full document; a real <head> element is required here.
           The Next-specific no-head-element rule is a false positive for TanStack Start and
           is dropped when Next lint integration is removed in a later phase. */}

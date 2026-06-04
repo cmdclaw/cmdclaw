@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { X } from "lucide-react";
 import { useCallback } from "react";
 import { BugReportForm } from "@/components/bug-report-form";
@@ -33,11 +34,17 @@ export function BugReportDialog({ open, onOpenChange }: BugReportDialogProps) {
       >
         <DialogClose className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-full p-1 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
           <X className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">
+            <T>Close</T>
+          </span>
         </DialogClose>
         <DialogHeader className="px-4 py-4 sm:px-6">
-          <DialogTitle>Bug report</DialogTitle>
-          <DialogDescription>Send a message to the CmdClaw team.</DialogDescription>
+          <DialogTitle>
+            <T>Bug report</T>
+          </DialogTitle>
+          <DialogDescription>
+            <T>Send a message to the CmdClaw team.</T>
+          </DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
           <BugReportForm onSuccess={handleSuccess} />

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -72,6 +73,8 @@ function AccountContactFieldsFallback() {
 const accountContactFieldsFallback = <AccountContactFieldsFallback />;
 
 function SettingsPage() {
+  const t = useGT();
+
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [firstName, setFirstName] = useState("");
@@ -127,15 +130,15 @@ function SettingsPage() {
           name: fullName,
           phoneNumber: phoneNumber || undefined,
         });
-        toast.success("Settings saved");
+        toast.success(t("Settings saved"));
       } catch (error) {
         console.error("Failed to update user:", error);
-        toast.error("Failed to save settings");
+        toast.error(t("Failed to save settings"));
       } finally {
         setSaving(false);
       }
     },
-    [firstName, lastName, phoneNumber],
+    [firstName, lastName, phoneNumber, t],
   );
 
   const handleRemovePhoneNumber = useCallback(async () => {
@@ -159,14 +162,14 @@ function SettingsPage() {
             }
           : prev,
       );
-      toast.success("Phone number removed");
+      toast.success(t("Phone number removed"));
     } catch (error) {
       console.error("Failed to remove phone number:", error);
-      toast.error("Failed to remove phone number");
+      toast.error(t("Failed to remove phone number"));
     } finally {
       setRemovingPhone(false);
     }
-  }, []);
+  }, [t]);
 
   const handleFirstNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setFirstName(event.target.value);
@@ -188,13 +191,13 @@ function SettingsPage() {
       }
       void setUserTimezone
         .mutateAsync(value)
-        .then(() => toast.success("Timezone updated"))
+        .then(() => toast.success(t("Timezone updated")))
         .catch((error) => {
           console.error("Failed to update timezone:", error);
-          toast.error("Failed to update timezone");
+          toast.error(t("Failed to update timezone"));
         });
     },
-    [setUserTimezone],
+    [setUserTimezone, t],
   );
 
   const handleUseBrowserTimezone = useCallback(() => {
@@ -204,19 +207,19 @@ function SettingsPage() {
     setTimezoneInput(browserTimezone);
     void setUserTimezone
       .mutateAsync(browserTimezone)
-      .then(() => toast.success("Timezone updated"))
+      .then(() => toast.success(t("Timezone updated")))
       .catch((error) => {
         console.error("Failed to update timezone:", error);
-        toast.error("Failed to update timezone");
+        toast.error(t("Failed to update timezone"));
       });
-  }, [browserTimezone, setUserTimezone]);
+  }, [browserTimezone, setUserTimezone, t]);
 
   const handleLanguageChange = useCallback(
     (nextLocale: string) => {
       setLocale(nextLocale);
-      toast.success("Language updated");
+      toast.success(t("Language updated"));
     },
-    [setLocale],
+    [setLocale, t],
   );
 
   const handleTaskDonePushToggle = useCallback(
@@ -228,26 +231,26 @@ function SettingsPage() {
         if (enabled) {
           const result = await setupBrowserPushNotifications();
           if (result === "subscribed") {
-            toast.success("Task completion notifications enabled");
+            toast.success(t("Task completion notifications enabled"));
           } else if (result === "permission-denied") {
-            toast.error("Browser notification permission was denied");
+            toast.error(t("Browser notification permission was denied"));
           } else if (result === "unsupported") {
-            toast.error("Browser push notifications are not supported here");
+            toast.error(t("Browser push notifications are not supported here"));
           } else {
-            toast.error("Notifications were enabled, but browser push setup did not complete");
+            toast.error(t("Notifications were enabled, but browser push setup did not complete"));
           }
         } else {
           await unregisterBrowserPushSubscription();
-          toast.success("Task completion notifications disabled");
+          toast.success(t("Task completion notifications disabled"));
         }
       } catch (error) {
         console.error("Failed to update task completion notifications:", error);
-        toast.error("Failed to update notifications");
+        toast.error(t("Failed to update notifications"));
       } finally {
         setIsUpdatingTaskDonePush(false);
       }
     },
-    [setTaskDonePushEnabled],
+    [setTaskDonePushEnabled, t],
   );
 
   const user = sessionData?.user;
@@ -267,7 +270,7 @@ function SettingsPage() {
   if (status === "error" || !user) {
     return (
       <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
-        Unable to load your account. Please try again.
+        <T>Unable to load your account. Please try again.</T>
       </div>
     );
   }
@@ -275,36 +278,48 @@ function SettingsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">General Settings</h2>
-        <p className="text-muted-foreground mt-1 text-sm">Manage your account information.</p>
+        <h2 className="text-xl font-semibold">
+          <T>General Settings</T>
+        </h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          <T>Manage your account information.</T>
+        </p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
         <div className="space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium">Email</label>
+            <label className="mb-2 block text-sm font-medium">
+              <T>Email</T>
+            </label>
             <Input type="email" value={user.email} disabled className="bg-muted/50" />
-            <p className="text-muted-foreground mt-1 text-xs">Email cannot be changed.</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              <T>Email cannot be changed.</T>
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium">First name</label>
+              <label className="mb-2 block text-sm font-medium">
+                <T>First name</T>
+              </label>
               <Input
                 type="text"
                 value={firstName}
                 onChange={handleFirstNameChange}
-                placeholder="Enter your first name"
+                placeholder={t("Enter your first name")}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium">Last name</label>
+              <label className="mb-2 block text-sm font-medium">
+                <T>Last name</T>
+              </label>
               <Input
                 type="text"
                 value={lastName}
                 onChange={handleLastNameChange}
-                placeholder="Enter your last name"
+                placeholder={t("Enter your last name")}
               />
             </div>
           </div>
@@ -326,10 +341,12 @@ function SettingsPage() {
 
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-center">
             <div>
-              <label className="block text-sm font-medium">Language</label>
+              <label className="block text-sm font-medium">
+                <T>Language</T>
+              </label>
             </div>
             <Select value={locale} onValueChange={handleLanguageChange}>
-              <SelectTrigger aria-label="Language" className="w-full">
+              <SelectTrigger aria-label={t("Language")} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent align="end">
@@ -344,9 +361,11 @@ function SettingsPage() {
 
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-center">
             <div>
-              <label className="block text-sm font-medium">Task completion notifications</label>
+              <label className="block text-sm font-medium">
+                <T>Task completion notifications</T>
+              </label>
               <p className="text-muted-foreground mt-1 text-xs">
-                Notify me when a CmdClaw task finishes.
+                <T>Notify me when a CmdClaw task finishes.</T>
               </p>
             </div>
             <div className="flex justify-start sm:justify-end">
@@ -354,7 +373,7 @@ function SettingsPage() {
                 checked={taskDonePushEnabled}
                 onCheckedChange={handleTaskDonePushToggle}
                 disabled={isUpdatingTaskDonePush}
-                aria-label="Enable task completion notifications"
+                aria-label={t("Enable task completion notifications")}
               />
             </div>
           </div>
@@ -366,10 +385,10 @@ function SettingsPage() {
           {saving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
+              <T>Saving...</T>
             </>
           ) : (
-            "Save changes"
+            <T>Save changes</T>
           )}
         </Button>
       </form>

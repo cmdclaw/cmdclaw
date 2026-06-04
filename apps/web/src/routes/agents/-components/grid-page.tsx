@@ -1,8 +1,9 @@
+import { T } from "gt-react";
 import { BarChart3, Loader2 } from "lucide-react";
-import { AppLink as Link } from "../-lib/app-link";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
 import { cn } from "@/lib/utils";
 import { useCoworkerList } from "@/orpc/hooks/coworkers";
+import { AppLink as Link } from "../-lib/app-link";
 
 type CoworkerItem = {
   id: string;
@@ -96,14 +97,16 @@ function CoworkerCard({ coworker }: { coworker: CoworkerItem }) {
       <div className="text-muted-foreground/70 mt-auto text-xs">
         {recentRun ? (
           <span>
-            Last run:{" "}
+            <T>Last run:</T>{" "}
             <span className="text-muted-foreground">
               {getCoworkerRunStatusLabel(recentRun.status)}
             </span>{" "}
             · {formatDate(recentRun.startedAt) ?? "—"}
           </span>
         ) : (
-          <span>No runs yet</span>
+          <span>
+            <T>No runs yet</T>
+          </span>
         )}
       </div>
     </Link>
@@ -118,9 +121,12 @@ export default function CoworkersGridPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">All Coworkers</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            <T>All Coworkers</T>
+          </h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            {coworkerList.length} coworker{coworkerList.length === 1 ? "" : "s"} in grid view
+            {coworkerList.length} <T>coworker</T>
+            {coworkerList.length === 1 ? "" : "s"} <T>in grid view</T>
           </p>
         </div>
         <Link
@@ -128,7 +134,7 @@ export default function CoworkersGridPage() {
           className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
         >
           <BarChart3 className="size-3.5" />
-          Overview
+          <T>Overview</T>
         </Link>
       </div>
 
@@ -138,7 +144,9 @@ export default function CoworkersGridPage() {
         </div>
       ) : coworkerList.length === 0 ? (
         <div className="border-border/40 rounded-xl border border-dashed p-10 text-center">
-          <p className="text-muted-foreground text-sm">No coworkers found.</p>
+          <p className="text-muted-foreground text-sm">
+            <T>No coworkers found.</T>
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

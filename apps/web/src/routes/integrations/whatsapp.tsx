@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Loader2 } from "lucide-react";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/integrations/whatsapp")({
 });
 
 function WhatsAppIntegrationPage() {
+  const t = useGT();
   const [waStatus, setWaStatus] = useState<WhatsAppStatus | null>(null);
   const [waQrDataUrl, setWaQrDataUrl] = useState<string | null>(null);
   const [waLoading, setWaLoading] = useState(false);
@@ -82,7 +84,7 @@ function WhatsAppIntegrationPage() {
       if (!res.ok) {
         if (res.status === 403) {
           setForbidden(true);
-          toast.error("Only admins can pair the WhatsApp bridge.");
+          toast.error(t("Only admins can pair the WhatsApp bridge."));
           return;
         }
         throw new Error(await res.text());
@@ -91,11 +93,11 @@ function WhatsAppIntegrationPage() {
       setWaStatus(data);
     } catch (err) {
       console.error("Failed to reconnect WhatsApp:", err);
-      toast.error("Failed to start WhatsApp pairing.");
+      toast.error(t("Failed to start WhatsApp pairing."));
     } finally {
       setWaLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleGenerateLinkCode = useCallback(async () => {
     setLinkLoading(true);
@@ -107,21 +109,23 @@ function WhatsAppIntegrationPage() {
       const data = (await res.json()) as { code: string; expiresAt: string };
       setLinkCode(data.code);
       setLinkExpiresAt(data.expiresAt);
-      toast.success("WhatsApp link code generated.");
+      toast.success(t("WhatsApp link code generated."));
     } catch (err) {
       console.error("Failed to generate link code:", err);
-      toast.error("Failed to generate link code.");
+      toast.error(t("Failed to generate link code."));
     } finally {
       setLinkLoading(false);
     }
-  }, []);
+  }, [t]);
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">WhatsApp</h2>
+        <h2 className="text-xl font-semibold">
+          <T>WhatsApp</T>
+        </h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Pair WhatsApp with a QR code, then link your own number with a code.
+          <T>Pair WhatsApp with a QR code, then link your own number with a code.</T>
         </p>
       </div>
 
@@ -129,16 +133,18 @@ function WhatsAppIntegrationPage() {
         <div className="rounded-lg border p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold">Bridge Pairing</h3>
+              <h3 className="text-lg font-semibold">
+                <T>Bridge Pairing</T>
+              </h3>
               <p className="text-muted-foreground text-sm">
-                Connect the app bridge to a WhatsApp account by scanning the QR code.
+                <T>Connect the app bridge to a WhatsApp account by scanning the QR code.</T>
               </p>
             </div>
             <Button onClick={handleReconnect} disabled={waLoading || forbidden}>
               {waLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting...
+                  <T>Connecting...</T>
                 </>
               ) : (
                 "Connect WhatsApp"
@@ -148,12 +154,12 @@ function WhatsAppIntegrationPage() {
 
           <div className="bg-muted/20 mt-4 rounded-lg border p-4">
             <div className="text-muted-foreground text-sm">
-              Status:{" "}
+              <T>Status:</T>{" "}
               <span className="text-foreground font-medium">{waStatus?.status ?? "unknown"}</span>
             </div>
             {forbidden && (
               <p className="text-muted-foreground mt-2 text-sm">
-                Only admins can pair the shared WhatsApp bridge.
+                <T>Only admins can pair the shared WhatsApp bridge.</T>
               </p>
             )}
             {waStatus?.lastError && (
@@ -171,28 +177,33 @@ function WhatsAppIntegrationPage() {
                   className="h-60 w-60 rounded-md border bg-white p-2"
                 />
                 <p className="text-muted-foreground text-xs">
-                  Scan this in WhatsApp: Settings {"->"} Linked Devices {"->"} Link a Device.
+                  <T>Scan this in WhatsApp: Settings</T> {"->"} <T>Linked Devices</T> {"->"}{" "}
+                  <T>Link a Device.</T>
                 </p>
               </div>
             ) : (
               <p className="text-muted-foreground mt-4 text-xs">
-                QR code will appear here when pairing is available.
+                <T>QR code will appear here when pairing is available.</T>
               </p>
             )}
           </div>
         </div>
 
         <div className="rounded-lg border p-6">
-          <h3 className="text-lg font-semibold">User Linking Code</h3>
+          <h3 className="text-lg font-semibold">
+            <T>User Linking Code</T>
+          </h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            Generate your code and send it from your WhatsApp number to complete account linking.
+            <T>
+              Generate your code and send it from your WhatsApp number to complete account linking.
+            </T>
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button onClick={handleGenerateLinkCode} disabled={linkLoading}>
               {linkLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  <T>Generating...</T>
                 </>
               ) : (
                 "Generate link code"
@@ -200,10 +211,12 @@ function WhatsAppIntegrationPage() {
             </Button>
             {linkCode && (
               <div className="bg-muted/40 rounded-md border px-4 py-2 text-sm">
-                <div className="font-medium">Code: {linkCode}</div>
+                <div className="font-medium">
+                  <T>Code:</T> {linkCode}
+                </div>
                 {linkExpiresAt && (
                   <div className="text-muted-foreground text-xs">
-                    Expires at {new Date(linkExpiresAt).toLocaleTimeString()}
+                    <T>Expires at</T> {new Date(linkExpiresAt).toLocaleTimeString()}
                   </div>
                 )}
               </div>

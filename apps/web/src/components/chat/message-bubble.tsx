@@ -175,8 +175,8 @@ export function MessageBubble({ role, content, className, sandboxFiles, onFileCl
   if (isUser) {
     return (
       <div data-testid="chat-bubble-user" className={cn("flex justify-end", className)}>
-        <div className="bg-primary text-primary-foreground min-w-0 max-w-[80%] rounded-lg px-4 py-2">
-          <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">{content}</p>
+        <div className="bg-primary text-primary-foreground max-w-[80%] min-w-0 rounded-lg px-4 py-2">
+          <p className="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap">{content}</p>
         </div>
       </div>
     );

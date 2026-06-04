@@ -1,6 +1,7 @@
 // oxlint-disable jsx-a11y/control-has-associated-label unicorn/consistent-function-scoping
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import {
   ArrowLeft,
   Loader2,
@@ -105,6 +106,8 @@ function SkillEditorPageFallback() {
 const skillEditorPageFallbackNode = <SkillEditorPageFallback />;
 
 function SkillEditorPageContent() {
+  const t = useGT();
+
   const { id: skillId } = Route.useParams();
   const navigate = useNavigate();
 
@@ -857,9 +860,13 @@ function SkillEditorPageContent() {
   if (!skill) {
     return (
       <div className="py-12 text-center">
-        <p className="text-muted-foreground">Skill not found</p>
+        <p className="text-muted-foreground">
+          <T>Skill not found</T>
+        </p>
         <Button asChild className="mt-4">
-          <Link to="/toolbox">Back to Skills</Link>
+          <Link to="/toolbox">
+            <T>Back to Skills</T>
+          </Link>
         </Button>
       </div>
     );
@@ -885,7 +892,7 @@ function SkillEditorPageContent() {
           <div className="flex items-center gap-2">
             {!canEdit ? (
               <span className="text-muted-foreground text-xs">
-                Shared by {skill.owner.name ?? skill.owner.email ?? "workspace"}
+                <T>Shared by</T> {skill.owner.name ?? skill.owner.email ?? "workspace"}
               </span>
             ) : null}
             <span
@@ -903,12 +910,12 @@ function SkillEditorPageContent() {
               {isSaving ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Saving...
+                  <T>Saving...</T>
                 </>
               ) : notification?.type === "success" ? (
                 <>
                   <CheckCircle2 className="h-3 w-3" />
-                  Saved
+                  <T>Saved</T>
                 </>
               ) : notification?.type === "error" ? (
                 <>
@@ -918,7 +925,7 @@ function SkillEditorPageContent() {
               ) : (
                 <>
                   <CheckCircle2 className="h-3 w-3" />
-                  Saved
+                  <T>Saved</T>
                 </>
               )}
             </span>
@@ -933,7 +940,7 @@ function SkillEditorPageContent() {
                 ) : (
                   <Download className="h-3 w-3" />
                 )}
-                Save to my skills
+                <T>Save to my skills</T>
               </Button>
             )}
           </div>
@@ -961,7 +968,7 @@ function SkillEditorPageContent() {
                 checked={isEnabled}
                 onCheckedChange={handleToggleEnabled}
                 disabled={!canEdit || isSaving}
-                aria-label="Toggle skill enabled"
+                aria-label={t("Toggle skill enabled")}
               />
             </div>
           </div>
@@ -995,7 +1002,7 @@ function SkillEditorPageContent() {
               type="text"
               value={skillDisplayName}
               onChange={handleDisplayNameInputChange}
-              placeholder="Untitled Skill"
+              placeholder={t("Untitled Skill")}
               readOnly={!canEdit}
               className="placeholder:text-muted-foreground/50 w-full bg-transparent pt-1 text-3xl font-bold outline-none focus:outline-none"
             />
@@ -1034,7 +1041,7 @@ function SkillEditorPageContent() {
               onChange={handleDescriptionInputChange}
               onBlur={handleStopEditingDescription}
               onKeyDown={handleDescriptionInputKeyDown}
-              placeholder="Add a description..."
+              placeholder={t("Add a description...")}
               className="text-muted-foreground placeholder:text-muted-foreground/50 min-h-20 w-full resize-y bg-transparent text-sm outline-none"
               autoFocus
             />
@@ -1045,7 +1052,9 @@ function SkillEditorPageContent() {
               className="text-muted-foreground hover:text-foreground text-left text-sm whitespace-pre-wrap"
             >
               {skillDescription || (
-                <span className="text-muted-foreground/50">Add a description...</span>
+                <span className="text-muted-foreground/50">
+                  <T>Add a description...</T>
+                </span>
               )}
             </button>
           )}
@@ -1053,7 +1062,7 @@ function SkillEditorPageContent() {
           {toolIntegrations.length > 0 ? (
             <div className="pt-2">
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Tool Integrations
+                <T>Tool Integrations</T>
               </p>
               <IntegrationBadges integrations={toolIntegrations} size="md" />
             </div>
@@ -1120,7 +1129,7 @@ function SkillEditorPageContent() {
                   data-doc-id={doc.id}
                   onClick={handlePromptDownloadDocument}
                   className="hover:bg-muted ml-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100"
-                  title="Download document"
+                  title={t("Download document")}
                 >
                   <Download className="h-2.5 w-2.5" />
                 </button>
@@ -1147,7 +1156,7 @@ function SkillEditorPageContent() {
               <DropdownMenuContent align="start">
                 <DropdownMenuItem onClick={handleShowAddFile}>
                   <FileText className="h-4 w-4" />
-                  Text file
+                  <T>Text file</T>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleTriggerDocumentUpload} disabled={isUploading}>
                   {isUploading ? (
@@ -1183,7 +1192,7 @@ function SkillEditorPageContent() {
         {canEdit && showAddFile && (
           <div className="mb-4 flex shrink-0 items-center gap-2">
             <Input
-              placeholder="filename.md"
+              placeholder={t("filename.md")}
               value={newFilePath}
               onChange={handleNewFilePathChange}
               className="h-8 flex-1 text-sm"
@@ -1191,10 +1200,10 @@ function SkillEditorPageContent() {
               onKeyDown={handleNewFilePathKeyDown}
             />
             <Button size="sm" onClick={handleAddFile} disabled={!newFilePath.trim()}>
-              Add
+              <T>Add</T>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleCancelAddFile}>
-              Cancel
+              <T>Cancel</T>
             </Button>
           </div>
         )}
@@ -1209,7 +1218,7 @@ function SkillEditorPageContent() {
                     <MilkdownEditor
                       value={skillBody}
                       onChange={handleSkillBodyChange}
-                      placeholder="Add your skill instructions here..."
+                      placeholder={t("Add your skill instructions here...")}
                       className="h-full"
                     />
                   </div>
@@ -1276,11 +1285,11 @@ Add your skill instructions here..."
                       <div className="bg-muted/30 flex h-full flex-col items-center justify-center gap-4 rounded-lg border">
                         <FileText className="text-muted-foreground h-16 w-16" />
                         <p className="text-muted-foreground text-sm">
-                          Preview unavailable in this browser.
+                          <T>Preview unavailable in this browser.</T>
                         </p>
                         <Button onClick={handleDownloadSelectedDocument}>
                           <Download className="mr-2 h-4 w-4" />
-                          Download
+                          <T>Download</T>
                         </Button>
                       </div>
                     </object>
@@ -1316,7 +1325,7 @@ Add your skill instructions here..."
                   </div>
                   <Button onClick={handleDownloadSelectedDocument}>
                     <Download className="mr-2 h-4 w-4" />
-                    Download
+                    <T>Download</T>
                   </Button>
                 </div>
               );
@@ -1327,17 +1336,20 @@ Add your skill instructions here..."
         {documentToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className="bg-background mx-4 w-full max-w-sm rounded-lg border p-6 shadow-lg">
-              <h3 className="text-lg font-semibold">Delete document</h3>
+              <h3 className="text-lg font-semibold">
+                <T>Delete document</T>
+              </h3>
               <p className="text-muted-foreground mt-2 text-sm">
-                Are you sure you want to delete &quot;{documentToDelete.filename}&quot;? This action
-                cannot be undone.
+                <T>Are you sure you want to delete &quot;</T>
+                {documentToDelete.filename}
+                <T>&quot;? This action cannot be undone.</T>
               </p>
               <div className="mt-4 flex justify-end gap-2">
                 <Button variant="outline" onClick={handleCancelDeleteDocument}>
-                  Cancel
+                  <T>Cancel</T>
                 </Button>
                 <Button variant="destructive" onClick={handleDeleteDocument}>
-                  Delete
+                  <T>Delete</T>
                 </Button>
               </div>
             </div>
@@ -1348,17 +1360,20 @@ Add your skill instructions here..."
         {fileToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className="bg-background mx-4 w-full max-w-sm rounded-lg border p-6 shadow-lg">
-              <h3 className="text-lg font-semibold">Delete file</h3>
+              <h3 className="text-lg font-semibold">
+                <T>Delete file</T>
+              </h3>
               <p className="text-muted-foreground mt-2 text-sm">
-                Are you sure you want to delete &quot;{fileToDelete.path}
-                &quot;? This action cannot be undone.
+                <T>Are you sure you want to delete &quot;</T>
+                {fileToDelete.path}
+                <T>&quot;? This action cannot be undone.</T>
               </p>
               <div className="mt-4 flex justify-end gap-2">
                 <Button variant="outline" onClick={handleCancelDeleteFile}>
-                  Cancel
+                  <T>Cancel</T>
                 </Button>
                 <Button variant="destructive" onClick={handleDeleteFile}>
-                  Delete
+                  <T>Delete</T>
                 </Button>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { T, useGT } from "gt-react";
 import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ import { AppLink } from "../-lib/app-link";
 import { useParams, useRouter, useSearchParams } from "../-lib/next-navigation-compat";
 
 export function SourceDetailPage() {
+  const t = useGT();
+
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,13 +115,13 @@ export function SourceDetailPage() {
     }
 
     if (oauthStatus === "success") {
-      toast.success("OAuth connected.");
+      toast.success(t("OAuth connected."));
     } else {
       toast.error(formatOAuthConnectionError(searchParams.get("oauth_error")));
     }
 
     router.replace(`/toolbox/sources/${id}`);
-  }, [id, router, searchParams]);
+  }, [id, router, searchParams, t]);
 
   const handleToggleEnabled = useCallback(
     async (enabled: boolean) => {
@@ -159,12 +162,12 @@ export function SourceDetailPage() {
     }
     try {
       await deleteSource.mutateAsync(source.id);
-      toast.success("Source deleted.");
+      toast.success(t("Source deleted."));
       router.push("/toolbox");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete source.");
     }
-  }, [deleteSource, router, source]);
+  }, [deleteSource, router, source, t]);
 
   const handleSaveCredential = useCallback(async () => {
     if (!source) {
@@ -172,7 +175,7 @@ export function SourceDetailPage() {
     }
     const trimmedSecret = secret.trim();
     if (!trimmedSecret) {
-      toast.error("Enter a secret first.");
+      toast.error(t("Enter a secret first."));
       return;
     }
     try {
@@ -182,11 +185,11 @@ export function SourceDetailPage() {
         displayName: credDisplayName.trim(),
       });
       setSecret("");
-      toast.success("Credential saved.");
+      toast.success(t("Credential saved."));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save credential.");
     }
-  }, [credDisplayName, secret, setCredential, source]);
+  }, [credDisplayName, secret, setCredential, source, t]);
 
   const handleStartOAuth = useCallback(async () => {
     if (!source) {
@@ -210,39 +213,39 @@ export function SourceDetailPage() {
     }
     try {
       await disconnectCredential.mutateAsync(source.id);
-      toast.success("Credential disconnected.");
+      toast.success(t("Credential disconnected."));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to disconnect credential.");
     }
-  }, [disconnectCredential, source]);
+  }, [disconnectCredential, source, t]);
 
   const handleConnectGalien = useCallback(async () => {
     const username = galienUsername.trim();
     const password = galienPassword.trim();
     if (!username || !password) {
-      toast.error("Enter your Galien username and password.");
+      toast.error(t("Enter your Galien username and password."));
       return;
     }
 
     try {
       await connectGalien.mutateAsync({ username, password });
       setGalienPassword("");
-      toast.success("Galien connected.");
+      toast.success(t("Galien connected."));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to connect Galien.");
     }
-  }, [connectGalien, galienPassword, galienUsername]);
+  }, [connectGalien, galienPassword, galienUsername, t]);
 
   const handleDisconnectGalien = useCallback(async () => {
     try {
       await disconnectGalien.mutateAsync();
       setGalienUsername("");
       setGalienPassword("");
-      toast.success("Galien disconnected.");
+      toast.success(t("Galien disconnected."));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to disconnect Galien.");
     }
-  }, [disconnectGalien]);
+  }, [disconnectGalien, t]);
 
   if (isLoading) {
     return (
@@ -255,9 +258,11 @@ export function SourceDetailPage() {
   if (!source) {
     return (
       <div className="py-24 text-center">
-        <p className="text-muted-foreground text-sm">Source not found.</p>
+        <p className="text-muted-foreground text-sm">
+          <T>Source not found.</T>
+        </p>
         <AppLink href="/toolbox" className="text-brand mt-4 inline-block text-sm hover:underline">
-          Back to Toolbox
+          <T>Back to Toolbox</T>
         </AppLink>
       </div>
     );
@@ -271,7 +276,7 @@ export function SourceDetailPage() {
           className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-1.5 text-sm transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Toolbox
+          <T>Back to Toolbox</T>
         </AppLink>
       </div>
 
@@ -300,7 +305,9 @@ export function SourceDetailPage() {
           <div className="flex items-center gap-2 sm:ml-6">
             {isWorkspaceAdmin ? (
               <div className="mr-2 flex items-center gap-2">
-                <span className="text-muted-foreground text-xs font-medium">Enabled</span>
+                <span className="text-muted-foreground text-xs font-medium">
+                  <T>Enabled</T>
+                </span>
                 <Switch
                   checked={source.enabled}
                   disabled={updateSource.isPending}
@@ -317,13 +324,15 @@ export function SourceDetailPage() {
                   onClick={handleDelete}
                   disabled={deleteSource.isPending}
                   className="text-destructive hover:text-destructive px-2"
-                  aria-label="Delete source"
+                  aria-label={t("Delete source")}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </>
             ) : isManagedSource ? (
-              <span className="text-muted-foreground text-xs">Managed by CmdClaw</span>
+              <span className="text-muted-foreground text-xs">
+                <T>Managed by CmdClaw</T>
+              </span>
             ) : null}
           </div>
         </div>
@@ -339,7 +348,7 @@ export function SourceDetailPage() {
                 </p>
                 {galienStatus?.connected && galienStatus.validatedAt ? (
                   <p className="text-muted-foreground mt-1 text-xs">
-                    Last validated {new Date(galienStatus.validatedAt).toLocaleString()}
+                    <T>Last validated</T> {new Date(galienStatus.validatedAt).toLocaleString()}
                   </p>
                 ) : null}
               </div>
@@ -348,7 +357,7 @@ export function SourceDetailPage() {
                 <Input
                   value={galienUsername}
                   onChange={handleGalienUsernameChange}
-                  placeholder="Galien username"
+                  placeholder={t("Galien username")}
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
@@ -379,7 +388,7 @@ export function SourceDetailPage() {
                     onClick={handleDisconnectGalien}
                     disabled={disconnectGalien.isPending}
                   >
-                    Disconnect
+                    <T>Disconnect</T>
                   </Button>
                 ) : null}
               </div>
@@ -407,7 +416,7 @@ export function SourceDetailPage() {
                   onClick={handleDisconnectCredential}
                   disabled={disconnectCredential.isPending}
                 >
-                  Disconnect
+                  <T>Disconnect</T>
                 </Button>
               ) : null}
             </div>
@@ -423,7 +432,7 @@ export function SourceDetailPage() {
                 <Input
                   value={credDisplayName}
                   onChange={handleCredDisplayNameChange}
-                  placeholder="Label (optional)"
+                  placeholder={t("Label (optional)")}
                 />
               </div>
 
@@ -445,7 +454,7 @@ export function SourceDetailPage() {
                     onClick={handleDisconnectCredential}
                     disabled={disconnectCredential.isPending}
                   >
-                    Disconnect
+                    <T>Disconnect</T>
                   </Button>
                 ) : null}
               </div>

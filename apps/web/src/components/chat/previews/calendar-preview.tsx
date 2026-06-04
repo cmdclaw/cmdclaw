@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Calendar } from "lucide-react";
 import {
   PreviewProps,
@@ -34,6 +35,8 @@ function CalendarCreatePreview({
   args: Record<string, string | undefined>;
   integration: string;
 }) {
+  const t = useGT();
+
   const summary = args.summary;
   const start = args.start;
   const end = args.end;
@@ -44,7 +47,9 @@ function CalendarCreatePreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration={integration} size={16} />
-        <span className="text-sm font-medium">Create Event</span>
+        <span className="text-sm font-medium">
+          <T>Create Event</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -61,13 +66,13 @@ function CalendarCreatePreview({
               </div>
             )}
 
-            {location && <PreviewField label="Location" value={location} />}
+            {location && <PreviewField label={t("Location")} value={location} />}
           </div>
         </div>
       </PreviewSection>
 
       {description && (
-        <PreviewSection title="Description">
+        <PreviewSection title={t("Description")}>
           <PreviewContent>{description}</PreviewContent>
         </PreviewSection>
       )}
@@ -84,25 +89,29 @@ function CalendarUpdatePreview({
   positionalArgs: string[];
   integration: string;
 }) {
+  const t = useGT();
+
   const eventId = positionalArgs[0];
 
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration={integration} size={16} />
-        <span className="text-sm font-medium">Update Event</span>
+        <span className="text-sm font-medium">
+          <T>Update Event</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Event ID" value={eventId} mono />
+        <PreviewField label={t("Event ID")} value={eventId} mono />
       </PreviewSection>
 
-      <PreviewSection title="Changes">
-        {args.summary && <PreviewField label="Title" value={args.summary} />}
-        {args.start && <PreviewField label="Start" value={formatDateTime(args.start)} />}
-        {args.end && <PreviewField label="End" value={formatDateTime(args.end)} />}
-        {args.description && <PreviewField label="Description" value={args.description} />}
-        {args.location && <PreviewField label="Location" value={args.location} />}
+      <PreviewSection title={t("Changes")}>
+        {args.summary && <PreviewField label={t("Title")} value={args.summary} />}
+        {args.start && <PreviewField label={t("Start")} value={formatDateTime(args.start)} />}
+        {args.end && <PreviewField label={t("End")} value={formatDateTime(args.end)} />}
+        {args.description && <PreviewField label={t("Description")} value={args.description} />}
+        {args.location && <PreviewField label={t("Location")} value={args.location} />}
       </PreviewSection>
     </div>
   );
@@ -115,18 +124,24 @@ function CalendarDeletePreview({
   positionalArgs: string[];
   integration: string;
 }) {
+  const t = useGT();
+
   const eventId = positionalArgs[0];
 
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration={integration} size={16} />
-        <span className="text-sm font-medium">Delete Event</span>
-        <PreviewBadge variant="danger">Destructive</PreviewBadge>
+        <span className="text-sm font-medium">
+          <T>Delete Event</T>
+        </span>
+        <PreviewBadge variant="danger">
+          <T>Destructive</T>
+        </PreviewBadge>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Event ID" value={eventId} mono />
+        <PreviewField label={t("Event ID")} value={eventId} mono />
       </PreviewSection>
     </div>
   );

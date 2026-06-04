@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   PreviewProps,
   PreviewField,
@@ -31,7 +32,9 @@ function SheetsCreatePreview({ args }: { args: Record<string, string | undefined
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_sheets" size={16} />
-        <span className="text-sm font-medium">Create Spreadsheet</span>
+        <span className="text-sm font-medium">
+          <T>Create Spreadsheet</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -51,6 +54,8 @@ function SheetsAppendPreview({
   args: Record<string, string | undefined>;
   positionalArgs: string[];
 }) {
+  const t = useGT();
+
   const spreadsheetId = positionalArgs[0];
   const range = args.range;
   const values = args.values;
@@ -59,16 +64,18 @@ function SheetsAppendPreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_sheets" size={16} />
-        <span className="text-sm font-medium">Append Rows</span>
+        <span className="text-sm font-medium">
+          <T>Append Rows</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Spreadsheet" value={spreadsheetId} mono />
-        <PreviewField label="Range" value={range} mono />
+        <PreviewField label={t("Spreadsheet")} value={spreadsheetId} mono />
+        <PreviewField label={t("Range")} value={range} mono />
       </PreviewSection>
 
       {values && (
-        <PreviewSection title="Data">
+        <PreviewSection title={t("Data")}>
           <ValuesPreview values={values} />
         </PreviewSection>
       )}
@@ -83,6 +90,8 @@ function SheetsUpdatePreview({
   args: Record<string, string | undefined>;
   positionalArgs: string[];
 }) {
+  const t = useGT();
+
   const spreadsheetId = positionalArgs[0];
   const range = args.range;
   const values = args.values;
@@ -91,16 +100,18 @@ function SheetsUpdatePreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_sheets" size={16} />
-        <span className="text-sm font-medium">Update Cells</span>
+        <span className="text-sm font-medium">
+          <T>Update Cells</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Spreadsheet" value={spreadsheetId} mono />
-        <PreviewField label="Range" value={range} mono />
+        <PreviewField label={t("Spreadsheet")} value={spreadsheetId} mono />
+        <PreviewField label={t("Range")} value={range} mono />
       </PreviewSection>
 
       {values && (
-        <PreviewSection title="New Values">
+        <PreviewSection title={t("New Values")}>
           <ValuesPreview values={values} />
         </PreviewSection>
       )}
@@ -115,6 +126,8 @@ function SheetsClearPreview({
   args: Record<string, string | undefined>;
   positionalArgs: string[];
 }) {
+  const t = useGT();
+
   const spreadsheetId = positionalArgs[0];
   const range = args.range;
 
@@ -122,13 +135,17 @@ function SheetsClearPreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_sheets" size={16} />
-        <span className="text-sm font-medium">Clear Cells</span>
-        <PreviewBadge variant="danger">Destructive</PreviewBadge>
+        <span className="text-sm font-medium">
+          <T>Clear Cells</T>
+        </span>
+        <PreviewBadge variant="danger">
+          <T>Destructive</T>
+        </PreviewBadge>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Spreadsheet" value={spreadsheetId} mono />
-        <PreviewField label="Range" value={range} mono />
+        <PreviewField label={t("Spreadsheet")} value={spreadsheetId} mono />
+        <PreviewField label={t("Range")} value={range} mono />
       </PreviewSection>
     </div>
   );
@@ -141,6 +158,8 @@ function SheetsAddSheetPreview({
   args: Record<string, string | undefined>;
   positionalArgs: string[];
 }) {
+  const t = useGT();
+
   const spreadsheetId = positionalArgs[0];
   const title = args.title;
 
@@ -148,12 +167,14 @@ function SheetsAddSheetPreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="google_sheets" size={16} />
-        <span className="text-sm font-medium">Add Sheet</span>
+        <span className="text-sm font-medium">
+          <T>Add Sheet</T>
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Spreadsheet" value={spreadsheetId} mono />
-        <PreviewField label="Sheet Name" value={title} />
+        <PreviewField label={t("Spreadsheet")} value={spreadsheetId} mono />
+        <PreviewField label={t("Sheet Name")} value={title} />
       </PreviewSection>
     </div>
   );
@@ -188,7 +209,7 @@ function ValuesPreview({ values }: { values: string }) {
             {parsed.length > 5 && (
               <tr>
                 <td className="text-muted-foreground border px-2 py-1 text-center" colSpan={100}>
-                  ... and {parsed.length - 5} more rows
+                  <T>... and</T> {parsed.length - 5} <T>more rows</T>
                 </td>
               </tr>
             )}

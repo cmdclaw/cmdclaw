@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { GTProvider } from "gt-react";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import loadTranslations from "@/loadTranslations";
 import gtConfig from "../../gt.config.json";
 
 const DEFAULT_LOCALE = gtConfig.defaultLocale;
-const LOCALE_COOKIE_NAME = "generaltranslation.locale";
+export const LOCALE_COOKIE_NAME = "generaltranslation.locale";
 const GENERAL_TRANSLATION_LOCALES = gtConfig.locales;
 const SUPPORTED_LOCALES = [DEFAULT_LOCALE, ...GENERAL_TRANSLATION_LOCALES];
 
@@ -17,7 +17,7 @@ type LocaleContextValue = {
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
-function readInitialLocale() {
+export function getInitialAppLocale() {
   if (typeof document === "undefined") {
     return DEFAULT_LOCALE;
   }
@@ -30,6 +30,11 @@ function readInitialLocale() {
   return cookieLocale && SUPPORTED_LOCALES.includes(cookieLocale) ? cookieLocale : DEFAULT_LOCALE;
 }
 
+export function localizedText(en: string, translations: Partial<Record<string, string>>) {
+  const locale = getInitialAppLocale();
+  return locale === DEFAULT_LOCALE ? en : (translations[locale] ?? en);
+}
+
 function writeLocaleCookie(locale: string) {
   if (typeof document === "undefined") {
     return;
@@ -39,7 +44,7 @@ function writeLocaleCookie(locale: string) {
 }
 
 export function GeneralTranslationProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState(readInitialLocale);
+  const [locale, setLocaleState] = useState(getInitialAppLocale);
   const setLocale = useCallback((nextLocale: string) => {
     if (!SUPPORTED_LOCALES.includes(nextLocale)) {
       return;
@@ -52,6 +57,10 @@ export function GeneralTranslationProvider({ children }: { children: ReactNode }
     () => ({ locale, locales: SUPPORTED_LOCALES, setLocale }),
     [locale, setLocale],
   );
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   return (
     <GTProvider

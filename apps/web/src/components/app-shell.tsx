@@ -1,11 +1,11 @@
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import type { SessionPrincipal } from "@/lib/route-guards";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBottomBar } from "@/components/mobile-bottom-bar";
 import { SelfhostControlPlaneGate } from "@/components/selfhost-control-plane-gate";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import type { SessionPrincipal } from "@/lib/route-guards";
 
 const APP_SHELL_CONTENT_STYLE: React.CSSProperties = { transform: "translateZ(0)" };
 

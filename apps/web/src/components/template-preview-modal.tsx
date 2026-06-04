@@ -1,4 +1,5 @@
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import { T, useGT } from "gt-react";
 import { Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { AppLink } from "@/components/app-link";
@@ -20,6 +21,8 @@ export function TemplatePreviewModal({
   template: TemplateCatalogTemplate | null;
   closeHref?: string;
 }) {
+  const t = useGT();
+
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +67,7 @@ export function TemplatePreviewModal({
               {template.title}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Preview the full template details before opening the standalone template page.
+              <T>Preview the full template details before opening the standalone template page.</T>
             </DialogDescription>
           </div>
           <div className="flex items-center gap-1">
@@ -75,7 +78,7 @@ export function TemplatePreviewModal({
               size="icon-sm"
               className="text-muted-foreground hover:text-foreground"
             >
-              <AppLink href={`/template/${template.id}`} aria-label="Open full page">
+              <AppLink href={`/template/${template.id}`} aria-label={t("Open full page")}>
                 <Maximize2 className="size-4" />
               </AppLink>
             </Button>
@@ -83,7 +86,7 @@ export function TemplatePreviewModal({
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground hover:bg-muted -mr-1.5 flex size-7 items-center justify-center rounded-lg transition-colors"
-                aria-label="Close preview"
+                aria-label={t("Close preview")}
               >
                 <X className="size-4" />
               </button>

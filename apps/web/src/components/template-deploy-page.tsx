@@ -1,5 +1,6 @@
 import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import { T } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getCoworkerEditHref } from "@/lib/coworker-routes";
@@ -93,7 +94,9 @@ export function TemplateDeployPage({ template }: { template: TemplateCatalogTemp
       ) : (
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <Loader2 className="size-4 animate-spin" />
-          <span>Deploying coworker template…</span>
+          <span>
+            <T>Deploying coworker template…</T>
+          </span>
         </div>
       )}
     </div>

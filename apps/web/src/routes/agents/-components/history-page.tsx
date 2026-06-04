@@ -1,5 +1,6 @@
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
+import { T, useGT } from "gt-react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -15,8 +16,6 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { AppImage as Image } from "../-lib/app-image";
-import { AppLink as Link } from "../-lib/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationType } from "@/lib/integration-icons";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -35,6 +34,8 @@ import { getCoworkerEditHref } from "@/lib/coworker-routes";
 import { INTEGRATION_DISPLAY_NAMES, INTEGRATION_LOGOS } from "@/lib/integration-icons";
 import { cn } from "@/lib/utils";
 import { type CoworkerHistoryEntry, useCoworkerHistory } from "@/orpc/hooks/coworkers";
+import { AppImage as Image } from "../-lib/app-image";
+import { AppLink as Link } from "../-lib/app-link";
 
 type HistoryEntryStatus = CoworkerHistoryEntry["status"];
 
@@ -137,11 +138,11 @@ function PayloadPreview({ preview }: { preview: Record<string, unknown> }) {
         >
           {expanded ? (
             <>
-              <ChevronUp className="size-3" /> Show less
+              <ChevronUp className="size-3" /> <T>Show less</T>
             </>
           ) : (
             <>
-              <ChevronDown className="size-3" /> Show more
+              <ChevronDown className="size-3" /> <T>Show more</T>
             </>
           )}
         </button>
@@ -203,14 +204,14 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
               href={getCoworkerEditHref(entry.coworker)}
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[11px] font-medium transition-colors"
             >
-              View in editor
+              <T>View in editor</T>
               <ArrowUpRight className="size-3" />
             </Link>
             <Link
               href={`/agents/runs/${entry.runId}`}
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[11px] font-medium transition-colors"
             >
-              View run
+              <T>View run</T>
               <ArrowUpRight className="size-3" />
             </Link>
             <StatusBadge status={entry.status} />
@@ -219,7 +220,9 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
 
         <div className="mt-2 flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">{entry.operationLabel}</span>
-          <span className="text-muted-foreground/50">&rarr;</span>
+          <span className="text-muted-foreground/50">
+            <T>&rarr;</T>
+          </span>
           <span className="font-medium">{entry.target}</span>
           <span className="text-muted-foreground/60 hidden text-xs sm:inline">
             {INTEGRATION_DISPLAY_NAMES[integration]}
@@ -233,6 +236,8 @@ function HistoryCard({ entry, isLast }: { entry: CoworkerHistoryEntry; isLast: b
 }
 
 export default function CoworkerHistoryPage() {
+  const t = useGT();
+
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const queryRange = useMemo(() => {
     if (!dateRange?.from) {
@@ -361,12 +366,14 @@ export default function CoworkerHistoryPage() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Coworker History</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          <T>Coworker History</T>
+        </h1>
         <div className="ml-auto flex flex-wrap gap-2">
-          <StatPill label="actions today" value={stats.actionsToday} />
-          <StatPill label="integrations" value={stats.integrations} />
-          <StatPill label="denied" value={stats.denied} accent="red" />
-          <StatPill label="active coworkers" value={stats.activeCoworkers} />
+          <StatPill label={t("actions today")} value={stats.actionsToday} />
+          <StatPill label={t("integrations")} value={stats.integrations} />
+          <StatPill label={t("denied")} value={stats.denied} accent="red" />
+          <StatPill label={t("active coworkers")} value={stats.activeCoworkers} />
         </div>
       </div>
 
@@ -376,7 +383,7 @@ export default function CoworkerHistoryPage() {
           <Input
             value={search}
             onChange={handleSearchChange}
-            placeholder='Search actions... (e.g. "#general", "john@", "CSV export")'
+            placeholder={t('Search actions... (e.g. "#general", "john@", "CSV export")')}
             className="h-9 pl-9 text-sm"
           />
         </div>
@@ -428,10 +435,12 @@ export default function CoworkerHistoryPage() {
           )}
           <Select value={coworkerFilter} onValueChange={setCoworkerFilter}>
             <SelectTrigger size="sm" className="w-[160px]">
-              <SelectValue placeholder="All coworkers" />
+              <SelectValue placeholder={t("All coworkers")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All coworkers</SelectItem>
+              <SelectItem value="all">
+                <T>All coworkers</T>
+              </SelectItem>
               {coworkerOptions.map((coworker) => (
                 <SelectItem key={coworker.id} value={coworker.id}>
                   {coworker.name}
@@ -441,10 +450,12 @@ export default function CoworkerHistoryPage() {
           </Select>
           <Select value={integrationFilter} onValueChange={setIntegrationFilter}>
             <SelectTrigger size="sm" className="w-[160px]">
-              <SelectValue placeholder="All integrations" />
+              <SelectValue placeholder={t("All integrations")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All integrations</SelectItem>
+              <SelectItem value="all">
+                <T>All integrations</T>
+              </SelectItem>
               {integrationOptions.map((integration) => (
                 <SelectItem key={integration} value={integration}>
                   {INTEGRATION_DISPLAY_NAMES[integration]}
@@ -454,14 +465,24 @@ export default function CoworkerHistoryPage() {
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger size="sm" className="w-[120px]">
-              <SelectValue placeholder="All status" />
+              <SelectValue placeholder={t("All status")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All status</SelectItem>
-              <SelectItem value="success">Success</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="denied">Denied</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
+              <SelectItem value="all">
+                <T>All status</T>
+              </SelectItem>
+              <SelectItem value="success">
+                <T>Success</T>
+              </SelectItem>
+              <SelectItem value="pending">
+                <T>Pending</T>
+              </SelectItem>
+              <SelectItem value="denied">
+                <T>Denied</T>
+              </SelectItem>
+              <SelectItem value="error">
+                <T>Error</T>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -474,15 +495,21 @@ export default function CoworkerHistoryPage() {
       ) : error ? (
         <div className="flex flex-col items-center justify-center py-16">
           <XCircle className="text-muted-foreground/40 mb-3 size-10" />
-          <p className="text-muted-foreground text-sm font-medium">Failed to load history</p>
-          <p className="text-muted-foreground/60 mt-1 text-xs">Refresh the page and try again.</p>
+          <p className="text-muted-foreground text-sm font-medium">
+            <T>Failed to load history</T>
+          </p>
+          <p className="text-muted-foreground/60 mt-1 text-xs">
+            <T>Refresh the page and try again.</T>
+          </p>
         </div>
       ) : (
         <div className="pt-2">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Search className="text-muted-foreground/30 mb-3 size-10" />
-              <p className="text-muted-foreground text-sm font-medium">No matching actions found</p>
+              <p className="text-muted-foreground text-sm font-medium">
+                <T>No matching actions found</T>
+              </p>
               <p className="text-muted-foreground/60 mt-1 text-xs">
                 {hasNextPage || isFetchingNextPage
                   ? "Loading older actions..."
@@ -500,7 +527,9 @@ export default function CoworkerHistoryPage() {
               {isFetchingNextPage ? (
                 <Loader2 className="text-muted-foreground size-5 animate-spin" />
               ) : (
-                <span className="text-muted-foreground text-xs">Scroll to load older actions</span>
+                <span className="text-muted-foreground text-xs">
+                  <T>Scroll to load older actions</T>
+                </span>
               )}
             </div>
           )}

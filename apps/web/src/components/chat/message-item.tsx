@@ -1,7 +1,8 @@
+import { T } from "gt-react";
 import { Paperclip, Download, FileIcon, Eye } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { AppImage } from "@/components/chat/app-image";
 import type { DisplayIntegrationType } from "@/lib/integration-icons";
+import { AppImage } from "@/components/chat/app-image";
 import { useDownloadAttachment, useDownloadSandboxFile } from "@/orpc/hooks/conversation";
 import type { ActivityItemData } from "./activity-item";
 import type { MessageTiming } from "./chat-performance-metrics";
@@ -472,7 +473,9 @@ export function MessageItem({
                     className="hover:bg-background inline-flex items-center gap-1 rounded px-1.5 py-0.5"
                   >
                     <Eye className="text-muted-foreground h-3 w-3" />
-                    <span>View</span>
+                    <span>
+                      <T>View</T>
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -481,7 +484,9 @@ export function MessageItem({
                     className="hover:bg-background inline-flex items-center gap-1 rounded px-1.5 py-0.5"
                   >
                     <Download className="text-muted-foreground h-3 w-3" />
-                    <span>Download</span>
+                    <span>
+                      <T>Download</T>
+                    </span>
                   </button>
                 </div>
               ),
@@ -606,7 +611,7 @@ export function MessageItem({
               key={file.fileId}
               data-file-id={file.fileId}
               onClick={handleSandboxFileClick}
-              className="bg-muted hover:bg-muted/80 flex min-w-0 max-w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+              className="bg-muted hover:bg-muted/80 flex max-w-full min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
             >
               <FileIcon className="text-muted-foreground h-4 w-4 shrink-0" />
               <span className="min-w-0 truncate font-medium">{file.filename}</span>
@@ -626,7 +631,9 @@ export function MessageItem({
         !hasTrace &&
         !displaySandboxFiles?.length &&
         coworkerInvocations.length === 0 && (
-          <div className="text-muted-foreground text-sm italic">Task completed</div>
+          <div className="text-muted-foreground text-sm italic">
+            <T>Task completed</T>
+          </div>
         )}
     </div>
   );

@@ -1,8 +1,9 @@
 import { createFileRoute, Outlet, useParams } from "@tanstack/react-router";
+import { useGT } from "gt-react";
 import { Menu } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChatHeaderActionsProvider } from "@/components/chat/chat-header-actions-context";
 import { ChatCopyButton } from "@/components/chat/chat-copy-button";
+import { ChatHeaderActionsProvider } from "@/components/chat/chat-header-actions-context";
 import { ChatShareControls } from "@/components/chat/chat-share-controls";
 import { MobileRecentDrawer } from "@/components/mobile-recent-drawer";
 import { RecentChatsSidebar } from "@/components/recent-chats-sidebar";
@@ -15,6 +16,8 @@ export const Route = createFileRoute("/_app/chat")({
 });
 
 function ChatLayout() {
+  const t = useGT();
+
   // The conversation id only exists on the `/chat/$conversationId` child route, so read
   // it loosely from the matched params (undefined on the `/chat` index route).
   const params = useParams({ strict: false });
@@ -81,7 +84,7 @@ function ChatLayout() {
               type="button"
               onClick={openRecentDrawer}
               className="text-muted-foreground hover:text-foreground -ml-1 flex h-9 w-9 items-center justify-center rounded-xl md:hidden"
-              aria-label="Recent chats"
+              aria-label={t("Recent chats")}
             >
               <Menu className="h-5 w-5" />
             </button>

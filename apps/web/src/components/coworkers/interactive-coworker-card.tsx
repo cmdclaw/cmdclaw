@@ -1,5 +1,7 @@
 // oxlint-disable jsx-a11y/no-noninteractive-tabindex
 
+import { Link, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import {
   Circle,
   Download,
@@ -13,7 +15,6 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Sheet, SheetContent } from "@/components/animate-ui/components/radix/sheet";
@@ -153,7 +154,9 @@ function RunsList({ runs }: { runs: RunEntry[] }) {
   return (
     <div className="flex flex-col">
       <div className="px-3 py-2">
-        <p className="text-xs font-bold">Recent runs</p>
+        <p className="text-xs font-bold">
+          <T>Recent runs</T>
+        </p>
       </div>
       <div className="max-h-64 overflow-y-auto">
         {runs.map((run) => (
@@ -196,6 +199,8 @@ export function InteractiveCoworkerCard({
   onClick?: () => void;
   nounLabel?: string;
 }) {
+  const t = useGT();
+
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { data: integrations } = useIntegrationList();
@@ -256,12 +261,12 @@ export function InteractiveCoworkerCard({
         toast.success(result.generationId ? "Run started." : "Needs your input.");
         void navigate({ href: result?.runId ? `/agents/runs/${result.runId}` : "/agents/runs" });
       } catch {
-        toast.error("Failed to start run.");
+        toast.error(t("Failed to start run."));
       } finally {
         setIsRunning(false);
       }
     },
-    [triggerCoworker, coworker.id, navigate],
+    [triggerCoworker, coworker.id, navigate, t],
   );
 
   const handleToggleStatus = useCallback(
@@ -293,11 +298,11 @@ export function InteractiveCoworkerCard({
         toast.success(`${nounLabel} shared with workspace.`);
       }
     } catch {
-      toast.error("Failed to update sharing.");
+      toast.error(t("Failed to update sharing."));
     } finally {
       setIsUpdatingShare(false);
     }
-  }, [shareCoworker, unshareCoworker, coworker.id, coworker.sharedAt, nounLabel]);
+  }, [shareCoworker, unshareCoworker, coworker.id, coworker.sharedAt, nounLabel, t]);
 
   const handleDelete = useCallback(async () => {
     try {
@@ -323,9 +328,9 @@ export function InteractiveCoworkerCard({
       await updateCoworker.mutateAsync({ id: coworker.id, isPinned: !coworker.isPinned });
       toast.success(coworker.isPinned ? "Unpinned." : "Pinned.");
     } catch {
-      toast.error("Failed to update pin.");
+      toast.error(t("Failed to update pin."));
     }
-  }, [updateCoworker, coworker.id, coworker.isPinned]);
+  }, [updateCoworker, coworker.id, coworker.isPinned, t]);
 
   const handleRequestDelete = useCallback(() => {
     setPendingDelete(true);
@@ -363,11 +368,11 @@ export function InteractiveCoworkerCard({
       URL.revokeObjectURL(url);
       toast.success(`Exported ${filename}.`);
     } catch {
-      toast.error("Failed to export coworker.");
+      toast.error(t("Failed to export coworker."));
     } finally {
       setIsExporting(false);
     }
-  }, [exportCoworkerDefinition, coworker.id, coworker.username, coworker.name]);
+  }, [exportCoworkerDefinition, coworker.id, coworker.username, coworker.name, t]);
 
   const isDeleting = deleteCoworkerMutation.isPending;
 
@@ -445,18 +450,18 @@ export function InteractiveCoworkerCard({
               {coworker.isPinned ? (
                 <>
                   <PinOff className="size-4" />
-                  Unpin
+                  <T>Unpin</T>
                 </>
               ) : (
                 <>
                   <Pin className="size-4" />
-                  Pin to top
+                  <T>Pin to top</T>
                 </>
               )}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleOpenTagsPanel}>
               <Tag className="size-4" />
-              Manage tags
+              <T>Manage tags</T>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -471,7 +476,7 @@ export function InteractiveCoworkerCard({
               disabled={isExporting || isDeleting || isUpdatingStatus}
             >
               <Download className="size-4" />
-              Export as JSON
+              <T>Export as JSON</T>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -480,7 +485,7 @@ export function InteractiveCoworkerCard({
               className="text-destructive focus:text-destructive"
             >
               <Trash2 className="size-4" />
-              Delete coworker
+              <T>Delete coworker</T>
             </DropdownMenuItem>
           </>
         ) : (
@@ -490,7 +495,7 @@ export function InteractiveCoworkerCard({
               onClick={handleBackToMainPanel}
               className="text-muted-foreground hover:text-foreground hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
             >
-              ← Back
+              <T>← Back</T>
             </button>
             <DropdownMenuSeparator />
             <TagManagerContent coworkerId={coworker.id} currentTagIds={currentTagIds} />
@@ -534,7 +539,8 @@ export function InteractiveCoworkerCard({
       )}
       {toolSummary.showSkillBadge ? (
         <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-          {toolSummary.skillCount} skill{toolSummary.skillCount === 1 ? "" : "s"}
+          {toolSummary.skillCount} <T>skill</T>
+          {toolSummary.skillCount === 1 ? "" : "s"}
         </span>
       ) : null}
       {toolSummary.overflowCount > 0 ? (
@@ -556,7 +562,7 @@ export function InteractiveCoworkerCard({
         >
           {recentRun ? (
             <span>
-              Last run:{" "}
+              <T>Last run:</T>{" "}
               <span className="text-muted-foreground">
                 {getCoworkerRunStatusLabel(recentRun.status)}
               </span>{" "}
@@ -583,7 +589,7 @@ export function InteractiveCoworkerCard({
           >
             {recentRun ? (
               <span>
-                Last run:{" "}
+                <T>Last run:</T>{" "}
                 <span className="text-muted-foreground">
                   {getCoworkerRunStatusLabel(recentRun.status)}
                 </span>{" "}
@@ -610,7 +616,7 @@ export function InteractiveCoworkerCard({
           to={getCoworkerEditHref(coworker)}
           onClick={handleStopPropagation}
           className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors"
-          title="Edit coworker"
+          title={t("Edit coworker")}
         >
           <PenLine className="size-3.5" />
         </Link>
@@ -619,7 +625,7 @@ export function InteractiveCoworkerCard({
           onClick={handleRun}
           disabled={isRunning || isDeleting}
           className="text-muted-foreground/30 hover:text-foreground group-hover:text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
-          title="Run coworker"
+          title={t("Run coworker")}
         >
           {isRunning ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -655,15 +661,21 @@ export function InteractiveCoworkerCard({
       <AlertDialog open={pendingDelete} onOpenChange={setPendingDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {nounLabel.toLowerCase()}</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>Delete</T> {nounLabel.toLowerCase()}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {getCoworkerDisplayName(coworker.name)}? This action
-              cannot be undone.
+              <T>Are you sure you want to delete</T> {getCoworkerDisplayName(coworker.name)}
+              <T>? This action cannot be undone.</T>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogCancel>
+              <T>Cancel</T>
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>
+              <T>Delete</T>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

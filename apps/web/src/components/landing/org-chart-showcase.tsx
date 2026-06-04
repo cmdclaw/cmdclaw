@@ -1,6 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-object-as-prop -- motion props are declarative animation config */
 
-import { T } from "gt-react";
+import { T, msg, useMessages } from "gt-react";
 import { motion, useInView } from "motion/react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -40,7 +40,7 @@ type Department = {
 
 const DEPARTMENTS: Department[] = [
   {
-    label: "Sales",
+    label: msg("Sales"),
     labelX: 40,
     labelY: 20,
     color: "#3B82F6",
@@ -50,8 +50,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Lead Qualifier",
         username: "lead-qualifier",
-        description: "Scores leads from HubSpot, routes hot leads to reps",
-        trigger: "On new lead",
+        description: msg("Scores leads from HubSpot, routes hot leads to reps"),
+        trigger: msg("On new lead"),
         status: "on",
         integrations: ["hubspot", "salesforce", "slack"],
         x: 40,
@@ -60,8 +60,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Deal Closer",
         username: "deal-closer",
-        description: "Drafts follow-up emails for stale pipeline deals",
-        trigger: "Scheduled",
+        description: msg("Drafts follow-up emails for stale pipeline deals"),
+        trigger: msg("Scheduled"),
         status: "on",
         integrations: ["salesforce", "google_gmail"],
         x: 290,
@@ -70,7 +70,7 @@ const DEPARTMENTS: Department[] = [
     ],
   },
   {
-    label: "Support",
+    label: msg("Support"),
     labelX: 580,
     labelY: 20,
     color: "#06B6D4",
@@ -80,8 +80,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Ticket Triage",
         username: "ticket-triage",
-        description: "Categorizes emails by urgency, creates Notion tickets",
-        trigger: "Email",
+        description: msg("Categorizes emails by urgency, creates Notion tickets"),
+        trigger: msg("Email"),
         status: "on",
         integrations: ["google_gmail", "notion", "slack"],
         x: 580,
@@ -90,8 +90,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Escalation Bot",
         username: "escalation-bot",
-        description: "Flags P0 tickets and pings on-call in Slack",
-        trigger: "On new ticket",
+        description: msg("Flags P0 tickets and pings on-call in Slack"),
+        trigger: msg("On new ticket"),
         status: "on",
         integrations: ["slack", "github"],
         x: 830,
@@ -100,7 +100,7 @@ const DEPARTMENTS: Department[] = [
     ],
   },
   {
-    label: "Marketing",
+    label: msg("Marketing"),
     labelX: 40,
     labelY: 250,
     color: "#F472B6",
@@ -110,8 +110,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Social Monitor",
         username: "social-monitor",
-        description: "Tracks LinkedIn mentions and competitor posts",
-        trigger: "Scheduled",
+        description: msg("Tracks LinkedIn mentions and competitor posts"),
+        trigger: msg("Scheduled"),
         status: "on",
         integrations: ["linkedin", "slack"],
         x: 40,
@@ -120,8 +120,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Campaign Digest",
         username: "campaign-digest",
-        description: "Weekly metrics from HubSpot, posts to #marketing",
-        trigger: "Scheduled",
+        description: msg("Weekly metrics from HubSpot, posts to #marketing"),
+        trigger: msg("Scheduled"),
         status: "on",
         integrations: ["hubspot", "google_sheets", "slack"],
         x: 290,
@@ -130,7 +130,7 @@ const DEPARTMENTS: Department[] = [
     ],
   },
   {
-    label: "Operations",
+    label: msg("Operations"),
     labelX: 580,
     labelY: 250,
     color: "#10B981",
@@ -140,8 +140,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Invoice Sync",
         username: "invoice-sync",
-        description: "Reconciles Stripe payments with accounting records",
-        trigger: "Scheduled",
+        description: msg("Reconciles Stripe payments with accounting records"),
+        trigger: msg("Scheduled"),
         status: "on",
         integrations: ["google_sheets", "slack"],
         x: 580,
@@ -150,8 +150,8 @@ const DEPARTMENTS: Department[] = [
       {
         name: "Onboarding Bot",
         username: "onboarding-bot",
-        description: "Sets up new hires in Notion, Slack, and Google",
-        trigger: "On new hire",
+        description: msg("Sets up new hires in Notion, Slack, and Google"),
+        trigger: msg("On new hire"),
         status: "on",
         integrations: ["notion", "slack", "google_calendar"],
         x: 830,
@@ -169,6 +169,8 @@ const OVERVIEW_PAUSE_MS = 5000;
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 function MiniCard({ agent, isHighlighted }: { agent: MockAgent; isHighlighted: boolean }) {
+  const m = useMessages();
+
   return (
     <motion.div
       animate={{
@@ -196,19 +198,19 @@ function MiniCard({ agent, isHighlighted }: { agent: MockAgent; isHighlighted: b
           }`}
         >
           {agent.status === "on" && <span className="size-1.5 rounded-full bg-green-500" />}
-          {agent.status === "on" ? "On" : "Off"}
+          {agent.status === "on" ? <T>On</T> : <T>Off</T>}
         </div>
       </div>
 
       {/* Description */}
       <p className="text-muted-foreground mt-2 line-clamp-1 text-[10px] leading-relaxed">
-        {agent.description}
+        {m(agent.description)}
       </p>
 
       {/* Bottom row */}
       <div className="mt-2.5 flex items-center gap-1.5">
         <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[8px] font-medium">
-          {agent.trigger}
+          {m(agent.trigger)}
         </span>
         <div className="ml-auto flex items-center gap-1">
           {agent.integrations.map((key) => (
@@ -234,6 +236,8 @@ function MiniCard({ agent, isHighlighted }: { agent: MockAgent; isHighlighted: b
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 function DeptLabel({ dept, isActive }: { dept: Department; isActive: boolean }) {
+  const m = useMessages();
+
   return (
     <motion.div
       animate={{
@@ -246,7 +250,9 @@ function DeptLabel({ dept, isActive }: { dept: Department; isActive: boolean }) 
     >
       <div className="flex items-center gap-2">
         <span className="size-2 rounded-full" style={{ backgroundColor: dept.color }} />
-        <span className="text-foreground text-sm font-semibold tracking-tight">{dept.label}</span>
+        <span className="text-foreground text-sm font-semibold tracking-tight">
+          {m(dept.label)}
+        </span>
       </div>
     </motion.div>
   );

@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Check, Copy, Globe } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { formatPersistedChatTranscript } from "@/components/chat/chat-transcript";
@@ -14,6 +15,8 @@ type Props = {
 };
 
 export function SharedConversationView({ title, messages }: Props) {
+  const t = useGT();
+
   const [isCopied, setIsCopied] = useState(false);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -45,7 +48,7 @@ export function SharedConversationView({ title, messages }: Props) {
         <div className="ml-auto flex items-center gap-2">
           <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
             <Globe className="h-3.5 w-3.5" />
-            Shared
+            <T>Shared</T>
           </span>
           <Button
             type="button"
@@ -53,7 +56,7 @@ export function SharedConversationView({ title, messages }: Props) {
             size="sm"
             disabled={!transcript}
             onClick={handleCopy}
-            title="Copy chat as text"
+            title={t("Copy chat as text")}
           >
             {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {isCopied ? "Copied" : "Copy"}

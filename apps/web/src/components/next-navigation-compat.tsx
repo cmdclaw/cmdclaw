@@ -12,8 +12,8 @@
  * speaks TanStack Router under the hood.
  */
 
-import { useMemo } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useMemo } from "react";
 
 export function usePathname(): string {
   return useRouterState({ select: (state) => state.location.pathname });

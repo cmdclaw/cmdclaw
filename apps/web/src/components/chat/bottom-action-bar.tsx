@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { AttachmentData } from "@/components/prompt-bar";
@@ -137,7 +138,7 @@ export function BottomActionBar({
             <ChevronLeft className="h-4 w-4" />
           </button>
           <span className="text-muted-foreground text-sm">
-            {currentIndex + 1} of {pendingItems.length}
+            {currentIndex + 1} <T>of</T> {pendingItems.length}
           </span>
           <button
             type="button"

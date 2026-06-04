@@ -1,6 +1,21 @@
 import { config } from "dotenv";
-import { afterAll, afterEach, beforeAll } from "vitest";
+import { createElement, Fragment, type ReactNode } from "react";
+import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { mswServer } from "@/test/msw/server";
+
+const passthroughTranslation = (message: string | string[] | null | undefined) => message ?? "";
+
+vi.mock("gt-react", async (importActual) => {
+  const actual = await importActual<typeof import("gt-react")>();
+
+  return {
+    ...actual,
+    msg: passthroughTranslation,
+    T: ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children),
+    useGT: () => passthroughTranslation,
+    useMessages: () => passthroughTranslation,
+  };
+});
 
 for (const envFile of [".env.test.local", ".env.test", "../../.env"]) {
   config({ path: envFile, override: false });
@@ -26,6 +41,29 @@ for (const [key, value] of Object.entries(testEnvDefaults)) {
 }
 
 const isLiveE2E = process.env.E2E_LIVE === "1";
+
+function createMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key) => store.get(key) ?? null,
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key) => store.delete(key),
+    setItem: (key, value) => store.set(key, String(value)),
+  };
+}
+
+if (typeof globalThis.localStorage?.clear !== "function") {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: createMemoryStorage(),
+    writable: true,
+  });
+}
 
 if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {

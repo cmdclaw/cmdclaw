@@ -5,6 +5,7 @@ import {
   type EmojiPickerListRowProps,
   EmojiPicker as EmojiPickerPrimitive,
 } from "frimousse";
+import { T } from "gt-react";
 import { LoaderIcon, SearchIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -104,7 +105,7 @@ function EmojiPickerContent({
         className="text-muted-foreground absolute inset-0 flex items-center justify-center text-sm"
         data-slot="emoji-picker-empty"
       >
-        No emoji found.
+        <T>No emoji found.</T>
       </EmojiPickerPrimitive.Empty>
       <EmojiPickerPrimitive.List
         className="pb-1 select-none"

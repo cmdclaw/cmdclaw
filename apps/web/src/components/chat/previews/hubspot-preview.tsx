@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { PreviewProps, PreviewField, PreviewSection, IntegrationLogo } from "./preview-styles";
 
 type HubSpotObjectType = "contacts" | "companies" | "deals" | "tickets" | "tasks" | "notes";
@@ -40,6 +41,8 @@ interface HubspotPreviewComponentProps {
 }
 
 function HubspotCreatePreview({ args, objectType, objectLabel }: HubspotPreviewComponentProps) {
+  const t = useGT();
+
   // Extract common fields based on object type
   const fields = getDisplayFields(objectType!, args);
 
@@ -47,7 +50,9 @@ function HubspotCreatePreview({ args, objectType, objectLabel }: HubspotPreviewC
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="hubspot" size={16} />
-        <span className="text-sm font-medium">Create {objectLabel}</span>
+        <span className="text-sm font-medium">
+          <T>Create</T> {objectLabel}
+        </span>
       </div>
 
       <PreviewSection>
@@ -64,7 +69,7 @@ function HubspotCreatePreview({ args, objectType, objectLabel }: HubspotPreviewC
       </PreviewSection>
 
       {args.properties && (
-        <PreviewSection title="Additional Properties">
+        <PreviewSection title={t("Additional Properties")}>
           <PropertiesPreview properties={args.properties} />
         </PreviewSection>
       )}
@@ -76,6 +81,8 @@ function HubspotUpdatePreview({
   args,
   objectLabel,
 }: Omit<HubspotPreviewComponentProps, "objectType">) {
+  const t = useGT();
+
   // The first positional arg after "hubspot <object> update" is the ID
   const id = args.id;
 
@@ -83,7 +90,9 @@ function HubspotUpdatePreview({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="hubspot" size={16} />
-        <span className="text-sm font-medium">Update {objectLabel}</span>
+        <span className="text-sm font-medium">
+          <T>Update</T> {objectLabel}
+        </span>
       </div>
 
       <PreviewSection>
@@ -94,7 +103,7 @@ function HubspotUpdatePreview({
       </PreviewSection>
 
       {args.properties && (
-        <PreviewSection title="Updated Properties">
+        <PreviewSection title={t("Updated Properties")}>
           <PropertiesPreview properties={args.properties} />
         </PreviewSection>
       )}
@@ -106,17 +115,21 @@ function HubspotCompletePreview({
   args,
   objectLabel,
 }: Omit<HubspotPreviewComponentProps, "objectType">) {
+  const t = useGT();
+
   const id = args.id;
 
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="hubspot" size={16} />
-        <span className="text-sm font-medium">Complete {objectLabel}</span>
+        <span className="text-sm font-medium">
+          <T>Complete</T> {objectLabel}
+        </span>
       </div>
 
       <PreviewSection>
-        <PreviewField label="Task ID" value={id} mono />
+        <PreviewField label={t("Task ID")} value={id} mono />
       </PreviewSection>
     </div>
   );

@@ -1,6 +1,7 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
 import type { ChangeEvent } from "react";
+import { T, useGT } from "gt-react";
 import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import {
@@ -221,6 +222,8 @@ export function WorkspaceMcpServerFields({
   hideMcpTransportFields?: boolean;
   fixedMcpAuthType?: Extract<WorkspaceMcpServerFormState["authType"], "oauth2"> | null;
 }) {
+  const t = useGT();
+
   const handleFieldInputChange = useCallback(
     (field: keyof WorkspaceMcpServerFormState) =>
       (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -250,34 +253,46 @@ export function WorkspaceMcpServerFields({
     <>
       <div className="space-y-2">
         <label htmlFor={`${formIdPrefix}-kind`} className="text-sm font-medium">
-          Kind
+          <T>Kind</T>
         </label>
         <Select value={form.kind} onValueChange={handleKindChange}>
           <SelectTrigger id={`${formIdPrefix}-kind`} disabled={disabled}>
-            <SelectValue placeholder="Select source type" />
+            <SelectValue placeholder={t("Select source type")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="mcp">Remote MCP</SelectItem>
+            <SelectItem value="mcp">
+              <T>Remote MCP</T>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       <div className="space-y-2">
         <label htmlFor={`${formIdPrefix}-auth-type`} className="text-sm font-medium">
-          Auth
+          <T>Auth</T>
         </label>
         {form.kind === "mcp" && fixedMcpAuthType ? (
           <Input id={`${formIdPrefix}-auth-type`} value="OAuth 2.0" disabled={true} />
         ) : (
           <Select value={form.authType} onValueChange={handleAuthTypeChange}>
             <SelectTrigger id={`${formIdPrefix}-auth-type`} disabled={disabled}>
-              <SelectValue placeholder="Select auth" />
+              <SelectValue placeholder={t("Select auth")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="bearer">Bearer token</SelectItem>
-              <SelectItem value="api_key">API key</SelectItem>
-              {form.kind === "mcp" ? <SelectItem value="oauth2">OAuth 2.0</SelectItem> : null}
-              <SelectItem value="none">No auth</SelectItem>
+              <SelectItem value="bearer">
+                <T>Bearer token</T>
+              </SelectItem>
+              <SelectItem value="api_key">
+                <T>API key</T>
+              </SelectItem>
+              {form.kind === "mcp" ? (
+                <SelectItem value="oauth2">
+                  <T>OAuth 2.0</T>
+                </SelectItem>
+              ) : null}
+              <SelectItem value="none">
+                <T>No auth</T>
+              </SelectItem>
             </SelectContent>
           </Select>
         )}
@@ -285,13 +300,13 @@ export function WorkspaceMcpServerFields({
 
       <div className="space-y-2">
         <label htmlFor={`${formIdPrefix}-name`} className="text-sm font-medium">
-          Name
+          <T>Name</T>
         </label>
         <Input
           id={`${formIdPrefix}-name`}
           value={form.name}
           onChange={handleFieldInputChange("name")}
-          placeholder="Display name"
+          placeholder={t("Display name")}
           disabled={disabled}
         />
       </div>
@@ -299,13 +314,13 @@ export function WorkspaceMcpServerFields({
       {!hideNamespace ? (
         <div className="space-y-2">
           <label htmlFor={`${formIdPrefix}-namespace`} className="text-sm font-medium">
-            Namespace
+            <T>Namespace</T>
           </label>
           <Input
             id={`${formIdPrefix}-namespace`}
             value={form.namespace}
             onChange={handleFieldInputChange("namespace")}
-            placeholder="Namespace (for example salesforce-prod)"
+            placeholder={t("Namespace (for example salesforce-prod)")}
             disabled={disabled}
           />
         </div>
@@ -313,13 +328,13 @@ export function WorkspaceMcpServerFields({
 
       <div className="space-y-2 md:col-span-2">
         <label htmlFor={`${formIdPrefix}-endpoint`} className="text-sm font-medium">
-          Endpoint
+          <T>Endpoint</T>
         </label>
         <Input
           id={`${formIdPrefix}-endpoint`}
           value={form.endpoint}
           onChange={handleFieldInputChange("endpoint")}
-          placeholder="Endpoint URL"
+          placeholder={t("Endpoint URL")}
           disabled={disabled}
         />
       </div>
@@ -328,26 +343,26 @@ export function WorkspaceMcpServerFields({
         <>
           <div className="space-y-2 md:col-span-2">
             <label htmlFor={`${formIdPrefix}-transport`} className="text-sm font-medium">
-              Transport
+              <T>Transport</T>
             </label>
             <Input
               id={`${formIdPrefix}-transport`}
               value={form.transport}
               onChange={handleFieldInputChange("transport")}
-              placeholder="Transport (for example streamable-http)"
+              placeholder={t("Transport (for example streamable-http)")}
               disabled={disabled}
             />
           </div>
           <JsonMapField
             id={`${formIdPrefix}-headers`}
-            label="Headers"
+            label={t("Headers")}
             value={form.headersText}
             onChange={handleFieldInputChange("headersText")}
             placeholder={`{\n  "X-Team": "sales"\n}`}
           />
           <JsonMapField
             id={`${formIdPrefix}-query-params`}
-            label="Query params"
+            label={t("Query params")}
             value={form.queryParamsText}
             onChange={handleFieldInputChange("queryParamsText")}
             placeholder={`{\n  "region": "eu"\n}`}
@@ -359,13 +374,13 @@ export function WorkspaceMcpServerFields({
         <>
           <div className="space-y-2">
             <label htmlFor={`${formIdPrefix}-auth-header-name`} className="text-sm font-medium">
-              Auth header name
+              <T>Auth header name</T>
             </label>
             <Input
               id={`${formIdPrefix}-auth-header-name`}
               value={form.authHeaderName}
               onChange={handleFieldInputChange("authHeaderName")}
-              placeholder="Auth header name"
+              placeholder={t("Auth header name")}
               disabled={disabled}
             />
           </div>
@@ -373,13 +388,13 @@ export function WorkspaceMcpServerFields({
           {form.kind === "mcp" && form.authType === "api_key" ? (
             <div className="space-y-2">
               <label htmlFor={`${formIdPrefix}-auth-query-param`} className="text-sm font-medium">
-                Auth query param
+                <T>Auth query param</T>
               </label>
               <Input
                 id={`${formIdPrefix}-auth-query-param`}
                 value={form.authQueryParam}
                 onChange={handleFieldInputChange("authQueryParam")}
-                placeholder="Optional query param name"
+                placeholder={t("Optional query param name")}
                 disabled={disabled}
               />
             </div>
@@ -389,13 +404,13 @@ export function WorkspaceMcpServerFields({
 
           <div className="space-y-2 md:col-span-2">
             <label htmlFor={`${formIdPrefix}-auth-prefix`} className="text-sm font-medium">
-              Auth prefix
+              <T>Auth prefix</T>
             </label>
             <Input
               id={`${formIdPrefix}-auth-prefix`}
               value={form.authType === "bearer" ? form.authPrefix : ""}
               onChange={handleFieldInputChange("authPrefix")}
-              placeholder="Auth prefix"
+              placeholder={t("Auth prefix")}
               disabled={disabled || form.authType !== "bearer"}
             />
           </div>

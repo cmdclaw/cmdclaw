@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { T } from "gt-react";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
@@ -101,7 +102,7 @@ export function CoworkerInvocationCard(props: CoworkerInvocationCardProps) {
           <p className="text-foreground/90 text-sm leading-relaxed">{props.message}</p>
           {props.attachmentNames.length > 0 && (
             <p className="text-muted-foreground text-xs">
-              Files: {props.attachmentNames.join(", ")}
+              <T>Files:</T> {props.attachmentNames.join(", ")}
             </p>
           )}
         </div>
@@ -121,7 +122,7 @@ export function CoworkerInvocationCard(props: CoworkerInvocationCardProps) {
             search={runSearch}
             className="border-border/70 text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors"
           >
-            Open
+            <T>Open</T>
             <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>

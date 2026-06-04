@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ function getPreviewErrorCopy(error: unknown): { title: string; description: stri
 }
 
 export function OutputHtmlPreviewPanel({ outputFile, onClose }: Props) {
+  const t = useGT();
+
   const preview = useOutputHtmlPreview(outputFile.fileId);
   const { mutateAsync: downloadSandboxFile, isPending: isDownloading } = useDownloadSandboxFile();
 
@@ -58,7 +61,9 @@ export function OutputHtmlPreviewPanel({ outputFile, onClose }: Props) {
     <div className="bg-background flex min-h-0 flex-1 flex-col">
       <div className="border-border/70 flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">output.html</p>
+          <p className="truncate text-sm font-medium">
+            <T>output.html</T>
+          </p>
         </div>
         <Button
           type="button"
@@ -67,7 +72,7 @@ export function OutputHtmlPreviewPanel({ outputFile, onClose }: Props) {
           className="h-8 w-8"
           onClick={handleRefresh}
           disabled={preview.isFetching}
-          aria-label="Refresh output preview"
+          aria-label={t("Refresh output preview")}
         >
           {preview.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -82,7 +87,7 @@ export function OutputHtmlPreviewPanel({ outputFile, onClose }: Props) {
           className="h-8 w-8"
           onClick={handleDownload}
           disabled={isDownloading}
-          aria-label="Download output.html"
+          aria-label={t("Download output.html")}
         >
           {isDownloading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -96,7 +101,7 @@ export function OutputHtmlPreviewPanel({ outputFile, onClose }: Props) {
           size="icon"
           className="h-8 w-8"
           onClick={onClose}
-          aria-label="Close output preview"
+          aria-label={t("Close output preview")}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -122,7 +127,7 @@ export function OutputHtmlPreviewPanel({ outputFile, onClose }: Props) {
           </div>
         ) : (
           <iframe
-            title="output.html preview"
+            title={t("output.html preview")}
             className="bg-background h-full w-full border-0"
             sandbox="allow-scripts allow-forms"
             srcDoc={preview.data?.html ?? ""}

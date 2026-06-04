@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   BarChart3,
   CheckCheck,
@@ -82,8 +83,13 @@ function formatRelativeShortNullable(value?: Date | string | null) {
 }
 
 function HumanInputDot() {
+  const t = useGT();
+
   return (
-    <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" aria-label="Needs human input" />
+    <span
+      className="h-2 w-2 shrink-0 rounded-full bg-orange-500"
+      aria-label={t("Needs human input")}
+    />
   );
 }
 
@@ -113,6 +119,8 @@ type MobileRecentDrawerProps = {
 };
 
 export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDrawerProps) {
+  const t = useGT();
+
   const pathname = usePathname();
   const router = useRouter();
   const recentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -345,7 +353,9 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                 ) : (
                   <CheckCheck className="h-3.5 w-3.5" />
                 )}
-                <span>Mark all read</span>
+                <span>
+                  <T>Mark all read</T>
+                </span>
               </button>
             )}
           </div>
@@ -358,10 +368,12 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
           >
             {mode === "chats" ? (
               conversationsLoading ? (
-                <p className="text-muted-foreground px-4 py-3 text-xs">Loading...</p>
+                <p className="text-muted-foreground px-4 py-3 text-xs">
+                  <T>Loading...</T>
+                </p>
               ) : conversations.length === 0 ? (
                 <p className="text-muted-foreground px-4 py-6 text-center text-xs">
-                  No conversations yet
+                  <T>No conversations yet</T>
                 </p>
               ) : (
                 <>
@@ -437,7 +449,9 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                               onClick={handleUsageMenuClick}
                             >
                               <BarChart3 className="h-4 w-4" />
-                              <span>Show usage</span>
+                              <span>
+                                <T>Show usage</T>
+                              </span>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               data-conversation-id={conversation.id}
@@ -445,7 +459,9 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                               onClick={handleRenameMenuClick}
                             >
                               <Pencil className="h-4 w-4" />
-                              <span>Rename</span>
+                              <span>
+                                <T>Rename</T>
+                              </span>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               data-conversation-id={conversation.id}
@@ -453,7 +469,9 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                               className="text-destructive focus:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span>Delete</span>
+                              <span>
+                                <T>Delete</T>
+                              </span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -471,7 +489,9 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                 </>
               )
             ) : recentCoworkerRuns.length === 0 ? (
-              <p className="text-muted-foreground px-4 py-6 text-center text-xs">No runs yet</p>
+              <p className="text-muted-foreground px-4 py-6 text-center text-xs">
+                <T>No runs yet</T>
+              </p>
             ) : (
               recentCoworkerRuns.map((run) => {
                 const runPath = `/agents/runs/${run.id}`;
@@ -509,19 +529,21 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
       <AlertDialog open={isRenameModalOpen} onOpenChange={handleRenameModalOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rename chat</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>Rename chat</T>
+            </AlertDialogTitle>
           </AlertDialogHeader>
           <form className="space-y-4" onSubmit={handleRenameFormSubmit}>
             <Input
               value={renameTitle}
               onChange={handleRenameTitleChange}
-              placeholder="Chat title"
+              placeholder={t("Chat title")}
               autoFocus
               maxLength={200}
             />
             <AlertDialogFooter>
               <AlertDialogCancel type="button" disabled={updateConversationTitle.isPending}>
-                Cancel
+                <T>Cancel</T>
               </AlertDialogCancel>
               <Button
                 type="submit"
@@ -530,12 +552,12 @@ export function MobileRecentDrawer({ open, onOpenChange, mode }: MobileRecentDra
                 {updateConversationTitle.isPending ? (
                   <span className="inline-flex items-center gap-1.5">
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                    Renaming...
+                    <T>Renaming...</T>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5" />
-                    Rename
+                    <T>Rename</T>
                   </span>
                 )}
               </Button>

@@ -5,6 +5,7 @@ import type {
   TemplateIntegrationType,
 } from "@cmdclaw/db/template-catalog";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { ArrowUp, Search, SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -187,6 +188,8 @@ export function TemplatesPageClient({
   templates: TemplateCatalogTemplate[];
   previewId: string | null;
 }) {
+  const t = useGT();
+
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const previewTemplate = useMemo(
@@ -264,7 +267,7 @@ export function TemplatesPageClient({
                 type="text"
                 value={search}
                 onChange={handleSearchChange}
-                placeholder="Search templates…"
+                placeholder={t("Search templates…")}
                 className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
               />
             </div>
@@ -276,7 +279,9 @@ export function TemplatesPageClient({
               className={cn("h-11 gap-2 rounded-xl px-4", filtersOpen && "bg-muted border-border")}
             >
               <SlidersHorizontal className="size-3.5" />
-              <span className="hidden sm:inline">Filters</span>
+              <span className="hidden sm:inline">
+                <T>Filters</T>
+              </span>
               {activeFilterCount > 0 && (
                 <span className="bg-foreground text-background inline-flex size-4.5 items-center justify-center rounded-full text-[10px] leading-none font-semibold">
                   {activeFilterCount}
@@ -296,9 +301,9 @@ export function TemplatesPageClient({
                 className="overflow-hidden"
               >
                 <div className="mb-3 space-y-1.5 md:mb-10 md:space-y-4">
-                  <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
+                  <div className="flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
                     <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
-                      Industry
+                      <T>Industry</T>
                     </span>
                     {INDUSTRIES.map((industry) => (
                       <FilterPill
@@ -311,9 +316,9 @@ export function TemplatesPageClient({
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
+                  <div className="flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
                     <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
-                      Use case
+                      <T>Use case</T>
                     </span>
                     {USE_CASES.map((useCase) => (
                       <FilterPill
@@ -326,9 +331,9 @@ export function TemplatesPageClient({
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
+                  <div className="flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
                     <span className="text-muted-foreground/50 mr-2 hidden w-16 shrink-0 text-[11px] font-medium tracking-wider uppercase md:block">
-                      App
+                      <T>App</T>
                     </span>
                     {INTEGRATIONS_FILTER.map((integration) => (
                       <FilterPill
@@ -349,7 +354,7 @@ export function TemplatesPageClient({
                         onClick={clearFilters}
                         className="text-muted-foreground hover:text-foreground text-xs transition-colors"
                       >
-                        Clear all filters
+                        <T>Clear all filters</T>
                       </button>
                     </div>
                   )}
@@ -363,21 +368,23 @@ export function TemplatesPageClient({
             <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
               <SheetContent
                 side="bottom"
-                title="Filters"
+                title={t("Filters")}
                 showCloseButton={false}
                 className="h-auto max-h-[80vh] rounded-t-2xl"
               >
                 <div className="flex items-center justify-between border-b px-5 py-4">
-                  <span className="text-sm font-semibold">Filters</span>
+                  <span className="text-sm font-semibold">
+                    <T>Filters</T>
+                  </span>
                   <SheetClose className="text-muted-foreground hover:text-foreground text-xs transition-colors">
-                    Done
+                    <T>Done</T>
                   </SheetClose>
                 </div>
 
                 <div className="space-y-5 overflow-y-auto px-5 py-4">
                   <div>
                     <span className="text-muted-foreground/50 mb-2 block text-[11px] font-medium tracking-wider uppercase">
-                      Industry
+                      <T>Industry</T>
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {INDUSTRIES.map((industry) => (
@@ -394,7 +401,7 @@ export function TemplatesPageClient({
 
                   <div>
                     <span className="text-muted-foreground/50 mb-2 block text-[11px] font-medium tracking-wider uppercase">
-                      Use case
+                      <T>Use case</T>
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {USE_CASES.map((useCase) => (
@@ -411,7 +418,7 @@ export function TemplatesPageClient({
 
                   <div>
                     <span className="text-muted-foreground/50 mb-2 block text-[11px] font-medium tracking-wider uppercase">
-                      App
+                      <T>App</T>
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {INTEGRATIONS_FILTER.map((integration) => (
@@ -436,12 +443,13 @@ export function TemplatesPageClient({
                       onClick={clearFilters}
                       className="text-muted-foreground"
                     >
-                      Clear all
+                      <T>Clear all</T>
                     </Button>
                   )}
                   <SheetClose asChild>
                     <Button variant="default" size="sm" className="ml-auto">
-                      Show {filtered.length} template{filtered.length !== 1 ? "s" : ""}
+                      <T>Show</T> {filtered.length} <T>template</T>
+                      {filtered.length !== 1 ? "s" : ""}
                     </Button>
                   </SheetClose>
                 </div>
@@ -451,7 +459,8 @@ export function TemplatesPageClient({
 
           <div className="mb-3 flex items-center justify-between md:mb-5">
             <p className="text-muted-foreground text-xs">
-              {filtered.length} template{filtered.length !== 1 ? "s" : ""}
+              {filtered.length} <T>template</T>
+              {filtered.length !== 1 ? "s" : ""}
             </p>
             {hasActiveFilter && !filtersOpen && (
               <button
@@ -459,9 +468,12 @@ export function TemplatesPageClient({
                 onClick={clearFilters}
                 className="text-muted-foreground hover:text-foreground text-xs transition-colors"
               >
-                {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active
+                {activeFilterCount} <T>filter</T>
+                {activeFilterCount !== 1 ? "s" : ""} <T>active</T>
                 {" · "}
-                <span className="underline">Clear</span>
+                <span className="underline">
+                  <T>Clear</T>
+                </span>
               </button>
             )}
           </div>
@@ -512,13 +524,15 @@ export function TemplatesPageClient({
               animate={FADE_IN_MOTION.animate}
               className="py-20 text-center"
             >
-              <p className="text-muted-foreground text-sm">No templates match your filters.</p>
+              <p className="text-muted-foreground text-sm">
+                <T>No templates match your filters.</T>
+              </p>
               <button
                 type="button"
                 onClick={clearFilters}
                 className="text-muted-foreground hover:text-foreground mt-2 text-xs underline transition-colors"
               >
-                Clear all filters
+                <T>Clear all filters</T>
               </button>
             </motion.div>
           ) : null}

@@ -5,6 +5,7 @@ import {
   formatCredits,
 } from "@cmdclaw/core/lib/billing-plans";
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -39,6 +40,7 @@ function formatDate(value: number | string | Date | null | undefined): string {
 }
 
 function UsagePage() {
+  const t = useGT();
   const { data, isLoading, refetch } = useBillingOverview(clientEditionCapabilities.hasBilling);
   const manualTopUp = useManualBillingTopUp();
   const [topUpUsd, setTopUpUsd] = useState("25");
@@ -83,7 +85,7 @@ function UsagePage() {
   const handleManualTopUp = useCallback(async () => {
     const usdAmount = Number(topUpUsd);
     if (!Number.isFinite(usdAmount) || usdAmount <= 0) {
-      toast.error("Enter a positive USD amount.");
+      toast.error(t("Enter a positive USD amount."));
       return;
     }
 
@@ -100,7 +102,7 @@ function UsagePage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to grant top-up.");
     }
-  }, [activeWorkspaceId, manualTopUp, refetch, topUpUsd]);
+  }, [activeWorkspaceId, manualTopUp, refetch, topUpUsd, t]);
 
   const topUpCreditsPreview = Math.max(
     0,
@@ -118,9 +120,11 @@ function UsagePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Usage</h2>
+        <h2 className="text-xl font-semibold">
+          <T>Usage</T>
+        </h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Shared workspace credits from your {plan.name} plan.
+          <T>Shared workspace credits from your</T> {plan.name} <T>plan.</T>
         </p>
       </div>
 
@@ -128,9 +132,14 @@ function UsagePage() {
       <section className="rounded-lg border p-5">
         <div className="flex items-baseline justify-between gap-4">
           <div className="text-sm font-medium">
-            {formatCredits(used)} <span className="text-muted-foreground font-normal">of</span>{" "}
+            {formatCredits(used)}{" "}
+            <span className="text-muted-foreground font-normal">
+              <T>of</T>
+            </span>{" "}
             {formatCredits(included)}{" "}
-            <span className="text-muted-foreground font-normal">credits used</span>
+            <span className="text-muted-foreground font-normal">
+              <T>credits used</T>
+            </span>
           </div>
           <div className="text-muted-foreground text-sm tabular-nums">
             {feature?.next_reset_at ? `Resets ${formatDate(feature.next_reset_at * 1000)}` : null}
@@ -149,16 +158,20 @@ function UsagePage() {
       {/* Top-up balance + action */}
       <section className="rounded-lg border p-5">
         <div className="flex items-baseline justify-between gap-4">
-          <h3 className="text-sm font-medium">Top-up balance</h3>
+          <h3 className="text-sm font-medium">
+            <T>Top-up balance</T>
+          </h3>
           <div className="text-2xl font-semibold tabular-nums">{formatCredits(topUpBalance)}</div>
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
-          Top-ups are valid for 12 months. $1 = {TOP_UP_CREDITS_PER_USD} credits.
+          <T>Top-ups are valid for 12 months. $1 =</T> {TOP_UP_CREDITS_PER_USD} <T>credits.</T>
         </p>
         {showConsumedTopUpHint ? (
           <p className="text-muted-foreground mt-2 text-xs">
-            Granted top-up credits are already being applied against your workspace usage, so the
-            available top-up balance is currently 0.
+            <T>
+              Granted top-up credits are already being applied against your workspace usage, so the
+              available top-up balance is currently 0.
+            </T>
           </p>
         ) : null}
 

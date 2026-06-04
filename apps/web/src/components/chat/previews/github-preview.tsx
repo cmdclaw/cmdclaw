@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { PreviewProps, PreviewSection, PreviewContent, IntegrationLogo } from "./preview-styles";
 
 export function GithubPreview({ operation, args }: PreviewProps) {
@@ -10,6 +11,8 @@ export function GithubPreview({ operation, args }: PreviewProps) {
 }
 
 function GithubCreateIssuePreview({ args }: { args: Record<string, string | undefined> }) {
+  const t = useGT();
+
   const owner = args.o || args.owner;
   const repo = args.r || args.repo;
   const title = args.t || args.title;
@@ -20,7 +23,9 @@ function GithubCreateIssuePreview({ args }: { args: Record<string, string | unde
     <div>
       <div className="mb-3 flex items-center gap-2">
         <IntegrationLogo integration="github" size={16} />
-        <span className="text-sm font-medium">Create Issue</span>
+        <span className="text-sm font-medium">
+          <T>Create Issue</T>
+        </span>
       </div>
 
       <PreviewSection>
@@ -50,7 +55,7 @@ function GithubCreateIssuePreview({ args }: { args: Record<string, string | unde
       </PreviewSection>
 
       {body && (
-        <PreviewSection title="Description">
+        <PreviewSection title={t("Description")}>
           <PreviewContent>{body}</PreviewContent>
         </PreviewSection>
       )}

@@ -1,5 +1,5 @@
+import { T } from "gt-react";
 import { Loader2 } from "lucide-react";
-import { useParams, usePathname, useSearchParams } from "../-lib/next-navigation-compat";
 import { useMemo } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
 import {
@@ -9,6 +9,7 @@ import {
 import { RunDebugDetails } from "@/components/coworkers/run-debug-details";
 import { ImpersonationRequiredPage } from "@/components/impersonation/impersonation-required-page";
 import { useCoworkerRun, useCoworkerRunImpersonationTarget } from "@/orpc/hooks/coworkers";
+import { useParams, usePathname, useSearchParams } from "../-lib/next-navigation-compat";
 
 export default function CoworkerRunPage() {
   const params = useParams<{ id: string }>();
@@ -39,7 +40,11 @@ export default function CoworkerRunPage() {
       return <ImpersonationRequiredPage target={impersonationTarget} redirectPath={redirectPath} />;
     }
 
-    return <div className="text-muted-foreground p-6 text-sm">Run not found.</div>;
+    return (
+      <div className="text-muted-foreground p-6 text-sm">
+        <T>Run not found.</T>
+      </div>
+    );
   }
 
   const remoteRunSource = extractRemoteRunSourceDetails(run);
@@ -47,11 +52,15 @@ export default function CoworkerRunPage() {
   if (!run.conversationId) {
     return (
       <div className="space-y-4 p-6">
-        <h3 className="text-lg font-semibold">Run details unavailable in chat view</h3>
+        <h3 className="text-lg font-semibold">
+          <T>Run details unavailable in chat view</T>
+        </h3>
         <RemoteRunSourceBanner source={remoteRunSource} />
         <p className="text-muted-foreground text-sm">
-          This run does not have a linked conversation, so it cannot be opened in the chat
-          interface.
+          <T>
+            This run does not have a linked conversation, so it cannot be opened in the chat
+            interface.
+          </T>
         </p>
         <RunDebugDetails
           debugInfo={run.debugInfo}

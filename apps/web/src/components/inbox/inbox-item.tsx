@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label react/no-unstable-nested-components
 
+import { T, useGT } from "gt-react";
 import {
   AlertTriangle,
   Check,
@@ -151,12 +152,12 @@ function AgentMessagePreview({ content }: { content: string }) {
           {isExpanded ? (
             <>
               <ChevronUp className="mr-1 h-3.5 w-3.5" />
-              Show less
+              <T>Show less</T>
             </>
           ) : (
             <>
               <ChevronDown className="mr-1 h-3.5 w-3.5" />
-              Show full message
+              <T>Show full message</T>
             </>
           )}
         </Button>
@@ -172,6 +173,8 @@ function ReplyField({
   disabled?: boolean;
   onSend: (message: string) => void;
 }) {
+  const t = useGT();
+
   const [value, setValue] = useState("");
   const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setValue(event.target.value);
@@ -202,7 +205,7 @@ function ReplyField({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder="Reply and open thread..."
+        placeholder={t("Reply and open thread...")}
         disabled={disabled}
         className="border-border/50 bg-background text-foreground placeholder:text-muted-foreground/50 focus:border-ring focus:ring-ring/50 h-8 w-full rounded-md border px-3 text-[12px] outline-none focus:ring-1 disabled:opacity-50"
       />
@@ -311,7 +314,7 @@ export function InboxItem({
               {item.lastAgentMessage ? (
                 <AgentMessagePreview content={item.lastAgentMessage} />
               ) : (
-                <span className="min-w-0 break-words font-mono text-[11px] leading-5 tracking-wide uppercase">
+                <span className="min-w-0 font-mono text-[11px] leading-5 tracking-wide break-words uppercase">
                   {STATUS_LABELS[item.status]}
                 </span>
               )}
@@ -323,7 +326,7 @@ export function InboxItem({
                 className="bg-foreground text-background hover:bg-foreground/90 h-8 border-transparent px-3 text-[12px] shadow-sm"
                 onClick={onOpenTarget}
               >
-                Chat
+                <T>Chat</T>
               </Button>
               <Button
                 size="sm"
@@ -331,7 +334,7 @@ export function InboxItem({
                 className="bg-background/80 hover:bg-accent h-8 px-3 text-[12px] shadow-sm"
                 onClick={onMarkAsRead}
               >
-                Mark read
+                <T>Mark read</T>
               </Button>
               {showBuilder && onOpenBuilder ? (
                 <Button
@@ -341,7 +344,7 @@ export function InboxItem({
                   onClick={onOpenBuilder}
                 >
                   <Wrench className="mr-1 h-3.5 w-3.5" />
-                  Builder
+                  <T>Builder</T>
                 </Button>
               ) : null}
               {showStop ? (
@@ -363,7 +366,7 @@ export function InboxItem({
                   onClick={onContinue}
                 >
                   <TimerReset className="mr-1 h-3.5 w-3.5" />
-                  Continue
+                  <T>Continue</T>
                 </Button>
               ) : null}
             </div>
@@ -389,7 +392,7 @@ export function InboxItem({
             <div className="flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2">
               <Pencil className="h-3.5 w-3.5 shrink-0 text-blue-400" />
               <span className="text-muted-foreground flex-1 text-[12px]">
-                Want to modify the action before approving?
+                <T>Want to modify the action before approving?</T>
               </span>
               <Button
                 size="sm"
@@ -398,7 +401,7 @@ export function InboxItem({
                 onClick={onToggleEditing}
               >
                 <Pencil className="mr-1.5 h-3 w-3" />
-                Edit
+                <T>Edit</T>
               </Button>
             </div>
           </div>
@@ -432,7 +435,9 @@ export function InboxItem({
 
         {showContinue ? (
           <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[12px] text-blue-300">
-            This run hit the max runtime and can be continued from the saved conversation state.
+            <T>
+              This run hit the max runtime and can be continued from the saved conversation state.
+            </T>
           </div>
         ) : null}
 

@@ -1,5 +1,6 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -50,7 +51,9 @@ function WorkspaceRow({
         <p className="text-muted-foreground truncate text-xs capitalize">{role}</p>
       </div>
       {isActive ? (
-        <span className="text-muted-foreground text-xs font-medium">Active</span>
+        <span className="text-muted-foreground text-xs font-medium">
+          <T>Active</T>
+        </span>
       ) : (
         <Button variant="outline" size="sm" disabled={isPending} onClick={handleClick}>
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Switch"}
@@ -61,6 +64,8 @@ function WorkspaceRow({
 }
 
 function WorkspaceSettingsPage() {
+  const t = useGT();
+
   const navigate = useNavigate();
   const { data, isLoading } = useBillingOverview();
   const inviteMembers = useInviteWorkspaceMembers();
@@ -124,7 +129,7 @@ function WorkspaceSettingsPage() {
 
       const trimmedName = workspaceNameInput.trim();
       if (trimmedName.length < 2) {
-        toast.error("Workspace name must be at least 2 characters.");
+        toast.error(t("Workspace name must be at least 2 characters."));
         return;
       }
 
@@ -133,12 +138,12 @@ function WorkspaceSettingsPage() {
           workspaceId: activeWorkspaceId,
           name: trimmedName,
         });
-        toast.success("Workspace renamed.");
+        toast.success(t("Workspace renamed."));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to rename workspace.");
       }
     },
-    [activeWorkspaceId, renameWorkspace, workspaceNameInput],
+    [activeWorkspaceId, renameWorkspace, workspaceNameInput, t],
   );
 
   const handleInviteSubmit = useCallback(
@@ -150,7 +155,7 @@ function WorkspaceSettingsPage() {
       }
 
       if (parsedInviteEmails.length === 0) {
-        toast.error("Enter at least one email address.");
+        toast.error(t("Enter at least one email address."));
         return;
       }
 
@@ -170,7 +175,7 @@ function WorkspaceSettingsPage() {
         toast.error(error instanceof Error ? error.message : "Failed to add members.");
       }
     },
-    [activeWorkspaceId, inviteMembers, parsedInviteEmails],
+    [activeWorkspaceId, inviteMembers, parsedInviteEmails, t],
   );
 
   if (isLoading) {
@@ -184,18 +189,22 @@ function WorkspaceSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Workspace</h2>
+        <h2 className="text-xl font-semibold">
+          <T>Workspace</T>
+        </h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Manage settings for your active workspace.
+          <T>Manage settings for your active workspace.</T>
         </p>
       </div>
 
       {clientEditionCapabilities.edition === "cloud" && workspaceOptions.length > 1 ? (
         <section className="rounded-lg border p-5">
           <div>
-            <h3 className="text-sm font-medium">Your workspaces</h3>
+            <h3 className="text-sm font-medium">
+              <T>Your workspaces</T>
+            </h3>
             <p className="text-muted-foreground mt-1 text-sm">
-              Switch between workspaces you belong to.
+              <T>Switch between workspaces you belong to.</T>
             </p>
           </div>
 
@@ -217,9 +226,11 @@ function WorkspaceSettingsPage() {
 
       <section className="rounded-lg border p-5">
         <div>
-          <h3 className="text-sm font-medium">Workspace name</h3>
+          <h3 className="text-sm font-medium">
+            <T>Workspace name</T>
+          </h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            Update how this workspace appears across the app.
+            <T>Update how this workspace appears across the app.</T>
           </p>
         </div>
 
@@ -227,7 +238,7 @@ function WorkspaceSettingsPage() {
           <Input
             value={workspaceNameInput}
             onChange={handleWorkspaceNameChange}
-            placeholder="Enter workspace name"
+            placeholder={t("Enter workspace name")}
             disabled={!canInviteMembers || renameWorkspace.isPending}
           />
           <Button
@@ -244,20 +255,22 @@ function WorkspaceSettingsPage() {
 
         {clientEditionCapabilities.hasBilling ? (
           <p className="text-muted-foreground mt-3 text-sm">
-            Workspace billing and credit management stay in the Billing and Usage tabs.
+            <T>Workspace billing and credit management stay in the Billing and Usage tabs.</T>
           </p>
         ) : (
           <p className="text-muted-foreground mt-3 text-sm">
-            This self-hosted deployment keeps one workspace for the whole instance.
+            <T>This self-hosted deployment keeps one workspace for the whole instance.</T>
           </p>
         )}
       </section>
 
       <section className="rounded-lg border p-5">
         <div>
-          <h3 className="text-sm font-medium">Members</h3>
+          <h3 className="text-sm font-medium">
+            <T>Members</T>
+          </h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            Review current access for this workspace.
+            <T>Review current access for this workspace.</T>
           </p>
         </div>
 
@@ -267,7 +280,7 @@ function WorkspaceSettingsPage() {
               <Input
                 value={inviteEmailsInput}
                 onChange={handleInviteEmailsChange}
-                placeholder="alice@example.com, bob@example.com"
+                placeholder={t("alice@example.com, bob@example.com")}
                 disabled={!canInviteMembers || inviteMembers.isPending}
               />
               <Button type="submit" disabled={!canInviteMembers || inviteMembers.isPending}>
@@ -281,17 +294,17 @@ function WorkspaceSettingsPage() {
 
             {!canInviteMembers ? (
               <p className="text-muted-foreground mt-3 text-sm">
-                Workspace admin access is required to add members.
+                <T>Workspace admin access is required to add members.</T>
               </p>
             ) : (
               <p className="text-muted-foreground mt-3 text-sm">
-                Only users with existing accounts can be added right now.
+                <T>Only users with existing accounts can be added right now.</T>
               </p>
             )}
           </>
         ) : (
           <p className="text-muted-foreground mt-3 text-sm">
-            New users automatically join this instance workspace after signup.
+            <T>New users automatically join this instance workspace after signup.</T>
           </p>
         )}
 
@@ -314,7 +327,9 @@ function WorkspaceSettingsPage() {
               </div>
             ))
           ) : (
-            <p className="text-muted-foreground text-sm">No members found in this workspace yet.</p>
+            <p className="text-muted-foreground text-sm">
+              <T>No members found in this workspace yet.</T>
+            </p>
           )}
         </div>
       </section>

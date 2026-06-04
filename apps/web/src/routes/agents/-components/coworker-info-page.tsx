@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -16,8 +17,6 @@ import {
   Timer,
   Wrench,
 } from "lucide-react";
-import { AppLink as Link } from "../-lib/app-link";
-import { useRouter, useSearchParams } from "../-lib/next-navigation-compat";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -27,17 +26,17 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import type { Message, MessagePart, SandboxFileData } from "@/components/chat/message-list";
 import { ChatArea } from "@/components/chat/chat-area";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { findLatestOutputHtmlFile } from "@/components/chat/output-preview-selection";
 import { mapPersistedMessagesToChatMessages } from "@/components/chat/persisted-message-mapper";
-import type { Message, MessagePart, SandboxFileData } from "@/components/chat/message-list";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
-import { RunDebugDetails } from "@/components/coworkers/run-debug-details";
 import {
   extractRemoteRunSourceDetails,
   RemoteRunSourceBanner,
 } from "@/components/coworkers/remote-run-source-banner";
+import { RunDebugDetails } from "@/components/coworkers/run-debug-details";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DualPanelWorkspace } from "@/components/ui/dual-panel-workspace";
@@ -58,6 +57,8 @@ import {
   useCoworkerRuns,
   useTriggerCoworker,
 } from "@/orpc/hooks/coworkers";
+import { AppLink as Link } from "../-lib/app-link";
+import { useRouter, useSearchParams } from "../-lib/next-navigation-compat";
 
 type Props = {
   coworkerSlug: string;
@@ -289,7 +290,9 @@ function EmptyPreview({ latestMessage }: { latestMessage?: string }) {
         <div className="mx-auto max-w-3xl">
           <div className="border-border/70 mb-4 flex h-11 items-center gap-2 border-b">
             <MessageSquareText className="text-muted-foreground h-4 w-4" />
-            <p className="text-sm font-medium">Latest coworker message</p>
+            <p className="text-sm font-medium">
+              <T>Latest coworker message</T>
+            </p>
           </div>
           <MessageBubble role="assistant" content={latestMessage} />
         </div>
@@ -301,9 +304,11 @@ function EmptyPreview({ latestMessage }: { latestMessage?: string }) {
     <div className="bg-muted/25 flex h-full min-h-[22rem] items-center justify-center p-6">
       <div className="max-w-sm text-center">
         <FileCode2 className="text-muted-foreground mx-auto mb-3 h-6 w-6" />
-        <p className="text-sm font-medium">No output.html found</p>
+        <p className="text-sm font-medium">
+          <T>No output.html found</T>
+        </p>
         <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-          The linked conversation has not produced an output.html artifact yet.
+          <T>The linked conversation has not produced an output.html artifact yet.</T>
         </p>
       </div>
     </div>
@@ -317,6 +322,8 @@ function OutputHtmlFrame({
   outputFile: SandboxFileData;
   showToolbar?: boolean;
 }) {
+  const t = useGT();
+
   const preview = useOutputHtmlPreview(outputFile.fileId);
   const { mutateAsync: downloadSandboxFile, isPending: isDownloading } = useDownloadSandboxFile();
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
@@ -344,7 +351,9 @@ function OutputHtmlFrame({
       {showToolbar ? (
         <div className="border-border/70 flex h-11 shrink-0 items-center gap-2 border-b px-3">
           <FileCode2 className="text-muted-foreground h-4 w-4" />
-          <p className="min-w-0 flex-1 truncate text-sm font-medium">output.html</p>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">
+            <T>output.html</T>
+          </p>
           <Button
             type="button"
             variant="ghost"
@@ -352,7 +361,7 @@ function OutputHtmlFrame({
             className="h-8 w-8"
             onClick={handleRefresh}
             disabled={preview.isFetching}
-            aria-label="Refresh output preview"
+            aria-label={t("Refresh output preview")}
           >
             {preview.isFetching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -367,7 +376,7 @@ function OutputHtmlFrame({
             className="h-8 w-8"
             onClick={handleDownload}
             disabled={isDownloading}
-            aria-label="Download output.html"
+            aria-label={t("Download output.html")}
           >
             {isDownloading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -385,7 +394,9 @@ function OutputHtmlFrame({
         ) : preview.isError ? (
           <div className="flex h-full items-center justify-center p-6 text-center">
             <div className="max-w-sm space-y-2">
-              <p className="text-sm font-medium">Preview unavailable</p>
+              <p className="text-sm font-medium">
+                <T>Preview unavailable</T>
+              </p>
               <p className="text-muted-foreground text-xs">
                 {showToolbar
                   ? "Download output.html to inspect the generated file."
@@ -399,14 +410,14 @@ function OutputHtmlFrame({
               type="button"
               variant="secondary"
               size="icon"
-              className="absolute top-3 right-3 z-10 hidden h-8 w-8 border bg-background/90 shadow-sm md:inline-flex"
+              className="bg-background/90 absolute top-3 right-3 z-10 hidden h-8 w-8 border shadow-sm md:inline-flex"
               onClick={handleOpenFullscreen}
-              aria-label="Open output preview fullscreen"
+              aria-label={t("Open output preview fullscreen")}
             >
               <Maximize2 className="h-4 w-4" />
             </Button>
             <iframe
-              title="output.html preview"
+              title={t("output.html preview")}
               className="bg-background h-full w-full border-0"
               sandbox="allow-scripts allow-forms"
               srcDoc={preview.data?.html ?? ""}
@@ -419,12 +430,14 @@ function OutputHtmlFrame({
           className="h-[calc(100dvh-2rem)] max-h-none w-[calc(100vw-2rem)] max-w-none gap-0 overflow-hidden p-0 sm:rounded-xl"
           showCloseButton
         >
-          <DialogTitle className="sr-only">output.html fullscreen preview</DialogTitle>
+          <DialogTitle className="sr-only">
+            <T>output.html fullscreen preview</T>
+          </DialogTitle>
           <DialogDescription className="sr-only">
-            Fullscreen preview of the generated output.html file.
+            <T>Fullscreen preview of the generated output.html file.</T>
           </DialogDescription>
           <iframe
-            title="output.html fullscreen preview"
+            title={t("output.html fullscreen preview")}
             className="bg-background h-full w-full border-0"
             sandbox="allow-scripts allow-forms"
             srcDoc={preview.data?.html ?? ""}
@@ -491,7 +504,7 @@ function RunSummaryPanel({
         <div className="border-border/70 rounded-md border px-2.5 py-1.5">
           <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
             <CheckCircle2 className={cn("h-3 w-3", completed && "text-emerald-600")} />
-            Status
+            <T>Status</T>
           </div>
           <p className={cn("mt-0.5 truncate text-sm font-medium", completed && "text-emerald-700")}>
             {completed ? "Completed" : (status ?? "Unknown")}
@@ -500,14 +513,14 @@ function RunSummaryPanel({
         <div className="border-border/70 rounded-md border px-2.5 py-1.5">
           <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
             <Clock className="h-3 w-3" />
-            Launched
+            <T>Launched</T>
           </div>
           <p className="mt-0.5 truncate text-sm font-medium">{launched}</p>
         </div>
         <div className="border-border/70 rounded-md border px-2.5 py-1.5">
           <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
             <Timer className="h-3 w-3" />
-            Time taken
+            <T>Time taken</T>
           </div>
           <p className="mt-0.5 truncate text-sm font-medium">{duration}</p>
         </div>
@@ -516,7 +529,9 @@ function RunSummaryPanel({
       <section className="space-y-2">
         <div className="flex items-center gap-2">
           <Wrench className="text-muted-foreground h-4 w-4" />
-          <h2 className="text-sm font-medium">Tools used</h2>
+          <h2 className="text-sm font-medium">
+            <T>Tools used</T>
+          </h2>
         </div>
         {tools.length > 0 ? (
           <div className="space-y-1.5">
@@ -534,7 +549,7 @@ function RunSummaryPanel({
           </div>
         ) : (
           <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-            No tool usage recorded for this Generation.
+            <T>No tool usage recorded for this Generation.</T>
           </p>
         )}
       </section>
@@ -542,7 +557,9 @@ function RunSummaryPanel({
       <section className="space-y-2">
         <div className="flex items-center gap-2">
           <FileText className="text-muted-foreground h-4 w-4" />
-          <h2 className="text-sm font-medium">Output files</h2>
+          <h2 className="text-sm font-medium">
+            <T>Output files</T>
+          </h2>
         </div>
         {files.length > 0 ? (
           <div className="space-y-1.5">
@@ -557,7 +574,7 @@ function RunSummaryPanel({
           </div>
         ) : (
           <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-            No output files were created by this Generation.
+            <T>No output files were created by this Generation.</T>
           </p>
         )}
       </section>
@@ -605,13 +622,17 @@ function RunDetailsPanel({
     <aside className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex min-h-12 shrink-0 flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
         <AnimatedTabs activeKey={activeTab} onTabChange={onTabChange}>
-          <AnimatedTab value="summary">Summary</AnimatedTab>
-          <AnimatedTab value="chat">Chat</AnimatedTab>
+          <AnimatedTab value="summary">
+            <T>Summary</T>
+          </AnimatedTab>
+          <AnimatedTab value="chat">
+            <T>Chat</T>
+          </AnimatedTab>
         </AnimatedTabs>
         {activeTab === "chat" && isFetchingConversation ? (
           <div className="text-muted-foreground flex items-center gap-1.5 px-1 text-xs">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Updating
+            <T>Updating</T>
           </div>
         ) : null}
       </div>
@@ -633,7 +654,7 @@ function RunDetailsPanel({
           </div>
         ) : (
           <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-sm">
-            No linked chat messages.
+            <T>No linked chat messages.</T>
           </div>
         )}
       </div>
@@ -642,6 +663,8 @@ function RunDetailsPanel({
 }
 
 export function CoworkerInfoPage({ coworkerSlug }: Props) {
+  const t = useGT();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const triggerCoworker = useTriggerCoworker();
@@ -851,9 +874,11 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
       <main className="flex min-h-[24rem] items-center justify-center p-6">
         <div className="border-border bg-card max-w-md rounded-xl border p-5 text-center">
           <AlertCircle className="text-muted-foreground mx-auto mb-3 h-5 w-5" />
-          <p className="text-sm font-medium">Coworker not found</p>
+          <p className="text-sm font-medium">
+            <T>Coworker not found</T>
+          </p>
           <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-            Use a coworker id or username in the page URL.
+            <T>Use a coworker id or username in the page URL.</T>
           </p>
         </div>
       </main>
@@ -874,7 +899,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
           ) : (
             <Play className="h-4 w-4" />
           )}
-          Run now
+          <T>Run now</T>
         </Button>
       </main>
     );
@@ -912,13 +937,15 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                   className="text-muted-foreground hover:text-foreground h-7 w-7 shrink-0"
                   onMouseEnter={handleOpenDefinition}
                   onClick={handleToggleDefinition}
-                  aria-label="Show coworker definition"
+                  aria-label={t("Show coworker definition")}
                 >
                   <Info className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="start" className="w-80 p-3">
-                <p className="text-sm font-medium">Coworker definition</p>
+                <p className="text-sm font-medium">
+                  <T>Coworker definition</T>
+                </p>
                 <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
                   {coworkerDefinition || "No definition set."}
                 </p>
@@ -941,7 +968,9 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                 })}
               >
                 <Pencil className="h-4 w-4" />
-                <span className="hidden md:inline">Configure</span>
+                <span className="hidden md:inline">
+                  <T>Configure</T>
+                </span>
               </Link>
             </Button>
             <Popover>
@@ -953,14 +982,18 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                   className="h-8 w-8 md:w-auto md:px-3"
                 >
                   <History className="h-4 w-4" />
-                  <span className="hidden md:inline">History</span>
+                  <span className="hidden md:inline">
+                    <T>History</T>
+                  </span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-72 p-2">
                 <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">Previous Generations</p>
+                  <p className="text-sm font-medium">
+                    <T>Previous Generations</T>
+                  </p>
                   <p className="text-muted-foreground text-xs">
-                    Switch this page to an older Generation.
+                    <T>Switch this page to an older Generation.</T>
                   </p>
                 </div>
                 <div className="mt-1 max-h-80 space-y-1 overflow-auto">
@@ -988,7 +1021,9 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              <span className="hidden md:inline">Run now</span>
+              <span className="hidden md:inline">
+                <T>Run now</T>
+              </span>
             </Button>
           </div>
         </div>
@@ -1028,7 +1063,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              Summary
+              <T>Summary</T>
               {mobilePanel === "summary" ? (
                 <span className="bg-foreground absolute inset-x-6 bottom-0 h-px" />
               ) : null}
@@ -1045,7 +1080,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              App
+              <T>App</T>
               {mobilePanel === "app" ? (
                 <span className="bg-foreground absolute inset-x-6 bottom-0 h-px" />
               ) : null}
@@ -1062,7 +1097,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              Chat
+              <T>Chat</T>
               {mobilePanel === "chat" ? (
                 <span className="bg-foreground absolute inset-x-6 bottom-0 h-px" />
               ) : null}
@@ -1136,13 +1171,15 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                               variant="ghost"
                               size="icon"
                               className="text-muted-foreground hover:text-foreground h-8 w-8 shrink-0"
-                              aria-label="Show full coworker description"
+                              aria-label={t("Show full coworker description")}
                             >
                               <Info className="h-4 w-4" />
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent align="end" className="w-80 p-3">
-                            <p className="text-sm font-medium">Coworker description</p>
+                            <p className="text-sm font-medium">
+                              <T>Coworker description</T>
+                            </p>
                             <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
                               {coworkerDefinition || "No definition set."}
                             </p>
@@ -1158,21 +1195,23 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                             })}
                           >
                             <Pencil className="h-4 w-4" />
-                            Edit
+                            <T>Edit</T>
                           </Link>
                         </Button>
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button type="button" variant="outline" size="sm">
                               <History className="h-4 w-4" />
-                              History
+                              <T>History</T>
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent align="center" className="w-72 p-2">
                             <div className="px-2 py-1.5">
-                              <p className="text-sm font-medium">Previous Generations</p>
+                              <p className="text-sm font-medium">
+                                <T>Previous Generations</T>
+                              </p>
                               <p className="text-muted-foreground text-xs">
-                                Switch this page to an older Generation.
+                                <T>Switch this page to an older Generation.</T>
                               </p>
                             </div>
                             <div className="mt-1 max-h-80 space-y-1 overflow-auto">
@@ -1199,7 +1238,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                           ) : (
                             <Play className="h-4 w-4" />
                           )}
-                          Run
+                          <T>Run</T>
                         </Button>
                       </div>
                     </div>
@@ -1217,7 +1256,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
                   </div>
                 ) : (
                   <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-sm">
-                    No linked chat messages.
+                    <T>No linked chat messages.</T>
                   </div>
                 )}
               </motion.div>

@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T, useGT } from "gt-react";
 import { ArrowUp, Loader2, Mic, Paperclip, Plus, Square, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PromptSegment } from "@/lib/prompt-segments";
@@ -147,6 +148,8 @@ export function PromptBar({
   renderDebugControls,
   className,
 }: PromptBarProps) {
+  const t = useGT();
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -602,8 +605,8 @@ export function PromptBar({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Add attachment"
-                  title="Add attachment"
+                  aria-label={t("Add attachment")}
+                  title={t("Add attachment")}
                   data-testid="prompt-attach"
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
@@ -628,7 +631,9 @@ export function PromptBar({
                   className="hover:bg-muted flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors"
                 >
                   <Paperclip className="text-muted-foreground h-4 w-4" />
-                  <span>Add files &amp; photos</span>
+                  <span>
+                    <T>Add files &amp; photos</T>
+                  </span>
                 </button>
               </PopoverContent>
             </Popover>

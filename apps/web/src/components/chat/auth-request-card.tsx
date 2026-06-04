@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { ChevronDown, ChevronRight, Check, X, Loader2, Link2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AppImage } from "@/components/chat/app-image";
@@ -87,32 +88,34 @@ export function AuthRequestCard({
             ) : null;
           })}
         </div>
-        <span className="font-medium">Connection Required</span>
+        <span className="font-medium">
+          <T>Connection Required</T>
+        </span>
 
         <div className="flex-1" />
 
         {status === "pending" && (
           <span className="flex items-center gap-1 text-xs text-blue-500">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Waiting for connection
+            <T>Waiting for connection</T>
           </span>
         )}
         {status === "connecting" && (
           <span className="flex items-center gap-1 text-xs text-amber-500">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Connecting...
+            <T>Connecting...</T>
           </span>
         )}
         {status === "completed" && (
           <span className="flex items-center gap-1 text-xs text-green-500">
             <Check className="h-3 w-3" />
-            Connected
+            <T>Connected</T>
           </span>
         )}
         {status === "cancelled" && (
           <span className="flex items-center gap-1 text-xs text-red-500">
             <X className="h-3 w-3" />
-            Cancelled
+            <T>Cancelled</T>
           </span>
         )}
       </button>
@@ -140,15 +143,17 @@ export function AuthRequestCard({
                       />
                     )}
                     <span className="text-sm">
-                      <span className="font-medium">CmdClaw</span> needs access to{" "}
-                      <span className="font-medium">{displayName}</span>
+                      <span className="font-medium">
+                        <T>CmdClaw</T>
+                      </span>{" "}
+                      <T>needs access to</T> <span className="font-medium">{displayName}</span>
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     {isConnected ? (
                       <span className="flex items-center gap-1 text-xs text-green-500">
                         <Check className="h-3 w-3" />
-                        Connected
+                        <T>Connected</T>
                       </span>
                     ) : status === "pending" ? (
                       <>
@@ -159,7 +164,7 @@ export function AuthRequestCard({
                           disabled={isLoading}
                         >
                           <X className="mr-1 h-4 w-4" />
-                          Cancel
+                          <T>Cancel</T>
                         </Button>
                         <Button
                           size="sm"
@@ -173,7 +178,7 @@ export function AuthRequestCard({
                           ) : (
                             <Link2 className="mr-1 h-4 w-4" />
                           )}
-                          Connect
+                          <T>Connect</T>
                         </Button>
                       </>
                     ) : null}

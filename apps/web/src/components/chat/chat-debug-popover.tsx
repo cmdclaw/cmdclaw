@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Play, RotateCcw, Shield } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -245,7 +246,9 @@ export function ChatDebugPopover({
       <PopoverContent align="end" side="top" sideOffset={8} className="w-[360px] p-3">
         <div className="space-y-3">
           <div className="space-y-1">
-            <div className="text-sm font-medium">Recovery Presets</div>
+            <div className="text-sm font-medium">
+              <T>Recovery Presets</T>
+            </div>
             <p className="text-muted-foreground text-xs">{introText}</p>
           </div>
 
@@ -260,7 +263,7 @@ export function ChatDebugPopover({
                     </div>
                   </div>
                   <Button type="button" size="sm" className="h-8" onClick={handleArmApproval}>
-                    Arm
+                    <T>Arm</T>
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -272,7 +275,9 @@ export function ChatDebugPopover({
                     onChange={handleApprovalSecondsChange}
                     className="h-8"
                   />
-                  <span className="text-muted-foreground text-xs">seconds before park</span>
+                  <span className="text-muted-foreground text-xs">
+                    <T>seconds before park</T>
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -287,7 +292,7 @@ export function ChatDebugPopover({
                     </div>
                   </div>
                   <Button type="button" size="sm" className="h-8" onClick={handleArmAuth}>
-                    Arm
+                    <T>Arm</T>
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -299,7 +304,9 @@ export function ChatDebugPopover({
                     onChange={handleAuthSecondsChange}
                     className="h-8"
                   />
-                  <span className="text-muted-foreground text-xs">seconds before park</span>
+                  <span className="text-muted-foreground text-xs">
+                    <T>seconds before park</T>
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -314,7 +321,7 @@ export function ChatDebugPopover({
                     </div>
                   </div>
                   <Button type="button" size="sm" className="h-8" onClick={handleArmQuestion}>
-                    Arm
+                    <T>Arm</T>
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -326,7 +333,9 @@ export function ChatDebugPopover({
                     onChange={handleQuestionSecondsChange}
                     className="h-8"
                   />
-                  <span className="text-muted-foreground text-xs">seconds before park</span>
+                  <span className="text-muted-foreground text-xs">
+                    <T>seconds before park</T>
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -341,7 +350,7 @@ export function ChatDebugPopover({
                     </div>
                   </div>
                   <Button type="button" size="sm" className="h-8" onClick={handleArmRuntime}>
-                    Arm
+                    <T>Arm</T>
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -353,7 +362,9 @@ export function ChatDebugPopover({
                     onChange={handleRuntimeSecondsChange}
                     className="h-8"
                   />
-                  <span className="text-muted-foreground text-xs">seconds before deadline</span>
+                  <span className="text-muted-foreground text-xs">
+                    <T>seconds before deadline</T>
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -361,7 +372,9 @@ export function ChatDebugPopover({
 
           <div className="rounded-lg border p-2.5">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="text-sm font-medium">Current Debug State</div>
+              <div className="text-sm font-medium">
+                <T>Current Debug State</T>
+              </div>
               <Button
                 type="button"
                 variant="ghost"
@@ -371,7 +384,7 @@ export function ChatDebugPopover({
                 disabled={!armedPreset}
               >
                 <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                Clear
+                <T>Clear</T>
               </Button>
             </div>
             <div className="space-y-1.5">

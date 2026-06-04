@@ -3,6 +3,7 @@ import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
+import { T, useGT } from "gt-react";
 import { CloudLoginClient } from "@/components/login/cloud-login-client";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
@@ -119,9 +120,7 @@ const resolveLoginPage = createServerFn({ method: "GET" })
     }
 
     const request = getRequest();
-    const sessionData = await auth.api
-      .getSession({ headers: request.headers })
-      .catch(() => null);
+    const sessionData = await auth.api.getSession({ headers: request.headers }).catch(() => null);
 
     if (sessionData?.user?.id) {
       throw redirect({ href: callbackUrl });
@@ -174,7 +173,7 @@ function LoginCard({
     <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          CmdClaw
+          <T>CmdClaw</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
@@ -185,6 +184,8 @@ function LoginCard({
 }
 
 function LoginPage() {
+  const t = useGT();
+
   const data = Route.useLoaderData();
 
   if (data.kind === "cloud") {
@@ -202,7 +203,7 @@ function LoginPage() {
   return (
     <div className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
       <LoginCard
-        title="Log in"
+        title={t("Log in")}
         description="Authentication for this self-hosted instance is managed by CmdClaw Cloud."
       >
         {data.errorMessage ? (
@@ -213,8 +214,10 @@ function LoginPage() {
 
         {!data.hasCloudAuthConfig ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
-            Set `CMDCLAW_CLOUD_API_BASE_URL` and `CMDCLAW_CLOUD_INSTANCE_API_KEY` on this
-            self-hosted deployment to enable cloud-managed sign-in.
+            <T>
+              Set `CMDCLAW_CLOUD_API_BASE_URL` and `CMDCLAW_CLOUD_INSTANCE_API_KEY` on this
+              self-hosted deployment to enable cloud-managed sign-in.
+            </T>
           </div>
         ) : null}
 
@@ -222,17 +225,21 @@ function LoginPage() {
           <Button asChild className="w-full">
             {/* API endpoint, not a typed router route: a plain anchor performs the full
                 navigation the cloud-managed sign-in handshake requires. */}
-            <a href={data.authStartUrl}>Continue with CmdClaw Cloud</a>
+            <a href={data.authStartUrl}>
+              <T>Continue with CmdClaw Cloud</T>
+            </a>
           </Button>
         ) : (
           <Button className="w-full" disabled>
-            Continue with CmdClaw Cloud
+            <T>Continue with CmdClaw Cloud</T>
           </Button>
         )}
 
         <p className="text-muted-foreground text-center text-xs">
-          Sign in with Google, magic link, or email and password on CmdClaw Cloud, then return here
-          automatically.
+          <T>
+            Sign in with Google, magic link, or email and password on CmdClaw Cloud, then return
+            here automatically.
+          </T>
         </p>
       </LoginCard>
     </div>

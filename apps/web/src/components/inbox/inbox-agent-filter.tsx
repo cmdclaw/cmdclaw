@@ -1,7 +1,8 @@
+import { useGT } from "gt-react";
 import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { InboxCoworkerSelector, type InboxCoworkerSelectorItem } from "./inbox-coworker-selector";
 import type { InboxItemStatus } from "./types";
+import { InboxCoworkerSelector, type InboxCoworkerSelectorItem } from "./inbox-coworker-selector";
 
 function FilterChip({
   label,
@@ -45,6 +46,8 @@ export function InboxAgentFilter({
   coworkers,
   isLoadingCoworkers,
 }: Props) {
+  const t = useGT();
+
   const handleAwaitingApprovalToggle = useCallback(() => {
     onToggleStatus("awaiting_approval");
   }, [onToggleStatus]);
@@ -74,42 +77,42 @@ export function InboxAgentFilter({
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
         <FilterChip
-          label="Needs your input"
+          label={t("Needs your input")}
           active={statusFilters.includes("needs_user_input")}
           onClick={handleNeedsUserInputToggle}
         />
         <FilterChip
-          label="Awaiting approval"
+          label={t("Awaiting approval")}
           active={statusFilters.includes("awaiting_approval")}
           onClick={handleAwaitingApprovalToggle}
         />
         <FilterChip
-          label="Running"
+          label={t("Running")}
           active={statusFilters.includes("running")}
           onClick={handleRunningToggle}
         />
         <FilterChip
-          label="Awaiting auth"
+          label={t("Awaiting auth")}
           active={statusFilters.includes("awaiting_auth")}
           onClick={handleAwaitingAuthToggle}
         />
         <FilterChip
-          label="Needs continuation"
+          label={t("Needs continuation")}
           active={statusFilters.includes("paused")}
           onClick={handlePausedToggle}
         />
         <FilterChip
-          label="Completed"
+          label={t("Completed")}
           active={statusFilters.includes("completed")}
           onClick={handleCompletedToggle}
         />
         <FilterChip
-          label="Error"
+          label={t("Error")}
           active={statusFilters.includes("error")}
           onClick={handleErrorToggle}
         />
         <FilterChip
-          label="Cancelled"
+          label={t("Cancelled")}
           active={statusFilters.includes("cancelled")}
           onClick={handleCancelledToggle}
         />

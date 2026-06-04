@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { T } from "gt-react";
 import { ArrowLeft, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -159,7 +160,9 @@ function IntegrationIconButton({
         </div>
       )}
       {isRecommended && !isConnected && (
-        <span className="text-primary text-[10px] font-medium">Recommended</span>
+        <span className="text-primary text-[10px] font-medium">
+          <T>Recommended</T>
+        </span>
       )}
       {isConnecting ? (
         <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
@@ -282,11 +285,13 @@ function OnboardingIntegrationsPage() {
     <>
       <div className="mb-6 text-center sm:mb-8">
         <h1 className="mb-2 text-xl font-semibold tracking-tight sm:text-2xl">
-          Connect your tools
+          <T>Connect your tools</T>
         </h1>
         <p className="text-muted-foreground">
-          Connect your apps to let the AI assistant help you with tasks like reading emails,
-          scheduling meetings, and managing documents.
+          <T>
+            Connect your apps to let the AI assistant help you with tasks like reading emails,
+            scheduling meetings, and managing documents.
+          </T>
         </p>
       </div>
 
@@ -332,7 +337,9 @@ function OnboardingIntegrationsPage() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card text-muted-foreground px-2">More integrations</span>
+              <span className="bg-card text-muted-foreground px-2">
+                <T>More integrations</T>
+              </span>
             </div>
           </div>
 
@@ -354,10 +361,10 @@ function OnboardingIntegrationsPage() {
       <div className="flex justify-center gap-2 sm:gap-3">
         <Button variant="ghost" onClick={handleBack} disabled={completeOnboarding.isPending}>
           <ArrowLeft className="mr-1.5 h-4 w-4" />
-          Back
+          <T>Back</T>
         </Button>
         <Button variant="ghost" onClick={handleSkip} disabled={completeOnboarding.isPending}>
-          Skip for now
+          <T>Skip for now</T>
         </Button>
         <Button onClick={handleContinue} disabled={completeOnboarding.isPending}>
           {completeOnboarding.isPending ? "Loading..." : "Continue"}

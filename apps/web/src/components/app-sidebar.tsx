@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/prefer-tag-over-role
 
+import { T, useGT } from "gt-react";
 import {
   Activity,
   ArrowLeft,
@@ -22,11 +23,12 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import type { SessionPrincipal } from "@/lib/route-guards";
 import { AppImage } from "@/components/app-image";
 import { AppLink } from "@/components/app-link";
 import { BugReportDialog } from "@/components/bug-report-dialog";
-import { usePathname, useRouter } from "@/components/next-navigation-compat";
 import { BrickIcon } from "@/components/icons/brick-icon";
+import { usePathname, useRouter } from "@/components/next-navigation-compat";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +42,6 @@ import { authClient } from "@/lib/auth-client";
 import { clientEditionCapabilities } from "@/lib/edition";
 import { openNewChat } from "@/lib/open-new-chat";
 import { cn } from "@/lib/utils";
-import type { SessionPrincipal } from "@/lib/route-guards";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 type SidebarMode = "user" | "admin";
@@ -153,23 +154,25 @@ function SidebarModeToggle({
   mode: SidebarMode;
   onModeChange: (mode: SidebarMode) => void;
 }) {
+  const t = useGT();
+
   return (
     <div
       className="border-sidebar-border bg-sidebar-accent/55 flex flex-col gap-1 rounded-xl border p-1"
       role="group"
-      aria-label="Sidebar view"
+      aria-label={t("Sidebar view")}
     >
       <SidebarModeToggleButton
         currentMode={mode}
         icon={User}
-        label="User view"
+        label={t("User view")}
         mode="user"
         onModeChange={onModeChange}
       />
       <SidebarModeToggleButton
         currentMode={mode}
         icon={Shield}
-        label="Admin view"
+        label={t("Admin view")}
         mode="admin"
         onModeChange={onModeChange}
       />
@@ -226,6 +229,8 @@ type AppSidebarProps = {
 };
 
 export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
+  const t = useGT();
+
   const pathname = usePathname();
   const router = useRouter();
   const [session, setSession] = useState<SessionData | undefined>(undefined);
@@ -349,21 +354,21 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
   const isImpersonating = Boolean(impersonatedBy);
 
   const mainNavItems: NavItem[] = [
-    { icon: WandSparkles, label: "Create", href: "/" },
-    { icon: LayoutTemplate, label: "Templates", href: "/templates" },
+    { icon: WandSparkles, label: t("Create"), href: "/" },
+    { icon: LayoutTemplate, label: t("Templates"), href: "/templates" },
   ];
 
   const appNavItems: NavItem[] = [
-    ...(isAdmin ? [{ icon: Inbox, label: "Inbox", href: "/inbox" }] : []),
-    { icon: MessageSquare, label: "Chat", href: "/chat", onClick: handleChatNavClick },
-    { icon: BrickIcon, label: "Agents", href: "/agents" },
-    { icon: Toolbox, label: "Toolbox", href: "/toolbox" },
+    ...(isAdmin ? [{ icon: Inbox, label: t("Inbox"), href: "/inbox" }] : []),
+    { icon: MessageSquare, label: t("Chat"), href: "/chat", onClick: handleChatNavClick },
+    { icon: BrickIcon, label: t("Agents"), href: "/agents" },
+    { icon: Toolbox, label: t("Toolbox"), href: "/toolbox" },
   ];
 
   const userNavItems: NavItem[] = isAdmin
     ? [
-        { icon: Inbox, label: "Inbox", href: "/inbox" },
-        { icon: BrickIcon, label: "Agents", href: "/agents" },
+        { icon: Inbox, label: t("Inbox"), href: "/inbox" },
+        { icon: BrickIcon, label: t("Agents"), href: "/agents" },
       ]
     : [];
 
@@ -405,7 +410,7 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
             <TooltipTrigger asChild>
               <AppLink
                 href="/"
-                aria-label="CmdClaw home"
+                aria-label={t("CmdClaw home")}
                 className="hover:bg-sidebar-accent focus-visible:ring-sidebar-ring/45 flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:ring-3 focus-visible:outline-none"
               >
                 <AppImage
@@ -418,7 +423,7 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
               </AppLink>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={10}>
-              CmdClaw
+              <T>CmdClaw</T>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -447,9 +452,9 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
               </NavGroup>
               <NavDivider />
               <NavGroup>
-                <NavButton icon={Bug} label="Bug report" onClick={openReportDialog} />
+                <NavButton icon={Bug} label={t("Bug report")} onClick={openReportDialog} />
                 {isAdmin ? (
-                  <NavButton icon={Shield} label="Admin" onClick={openAdminRoute} />
+                  <NavButton icon={Shield} label={t("Admin")} onClick={openAdminRoute} />
                 ) : null}
               </NavGroup>
             </>
@@ -480,7 +485,7 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
               </NavGroup>
               <NavDivider />
               <NavGroup>
-                <NavButton icon={ArrowLeft} label="Exit Admin" onClick={enterUserMode} />
+                <NavButton icon={ArrowLeft} label={t("Exit Admin")} onClick={enterUserMode} />
               </NavGroup>
             </>
           ) : (
@@ -494,7 +499,7 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
               ) : null}
               <NavDivider />
               <NavGroup>
-                <NavButton icon={ArrowLeft} label="Exit Admin" onClick={enterUserMode} />
+                <NavButton icon={ArrowLeft} label={t("Exit Admin")} onClick={enterUserMode} />
               </NavGroup>
             </>
           )}
@@ -538,14 +543,18 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
               <DropdownMenuItem asChild>
                 <AppLink href="/settings" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  <span>Settings</span>
+                  <span>
+                    <T>Settings</T>
+                  </span>
                 </AppLink>
               </DropdownMenuItem>
               {clientEditionCapabilities.hasBilling ? (
                 <DropdownMenuItem asChild>
                   <AppLink href="/settings/usage" className="flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
-                    <span>Usage</span>
+                    <span>
+                      <T>Usage</T>
+                    </span>
                   </AppLink>
                 </DropdownMenuItem>
               ) : null}
@@ -566,13 +575,17 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
                   className="text-destructive focus:text-destructive"
                 >
                   <LogOut className="h-4 w-4" />
-                  <span>Log out</span>
+                  <span>
+                    <T>Log out</T>
+                  </span>
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem asChild>
                   <AppLink href="/login" className="flex items-center gap-2">
                     <LogOut className="h-4 w-4" />
-                    <span>Log in</span>
+                    <span>
+                      <T>Log in</T>
+                    </span>
                   </AppLink>
                 </DropdownMenuItem>
               )}

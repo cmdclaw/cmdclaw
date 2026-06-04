@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import {
   Globe,
   FileOutput,
@@ -8,11 +9,10 @@ import {
   Lightbulb,
   ExternalLink,
 } from "lucide-react";
+import type { CommunitySkillContent, UseCase } from "@/lib/community-skills";
 import { AppImage } from "@/components/app-image";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-
-import type { CommunitySkillContent, UseCase } from "@/lib/community-skills";
 
 // ─── Icon helper ──────────────────────────────────────────────────────────────
 
@@ -104,13 +104,13 @@ export function CommunitySkillDetailContent({
             ) : (
               <Button className="gap-1.5 rounded-lg px-5">
                 <Zap className="size-3.5" />
-                Activate skill
+                <T>Activate skill</T>
               </Button>
             )}
             <Button variant="outline" className="gap-1.5 rounded-lg px-5" asChild>
               <a href={skill.githubUrl} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="size-3.5" />
-                View source
+                <T>View source</T>
               </a>
             </Button>
           </div>
@@ -119,7 +119,7 @@ export function CommunitySkillDetailContent({
           <div className="mt-12 space-y-6">
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Category
+                <T>Category</T>
               </p>
               <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
                 {skill.category}
@@ -128,16 +128,17 @@ export function CommunitySkillDetailContent({
 
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Capabilities
+                <T>Capabilities</T>
               </p>
               <p className="text-sm">
-                {skill.summaryBlocks.length} capabilities · {skill.howItWorks.length} steps
+                {skill.summaryBlocks.length} <T>capabilities ·</T> {skill.howItWorks.length}{" "}
+                <T>steps</T>
               </p>
             </div>
 
             <div>
               <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-widest uppercase">
-                Type
+                <T>Type</T>
               </p>
               <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
                 {skill.kind === "tool-integration" ? "Tool integration" : "Community skill"}
@@ -150,8 +151,12 @@ export function CommunitySkillDetailContent({
         <div>
           <section>
             <div className="mb-5">
-              <h2 className="text-sm font-semibold">What this skill does</h2>
-              <p className="text-muted-foreground mt-1 text-xs">Core capabilities</p>
+              <h2 className="text-sm font-semibold">
+                <T>What this skill does</T>
+              </h2>
+              <p className="text-muted-foreground mt-1 text-xs">
+                <T>Core capabilities</T>
+              </p>
             </div>
 
             <div className="grid grid-cols-1 gap-3.5">
@@ -178,8 +183,12 @@ export function CommunitySkillDetailContent({
         {/* ── How it works ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">How it works</h2>
-            <p className="text-muted-foreground mt-1 text-xs">Step-by-step execution flow</p>
+            <h2 className="text-sm font-semibold">
+              <T>How it works</T>
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs">
+              <T>Step-by-step execution flow</T>
+            </p>
           </div>
           <div className="border-border/40 bg-card rounded-xl border p-6 shadow-sm">
             <ol className="space-y-3 pl-5 text-sm leading-relaxed">
@@ -195,9 +204,11 @@ export function CommunitySkillDetailContent({
         {/* ── Example use cases ── */}
         <section>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold">Example use cases</h2>
+            <h2 className="text-sm font-semibold">
+              <T>Example use cases</T>
+            </h2>
             <p className="text-muted-foreground mt-1 text-xs">
-              Common scenarios where this skill shines
+              <T>Common scenarios where this skill shines</T>
             </p>
           </div>
           <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">{exampleCaseCards}</div>

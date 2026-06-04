@@ -2,13 +2,14 @@ import {
   BILLING_PLANS,
   TOP_UP_CREDITS_PER_USD,
   TOP_UP_EXPIRY_MONTHS,
-  formatCredits,
   type BillingPlanDefinition,
 } from "@cmdclaw/core/lib/billing-plans";
 import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { T, msg, useGT, useMessages } from "gt-react";
 import { Check } from "lucide-react";
+import { localizedText } from "@/components/general-translation-provider";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -29,11 +30,15 @@ export const Route = createFileRoute("/_marketing/pricing")({
   },
   head: () => ({
     meta: [
-      { title: "Pricing · CmdClaw" },
+      { title: localizedText("Pricing · CmdClaw", { fr: "Tarifs · CmdClaw" }) },
       {
         name: "description",
-        content:
+        content: localizedText(
           "Start with a shared workspace. Upgrade for a larger shared credit pool as your team grows.",
+          {
+            fr: "Commencez avec un espace de travail partagé. Passez à une réserve de crédits partagée plus importante à mesure que votre équipe grandit.",
+          },
+        ),
       },
     ],
   }),
@@ -50,51 +55,128 @@ const PLAN_META: Record<
 > = {
   free: {
     features: [
-      "Manual credit top-ups",
-      "All AI models",
-      "Unlimited users",
-      "Shared workspace access",
-      "Community support",
+      msg("Manual credit top-ups"),
+      msg("All AI models"),
+      msg("Unlimited users"),
+      msg("Shared workspace access"),
+      msg("Community support"),
     ],
-    featurePrefix: "Workspace includes",
+    featurePrefix: msg("Workspace includes"),
   },
   pro: {
     highlighted: true,
     features: [
-      `${formatCredits(2500)} monthly shared credits`,
-      "1-month credit rollover",
-      "On-demand top-ups",
-      "Priority support",
-      "Shared across unlimited users",
+      msg("2,500 monthly shared credits"),
+      msg("1-month credit rollover"),
+      msg("On-demand top-ups"),
+      msg("Priority support"),
+      msg("Shared across unlimited users"),
     ],
-    featurePrefix: "All features in Free, plus:",
+    featurePrefix: msg("All features in Free, plus:"),
   },
   business: {
     features: [
-      `${formatCredits(5000)} monthly shared credits`,
-      "3-month credit rollover",
-      "Workspace billing & admin",
-      "On-demand top-ups",
-      "Priority support",
-      "Shared across unlimited users",
+      msg("5,000 monthly shared credits"),
+      msg("3-month credit rollover"),
+      msg("Workspace billing & admin"),
+      msg("On-demand top-ups"),
+      msg("Priority support"),
+      msg("Shared across unlimited users"),
     ],
-    featurePrefix: "All features in Pro, plus:",
+    featurePrefix: msg("All features in Pro, plus:"),
   },
   enterprise: {
     features: [
-      "Custom credit allocation",
-      "12-month credit rollover",
-      "Dedicated account manager",
-      "SSO & advanced security",
-      "Custom integrations",
-      "SLA & onboarding",
+      msg("Custom credit allocation"),
+      msg("12-month credit rollover"),
+      msg("Dedicated account manager"),
+      msg("SSO & advanced security"),
+      msg("Custom integrations"),
+      msg("SLA & onboarding"),
     ],
-    featurePrefix: "All features in Business, plus:",
+    featurePrefix: msg("All features in Business, plus:"),
   },
 };
 
+const PLAN_COPY = {
+  free: {
+    source: {
+      name: "Free",
+      description: "Shared workspace for trying CmdClaw with manual top-ups.",
+      ctaLabel: "Start free",
+      monthlyPriceLabel: "$0",
+    },
+    messages: {
+      name: msg("Free"),
+      description: msg("Shared workspace for trying CmdClaw with manual top-ups."),
+      ctaLabel: msg("Start free"),
+      monthlyPriceLabel: msg("$0"),
+    },
+  },
+  pro: {
+    source: {
+      name: "Pro",
+      description: "Shared workspace plan with a monthly included credit budget.",
+      ctaLabel: "Start Pro",
+      monthlyPriceLabel: "$25",
+    },
+    messages: {
+      name: msg("Pro"),
+      description: msg("Shared workspace plan with a monthly included credit budget."),
+      ctaLabel: msg("Start Pro"),
+      monthlyPriceLabel: msg("$25"),
+    },
+  },
+  business: {
+    source: {
+      name: "Business",
+      description: "Flat org plan with shared credits across the workspace.",
+      ctaLabel: "Start Business",
+      monthlyPriceLabel: "$50",
+    },
+    messages: {
+      name: msg("Business"),
+      description: msg("Flat org plan with shared credits across the workspace."),
+      ctaLabel: msg("Start Business"),
+      monthlyPriceLabel: msg("$50"),
+    },
+  },
+  enterprise: {
+    source: {
+      name: "Enterprise",
+      description: "Contact-led org plan with long rollover and manual provisioning.",
+      ctaLabel: "Contact sales",
+      monthlyPriceLabel: "Contact us",
+    },
+    messages: {
+      name: msg("Enterprise"),
+      description: msg("Contact-led org plan with long rollover and manual provisioning."),
+      ctaLabel: msg("Contact sales"),
+      monthlyPriceLabel: msg("Contact us"),
+    },
+  },
+} satisfies Record<
+  BillingPlanDefinition["id"],
+  {
+    source: Pick<BillingPlanDefinition, "name" | "description" | "ctaLabel" | "monthlyPriceLabel">;
+    messages: { name: string; description: string; ctaLabel: string; monthlyPriceLabel: string };
+  }
+>;
+
+for (const [planId, copy] of Object.entries(PLAN_COPY)) {
+  const plan = BILLING_PLANS[planId as BillingPlanDefinition["id"]];
+  for (const field of ["name", "description", "ctaLabel", "monthlyPriceLabel"] as const) {
+    if (copy.source[field] !== plan[field]) {
+      throw new Error(`Pricing copy for ${planId}.${field} must match BILLING_PLANS.`);
+    }
+  }
+}
+
 function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
+  const t = useGT();
+  const m = useMessages();
   const meta = PLAN_META[plan.id];
+  const copy = PLAN_COPY[plan.id];
   const highlighted = meta?.highlighted;
 
   return (
@@ -106,22 +188,24 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
           : "border-neutral-200 bg-white text-neutral-950",
       ].join(" ")}
     >
-      <h3 className="text-lg font-semibold">{plan.name}</h3>
+      <h3 className="text-lg font-semibold">{m(copy.messages.name)}</h3>
       <p
         className={["mt-1 text-sm", highlighted ? "text-neutral-400" : "text-neutral-500"].join(
           " ",
         )}
       >
-        {plan.description}
+        {m(copy.messages.description)}
       </p>
 
       <div className="mt-6 flex items-baseline gap-1">
-        <span className="text-4xl font-semibold tracking-tight">{plan.monthlyPriceLabel}</span>
+        <span className="text-4xl font-semibold tracking-tight">
+          {m(copy.messages.monthlyPriceLabel)}
+        </span>
         {plan.monthlyPriceUsd !== null && plan.monthlyPriceUsd > 0 && (
           <span
             className={["text-sm", highlighted ? "text-neutral-500" : "text-neutral-400"].join(" ")}
           >
-            / month
+            <T>/ month</T>
           </span>
         )}
       </div>
@@ -132,10 +216,10 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
         )}
       >
         {plan.contactSales
-          ? "custom pricing"
+          ? t("custom pricing")
           : plan.monthlyPriceUsd === 0
-            ? "no credit card required"
-            : "shared across unlimited users"}
+            ? t("no credit card required")
+            : t("shared across unlimited users")}
       </div>
 
       <div className="mt-6">
@@ -145,7 +229,9 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
             variant="outline"
             className="w-full border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-50"
           >
-            <a href="mailto:hello@cmdclaw.ai?subject=CmdClaw%20Enterprise">Contact sales</a>
+            <a href="mailto:hello@cmdclaw.ai?subject=CmdClaw%20Enterprise">
+              <T>Contact sales</T>
+            </a>
           </Button>
         ) : (
           <Button
@@ -157,7 +243,7 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
                 : "bg-neutral-900 text-white hover:bg-neutral-800",
             ].join(" ")}
           >
-            <Link to="/login">{plan.ctaLabel}</Link>
+            <Link to="/login">{m(copy.messages.ctaLabel)}</Link>
           </Button>
         )}
       </div>
@@ -173,7 +259,7 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
             " ",
           )}
         >
-          {meta?.featurePrefix}
+          {meta?.featurePrefix ? m(meta.featurePrefix) : null}
         </p>
         <ul className="space-y-2.5">
           {meta?.features.map((feature) => (
@@ -185,7 +271,7 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
                 ].join(" ")}
               />
               <span className={highlighted ? "text-neutral-300" : "text-neutral-600"}>
-                {feature}
+                {m(feature)}
               </span>
             </li>
           ))}
@@ -209,10 +295,14 @@ function PricingPage() {
       <div className="mx-auto max-w-5xl px-6 pt-16 pb-20 sm:pt-24">
         {/* Header */}
         <div className="mx-auto max-w-xl text-center">
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Pricing</h1>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <T>Pricing</T>
+          </h1>
           <p className="mt-3 text-base text-neutral-500">
-            Start with a shared workspace. Upgrade for a larger shared credit pool as your team
-            grows.
+            <T>
+              Start with a shared workspace. Upgrade for a larger shared credit pool as your team
+              grows.
+            </T>
           </p>
         </div>
 
@@ -226,9 +316,12 @@ function PricingPage() {
         {/* Credits info */}
         <div className="mx-auto mt-16 max-w-xl text-center text-sm text-neutral-400">
           <p>
-            Credits are computed from model token usage plus sandbox runtime. Top-ups convert at
-            $1&nbsp;=&nbsp;{TOP_UP_CREDITS_PER_USD} credits and expire after {TOP_UP_EXPIRY_MONTHS}{" "}
-            months.
+            <T>
+              Credits are computed from model token usage plus sandbox runtime. Top-ups convert at
+              $1&nbsp;=&nbsp;
+            </T>
+            {TOP_UP_CREDITS_PER_USD} <T>credits and expire after</T> {TOP_UP_EXPIRY_MONTHS}{" "}
+            <T>months.</T>
           </p>
         </div>
       </div>

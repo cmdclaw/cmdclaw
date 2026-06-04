@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { cn } from "@/lib/utils";
 
 type RunDebugDetailsProps = {
@@ -37,7 +38,7 @@ export function RunDebugDetails({ className, debugInfo, fallbackTimestamp }: Run
   return (
     <details className={cn("mt-3 rounded-lg border border-dashed px-3 py-2", className)}>
       <summary className="text-muted-foreground cursor-pointer text-xs font-medium">
-        Technical details
+        <T>Technical details</T>
       </summary>
       <div className="mt-2 space-y-1">
         {recordedAt ? (
@@ -47,17 +48,26 @@ export function RunDebugDetails({ className, debugInfo, fallbackTimestamp }: Run
         ) : null}
         {originalErrorMessage ? (
           <p className="text-xs">
-            <span className="text-muted-foreground">Original error:</span> {originalErrorMessage}
+            <span className="text-muted-foreground">
+              <T>Original error:</T>
+            </span>{" "}
+            {originalErrorMessage}
           </p>
         ) : null}
         {originalErrorPhase ? (
           <p className="text-xs">
-            <span className="text-muted-foreground">Phase:</span> {originalErrorPhase}
+            <span className="text-muted-foreground">
+              <T>Phase:</T>
+            </span>{" "}
+            {originalErrorPhase}
           </p>
         ) : null}
         {runtimeFailure ? (
           <p className="text-xs">
-            <span className="text-muted-foreground">Runtime failure:</span> {runtimeFailure}
+            <span className="text-muted-foreground">
+              <T>Runtime failure:</T>
+            </span>{" "}
+            {runtimeFailure}
           </p>
         ) : null}
         <pre className="bg-muted/40 overflow-x-auto rounded-md p-2 text-[11px] leading-relaxed break-words whitespace-pre-wrap">

@@ -8,6 +8,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { T, useGT } from "gt-react";
 import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -371,19 +372,33 @@ function buildColumns(
         const c = row.original;
         if (c.consecutiveErrors >= 3) {
           return (
-            <span className="text-xs font-medium text-red-500">{c.consecutiveErrors}x failing</span>
+            <span className="text-xs font-medium text-red-500">
+              {c.consecutiveErrors}
+              <T>x failing</T>
+            </span>
           );
         }
         if (c.consecutiveErrors >= 1) {
           return (
-            <span className="text-xs font-medium text-amber-500">{c.consecutiveErrors}x error</span>
+            <span className="text-xs font-medium text-amber-500">
+              {c.consecutiveErrors}
+              <T>x error</T>
+            </span>
           );
         }
         if (c.latestRunStatus === "completed") {
-          return <span className="text-xs font-medium text-green-500">healthy</span>;
+          return (
+            <span className="text-xs font-medium text-green-500">
+              <T>healthy</T>
+            </span>
+          );
         }
         if (c.latestRunStatus === null) {
-          return <span className="text-muted-foreground text-xs">no runs</span>;
+          return (
+            <span className="text-muted-foreground text-xs">
+              <T>no runs</T>
+            </span>
+          );
         }
         return (
           <span className="text-muted-foreground text-xs capitalize">{c.latestRunStatus}</span>
@@ -407,6 +422,8 @@ export function CoworkerOverviewDashboard({
   workspaceId,
   onWorkspaceChange,
 }: CoworkerOverviewDashboardProps) {
+  const t = useGT();
+
   const isMultiWorkspace = Boolean(workspaces && onWorkspaceChange);
   const isAllWorkspaces = isMultiWorkspace && workspaceId === "all";
 
@@ -488,14 +505,18 @@ export function CoworkerOverviewDashboard({
     <div className="space-y-8">
       {/* Header with optional workspace selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Coworker Overview</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          <T>Coworker Overview</T>
+        </h1>
         {isMultiWorkspace ? (
           <Select value={workspaceId ?? "all"} onValueChange={handleWorkspaceChange}>
             <SelectTrigger size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Workspaces</SelectItem>
+              <SelectItem value="all">
+                <T>All Workspaces</T>
+              </SelectItem>
               {workspaces!.map((ws) => (
                 <SelectItem key={ws.id} value={ws.id}>
                   {ws.name}
@@ -508,15 +529,15 @@ export function CoworkerOverviewDashboard({
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="Total Coworkers" value={summary.totalCoworkers} />
+        <StatCard label={t("Total Coworkers")} value={summary.totalCoworkers} />
         <StatCard
-          label="Active"
+          label={t("Active")}
           value={summary.activeCoworkers}
           subtitle={`of ${summary.totalCoworkers}`}
         />
-        <StatCard label="Runs (30d)" value={summary.totalRuns30d} />
+        <StatCard label={t("Runs (30d)")} value={summary.totalRuns30d} />
         <StatCard
-          label="Error Rate"
+          label={t("Error Rate")}
           value={`${summary.errorRate}%`}
           subtitle={`${summary.errorRuns30d} errors`}
           alert={summary.errorRate > 20}
@@ -527,21 +548,35 @@ export function CoworkerOverviewDashboard({
       {isAllWorkspaces && data.workspaceBreakdown.length > 0 ? (
         <section className="bg-card rounded-lg border p-5">
           <div className="mb-4">
-            <h3 className="text-base font-semibold">By Workspace</h3>
+            <h3 className="text-base font-semibold">
+              <T>By Workspace</T>
+            </h3>
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Coworker health broken down by workspace. Click a row to view details.
+              <T>Coworker health broken down by workspace. Click a row to view details.</T>
             </p>
           </div>
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium">Workspace</th>
-                  <th className="px-3 py-2 text-right font-medium">Coworkers</th>
-                  <th className="px-3 py-2 text-right font-medium">Active</th>
-                  <th className="px-3 py-2 text-right font-medium">Runs</th>
-                  <th className="px-3 py-2 text-right font-medium">Errors</th>
-                  <th className="px-3 py-2 text-right font-medium">Error Rate</th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    <T>Workspace</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Coworkers</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Active</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Runs</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Errors</T>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    <T>Error Rate</T>
+                  </th>
                   <th className="hidden px-3 py-2 sm:table-cell" />
                 </tr>
               </thead>
@@ -564,16 +599,24 @@ export function CoworkerOverviewDashboard({
       {chartData.length > 0 && (
         <div className="rounded-xl border p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-medium">Runs over time (30 days)</h2>
+            <h2 className="text-sm font-medium">
+              <T>Runs over time (30 days)</T>
+            </h2>
             {isAllWorkspaces ? (
               <Select value={chartGroupBy} onValueChange={handleChartGroupByChange}>
                 <SelectTrigger size="sm">
-                  <span className="text-muted-foreground mr-1 text-xs">Group by:</span>
+                  <span className="text-muted-foreground mr-1 text-xs">
+                    <T>Group by:</T>
+                  </span>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="status">Status</SelectItem>
-                  <SelectItem value="workspace">Workspace</SelectItem>
+                  <SelectItem value="status">
+                    <T>Status</T>
+                  </SelectItem>
+                  <SelectItem value="workspace">
+                    <T>Workspace</T>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             ) : null}
@@ -643,7 +686,8 @@ export function CoworkerOverviewDashboard({
           <div className="mb-3 flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
             <AlertTriangle className="size-4" />
             <span>
-              {failingCoworkers.length} coworker{failingCoworkers.length > 1 ? "s" : ""} failing
+              {failingCoworkers.length} <T>coworker</T>
+              {failingCoworkers.length > 1 ? "s" : ""} <T>failing</T>
             </span>
           </div>
           <div className="space-y-2">
@@ -665,7 +709,8 @@ export function CoworkerOverviewDashboard({
                 )}
                 {c.consecutiveErrors > 1 && (
                   <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
-                    {c.consecutiveErrors}x consecutive
+                    {c.consecutiveErrors}
+                    <T>x consecutive</T>
                   </span>
                 )}
                 {c.latestErrorMessage && (
@@ -727,7 +772,7 @@ export function CoworkerOverviewDashboard({
                     colSpan={columns.length}
                     className="text-muted-foreground px-4 py-8 text-center"
                   >
-                    No coworkers yet
+                    <T>No coworkers yet</T>
                   </td>
                 </tr>
               )}

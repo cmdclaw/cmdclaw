@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { Pin } from "lucide-react";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { getCoworkerRunStatusLabel } from "@/lib/coworker-status";
@@ -148,7 +149,7 @@ export function CoworkerCardContent({
         </span>
         {coworker.sharedAt ? (
           <span className="text-foreground/70 bg-foreground/[0.06] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
-            Shared
+            <T>Shared</T>
           </span>
         ) : null}
         {badgesSlot}
@@ -160,7 +161,7 @@ export function CoworkerCardContent({
           <div className="text-muted-foreground/70 text-xs">
             {recentRun ? (
               <span>
-                Last run:{" "}
+                <T>Last run:</T>{" "}
                 <span className="text-muted-foreground">
                   {getCoworkerRunStatusLabel(recentRun.status)}
                 </span>{" "}
@@ -170,7 +171,9 @@ export function CoworkerCardContent({
           </div>
         ) : (
           <div className="text-muted-foreground/70 text-xs">
-            <span>No runs yet</span>
+            <span>
+              <T>No runs yet</T>
+            </span>
           </div>
         ))}
 
@@ -178,7 +181,7 @@ export function CoworkerCardContent({
       {footerSlot ?? (
         <div className="mt-auto flex items-center pt-3">
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            Coworker
+            <T>Coworker</T>
           </span>
         </div>
       )}

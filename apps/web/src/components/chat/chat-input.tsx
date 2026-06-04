@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { useGT } from "gt-react";
 import { Send, Square, Mic, Paperclip, X, Clock3 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AppImage } from "@/components/chat/app-image";
@@ -53,6 +54,8 @@ export function ChatInput({
   prefillRequest,
   conversationId,
 }: Props) {
+  const t = useGT();
+
   const draftKey = getChatDraftKey(conversationId);
   const readDraft = useChatDraftStore((state) => state.readDraft);
   const upsertDraft = useChatDraftStore((state) => state.upsertDraft);
@@ -332,7 +335,7 @@ export function ChatInput({
           value={value}
           onChange={handleValueChange}
           onKeyDown={handleKeyDown}
-          placeholder="Send a message..."
+          placeholder={t("Send a message...")}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none overflow-y-hidden overscroll-contain bg-transparent px-2 py-1.5 text-sm focus:outline-none disabled:opacity-50"
@@ -356,7 +359,7 @@ export function ChatInput({
           <Button
             onClick={onStop}
             data-testid="chat-stop"
-            aria-label="Stop generation"
+            aria-label={t("Stop generation")}
             size="icon"
             variant="destructive"
             className="h-9 w-9"

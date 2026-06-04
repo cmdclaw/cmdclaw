@@ -1,5 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
+import { T, msg, useGT, useMessages } from "gt-react";
 import {
   ArrowUp,
   Copy,
@@ -102,87 +103,87 @@ function isGoogleIntegrationType(type: OAuthIntegrationType): type is GoogleInte
 const integrationConfig: Record<string, { name: string; description: string; icon: string }> = {
   google_gmail: {
     name: "Google Gmail",
-    description: "Read and send emails",
+    description: msg("Read and send emails"),
     icon: "/integrations/google-gmail.svg",
   },
   outlook: {
     name: "Outlook Mail",
-    description: "Read and send emails",
+    description: msg("Read and send emails"),
     icon: "/integrations/outlook.svg",
   },
   outlook_calendar: {
     name: "Outlook Calendar",
-    description: "Manage events and calendars",
+    description: msg("Manage events and calendars"),
     icon: "/integrations/outlook-calendar.svg",
   },
   google_calendar: {
     name: "Google Calendar",
-    description: "Manage events and calendars",
+    description: msg("Manage events and calendars"),
     icon: "/integrations/google-calendar.svg",
   },
   google_docs: {
     name: "Google Docs",
-    description: "Read and edit documents",
+    description: msg("Read and edit documents"),
     icon: "/integrations/google-docs.svg",
   },
   google_sheets: {
     name: "Google Sheets",
-    description: "Read and edit spreadsheets",
+    description: msg("Read and edit spreadsheets"),
     icon: "/integrations/google-sheets.svg",
   },
   google_drive: {
     name: "Google Drive",
-    description: "Access and manage files",
+    description: msg("Access and manage files"),
     icon: "/integrations/google-drive.svg",
   },
   notion: {
     name: "Notion",
-    description: "Search and create pages",
+    description: msg("Search and create pages"),
     icon: "/integrations/notion.svg",
   },
   airtable: {
     name: "Airtable",
-    description: "Read and update bases",
+    description: msg("Read and update bases"),
     icon: "/integrations/airtable.svg",
   },
   slack: {
     name: "Slack",
-    description: "Send messages and read channels",
+    description: msg("Send messages and read channels"),
     icon: "/integrations/slack.svg",
   },
   hubspot: {
     name: "HubSpot",
-    description: "Manage CRM contacts, deals, and tickets",
+    description: msg("Manage CRM contacts, deals, and tickets"),
     icon: "/integrations/hubspot.svg",
   },
   linkedin: {
     name: "LinkedIn",
-    description: "Send messages, manage connections, and post content",
+    description: msg("Send messages, manage connections, and post content"),
     icon: "/integrations/linkedin.svg",
   },
   salesforce: {
     name: "Salesforce",
-    description: "Query and manage CRM records and contacts",
+    description: msg("Query and manage CRM records and contacts"),
     icon: "/integrations/salesforce.svg",
   },
   dynamics: {
     name: "Microsoft Dynamics 365",
-    description: "Manage Dataverse tables and CRM rows",
+    description: msg("Manage Dataverse tables and CRM rows"),
     icon: "/integrations/dynamics.svg",
   },
   reddit: {
     name: "Reddit",
-    description: "Browse, vote, comment, and post on Reddit",
+    description: msg("Browse, vote, comment, and post on Reddit"),
     icon: "/integrations/reddit.svg",
   },
   twitter: {
     name: "X (Twitter)",
-    description: "Post tweets, manage followers, and search content",
+    description: msg("Post tweets, manage followers, and search content"),
     icon: "/integrations/twitter.svg",
   },
   whatsapp: {
     name: "WhatsApp",
-    description: "Link WhatsApp and pair the bridge with QR",
+    description: msg("Link WhatsApp and pair the bridge with QR"),
     icon: "/integrations/whatsapp.svg",
   },
 };
@@ -313,6 +314,7 @@ function IntegrationToolCard({
   connectError?: string;
   isPreviewOnly: boolean;
 }) {
+  const m = useMessages();
   const isConnected = !!integration;
   const isEnabled = integration?.enabled ?? false;
 
@@ -364,21 +366,23 @@ function IntegrationToolCard({
                           : "text-amber-600 dark:text-amber-400",
                       )}
                     >
-                      {isEnabled ? "Connected" : "Disabled"}
+                      {isEnabled ? <T>Connected</T> : <T>Disabled</T>}
                     </span>
                   </>
                 ) : isPreviewOnly ? (
                   <span className="text-muted-foreground/60 text-[10px] font-medium">
-                    Coming soon
+                    <T>Coming soon</T>
                   </span>
                 ) : connectError ? (
                   <>
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
-                    <span className="text-[10px] font-medium text-red-500">Error</span>
+                    <span className="text-[10px] font-medium text-red-500">
+                      <T>Error</T>
+                    </span>
                   </>
                 ) : (
                   <span className="text-muted-foreground text-[10px] font-medium">
-                    Not connected
+                    <T>Not connected</T>
                   </span>
                 )}
               </div>
@@ -394,14 +398,14 @@ function IntegrationToolCard({
               )}
             />
             <span className="text-muted-foreground text-xs">
-              {isConnected && isEnabled ? "On" : "Off"}
+              {isConnected && isEnabled ? <T>On</T> : <T>Off</T>}
             </span>
           </div>
         </div>
 
         {/* Description */}
         <p className="text-muted-foreground mt-3 line-clamp-2 text-xs leading-relaxed">
-          {config.description}
+          {m(config.description)}
         </p>
 
         {/* Error */}
@@ -414,7 +418,7 @@ function IntegrationToolCard({
         {/* Footer */}
         <div className="mt-auto flex items-center justify-between pt-4">
           <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-            Integration
+            <T>Integration</T>
           </span>
           <ArrowUp className="text-muted-foreground/30 group-hover:text-muted-foreground size-3.5 rotate-45 transition-colors" />
         </div>
@@ -721,25 +725,25 @@ function WorkspaceMcpServerToolCard({
                   <>
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                      Connected
+                      <T>Connected</T>
                     </span>
                   </>
                 ) : source.connected && !source.credentialEnabled ? (
                   <>
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
                     <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                      Paused
+                      <T>Paused</T>
                     </span>
                   </>
                 ) : needsSetup ? (
                   <span className="text-muted-foreground text-[10px] font-medium">
-                    Not connected
+                    <T>Not connected</T>
                   </span>
                 ) : (
                   <>
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
                     <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                      Disabled
+                      <T>Disabled</T>
                     </span>
                   </>
                 )}
@@ -779,6 +783,8 @@ function WorkspaceMcpServerToolCard({
 // ─── Page content ───────────────────────────────────────────────────────────────
 
 export function ToolboxPage() {
+  const t = useGT();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
@@ -874,17 +880,17 @@ export function ToolboxPage() {
       linkLinkedIn
         .mutateAsync(accountId)
         .then(() => {
-          toast.success("LinkedIn connected successfully!");
+          toast.success(t("LinkedIn connected successfully!"));
           refetchIntegrations();
         })
         .catch(() => {
-          toast.error("Failed to connect LinkedIn. Please try again.");
+          toast.error(t("Failed to connect LinkedIn. Please try again."));
         })
         .finally(() => {
           window.history.replaceState({}, "", "/toolbox");
         });
     }
-  }, [searchParams, linkLinkedIn, refetchIntegrations]);
+  }, [searchParams, linkLinkedIn, refetchIntegrations, t]);
 
   // ─── URL params handling (OAuth callback) ───────────────────────────────────
   useEffect(() => {
@@ -892,7 +898,7 @@ export function ToolboxPage() {
     const error = searchParams.get("error");
     if (success) {
       queueMicrotask(() => {
-        toast.success("Integration connected successfully!");
+        toast.success(t("Integration connected successfully!"));
       });
       window.history.replaceState({}, "", "/toolbox");
       refetchIntegrations();
@@ -902,7 +908,7 @@ export function ToolboxPage() {
       });
       window.history.replaceState({}, "", "/toolbox");
     }
-  }, [searchParams, refetchIntegrations]);
+  }, [searchParams, refetchIntegrations, t]);
 
   useEffect(() => {
     const input = folderImportInputRef.current;
@@ -982,13 +988,13 @@ export function ToolboxPage() {
       try {
         await requestGoogleAccess.mutateAsync({ integration: type, source: "integrations" });
         toast.success(
-          "Access request sent. We notified the team and will approve your Google access.",
+          t("Access request sent. We notified the team and will approve your Google access."),
         );
       } catch {
-        toast.error("Failed to send access request.");
+        toast.error(t("Failed to send access request."));
       }
     },
-    [requestGoogleAccess],
+    [requestGoogleAccess, t],
   );
 
   // ─── Skill handlers ────────────────────────────────────────────────────────
@@ -997,14 +1003,14 @@ export function ToolboxPage() {
     try {
       const result = await createSkill.mutateAsync({
         displayName: "New Skill",
-        description: "Add a description for this skill",
+        description: msg("Add a description for this skill"),
       });
       router.push(`/skills/${result.id}`);
     } catch {
-      toast.error("Failed to create skill.");
+      toast.error(t("Failed to create skill."));
       setIsCreating(false);
     }
-  }, [createSkill, router]);
+  }, [createSkill, router, t]);
 
   const handleImportZipClick = useCallback(() => {
     if (importSkill.isPending) {
@@ -1032,7 +1038,7 @@ export function ToolboxPage() {
         return;
       }
       if (!file.name.toLowerCase().endsWith(".zip")) {
-        toast.error("Select a .zip skill archive.");
+        toast.error(t("Select a .zip skill archive."));
         return;
       }
 
@@ -1049,7 +1055,7 @@ export function ToolboxPage() {
         toast.error(toErrorMessage(error, "Failed to import skill."));
       }
     },
-    [importSkill, router],
+    [importSkill, router, t],
   );
 
   const handleImportFolderChange = useCallback(
@@ -1097,10 +1103,10 @@ export function ToolboxPage() {
         toast.success(`Skill "${displayName}" deleted.`);
         refetchSkills();
       } catch {
-        toast.error("Failed to delete skill.");
+        toast.error(t("Failed to delete skill."));
       }
     },
-    [deleteSkill, refetchSkills],
+    [deleteSkill, refetchSkills, t],
   );
 
   const handleShareSkill = useCallback(
@@ -1297,9 +1303,9 @@ export function ToolboxPage() {
     filteredWorkspaceMcpServers.length > 0;
 
   const tabs: { id: FilterTab; label: string; count: number }[] = [
-    { id: "all", label: "All", count: totalAll },
-    { id: "active", label: "Active", count: totalActive },
-    { id: "needs_setup", label: "Needs Setup", count: totalNeedsSetup },
+    { id: "all", label: t("All"), count: totalAll },
+    { id: "active", label: t("Active"), count: totalActive },
+    { id: "needs_setup", label: t("Needs Setup"), count: totalNeedsSetup },
   ];
 
   const handleTabChange = useCallback((key: string) => {
@@ -1503,7 +1509,7 @@ export function ToolboxPage() {
                   ) : (
                     <Wand2 className="mr-2 h-4 w-4" />
                   )}
-                  Actions
+                  <T>Actions</T>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -1511,13 +1517,13 @@ export function ToolboxPage() {
                   <>
                     <DropdownMenuItem onClick={handleNewMcpSource}>
                       <Puzzle className="h-4 w-4" />
-                      Add MCP
+                      <T>Add MCP</T>
                     </DropdownMenuItem>
                   </>
                 ) : null}
                 <DropdownMenuItem onClick={handleImportZipClick} disabled={importSkill.isPending}>
                   <FileInput className="h-4 w-4" />
-                  Import .zip
+                  <T>Import .zip</T>
                 </DropdownMenuItem>
                 {supportsFolderImport ? (
                   <DropdownMenuItem
@@ -1525,12 +1531,12 @@ export function ToolboxPage() {
                     disabled={importSkill.isPending}
                   >
                     <FileOutput className="h-4 w-4" />
-                    Import folder
+                    <T>Import folder</T>
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem onClick={handleCreateSkill} disabled={isCreating}>
                   <Plus className="h-4 w-4" />
-                  Create Skill
+                  <T>Create Skill</T>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1544,7 +1550,7 @@ export function ToolboxPage() {
               type="text"
               value={search}
               onChange={handleSearchChange}
-              placeholder="Search tools…"
+              placeholder={t("Search tools…")}
               className="placeholder:text-muted-foreground/40 w-full bg-transparent text-sm outline-none"
             />
           </div>
@@ -1554,7 +1560,7 @@ export function ToolboxPage() {
                 <Button variant="outline" asChild>
                   <AppLink href="/toolbox/sources/new?kind=mcp">
                     <Puzzle className="mr-2 h-4 w-4" />
-                    Add MCP
+                    <T>Add MCP</T>
                   </AppLink>
                 </Button>
               </>
@@ -1567,13 +1573,13 @@ export function ToolboxPage() {
                   ) : (
                     <FileInput className="mr-2 h-4 w-4" />
                   )}
-                  Import Skill
+                  <T>Import Skill</T>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleImportZipClick} disabled={importSkill.isPending}>
                   <FileInput className="h-4 w-4" />
-                  Import .zip
+                  <T>Import .zip</T>
                 </DropdownMenuItem>
                 {supportsFolderImport ? (
                   <DropdownMenuItem
@@ -1581,7 +1587,7 @@ export function ToolboxPage() {
                     disabled={importSkill.isPending}
                   >
                     <FileOutput className="h-4 w-4" />
-                    Import folder
+                    <T>Import folder</T>
                   </DropdownMenuItem>
                 ) : null}
               </DropdownMenuContent>
@@ -1592,7 +1598,7 @@ export function ToolboxPage() {
               ) : (
                 <Plus className="mr-2 h-4 w-4" />
               )}
-              Create Skill
+              <T>Create Skill</T>
             </Button>
           </div>
           <input
@@ -1600,7 +1606,7 @@ export function ToolboxPage() {
             type="file"
             accept=".zip,application/zip"
             className="hidden"
-            aria-label="Import skill zip"
+            aria-label={t("Import skill zip")}
             onChange={handleImportZipChange}
           />
           <input
@@ -1608,7 +1614,7 @@ export function ToolboxPage() {
             type="file"
             multiple
             className="hidden"
-            aria-label="Import skill folder"
+            aria-label={t("Import skill folder")}
             onChange={handleImportFolderChange}
           />
         </div>
@@ -1641,13 +1647,15 @@ export function ToolboxPage() {
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">My Skills</h2>
+                  <h2 className="text-sm font-semibold">
+                    <T>My Skills</T>
+                  </h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    Private skills you own in this workspace
+                    <T>Private skills you own in this workspace</T>
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredOwnedSkills.length} tool
+                  {filteredOwnedSkills.length} <T>tool</T>
                   {filteredOwnedSkills.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -1673,13 +1681,15 @@ export function ToolboxPage() {
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">Workspace Skills</h2>
+                  <h2 className="text-sm font-semibold">
+                    <T>Workspace Skills</T>
+                  </h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    Public skills shared by other people in your workspace
+                    <T>Public skills shared by other people in your workspace</T>
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredSharedSkills.length} tool
+                  {filteredSharedSkills.length} <T>tool</T>
                   {filteredSharedSkills.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -1705,13 +1715,15 @@ export function ToolboxPage() {
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">Integrations</h2>
+                  <h2 className="text-sm font-semibold">
+                    <T>Integrations</T>
+                  </h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    Connect external services to your coworker
+                    <T>Connect external services to your coworker</T>
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredIntegrations.length} tool
+                  {filteredIntegrations.length} <T>tool</T>
                   {filteredIntegrations.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -1748,13 +1760,15 @@ export function ToolboxPage() {
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">MCP Servers</h2>
+                  <h2 className="text-sm font-semibold">
+                    <T>MCP Servers</T>
+                  </h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    MCP servers configured for your workspace
+                    <T>MCP servers configured for your workspace</T>
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredWorkspaceMcpServers.length} source
+                  {filteredWorkspaceMcpServers.length} <T>source</T>
                   {filteredWorkspaceMcpServers.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -1773,13 +1787,15 @@ export function ToolboxPage() {
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">Community Skills</h2>
+                  <h2 className="text-sm font-semibold">
+                    <T>Community Skills</T>
+                  </h2>
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    Pre-built skills ready to activate
+                    <T>Pre-built skills ready to activate</T>
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {filteredCommunitySkills.length} tool
+                  {filteredCommunitySkills.length} <T>tool</T>
                   {filteredCommunitySkills.length !== 1 ? "s" : ""}
                 </p>
               </div>

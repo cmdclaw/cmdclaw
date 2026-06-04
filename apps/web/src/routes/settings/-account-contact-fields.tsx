@@ -1,4 +1,5 @@
 import type { ITimezone } from "react-timezone-select";
+import { T, useGT } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import TimezoneSelect from "react-timezone-select";
@@ -117,6 +118,8 @@ export default function AccountContactFields({
   timezoneDiffers,
   timezoneInput,
 }: AccountContactFieldsProps) {
+  const t = useGT();
+
   const timezoneSelectStyles = useTimezoneSelectStyles();
   const handleTimezoneChange = useCallback(
     (tz: ITimezone) => {
@@ -128,14 +131,16 @@ export default function AccountContactFields({
   return (
     <>
       <div>
-        <label className="mb-2 block text-sm font-medium">Phone number</label>
+        <label className="mb-2 block text-sm font-medium">
+          <T>Phone number</T>
+        </label>
         <PhoneInput
           defaultCountry="US"
           international
           countryCallingCodeEditable={false}
           value={phoneNumber}
           onChange={onPhoneNumberChange}
-          placeholder="Enter your phone number"
+          placeholder={t("Enter your phone number")}
         />
         {phoneNumber ? (
           <Button
@@ -149,7 +154,7 @@ export default function AccountContactFields({
             {isRemovingPhone ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Removing...
+                <T>Removing...</T>
               </>
             ) : (
               "Remove phone number"
@@ -159,22 +164,24 @@ export default function AccountContactFields({
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium">Timezone</label>
+        <label className="mb-2 block text-sm font-medium">
+          <T>Timezone</T>
+        </label>
         <TimezoneSelect
           value={timezoneInput}
           onChange={handleTimezoneChange}
           styles={timezoneSelectStyles}
-          placeholder="Select your timezone..."
+          placeholder={t("Select your timezone...")}
         />
         {isSavingTimezone && (
           <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
-            <Loader2 className="inline h-3 w-3 animate-spin" /> Saving...
+            <Loader2 className="inline h-3 w-3 animate-spin" /> <T>Saving...</T>
           </p>
         )}
         {timezoneDiffers ? (
           <div className="mt-3 flex items-center gap-3 text-sm">
             <p className="text-muted-foreground">
-              Browser detects <strong className="text-foreground">{browserTimezone}</strong>
+              <T>Browser detects</T> <strong className="text-foreground">{browserTimezone}</strong>
             </p>
             <Button
               type="button"
@@ -183,7 +190,7 @@ export default function AccountContactFields({
               onClick={onUseBrowserTimezone}
               disabled={isSavingTimezone}
             >
-              Use browser timezone
+              <T>Use browser timezone</T>
             </Button>
           </div>
         ) : null}

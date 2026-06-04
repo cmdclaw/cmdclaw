@@ -13,6 +13,7 @@ import {
 import { gfm, toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
 import { callCommand, replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor, useInstance } from "@milkdown/react";
+import { useGT } from "gt-react";
 import {
   Bold,
   Code,
@@ -59,6 +60,8 @@ function ToolbarButton({
 }
 
 function MilkdownToolbar() {
+  const t = useGT();
+
   const [loading, getInstance] = useInstance();
 
   const exec = useCallback(
@@ -155,43 +158,43 @@ function MilkdownToolbar() {
 
   return (
     <div className="border-border/40 flex items-center gap-0.5 border-b px-3 py-1.5">
-      <ToolbarButton onClick={handleParagraph} title="Normal text">
+      <ToolbarButton onClick={handleParagraph} title={t("Normal text")}>
         <Pilcrow className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleH1} title="Heading 1">
+      <ToolbarButton onClick={handleH1} title={t("Heading 1")}>
         <Heading1 className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleH2} title="Heading 2">
+      <ToolbarButton onClick={handleH2} title={t("Heading 2")}>
         <Heading2 className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleH3} title="Heading 3">
+      <ToolbarButton onClick={handleH3} title={t("Heading 3")}>
         <Heading3 className="h-3.5 w-3.5" />
       </ToolbarButton>
 
       <div className="bg-border/40 mx-1 h-4 w-px" />
 
-      <ToolbarButton onClick={handleBold} title="Bold">
+      <ToolbarButton onClick={handleBold} title={t("Bold")}>
         <Bold className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleItalic} title="Italic">
+      <ToolbarButton onClick={handleItalic} title={t("Italic")}>
         <Italic className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleStrikethrough} title="Strikethrough">
+      <ToolbarButton onClick={handleStrikethrough} title={t("Strikethrough")}>
         <Strikethrough className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleCode} title="Code">
+      <ToolbarButton onClick={handleCode} title={t("Code")}>
         <Code className="h-3.5 w-3.5" />
       </ToolbarButton>
 
       <div className="bg-border/40 mx-1 h-4 w-px" />
 
-      <ToolbarButton onClick={handleBulletList} title="Bullet list">
+      <ToolbarButton onClick={handleBulletList} title={t("Bullet list")}>
         <List className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleOrderedList} title="Ordered list">
+      <ToolbarButton onClick={handleOrderedList} title={t("Ordered list")}>
         <ListOrdered className="h-3.5 w-3.5" />
       </ToolbarButton>
-      <ToolbarButton onClick={handleBlockquote} title="Blockquote">
+      <ToolbarButton onClick={handleBlockquote} title={t("Blockquote")}>
         <Quote className="h-3.5 w-3.5" />
       </ToolbarButton>
     </div>
