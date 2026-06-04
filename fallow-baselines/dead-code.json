@@ -2,11 +2,6 @@
   "unused_files": [
     "apps/mcp/dev-require-shim.mjs",
     "apps/mcp/servers/modulr/src/resources/(modulr)/documents/[documentId]/index.ts",
-    "apps/web/src/components/inbox/inbox-create-input.tsx",
-    "apps/web/src/instrumentation-node.ts",
-    "apps/web/src/instrumentation.ts",
-    "apps/web/src/orpc/hooks.ts",
-    "apps/web/src/server/lib/same-origin.ts",
     "design/generation-refactor/proposal-two/interfaces/decision-flow.ts",
     "design/generation-refactor/proposal-two/interfaces/event-log.ts",
     "design/generation-refactor/proposal-two/interfaces/execution-environment.ts",
@@ -25,24 +20,6 @@
   "unused_exports": [
     "apps/mcp/servers/galien/src/lib/tool-helpers.ts:requestCurrentGalienUserPathParamGet",
     "apps/mcp/servers/modulr/src/lib/modulr-auth.ts:getManagedModulrCredentialsForTool",
-    "apps/web/src/components/chat/output-preview-selection.ts:isOutputHtmlSandboxFile",
-    "apps/web/src/components/executor-source-form.tsx:WorkspaceMcpServerFields",
-    "apps/web/src/instrumentation-node.ts:registerNodeInstrumentation",
-    "apps/web/src/lib/executor-tool.ts:getExecutorMetadataInput",
-    "apps/web/src/orpc/hooks/admin.ts:useGrantAdminAccessByEmail",
-    "apps/web/src/orpc/hooks/conversation.ts:useMarkConversationSeen",
-    "apps/web/src/orpc/hooks/coworkers.ts:useCoworkerFolderList",
-    "apps/web/src/orpc/hooks/coworkers.ts:useCreateCoworkerFolderPath",
-    "apps/web/src/orpc/hooks/coworkers.ts:useMoveCoworkerToFolder",
-    "apps/web/src/orpc/hooks/inbox.ts:useInboxItems",
-    "apps/web/src/orpc/hooks/integrations.ts:useAccountLabels",
-    "apps/web/src/orpc/hooks/integrations.ts:useMoveConnectedAccount",
-    "apps/web/src/routes/admin/-lib/impersonation-errors.ts:INVITE_ONLY_IMPERSONATION_ERROR_MESSAGE",
-    "apps/web/src/routes/toolbox/-lib/next-navigation-compat.tsx:usePathname",
-    "apps/web/src/server/api/coworkers/document-download.ts:buildContentDisposition",
-    "apps/web/src/server/api/modulr/document-download.ts:buildContentDisposition",
-    "apps/web/src/server/hosted-mcp-oauth.ts:buildHostedMcpAuthorizationServerMetadata",
-    "apps/web/src/server/services/output-html-preview.ts:OUTPUT_HTML_PREVIEW_FILENAME",
     "apps/worktree/src/process-cleanup.ts:isWorktreeServiceProcessCommand",
     "packages/core/src/server/execution/providers/conversation-environment.ts:ConversationExecutionEnvironmentProvider",
     "packages/core/src/server/execution/providers/daytona-environment.ts:DaytonaExecutionEnvironmentProvider",
@@ -101,9 +78,6 @@
     "packages/core/src/server/utils/observability.ts:normalizeLogFields"
   ],
   "unused_types": [
-    "apps/web/src/components/inbox/types.ts:InboxSourceOption",
-    "apps/web/src/routes/_marketing/-landing-data.ts:LandingData",
-    "apps/web/src/server/health/handler.ts:HealthChecks",
     "design/generation-refactor/proposal-two/interfaces/event-log.ts:GenerationEventLog",
     "design/generation-refactor/proposal-two/interfaces/execution-environment.ts:ExecutionEnvironmentProvider",
     "design/generation-refactor/proposal-two/interfaces/lifecycle-store.ts:LifecycleStore",
@@ -145,28 +119,15 @@
     "apps/worktree/package.json:@cmdclaw/core"
   ],
   "unused_dev_dependencies": [
-    "apps/web/package.json:@t3-oss/env-core",
-    "apps/web/package.json:@tanstack/eslint-plugin-router",
-    "apps/web/package.json:eslint-plugin-drizzle",
-    "apps/web/package.json:eslint-plugin-react-compiler"
+    "apps/web/package.json:@t3-oss/env-core"
   ],
   "circular_dependencies": [],
+  "re_export_cycles": [],
   "unused_optional_dependencies": [],
   "unused_enum_members": [],
   "unused_class_members": [
     "apps/mcp/servers/modulr/src/lib/modulr-client.ts:ModulrClient.listCustomerDocumentsByEmail",
     "apps/mcp/servers/modulr/src/lib/modulr-client.ts:ModulrClient.getDocument",
-    "apps/web/src/lib/generation-runtime.ts:GenerationRuntime.getCurrentIds",
-    "apps/web/src/lib/generation-runtime.ts:GenerationRuntime.setAuthConnecting",
-    "apps/web/src/lib/generation-runtime.ts:GenerationRuntime.setAuthPending",
-    "apps/web/src/lib/generation-runtime.ts:GenerationRuntime.setAuthCancelled",
-    "apps/web/src/lib/generation-runtime.ts:GenerationRuntime.applyServerEvent",
-    "apps/web/src/lib/generation-runtime.ts:GenerationRuntime.reset",
-    "apps/web/src/server/sandbox/harness/agent-sdk.ts:AgentSdkHarness.id",
-    "apps/web/src/server/sandbox/harness/opencode.ts:OpencodeHarness.id",
-    "apps/web/src/server/sandbox/providers/daytona.ts:DaytonaProvider.id",
-    "apps/web/src/server/sandbox/providers/docker.ts:DockerProvider.id",
-    "apps/web/src/server/sandbox/providers/e2b.ts:E2BProvider.id",
     "packages/core/src/server/runtime/opencode/opencode-generation-runtime-driver.ts:OpenCodeGenerationRuntimeDriver.bindGenerationContext",
     "packages/core/src/server/runtime/opencode/opencode-generation-runtime-driver.ts:OpenCodeGenerationRuntimeDriver.setRuntimeFailureResolver",
     "packages/core/src/server/runtime/opencode/opencode-generation-runtime-driver.ts:OpenCodeGenerationRuntimeDriver.startTurn",
@@ -242,7 +203,7 @@
     "design/generation-refactor/proposal-two/interfaces/types.ts:../../../../../packages/db/src/schema"
   ],
   "unlisted_dependencies": [
-    "@cmdclaw/__mocks__"
+    "react"
   ],
   "duplicate_exports": [
     "ExecuteResult|packages/core/src/server/execution/execution-environment.ts|packages/core/src/server/sandbox/types.ts",
@@ -253,25 +214,21 @@
     "RuntimePermissionRequest|packages/core/src/server/runtime/runtime-driver.ts|packages/core/src/server/sandbox/core/types.ts",
     "RuntimeQuestionRequest|packages/core/src/server/runtime/runtime-driver.ts|packages/core/src/server/sandbox/core/types.ts",
     "RuntimeRecoveryReattachOptions|packages/core/src/server/runtime/opencode/opencode-generation-runtime-driver.ts|packages/core/src/server/runtime/runtime-generation-driver.ts",
-    "SandboxFileData|apps/web/src/components/chat/message-list.tsx|apps/web/src/lib/generation-stream.ts",
-    "Sheet|apps/web/src/components/animate-ui/components/radix/sheet.tsx|apps/web/src/components/animate-ui/primitives/radix/sheet.tsx",
-    "SheetClose|apps/web/src/components/animate-ui/components/radix/sheet.tsx|apps/web/src/components/animate-ui/primitives/radix/sheet.tsx",
-    "SheetCloseProps|apps/web/src/components/animate-ui/components/radix/sheet.tsx|apps/web/src/components/animate-ui/primitives/radix/sheet.tsx",
-    "SheetContent|apps/web/src/components/animate-ui/components/radix/sheet.tsx|apps/web/src/components/animate-ui/primitives/radix/sheet.tsx",
-    "SheetContentProps|apps/web/src/components/animate-ui/components/radix/sheet.tsx|apps/web/src/components/animate-ui/primitives/radix/sheet.tsx",
-    "SheetProps|apps/web/src/components/animate-ui/components/radix/sheet.tsx|apps/web/src/components/animate-ui/primitives/radix/sheet.tsx",
     "StartCoworkerGenerationInput|packages/core/src/server/services/generation/turn-intake.ts|packages/core/src/server/services/generation/types.ts",
     "UserFileAttachment|packages/core/src/server/services/generation/queue/conversation-turn-queue.ts|packages/core/src/server/services/generation/types.ts",
     "buildDefaultQuestionAnswers|packages/core/src/server/runtime/opencode/opencode-event-translator.ts|packages/core/src/server/runtime/runtime-driver.ts",
     "buildQuestionCommand|packages/core/src/server/runtime/opencode/opencode-event-translator.ts|packages/core/src/server/runtime/runtime-driver.ts",
     "isOpenCodeActionableEvent|packages/core/src/server/runtime/opencode/opencode-event-translator.ts|packages/core/src/server/runtime/opencode/opencode-runtime-driver.ts",
     "isOpenCodeTrackedEvent|packages/core/src/server/runtime/opencode/opencode-event-translator.ts|packages/core/src/server/runtime/opencode/opencode-runtime-driver.ts",
-    "limitToolResultContent|packages/core/src/server/runtime/opencode/opencode-event-translator.ts|packages/core/src/server/runtime/runtime-driver.ts",
-    "storeProviderTokens|apps/web/src/server/orpc/routers/provider-auth.ts|packages/core/src/server/control-plane/subscription-providers.ts",
-    "storeSharedProviderTokens|apps/web/src/server/orpc/routers/provider-auth.ts|packages/core/src/server/control-plane/subscription-providers.ts"
+    "limitToolResultContent|packages/core/src/server/runtime/opencode/opencode-event-translator.ts|packages/core/src/server/runtime/runtime-driver.ts"
   ],
   "type_only_dependencies": [],
   "test_only_dependencies": [],
   "boundary_violations": [],
-  "stale_suppressions": []
+  "stale_suppressions": [],
+  "unused_catalog_entries": [],
+  "empty_catalog_groups": [],
+  "unresolved_catalog_references": [],
+  "unused_dependency_overrides": [],
+  "misconfigured_dependency_overrides": []
 }

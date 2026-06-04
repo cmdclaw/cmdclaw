@@ -1186,10 +1186,10 @@
         "count": 2
       },
       "crap_critical": {
-        "count": 2
+        "count": 3
       },
       "crap_high": {
-        "count": 5
+        "count": 4
       },
       "crap_moderate": {
         "count": 6
@@ -1329,7 +1329,7 @@
     },
     "apps/web/src/routes/api/observability/-handlers/client-observations.ts": {
       "crap_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "apps/web/src/routes/integrations/$type.tsx": {
@@ -1511,11 +1511,6 @@
       },
       "crap_moderate": {
         "count": 3
-      }
-    },
-    "apps/web/src/server/internal/coworker-runtime.ts": {
-      "crap_moderate": {
-        "count": 1
       }
     },
     "apps/web/src/server/internal/mcp-credentials.ts": {
@@ -2355,68 +2350,70 @@
   "runtime_coverage_findings": [],
   "target_keys": [
     "apps/mcp/servers/modulr/src/resources/(modulr)/documents/[documentId]/index.ts:dead code",
-    "packages/core/src/server/services/runtime-diagnostic-snapshot-service.ts:complexity",
-    "packages/core/src/server/integrations/account-labels.ts:dead code",
     "apps/web/src/lib/generation-stream.ts:complexity",
-    "packages/core/src/server/runtime/opencode/opencode-reattach.ts:complexity",
+    "packages/core/src/server/services/runtime-diagnostic-snapshot-service.ts:complexity",
     "packages/core/src/server/sandbox/opencode-session.ts:dead code",
+    "packages/core/src/server/integrations/account-labels.ts:dead code",
+    "packages/core/src/server/runtime/opencode/opencode-reattach.ts:complexity",
     "packages/core/src/server/integrations/connected-identities.ts:dead code",
     "packages/core/src/server/services/slo-journey.ts:dead code",
     "packages/core/src/server/runtime/opencode/opencode-event-translator.ts:dead code",
-    "packages/core/src/server/integrations/cli-env.ts:complexity",
-    "apps/web/src/orpc/hooks/inbox.ts:untested risk",
-    "packages/core/src/server/services/coworker-builder-service.ts:complexity",
     "packages/core/src/server/executor/workspace-sources.ts:complexity",
+    "packages/core/src/server/integrations/cli-env.ts:complexity",
     "packages/core/src/server/services/opencode-session-snapshot-service.ts:complexity",
+    "packages/core/src/server/services/coworker-builder-service.ts:complexity",
+    "packages/core/src/server/sandbox/compat/opencode-client-shim.ts:high impact",
     "packages/core/src/server/queues/sandbox-usage-snapshot.ts:dead code",
-    "packages/core/src/server/runtime/opencode/opencode-runtime-driver.ts:complexity",
     "apps/web/src/routes/toolbox/-components/source-detail-page.tsx:complexity",
+    "packages/core/src/server/runtime/opencode/opencode-runtime-driver.ts:complexity",
+    "apps/web/src/components/chat/tool-approval-card.tsx:complexity",
+    "apps/web/src/routes/api/oauth/-handlers/callback.ts:complexity",
     "packages/client/src/generation-stream.ts:complexity",
     "apps/web/src/lib/brandfetch.ts:high impact",
-    "apps/web/src/routes/api/oauth/-handlers/callback.ts:complexity",
-    "apps/web/src/components/chat/tool-approval-card.tsx:complexity",
     "packages/core/src/server/runtime/opencode/opencode-recovery-runner.ts:complexity",
-    "apps/web/src/components/inbox/inbox-item.tsx:complexity",
     "packages/core/src/server/services/generation/model-access.ts:complexity",
-    "packages/core/src/server/redis/connection-options.ts:high impact",
+    "apps/web/src/components/inbox/inbox-item.tsx:complexity",
     "apps/web/src/components/chat/browser-json-storage.ts:high impact",
+    "apps/web/src/components/chat/question-approval-utils.ts:complexity",
+    "apps/web/src/orpc/hooks/inbox.ts:untested risk",
+    "apps/cli/src/commands/chat/impl.ts:complexity",
+    "apps/web/src/components/app-sidebar.tsx:complexity",
+    "packages/core/src/server/services/memory-service.ts:complexity",
     "packages/core/src/server/sandbox/runtime/runtime-client/opencode.ts:high impact",
     "apps/web/src/components/prompt-bar.tsx:complexity",
-    "apps/cli/src/commands/chat/impl.ts:complexity",
-    "packages/core/src/server/services/memory-service.ts:complexity",
-    "apps/web/src/components/integration-detail-content.tsx:complexity",
-    "apps/web/src/components/app-sidebar.tsx:complexity",
-    "apps/web/src/components/chat/question-approval-utils.ts:complexity",
+    "apps/web/src/components/chat/chat-message-sync.ts:high impact",
+    "apps/web/src/components/ui/dual-panel-workspace.tsx:complexity",
     "apps/web/src/server/orpc/routers/coworker.ts:complexity",
-    "packages/core/src/server/services/generation/core/turn-finalizer.ts:complexity",
-    "apps/web/src/routes/agents/-components/coworker-editor-page.tsx:complexity",
-    "apps/web/scripts/lib/question-approval.ts:complexity",
-    "apps/web/src/components/coworkers/interactive-coworker-card.tsx:complexity",
+    "apps/web/src/components/integration-detail-content.tsx:complexity",
     "packages/core/src/server/services/generation/core/canonical-generation-events.ts:complexity",
-    "apps/web/src/routes/agents/-components/coworker-info-page.tsx:complexity",
+    "apps/web/src/routes/agents/-components/coworker-editor-page.tsx:complexity",
+    "apps/web/src/components/coworkers/interactive-coworker-card.tsx:complexity",
+    "apps/web/scripts/lib/question-approval.ts:complexity",
+    "packages/core/src/server/services/generation/core/turn-finalizer.ts:complexity",
     "apps/web/src/routes/prototype/coworker/info/-components/coworker-info-prototype.tsx:complexity",
     "apps/web/scripts/coworker.ts:complexity",
+    "apps/web/src/routes/agents/-components/coworker-info-page.tsx:complexity",
     "apps/web/scripts/chat.ts:complexity",
+    "packages/message-format/src/index.ts:complexity",
     "apps/web/src/routes/skills/$id.tsx:complexity",
     "packages/core/src/server/runtime/opencode/opencode-normal-runner.ts:complexity",
     "apps/cli/src/commands/coworker/logs.ts:complexity",
-    "packages/message-format/src/index.ts:complexity",
-    "apps/sandbox/src/common/skills/coworker/src/coworker.ts:complexity",
-    "apps/web/src/server/orpc/shared/overview-queries.ts:complexity",
     "apps/web/src/routes/toolbox/-components/toolbox-page.tsx:complexity",
-    "packages/core/src/server/services/generation/streams/generation-event-log.ts:complexity",
+    "apps/sandbox/src/common/skills/coworker/src/coworker.ts:complexity",
     "apps/web/src/routes/agents/-components/coworkers-page.tsx:complexity",
+    "apps/web/src/server/orpc/shared/overview-queries.ts:complexity",
     "packages/core/src/server/services/generation/turn-intake.ts:complexity",
+    "packages/core/src/server/services/generation/streams/generation-event-log.ts:complexity",
     "apps/cli/src/lib/question-approval.ts:complexity",
-    "apps/worktree/src/cli.ts:complexity",
-    "apps/web/public/sw.js:untested risk",
     "apps/web/src/server/orpc/routers/inbox.ts:complexity",
-    "apps/web/src/components/login/cloud-login-client.tsx:complexity",
+    "apps/web/public/sw.js:untested risk",
+    "apps/worktree/src/cli.ts:complexity",
     "apps/sandbox/src/common/plugins/integration-permissions.ts:complexity",
+    "apps/web/src/components/login/cloud-login-client.tsx:complexity",
     "apps/web/src/routes/admin/performance.tsx:complexity",
     "apps/sandbox/scripts/daytona-sandbox.ts:complexity",
-    "apps/web/src/routes/admin/sandboxes.tsx:complexity",
     "packages/core/src/server/sandbox/runtime/runtime-client/agent-sdk.ts:complexity",
+    "apps/web/src/routes/admin/sandboxes.tsx:complexity",
     "apps/sandbox/scripts/test-sandbox.ts:complexity",
     "apps/sandbox/src/common/skills/linkedin/src/linkedin.ts:complexity",
     "apps/sandbox/src/common/skills/dynamics/src/dynamics.ts:complexity",

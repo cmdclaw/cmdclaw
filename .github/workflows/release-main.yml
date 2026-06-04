@@ -164,7 +164,7 @@ jobs:
           command: audit
           format: compact
           fail-on-issues: true
-          version: 2.61.0
+          version: 2.88.3
 
       - name: Check Render observability config
         run: bun scripts/check-render-observability-config.ts
