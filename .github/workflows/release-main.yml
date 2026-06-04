@@ -176,10 +176,33 @@ jobs:
       - name: Run CI tests
         run: bun run test:ci
 
+  staging-resume:
+    needs:
+      - resolve
+      - checks
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.commit_sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Resume staging Render resources
+        run: bun scripts/release/render-staging-lifecycle.ts resume
+
   staging-db:
     needs:
       - resolve
       - checks
+      - staging-resume
     uses: ./.github/workflows/db-push.yml
     with:
       ref: ${{ needs.resolve.outputs.commit_sha }}
@@ -190,6 +213,7 @@ jobs:
     needs:
       - resolve
       - checks
+      - staging-resume
     uses: ./.github/workflows/daytona-sandbox.yml
     with:
       ref: ${{ needs.resolve.outputs.commit_sha }}
@@ -199,6 +223,7 @@ jobs:
   staging-render:
     needs:
       - resolve
+      - staging-resume
       - staging-db
     uses: ./.github/workflows/render-deploy.yml
     with:
@@ -210,6 +235,7 @@ jobs:
     needs:
       - resolve
       - checks
+      - staging-resume
       # Temporarily bypass observability change detection while the stack is
       # being iterated on heavily. Keep deploying every main release until this
       # gate is restored.
@@ -255,6 +281,35 @@ jobs:
       base_url: https://staging.cmdclaw.ai
       run_replay: true
     secrets: inherit
+
+  staging-suspend:
+    needs:
+      - resolve
+      - staging-resume
+      - staging-db
+      - staging-daytona
+      - staging-render
+      - staging-observability
+      - staging-observability-verify
+      - staging-verify
+    if: ${{ always() && needs.staging-resume.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.commit_sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Suspend staging Render resources
+        run: bun scripts/release/render-staging-lifecycle.ts suspend
 
   # Prod promotion is parked while staging release automation settles.
   # Uncomment this block, the prod rollback job, the tag-release job, and the
@@ -362,12 +417,14 @@ jobs:
       - resolve
       - observability-changes
       - checks
+      - staging-resume
       - staging-db
       - staging-daytona
       - staging-render
       - staging-observability
       - staging-observability-verify
       - staging-verify
+      - staging-suspend
       # - rollback-staging-render
       # - prod-db
       # - prod-daytona

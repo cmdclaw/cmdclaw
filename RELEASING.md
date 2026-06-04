@@ -14,10 +14,14 @@ The automatic workflow is `.github/workflows/release-main.yml`.
 For each release it:
 
 - resolves the pushed commit and verifies it is on `main`
+- resumes the staging Render resources that are normally suspended for cost
+  control
 - pushes database schema changes to staging
 - builds the Daytona staging snapshot
 - deploys staging Render services from the commit SHA
 - checks staging health, runs CLI live checks, and runs release replay fixtures
+- suspends staging Render resources again, even when staging deploy or
+  verification fails
 - pushes database schema changes to production
 - builds the Daytona production snapshot
 - deploys production Render services from the same commit SHA
@@ -90,6 +94,12 @@ workflow expects these names to exist:
 
 - staging: `cmdclaw-web-staging`, `cmdclaw-worker-staging`, `cmdclaw-mcp-staging`
 - prod: `cmdclaw-web-prod`, `cmdclaw-worker-prod`, `cmdclaw-mcp-prod`
+
+Staging is intentionally on-demand. The `staging-resume` job starts every
+staging Render resource listed in `scripts/release/render-staging-lifecycle.ts`
+before migrations and deployment. The `staging-suspend` job runs with
+`always()` after staging verification and turns those resources back off, so a
+failed release does not leave staging billing all month.
 
 Deployment configuration is tracked in `render.yaml`, and service runtime
 secrets should come from the Render environment groups described there.
