@@ -9,6 +9,20 @@
     "import",
     "vitest"
   ],
+  "jsPlugins": [
+    {
+      "name": "@tanstack/router",
+      "specifier": "@tanstack/eslint-plugin-router"
+    },
+    {
+      "name": "drizzle",
+      "specifier": "eslint-plugin-drizzle"
+    },
+    {
+      "name": "react-compiler",
+      "specifier": "eslint-plugin-react-compiler"
+    }
+  ],
   "categories": {
     "correctness": "error",
     "perf": "error",
@@ -26,7 +40,12 @@
     "react/rules-of-hooks": "error",
     "react/exhaustive-deps": "error",
     "typescript/no-explicit-any": "error",
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
+    "@tanstack/router/create-route-property-order": "error",
+    "@tanstack/router/route-param-names": "error",
+    "drizzle/enforce-delete-with-where": ["error", { "drizzleObjectName": ["db"] }],
+    "drizzle/enforce-update-with-where": ["error", { "drizzleObjectName": ["db"] }],
+    "react-compiler/react-compiler": "error"
   },
   "ignorePatterns": [
     "dist/**",
