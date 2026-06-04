@@ -132,8 +132,7 @@ export function OrgChartCanvas({
 
   const initialNodes = useMemo(
     () => buildNodes(chartNodes, coworkerMap),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chartNodes],
+    [chartNodes, coworkerMap],
   );
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState(initialNodes);

@@ -425,6 +425,13 @@ function useTimelineLoop(isActive: boolean, _buttonPositions: ButtonPositionMap)
   const [pulsingAgent, setPulsingAgent] = useState<number | null>(null);
   const stepRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runStepRef = useRef<() => void>(() => {});
+
+  const scheduleRunStep = useCallback((delay: number) => {
+    timerRef.current = setTimeout(() => {
+      runStepRef.current();
+    }, delay);
+  }, []);
 
   const runStep = useCallback(() => {
     const step = stepRef.current;
@@ -437,7 +444,7 @@ function useTimelineLoop(isActive: boolean, _buttonPositions: ButtonPositionMap)
         setDismissingId(null);
         setResolvedActions({});
         stepRef.current = 0;
-        timerRef.current = setTimeout(runStep, 800);
+        scheduleRunStep(800);
       }, RESET_PAUSE_MS);
       return;
     }
@@ -449,7 +456,7 @@ function useTimelineLoop(isActive: boolean, _buttonPositions: ButtonPositionMap)
       case "add":
         setPulsingAgent(null);
         setItems((prev) => [event.item, ...prev]);
-        timerRef.current = setTimeout(runStep, EVENT_INTERVAL_MS);
+        scheduleRunStep(EVENT_INTERVAL_MS);
         break;
 
       case "dismiss": {
@@ -468,7 +475,7 @@ function useTimelineLoop(isActive: boolean, _buttonPositions: ButtonPositionMap)
                   delete next[event.itemId];
                   return next;
                 });
-                timerRef.current = setTimeout(runStep, 250);
+                scheduleRunStep(250);
               }, 400);
             }, 600);
           },
@@ -480,34 +487,32 @@ function useTimelineLoop(isActive: boolean, _buttonPositions: ButtonPositionMap)
       case "pulse":
         setPulsingAgent(event.agentIndex);
         timerRef.current = setTimeout(() => {
-          timerRef.current = setTimeout(runStep, 200);
+          scheduleRunStep(200);
         }, 400);
         break;
 
       case "pause":
         setCursorTargetId(null);
-        timerRef.current = setTimeout(runStep, PAUSE_DURATION_MS);
+        scheduleRunStep(PAUSE_DURATION_MS);
         break;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
+  }, [scheduleRunStep]);
+
+  useEffect(() => {
+    runStepRef.current = runStep;
+  }, [runStep]);
 
   useEffect(() => {
     if (!isActive) {
       return;
     }
-    timerRef.current = setTimeout(runStep, 1200);
+    scheduleRunStep(1200);
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]);
-
-  useEffect(() => {
-    // no-op: just ensures runStep recaptures `items`
-  }, [runStep]);
+  }, [isActive, scheduleRunStep]);
 
   return {
     items,

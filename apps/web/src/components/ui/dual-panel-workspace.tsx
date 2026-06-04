@@ -37,8 +37,6 @@ type DualPanelWorkspaceProps = {
   collapsedSidebar?: boolean;
   /** Hide the separator collapse button while expanded when the panel already offers its own close affordance. */
   showExpandedCollapseButton?: boolean;
-  /** Expose collapse toggle so child content can trigger it (e.g. an X close button inside the panel). */
-  onCollapseToggleRef?: React.MutableRefObject<(() => void) | null>;
   /** Hide the built-in mobile toggle buttons (useful when the parent provides its own mobile layout). */
   hideMobileToggle?: boolean;
 };
@@ -71,7 +69,6 @@ export function DualPanelWorkspace({
   collapsedLabel,
   collapsedSidebar = false,
   showExpandedCollapseButton = true,
-  onCollapseToggleRef,
   hideMobileToggle = false,
 }: DualPanelWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -178,18 +175,6 @@ export function DualPanelWorkspace({
       setCollapsed(true);
     }
   }, [defaultRightWidth, isCollapsed, rightWidth, setCollapsed, setWidthWithinBounds]);
-
-  // Expose collapse toggle to child content
-  useEffect(() => {
-    if (onCollapseToggleRef) {
-      onCollapseToggleRef.current = handleCollapseToggle;
-    }
-    return () => {
-      if (onCollapseToggleRef) {
-        onCollapseToggleRef.current = null;
-      }
-    };
-  }, [handleCollapseToggle, onCollapseToggleRef]);
 
   const effectiveRightWidth = isCollapsed ? 0 : rightWidth;
   const leftWidth = 100 - effectiveRightWidth;

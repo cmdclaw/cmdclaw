@@ -2002,7 +2002,6 @@ export default function CoworkerEditorPage({
         adminContent={adminPanel}
       />
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dep list tracks all panel props
     [
       name,
       description,
@@ -2015,6 +2014,8 @@ export default function CoworkerEditorPage({
       userInputPrompt,
       prompt,
       model,
+      modelAuthSource,
+      providerAvailability,
       availableSkills,
       selectedSkillKeys,
       executorSourceEntries,
@@ -2046,10 +2047,12 @@ export default function CoworkerEditorPage({
       isRunning,
       isUploadingDocuments,
       deletingDocumentIds,
+      downloadingDocumentIds,
       createForwardingAlias,
       disableForwardingAlias,
       rotateForwardingAlias,
       handleUploadDocuments,
+      handleDownloadDocument,
       handleDeleteDocument,
       handleTabChange,
       handleRunClick,
@@ -2064,7 +2067,7 @@ export default function CoworkerEditorPage({
       setUserInputPrompt,
       handlePromptChange,
       handleSaveInstructions,
-      setModel,
+      handleModelSelectionChange,
       handleClearSkills,
       handleToggleSkillChecked,
       handleClearWorkspaceMcpServers,
@@ -2083,6 +2086,7 @@ export default function CoworkerEditorPage({
       handleRotateCoworkerAlias,
       handleDisableCoworkerAlias,
       handleCreateCoworkerAlias,
+      handleClose,
       showDeleteDialog,
       setShowDeleteDialog,
       handleDelete,

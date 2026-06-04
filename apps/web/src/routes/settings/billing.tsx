@@ -87,7 +87,7 @@ function BillingPage() {
               : undefined,
         });
         if (result.checkoutUrl) {
-          window.location.href = result.checkoutUrl;
+          window.location.assign(result.checkoutUrl);
           return;
         }
         toast.success(`Plan updated to ${BILLING_PLANS[planId].name}.`);

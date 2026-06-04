@@ -226,7 +226,7 @@ function SubscriptionsPage() {
         }
 
         if (result.mode === "redirect") {
-          window.location.href = result.authUrl;
+          window.location.assign(result.authUrl);
           return;
         }
 

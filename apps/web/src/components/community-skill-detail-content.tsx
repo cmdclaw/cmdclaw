@@ -58,6 +58,18 @@ function SkillIcon({ name, className }: { name: string; className?: string }) {
   }
 }
 
+function renderExampleCaseCard(uc: UseCase) {
+  return (
+    <div key={uc.title} className="border-border/40 bg-card rounded-xl border p-5 shadow-sm">
+      <div className="bg-muted mb-3 inline-flex size-8 items-center justify-center rounded-lg">
+        <Lightbulb className="text-muted-foreground size-4" />
+      </div>
+      <p className="text-sm leading-snug font-medium">{uc.title}</p>
+      <p className="text-muted-foreground mt-2 text-xs leading-relaxed">{uc.body}</p>
+    </div>
+  );
+}
+
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
 export const COMMUNITY_SKILLS_DATA: Record<string, CommunitySkillContent> = {
@@ -308,6 +320,8 @@ export function CommunitySkillDetailContent({
   enabled?: boolean;
   onToggle?: (value: boolean) => void;
 }) {
+  const exampleCaseCards = Array.from(skill["useCases"], renderExampleCaseCard);
+
   return (
     <div className="mx-auto max-w-3xl pb-8">
       {/* ── Hero section ── */}
@@ -449,20 +463,7 @@ export function CommunitySkillDetailContent({
               Common scenarios where this skill shines
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
-            {skill.useCases.map((uc) => (
-              <div
-                key={uc.title}
-                className="border-border/40 bg-card rounded-xl border p-5 shadow-sm"
-              >
-                <div className="bg-muted mb-3 inline-flex size-8 items-center justify-center rounded-lg">
-                  <Lightbulb className="text-muted-foreground size-4" />
-                </div>
-                <p className="text-sm leading-snug font-medium">{uc.title}</p>
-                <p className="text-muted-foreground mt-2 text-xs leading-relaxed">{uc.body}</p>
-              </div>
-            ))}
-          </div>
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">{exampleCaseCards}</div>
         </section>
 
         {/* ── Toggle CTA ── */}

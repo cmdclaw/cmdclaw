@@ -1,4 +1,6 @@
-import { Suspense, useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { PostHogProvider, usePostHog } from "posthog-js/react";
+import type { PostHog } from "posthog-js";
 import { usePathname, useSearchParams } from "@/components/next-navigation-compat";
 import { env } from "@/env";
 import { authClient } from "@/lib/auth-client";
@@ -9,43 +11,16 @@ const isPosthogEnabled = Boolean(posthogKey);
 let posthogInitialized = false;
 let posthogModulesPromise: Promise<PostHogModules> | undefined;
 
-type PostHogClient = {
-  init: (
-    key: string,
-    options: {
-      api_host: string | undefined;
-      defaults: string;
-      capture_pageview: boolean;
-      capture_exceptions: {
-        capture_unhandled_errors: boolean;
-        capture_unhandled_rejections: boolean;
-        capture_console_errors: boolean;
-      };
-      enable_recording_console_log: boolean;
-    },
-  ) => void;
-  capture: (eventName: string, properties?: Record<string, unknown>) => void;
-  identify: (distinctId: string, properties?: Record<string, string>) => void;
-  reset: () => void;
-};
-
-type PostHogReactModule = {
-  PostHogProvider: ComponentType<{ client: PostHogClient; children: ReactNode }>;
-  usePostHog: () => PostHogClient | undefined;
-};
+type PostHogClient = PostHog;
 
 type PostHogModules = {
   client: PostHogClient;
-  react: PostHogReactModule;
 };
 
 function loadPosthogModules(): Promise<PostHogModules> {
-  posthogModulesPromise ??= Promise.all([import("posthog-js"), import("posthog-js/react")]).then(
-    ([posthogModule, posthogReactModule]) => ({
-      client: posthogModule.default as unknown as PostHogClient,
-      react: posthogReactModule as unknown as PostHogReactModule,
-    }),
-  );
+  posthogModulesPromise ??= import("posthog-js").then((posthogModule) => ({
+    client: posthogModule.default as unknown as PostHogClient,
+  }));
 
   return posthogModulesPromise;
 }
@@ -70,9 +45,8 @@ function initializePosthog(posthogClient: PostHogClient) {
   posthogInitialized = true;
 }
 
-function PostHogPageView({ posthogReact }: { posthogReact: PostHogReactModule }) {
-  // oxlint-disable-next-line react-compiler/react-compiler
-  const posthogClient = posthogReact.usePostHog();
+function PostHogPageView() {
+  const posthogClient = usePostHog() as PostHogClient | undefined;
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -88,9 +62,8 @@ function PostHogPageView({ posthogReact }: { posthogReact: PostHogReactModule })
   return null;
 }
 
-function PostHogIdentify({ posthogReact }: { posthogReact: PostHogReactModule }) {
-  // oxlint-disable-next-line react-compiler/react-compiler
-  const posthogClient = posthogReact.usePostHog();
+function PostHogIdentify() {
+  const posthogClient = usePostHog() as PostHogClient | undefined;
 
   useEffect(() => {
     if (!posthogClient) {
@@ -170,14 +143,12 @@ export function PostHogClientProvider({ children }: PostHogClientProviderProps) 
     return <>{children}</>;
   }
 
-  const PostHogProvider = posthogModules.react.PostHogProvider;
-
   return (
     <PostHogProvider client={posthogModules.client}>
       <Suspense fallback={null}>
-        <PostHogPageView posthogReact={posthogModules.react} />
+        <PostHogPageView />
       </Suspense>
-      <PostHogIdentify posthogReact={posthogModules.react} />
+      <PostHogIdentify />
       {children}
     </PostHogProvider>
   );
