@@ -31,7 +31,8 @@ const SNAPSHOT_NAME =
 const DEFAULT_WORKDIR = "/app";
 const COMMAND_TIMEOUT_MS = 60 * 1000;
 const START_TIMEOUT_SECONDS = 60;
-export const DEFAULT_CREATE_USER_EMAIL = "baptiste@heybap.com";
+export const DEFAULT_CREATE_USER_EMAIL =
+  process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() || "cmdclaw@example.com";
 export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "github" | "airtable";

@@ -17,11 +17,12 @@ const {
   readFileSyncMock,
 } = vi.hoisted(() => ({
   ensureWorkspaceForUserMock: vi.fn<VitestProcedure>(),
-  envMock: {
-    BETTER_AUTH_SECRET: "test-secret",
-    CMDCLAW_DEV_AUTO_LOGIN: "0",
-    CMDCLAW_DEV_AUTO_LOGIN_EMAIL: undefined as string | undefined,
-  },
+    envMock: {
+      BETTER_AUTH_SECRET: "test-secret",
+      CMDCLAW_DEV_AUTO_LOGIN: "0",
+      CMDCLAW_DEV_AUTO_LOGIN_EMAIL: undefined as string | undefined,
+      CMDCLAW_DEFAULT_USER_EMAIL: undefined as string | undefined,
+    },
   findFirstMock: vi.fn<VitestProcedure>(),
   insertValuesMock: vi.fn<VitestProcedure>(),
   serializeSignedCookieMock: vi.fn<VitestProcedure>(),
@@ -97,6 +98,7 @@ describe("handleDevAutoLogin (GET /api/dev/auto-login)", () => {
     envMock.BETTER_AUTH_SECRET = "test-secret";
     envMock.CMDCLAW_DEV_AUTO_LOGIN = "0";
     envMock.CMDCLAW_DEV_AUTO_LOGIN_EMAIL = undefined;
+    envMock.CMDCLAW_DEFAULT_USER_EMAIL = undefined;
     findFirstMock.mockResolvedValue(null);
     updateSetMock.mockReturnValue({ where: updateWhereMock });
     updateWhereMock.mockResolvedValue(undefined);
@@ -129,7 +131,7 @@ describe("handleDevAutoLogin (GET /api/dev/auto-login)", () => {
 
   it("creates a session cookie and redirects to the callback for loopback requests", async () => {
     envMock.CMDCLAW_DEV_AUTO_LOGIN = "1";
-    envMock.CMDCLAW_DEV_AUTO_LOGIN_EMAIL = "baptiste@heybap.com";
+    envMock.CMDCLAW_DEV_AUTO_LOGIN_EMAIL = "admin@example.com";
     findFirstMock.mockResolvedValue({
       id: "user-1",
       name: "Baptiste",

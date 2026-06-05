@@ -22,7 +22,7 @@ import { loadWorktreeSessionCookie } from "@/server/worktree-auto-login-storage"
  * `better-call` cookie serializer so the TanStack Start route files stay thin adapters.
  */
 
-const DEFAULT_DEV_AUTO_LOGIN_EMAIL = "baptiste@heybap.com";
+const DEFAULT_DEV_AUTO_LOGIN_EMAIL = "cmdclaw@example.com";
 const DEFAULT_DEV_AUTO_LOGIN_NAME = "Baptiste";
 const LOOPBACK_HOSTNAMES = new Set([
 	"0.0.0.0",
@@ -254,7 +254,9 @@ export async function handleDevAutoLogin(request: Request): Promise<Response> {
 	}
 
 	const email =
-		env.CMDCLAW_DEV_AUTO_LOGIN_EMAIL ?? DEFAULT_DEV_AUTO_LOGIN_EMAIL;
+		env.CMDCLAW_DEV_AUTO_LOGIN_EMAIL ??
+		env.CMDCLAW_DEFAULT_USER_EMAIL ??
+		DEFAULT_DEV_AUTO_LOGIN_EMAIL;
 	const userId = await ensureDevUser(email);
 	const { cookieName, expiresAt, signedToken } = await createSessionCookie(
 		userId,

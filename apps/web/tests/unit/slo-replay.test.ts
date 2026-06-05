@@ -15,7 +15,7 @@ function event(overrides: Partial<SourceReplayEvent>): SourceReplayEvent {
     sourceGenerationId: "gen-1",
     sourceCoworkerRunId: null,
     sourceUserId: "remote-user-1",
-    targetUserEmail: "baptiste@heybap.com",
+    targetUserEmail: "slo-replay@example.com",
     firstUserMessage: " Check my inbox ",
     coworkerId: null,
     model: "openai/gpt-5.4",

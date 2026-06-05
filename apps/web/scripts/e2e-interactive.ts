@@ -11,7 +11,7 @@ type TestMeta = {
   live: boolean;
 };
 
-const DEFAULT_E2E_EMAIL = "baptiste@heybap.com";
+const DEFAULT_E2E_EMAIL = "playwright@example.com";
 const SERVICE_TOKENS = [
   "slack",
   "discord",
@@ -147,7 +147,10 @@ async function chooseMode(rl: readline.Interface): Promise<Mode> {
 }
 
 async function chooseEmail(rl: readline.Interface): Promise<string> {
-  const envEmail = process.env.E2E_TEST_EMAIL?.trim() || DEFAULT_E2E_EMAIL;
+  const envEmail =
+    process.env.E2E_TEST_EMAIL?.trim() ||
+    process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() ||
+    DEFAULT_E2E_EMAIL;
   const useDefault = parseYesNo(await ask(rl, `\nUse e2e user email "${envEmail}"? [Y/n]: `), true);
   if (useDefault) {
     return envEmail;

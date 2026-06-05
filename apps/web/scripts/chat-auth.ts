@@ -7,7 +7,7 @@ import {
   saveConfig,
 } from "./lib/cli-shared";
 
-const DEFAULT_CHAT_AUTH_EMAIL = "baptiste@heybap.com";
+const DEFAULT_CHAT_AUTH_EMAIL = "cmdclaw@example.com";
 const DEFAULT_CHAT_AUTH_NAME = "Baptiste";
 
 function isLocalServerUrl(serverUrl: string): boolean {
@@ -55,7 +55,10 @@ async function main(): Promise<void> {
 
     const minRemainingMinutes = parsePositiveInt(process.env.CHAT_AUTH_MIN_REMAINING_MINUTES, 10);
     const email =
-      process.env.CHAT_AUTH_EMAIL || process.env.E2E_TEST_EMAIL || DEFAULT_CHAT_AUTH_EMAIL;
+      process.env.CHAT_AUTH_EMAIL ||
+      process.env.E2E_TEST_EMAIL ||
+      process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() ||
+      DEFAULT_CHAT_AUTH_EMAIL;
     const name = process.env.CHAT_AUTH_NAME || DEFAULT_CHAT_AUTH_NAME;
 
     if (loaded?.token && loaded.serverUrl === serverUrl) {

@@ -25,7 +25,8 @@ void dotenvConfig;
 
 const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
 const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
-export const DEFAULT_CREATE_USER_EMAIL = "baptiste@heybap.com";
+export const DEFAULT_CREATE_USER_EMAIL =
+  process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() || "cmdclaw@example.com";
 export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "github" | "airtable";

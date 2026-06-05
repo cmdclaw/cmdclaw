@@ -51,7 +51,10 @@ function getStorageStatePath(): string {
 }
 
 async function ensureUser(): Promise<{ id: string; email: string }> {
-  const email = process.env.E2E_TEST_EMAIL ?? "baptiste@heybap.com";
+  const email =
+    process.env.E2E_TEST_EMAIL?.trim() ||
+    process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() ||
+    "playwright@example.com";
   const name = process.env.E2E_TEST_NAME ?? "Playwright E2E";
   const now = new Date();
 

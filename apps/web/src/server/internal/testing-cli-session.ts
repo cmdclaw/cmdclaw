@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { isAuthorizedByServerSecret } from "@/server/internal/server-secret";
 
-const DEFAULT_TEST_EMAIL = "baptiste@heybap.com";
+const DEFAULT_TEST_EMAIL = "cmdclaw@example.com";
 const DEFAULT_TEST_NAME = "Baptiste";
 
 const requestSchema = z.object({
@@ -33,7 +33,8 @@ export async function handleCliSession(request: Request): Promise<Response> {
   }
 
   const now = new Date();
-  const email = parsed.data.email ?? DEFAULT_TEST_EMAIL;
+  const email =
+    parsed.data.email ?? (process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() || DEFAULT_TEST_EMAIL);
   const name = parsed.data.name ?? DEFAULT_TEST_NAME;
   const existingUser = await db.query.user.findFirst({
     where: eq(user.email, email),

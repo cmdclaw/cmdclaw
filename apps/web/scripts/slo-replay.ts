@@ -23,11 +23,13 @@ const REPLAY_CONFIG_VERSION = 1;
 
 export const SLO_REPLAY_TARGET_EMAIL_ALLOWLIST = [
   "collebaptiste@gmail.com",
-  "baptiste@heybap.com",
+  ...(process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim()
+    ? [process.env.CMDCLAW_DEFAULT_USER_EMAIL.trim()]
+    : []),
   "lubin@hyperstack.studio",
   "louis@hyperstack.studio",
   "louis@heybap.com",
-] as const;
+];
 
 const REPLAY_JOURNEYS = SLO_CONCRETE_JOURNEYS;
 

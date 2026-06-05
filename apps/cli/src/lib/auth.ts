@@ -11,7 +11,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { resolveServerUrl } from "./client";
 
-const DEFAULT_CHAT_AUTH_EMAIL = "baptiste@heybap.com";
+const DEFAULT_CHAT_AUTH_EMAIL = "cmdclaw@example.com";
 const DEFAULT_CHAT_AUTH_NAME = "Baptiste";
 const DEFAULT_CLIENT_ID = "cmdclaw-cli";
 
@@ -69,7 +69,11 @@ async function loginWithRemoteTestSession(serverUrl: string): Promise<CmdclawPro
     throw new Error("CMDCLAW_SERVER_SECRET is required for remote test login.");
   }
 
-  const email = process.env.CHAT_AUTH_EMAIL || process.env.E2E_TEST_EMAIL || DEFAULT_CHAT_AUTH_EMAIL;
+  const email =
+    process.env.CHAT_AUTH_EMAIL ||
+    process.env.E2E_TEST_EMAIL ||
+    process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() ||
+    DEFAULT_CHAT_AUTH_EMAIL;
   const name = process.env.CHAT_AUTH_NAME || DEFAULT_CHAT_AUTH_NAME;
   const ttlHours = parsePositiveInt(process.env.CHAT_SESSION_TTL_HOURS, 24);
 
@@ -164,7 +168,11 @@ async function bootstrapLocalProfileAndClose(serverUrl: string): Promise<Cmdclaw
 
 async function bootstrapLocalProfile(serverUrl: string): Promise<CmdclawProfile> {
   const now = new Date();
-  const email = process.env.CHAT_AUTH_EMAIL || process.env.E2E_TEST_EMAIL || DEFAULT_CHAT_AUTH_EMAIL;
+  const email =
+    process.env.CHAT_AUTH_EMAIL ||
+    process.env.E2E_TEST_EMAIL ||
+    process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() ||
+    DEFAULT_CHAT_AUTH_EMAIL;
   const name = process.env.CHAT_AUTH_NAME || DEFAULT_CHAT_AUTH_NAME;
 
   const existingUser = await db.query.user.findFirst({

@@ -46,7 +46,7 @@ function mockSession(role: string | null = null) {
   getSessionMock.mockResolvedValue({
     user: {
       id: "user-1",
-      email: "baptiste@heybap.com",
+      email: "admin@example.com",
       role,
     },
     session: {
@@ -73,7 +73,7 @@ describe("route guards", () => {
     await expect(fetchSessionContext()).resolves.toEqual({
       principal: {
         userId: "user-1",
-        email: "baptiste@heybap.com",
+        email: "admin@example.com",
         image: null,
         name: null,
         role: "admin",
