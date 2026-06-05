@@ -28,7 +28,7 @@ Override names with:
 - `DAYTONA_SNAPSHOT_STAGING`
 - `DAYTONA_SNAPSHOT_PROD`
 
-If you point `DAYTONA_API_URL` at the local compose stack and the build fails on `http://minio:9000/...`, Daytona is returning a Docker-internal MinIO URL for the snapshot upload. Run the build from a container on the compose network or reconfigure the stack to publish a host-reachable MinIO endpoint such as `http://localhost:9100`.
+If you point `DAYTONA_API_URL` at the local compose stack and the build fails on `http://minio:9000/...`, Daytona is returning a Docker-internal MinIO URL for the snapshot upload. Run the build from a container on the compose network or reconfigure the stack to publish a host-reachable MinIO endpoint such as `http://localhost:9000`.
 
 The builder now rewrites the local compose MinIO endpoint automatically for host-side builds. If your object storage is exposed somewhere else, set `DAYTONA_OBJECT_STORAGE_URL` explicitly.
 

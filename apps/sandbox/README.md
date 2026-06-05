@@ -15,4 +15,4 @@ bun run --cwd apps/sandbox daytona:build:prod
 
 These commands load `/.env` from the repo root so sandbox builders keep using the same shared local environment as the web app.
 
-For a self-hosted Daytona compose stack, snapshot builds can fail on the host if Daytona returns presigned MinIO URLs on `http://minio:9000/...`. In that case run the build from a container on the compose network or expose/configure MinIO with a host-reachable URL such as `http://localhost:9100`.
+For a self-hosted Daytona compose stack, snapshot builds can fail on the host if Daytona returns presigned MinIO URLs on `http://minio:9000/...`. In that case run the build from a container on the compose network or expose/configure MinIO with a host-reachable URL such as `http://localhost:9000`.

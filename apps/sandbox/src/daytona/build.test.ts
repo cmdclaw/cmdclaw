@@ -65,7 +65,7 @@ describe("daytona build helpers", () => {
     );
 
     expect(message).toContain("http://minio:9000/daytona/?list-type=2");
-    expect(message).toContain("http://localhost:9100");
+    expect(message).toContain("http://localhost:9000");
     expect(message).toContain("DAYTONA_API_URL points to a local Daytona API");
   });
 
@@ -74,11 +74,11 @@ describe("daytona build helpers", () => {
   });
 
   it("rewrites the local minio endpoint to the published host port", () => {
-    process.env.CMDCLAW_MINIO_API_PORT = "9100";
+    process.env.CMDCLAW_MINIO_API_PORT = "9000";
 
     expect(
       rewriteStorageUrlForHostBuild("http://minio:9000", "http://localhost:3300/api"),
-    ).toBe("http://localhost:9100/");
+    ).toBe("http://localhost:9000/");
   });
 
   it("prefers an explicit object storage override", () => {

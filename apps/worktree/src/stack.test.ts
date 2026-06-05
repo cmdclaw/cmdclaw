@@ -77,10 +77,10 @@ describe("worktree stack config", () => {
 
       expect(buildSharedStackConfig()).toEqual({
         composeProjectName: "cmdclaw-local",
-        postgresPort: 5433,
-        redisPort: 6380,
-        minioApiPort: 9100,
-        minioConsolePort: 9101,
+        postgresPort: 5432,
+        redisPort: 6379,
+        minioApiPort: 9000,
+        minioConsolePort: 9001,
         grafanaPort: 3400,
         alertmanagerPort: 9093,
         vectorOtelGrpcPort: 4317,

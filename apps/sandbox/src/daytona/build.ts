@@ -124,7 +124,7 @@ function isLocalDaytonaApiUrl(apiUrl?: string): boolean {
 }
 
 function getLocalMinioPort(): string {
-  return process.env.CMDCLAW_MINIO_API_PORT?.trim() || "9100";
+  return process.env.CMDCLAW_MINIO_API_PORT?.trim() || "9000";
 }
 
 export function rewriteStorageUrlForHostBuild(storageUrl: string, apiUrl?: string): string {
@@ -204,7 +204,7 @@ export function formatDaytonaBuildError(error: unknown, apiUrl?: string): string
     "Daytona snapshot build failed while uploading the build context to object storage.",
     `The presigned URL points to ${failedPath}, which is only reachable from inside the Docker network.`,
     locationHint,
-    "For the local compose stack, either run the build from a container on that network or reconfigure Daytona/MinIO so presigned URLs use a host-reachable address such as http://localhost:9100.",
+    "For the local compose stack, either run the build from a container on that network or reconfigure Daytona/MinIO so presigned URLs use a host-reachable address such as http://localhost:9000.",
   ].join(" ");
 }
 

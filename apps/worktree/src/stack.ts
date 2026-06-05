@@ -79,10 +79,10 @@ export function buildSharedStackConfig(): SharedStackConfig {
 
   return {
     composeProjectName,
-    postgresPort: parsePort(process.env.CMDCLAW_POSTGRES_PORT, 5433),
-    redisPort: parsePort(process.env.CMDCLAW_REDIS_PORT, 6380),
-    minioApiPort: parsePort(process.env.CMDCLAW_MINIO_API_PORT, 9100),
-    minioConsolePort: parsePort(process.env.CMDCLAW_MINIO_CONSOLE_PORT, 9101),
+    postgresPort: parsePort(process.env.CMDCLAW_POSTGRES_PORT, 5432),
+    redisPort: parsePort(process.env.CMDCLAW_REDIS_PORT, 6379),
+    minioApiPort: parsePort(process.env.CMDCLAW_MINIO_API_PORT, 9000),
+    minioConsolePort: parsePort(process.env.CMDCLAW_MINIO_CONSOLE_PORT, 9001),
     grafanaPort: parsePort(process.env.CMDCLAW_GRAFANA_PORT, 3400),
     alertmanagerPort: parsePort(process.env.CMDCLAW_ALERTMANAGER_PORT, 9093),
     vectorOtelGrpcPort: parsePort(process.env.CMDCLAW_VECTOR_OTLP_GRPC_PORT, 4317),
