@@ -639,8 +639,12 @@ async function handleAction(payload: z.infer<typeof requestSchema>): Promise<unk
           suspendedAt: true,
           remainingRunMs: true,
           executionPolicy: true,
+          errorMessage: true,
+          debugInfo: true,
+          lastRuntimeProgressAt: true,
           startedAt: true,
           deadlineAt: true,
+          completedAt: true,
         },
       });
       return { record };

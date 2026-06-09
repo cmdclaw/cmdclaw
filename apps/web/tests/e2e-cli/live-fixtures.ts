@@ -176,8 +176,12 @@ type GenerationStateRecord = {
   suspendedAt: string | null;
   remainingRunMs: number;
   executionPolicy: Record<string, unknown> | null;
+  errorMessage: string | null;
+  debugInfo: Record<string, unknown> | null;
+  lastRuntimeProgressAt: string;
   startedAt: string;
   deadlineAt: string;
+  completedAt: string | null;
 };
 
 export function runBunCommand(
@@ -346,6 +350,38 @@ export async function waitForGenerationState(args: {
   return poll();
 }
 
+export async function waitForGenerationTerminalState(args: {
+  generationId: string;
+  expectedStatus: "completed" | "cancelled" | "error";
+  completionReason?: string | null;
+  timeoutMs: number;
+}): Promise<GenerationStateRecord> {
+  const deadline = Date.now() + args.timeoutMs;
+  const poll = async (): Promise<GenerationStateRecord> => {
+    const { record } = await callCliLiveTestingApi<{ record: GenerationStateRecord | null }>({
+      action: "generation:get-state",
+      generationId: args.generationId,
+    });
+    if (
+      record &&
+      record.status === args.expectedStatus &&
+      record.completedAt &&
+      (args.completionReason === undefined || record.completionReason === args.completionReason)
+    ) {
+      return record;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out waiting for generation ${args.generationId} to reach ${args.expectedStatus}`,
+      );
+    }
+    await sleep(250);
+    return poll();
+  };
+
+  return poll();
+}
+
 export async function waitForPendingInterrupt(args: {
   generationId: string;
   expectedKind: "plugin_write" | "auth";
@@ -449,6 +485,7 @@ export async function runChatMessage(args: {
   sandboxProvider?: SandboxProvider;
   timing?: boolean;
   timeoutMs?: number;
+  chaosRuntimeNoProgress?: string;
 }): Promise<CommandResult> {
   const commandArgs = buildCliCommandArgs("chat", "--message", args.message, "--no-validate");
 
@@ -466,6 +503,10 @@ export async function runChatMessage(args: {
 
   if (args.timing) {
     commandArgs.push("--timing");
+  }
+
+  if (args.chaosRuntimeNoProgress) {
+    commandArgs.push("--chaos-runtime-no-progress", args.chaosRuntimeNoProgress);
   }
 
   commandArgs.push("--sandbox", args.sandboxProvider ?? liveSandboxProvider);

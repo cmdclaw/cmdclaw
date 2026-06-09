@@ -364,6 +364,7 @@ async function runCliLive(env: NodeJS.ProcessEnv): Promise<void> {
       "tests/e2e-cli/chat.cli.live.test.ts",
       "tests/e2e-cli/chat.interrupt.cli.live.test.ts",
       "tests/e2e-cli/chat.performance.cli.live.test.ts",
+      "tests/e2e-cli/chat.runtime-progress-stall.cli.live.test.ts",
       "tests/e2e-cli/chat.question.cli.live.test.ts",
       "tests/e2e-cli/chat.file-upload.cli.live.test.ts",
       "tests/e2e-cli/chat.fill-pdf.cli.live.test.ts",
