@@ -25,6 +25,23 @@ export type FreeModelsResponse = {
   models: FreeModel[];
 };
 
+export type SkillImportInput = {
+  mode: "folder";
+  files: Array<{
+    path: string;
+    mimeType?: string;
+    contentBase64: string;
+  }>;
+};
+
+export type SkillImportResult = {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  enabled: boolean;
+};
+
 export type GenerationUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -485,6 +502,9 @@ export interface CmdclawApiClient {
   };
   integration: {
     getAuthUrl(input: { type: string; redirectUrl: string }): Promise<{ authUrl: string }>;
+  };
+  skill: {
+    import(input: SkillImportInput): Promise<SkillImportResult>;
   };
   coworker: {
     list(): Promise<CoworkerSummary[]>;

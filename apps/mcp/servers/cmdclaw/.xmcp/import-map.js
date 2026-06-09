@@ -8,6 +8,7 @@ export const tools = {
 "src/tools/coworker.run.ts": () => import("../src/tools/coworker.run.ts"),
 "src/tools/coworker.runs.ts": () => import("../src/tools/coworker.runs.ts"),
 "src/tools/coworker.uploadDocument.ts": () => import("../src/tools/coworker.uploadDocument.ts"),
+"src/tools/skill.add.ts": () => import("../src/tools/skill.add.ts"),
 };
 
 export const prompts = {

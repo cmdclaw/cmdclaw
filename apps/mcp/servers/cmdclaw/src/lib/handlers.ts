@@ -189,3 +189,22 @@ export async function handleCoworkerRuns(params: {
     ...result,
   };
 }
+
+export async function handleSkillAdd(params: {
+  client: CmdclawApiClient;
+  files: Array<{
+    path: string;
+    mimeType?: string;
+    contentBase64: string;
+  }>;
+}) {
+  const created = await params.client.skill.import({
+    mode: "folder",
+    files: params.files,
+  });
+
+  return {
+    status: "completed" as const,
+    skill: created,
+  };
+}

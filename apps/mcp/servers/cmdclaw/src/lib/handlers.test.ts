@@ -9,6 +9,7 @@ import {
   handleCoworkerRun,
   handleCoworkerRuns,
   handleCoworkerUploadDocument,
+  handleSkillAdd,
 } from "./handlers";
 
 describe("MCP handlers", () => {
@@ -384,6 +385,53 @@ describe("MCP handlers", () => {
       status: "completed",
       runs: [{ id: "run-1", status: "error" }],
       nextCursor: "cursor-2",
+    });
+  });
+
+  it("adds a user skill from folder files", async () => {
+    const client = {
+      skill: {
+        import: vi.fn().mockResolvedValue({
+          id: "skill-1",
+          name: "weekly-report",
+          displayName: "weekly-report",
+          description: "Build a weekly report",
+          enabled: false,
+        }),
+      },
+    };
+
+    const files = [
+      {
+        path: "SKILL.md",
+        mimeType: "text/markdown",
+        contentBase64: Buffer.from(`---
+name: weekly-report
+description: Build a weekly report
+---
+
+# Weekly Report
+`).toString("base64"),
+      },
+      {
+        path: "references/checklist.txt",
+        mimeType: "text/plain",
+        contentBase64: Buffer.from("ship it").toString("base64"),
+      },
+    ];
+
+    const result = await handleSkillAdd({
+      client: client as never,
+      files,
+    });
+
+    expect(client.skill.import).toHaveBeenCalledWith({
+      mode: "folder",
+      files,
+    });
+    expect(result).toMatchObject({
+      status: "completed",
+      skill: { id: "skill-1", name: "weekly-report", enabled: false },
     });
   });
 });
