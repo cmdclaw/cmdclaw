@@ -65,13 +65,13 @@ jobs:
 
           echo "DATABASE_URL=${database_url}" >> "$GITHUB_ENV"
 
-      - name: Run CLI live checks
+      - name: Run CLI live smoke checks
         env:
           CMDCLAW_SERVER_SECRET: ${{ secrets.CMDCLAW_SERVER_SECRET }}
           CMDCLAW_SERVER_URL: ${{ inputs.base_url }}
           PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
           PLAYWRIGHT_SKIP_WEBSERVER: "1"
-        run: bun run --cwd apps/web test:e2e:cli:live
+        run: bun run --cwd apps/web test:live:cli
 
       - name: Run conversation and workflow replay
         if: ${{ inputs.run_replay }}
