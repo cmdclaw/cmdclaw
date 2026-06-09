@@ -33,3 +33,5 @@ experiments/**/__pycache__/
 plans/*
 !plans/.gitkeep
 .env.backup
+
+customers
