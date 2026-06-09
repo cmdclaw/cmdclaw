@@ -166,4 +166,49 @@ describe("runGenerationStream", () => {
     );
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it("returns after a terminal done event even if the stream stays open", async () => {
+    const client = {
+      generation: {
+        startGeneration: vi.fn().mockResolvedValue({
+          generationId: "gen-open",
+          conversationId: "conv-open",
+        }),
+        subscribeGeneration: vi.fn().mockResolvedValue(
+          (async function* () {
+            yield {
+              type: "done" as const,
+              generationId: "gen-open",
+              conversationId: "conv-open",
+              messageId: "msg-open",
+              usage: {
+                inputTokens: 1,
+                outputTokens: 2,
+                totalCostUsd: 0.01,
+              },
+            };
+            await new Promise(() => {});
+          })(),
+        ),
+      },
+    };
+
+    await expect(
+      Promise.race([
+        runGenerationStream({
+          client: client as never,
+          input: {
+            content: "hi",
+          },
+          callbacks: {},
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("stream did not stop after done")), 50),
+        ),
+      ]),
+    ).resolves.toEqual({
+      generationId: "gen-open",
+      conversationId: "conv-open",
+    });
+  });
 });

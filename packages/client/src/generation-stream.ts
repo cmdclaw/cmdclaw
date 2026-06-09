@@ -89,8 +89,10 @@ export async function runGenerationStream(
   }
 
   let shouldReconnect = false;
+  let shouldStop = false;
   do {
     shouldReconnect = false;
+    shouldStop = false;
     const iterator = signal
       ? await client.generation.subscribeGeneration(
           cursor ? { generationId, cursor } : { generationId },
@@ -209,6 +211,7 @@ export async function runGenerationStream(
             event.usage,
             event.artifacts,
           );
+          shouldStop = true;
           break;
         case "error":
           if (!signal?.aborted && shouldReconnectWithCursor(event)) {
@@ -219,6 +222,7 @@ export async function runGenerationStream(
             ...normalizeGenerationError(event.message, GENERATION_ERROR_PHASES.STREAM),
             diagnosticMessage: event.diagnosticMessage,
           });
+          shouldStop = true;
           break;
         case "cancelled":
           await callbacks.onCancelled?.({
@@ -226,17 +230,18 @@ export async function runGenerationStream(
             conversationId: event.conversationId,
             messageId: event.messageId,
           });
+          shouldStop = true;
           break;
         case "status_change":
           await callbacks.onStatusChange?.(event.status, event.metadata);
           break;
       }
 
-      if (shouldReconnect) {
+      if (shouldReconnect || shouldStop) {
         break;
       }
     }
-  } while (!signal?.aborted && shouldReconnect);
+  } while (!signal?.aborted && shouldReconnect && !shouldStop);
 
   return conversationId && generationId ? { generationId, conversationId } : null;
 }

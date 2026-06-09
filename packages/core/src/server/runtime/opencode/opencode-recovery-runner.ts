@@ -174,8 +174,12 @@ export class OpenCodeRecoveryRunner {
       );
 
       runtimeClient = session.harnessClient;
+      const createdFreshResumeSession = session.sessionSource === "created_session";
 
-      if (session.sessionSource === "created_session") {
+      if (
+        createdFreshResumeSession &&
+        (requireLiveSession || !options?.resumeInterruptId || !options.onRuntimeAttached)
+      ) {
         this.callbacks.setCompletionReason(ctx, "sandbox_missing");
         ctx.errorMessage = requireLiveSession
           ? "The live runtime could not be reattached because the original sandbox was no longer available."
@@ -230,7 +234,7 @@ export class OpenCodeRecoveryRunner {
         session.sandbox,
         await this.callbacks.resolveSandboxRuntimeEnvForContext(ctx),
       );
-      if (options?.resumeInterruptId) {
+      if (options?.resumeInterruptId && !createdFreshResumeSession) {
         await this.callbacks.applyResolvedInterruptToRuntime(
           ctx,
           options.resumeInterruptId,
@@ -238,6 +242,16 @@ export class OpenCodeRecoveryRunner {
         );
       }
       const continuationPromptParts = await options?.onRuntimeAttached?.(runtimeClient);
+      if (
+        createdFreshResumeSession &&
+        (!continuationPromptParts || continuationPromptParts.length === 0)
+      ) {
+        this.callbacks.setCompletionReason(ctx, "sandbox_missing");
+        ctx.errorMessage =
+          "The suspended runtime could not be resumed because no session snapshot was restored.";
+        await this.callbacks.finishGeneration(ctx, "error");
+        return;
+      }
       await this.callbacks.setSnapshotRestoreAllowance(ctx, false);
 
       if (options?.completeAfterRuntimeAttached) {

@@ -54,6 +54,7 @@ const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
 const DAYTONA_CREATE_TIMEOUT_SECONDS = 30;
 const DAYTONA_CREATE_MAX_ATTEMPTS = 2;
 const DAYTONA_CREATE_RETRY_DELAY_MS = 1_000;
+const OPENCODE_READINESS_FETCH_TIMEOUT_MS = 2_000;
 const DAYTONA_AUTO_STOP_INTERVAL_MINUTES = Math.ceil(
   generationLifecyclePolicy.activeSandboxTimeoutMs / 60_000,
 );
@@ -306,9 +307,17 @@ async function waitForServer(
   const readinessUrl = appendDaytonaAuth(getSandboxReadinessUrl(url, model), token);
   const startedAt = Date.now();
   while (Date.now() - startedAt < maxWait) {
+    const remainingMs = maxWait - (Date.now() - startedAt);
+    const fetchTimeoutMs = Math.max(
+      1,
+      Math.min(OPENCODE_READINESS_FETCH_TIMEOUT_MS, remainingMs),
+    );
     try {
       // eslint-disable-next-line no-await-in-loop -- readiness polling is intentional
-      const response = await fetch(readinessUrl, { method: "GET" });
+      const response = await fetch(readinessUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(fetchTimeoutMs),
+      });
       if (response.ok) {
         return;
       }

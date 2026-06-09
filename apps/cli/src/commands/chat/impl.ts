@@ -80,6 +80,11 @@ type ChatState = {
   debugRuntimeNoProgressTimeoutMs?: number;
   debugForceRuntimeNoProgressAfterPrompt?: boolean;
   validate: boolean;
+  continueAfterMessage?: boolean;
+};
+
+type InternalChatFlags = ChatFlags & {
+  continueAfterMessage?: boolean;
 };
 
 type ChatGenerationTarget =
@@ -1048,6 +1053,7 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
     debugForceRuntimeNoProgressAfterPrompt:
       flags.chaosForceRuntimeNoProgress ?? false,
     validate: flags.validate,
+    continueAfterMessage: (flags as InternalChatFlags).continueAfterMessage,
     file: flags.file ?? [],
     perfettoTrace: flags.perfettoTrace ?? false,
     timing: flags.timing ?? false,
@@ -1124,7 +1130,10 @@ export default async function (this: LocalContext, flags: ChatFlags): Promise<vo
   }
 
   if (state.message) {
-    const rl = process.stdin.isTTY && process.stdout.isTTY ? createPrompt() : null;
+    const rl =
+      state.continueAfterMessage && process.stdin.isTTY && process.stdout.isTTY
+        ? createPrompt()
+        : null;
     if (rl) {
       attachSigintHandler(rl);
     }

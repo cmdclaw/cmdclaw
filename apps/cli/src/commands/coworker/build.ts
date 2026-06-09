@@ -25,6 +25,10 @@ type BuildFlags = {
   chaosApprovalParkAfter?: string;
 };
 
+type InternalChatFlags = Parameters<typeof chatCommand>[0] & {
+  continueAfterMessage?: boolean;
+};
+
 export default async function (this: LocalContext, flags: BuildFlags): Promise<void> {
   if (flags.attach) {
     await chatCommand.call(this, {
@@ -86,7 +90,7 @@ export default async function (this: LocalContext, flags: BuildFlags): Promise<v
   this.process.stdout.write(`  folder: ${folder ? trimmedFolderPath : "-"}\n`);
   this.process.stdout.write(`  builder conversation id: ${conversationId}\n\n`);
 
-  await chatCommand.call(this, {
+  const chatFlags: InternalChatFlags = {
     server: flags.server,
     conversation: conversationId,
     message: flags.message,
@@ -99,9 +103,12 @@ export default async function (this: LocalContext, flags: BuildFlags): Promise<v
     chaosRunDeadline: flags.chaosRunDeadline,
     chaosApprovalParkAfter: flags.chaosApprovalParkAfter,
     validate: flags.validate,
+    continueAfterMessage: true,
     file: flags.file ?? [],
     questionAnswer: flags.questionAnswer ?? [],
     perfettoTrace: false,
     timing: false,
-  });
+  };
+
+  await chatCommand.call(this, chatFlags);
 }
