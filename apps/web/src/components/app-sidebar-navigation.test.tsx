@@ -94,9 +94,49 @@ function renderWithRouter() {
     path: "/agents",
     component: () => <div>Agents page</div>,
   });
+  const adminRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/admin",
+    component: () => <AppSidebar />,
+  });
+  const adminWorkspacesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/admin/workspaces",
+    component: () => <AppSidebar />,
+  });
+  const adminMcpRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/admin/mcp",
+    component: () => <AppSidebar />,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([indexRoute, agentsRoute]),
+    routeTree: rootRoute.addChildren([
+      indexRoute,
+      agentsRoute,
+      adminRoute,
+      adminWorkspacesRoute,
+      adminMcpRoute,
+    ]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+
+  render(<RouterProvider router={router} />);
+
+  return router;
+}
+
+function renderWithRouterAt(pathname: string) {
+  const rootRoute = createRootRoute({
+    component: () => <Outlet />,
+  });
+  const route = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "$",
+    component: () => <AppSidebar />,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: [pathname] }),
   });
 
   render(<RouterProvider router={router} />);
@@ -123,6 +163,32 @@ describe("AppSidebar navigation", () => {
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/agents");
+    });
+  });
+
+  it("does not keep the admin user item selected on nested admin pages", async () => {
+    renderWithRouterAt("/admin/workspaces");
+
+    const userLink = await screen.findByRole("link", { name: "User" });
+    const workspacesLink = await screen.findByRole("link", { name: "Workspaces" });
+
+    expect(userLink).not.toHaveClass("bg-sidebar-primary");
+    expect(userLink).not.toHaveClass("text-sidebar-primary-foreground");
+    expect(workspacesLink).toHaveClass("bg-sidebar-primary");
+    expect(workspacesLink).toHaveClass("text-sidebar-primary-foreground");
+  });
+
+  it("renders the selected MCP logo with the active text color", async () => {
+    renderWithRouterAt("/admin/mcp");
+
+    const mcpLink = await screen.findByRole("link", { name: "MCP" });
+    const mcpIcon = mcpLink.querySelector("span");
+
+    expect(mcpLink).toHaveClass("bg-sidebar-primary");
+    expect(mcpLink).toHaveClass("text-sidebar-primary-foreground");
+    expect(mcpIcon).toHaveClass("bg-current");
+    expect(mcpIcon).toHaveStyle({
+      mask: "url('/integrations/mcp.svg') center / contain no-repeat",
     });
   });
 });

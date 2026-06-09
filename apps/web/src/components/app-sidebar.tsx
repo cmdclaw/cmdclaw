@@ -54,6 +54,11 @@ type NavItem = {
   onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 };
 
+const MCP_LOGO_MASK_STYLE = {
+  mask: "url('/integrations/mcp.svg') center / contain no-repeat",
+  WebkitMask: "url('/integrations/mcp.svg') center / contain no-repeat",
+} as const;
+
 function readStoredSidebarMode(): SidebarMode {
   if (typeof window === "undefined") {
     return "admin";
@@ -69,15 +74,11 @@ function readStoredSidebarMode(): SidebarMode {
 
 function McpLogoIcon({ className }: { className?: string }) {
   return (
-    <span className={cn("relative block", className)}>
-      <AppImage
-        src="/integrations/mcp.svg"
-        alt=""
-        width={18}
-        height={18}
-        className="absolute inset-0 h-full w-full object-contain dark:invert"
-      />
-    </span>
+    <span
+      aria-hidden="true"
+      className={cn("block bg-current", className)}
+      style={MCP_LOGO_MASK_STYLE}
+    />
   );
 }
 
@@ -329,6 +330,9 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
   const isActive = (href: string) => {
     if (href === "/") {
       return pathname === "/";
+    }
+    if (href === "/admin") {
+      return pathname === "/admin" || pathname === "/admin/";
     }
     if (href === "/chat") {
       return pathname === "/chat" || pathname.startsWith("/chat/");
