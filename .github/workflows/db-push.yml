@@ -84,27 +84,47 @@ jobs:
             exit 1
           fi
 
+          max_attempts=5
+          attempt=1
           log_file="$(mktemp)"
           trap 'rm -f "$log_file"' EXIT
 
-          if bun run db:push 2>&1 | tee "$log_file"; then
-            if grep -Eq "^error:" "$log_file"; then
-              echo "db:push printed an error but exited successfully; failing CI." >&2
+          while true; do
+            : > "$log_file"
+            echo "Running db:push attempt ${attempt}/${max_attempts}"
+
+            if bun run db:push 2>&1 | tee "$log_file"; then
+              if grep -Eq "^error:" "$log_file"; then
+                echo "db:push printed an error but exited successfully; failing CI." >&2
+                exit 1
+              fi
+              exit 0
+            fi
+
+            if grep -Fq "Interactive prompts require a TTY terminal" "$log_file"; then
+              prompt_context="$(grep -iE "you're about to|do you want to truncate|truncate the table|add unique|add constraint" "$log_file" || true)"
+              echo >&2
+              echo "db:push needs manual approval for a schema change and cannot continue in CI." >&2
+              echo "Drizzle prompted for confirmation because the push may require a risky operation, such as truncating data or applying a constraint on existing rows." >&2
+              if [ -n "$prompt_context" ]; then
+                echo "Prompt context from Drizzle:" >&2
+                echo "$prompt_context" >&2
+              fi
+              echo "Run the same db:push command manually in a TTY and decide how to handle the prompt." >&2
               exit 1
             fi
-            exit 0
-          fi
 
-          if grep -Fq "Interactive prompts require a TTY terminal" "$log_file"; then
-            prompt_context="$(grep -iE "you're about to|do you want to truncate|truncate the table|add unique|add constraint" "$log_file" || true)"
-            echo >&2
-            echo "db:push needs manual approval for a schema change and cannot continue in CI." >&2
-            echo "Drizzle prompted for confirmation because the push may require a risky operation, such as truncating data or applying a constraint on existing rows." >&2
-            if [ -n "$prompt_context" ]; then
-              echo "Prompt context from Drizzle:" >&2
-              echo "$prompt_context" >&2
+            if ! grep -Eiq "ECONNREFUSED|ECONNRESET|ETIMEDOUT|Connection terminated|timeout expired" "$log_file"; then
+              exit 1
             fi
-            echo "Run the same db:push command manually in a TTY and decide how to handle the prompt." >&2
-          fi
 
-          exit 1
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "db:push failed after ${max_attempts} transient connection attempts." >&2
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 10))
+            echo "db:push hit a transient connection failure; retrying in ${sleep_seconds}s." >&2
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+          done
