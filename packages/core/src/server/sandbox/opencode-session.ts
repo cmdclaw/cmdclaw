@@ -44,8 +44,11 @@ import {
 import {
   type OpenCodeMcpRuntimeWarning,
   reconcileOpencodeMcpServers,
-  writeOpencodeMcpConfigToSandbox,
 } from "./opencode-mcp-reconciliation";
+import {
+  readSandboxAppliedMcpConfigHash,
+  writeSandboxAppliedMcpConfigHash,
+} from "../redis/sandbox-mcp-config-cache";
 import { conversationRuntimeService } from "../services/conversation-runtime-service";
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import type { RuntimeMcpServer } from "./core/types";
@@ -325,7 +328,7 @@ async function waitForServer(
       // The server is still starting.
     }
     // eslint-disable-next-line no-await-in-loop -- readiness polling is intentional
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   throw new Error(
@@ -771,25 +774,9 @@ async function ensureDockerAgentReady(
   const onLifecycle = options?.onLifecycle;
   const runtimePort = getSandboxServerPort(config.model);
   const baseUrl = await resolveMappedRuntimeUrl(container, runtimePort);
-  const wrappedSandbox = wrapDockerSandbox(container);
-  const configChanged =
-    resolveSandboxAgentRuntimeForModel(config.model) === "opencode" &&
-    options?.sessionMcpServers !== undefined
-      ? await writeOpencodeMcpConfigToSandbox(wrappedSandbox, options?.sessionMcpServers)
-      : false;
-  if (configChanged) {
-    await execInContainer({
-      container,
-      command: "pkill -f 'opencode serve' || true",
-      cwd: "/app",
-      timeoutMs: 10_000,
-    });
-  }
-  const health = configChanged
-    ? null
-    : await fetch(getSandboxReadinessUrl(baseUrl, config.model), {
-        method: "GET",
-      }).catch(() => null);
+  const health = await fetch(getSandboxReadinessUrl(baseUrl, config.model), {
+    method: "GET",
+  }).catch(() => null);
 
   if (!health?.ok) {
     onLifecycle?.("opencode_starting", {
@@ -889,31 +876,13 @@ async function ensureDaytonaAgentReady(
   sandbox: DaytonaSandboxLike,
   config: OpenCodeSessionConfig,
   options?: OpenCodeSessionOptions,
+  init?: { freshSandbox?: boolean },
 ): Promise<OpencodeClient> {
   const onLifecycle = options?.onLifecycle;
   const preview = await sandbox.getPreviewLink(getSandboxServerPort(config.model));
   const baseUrl = preview.url;
-  const wrappedSandbox = wrapDaytonaSandbox(sandbox);
-  const configChanged =
-    resolveSandboxAgentRuntimeForModel(config.model) === "opencode" &&
-    options?.sessionMcpServers !== undefined
-      ? await writeOpencodeMcpConfigToSandbox(wrappedSandbox, options?.sessionMcpServers)
-      : false;
-  if (configChanged) {
-    await sandbox.process.executeCommand(
-      "sh -lc 'pkill -f \"opencode serve\" || true'",
-      "/app",
-      undefined,
-      10,
-    );
-  }
-  const health = configChanged
-    ? null
-    : await fetch(appendDaytonaAuth(getSandboxReadinessUrl(baseUrl, config.model), preview.token), {
-        method: "GET",
-      }).catch(() => null);
 
-  if (!health?.ok) {
+  const startServerAndWait = async () => {
     onLifecycle?.("opencode_starting", {
       conversationId: config.conversationId,
       sandboxId: sandbox.id,
@@ -942,6 +911,30 @@ async function ensureDaytonaAgentReady(
       serverUrl: preview.url,
     });
     await waitForServer(baseUrl, config.model, preview.token);
+  };
+
+  if (init?.freshSandbox) {
+    // The sandbox entrypoint already starts the agent server on boot; poll
+    // readiness instead of racing it with a duplicate process. Fall back to a
+    // manual start if it never comes up (e.g. stale image without entrypoint).
+    onLifecycle?.("opencode_waiting_ready", {
+      conversationId: config.conversationId,
+      sandboxId: sandbox.id,
+      serverUrl: preview.url,
+    });
+    try {
+      await waitForServer(baseUrl, config.model, preview.token, 10_000);
+    } catch {
+      await startServerAndWait();
+    }
+  } else {
+    const health = await fetch(
+      appendDaytonaAuth(getSandboxReadinessUrl(baseUrl, config.model), preview.token),
+      { method: "GET" },
+    ).catch(() => null);
+    if (!health?.ok) {
+      await startServerAndWait();
+    }
   }
 
   onLifecycle?.("opencode_ready", {
@@ -987,7 +980,7 @@ async function getOrCreateDaytonaSandboxInit(
       sandbox: wrapDaytonaSandbox(fromConversation),
       reused: true,
       connectAgent: async (options) =>
-        await ensureDaytonaAgentReady(fromConversation, config, options),
+        await ensureDaytonaAgentReady(fromConversation, config, options, { freshSandbox: false }),
     };
   }
 
@@ -1017,7 +1010,7 @@ async function getOrCreateDaytonaSandboxInit(
     sandbox: wrapDaytonaSandbox(created),
     reused: false,
     connectAgent: async (options) =>
-      await ensureDaytonaAgentReady(created, config, options),
+      await ensureDaytonaAgentReady(created, config, options, { freshSandbox: true }),
   };
 }
 
@@ -1256,21 +1249,9 @@ export async function getOrCreateSandboxForCloudProvider(
           await state.sandbox.kill().catch(() => {});
         },
       };
-      const configChanged =
-        resolveSandboxAgentRuntimeForModel(config.model) === "opencode" &&
-        agentOptions?.sessionMcpServers !== undefined
-          ? await writeOpencodeMcpConfigToSandbox(wrappedSandbox, agentOptions.sessionMcpServers)
-          : false;
-      if (configChanged) {
-        await wrappedSandbox.commands.run("pkill -f 'opencode serve' || true", {
-          timeoutMs: 10_000,
-        });
-      }
-      const health = configChanged
-        ? null
-        : await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
-            method: "GET",
-          }).catch(() => null);
+      const health = await fetch(getSandboxReadinessUrl(serverUrl, config.model), {
+        method: "GET",
+      }).catch(() => null);
 
       if (!health?.ok) {
         agentOptions?.onLifecycle?.("opencode_starting", {
@@ -1323,9 +1304,14 @@ export async function completeSessionInitForCloudProvider(
   const client = await sandboxInit.connectAgent(options);
   let mcpWarnings: OpenCodeMcpRuntimeWarning[] = [];
   if (resolveSandboxAgentRuntimeForModel(config.model) === "opencode") {
+    const sandboxId = sandboxInit.sandbox.sandboxId;
     mcpWarnings = await reconcileOpencodeMcpServers({
       client,
       servers: options?.sessionMcpServers,
+      appliedConfigStore: {
+        read: () => readSandboxAppliedMcpConfigHash(sandboxId),
+        write: (hash) => writeSandboxAppliedMcpConfigHash(sandboxId, hash),
+      },
     });
   }
   const runtimeState = await getConversationRuntimeState(config.conversationId);
