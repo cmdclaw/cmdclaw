@@ -219,7 +219,9 @@ async function createOrReplaceSnapshot(daytona: Daytona, name: string) {
 
     try {
       return await daytona.snapshot.create(
-        { name, image },
+        // 2 vCPU / 2GB: OpenCode server boot, project init, and event
+        // streaming are CPU-bound and noticeably slow on the 1-vCPU default.
+        { name, image, resources: { cpu: 2, memory: 2, disk: 3 } },
         {
           onLogs: (chunk) => console.log(`[daytona] ${chunk}`),
         },
