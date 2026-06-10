@@ -237,6 +237,8 @@ export interface GenerationContext {
   conversationId: string;
   userId: string;
   workspaceId?: string | null;
+  // Spawn Depth of the run this generation belongs to (0 = human/external trigger)
+  spawnDepth: number;
   sandboxId?: string;
   executionEnvironment?: ExecutionEnvironment;
   status: GenerationStatus;

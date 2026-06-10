@@ -8,6 +8,9 @@ export default async function cmdclawMiddleware(req: any, res: any, next: () => 
     req.auth = await authenticateHostedMcpRequest({
       req,
       requiredAudience: "cmdclaw",
+      // Platform MCP Server (ADR-0013): generations authenticate with managed
+      // tokens minted per generation; external agents keep using OAuth.
+      allowManagedToken: true,
     });
     next();
   } catch (error) {

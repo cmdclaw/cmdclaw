@@ -455,6 +455,7 @@ async function startGenerationForCoworkerRun(params: {
     remoteIntegrationSource: options.resolvedRemoteIntegrationSource,
     debugRunDeadlineMs: params.debugRunDeadlineMs,
     syntheticKind: params.syntheticKind,
+    spawnDepth: params.run.spawnDepth,
   });
 
   await db
@@ -480,6 +481,7 @@ export async function triggerCoworkerRun(params: {
   autoApprove?: boolean;
   debugRunDeadlineMs?: number;
   syntheticKind?: "slo_replay";
+  spawnDepth?: number;
 }): Promise<{
   coworkerId: string;
   runId: string;
@@ -552,6 +554,7 @@ export async function triggerCoworkerRun(params: {
         model: wf.model,
         authSource: wf.authSource,
         autoApprove: wf.autoApprove,
+        spawnDepth: params.spawnDepth ?? 0,
       })
       .returning();
     const [run] = await db
@@ -564,6 +567,7 @@ export async function triggerCoworkerRun(params: {
         triggerPayload: sanitizeJsonForPostgres(pendingPayload),
         conversationId: conv.id,
         syntheticKind: params.syntheticKind,
+        spawnDepth: params.spawnDepth ?? 0,
       })
       .returning();
 
@@ -603,6 +607,7 @@ export async function triggerCoworkerRun(params: {
       status: "running",
       triggerPayload: sanitizeJsonForPostgres(runPayload),
       syntheticKind: params.syntheticKind,
+      spawnDepth: params.spawnDepth ?? 0,
     })
     .returning();
 

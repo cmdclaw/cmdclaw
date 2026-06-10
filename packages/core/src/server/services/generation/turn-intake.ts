@@ -54,6 +54,7 @@ export type StartGenerationInput = {
   selectedPlatformSkillSlugs?: string[];
   remoteIntegrationSource?: RemoteIntegrationSource;
   syntheticKind?: SyntheticTrafficKind;
+  spawnDepth?: number;
 };
 
 export type StartCoworkerGenerationInput = {
@@ -78,6 +79,7 @@ export type StartCoworkerGenerationInput = {
   debugRuntimeNoProgressTimeoutMs?: number;
   debugForceRuntimeNoProgressAfterPrompt?: boolean;
   syntheticKind?: SyntheticTrafficKind;
+  spawnDepth?: number;
 };
 
 type TurnIntakeDeps = {
@@ -241,6 +243,7 @@ export class TurnIntake {
           authSource: resolvedAuthSource,
           autoApprove: false,
           syntheticKind: params.syntheticKind,
+          spawnDepth: params.spawnDepth ?? 0,
         })
         .returning();
       conv = newConv;
@@ -433,6 +436,7 @@ export class TurnIntake {
       .values({
         conversationId: conv.id,
         status: "running",
+        spawnDepth: params.spawnDepth ?? 0,
         executionPolicy,
         debugInfo: buildInitialDebugInfo(
           params.remoteIntegrationSource,
@@ -578,6 +582,7 @@ export class TurnIntake {
           authSource: resolvedAuthSource,
           autoApprove: params.autoApprove,
           syntheticKind: params.syntheticKind,
+          spawnDepth: params.spawnDepth ?? 0,
         })
         .returning();
       conv = newConv;
@@ -630,6 +635,7 @@ export class TurnIntake {
       .values({
         conversationId: conv.id,
         status: "running",
+        spawnDepth: params.spawnDepth ?? 0,
         executionPolicy,
         debugInfo: buildInitialDebugInfo(
           params.remoteIntegrationSource,

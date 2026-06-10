@@ -1,10 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+export const MANAGED_MCP_TOKEN_TTL_SECONDS = 10 * 60;
+
 export type ManagedMcpTokenClaims = {
   userId: string;
   workspaceId: string;
   internalKey: string;
   exp: number;
+  spawnDepth?: number;
   remoteIntegrationSource?: {
     targetEnv: "staging" | "prod";
     remoteUserId: string;
@@ -27,6 +30,9 @@ function signPayload(payload: string, secret: string): string {
 }
 
 export function signManagedMcpToken(claims: ManagedMcpTokenClaims, secret: string): string {
+  if (!secret) {
+    throw new Error("Cannot sign a managed MCP token without a secret.");
+  }
   const payload = encodeBase64Url(JSON.stringify(claims));
   const signature = signPayload(payload, secret);
   return `${payload}.${signature}`;
@@ -37,6 +43,11 @@ export function verifyManagedMcpToken(
   secret: string,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): ManagedMcpTokenClaims {
+  // Fail closed: an empty secret must never validate a token, otherwise any
+  // verify site that passes `?? ""` would accept attacker-forged tokens.
+  if (!secret) {
+    throw new Error("Cannot verify a managed MCP token without a secret.");
+  }
   const [payload, signature] = token.split(".");
   if (!payload || !signature) {
     throw new Error("Invalid managed MCP token format.");
@@ -59,6 +70,10 @@ export function verifyManagedMcpToken(
     !parsed.workspaceId ||
     !parsed.internalKey ||
     typeof parsed.exp !== "number" ||
+    (parsed.spawnDepth !== undefined &&
+      (typeof parsed.spawnDepth !== "number" ||
+        !Number.isInteger(parsed.spawnDepth) ||
+        parsed.spawnDepth < 0)) ||
     (remoteIntegrationSource !== undefined &&
       (typeof remoteIntegrationSource !== "object" ||
         (remoteIntegrationSource.targetEnv !== "staging" &&

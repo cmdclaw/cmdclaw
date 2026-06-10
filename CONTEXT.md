@@ -49,8 +49,24 @@ The CmdClaw-owned credential or grant that allows a **Workspace MCP Server** to 
 _Avoid_: OpenCode auth, Executor auth, local token store
 
 **Workspace MCP Server Allowlist**:
-The concrete set of **Workspace MCP Servers** exposed to a chat or coworker **Generation**. User interfaces may group servers by **Integration Type**, but runtime access is granted by explicit server identity.
+The concrete set of **Workspace MCP Servers** exposed to a chat or coworker **Generation**. User interfaces may group servers by **Integration Type**, but runtime access is granted by explicit server identity. The allowlist governs **Workspace MCP Servers** only; it does not govern **Platform MCP Servers**.
 _Avoid_: allowed Executor sources, allowed integrations
+
+**Platform MCP Server**:
+A CmdClaw-owned MCP server that is present in every **Generation** unconditionally. A **Platform MCP Server** is not a **Workspace MCP Server**: it does not appear in the **Toolbox**, is not subject to the **Workspace MCP Server Allowlist**, and cannot be removed per chat or per **Coworker**.
+_Avoid_: built-in integration, default tool, hidden server
+
+**CmdClaw MCP Server**:
+The **Platform MCP Server** that exposes CmdClaw's own capabilities — running chats, listing, creating, and running **Coworkers**, uploading documents, and adding skills — so a **Generation** can operate CmdClaw itself. Calls through the **CmdClaw MCP Server** act as the **Generation**'s acting user (the chat **User**, or the **Coworker**'s owner) and are recorded as runtime-originated, not user-originated.
+_Avoid_: self MCP, management API, internal tools
+
+**Runtime-Originated Run**:
+A chat or **Coworker** run started by a **Generation** through the **CmdClaw MCP Server**, rather than directly by a **User** or an external trigger. A **Runtime-Originated Run** carries a **Spawn Depth**.
+_Avoid_: nested run, sub-run, child generation
+
+**Spawn Depth**:
+The number of **Runtime-Originated Run** hops between a **User**- or trigger-initiated run and the current **Generation**. Runs started directly by a **User** or external trigger have **Spawn Depth** zero. The **CmdClaw MCP Server** refuses to start a run beyond the platform's maximum **Spawn Depth** (currently three), so cycles between **Coworkers** self-extinguish instead of running away.
+_Avoid_: recursion level, nesting limit, loop guard
 
 **Canonical Service Event**:
 One authoritative, context-rich observability record emitted by a CmdClaw service-owned operation. HTTP requests, worker jobs, and generation lifecycle work each produce their own **Canonical Service Event**; browser-originated telemetry is a **Client Observation**, not an authoritative service event. **Canonical Service Events** use a required common envelope, operation-specific fields, and are correlated by trace id with **Generation** and conversation identifiers as domain pivots when available.
@@ -136,9 +152,13 @@ _Avoid_: no progress, run deadline, timeout
 A non-terminal condition surfaced to the **User** when a **Generation** can continue but an expected runtime capability is degraded or unavailable. A **Runtime Warning** is visible product state, not only an **Operational Log**.
 _Avoid_: soft error, hidden warning, console warning
 
-**Generation Output Preview**:
-A user-facing preview of a file produced by a **Generation**, shown inside the chat surface so the **User** can inspect the result without leaving the conversation.
-_Avoid_: canvas, artifact viewer, file preview
+**Agentic-App**:
+A self-contained interactive application produced by a **Generation** and rendered inside the chat surface, so the **User** can view and use the result without leaving the conversation. An **Agentic-App** can send an **Agentic-App Prompt** into its conversation.
+_Avoid_: canvas, artifact viewer, file preview, mini-app, preview, Generation Output Preview
+
+**Agentic-App Prompt**:
+A user message sent into the conversation from inside an **Agentic-App** rather than from the composer. It requires the **User**'s direct interaction with the **Agentic-App**, appears in the conversation like any other user message, and starts or queues a **Generation** under the conversation's existing defaults.
+_Avoid_: preview prompt, mini-app prompt, button action, injected message
 
 **Runtime Diagnostic Snapshot**:
 A privileged operational artifact captured when a **Generation** fails in the runtime boundary and ordinary telemetry is insufficient to explain the failure. A **Runtime Diagnostic Snapshot** contains bounded runtime probe values, counters, event types, and pointers needed for debugging. Unlike **Operational Logs** and **Canonical Service Events**, it may include raw runtime message fields, provider errors, and log snippets because it is stored behind sensitive debug access rather than emitted into the general observability stream.

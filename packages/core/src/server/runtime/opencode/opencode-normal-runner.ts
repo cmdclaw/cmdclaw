@@ -50,6 +50,7 @@ import type {
 import type { OpenCodeTurnEventBridge } from "./opencode-turn-events";
 import { captureRuntimeNoProgressDiagnosticSnapshot } from "../../services/runtime-diagnostic-snapshot-service";
 import { resolveWorkspaceMcpServersForGeneration } from "../../executor/workspace-sources";
+import { resolveCmdclawPlatformMcpServer } from "../../sandbox/platform-mcp-server";
 
 const OPENCODE_EARLY_STREAM_REATTACH_ATTEMPTS = 2;
 const OPENCODE_EARLY_STREAM_REATTACH_WAIT_MS = 8_000;
@@ -658,22 +659,36 @@ export class OpenCodeNormalRunner {
         markPrePromptPhase("workspace_mcp_resolve", "started");
         const startedAt = Date.now();
         try {
-          const resolved = await resolveWorkspaceMcpServersForGeneration({
-            workspaceId: ctx.workspaceId,
-            userId: ctx.userId,
-            allowedWorkspaceMcpServerIds: ctx.allowedWorkspaceMcpServerIds,
-            remoteIntegrationSource: ctx.remoteIntegrationSource,
-          });
+          const [resolved, platformResolution] = await Promise.all([
+            resolveWorkspaceMcpServersForGeneration({
+              workspaceId: ctx.workspaceId,
+              userId: ctx.userId,
+              allowedWorkspaceMcpServerIds: ctx.allowedWorkspaceMcpServerIds,
+              remoteIntegrationSource: ctx.remoteIntegrationSource,
+            }),
+            // Platform MCP Server (ADR-0013): hard-wired into every generation,
+            // independent of the Workspace MCP Server Allowlist.
+            resolveCmdclawPlatformMcpServer({
+              userId: ctx.userId,
+              workspaceId: ctx.workspaceId,
+              spawnDepth: ctx.spawnDepth,
+            }),
+          ]);
           for (const unavailable of resolved.unavailableServers) {
             runtimeMcpWarnings.push({
               serverName: unavailable.namespace,
               message: `${unavailable.name} tools are unavailable: ${unavailable.reason}`,
             });
           }
-          resolvedWorkspaceMcpServerNames = resolved.requestedServers.map(
-            (entry) => entry.server.name,
-          );
-          resolveWorkspaceMcpSessionServers(resolved.requestedServers.map((entry) => entry.server));
+          if (!platformResolution.server) {
+            runtimeMcpWarnings.push(platformResolution.warning);
+          }
+          const sessionServers = [
+            ...resolved.requestedServers.map((entry) => entry.server),
+            ...(platformResolution.server ? [platformResolution.server] : []),
+          ];
+          resolvedWorkspaceMcpServerNames = sessionServers.map((server) => server.name);
+          resolveWorkspaceMcpSessionServers(sessionServers);
         } catch (error) {
           rejectWorkspaceMcpSessionServers(error);
           throw error;

@@ -601,6 +601,8 @@ export const conversation = pgTable(
     currentGenerationId: text("current_generation_id"),
     // Auto-approve sensitive operations without user confirmation
     autoApprove: boolean("auto_approve").default(false).notNull(),
+    // Spawn Depth: runtime-originated hops from a human/external trigger (0 = direct)
+    spawnDepth: integer("spawn_depth").default(0).notNull(),
     // Number of messages this user has acknowledged in the sidebar
     seenMessageCount: integer("seen_message_count").default(0).notNull(),
     // Conversation-level usage counters persisted for direct querying.
@@ -937,6 +939,10 @@ export const generation = pgTable(
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversation.id, { onDelete: "cascade" }),
+    // Spawn Depth of this run (ADR-0013). Lives on the generation, not the
+    // reusable conversation, so a runtime-originated turn continuing an existing
+    // conversation cannot inherit (and reset to) the conversation's stale depth.
+    spawnDepth: integer("spawn_depth").default(0).notNull(),
     runtimeId: text("runtime_id").references((): AnyPgColumn => conversationRuntime.id, {
       onDelete: "set null",
     }),
@@ -1308,6 +1314,8 @@ export const coworkerRun = pgTable(
     workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
     status: coworkerRunStatusEnum("status").default("running").notNull(),
     triggerPayload: jsonb("trigger_payload").notNull(),
+    // Spawn Depth: runtime-originated hops from a human/external trigger (0 = direct)
+    spawnDepth: integer("spawn_depth").default(0).notNull(),
     generationId: text("generation_id").references(() => generation.id, {
       onDelete: "set null",
     }),

@@ -41,6 +41,7 @@ import {
   reconcileStaleCoworkerRunsForCoworkers,
   triggerCoworkerRun,
 } from "@cmdclaw/core/server/services/coworker-service";
+import { evaluateSpawnRequest } from "@cmdclaw/core/server/services/generation/spawn-depth";
 import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
 import { downloadFromS3, ensureBucket, uploadToS3 } from "@cmdclaw/core/server/storage/s3-client";
 import {
@@ -1716,6 +1717,17 @@ const trigger = protectedProcedure
       throw new ORPCError("FORBIDDEN", { message: "Admin access required" });
     }
 
+    // Runtime-Originated Runs (ADR-0013): calls from the platform MCP server
+    // carry a Spawn Depth; refuse beyond the platform maximum.
+    let spawnDepth: number | undefined;
+    if (context.authSource === "managed_mcp" && context.runtimeMcp) {
+      const spawnEvaluation = evaluateSpawnRequest(context.runtimeMcp.spawnDepth);
+      if (!spawnEvaluation.allowed) {
+        throw new ORPCError("BAD_REQUEST", { message: spawnEvaluation.message });
+      }
+      spawnDepth = spawnEvaluation.childSpawnDepth;
+    }
+
     return triggerCoworkerRun({
       coworkerId: input.id,
       triggerPayload: input.payload ?? {},
@@ -1724,6 +1736,7 @@ const trigger = protectedProcedure
       userId: context.user.id,
       userRole: dbUser?.role ?? null,
       debugRunDeadlineMs: input.debugRunDeadlineMs,
+      spawnDepth,
       remoteIntegrationSource: input.remoteIntegrationSource
         ? {
             ...input.remoteIntegrationSource,

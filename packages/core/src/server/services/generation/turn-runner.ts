@@ -49,7 +49,7 @@ export type QueuedGenerationRecord = typeof generation.$inferSelect & {
 
 type LinkedCoworkerRunRecord = Pick<
   typeof coworkerRun.$inferSelect,
-  "id" | "coworkerId" | "triggerPayload"
+  "id" | "coworkerId" | "triggerPayload" | "spawnDepth"
 >;
 
 type LinkedCoworkerRecord = Pick<
@@ -130,6 +130,11 @@ export class TurnRunnerContextLoader {
       conversationId: genRecord.conversationId,
       userId: genRecord.conversation.userId!,
       workspaceId: genRecord.conversation.workspaceId ?? null,
+      // Spawn Depth is authoritative per-run: the coworker run, else the
+      // generation's own persisted depth. Never inherited from the reusable
+      // conversation, so a human continuing a runtime-created conversation
+      // starts at depth 0 rather than the conversation's runtime depth.
+      spawnDepth: loaded.linkedCoworkerRun?.spawnDepth ?? genRecord.spawnDepth ?? 0,
       status: genRecord.status as GenerationStatus,
       executionPolicy: loaded.executionPolicy,
       deadlineAt: resolveGenerationDeadlineAt({
@@ -242,7 +247,7 @@ export class TurnRunnerContextLoader {
     });
     const linkedCoworkerRun = await db.query.coworkerRun.findFirst({
       where: eq(coworkerRun.generationId, genRecord.id),
-      columns: { id: true, coworkerId: true, triggerPayload: true },
+      columns: { id: true, coworkerId: true, triggerPayload: true, spawnDepth: true },
     });
     const linkedCoworker = linkedCoworkerRun
       ? await db.query.coworker.findFirst({

@@ -8,7 +8,7 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import { getValidTokensForUser } from "../integrations/token-refresh";
 import { canUserUseGalienInWorkspace, getGalienAccessStatus } from "../galien/service";
-import { signManagedMcpToken } from "../managed-mcp-auth";
+import { MANAGED_MCP_TOKEN_TTL_SECONDS, signManagedMcpToken } from "../managed-mcp-auth";
 import {
   MODULR_INTERNAL_KEY,
   canUserUseModulrInWorkspace,
@@ -39,7 +39,6 @@ type ManagedWorkspaceMcpServerDefinition = {
 };
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
-const MANAGED_MCP_TOKEN_TTL_SECONDS = 10 * 60;
 const GMAIL_MANAGED_EXECUTOR_SOURCE_ENABLED = false;
 const DEFINITIVE_OAUTH_REAUTH_PATTERNS = [
   /re-authorization is required/i,

@@ -2,6 +2,7 @@ import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
 import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
 import { PROVIDER_AUTH_SOURCES } from "@cmdclaw/core/lib/provider-auth-source";
 import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
+import { evaluateSpawnRequest } from "@cmdclaw/core/server/services/generation/spawn-depth";
 import { isGenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
 import { startPendingCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
 import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
@@ -465,6 +466,18 @@ const startGeneration = protectedProcedure
       } else {
         await requireActiveWorkspaceAccess(context.user.id, context.workspaceId);
       }
+      // Runtime-Originated Runs (ADR-0013): calls from the platform MCP server
+      // carry a Spawn Depth; refuse beyond the platform maximum. Evaluated before
+      // any run is started, including the pending-coworker path below.
+      let spawnDepth: number | undefined;
+      if (context.authSource === "managed_mcp" && context.runtimeMcp) {
+        const spawnEvaluation = evaluateSpawnRequest(context.runtimeMcp.spawnDepth);
+        if (!spawnEvaluation.allowed) {
+          throw new ORPCError("BAD_REQUEST", { message: spawnEvaluation.message });
+        }
+        spawnDepth = spawnEvaluation.childSpawnDepth;
+      }
+
       if (input.conversationId && !input.resumePausedGenerationId) {
         const pendingRun = await context.db.query.coworkerRun.findFirst({
           where: and(
@@ -475,6 +488,8 @@ const startGeneration = protectedProcedure
           columns: { id: true },
         });
         if (pendingRun) {
+          // The pending run keeps the Spawn Depth it was created with; the guard
+          // above already refused a max-depth runtime caller from resuming it.
           const result = await startPendingCoworkerRun({
             conversationId: input.conversationId,
             userId: context.user.id,
@@ -504,6 +519,7 @@ const startGeneration = protectedProcedure
         debugForceRuntimeNoProgressAfterPrompt: input.debugForceRuntimeNoProgressAfterPrompt,
         selectedPlatformSkillSlugs: input.selectedPlatformSkillSlugs,
         fileAttachments: input.fileAttachments,
+        spawnDepth,
       });
 
       const successLogContext = {
@@ -533,6 +549,8 @@ const startGeneration = protectedProcedure
           "cmdclaw.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
           "cmdclaw.generation.selected_platform_skill_count":
             input.selectedPlatformSkillSlugs?.length ?? 0,
+          "cmdclaw.auth.source": context.authSource,
+          "cmdclaw.spawn.depth": spawnDepth ?? 0,
         },
       });
       logger.info({
