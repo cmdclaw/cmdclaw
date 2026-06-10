@@ -1,0 +1,23 @@
+# Agentic-App Prompts use raw postMessage with a parent-verified user-activation gate
+
+An **Agentic-App** can send an **Agentic-App Prompt** into its conversation by calling `parent.postMessage` directly with a versioned envelope: `{ type: "cmdclaw:agentic-app-prompt", version: 1, prompt: string }`. CmdClaw does not inject a helper script or declarative wiring into the Agentic-App HTML; the agent authoring `output.html` writes the postMessage call itself, following the protocol taught in its runtime instructions. The chat panel listening for these messages accepts only messages whose source is the mounted Agentic-App iframe, ignores unknown fields, and silently drops unknown `type` or `version` values.
+
+An accepted prompt is auto-sent as a visible user message in the conversation, reusing composer semantics: it starts a Generation when the conversation is idle and is enqueued when a Generation is already running. The v1 envelope carries text only — no attachments, skill selection, or model override; those inherit the conversation's defaults.
+
+Because `postMessage` requires no user gesture, rendering a hostile or prompt-injected Agentic-App would otherwise be equivalent to executing its prompt, and a looping script could chain Generations indefinitely. The panel therefore enforces a parent-verified user-activation gate. The parent cannot observe clicks inside the sandboxed iframe, so the gate is armed by the only two honest parent-side signals: a real pointer or keyboard gesture over the panel chrome, immediately followed by focus entering the iframe. A genuine button click produces that gesture→focus pairing; autofocus, a scripted `.focus()`, or a background timer produces neither in sequence, so they cannot arm the gate. Focus entries within a short load-grace window are ignored so autofocus at load cannot self-arm. Armed engagement expires after a bounded TTL so an abandoned app cannot keep sending, the rate budget (at most one per second and six per minute) is consumed only after a send actually succeeds so app-layer refusals do not deplete it, and the panel is keyed by the Agentic-App's file id so a newly rendered app starts with a fresh gate and rate budget rather than inheriting engagement earned by a previous app. The panel replies to the Agentic-App with `{ type: "cmdclaw:agentic-app-prompt-result", version: 1, status: "sent" | "rejected", reason? }` so pages can render honest button states and rejected sends are debuggable rather than silent.
+
+This gate is defense-in-depth, not the sole control: because the parent cannot see in-iframe clicks, an app the user is actively using and has focused can send (rate-capped), so the hard guarantee against destructive actions remains the normal tool-approval flow inside the resulting Generation. Accepted and rejected prompts are emitted to client telemetry so abuse patterns and "the button does nothing" reports are observable.
+
+The alternative considered was a CmdClaw-injected bootstrap script wiring declarative `data-prompt` attributes (plus a `sendPrompt` helper), which would keep the wire format private and changeable. Raw postMessage was chosen to avoid mutating agent-authored HTML at render time; the cost is that the envelope is a frozen public contract, since stored Agentic-Apps keep posting whatever shape they were generated with.
+
+**Consequences**
+
+The envelope shapes above are append-only: new optional fields and new versions may be added, but existing fields and semantics of `version: 1` must never change, and the panel must keep accepting `version: 1` indefinitely.
+
+The agent runtime instructions are the only place the protocol is taught; there is no runtime-injected affordance. A generated Agentic-App that gets the protocol wrong fails silently apart from the rejection ack.
+
+Because the iframe stays sandboxed without `allow-same-origin`, the Agentic-App origin is opaque: it cannot make authenticated API calls, and `postMessage` source identity — not origin — is the trust check.
+
+The user-activation gate means a rendered Agentic-App cannot send prompts on load, from a scripted focus with no preceding user gesture, or from a background timer while the user is absent; any future capability for autonomous sends must be a new, explicitly approved mechanism, not a relaxation of the gate.
+
+The same `output.html` is also rendered read-only on coworker info surfaces, which mount the iframe with no prompt listener. Buttons there receive no acknowledgement, so the runtime instructions tell generated apps that prompts only take effect in the live chat panel and to handle a never-arriving ack (re-enable the button after a timeout) rather than assuming the channel always exists.
