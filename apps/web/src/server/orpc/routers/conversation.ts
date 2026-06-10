@@ -8,7 +8,7 @@ import { z } from "zod";
 import { requireAppAdminActor } from "../app-admin-access";
 import { protectedProcedure } from "../middleware";
 import { requireActiveWorkspaceAccess, requireActiveWorkspaceAdmin } from "../workspace-access";
-import { loadOutputHtmlPreview, OutputHtmlPreviewError } from "../../services/output-html-preview";
+import { loadAgenticAppHtml, AgenticAppHtmlError } from "../../services/agentic-app-html";
 import { buildSandboxFileDownloadUrl } from "../../api/sandbox-files/download";
 
 const conversationListCursorSchema = z.object({
@@ -669,7 +669,7 @@ const downloadSandboxFile = protectedProcedure
     };
   });
 
-const previewSandboxOutputHtml = protectedProcedure
+const getAgenticAppHtml = protectedProcedure
   .input(z.object({ fileId: z.string() }))
   .handler(async ({ input, context }) => {
     const {
@@ -684,17 +684,25 @@ const previewSandboxOutputHtml = protectedProcedure
     });
 
     try {
-      return await loadOutputHtmlPreview({
+      return await loadAgenticAppHtml({
         file,
         userId: context.user.id,
         workspaceId,
       });
     } catch (error) {
-      if (error instanceof OutputHtmlPreviewError) {
+      if (error instanceof AgenticAppHtmlError) {
+        // Carry the structured code so the client can render copy without
+        // string-matching human-readable messages.
         if (error.code === "not_found" || error.code === "missing_storage") {
-          throw new ORPCError("NOT_FOUND", { message: error.message });
+          throw new ORPCError("NOT_FOUND", {
+            message: error.message,
+            data: { agenticAppCode: error.code },
+          });
         }
-        throw new ORPCError("BAD_REQUEST", { message: error.message });
+        throw new ORPCError("BAD_REQUEST", {
+          message: error.message,
+          data: { agenticAppCode: error.code },
+        });
       }
       throw error;
     }
@@ -814,7 +822,7 @@ export const conversationRouter = {
   delete: del,
   downloadAttachment,
   downloadSandboxFile,
-  previewSandboxOutputHtml,
+  getAgenticAppHtml,
   getSandboxFiles,
   adminGetWorkspaceConversation,
 };

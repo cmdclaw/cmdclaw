@@ -1,27 +1,27 @@
 import type { Message, SandboxFileData } from "./message-list";
 
-type DoneArtifactsForOutputPreview = {
+type DoneArtifactsForAgenticApp = {
   sandboxFiles?: SandboxFileData[];
 };
 
-type LatestOutputHtmlInput =
+type LatestAgenticAppInput =
   | Message[]
   | {
       messages?: Message[];
       persistedSandboxFiles?: SandboxFileData[];
-      doneArtifacts?: DoneArtifactsForOutputPreview | null;
+      doneArtifacts?: DoneArtifactsForAgenticApp | null;
     };
 
-export function isOutputHtmlSandboxFile(file: SandboxFileData): boolean {
+export function isAgenticAppSandboxFile(file: SandboxFileData): boolean {
   return file.filename === "output.html";
 }
 
-function findLatestOutputHtmlFromFiles(
+function findLatestAgenticAppFromFiles(
   files: SandboxFileData[] | undefined,
 ): SandboxFileData | null {
   for (let fileIndex = (files?.length ?? 0) - 1; fileIndex >= 0; fileIndex -= 1) {
     const file = files?.[fileIndex];
-    if (file && isOutputHtmlSandboxFile(file)) {
+    if (file && isAgenticAppSandboxFile(file)) {
       return file;
     }
   }
@@ -29,14 +29,14 @@ function findLatestOutputHtmlFromFiles(
   return null;
 }
 
-export function findLatestOutputHtmlFile(input: LatestOutputHtmlInput): SandboxFileData | null {
+export function findLatestAgenticAppFile(input: LatestAgenticAppInput): SandboxFileData | null {
   if (!Array.isArray(input)) {
-    const doneArtifactFile = findLatestOutputHtmlFromFiles(input.doneArtifacts?.sandboxFiles);
+    const doneArtifactFile = findLatestAgenticAppFromFiles(input.doneArtifacts?.sandboxFiles);
     if (doneArtifactFile) {
       return doneArtifactFile;
     }
 
-    const persistedFile = findLatestOutputHtmlFromFiles(input.persistedSandboxFiles);
+    const persistedFile = findLatestAgenticAppFromFiles(input.persistedSandboxFiles);
     if (persistedFile) {
       return persistedFile;
     }
@@ -44,7 +44,7 @@ export function findLatestOutputHtmlFile(input: LatestOutputHtmlInput): SandboxF
 
   const messages = Array.isArray(input) ? input : (input.messages ?? []);
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const file = findLatestOutputHtmlFromFiles(messages[messageIndex]?.sandboxFiles);
+    const file = findLatestAgenticAppFromFiles(messages[messageIndex]?.sandboxFiles);
     if (file) {
       return file;
     }

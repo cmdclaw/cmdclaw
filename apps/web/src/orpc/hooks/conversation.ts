@@ -1,6 +1,9 @@
 import type { InfiniteData } from "@tanstack/react-query";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery as useZeroQuery } from "@rocicorp/zero/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { mapZeroConversationDetail, mapZeroConversationList } from "@/zero/chat-data";
+import { zeroQueries } from "@/zero/queries";
 import { client } from "../client";
 
 type ConversationListQueryData = {
@@ -65,33 +68,49 @@ function removeConversationFromConversationListData(
 
 // Hook for listing conversations
 export function useConversationList(options?: { limit?: number }) {
-  const query = useInfiniteQuery({
-    queryKey: ["conversation", "list", options?.limit],
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      client.conversation.list({ limit: options?.limit ?? 50, cursor: pageParam }),
-    getNextPageParam: (lastPage) => lastPage.nextCursor,
-  });
-
+  const [conversations, details] = useZeroQuery(
+    zeroQueries.conversations.recent({ limit: options?.limit ?? 50 }),
+  );
   const data = useMemo(
     () => ({
-      conversations: query.data?.pages.flatMap((page) => page.conversations) ?? [],
+      conversations: mapZeroConversationList(conversations ?? []),
     }),
-    [query.data],
+    [conversations],
   );
+  const isLoading = details.type !== "complete" && data.conversations.length === 0;
 
   return {
-    ...query,
+    dataUpdatedAt: Date.now(),
+    error: details.type === "error" ? details.error : null,
+    fetchNextPage: async () => undefined,
+    hasNextPage: false,
+    isError: details.type === "error",
+    isFetching: details.type !== "complete",
+    isFetchingNextPage: false,
+    isLoading,
+    isPending: isLoading,
+    refetch: async () => ({ data }),
+    status: details.type === "error" ? "error" : isLoading ? "pending" : "success",
     data,
   };
 }
 
 export function useConversation(id: string | undefined) {
-  return useQuery({
-    queryKey: ["conversation", "get", id],
-    queryFn: () => client.conversation.get({ id: id! }),
-    enabled: !!id,
-  });
+  const [conversation, details] = useZeroQuery(id ? zeroQueries.conversations.byId({ id }) : null);
+  const data = useMemo(() => mapZeroConversationDetail(conversation), [conversation]);
+  const isLoading = Boolean(id) && details.type !== "complete" && !data;
+
+  return {
+    data,
+    dataUpdatedAt: Date.now(),
+    error: details.type === "error" ? details.error : null,
+    isError: details.type === "error",
+    isFetching: Boolean(id) && details.type !== "complete",
+    isLoading,
+    isPending: isLoading,
+    refetch: async () => ({ data }),
+    status: details.type === "error" ? "error" : isLoading ? "pending" : "success",
+  };
 }
 
 export function useConversationImpersonationTarget(
@@ -274,10 +293,10 @@ export function useDownloadSandboxFile() {
   });
 }
 
-export function useOutputHtmlPreview(fileId: string | null | undefined, enabled = true) {
+export function useAgenticAppHtml(fileId: string | null | undefined, enabled = true) {
   return useQuery({
-    queryKey: ["conversation", "output-html-preview", fileId],
-    queryFn: () => client.conversation.previewSandboxOutputHtml({ fileId: fileId! }),
+    queryKey: ["conversation", "agentic-app-html", fileId],
+    queryFn: () => client.conversation.getAgenticAppHtml({ fileId: fileId! }),
     enabled: enabled && !!fileId,
   });
 }

@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import type { Message, MessagePart, SandboxFileData } from "@/components/chat/message-list";
 import { ChatArea } from "@/components/chat/chat-area";
 import { MessageBubble } from "@/components/chat/message-bubble";
-import { findLatestOutputHtmlFile } from "@/components/chat/output-preview-selection";
+import { findLatestAgenticAppFile } from "@/components/chat/agentic-app-selection";
 import { mapPersistedMessagesToChatMessages } from "@/components/chat/persisted-message-mapper";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import {
@@ -48,7 +48,7 @@ import { cn } from "@/lib/utils";
 import {
   useConversation,
   useDownloadSandboxFile,
-  useOutputHtmlPreview,
+  useAgenticAppHtml,
 } from "@/orpc/hooks/conversation";
 import {
   useCoworker,
@@ -315,7 +315,7 @@ function EmptyPreview({ latestMessage }: { latestMessage?: string }) {
   );
 }
 
-function OutputHtmlFrame({
+function AgenticAppFrame({
   outputFile,
   showToolbar = true,
 }: {
@@ -324,7 +324,7 @@ function OutputHtmlFrame({
 }) {
   const t = useGT();
 
-  const preview = useOutputHtmlPreview(outputFile.fileId);
+  const preview = useAgenticAppHtml(outputFile.fileId);
   const { mutateAsync: downloadSandboxFile, isPending: isDownloading } = useDownloadSandboxFile();
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
@@ -361,7 +361,7 @@ function OutputHtmlFrame({
             className="h-8 w-8"
             onClick={handleRefresh}
             disabled={preview.isFetching}
-            aria-label={t("Refresh output preview")}
+            aria-label={t("Refresh Agentic-App")}
           >
             {preview.isFetching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -395,12 +395,12 @@ function OutputHtmlFrame({
           <div className="flex h-full items-center justify-center p-6 text-center">
             <div className="max-w-sm space-y-2">
               <p className="text-sm font-medium">
-                <T>Preview unavailable</T>
+                <T>Agentic-App unavailable</T>
               </p>
               <p className="text-muted-foreground text-xs">
                 {showToolbar
                   ? "Download output.html to inspect the generated file."
-                  : "The generated preview could not be loaded."}
+                  : "The generated Agentic-App could not be loaded."}
               </p>
             </div>
           </div>
@@ -412,12 +412,12 @@ function OutputHtmlFrame({
               size="icon"
               className="bg-background/90 absolute top-3 right-3 z-10 hidden h-8 w-8 border shadow-sm md:inline-flex"
               onClick={handleOpenFullscreen}
-              aria-label={t("Open output preview fullscreen")}
+              aria-label={t("Open Agentic-App fullscreen")}
             >
               <Maximize2 className="h-4 w-4" />
             </Button>
             <iframe
-              title={t("output.html preview")}
+              title={t("output.html Agentic-App")}
               className="bg-background h-full w-full border-0"
               sandbox="allow-scripts allow-forms"
               srcDoc={preview.data?.html ?? ""}
@@ -431,13 +431,13 @@ function OutputHtmlFrame({
           showCloseButton
         >
           <DialogTitle className="sr-only">
-            <T>output.html fullscreen preview</T>
+            <T>output.html Agentic-App fullscreen</T>
           </DialogTitle>
           <DialogDescription className="sr-only">
-            <T>Fullscreen preview of the generated output.html file.</T>
+            <T>Fullscreen view of the generated output.html file.</T>
           </DialogDescription>
           <iframe
-            title={t("output.html fullscreen preview")}
+            title={t("output.html Agentic-App fullscreen")}
             className="bg-background h-full w-full border-0"
             sandbox="allow-scripts allow-forms"
             srcDoc={preview.data?.html ?? ""}
@@ -592,7 +592,7 @@ function OutputPanel({
   showOutputToolbar?: boolean;
 }) {
   return outputFile ? (
-    <OutputHtmlFrame outputFile={outputFile} showToolbar={showOutputToolbar} />
+    <AgenticAppFrame outputFile={outputFile} showToolbar={showOutputToolbar} />
   ) : (
     <EmptyPreview latestMessage={latestCoworkerMessage} />
   );
@@ -715,7 +715,7 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
     () => mapPersistedMessagesToChatMessages(conversation.data?.messages ?? []),
     [conversation.data?.messages],
   );
-  const outputFile = useMemo(() => findLatestOutputHtmlFile(messages), [messages]);
+  const outputFile = useMemo(() => findLatestAgenticAppFile(messages), [messages]);
   const latestCoworkerMessage = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];

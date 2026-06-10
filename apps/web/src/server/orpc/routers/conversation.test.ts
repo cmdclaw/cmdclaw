@@ -295,7 +295,7 @@ describe("conversationRouter.list", () => {
   });
 });
 
-describe("conversationRouter.previewSandboxOutputHtml", () => {
+describe("conversationRouter.getAgenticAppHtml", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     downloadFromS3Mock.mockResolvedValue(Buffer.from("<!doctype html><p>Preview</p>"));
@@ -314,7 +314,7 @@ describe("conversationRouter.previewSandboxOutputHtml", () => {
       },
     });
 
-    const result = await conversationRouterAny.previewSandboxOutputHtml({
+    const result = await conversationRouterAny.getAgenticAppHtml({
       input: { fileId: "file-1" },
       context,
     });
@@ -341,11 +341,15 @@ describe("conversationRouter.previewSandboxOutputHtml", () => {
     });
 
     await expect(
-      conversationRouterAny.previewSandboxOutputHtml({
+      conversationRouterAny.getAgenticAppHtml({
         input: { fileId: "file-2" },
         context,
       }),
-    ).rejects.toMatchObject(new ORPCError("NOT_FOUND", { message: "File not found" }));
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "File not found",
+      data: { agenticAppCode: "not_found" },
+    });
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 
@@ -363,15 +367,19 @@ describe("conversationRouter.previewSandboxOutputHtml", () => {
     });
 
     await expect(
-      conversationRouterAny.previewSandboxOutputHtml({
+      conversationRouterAny.getAgenticAppHtml({
         input: { fileId: "file-3" },
         context,
       }),
-    ).rejects.toMatchObject(new ORPCError("BAD_REQUEST", { message: "File is not previewable" }));
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "File is not an Agentic-App",
+      data: { agenticAppCode: "invalid_filename" },
+    });
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 
-  it("rejects output.html files over the preview size cap before downloading", async () => {
+  it("rejects output.html files over the size cap before downloading", async () => {
     sandboxFileFindFirstMock.mockResolvedValue({
       id: "file-4",
       filename: "output.html",
@@ -385,13 +393,15 @@ describe("conversationRouter.previewSandboxOutputHtml", () => {
     });
 
     await expect(
-      conversationRouterAny.previewSandboxOutputHtml({
+      conversationRouterAny.getAgenticAppHtml({
         input: { fileId: "file-4" },
         context,
       }),
-    ).rejects.toMatchObject(
-      new ORPCError("BAD_REQUEST", { message: "File is too large to preview" }),
-    );
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "File is too large to display",
+      data: { agenticAppCode: "too_large" },
+    });
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 
@@ -409,13 +419,15 @@ describe("conversationRouter.previewSandboxOutputHtml", () => {
     });
 
     await expect(
-      conversationRouterAny.previewSandboxOutputHtml({
+      conversationRouterAny.getAgenticAppHtml({
         input: { fileId: "file-5" },
         context,
       }),
-    ).rejects.toMatchObject(
-      new ORPCError("BAD_REQUEST", { message: "File is not a previewable HTML document" }),
-    );
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "File is not an Agentic-App HTML document",
+      data: { agenticAppCode: "invalid_mime" },
+    });
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 });

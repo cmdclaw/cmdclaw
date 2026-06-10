@@ -504,8 +504,12 @@ vi.mock("./message-list", () => ({
   ),
 }));
 
-vi.mock("./output-html-preview-panel", () => ({
-  OutputHtmlPreviewPanel: () => <div>Output Preview Panel</div>,
+vi.mock("./agentic-app-panel", () => ({
+  AgenticAppPanel: ({ outputFile }: { outputFile: { fileId: string } }) => (
+    <div data-testid="agentic-app-panel" data-file-id={outputFile.fileId}>
+      Agentic-App Panel
+    </div>
+  ),
 }));
 
 vi.mock("./model-selector", () => ({
@@ -866,7 +870,7 @@ describe("ChatArea generation errors", () => {
     expect(screen.queryByRole("button", { name: /debug/i })).not.toBeInTheDocument();
   });
 
-  it("keeps chat reachable on mobile when output preview is enabled", async () => {
+  it("keeps chat reachable on mobile when the Agentic-App panel is enabled", async () => {
     mockConversationState.data = {
       type: "chat",
       messages: [
@@ -887,7 +891,7 @@ describe("ChatArea generation errors", () => {
       ],
     };
 
-    render(<ChatArea conversationId="conv-1" enableOutputPreview />);
+    render(<ChatArea conversationId="conv-1" enableAgenticApp />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Chat" })).toBeInTheDocument();

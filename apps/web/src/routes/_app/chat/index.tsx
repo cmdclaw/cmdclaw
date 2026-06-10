@@ -22,5 +22,5 @@ function NewChatPage() {
   const { prefill } = Route.useSearch();
   const initialPrefillText = prefill ?? null;
 
-  return <ChatArea initialPrefillText={initialPrefillText} enableOutputPreview />;
+  return <ChatArea initialPrefillText={initialPrefillText} enableAgenticApp />;
 }

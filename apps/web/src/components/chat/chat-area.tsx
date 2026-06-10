@@ -103,8 +103,8 @@ import {
   type SandboxFileData,
 } from "./message-list";
 import { ModelSelector } from "./model-selector";
-import { OutputHtmlPreviewPanel } from "./output-html-preview-panel";
-import { findLatestOutputHtmlFile } from "./output-preview-selection";
+import { AgenticAppPanel } from "./agentic-app-panel";
+import { findLatestAgenticAppFile } from "./agentic-app-selection";
 import { isQuestionApprovalRequest } from "./question-approval-utils";
 import { ToolApprovalCard } from "./tool-approval-card";
 import { VoiceIndicator } from "./voice-indicator";
@@ -131,7 +131,7 @@ type Props = {
   skillSelectionScopeKey?: string;
   initialPrefillText?: string | null;
   authCompletion?: { integration: string; interruptId: string } | null;
-  enableOutputPreview?: boolean;
+  enableAgenticApp?: boolean;
   compact?: boolean;
 };
 
@@ -961,7 +961,7 @@ export function ChatArea({
   skillSelectionScopeKey: skillSelectionScopeKeyOverride,
   initialPrefillText,
   authCompletion,
-  enableOutputPreview = false,
+  enableAgenticApp = false,
   compact = false,
 }: Props) {
   const t = useGT();
@@ -1038,17 +1038,17 @@ export function ChatArea({
   const [draftConversationId, setDraftConversationId] = useState<string | undefined>(
     conversationId,
   );
-  const [isOutputPreviewCollapsed, setIsOutputPreviewCollapsed] = useState(false);
+  const [isAgenticAppCollapsed, setIsAgenticAppCollapsed] = useState(false);
   const skillSelectionScopeKey = useMemo(
     () => skillSelectionScopeKeyOverride ?? draftConversationId ?? conversationId ?? "new-chat",
     [conversationId, draftConversationId, skillSelectionScopeKeyOverride],
   );
-  const outputPreviewStorageKey = useMemo(() => {
-    if (!enableOutputPreview) {
+  const agenticAppStorageKey = useMemo(() => {
+    if (!enableAgenticApp) {
       return null;
     }
-    return `chat-output-preview:${draftConversationId ?? conversationId ?? "new-chat"}`;
-  }, [conversationId, draftConversationId, enableOutputPreview]);
+    return `chat-agentic-app:${draftConversationId ?? conversationId ?? "new-chat"}`;
+  }, [conversationId, draftConversationId, enableAgenticApp]);
   const selectedSkillSlugsByScope = useChatSkillStore((state) => state.selectedSkillSlugsByScope);
   const selectedSkillKeys =
     selectedSkillSlugsByScope[skillSelectionScopeKey] ?? EMPTY_SELECTED_SKILLS;
@@ -3903,33 +3903,31 @@ export function ChatArea({
 
     return nodes;
   }, [historicalActivityBlocks, messages]);
-  const latestOutputHtmlFile = useMemo(
-    () => (enableOutputPreview ? findLatestOutputHtmlFile(messages) : null),
-    [enableOutputPreview, messages],
+  const latestAgenticAppFile = useMemo(
+    () => (enableAgenticApp ? findLatestAgenticAppFile(messages) : null),
+    [enableAgenticApp, messages],
   );
 
   useEffect(() => {
-    if (!outputPreviewStorageKey || !latestOutputHtmlFile || typeof window === "undefined") {
+    if (!agenticAppStorageKey || !latestAgenticAppFile || typeof window === "undefined") {
       return;
     }
 
-    setIsOutputPreviewCollapsed(
-      window.localStorage.getItem(outputPreviewStorageKey) === "collapsed",
-    );
-  }, [latestOutputHtmlFile, outputPreviewStorageKey]);
+    setIsAgenticAppCollapsed(window.localStorage.getItem(agenticAppStorageKey) === "collapsed");
+  }, [latestAgenticAppFile, agenticAppStorageKey]);
 
-  const handleOutputPreviewCollapsedChange = useCallback(
+  const handleAgenticAppCollapsedChange = useCallback(
     (collapsed: boolean) => {
-      setIsOutputPreviewCollapsed(collapsed);
-      if (outputPreviewStorageKey && typeof window !== "undefined") {
-        window.localStorage.setItem(outputPreviewStorageKey, collapsed ? "collapsed" : "open");
+      setIsAgenticAppCollapsed(collapsed);
+      if (agenticAppStorageKey && typeof window !== "undefined") {
+        window.localStorage.setItem(agenticAppStorageKey, collapsed ? "collapsed" : "open");
       }
     },
-    [outputPreviewStorageKey],
+    [agenticAppStorageKey],
   );
-  const handleCloseOutputPreview = useCallback(() => {
-    handleOutputPreviewCollapsedChange(true);
-  }, [handleOutputPreviewCollapsedChange]);
+  const handleCloseAgenticApp = useCallback(() => {
+    handleAgenticAppCollapsedChange(true);
+  }, [handleAgenticAppCollapsedChange]);
 
   // Voice recording: stop and transcribe
   const stopRecordingAndTranscribe = useCallback(async () => {
@@ -4377,18 +4375,20 @@ export function ChatArea({
       voiceError,
     ],
   );
-  const outputPreviewPanel = useMemo(() => {
-    if (!latestOutputHtmlFile) {
+  const agenticAppPanel = useMemo(() => {
+    if (!latestAgenticAppFile) {
       return null;
     }
 
     return (
-      <OutputHtmlPreviewPanel
-        outputFile={latestOutputHtmlFile}
-        onClose={handleCloseOutputPreview}
+      <AgenticAppPanel
+        key={latestAgenticAppFile.fileId}
+        outputFile={latestAgenticAppFile}
+        onClose={handleCloseAgenticApp}
+        onSendPrompt={handleSend}
       />
     );
-  }, [handleCloseOutputPreview, latestOutputHtmlFile]);
+  }, [handleCloseAgenticApp, handleSend, latestAgenticAppFile]);
 
   if (conversationId && isLoading) {
     return (
@@ -4400,25 +4400,25 @@ export function ChatArea({
     );
   }
 
-  if (enableOutputPreview && latestOutputHtmlFile && outputPreviewPanel) {
+  if (enableAgenticApp && latestAgenticAppFile && agenticAppPanel) {
     return (
       <DualPanelWorkspace
-        storageKey="chat-output-preview-panels-v1"
+        storageKey="chat-agentic-app-panels-v1"
         defaultRightWidth={42}
         minRightWidth={34}
         collapsible
         collapsedSidebar
         showExpandedCollapseButton={false}
         showTitles={false}
-        rightCollapsed={isOutputPreviewCollapsed}
-        onRightCollapsedChange={handleOutputPreviewCollapsedChange}
+        rightCollapsed={isAgenticAppCollapsed}
+        onRightCollapsedChange={handleAgenticAppCollapsedChange}
         leftTitle="Chat"
         rightTitle="output.html"
         leftPanelClassName="border-0 rounded-none"
         separatorClassName="bg-muted/30"
         rightPanelClassName="border-0 rounded-none bg-muted/30 md:min-w-[28rem]"
         left={chatContent}
-        right={outputPreviewPanel}
+        right={agenticAppPanel}
       />
     );
   }

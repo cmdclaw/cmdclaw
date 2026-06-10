@@ -94,6 +94,6 @@ function ConversationPage() {
   }
 
   return (
-    <ChatArea conversationId={conversationId} authCompletion={authCompletion} enableOutputPreview />
+    <ChatArea conversationId={conversationId} authCompletion={authCompletion} enableAgenticApp />
   );
 }

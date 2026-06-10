@@ -14,7 +14,7 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { MessageList } from "@/components/chat/message-list";
 import { MessageBubble } from "@/components/chat/message-bubble";
-import { findLatestOutputHtmlFile } from "@/components/chat/output-preview-selection";
+import { findLatestAgenticAppFile } from "@/components/chat/agentic-app-selection";
 import { mapPersistedMessagesToChatMessages } from "@/components/chat/persisted-message-mapper";
 import { CoworkerAvatar } from "@/components/coworker-avatar";
 import { RunDebugDetails } from "@/components/coworkers/run-debug-details";
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import {
   useConversation,
   useDownloadSandboxFile,
-  useOutputHtmlPreview,
+  useAgenticAppHtml,
 } from "@/orpc/hooks/conversation";
 import {
   useCoworker,
@@ -123,8 +123,8 @@ function EmptyPreview({ latestMessage }: { latestMessage?: string }) {
   );
 }
 
-function OutputHtmlFrame({ outputFile }: { outputFile: SandboxFileData }) {
-  const preview = useOutputHtmlPreview(outputFile.fileId);
+function AgenticAppFrame({ outputFile }: { outputFile: SandboxFileData }) {
+  const preview = useAgenticAppHtml(outputFile.fileId);
   const { mutateAsync: downloadSandboxFile, isPending: isDownloading } = useDownloadSandboxFile();
 
   const handleRefresh = useCallback(() => {
@@ -154,7 +154,7 @@ function OutputHtmlFrame({ outputFile }: { outputFile: SandboxFileData }) {
           className="h-8 w-8"
           onClick={handleRefresh}
           disabled={preview.isFetching}
-          aria-label="Refresh output preview"
+          aria-label="Refresh Agentic-App"
         >
           {preview.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -186,7 +186,7 @@ function OutputHtmlFrame({ outputFile }: { outputFile: SandboxFileData }) {
         ) : preview.isError ? (
           <div className="flex h-full items-center justify-center p-6 text-center">
             <div className="max-w-sm space-y-2">
-              <p className="text-sm font-medium">Preview unavailable</p>
+              <p className="text-sm font-medium">Agentic-App unavailable</p>
               <p className="text-muted-foreground text-xs">
                 Download output.html to inspect the generated file.
               </p>
@@ -194,7 +194,7 @@ function OutputHtmlFrame({ outputFile }: { outputFile: SandboxFileData }) {
           </div>
         ) : (
           <iframe
-            title="output.html preview"
+            title="output.html Agentic-App"
             className="bg-background h-full w-full border-0"
             sandbox="allow-scripts allow-forms"
             srcDoc={preview.data?.html ?? ""}
@@ -285,7 +285,7 @@ export function CoworkerInfoPrototype({ coworkerSlug }: Props) {
     () => mapPersistedMessagesToChatMessages(conversation.data?.messages ?? []),
     [conversation.data?.messages],
   );
-  const outputFile = useMemo(() => findLatestOutputHtmlFile(messages), [messages]);
+  const outputFile = useMemo(() => findLatestAgenticAppFile(messages), [messages]);
   const latestCoworkerMessage = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
@@ -473,7 +473,7 @@ export function CoworkerInfoPrototype({ coworkerSlug }: Props) {
         <section className="grid min-h-[calc(100dvh-13rem)] gap-4 xl:grid-cols-[minmax(0,1fr)_25rem]">
           <div className="border-border bg-card min-h-[34rem] overflow-hidden rounded-xl border">
             {outputFile ? (
-              <OutputHtmlFrame outputFile={outputFile} />
+              <AgenticAppFrame outputFile={outputFile} />
             ) : (
               <EmptyPreview latestMessage={latestCoworkerMessage} />
             )}

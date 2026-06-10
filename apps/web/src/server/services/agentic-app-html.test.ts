@@ -4,11 +4,7 @@ type VitestProcedure = Extract<
   NonNullable<Parameters<typeof vi.fn>[0]>,
   (...args: never[]) => unknown
 >;
-import {
-  loadOutputHtmlPreview,
-  OUTPUT_HTML_PREVIEW_MAX_BYTES,
-  OutputHtmlPreviewError,
-} from "./output-html-preview";
+import { loadAgenticAppHtml, AGENTIC_APP_MAX_BYTES, AgenticAppHtmlError } from "./agentic-app-html";
 
 const { downloadFromS3Mock } = vi.hoisted(() => ({
   downloadFromS3Mock: vi.fn<VitestProcedure>(),
@@ -38,7 +34,7 @@ function previewFile(overrides?: {
   };
 }
 
-describe("loadOutputHtmlPreview", () => {
+describe("loadAgenticAppHtml", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     downloadFromS3Mock.mockResolvedValue(Buffer.from("<!doctype html><p>Preview</p>"));
@@ -46,7 +42,7 @@ describe("loadOutputHtmlPreview", () => {
 
   it("returns HTML for an owned text/html output.html file", async () => {
     await expect(
-      loadOutputHtmlPreview({
+      loadAgenticAppHtml({
         file: previewFile({ mimeType: "text/html; charset=utf-8" }),
         userId: "user-1",
         workspaceId: "ws-1",
@@ -61,52 +57,48 @@ describe("loadOutputHtmlPreview", () => {
 
   it("rejects files not owned by the active user and workspace", async () => {
     await expect(
-      loadOutputHtmlPreview({
+      loadAgenticAppHtml({
         file: previewFile({ workspaceId: "ws-2" }),
         userId: "user-1",
         workspaceId: "ws-1",
       }),
-    ).rejects.toMatchObject(new OutputHtmlPreviewError("not_found", "File not found"));
+    ).rejects.toMatchObject(new AgenticAppHtmlError("not_found", "File not found"));
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 
   it("rejects non-HTML MIME types before downloading", async () => {
     await expect(
-      loadOutputHtmlPreview({
+      loadAgenticAppHtml({
         file: previewFile({ mimeType: "application/json" }),
         userId: "user-1",
         workspaceId: "ws-1",
       }),
     ).rejects.toMatchObject(
-      new OutputHtmlPreviewError("invalid_mime", "File is not a previewable HTML document"),
+      new AgenticAppHtmlError("invalid_mime", "File is not an Agentic-App HTML document"),
     );
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 
   it("rejects oversized files before downloading when stored size is known", async () => {
     await expect(
-      loadOutputHtmlPreview({
-        file: previewFile({ sizeBytes: OUTPUT_HTML_PREVIEW_MAX_BYTES + 1 }),
+      loadAgenticAppHtml({
+        file: previewFile({ sizeBytes: AGENTIC_APP_MAX_BYTES + 1 }),
         userId: "user-1",
         workspaceId: "ws-1",
       }),
-    ).rejects.toMatchObject(
-      new OutputHtmlPreviewError("too_large", "File is too large to preview"),
-    );
+    ).rejects.toMatchObject(new AgenticAppHtmlError("too_large", "File is too large to display"));
     expect(downloadFromS3Mock).not.toHaveBeenCalled();
   });
 
   it("rejects oversized downloaded bodies when stored size is missing", async () => {
-    downloadFromS3Mock.mockResolvedValue(Buffer.alloc(OUTPUT_HTML_PREVIEW_MAX_BYTES + 1));
+    downloadFromS3Mock.mockResolvedValue(Buffer.alloc(AGENTIC_APP_MAX_BYTES + 1));
 
     await expect(
-      loadOutputHtmlPreview({
+      loadAgenticAppHtml({
         file: previewFile({ sizeBytes: null }),
         userId: "user-1",
         workspaceId: "ws-1",
       }),
-    ).rejects.toMatchObject(
-      new OutputHtmlPreviewError("too_large", "File is too large to preview"),
-    );
+    ).rejects.toMatchObject(new AgenticAppHtmlError("too_large", "File is too large to display"));
   });
 });
