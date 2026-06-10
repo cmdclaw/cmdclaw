@@ -112,6 +112,9 @@ export async function resolveRuntimeEnvironmentForTurn(
       ...filteredCliEnv,
       APP_URL: resolveSandboxRuntimeAppUrl(),
       CMDCLAW_RUNTIME_CREDENTIALS_URL: `${resolveSandboxRuntimeAppUrl().replace(/\/$/, "")}/api/internal/mcp/runtime-credentials`,
+      CMDCLAW_REMOTE_INTEGRATION_SOURCE: input.remoteIntegrationSource
+        ? JSON.stringify(input.remoteIntegrationSource)
+        : undefined,
       CMDCLAW_USER_ID: input.userId,
       CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
       CONVERSATION_ID: input.conversationId,

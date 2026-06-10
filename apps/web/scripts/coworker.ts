@@ -35,6 +35,9 @@ type ParsedArgs = {
   watch: boolean;
   debug: boolean;
   watchIntervalSeconds: number;
+  remoteIntegrationEnv?: "staging" | "prod";
+  remoteIntegrationUserId?: string;
+  remoteIntegrationUserEmail?: string;
   limit?: number;
   // Create flags
   name?: string;
@@ -63,6 +66,8 @@ type CoworkerIntegrationType =
   | "google_docs"
   | "google_sheets"
   | "google_drive"
+  | "outlook"
+  | "outlook_calendar"
   | "notion"
   | "github"
   | "airtable"
@@ -80,6 +85,8 @@ const integrationTypes = new Set<CoworkerIntegrationType>([
   "google_docs",
   "google_sheets",
   "google_drive",
+  "outlook",
+  "outlook_calendar",
   "notion",
   "github",
   "airtable",
@@ -142,6 +149,23 @@ function parseArgs(argv: string[]): ParsedArgs {
         i += 1;
         break;
       }
+      case "--remote-integration-env": {
+        const targetEnv = argv[i + 1];
+        if (targetEnv !== "staging" && targetEnv !== "prod") {
+          throw new Error("--remote-integration-env must be one of: staging, prod");
+        }
+        args.remoteIntegrationEnv = targetEnv;
+        i += 1;
+        break;
+      }
+      case "--remote-integration-user-id":
+        args.remoteIntegrationUserId = argv[i + 1];
+        i += 1;
+        break;
+      case "--remote-integration-user-email":
+        args.remoteIntegrationUserEmail = argv[i + 1];
+        i += 1;
+        break;
       case "--limit": {
         const parsed = Number(argv[i + 1]);
         if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -453,6 +477,13 @@ function printHelp(): void {
     "  --debug                           Trigger a fresh run and tail run, transcript, and final DB state",
   );
   console.log("  --watch-interval <seconds>        Polling interval for --watch (default 2)");
+  console.log(
+    "  --remote-integration-env <env>    Borrow remote integrations from staging or prod",
+  );
+  console.log("  --remote-integration-user-id <id> Remote user id for borrowed integrations");
+  console.log(
+    "  --remote-integration-user-email <email> Resolve remote user by email before running",
+  );
   console.log("\nLogs/Runs flags:");
   console.log(
     "  --limit <n>                       Limit run list size for runs command (default 20)",
@@ -866,6 +897,57 @@ async function createCoworker(client: RouterClient<AppRouter>, args: ParsedArgs)
   });
 }
 
+async function resolveRemoteIntegrationSource(
+  client: RouterClient<AppRouter>,
+  args: ParsedArgs,
+): Promise<{ targetEnv: "staging" | "prod"; remoteUserId: string } | undefined> {
+  const hasRemoteSourceInput = Boolean(
+    args.remoteIntegrationEnv || args.remoteIntegrationUserId || args.remoteIntegrationUserEmail,
+  );
+  if (!hasRemoteSourceInput) {
+    return undefined;
+  }
+
+  if (!args.remoteIntegrationEnv) {
+    throw new Error("--remote-integration-env is required when using remote integrations");
+  }
+  if (args.remoteIntegrationUserId && args.remoteIntegrationUserEmail) {
+    throw new Error(
+      "Use only one of --remote-integration-user-id or --remote-integration-user-email",
+    );
+  }
+  if (args.remoteIntegrationUserId) {
+    return {
+      targetEnv: args.remoteIntegrationEnv,
+      remoteUserId: args.remoteIntegrationUserId,
+    };
+  }
+  if (!args.remoteIntegrationUserEmail) {
+    throw new Error(
+      "Remote integrations require --remote-integration-user-id or --remote-integration-user-email",
+    );
+  }
+
+  const result = await client.coworker.searchRemoteIntegrationUsers({
+    targetEnv: args.remoteIntegrationEnv,
+    query: args.remoteIntegrationUserEmail,
+    limit: 10,
+  });
+  const normalizedEmail = args.remoteIntegrationUserEmail.trim().toLowerCase();
+  const exactMatch = result.users.find((entry) => entry.email.toLowerCase() === normalizedEmail);
+  if (!exactMatch) {
+    const candidates = result.users.map((entry) => `${entry.email} (${entry.id})`).join(", ");
+    throw new Error(
+      `Remote integration user ${args.remoteIntegrationUserEmail} was not found in ${args.remoteIntegrationEnv}.${candidates ? ` Candidates: ${candidates}` : ""}`,
+    );
+  }
+
+  return {
+    targetEnv: args.remoteIntegrationEnv,
+    remoteUserId: exactMatch.id,
+  };
+}
+
 async function runCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): Promise<void> {
   const coworkerRef = args.positionals[0];
   if (!coworkerRef) {
@@ -882,11 +964,18 @@ async function runCoworker(client: RouterClient<AppRouter>, args: ParsedArgs): P
 
   const payload = parsePayload(args.payload);
   const trustedUserInput = args.userInput?.trim();
+  const remoteIntegrationSource = await resolveRemoteIntegrationSource(client, args);
+  if (remoteIntegrationSource) {
+    console.log(
+      `Using remote integrations from ${remoteIntegrationSource.targetEnv} user ${remoteIntegrationSource.remoteUserId}`,
+    );
+  }
   const result = await client.coworker.trigger({
     id: coworkerId,
     payload,
     trustedUserInput:
       trustedUserInput && trustedUserInput.length > 0 ? trustedUserInput : undefined,
+    remoteIntegrationSource,
   });
 
   console.log(`Triggered coworker ${result.coworkerId}`);

@@ -1,4 +1,9 @@
+import { env } from "@cmdclaw/core/env";
 import { getCliEnvForUser } from "@cmdclaw/core/server/integrations/cli-env";
+import {
+  getRemoteIntegrationCredentials,
+  searchRemoteIntegrationUsers,
+} from "@cmdclaw/core/server/integrations/remote-integrations";
 import { SANDBOX_SKILLS_ROOT } from "@cmdclaw/sandbox/paths";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
@@ -13,6 +18,9 @@ type ParsedArgs = {
   serverUrl: string;
   toolName?: string;
   toolArgs: string[];
+  remoteIntegrationEnv?: "staging" | "prod";
+  remoteIntegrationUserId?: string;
+  remoteIntegrationUserEmail?: string;
 };
 
 const SKILLS_ROOT = SANDBOX_SKILLS_ROOT;
@@ -38,6 +46,25 @@ const TOOL_ENV_REQUIREMENTS: Record<string, string[]> = {
   twitter: ["TWITTER_ACCESS_TOKEN"],
 };
 
+const TOOL_INTEGRATION_TYPES: Partial<Record<string, string>> = {
+  airtable: "airtable",
+  dynamics: "dynamics",
+  github: "github",
+  "google-calendar": "google_calendar",
+  "google-docs": "google_docs",
+  "google-drive": "google_drive",
+  "google-gmail": "google_gmail",
+  "google-sheets": "google_sheets",
+  hubspot: "hubspot",
+  notion: "notion",
+  "outlook-calendar": "outlook_calendar",
+  "outlook-mail": "outlook",
+  reddit: "reddit",
+  salesforce: "salesforce",
+  slack: "slack",
+  twitter: "twitter",
+};
+
 const TOOL_SPECS = Object.fromEntries(
   Object.entries(TOOL_ENV_REQUIREMENTS).map(([toolName, requiredEnv]) => [
     toolName,
@@ -61,6 +88,9 @@ function printHelp(): void {
   console.log("\nExamples:");
   console.log("  bun run tool google-gmail --help");
   console.log('  bun run tool google-gmail search -q "is:unread" -l 5');
+  console.log(
+    "  bun run tool --remote-integration-env prod --remote-integration-user-email user@example.com outlook-mail list -l 5",
+  );
   console.log('  bun run tool linkedin profile get "acme-user"\n');
 }
 
@@ -88,6 +118,28 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
+    if (arg === "--remote-integration-env" && !toolCaptured) {
+      const targetEnv = argv[i + 1];
+      if (targetEnv !== "staging" && targetEnv !== "prod") {
+        throw new Error("--remote-integration-env must be one of: staging, prod");
+      }
+      parsed.remoteIntegrationEnv = targetEnv;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--remote-integration-user-id" && !toolCaptured) {
+      parsed.remoteIntegrationUserId = argv[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--remote-integration-user-email" && !toolCaptured) {
+      parsed.remoteIntegrationUserEmail = argv[i + 1];
+      i += 1;
+      continue;
+    }
+
     if (!toolCaptured && !arg.startsWith("-")) {
       parsed.toolName = arg;
       toolCaptured = true;
@@ -107,7 +159,67 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-async function resolveCliEnv(serverUrl: string): Promise<Record<string, string>> {
+async function resolveRemoteIntegrationSource(parsed: ParsedArgs): Promise<
+  | {
+      targetEnv: "staging" | "prod";
+      remoteUserId: string;
+      remoteUserEmail?: string | null;
+    }
+  | undefined
+> {
+  const hasRemoteSourceInput = Boolean(
+    parsed.remoteIntegrationEnv ||
+    parsed.remoteIntegrationUserId ||
+    parsed.remoteIntegrationUserEmail,
+  );
+  if (!hasRemoteSourceInput) {
+    return undefined;
+  }
+  if (!parsed.remoteIntegrationEnv) {
+    throw new Error("--remote-integration-env is required when using remote integrations");
+  }
+  if (parsed.remoteIntegrationUserId && parsed.remoteIntegrationUserEmail) {
+    throw new Error(
+      "Use only one of --remote-integration-user-id or --remote-integration-user-email",
+    );
+  }
+  if (parsed.remoteIntegrationUserId) {
+    return {
+      targetEnv: parsed.remoteIntegrationEnv,
+      remoteUserId: parsed.remoteIntegrationUserId,
+    };
+  }
+  if (!parsed.remoteIntegrationUserEmail) {
+    throw new Error(
+      "Remote integrations require --remote-integration-user-id or --remote-integration-user-email",
+    );
+  }
+
+  const result = await searchRemoteIntegrationUsers({
+    targetEnv: parsed.remoteIntegrationEnv,
+    query: parsed.remoteIntegrationUserEmail,
+    limit: 10,
+  });
+  const normalizedEmail = parsed.remoteIntegrationUserEmail.trim().toLowerCase();
+  const exactMatch = result.find((entry) => entry.email.toLowerCase() === normalizedEmail);
+  if (!exactMatch) {
+    const candidates = result.map((entry) => `${entry.email} (${entry.id})`).join(", ");
+    throw new Error(
+      `Remote integration user ${parsed.remoteIntegrationUserEmail} was not found in ${parsed.remoteIntegrationEnv}.${candidates ? ` Candidates: ${candidates}` : ""}`,
+    );
+  }
+
+  return {
+    targetEnv: parsed.remoteIntegrationEnv,
+    remoteUserId: exactMatch.id,
+    remoteUserEmail: exactMatch.email,
+  };
+}
+
+async function resolveCliEnv(
+  parsed: ParsedArgs,
+): Promise<{ cliEnv: Record<string, string>; userId: string }> {
+  const { serverUrl } = parsed;
   const config = loadConfig(serverUrl);
   if (!config?.token) {
     throw new Error(
@@ -121,7 +233,37 @@ async function resolveCliEnv(serverUrl: string): Promise<Record<string, string>>
     throw new Error("Could not resolve authenticated user from CLI token.");
   }
 
-  return getCliEnvForUser(me.id);
+  const remoteIntegrationSource = await resolveRemoteIntegrationSource(parsed);
+  if (remoteIntegrationSource) {
+    const integrationType = parsed.toolName ? TOOL_INTEGRATION_TYPES[parsed.toolName] : undefined;
+    if (!integrationType) {
+      throw new Error(`Remote integrations are not supported for ${parsed.toolName}`);
+    }
+    const credentials = await getRemoteIntegrationCredentials({
+      targetEnv: remoteIntegrationSource.targetEnv,
+      remoteUserId: remoteIntegrationSource.remoteUserId,
+      integrationTypes: [integrationType as never],
+      requestedByUserId: me.id,
+      requestedByEmail: me.email ?? null,
+    });
+    return {
+      userId: me.id,
+      cliEnv: {
+        ...credentials.tokens,
+        CMDCLAW_REMOTE_INTEGRATION_SOURCE: JSON.stringify({
+          ...remoteIntegrationSource,
+          requestedByUserId: me.id,
+          requestedByEmail: me.email ?? null,
+          remoteUserEmail: remoteIntegrationSource.remoteUserEmail ?? credentials.remoteUserEmail,
+        }),
+        CMDCLAW_RUNTIME_CREDENTIALS_URL: `${serverUrl.replace(/\/$/, "")}/api/internal/mcp/runtime-credentials`,
+        CMDCLAW_SERVER_SECRET: env.CMDCLAW_SERVER_SECRET || "",
+        CMDCLAW_USER_ID: me.id,
+      },
+    };
+  }
+
+  return { userId: me.id, cliEnv: await getCliEnvForUser(me.id) };
 }
 
 async function main(): Promise<void> {
@@ -144,7 +286,7 @@ async function main(): Promise<void> {
   let cliEnv: Record<string, string> = {};
 
   if (!toolHelpRequested) {
-    cliEnv = await resolveCliEnv(parsed.serverUrl);
+    cliEnv = (await resolveCliEnv(parsed)).cliEnv;
 
     const missingEnv = spec.requiredEnv.filter((key) => !cliEnv[key]);
     if (missingEnv.length > 0) {

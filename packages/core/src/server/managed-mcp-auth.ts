@@ -5,6 +5,13 @@ export type ManagedMcpTokenClaims = {
   workspaceId: string;
   internalKey: string;
   exp: number;
+  remoteIntegrationSource?: {
+    targetEnv: "staging" | "prod";
+    remoteUserId: string;
+    requestedByUserId?: string;
+    requestedByEmail?: string | null;
+    remoteUserEmail?: string | null;
+  };
 };
 
 function encodeBase64Url(value: string): string {
@@ -46,11 +53,27 @@ export function verifyManagedMcpToken(
   }
 
   const parsed = JSON.parse(decodeBase64Url(payload)) as Partial<ManagedMcpTokenClaims>;
+  const remoteIntegrationSource = parsed.remoteIntegrationSource;
   if (
     !parsed.userId ||
     !parsed.workspaceId ||
     !parsed.internalKey ||
-    typeof parsed.exp !== "number"
+    typeof parsed.exp !== "number" ||
+    (remoteIntegrationSource !== undefined &&
+      (typeof remoteIntegrationSource !== "object" ||
+        (remoteIntegrationSource.targetEnv !== "staging" &&
+          remoteIntegrationSource.targetEnv !== "prod") ||
+        typeof remoteIntegrationSource.remoteUserId !== "string" ||
+        remoteIntegrationSource.remoteUserId.length === 0 ||
+        (remoteIntegrationSource.requestedByUserId !== undefined &&
+          (typeof remoteIntegrationSource.requestedByUserId !== "string" ||
+            remoteIntegrationSource.requestedByUserId.length === 0)) ||
+        (remoteIntegrationSource.requestedByEmail !== undefined &&
+          remoteIntegrationSource.requestedByEmail !== null &&
+          typeof remoteIntegrationSource.requestedByEmail !== "string") ||
+        (remoteIntegrationSource.remoteUserEmail !== undefined &&
+          remoteIntegrationSource.remoteUserEmail !== null &&
+          typeof remoteIntegrationSource.remoteUserEmail !== "string")))
   ) {
     throw new Error("Invalid managed MCP token payload.");
   }

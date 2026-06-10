@@ -11,6 +11,13 @@ type AuthenticatedMcpClaims = {
   audience: HostedMcpAudience;
   grantId?: string;
   internalKey?: string;
+  remoteIntegrationSource?: {
+    targetEnv: "staging" | "prod";
+    remoteUserId: string;
+    requestedByUserId?: string;
+    requestedByEmail?: string | null;
+    remoteUserEmail?: string | null;
+  };
   authType: "hosted_oauth" | "managed";
 };
 
@@ -130,6 +137,7 @@ export async function authenticateHostedMcpRequest(params: {
         workspaceId: managedClaims.workspaceId,
         audience: params.requiredAudience,
         internalKey: managedClaims.internalKey,
+        remoteIntegrationSource: managedClaims.remoteIntegrationSource,
         authType: "managed" as const,
       },
     };

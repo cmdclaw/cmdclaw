@@ -42,6 +42,18 @@ function runtimeCredentialRequestHeaders(): Record<string, string> {
   return headers;
 }
 
+function parseRemoteIntegrationSource(): unknown {
+  const raw = process.env.CMDCLAW_REMOTE_INTEGRATION_SOURCE;
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function resolveConnectedAccountAccessToken(
   options: ConnectedAccountCliOptions,
 ): Promise<string> {
@@ -55,6 +67,7 @@ export async function resolveConnectedAccountAccessToken(
       headers: runtimeCredentialRequestHeaders(),
       body: JSON.stringify({
         userId,
+        remoteIntegrationSource: parseRemoteIntegrationSource(),
         resolve: {
           integrationType: options.integrationType,
           accountLabel,

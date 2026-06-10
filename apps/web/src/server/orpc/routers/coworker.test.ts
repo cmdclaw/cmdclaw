@@ -127,7 +127,7 @@ const coworkerRouterAny = coworkerRouter as unknown as Record<
   string,
   (args: unknown) => Promise<unknown>
 >;
-const DEFAULT_MODEL = "openai/gpt-5.4";
+const DEFAULT_MODEL = "openai/gpt-5.5";
 
 function createContext() {
   const insertReturningMock = vi.fn<VitestProcedure>();

@@ -662,6 +662,7 @@ export class OpenCodeNormalRunner {
             workspaceId: ctx.workspaceId,
             userId: ctx.userId,
             allowedWorkspaceMcpServerIds: ctx.allowedWorkspaceMcpServerIds,
+            remoteIntegrationSource: ctx.remoteIntegrationSource,
           });
           for (const unavailable of resolved.unavailableServers) {
             runtimeMcpWarnings.push({

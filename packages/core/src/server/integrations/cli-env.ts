@@ -10,10 +10,7 @@ import {
   getDelegatedRuntimeCredentials,
   listCloudManagedIntegrations,
 } from "../control-plane/client";
-import {
-  getValidTokensForUser,
-  getValidCustomTokens,
-} from "./token-refresh";
+import { getValidTokensForUser, getValidCustomTokens } from "./token-refresh";
 import { backfillConnectedIdentities } from "./backfill-connected-identities";
 
 // Token-based integrations map to their access token env var
@@ -40,6 +37,10 @@ const TOKEN_ENV_VAR_MAP: Record<TokenEnvIntegrationType, string> = {
 
 function isTokenEnvIntegrationType(type: string): type is TokenEnvIntegrationType {
   return type in TOKEN_ENV_VAR_MAP;
+}
+
+export function getTokenEnvVarForIntegrationType(type: string): string | null {
+  return isTokenEnvIntegrationType(type) ? TOKEN_ENV_VAR_MAP[type] : null;
 }
 
 const CLI_ENV_INTEGRATION_MAP: Record<string, IntegrationType> = {

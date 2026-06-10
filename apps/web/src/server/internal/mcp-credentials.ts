@@ -1,11 +1,16 @@
 import {
   getEnabledIntegrationTypes,
+  getTokenEnvVarForIntegrationType,
   getTokensForIntegrations,
 } from "@cmdclaw/core/server/integrations/cli-env";
 import {
   ConnectedAccountResolutionError,
   resolveConnectedAccountCredential,
 } from "@cmdclaw/core/server/integrations/connected-account-resolution";
+import {
+  getRemoteIntegrationCredentials,
+  remoteIntegrationSourceSchema,
+} from "@cmdclaw/core/server/integrations/remote-integrations";
 import {
   getGalienCredentialForUser,
   getGalienWorkspaceAccessForUser,
@@ -14,6 +19,9 @@ import {
   canUserUseModulrInWorkspace,
   getModulrWorkspaceConnection,
 } from "@cmdclaw/core/server/modulr/service";
+import { db } from "@cmdclaw/db/client";
+import { user } from "@cmdclaw/db/schema";
+import { eq } from "drizzle-orm";
 import { isAuthorizedByServerSecret } from "@/server/internal/server-secret";
 
 /**
@@ -25,6 +33,24 @@ function assertValidServerSecret(request: Request): void {
   if (!isAuthorizedByServerSecret(request)) {
     throw new Error("Unauthorized");
   }
+}
+
+async function assertRemoteIntegrationSourceAdmin(source: {
+  requestedByUserId?: string;
+}): Promise<Response | null> {
+  if (!source.requestedByUserId) {
+    return Response.json({ message: "Missing remote integration actor" }, { status: 403 });
+  }
+
+  const actor = await db.query.user.findFirst({
+    where: eq(user.id, source.requestedByUserId),
+    columns: { role: true },
+  });
+  if (actor?.role !== "admin") {
+    return Response.json({ message: "Admin access required" }, { status: 403 });
+  }
+
+  return null;
 }
 
 /** POST /api/internal/mcp/galien-credentials */
@@ -130,13 +156,72 @@ export async function handleRuntimeCredentials(request: Request): Promise<Respon
         accountLabel?: string | null;
         allowedIntegrationTypes?: string[];
       };
+      remoteIntegrationSource?: unknown;
     };
 
     if (!body.userId) {
       return Response.json({ message: "Missing userId" }, { status: 400 });
     }
 
+    const remoteIntegrationSourceResult = remoteIntegrationSourceSchema
+      .optional()
+      .safeParse(body.remoteIntegrationSource);
+    if (!remoteIntegrationSourceResult.success) {
+      return Response.json({ message: "Invalid remoteIntegrationSource" }, { status: 400 });
+    }
+    const remoteIntegrationSource = remoteIntegrationSourceResult.data;
+    if (remoteIntegrationSource) {
+      const forbidden = await assertRemoteIntegrationSourceAdmin(remoteIntegrationSource);
+      if (forbidden) {
+        return forbidden;
+      }
+    }
+
     if (body.resolve?.integrationType) {
+      if (remoteIntegrationSource) {
+        const integrationType = body.resolve.integrationType;
+        const tokenEnvVar = getTokenEnvVarForIntegrationType(integrationType);
+        if (!tokenEnvVar) {
+          return Response.json(
+            { message: `Remote credential resolution is not supported for ${integrationType}.` },
+            { status: 400 },
+          );
+        }
+        const credentials = await getRemoteIntegrationCredentials({
+          targetEnv: remoteIntegrationSource.targetEnv,
+          remoteUserId: remoteIntegrationSource.remoteUserId,
+          integrationTypes: [integrationType as never],
+          requestedByUserId: remoteIntegrationSource.requestedByUserId,
+          requestedByEmail: remoteIntegrationSource.requestedByEmail ?? null,
+        });
+        const accessToken = credentials.tokens[tokenEnvVar];
+        if (!accessToken) {
+          return Response.json(
+            {
+              code: "auth_required",
+              message: `No Connected Account is available for ${integrationType}.`,
+              availableAccountLabels: [],
+            },
+            { status: 409 },
+          );
+        }
+        return Response.json({
+          credential: {
+            integrationType,
+            accessToken,
+            connectedAccountId: remoteIntegrationSource.remoteUserId,
+            connectedIdentityId: null,
+            accountLabel: null,
+            displayName: credentials.remoteUserName,
+            metadata: {
+              remoteUserEmail: credentials.remoteUserEmail,
+              remoteTargetEnv: remoteIntegrationSource.targetEnv,
+            },
+            availableAccountLabels: [],
+          },
+          issuedAt: new Date().toISOString(),
+        });
+      }
       try {
         const credential = await resolveConnectedAccountCredential({
           userId: body.userId,
@@ -161,6 +246,24 @@ export async function handleRuntimeCredentials(request: Request): Promise<Respon
         }
         throw error;
       }
+    }
+
+    if (remoteIntegrationSource) {
+      const credentials = await getRemoteIntegrationCredentials({
+        targetEnv: remoteIntegrationSource.targetEnv,
+        remoteUserId: remoteIntegrationSource.remoteUserId,
+        integrationTypes: (body.integrationTypes ?? []) as never,
+        requestedByUserId: remoteIntegrationSource.requestedByUserId,
+        requestedByEmail: remoteIntegrationSource.requestedByEmail ?? null,
+      });
+
+      return Response.json({
+        userId: body.userId,
+        workspaceId: body.workspaceId ?? null,
+        tokens: credentials.tokens,
+        enabledIntegrations: credentials.enabledIntegrations,
+        issuedAt: new Date().toISOString(),
+      });
     }
 
     return Response.json({

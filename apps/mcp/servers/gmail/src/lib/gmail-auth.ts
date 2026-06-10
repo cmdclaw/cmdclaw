@@ -6,6 +6,13 @@ type ManagedGmailClaims = {
   userId: string;
   workspaceId: string;
   audience: string;
+  remoteIntegrationSource?: {
+    targetEnv: "staging" | "prod";
+    remoteUserId: string;
+    requestedByUserId?: string;
+    requestedByEmail?: string | null;
+    remoteUserEmail?: string | null;
+  };
 };
 
 export async function createManagedGmailClient(extra?: ToolExtraArguments) {
@@ -18,6 +25,7 @@ export async function createManagedGmailClient(extra?: ToolExtraArguments) {
     userId: claims.userId,
     workspaceId: claims.workspaceId,
     integrationTypes: ["google_gmail"],
+    remoteIntegrationSource: claims.remoteIntegrationSource,
   });
   const accessToken = tokens.GMAIL_ACCESS_TOKEN;
   if (!accessToken) {

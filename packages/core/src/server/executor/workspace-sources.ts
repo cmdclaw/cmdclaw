@@ -17,6 +17,7 @@ import {
 import { decrypt, encrypt } from "../utils/encryption";
 import { type McpOAuthMetadata, ensureValidMcpOAuthCredential } from "./mcp-oauth";
 import type { RuntimeMcpServer } from "../sandbox/core/types";
+import type { RemoteIntegrationSource } from "../integrations/remote-integrations";
 
 type DatabaseLike = typeof db;
 
@@ -577,6 +578,7 @@ async function buildWorkspaceMcpRuntimeServer(input: {
   source: WorkspaceMcpServerRecord;
   credential: WorkspaceMcpServerCredentialRecord | null | undefined;
   userId: string;
+  remoteIntegrationSource?: RemoteIntegrationSource | null;
 }): Promise<RuntimeMcpServer> {
   const headers: Record<string, string> = { ...(input.source.headers ?? {}) };
   const queryParams: Record<string, string> = { ...(input.source.queryParams ?? {}) };
@@ -595,6 +597,7 @@ async function buildWorkspaceMcpRuntimeServer(input: {
         workspaceId: input.source.workspaceId,
         internalKey: input.source.internalKey,
         exp: Math.floor(Date.now() / 1000) + MANAGED_MCP_TOKEN_TTL_SECONDS,
+        remoteIntegrationSource: input.remoteIntegrationSource ?? undefined,
       },
       env.CMDCLAW_SERVER_SECRET,
     )}`;
@@ -716,6 +719,7 @@ export async function resolveWorkspaceMcpServersForGeneration(input: {
   workspaceId: string | null | undefined;
   userId: string;
   allowedWorkspaceMcpServerIds?: string[] | null;
+  remoteIntegrationSource?: RemoteIntegrationSource | null;
 }): Promise<WorkspaceMcpServerResolution> {
   if (!input.workspaceId) {
     return { requestedServers: [], unavailableServers: [] };
@@ -809,6 +813,7 @@ export async function resolveWorkspaceMcpServersForGeneration(input: {
           source,
           credential: credentialBySourceId.get(source.id),
           userId: input.userId,
+          remoteIntegrationSource: input.remoteIntegrationSource,
         }),
       });
     } catch (error) {

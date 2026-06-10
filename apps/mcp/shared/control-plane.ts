@@ -4,6 +4,13 @@ export async function getManagedIntegrationTokens(params: {
   userId: string;
   workspaceId?: string;
   integrationTypes: string[];
+  remoteIntegrationSource?: {
+    targetEnv: "staging" | "prod";
+    remoteUserId: string;
+    requestedByUserId?: string;
+    requestedByEmail?: string | null;
+    remoteUserEmail?: string | null;
+  };
 }): Promise<Record<string, string>> {
   const response = await fetch(
     new URL("/api/internal/mcp/runtime-credentials", resolveCmdclawAppUrl()),
