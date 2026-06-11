@@ -30,6 +30,7 @@ type RenderKeyValue = {
 type Resource = {
   kind: ResourceKind;
   name: string;
+  optional?: boolean;
 };
 
 const renderApiBaseUrl = "https://api.render.com/v1";
@@ -42,7 +43,7 @@ const stagingResources: Resource[] = [
   { kind: "service", name: "cmdclaw-s3-staging" },
   { kind: "service", name: "cmdclaw-tailscale-staging" },
   { kind: "service", name: "cmdclaw-postgres-tailscale-staging" },
-  { kind: "service", name: "cmdclaw-zero-cache-staging" },
+  { kind: "service", name: "cmdclaw-zero-cache-staging", optional: true },
   { kind: "service", name: "cmdclaw-caddy-staging" },
   { kind: "service", name: "cmdclaw-caddy-tailscale-staging" },
   { kind: "service", name: "cmdclaw-victoria-metrics-staging" },
@@ -137,11 +138,11 @@ function appendQuery(path: string, params: URLSearchParams): string {
   return query ? `${path}?${query}` : path;
 }
 
-function unwrapNamed<T extends { id: string; name: string }>(
+function findNamed<T extends { id: string; name: string }>(
   value: unknown,
   wrapperKey: string,
   name: string,
-): T {
+): T | null {
   if (!Array.isArray(value)) {
     fail(`Render API response for "${name}" was not a list`);
   }
@@ -162,7 +163,7 @@ function unwrapNamed<T extends { id: string; name: string }>(
   });
 
   if (matches.length === 0) {
-    fail(`No Render ${wrapperKey} resource found with name "${name}"`);
+    return null;
   }
 
   if (matches.length > 1) {
@@ -177,37 +178,76 @@ function unwrapNamed<T extends { id: string; name: string }>(
   return resource;
 }
 
-async function resolveResource(resource: Resource): Promise<string> {
+function unwrapFound<T extends { id: string; name: string }>(
+  resource: Resource,
+  wrapperKey: string,
+  value: T | null,
+): T | null {
+  if (value) {
+    return value;
+  }
+
+  const message = `No Render ${wrapperKey} resource found with name "${resource.name}"`;
+  if (resource.optional) {
+    console.log(`[render-staging-lifecycle] ${message}; skipping optional resource`);
+    return null;
+  }
+
+  fail(message);
+}
+
+async function resolveResource(resource: Resource): Promise<string | null> {
   const params = new URLSearchParams({ limit: "100" });
   params.append("name", resource.name);
 
   if (resource.kind === "service") {
-    const service = unwrapNamed<RenderService>(
-      await renderRequest(appendQuery("/services", params)),
+    const service = unwrapFound(
+      resource,
       "service",
-      resource.name,
+      findNamed<RenderService>(
+        await renderRequest(appendQuery("/services", params)),
+        "service",
+        resource.name,
+      ),
     );
+    if (!service) {
+      return null;
+    }
     console.log(`[render-staging-lifecycle] Resolved service "${service.name}" to ${service.id}`);
     return service.id;
   }
 
   if (resource.kind === "postgres") {
-    const postgres = unwrapNamed<RenderPostgres>(
-      await renderRequest(appendQuery("/postgres", params)),
+    const postgres = unwrapFound(
+      resource,
       "postgres",
-      resource.name,
+      findNamed<RenderPostgres>(
+        await renderRequest(appendQuery("/postgres", params)),
+        "postgres",
+        resource.name,
+      ),
     );
+    if (!postgres) {
+      return null;
+    }
     console.log(
       `[render-staging-lifecycle] Resolved Postgres "${postgres.name}" to ${postgres.id}`,
     );
     return postgres.id;
   }
 
-  const keyValue = unwrapNamed<RenderKeyValue>(
-    await renderRequest(appendQuery("/key-value", params)),
+  const keyValue = unwrapFound(
+    resource,
     "keyValue",
-    resource.name,
+    findNamed<RenderKeyValue>(
+      await renderRequest(appendQuery("/key-value", params)),
+      "keyValue",
+      resource.name,
+    ),
   );
+  if (!keyValue) {
+    return null;
+  }
   console.log(`[render-staging-lifecycle] Resolved Key Value "${keyValue.name}" to ${keyValue.id}`);
   return keyValue.id;
 }
@@ -296,6 +336,10 @@ async function waitForState(command: Command, resource: Resource, id: string): P
 
 async function applyLifecycle(command: Command, resource: Resource): Promise<void> {
   const id = await resolveResource(resource);
+  if (!id) {
+    return;
+  }
+
   const current = await getResource(resource, id);
   if (isInTargetState(command, resource, current)) {
     console.log(
