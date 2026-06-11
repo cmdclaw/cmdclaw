@@ -51,6 +51,20 @@ export const messageTable = table("message")
   })
   .primaryKey("id");
 
+export const sandboxFileTable = table("sandboxFile")
+  .from("sandbox_file")
+  .columns({
+    id: string(),
+    messageId: string().from("message_id").optional(),
+    conversationId: string().from("conversation_id"),
+    path: string(),
+    filename: string(),
+    mimeType: string().from("mime_type"),
+    sizeBytes: number().from("size_bytes").optional(),
+    createdAt: number().from("created_at"),
+  })
+  .primaryKey("id");
+
 export const workspaceMemberTable = table("workspaceMember")
   .from("workspace_member")
   .columns({
@@ -151,7 +165,25 @@ const conversationRelationships = relationships(conversationTable, ({ many }) =>
   }),
 }));
 
-const messageRelationships = relationships(messageTable, ({ one }) => ({
+const messageRelationships = relationships(messageTable, ({ many, one }) => ({
+  conversation: one({
+    sourceField: ["conversationId"],
+    destField: ["id"],
+    destSchema: conversationTable,
+  }),
+  sandboxFiles: many({
+    sourceField: ["id"],
+    destField: ["messageId"],
+    destSchema: sandboxFileTable,
+  }),
+}));
+
+const sandboxFileRelationships = relationships(sandboxFileTable, ({ one }) => ({
+  message: one({
+    sourceField: ["messageId"],
+    destField: ["id"],
+    destSchema: messageTable,
+  }),
   conversation: one({
     sourceField: ["conversationId"],
     destField: ["id"],
@@ -233,6 +265,7 @@ export const schema = createSchema({
   tables: [
     conversationTable,
     messageTable,
+    sandboxFileTable,
     workspaceMemberTable,
     coworkerFolderTable,
     coworkerTable,
@@ -243,6 +276,7 @@ export const schema = createSchema({
   relationships: [
     conversationRelationships,
     messageRelationships,
+    sandboxFileRelationships,
     coworkerRelationships,
     coworkerRunRelationships,
     coworkerFolderRelationships,
@@ -256,6 +290,7 @@ export const zql = createBuilder(schema);
 export type ZeroSchema = typeof schema;
 export type ZeroConversationRow = QueryRowType<typeof zql.conversation>;
 export type ZeroMessageRow = QueryRowType<typeof zql.message>;
+export type ZeroSandboxFileRow = QueryRowType<typeof zql.sandboxFile>;
 export type ZeroCoworkerRow = QueryRowType<typeof zql.coworker>;
 export type ZeroCoworkerRunRow = QueryRowType<typeof zql.coworkerRun>;
 export type ZeroCoworkerFolderRow = QueryRowType<typeof zql.coworkerFolder>;

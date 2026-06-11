@@ -4,9 +4,24 @@ import { schema } from "./schema";
 describe("Zero schema allowlist", () => {
   it("does not include secret-bearing runtime tables", () => {
     expect(Object.keys(schema.tables)).not.toContain("generation");
-    expect(Object.keys(schema.tables)).not.toContain("coworkerDocument");
-    expect(Object.keys(schema.tables)).not.toContain("sandboxFile");
     expect(Object.keys(schema.tables)).not.toContain("integrationToken");
+    expect(Object.keys(schema.tables)).not.toContain("coworkerDocument");
+  });
+
+  it("limits sandbox files to display and download metadata", () => {
+    const columns = Object.keys(schema.tables.sandboxFile.columns);
+
+    expect(columns).toEqual([
+      "id",
+      "messageId",
+      "conversationId",
+      "path",
+      "filename",
+      "mimeType",
+      "sizeBytes",
+      "createdAt",
+    ]);
+    expect(columns).not.toContain("storageKey");
   });
 
   it("limits coworker run rows to list-safe columns", () => {

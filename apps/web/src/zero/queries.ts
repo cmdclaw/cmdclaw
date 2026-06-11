@@ -29,13 +29,15 @@ const coworkerRunsInput = z.object({
   limit: z.number().int().positive().max(COWORKER_RUN_LIMIT).optional(),
 });
 
-function accessibleConversations(ctx: ZeroQueryContext) {
+function accessibleConversationDetails(ctx: ZeroQueryContext) {
   return zql.conversation
     .where("userId", ctx.userId)
     .whereExists("workspaceMembers", (members) => members.where("userId", ctx.userId))
-    .where("type", "chat")
-    .where("archivedAt", "IS", null)
     .where("syntheticKind", "IS", null);
+}
+
+function accessibleRecentChatConversations(ctx: ZeroQueryContext) {
+  return accessibleConversationDetails(ctx).where("type", "chat").where("archivedAt", "IS", null);
 }
 
 function accessibleCoworkers(ctx: ZeroQueryContext) {
@@ -47,7 +49,7 @@ function accessibleCoworkers(ctx: ZeroQueryContext) {
 export const zeroQueries = defineQueries({
   conversations: {
     recent: defineQuery(conversationListInput, ({ args, ctx }) =>
-      accessibleConversations(ctx)
+      accessibleRecentChatConversations(ctx)
         .related("messages", (messages) =>
           messages.where("role", "IN", ["user", "assistant"]).orderBy("createdAt", "asc"),
         )
@@ -57,10 +59,13 @@ export const zeroQueries = defineQueries({
         .limit(args?.limit ?? 50),
     ),
     byId: defineQuery(conversationByIdInput, ({ args, ctx }) =>
-      accessibleConversations(ctx)
+      accessibleConversationDetails(ctx)
         .where("id", args.id)
         .related("messages", (messages) =>
-          messages.where("role", "IN", ["user", "assistant"]).orderBy("createdAt", "asc"),
+          messages
+            .where("role", "IN", ["user", "assistant"])
+            .related("sandboxFiles", (files) => files.orderBy("createdAt", "asc"))
+            .orderBy("createdAt", "asc"),
         )
         .one(),
     ),

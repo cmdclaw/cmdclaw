@@ -50,10 +50,10 @@ describe("Zero chat data adapters", () => {
     ]);
   });
 
-  it("maps conversation detail messages in created order and omits file metadata", () => {
+  it("maps conversation detail messages in created order with safe sandbox file metadata", () => {
     const conversation = mapZeroConversationDetail({
       id: "chat-1",
-      type: "chat",
+      type: "coworker",
       title: null,
       model: "openai/gpt-5",
       authSource: "shared",
@@ -70,6 +70,15 @@ describe("Zero chat data adapters", () => {
           role: "assistant",
           content: "second",
           createdAt: 1781130200000,
+          sandboxFiles: [
+            {
+              id: "file-1",
+              path: "/app/output.html",
+              filename: "output.html",
+              mimeType: "text/html",
+              sizeBytes: 128,
+            },
+          ],
         },
         {
           id: "msg-1",
@@ -81,6 +90,7 @@ describe("Zero chat data adapters", () => {
     });
 
     expect(conversation?.title).toBe("New conversation");
+    expect(conversation?.type).toBe("coworker");
     expect(conversation?.messages.map((message) => message.id)).toEqual(["msg-1", "msg-2"]);
     expect(conversation?.messages[0]).toEqual(
       expect.objectContaining({
@@ -88,5 +98,14 @@ describe("Zero chat data adapters", () => {
         sandboxFiles: [],
       }),
     );
+    expect(conversation?.messages[1]?.sandboxFiles).toEqual([
+      {
+        fileId: "file-1",
+        path: "/app/output.html",
+        filename: "output.html",
+        mimeType: "text/html",
+        sizeBytes: 128,
+      },
+    ]);
   });
 });
