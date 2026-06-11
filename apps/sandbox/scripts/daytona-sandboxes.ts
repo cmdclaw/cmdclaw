@@ -15,8 +15,7 @@ type DaytonaClientConfig = {
   target?: string;
 };
 
-type DaytonaListResult = Awaited<ReturnType<Daytona["list"]>>;
-type DaytonaSandboxRecord = NonNullable<DaytonaListResult["items"]>[number];
+type DaytonaSandboxRecord = Awaited<ReturnType<Daytona["get"]>>;
 
 function getDaytonaConfig(): DaytonaClientConfig {
   const apiKey = process.env.DAYTONA_API_KEY;
@@ -42,18 +41,12 @@ function getDaytonaConfig(): DaytonaClientConfig {
 
 async function fetchSandboxes(
   daytona: Daytona,
-  page = 1,
-  acc: DaytonaSandboxRecord[] = [],
 ): Promise<DaytonaSandboxRecord[]> {
-  const result = await daytona.list(undefined, page, PAGE_SIZE);
-  const items = result.items ?? [];
-  const next = [...acc, ...items];
-
-  if (!result.totalPages || page >= result.totalPages) {
-    return next;
+  const sandboxes: DaytonaSandboxRecord[] = [];
+  for await (const sandbox of daytona.list({ limit: PAGE_SIZE })) {
+    sandboxes.push(sandbox);
   }
-
-  return fetchSandboxes(daytona, page + 1, next);
+  return sandboxes;
 }
 
 function formatSandbox(sandbox: DaytonaSandboxRecord): string {

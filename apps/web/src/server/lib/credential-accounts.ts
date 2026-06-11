@@ -103,7 +103,7 @@ export async function setCredentialPassword(input: { userId: string; password: s
     });
   }
 
-  await authContext.internalAdapter.deleteSessions(input.userId);
+  await authContext.internalAdapter.deleteUserSessions(input.userId);
 }
 
 export async function hasCredentialPasswordByEmail(email: string): Promise<boolean> {

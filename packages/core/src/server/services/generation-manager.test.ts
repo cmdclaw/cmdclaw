@@ -387,6 +387,7 @@ vi.mock("../sandbox/core/orchestrator", () => ({
 
 vi.mock("../sandbox/prep/skills-prep", () => ({
   writeSkillsToSandbox: vi.fn(),
+  writeSandboxCommonLibToSandbox: vi.fn(),
   getSkillsSystemPrompt: vi.fn(() => ""),
   writeResolvedIntegrationSkillsToSandbox: vi.fn(),
   getIntegrationSkillsSystemPrompt: vi.fn(() => ""),
@@ -3715,6 +3716,7 @@ describe("generationManager transitions", () => {
           type: "text",
           text: "Questionnaire rempli avec les informations personnelles fournies et télécharge ici : `QUESTIONNAIRE_RCP_rempli.pdf`.",
         },
+        { type: "tool_use", name: "bash", id: "tool-use-1", input: {} } as any,
       ],
       generationMarkerTime: Date.now() - 1_000,
       sandbox: {} as unknown,
@@ -3745,7 +3747,10 @@ describe("generationManager transitions", () => {
 
     const ctx = createCtx({
       assistantContent: "Traitement terminé.",
-      contentParts: [{ type: "text", text: "Traitement terminé." }],
+      contentParts: [
+        { type: "text", text: "Traitement terminé." },
+        { type: "tool_use", name: "bash", id: "tool-use-2", input: {} } as any,
+      ],
       generationMarkerTime: Date.now() - 1_000,
       sandbox: {} as unknown,
       uploadedSandboxFileIds: new Set(),
@@ -3775,7 +3780,10 @@ describe("generationManager transitions", () => {
 
     const ctx = createCtx({
       assistantContent: "Traitement terminé.",
-      contentParts: [{ type: "text", text: "Traitement terminé." }],
+      contentParts: [
+        { type: "text", text: "Traitement terminé." },
+        { type: "tool_use", name: "bash", id: "tool-use-2", input: {} } as any,
+      ],
       generationMarkerTime: Date.now() - 1_000,
       sandbox: {} as unknown,
       uploadedSandboxFileIds: new Set(),
@@ -3812,7 +3820,10 @@ describe("generationManager transitions", () => {
 
     const ctx = createCtx({
       assistantContent: "Done.",
-      contentParts: [{ type: "text", text: "Done." }],
+      contentParts: [
+        { type: "text", text: "Done." },
+        { type: "tool_use", name: "bash", id: "tool-use-3", input: {} } as any,
+      ],
       generationMarkerTime: Date.now() - 1_000,
       sandbox: {} as unknown,
       uploadedSandboxFileIds: new Set(),

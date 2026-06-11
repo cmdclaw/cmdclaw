@@ -285,18 +285,15 @@ async function deleteSandbox(sandbox: DaytonaSandboxHandle): Promise<void> {
 async function listByRunLabel(
   daytona: Daytona,
   runId: string,
-  page = 1,
-  acc: DaytonaSandboxStateSnapshot[] = [],
 ): Promise<DaytonaSandboxStateSnapshot[]> {
-  const result = await daytona.list({ "cmdclaw-run-id": runId }, page, LIST_PAGE_SIZE);
-  const items = (result.items ?? []) as DaytonaSandboxStateSnapshot[];
-  const next = [...acc, ...items];
-
-  if (!result.totalPages || page >= result.totalPages) {
-    return next;
+  const sandboxes: DaytonaSandboxStateSnapshot[] = [];
+  for await (const sandbox of daytona.list({
+    labels: { "cmdclaw-run-id": runId },
+    limit: LIST_PAGE_SIZE,
+  })) {
+    sandboxes.push(sandbox);
   }
-
-  return listByRunLabel(daytona, runId, page + 1, next);
+  return sandboxes;
 }
 
 function formatSandboxStates(sandboxes: DaytonaSandboxStateSnapshot[]): string {

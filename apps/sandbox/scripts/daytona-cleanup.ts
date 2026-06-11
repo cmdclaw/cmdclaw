@@ -41,14 +41,12 @@ function getDaytonaConfig(): {
 
 async function collectSandboxes(
   daytona: Daytona,
-  page = 1,
-): Promise<Awaited<ReturnType<Daytona["list"]>>["items"]> {
-  const result = await daytona.list(undefined, page, PAGE_SIZE);
-  if (!result.totalPages || page >= result.totalPages) {
-    return result.items ?? [];
+): Promise<Awaited<ReturnType<Daytona["get"]>>[]> {
+  const sandboxes: Awaited<ReturnType<Daytona["get"]>>[] = [];
+  for await (const sandbox of daytona.list({ limit: PAGE_SIZE })) {
+    sandboxes.push(sandbox);
   }
-  const next = await collectSandboxes(daytona, page + 1);
-  return [...(result.items ?? []), ...next];
+  return sandboxes;
 }
 
 async function collectSnapshots(

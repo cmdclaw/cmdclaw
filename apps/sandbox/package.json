@@ -33,8 +33,8 @@
   "dependencies": {
     "@cmdclaw/db": "workspace:*",
     "@cmdclaw/message-format": "workspace:*",
-    "@daytonaio/sdk": "^0.144.0",
-    "@opencode-ai/plugin": "^1.16.2",
+    "@daytonaio/sdk": "^0.186.0",
+    "@opencode-ai/plugin": "^1.17.3",
     "@opencode-ai/sdk": "^1.16.2",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",

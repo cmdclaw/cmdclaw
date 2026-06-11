@@ -13,7 +13,15 @@ const mocks = vi.hoisted(() => ({
     NEXT_PUBLIC_CMDCLAW_EDITION: "cloud" as string | undefined,
   },
   autumnProvider: vi.fn<
-    ({ children }: { betterAuthUrl?: string; children: ReactNode }) => ReactNode
+    ({
+      backendUrl,
+      children,
+      useBetterAuth,
+    }: {
+      backendUrl?: string;
+      children: ReactNode;
+      useBetterAuth?: boolean;
+    }) => ReactNode
   >(({ children }) => <div data-testid="autumn-provider">{children}</div>),
 }));
 
@@ -45,6 +53,10 @@ vi.mock("@/orpc/provider", () => ({
   ORPCProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+vi.mock("@/zero/provider", () => ({
+  CmdClawZeroProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -66,7 +78,8 @@ describe("AppRootShell", () => {
 
     expect(mocks.autumnProvider).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        betterAuthUrl: window.location.origin,
+        backendUrl: window.location.origin,
+        useBetterAuth: true,
       }),
       undefined,
     );

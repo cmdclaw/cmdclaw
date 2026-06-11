@@ -56,7 +56,11 @@ function BillingProviderWrapper({ children }: { children: ReactNode }) {
     return children;
   }
 
-  return <AutumnProvider betterAuthUrl={getAutumnBetterAuthUrl()}>{children}</AutumnProvider>;
+  return (
+    <AutumnProvider backendUrl={getAutumnBetterAuthUrl()} useBetterAuth>
+      {children}
+    </AutumnProvider>
+  );
 }
 
 export function AppRootShell({

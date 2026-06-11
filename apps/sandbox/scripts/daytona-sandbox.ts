@@ -135,8 +135,7 @@ type DaytonaSandbox = {
   };
 };
 
-type DaytonaListResult = Awaited<ReturnType<Daytona["list"]>>;
-type DaytonaSandboxRecord = NonNullable<DaytonaListResult["items"]>[number];
+type DaytonaSandboxRecord = Awaited<ReturnType<Daytona["get"]>>;
 
 const ENV_VAR_MAP: Record<IntegrationType, string> = {
   google_gmail: "GMAIL_ACCESS_TOKEN",
@@ -210,18 +209,12 @@ function isDaytonaNoAvailableRunnersError(error: unknown): boolean {
 
 async function listDaytonaSandboxes(
   daytona: Daytona,
-  page = 1,
-  acc: DaytonaSandboxRecord[] = [],
 ): Promise<DaytonaSandboxRecord[]> {
-  const result = await daytona.list(undefined, page, 100);
-  const items = result.items ?? [];
-  const next = [...acc, ...items];
-
-  if (!result.totalPages || page >= result.totalPages) {
-    return next;
+  const sandboxes: DaytonaSandboxRecord[] = [];
+  for await (const sandbox of daytona.list({ limit: 100 })) {
+    sandboxes.push(sandbox);
   }
-
-  return listDaytonaSandboxes(daytona, page + 1, next);
+  return sandboxes;
 }
 
 async function enrichCreateError(daytona: Daytona, error: unknown): Promise<Error> {
