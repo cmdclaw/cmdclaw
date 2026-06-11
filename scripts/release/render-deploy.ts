@@ -341,6 +341,14 @@ function printLogs(logs: RenderLog[]): void {
   }
 }
 
+function sortLogsAscending(logs: RenderLog[]): RenderLog[] {
+  return logs.toSorted((left, right) => {
+    const leftTime = left.timestamp ? Date.parse(left.timestamp) : 0;
+    const rightTime = right.timestamp ? Date.parse(right.timestamp) : 0;
+    return leftTime - rightTime;
+  });
+}
+
 function unwrapServiceEvents(value: unknown): RenderServiceEvent[] {
   if (!Array.isArray(value)) {
     throw new Error("Render API event list response was not an array");
@@ -461,20 +469,32 @@ async function printRecentLogs(
     return;
   }
 
-  const params = new URLSearchParams({
+  const baseParams = {
     ownerId: service.ownerId,
     startTime,
     endTime,
-    direction: "forward",
     limit: "100",
-  });
-  params.append("resource", service.id);
-  params.append("type", "build");
-  params.append("type", "app");
+  };
 
-  const body = await renderRequest<RenderLogsResponse>(appendQuery("/logs", params));
-  console.error("[render-deploy] Recent Render logs:");
-  printLogs(body.logs ?? []);
+  const buildParams = (direction: "forward" | "backward"): URLSearchParams => {
+    const params = new URLSearchParams({ ...baseParams, direction });
+    params.append("resource", service.id);
+    params.append("type", "build");
+    params.append("type", "app");
+    return params;
+  };
+
+  const head = await renderRequest<RenderLogsResponse>(
+    appendQuery("/logs", buildParams("forward")),
+  );
+  console.error("[render-deploy] Recent Render logs (oldest first):");
+  printLogs(head.logs ?? []);
+
+  const tail = await renderRequest<RenderLogsResponse>(
+    appendQuery("/logs", buildParams("backward")),
+  );
+  console.error("[render-deploy] Recent Render logs (newest first):");
+  printLogs(sortLogsAscending(tail.logs ?? []));
 }
 
 async function waitForDeploy(serviceId: string, deployId: string): Promise<RenderDeploy> {
