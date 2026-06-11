@@ -143,6 +143,14 @@ const scheduleMotionExit = { opacity: 0, y: -8, height: 0 } as const;
 const scheduleMotionTransition = { duration: 0.22, ease: "easeOut" } as const;
 const scheduleMotionStyle = { overflow: "hidden" } as const;
 const sectionMotionInitial = { height: 0, opacity: 0 } as const;
+
+function isUuidRouteSlug(value: string | undefined): value is string {
+  return Boolean(
+    value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
+  );
+}
+
 const sectionMotionAnimate = { height: "auto" as const, opacity: 1 } as const;
 const sectionMotionExit = { height: 0, opacity: 0 } as const;
 const sectionMotionTransition = { duration: 0.2 } as const;
@@ -468,7 +476,8 @@ export default function CoworkerEditorPage({
           ) ?? null),
     [coworkerIdOverride, coworkerList.data, routeCoworkerSlug],
   );
-  const coworkerId = coworkerIdOverride ?? coworkerListItem?.id;
+  const routeCoworkerId = isUuidRouteSlug(routeCoworkerSlug) ? routeCoworkerSlug : undefined;
+  const coworkerId = coworkerIdOverride ?? coworkerListItem?.id ?? routeCoworkerId;
   const coworkerRouteSlug = coworkerIdOverride
     ? coworkerIdOverride
     : coworkerListItem
@@ -479,6 +488,7 @@ export default function CoworkerEditorPage({
   const router = useRouter();
   const { isAdmin } = useIsAdmin();
   const { data: coworker, isLoading, refetch: refetchCoworker } = useCoworker(coworkerId);
+  const [hasResolvedInitialCoworker, setHasResolvedInitialCoworker] = useState(false);
   const { data: platformSkills, isLoading: isPlatformSkillsLoading } = usePlatformSkillList();
   const { data: accessibleSkills, isLoading: isAccessibleSkillsLoading } = useSkillList();
   const { data: executorSourceData } = useWorkspaceMcpServerList();
@@ -597,6 +607,16 @@ export default function CoworkerEditorPage({
     () => (remoteUserSearchData?.users as RemoteIntegrationUserOption[] | undefined) ?? [],
     [remoteUserSearchData],
   );
+
+  useEffect(() => {
+    if (!coworker) {
+      setHasResolvedInitialCoworker(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setHasResolvedInitialCoworker(true), 120);
+    return () => window.clearTimeout(timeout);
+  }, [coworker]);
 
   useEffect(() => {
     if (!isAdmin && activeTab === "admin") {
@@ -2105,13 +2125,17 @@ export default function CoworkerEditorPage({
 
   if (
     isLoading ||
+    (Boolean(coworkerId) && !hasResolvedInitialCoworker) ||
     (!coworkerId && coworkerList.isLoading) ||
     (shouldLoadCoworkerImpersonationTarget && isCoworkerImpersonationTargetLoading) ||
     (shouldLoadRunImpersonationTarget && isRunImpersonationTargetLoading)
   ) {
     return (
-      <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="text-muted-foreground flex h-full min-h-0 w-full flex-1 items-center justify-center gap-2 text-sm">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>
+          <T>Loading coworker</T>
+        </span>
       </div>
     );
   }

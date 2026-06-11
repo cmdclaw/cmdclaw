@@ -10,3 +10,7 @@ export function getCoworkerRouteSlug(coworker: CoworkerRouteTarget) {
 export function getCoworkerEditHref(coworker: CoworkerRouteTarget) {
   return `/agents/edit/${getCoworkerRouteSlug(coworker)}`;
 }
+
+export function getCoworkerEditHrefById(coworker: Pick<CoworkerRouteTarget, "id">) {
+  return `/agents/edit/${encodeURIComponent(coworker.id)}`;
+}

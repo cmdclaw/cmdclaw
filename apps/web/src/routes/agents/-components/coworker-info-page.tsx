@@ -158,6 +158,13 @@ function getAdjacentMobilePanel(current: MobilePanel, direction: "next" | "previ
   return MOBILE_PANEL_ORDER[nextIndex] ?? current;
 }
 
+function isUuidRouteSlug(value: string | undefined): value is string {
+  return Boolean(
+    value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
+  );
+}
+
 function toDate(value?: Date | string | null) {
   if (!value) {
     return null;
@@ -676,7 +683,8 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
       ) ?? null,
     [coworkerList.data, coworkerSlug],
   );
-  const resolvedCoworkerId = coworkerListItem?.id;
+  const routeCoworkerId = isUuidRouteSlug(coworkerSlug) ? coworkerSlug : undefined;
+  const resolvedCoworkerId = coworkerListItem?.id ?? routeCoworkerId;
   const resolvedCoworkerSlug = coworkerListItem?.username ?? coworkerSlug;
   const coworkerRuns = useCoworkerRuns(resolvedCoworkerId, 20, {
     enabled: Boolean(resolvedCoworkerId),
@@ -706,8 +714,13 @@ export function CoworkerInfoPage({ coworkerSlug }: Props) {
   const handleToggleDefinition = useCallback(() => {
     setDefinitionOpen((open) => !open);
   }, []);
+  const shouldWaitForCoworkerList = !routeCoworkerId;
+  const shouldWaitForCoworkerRuns =
+    Boolean(requestedRunId) || (coworkerListItem?.recentRuns?.length ?? 0) > 0;
   const isRunLoading =
-    coworkerList.isLoading || coworkerRuns.isLoading || Boolean(selectedRunId && run.isLoading);
+    (shouldWaitForCoworkerList && coworkerList.isLoading) ||
+    (shouldWaitForCoworkerRuns && coworkerRuns.isLoading) ||
+    Boolean(selectedRunId && run.isLoading);
   const conversationId = run.data?.conversationId ?? undefined;
   const conversation = useConversation(conversationId);
 
