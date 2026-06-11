@@ -1,11 +1,14 @@
 ---
 name: review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes — Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/PRD asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: "Review changes against a supplied comparison target: a fixed Git point (commit, branch, tag, or merge-base) or a list of files to review against the rest of the current changes. Runs two parallel axes — Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/PRD asked for?) — and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, selected files within a larger change, or asks to \"review since X\"."
 ---
 
 # Review
 
-Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
+Two-axis review of the diff against the comparison target the user supplies. The target may be:
+
+- A fixed Git point such as a commit SHA, branch name, tag, `main`, or `HEAD~5`.
+- A list of files to review as the target subset, with the rest of the current changes treated as surrounding context.
 
 - **Standards** — does the code conform to this repo's documented coding standards?
 - **Spec** — does the code faithfully implement the originating issue / PRD / spec?
@@ -16,11 +19,20 @@ The issue tracker should have been provided to you — run `/setup-matt-pocock-s
 
 ## Process
 
-### 1. Pin the fixed point
+### 1. Pin the comparison target
 
-Whatever the user said is the fixed point — a commit SHA, branch name, tag, `main`, `HEAD~5`, etc. Don't be opinionated; pass it through. If they didn't specify one, ask: "Review against what — a branch, a commit, or `main`?" Don't proceed until you have it.
+Whatever the user said is the comparison target. Don't be opinionated; pass it through.
 
-Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
+If the target is a fixed Git point, capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
+
+If the target is a list of files, capture both commands once:
+
+- Review diff: `git diff HEAD -- <file> [<file> ...]`
+- Context diff: `git diff HEAD -- . ':(exclude)<file>' [':(exclude)<file>' ...]`
+
+Tell the sub-agents that the review diff is the subject of the review, and the context diff is only for understanding how those files relate to the rest of the current changes. Do not report findings against context-only files unless they directly explain a finding in the review diff.
+
+If the user didn't specify a comparison target, ask: "Review against what — a branch, a commit, `main`, or a list of files?" Don't proceed until you have it.
 
 ### 2. Identify the spec source
 
@@ -50,13 +62,13 @@ Send a single message with two `Agent` tool calls. Use the `general-purpose` sub
 
 **Standards sub-agent prompt** — include:
 
-- The full diff command and commit list.
+- The full review diff command, any context diff command, and commit list if relevant.
 - The list of standards-source files you found in step 3.
 - The brief: "Read the standards docs. Then read the diff. Report — per file/hunk where relevant — every place the diff violates a documented standard. Cite the standard (file + the rule). Distinguish hard violations from judgement calls. Skip anything tooling enforces. Under 400 words."
 
 **Spec sub-agent prompt** — include:
 
-- The diff command and commit list.
+- The review diff command, any context diff command, and commit list if relevant.
 - The path or fetched contents of the spec.
 - The brief: "Read the spec. Then read the diff. Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
 

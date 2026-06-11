@@ -18,3 +18,8 @@ approval_mode = "approve"
 
 [mcp_servers.cmdclaw-modulr]
 url = "http://127.0.0.1:3010/modulr"
+
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["@playwright/mcp@latest"]

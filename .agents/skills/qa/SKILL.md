@@ -18,13 +18,23 @@ Start by identifying:
 - Authentication needs and available test accounts or browser sessions
 - Output location for screenshots and the QA report
 
-For local web UI QA in Codex, use the Codex native in-app Browser first. If the user says the in-app browser is open, or the target is `localhost`, `127.0.0.1`, `::1`, or a `file://` URL, control that browser directly for navigation, screenshots, clicks, typing, console inspection, and network inspection. Do not create temporary Playwright, Selenium, TypeScript, JavaScript, or `.mjs` driver files for browser testing in this case.
-
-Only fall back to a custom browser automation script when the Codex native Browser tool is genuinely unavailable after checking the available tools/skills. If you fall back, state the reason before creating any files and keep all temporary artifacts out of the app source tree.
+Treat visible browser console errors as QA findings even when they appear to predate the current change. During test-and-fix work, fix source-controllable console errors in scope so the verified navigation paths finish with no visible browser errors.
 
 If no URL is provided and the worktree is on a feature branch, prefer diff-aware QA: inspect changed files, infer the affected routes and flows, then test those areas first before broader smoke coverage.
 
 Respect the repo's working-tree and commit policy. Do not commit unless the user explicitly asks. If fixes are requested, avoid overwriting unrelated user changes.
+
+## Browser Harness
+
+Use a real browser harness to view and interact with webpages. Choose tooling in this order of preference:
+
+- `agent-browser`
+- Playwright MCP
+- `browser-harness`
+
+In Codex, use the Codex native in-app Browser before the global list when it is available. It is not available in TUI sessions. If the user says the in-app browser is open, or the target is `localhost`, `127.0.0.1`, `::1`, or a `file://` URL, control that browser directly for navigation, screenshots, clicks, typing, console inspection, and network inspection. Do not create temporary Playwright, Selenium, TypeScript, JavaScript, or `.mjs` driver files for browser testing in this case.
+
+If none of the preferred browser harness options are available, stop and tell the user that QA cannot continue without a browser harness. Do not create custom Playwright, Selenium, TypeScript, JavaScript, or `.mjs` automation scripts as a fallback.
 
 ## Tiers
 
@@ -43,7 +53,8 @@ Explore the app like a user, not like a DOM inspector. For each relevant page or
 - Fill forms with valid data, empty submissions, invalid data, long values, and special characters when relevant.
 - Check navigation paths in and out, including back/forward behavior, deep links, mobile navigation, and dead ends.
 - Exercise loading, empty, error, full, and overflow states when they are reachable.
-- Watch console errors and failed network requests after each interaction.
+- Inspect the browser console after each interaction and treat all visible console errors as findings, including previously existing errors.
+- Watch failed network requests after each interaction.
 - Check responsive behavior on mobile and desktop when the UI is user-facing.
 - Check auth boundaries when roles, logged-out states, or permission gates matter.
 
@@ -73,7 +84,7 @@ For each fixable issue, work one issue at a time:
 4. Avoid unrelated refactors, opportunistic cleanup, and broad rewrites.
 5. Re-test the exact repro path.
 6. Capture before/after evidence when visual or behavioral evidence is useful.
-7. Check for new console errors or obvious regressions.
+7. Check the browser console and fix any visible source-controllable errors on the exercised path, including errors that existed before the current QA pass.
 8. Classify the result as verified, best-effort, reverted, or deferred.
 
 If a fix makes the application worse, revert only that fix and mark the issue deferred with evidence.
@@ -107,6 +118,8 @@ Keep the blast radius small. A QA pass should increase confidence, not produce a
 
 After fixes, re-run the affected workflows and any broader smoke paths that could have regressed. Compute a final health score using the same categories as the baseline.
 
+Final QA must include browser console inspection across the verified navigation paths. Do not mark a path clean while visible browser console errors remain unless the errors are explicitly deferred as non-source-controllable, third-party, infrastructure-dependent, or outside the agreed scope.
+
 If the final score is worse than the baseline, call that out clearly and explain what regressed.
 
 ## Report
@@ -118,7 +131,7 @@ Every report should include:
 - Date, target, branch or commit when relevant, tier, scope, duration, pages visited, and screenshots captured.
 - Baseline and final health scores.
 - Top issues to fix.
-- Console and network health summary.
+- Console and network health summary, including confirmation that verified navigation paths have no visible browser console errors or a list of explicitly deferred console errors with reasons.
 - Issue list with severity, category, URL, description, expected versus actual behavior, and repro steps.
 - Fix status for each issue: verified, best-effort, reverted, or deferred.
 - Files changed and tests added when fixes were made.
