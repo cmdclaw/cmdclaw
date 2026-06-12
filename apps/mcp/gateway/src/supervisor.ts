@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer, type Server } from "node:net";
 import path from "node:path";
 import { logger as telemetryLogger } from "@cmdclaw/core/server/utils/observability";
 import { MCP_SERVER_REGISTRY, type McpServerSlug } from "../../shared/registry";
@@ -15,36 +15,73 @@ type ManagedGatewayChild = {
   process: ChildProcess;
 };
 
-function isPortAvailable(port: number, host: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = createServer();
-    server.once("error", () => resolve(false));
-    server.listen(port, host, () => {
-      server.close(() => resolve(true));
+type ReservedPort = {
+  port: number;
+  release: () => Promise<void>;
+};
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
     });
   });
 }
 
-async function findAvailablePort(startPort: number, host: string): Promise<number> {
+function reservePort(port: number, host: string): Promise<ReservedPort | null> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        resolve(null);
+        return;
+      }
+      reject(error);
+    });
+    server.listen(port, host, () => {
+      resolve({
+        port,
+        release: () => closeServer(server),
+      });
+    });
+  });
+}
+
+async function reserveAvailablePort(startPort: number, host: string): Promise<ReservedPort> {
   let port = startPort;
-  while (!(await isPortAvailable(port, host))) {
+  let reserved = await reservePort(port, host);
+  while (!reserved) {
     port += 1;
+    reserved = await reservePort(port, host);
   }
-  return port;
+  return reserved;
 }
 
-async function waitForPort(port: number, host: string, timeoutMs = READY_TIMEOUT_MS) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (!(await isPortAvailable(port, host))) {
-      return;
-    }
-    await Bun.sleep(150);
+export function parseMcpChildListeningPort(line: string, host: string): number | null {
+  const match = line.match(/MCP Server running on http:\/\/([^:]+):(\d+)\/mcp/);
+  if (!match) {
+    return null;
   }
-  throw new Error(`Timed out waiting for MCP child on ${host}:${port}`);
+
+  const [, listeningHost, rawPort] = match;
+  if (listeningHost !== host) {
+    return null;
+  }
+
+  const port = Number.parseInt(rawPort, 10);
+  return Number.isNaN(port) ? null : port;
 }
 
-function pipeChildLogs(slug: string, stream: NodeJS.ReadableStream | null, label: "stdout" | "stderr") {
+function pipeChildLogs(
+  slug: string,
+  stream: NodeJS.ReadableStream | null,
+  label: "stdout" | "stderr",
+  onLine?: (line: string) => void,
+) {
   if (!stream) {
     return;
   }
@@ -58,6 +95,7 @@ function pipeChildLogs(slug: string, stream: NodeJS.ReadableStream | null, label
       if (line.trim().length === 0) {
         continue;
       }
+      onLine?.(line);
       const consoleLogger = label === "stderr" ? console.error : console.log;
       const prefixedLine = `[mcp:${slug}] ${line}`;
       consoleLogger(prefixedLine);
@@ -78,44 +116,6 @@ function pipeChildLogs(slug: string, stream: NodeJS.ReadableStream | null, label
   });
 }
 
-async function runChildBuild(params: {
-  slug: McpServerSlug;
-  childRoot: string;
-  env: NodeJS.ProcessEnv;
-  rootDir: string;
-}) {
-  const cwd = path.resolve(params.rootDir, params.childRoot);
-  const command = [path.resolve(params.rootDir, "node_modules/.bin/xmcp"), "build"];
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command[0], command.slice(1), {
-      cwd,
-      env: params.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    pipeChildLogs(params.slug, child.stdout, "stdout");
-    pipeChildLogs(params.slug, child.stderr, "stderr");
-
-    child.on("error", (error) => {
-      reject(error);
-    });
-
-    child.on("exit", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(
-        new Error(
-          `Failed building MCP child ${params.slug} (code=${code ?? "null"} signal=${signal ?? "null"})`,
-        ),
-      );
-    });
-  });
-}
-
 function spawnChildProcess(params: {
   slug: McpServerSlug;
   childRoot: string;
@@ -123,7 +123,10 @@ function spawnChildProcess(params: {
   port: number;
   env: NodeJS.ProcessEnv;
   rootDir: string;
-}): ChildProcess {
+}): {
+  process: ChildProcess;
+  readyPort: Promise<number>;
+} {
   const cwd = path.resolve(params.rootDir, params.childRoot);
   const childEnv = {
     ...params.env,
@@ -136,19 +139,72 @@ function spawnChildProcess(params: {
       ? ["bun", "dist/http.js"]
       : [path.resolve(params.rootDir, "node_modules/.bin/xmcp"), "dev"];
 
+  let readyTimeout: Timer | undefined;
+  let settleReadyPort: ((port: number) => void) | undefined;
+  let rejectReadyPort: ((error: Error) => void) | undefined;
+  const readyPort = new Promise<number>((resolve, reject) => {
+    settleReadyPort = resolve;
+    rejectReadyPort = reject;
+    readyTimeout = setTimeout(() => {
+      reject(
+        new Error(
+          `Timed out waiting for MCP child ${params.slug} to report a listening port after ${READY_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, READY_TIMEOUT_MS);
+  });
+
+  const resolveReadyPort = (line: string) => {
+    const listeningPort = parseMcpChildListeningPort(line, DEFAULT_CHILD_HOST);
+    if (listeningPort === null) {
+      return;
+    }
+    if (readyTimeout) {
+      clearTimeout(readyTimeout);
+      readyTimeout = undefined;
+    }
+    settleReadyPort?.(listeningPort);
+    settleReadyPort = undefined;
+    rejectReadyPort = undefined;
+  };
+
   const child = spawn(command[0], command.slice(1), {
     cwd,
     env: childEnv,
+    detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  pipeChildLogs(params.slug, child.stdout, "stdout");
+  pipeChildLogs(params.slug, child.stdout, "stdout", resolveReadyPort);
   pipeChildLogs(params.slug, child.stderr, "stderr");
+  child.on("error", (error) => {
+    if (readyTimeout) {
+      clearTimeout(readyTimeout);
+      readyTimeout = undefined;
+    }
+    rejectReadyPort?.(error);
+    settleReadyPort = undefined;
+    rejectReadyPort = undefined;
+  });
   child.on("exit", (code, signal) => {
+    if (readyTimeout) {
+      clearTimeout(readyTimeout);
+      readyTimeout = undefined;
+    }
+    rejectReadyPort?.(
+      new Error(
+        `MCP child ${params.slug} exited before startup (code=${code ?? "null"} signal=${signal ?? "null"})`,
+      ),
+    );
+    settleReadyPort = undefined;
+    rejectReadyPort = undefined;
     console.log(`[mcp:${params.slug}] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
   });
 
-  return child;
+  return {
+    process: child,
+    readyPort,
+  };
 }
 
 export function shouldManageGatewayChildren(env: Record<string, string | undefined>): boolean {
@@ -178,22 +234,14 @@ export async function startManagedGatewayChildren(params: {
       continue;
     }
 
-    const port = await findAvailablePort(nextPort, DEFAULT_CHILD_HOST);
+    const reservedPort = await reserveAvailablePort(nextPort, DEFAULT_CHILD_HOST);
+    const port = reservedPort.port;
     nextPort = port + 1;
     const childEnv = {
       ...params.env,
       PORT: String(port),
       HOST: DEFAULT_CHILD_HOST,
     };
-
-    if (mode === "start") {
-      await runChildBuild({
-        slug: server.slug,
-        childRoot: server.childRoot,
-        env: childEnv,
-        rootDir: params.rootDir,
-      });
-    }
 
     const processHandle = spawnChildProcess({
       slug: server.slug,
@@ -203,22 +251,30 @@ export async function startManagedGatewayChildren(params: {
       env: childEnv,
       rootDir: params.rootDir,
     });
-    await waitForPort(port, DEFAULT_CHILD_HOST);
+    await reservedPort.release();
+    const listeningPort = await processHandle.readyPort;
 
-    const target = `http://${DEFAULT_CHILD_HOST}:${port}`;
+    const target = `http://${DEFAULT_CHILD_HOST}:${listeningPort}`;
     children.push({
       slug: server.slug,
-      port,
+      port: listeningPort,
       target,
-      process: processHandle,
+      process: processHandle.process,
     });
     targetEnv[server.internalTargetEnvVar] = target;
   }
 
   const shutdown = () => {
     for (const child of children) {
-      if (!child.process.killed) {
-        child.process.kill("SIGTERM");
+      const pid = child.process.pid;
+      if (pid) {
+        try {
+          process.kill(-pid, "SIGTERM");
+        } catch {
+          if (!child.process.killed) {
+            child.process.kill("SIGTERM");
+          }
+        }
       }
     }
   };
