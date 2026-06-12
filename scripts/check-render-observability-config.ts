@@ -5,10 +5,12 @@ const renderConfig = readFileSync(
   "utf8",
 );
 
+const renderServicePrefix = "bap";
+
 function requireVictoriaMetricsVmalertProxy(
   environment: "staging" | "prod",
 ): void {
-  const serviceName = `cmdclaw-victoria-metrics-${environment}`;
+  const serviceName = `${renderServicePrefix}-victoria-metrics-${environment}`;
   const serviceHeader = `          - type: pserv
             name: ${serviceName}`;
   const serviceStart = renderConfig.indexOf(serviceHeader);
@@ -25,7 +27,7 @@ function requireVictoriaMetricsVmalertProxy(
     ? serviceStart + serviceName.length + nextServiceMatch.index!
     : renderConfig.length;
   const serviceBlock = renderConfig.slice(serviceStart, serviceEnd);
-  const expectedProxy = `-vmalert.proxyURL=http://cmdclaw-vmalert-${environment}:8880`;
+  const expectedProxy = `-vmalert.proxyURL=http://${renderServicePrefix}-vmalert-${environment}:8880`;
 
   if (!serviceBlock.includes(expectedProxy)) {
     throw new Error(
