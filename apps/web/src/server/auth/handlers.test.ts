@@ -111,6 +111,13 @@ function getLocation(response: Response): string {
   return location;
 }
 
+function postMagicLinkResend(token = "abc123") {
+  return handleMagicLinkResend(
+    new Request(`https://cmdclaw.ai/sign-in/${token}/resend`, { method: "POST" }),
+    token,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.APP_URL;
@@ -325,10 +332,7 @@ describe("handleMagicLinkResend (POST /sign-in/:token/resend)", () => {
   it("requests a replacement magic link and redirects back with a resent flag", async () => {
     authHandlerMock.mockResolvedValue(Response.json({ status: true }));
 
-    const response = await handleMagicLinkResend(
-      new Request("https://cmdclaw.ai/sign-in/abc123/resend", { method: "POST" }),
-      "abc123",
-    );
+    const response = await postMagicLinkResend();
 
     expect(response.status).toBe(303);
     expect(getLocation(response)).toBe("https://cmdclaw.ai/sign-in/abc123?resent=1");
@@ -352,10 +356,7 @@ describe("handleMagicLinkResend (POST /sign-in/:token/resend)", () => {
       errorCallbackUrl: null,
     });
 
-    const response = await handleMagicLinkResend(
-      new Request("https://cmdclaw.ai/sign-in/abc123/resend", { method: "POST" }),
-      "abc123",
-    );
+    const response = await postMagicLinkResend();
 
     expect(response.status).toBe(303);
     expect(getLocation(response)).toBe("https://cmdclaw.ai/sign-in/abc123?error=invalid");
