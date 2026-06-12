@@ -17,8 +17,8 @@
 	}
 
 	handle {
-		reverse_proxy http://{$CMDCLAW_WEB_HOST}:10000 {
-			header_up Host {host}
+		reverse_proxy https://{$CMDCLAW_WEB_HOST} {
+			header_up Host {$CMDCLAW_WEB_HOST}
 			header_up X-Forwarded-Proto https
 		}
 	}

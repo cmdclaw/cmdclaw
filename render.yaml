@@ -217,10 +217,7 @@ projects:
               - key: PORT
                 value: "10000"
               - key: CMDCLAW_WEB_HOST
-                fromService:
-                  type: web
-                  name: cmdclaw-web-staging
-                  property: host
+                value: cmdclaw-web-staging.onrender.com
               - key: CMDCLAW_ZERO_CACHE_HOST
                 fromService:
                   type: pserv
