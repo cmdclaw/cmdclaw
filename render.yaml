@@ -626,14 +626,13 @@ projects:
               mountPath: /data
               sizeGB: 10
             envVars:
+              - fromGroup: prod
               - key: NODE_ENV
                 value: production
               - key: ZERO_PORT
                 value: "4848"
-              - key: ZERO_UPSTREAM_DB
-                fromDatabase:
-                  name: cmdclaw-postgres-prod
-                  property: connectionString
+              - key: ZERO_APP_PUBLICATIONS
+                value: zero_cmdclaw_prod
               - key: ZERO_CVR_DB
                 fromDatabase:
                   name: cmdclaw-postgres-prod
