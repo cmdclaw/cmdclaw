@@ -3,20 +3,20 @@ import getMyAppointments from "../tools/get_users_by_user_id_appointments";
 
 describe("get_my_appointments", () => {
   const originalFetch = globalThis.fetch;
-  const originalServerUrl = process.env.CMDCLAW_SERVER_URL;
-  const originalServerSecret = process.env.CMDCLAW_SERVER_SECRET;
+  const originalServerUrl = process.env.APP_SERVER_URL;
+  const originalServerSecret = process.env.APP_SERVER_SECRET;
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
     if (originalServerUrl === undefined) {
-      delete process.env.CMDCLAW_SERVER_URL;
+      delete process.env.APP_SERVER_URL;
     } else {
-      process.env.CMDCLAW_SERVER_URL = originalServerUrl;
+      process.env.APP_SERVER_URL = originalServerUrl;
     }
     if (originalServerSecret === undefined) {
-      delete process.env.CMDCLAW_SERVER_SECRET;
+      delete process.env.APP_SERVER_SECRET;
     } else {
-      process.env.CMDCLAW_SERVER_SECRET = originalServerSecret;
+      process.env.APP_SERVER_SECRET = originalServerSecret;
     }
     vi.restoreAllMocks();
   });
@@ -27,8 +27,8 @@ describe("get_my_appointments", () => {
     const bearerToken = `Bearer ${header}.${payload}.signature`;
     const requests: string[] = [];
 
-    process.env.CMDCLAW_SERVER_URL = "https://cmdclaw.example";
-    process.env.CMDCLAW_SERVER_SECRET = "server-secret";
+    process.env.APP_SERVER_URL = "https://cmdclaw.example";
+    process.env.APP_SERVER_SECRET = "server-secret";
     globalThis.fetch = vi.fn(async (input, init) => {
       requests.push(String(input));
 
