@@ -2,11 +2,11 @@ import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
 import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@bap/db/template-catalog";
 import type { ChangeEvent, FormEvent } from "react";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
-import { ClientOnly, Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { ArrowUp, ChevronDown, Globe2 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AttachmentData } from "@/components/prompt-bar";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PromptBar, type AttachmentData } from "@/components/prompt-bar";
 import type { PromptSegment } from "@/lib/prompt-segments";
 import {
   ChatDebugPopover,
@@ -427,12 +427,6 @@ function LandingLocaleSelector({ placement = "hero" }: { placement?: "hero" | "f
     </div>
   );
 }
-
-// Landing
-
-const PromptBar = lazy(() =>
-  import("@/components/prompt-bar").then((mod) => ({ default: mod.PromptBar })),
-);
 
 // ─── Animated Department Heading ──────────────────────────────────────────────
 
@@ -883,30 +877,26 @@ export function CoworkerLanding({
               <p className="mx-auto mb-8 max-w-md text-center text-base text-white/70 md:text-lg">
                 <T>Describe a task and we&apos;ll build it step by step</T>
               </p>
-              <ClientOnly>
-                <Suspense fallback={null}>
-                  <PromptBar
-                    onSubmit={handlePromptComposerSubmit}
-                    isSubmitting={isCreating}
-                    disabled={isCreating || isRecording || isProcessingVoice}
-                    variant="hero"
-                    submitOnEnter
-                    placeholder={gt(
-                      "e.g. Every morning, summarize my unread emails and send me a digest...",
-                    )}
-                    animatedPlaceholders={heroAnimatedPrompts}
-                    richAnimatedPlaceholders={heroRichSegments}
-                    onAnimatedPlaceholderIndexChange={setActivePromptIndex}
-                    isRecording={isRecording}
-                    onStartRecording={handleStartRecording}
-                    onStopRecording={stopRecordingAndTranscribe}
-                    voiceInteractionMode="toggle"
-                    prefillRequest={inputPrefillRequest}
-                    renderModelSelector={!isAnonymous ? modelSelectorNode : undefined}
-                    renderDebugControls={debugControlNode}
-                  />
-                </Suspense>
-              </ClientOnly>
+              <PromptBar
+                onSubmit={handlePromptComposerSubmit}
+                isSubmitting={isCreating}
+                disabled={isCreating || isRecording || isProcessingVoice}
+                variant="hero"
+                submitOnEnter
+                placeholder={gt(
+                  "e.g. Every morning, summarize my unread emails and send me a digest...",
+                )}
+                animatedPlaceholders={heroAnimatedPrompts}
+                richAnimatedPlaceholders={heroRichSegments}
+                onAnimatedPlaceholderIndexChange={setActivePromptIndex}
+                isRecording={isRecording}
+                onStartRecording={handleStartRecording}
+                onStopRecording={stopRecordingAndTranscribe}
+                voiceInteractionMode="toggle"
+                prefillRequest={inputPrefillRequest}
+                renderModelSelector={!isAnonymous ? modelSelectorNode : undefined}
+                renderDebugControls={debugControlNode}
+              />
               {(isRecording || isProcessingVoice || voiceError) && (
                 <div className="mt-4">
                   <VoiceIndicator
