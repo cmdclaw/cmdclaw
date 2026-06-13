@@ -190,4 +190,15 @@ describe("AppSidebar navigation", () => {
       mask: "url('/integrations/mcp.svg') center / contain no-repeat",
     });
   });
+
+  it("loads the first-viewport sidebar logo eagerly", async () => {
+    renderWithRouterAt("/inbox");
+
+    const homeLink = await screen.findByRole("link", { name: "Bap home" });
+    const logo = homeLink.querySelector("img");
+
+    expect(logo).toHaveAttribute("src", "/logo-sidebar.png");
+    expect(logo).toHaveAttribute("loading", "eager");
+    expect(logo).toHaveAttribute("decoding", "sync");
+  });
 });

@@ -415,7 +415,15 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
             aria-label={t("Bap home")}
             className="hover:bg-sidebar-accent focus-visible:ring-sidebar-ring/45 flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:ring-3 focus-visible:outline-none"
           >
-            <AppImage src="/logo.png" alt="" width={24} height={24} className="object-contain" />
+            <AppImage
+              src="/logo-sidebar.png"
+              alt=""
+              width={24}
+              height={24}
+              loading="eager"
+              decoding="sync"
+              className="object-contain"
+            />
           </AppLink>
         </div>
 
