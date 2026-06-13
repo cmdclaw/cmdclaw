@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      deploy_victoria_metrics:
+        description: "Deploy VictoriaMetrics"
+        required: false
+        type: boolean
+        default: false
       deploy_vmalert:
         description: "Deploy vmalert"
         required: false
@@ -41,6 +46,38 @@ on:
         required: false
 
 jobs:
+  deploy-victoria-metrics:
+    if: ${{ inputs.deploy_victoria_metrics }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_NAME: bap-victoria-metrics-${{ inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Validate Render configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${RENDER_API_KEY}" ] || {
+            echo 'Missing RENDER_API_KEY' >&2
+            exit 1
+          }
+
+      - name: Deploy VictoriaMetrics
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: bun scripts/release/render-deploy.ts deploy --service-name "${RENDER_SERVICE_NAME}" --commit "${COMMIT_SHA}"
+
   deploy-grafana:
     if: ${{ inputs.deploy_grafana }}
     runs-on: ubuntu-latest
