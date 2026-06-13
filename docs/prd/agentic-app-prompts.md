@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-A Generation can already produce an `output.html` that CmdClaw renders next to the conversation, but the rendered page is a dead end: the User can look at it, yet nothing in it can talk back to the conversation. When an agent builds a page with a "Send the email" button, clicking it does nothing — the User has to leave the page, retype their intent into the composer, and send it manually. The artifact looks like an app but cannot act like one.
+A Generation can already produce an `output.html` that Bap renders next to the conversation, but the rendered page is a dead end: the User can look at it, yet nothing in it can talk back to the conversation. When an agent builds a page with a "Send the email" button, clicking it does nothing — the User has to leave the page, retype their intent into the composer, and send it manually. The artifact looks like an app but cannot act like one.
 
 ## Solution
 
@@ -19,7 +19,7 @@ Rename the concept from **Generation Output Preview** to **Agentic-App** and giv
 7. As a User, I want a form inside an Agentic-App whose values are interpolated into the prompt, so that I can parameterize the agent's next action (recipient, subject, dates) without typing a full sentence.
 8. As a User, I want the conversation's existing defaults (model, toolbox, skills) to apply to an Agentic-App Prompt, so that a page cannot escalate or change how the agent runs.
 9. As a User, I want a rejected send to be observable in the page (a disabled button, an error hint), so that I am not left wondering whether my click did anything.
-10. As an agent authoring an Agentic-App, I want a documented, versioned message envelope, so that the page I generate keeps working after CmdClaw evolves.
+10. As an agent authoring an Agentic-App, I want a documented, versioned message envelope, so that the page I generate keeps working after Bap evolves.
 11. As an agent authoring an Agentic-App, I want a result ack telling me whether the prompt was sent or rejected and why, so that I can write honest button UX (pending, sent, slow-down states).
 12. As an agent, I want a sandbox skill that teaches the `output.html` convention and the prompt protocol, so that I produce working Agentic-Apps without guessing the wire format.
 13. As a security-conscious operator, I want the Agentic-App iframe to remain sandboxed without same-origin access, so that generated HTML can never make authenticated API calls or read app state.
@@ -31,7 +31,7 @@ Rename the concept from **Generation Output Preview** to **Agentic-App** and giv
 19. As a future developer, I want the activation gate and rate cap isolated in one deterministic module, so that the security behavior is testable without a browser.
 20. As a future developer, I want the glossary terms **Agentic-App** and **Agentic-App Prompt** used across code, docs, and UI copy, so that "preview", "canvas", and "mini-app" stop accumulating as synonyms.
 21. As a future developer, I want the old "output HTML preview" identifiers fully renamed rather than aliased, so that the codebase has one name for one concept.
-22. As a User on a conversation with an older Agentic-App, I want its buttons to keep working after CmdClaw updates, so that stored artifacts do not silently rot.
+22. As a User on a conversation with an older Agentic-App, I want its buttons to keep working after Bap updates, so that stored artifacts do not silently rot.
 23. As a User, I want sends from an Agentic-App to respect the same auth and ownership checks as the composer, so that the page cannot post into conversations I do not own.
 24. As an operator, I want rejected and accepted Agentic-App Prompts to be observable in telemetry, so that I can detect abuse patterns and debug "the button does nothing" reports.
 
@@ -39,8 +39,8 @@ Rename the concept from **Generation Output Preview** to **Agentic-App** and giv
 
 Decisions below were settled in a grilling session and recorded in the Agentic-App ADRs (the renamed `output.html` ADR and the new Agentic-App Prompt protocol ADR); the glossary terms are in `CONTEXT.md`.
 
-- **Raw postMessage, no injection.** The agent writes the `parent.postMessage` call itself. CmdClaw never mutates or augments the generated HTML (no injected bootstrap script, no declarative `data-*` wiring). Consequence: the envelope is a frozen public contract — append-only, version 1 accepted forever.
-- **Wire format.** Inbound: `{ type: "cmdclaw:agentic-app-prompt", version: 1, prompt: string }`. Outbound ack: `{ type: "cmdclaw:agentic-app-prompt-result", version: 1, status: "sent" | "rejected", reason?: "rate_limited" | "no_user_activation" | "invalid" }`. Unknown extra fields are ignored; unknown `type` or `version` values are dropped silently.
+- **Raw postMessage, no injection.** The agent writes the `parent.postMessage` call itself. Bap never mutates or augments the generated HTML (no injected bootstrap script, no declarative `data-*` wiring). Consequence: the envelope is a frozen public contract — append-only, version 1 accepted forever.
+- **Wire format.** Inbound: `{ type: "bap:agentic-app-prompt", version: 1, prompt: string }`. Outbound ack: `{ type: "bap:agentic-app-prompt-result", version: 1, status: "sent" | "rejected", reason?: "rate_limited" | "no_user_activation" | "invalid" }`. Unknown extra fields are ignored; unknown `type` or `version` values are dropped silently.
 - **Auto-send with composer semantics.** An accepted prompt is submitted as a visible user message: start a Generation when idle, enqueue when one is running. No composer prefill, no hidden or synthetic messages. Text only in v1 — no attachments, skill selection, or model override; conversation defaults apply.
 - **Parent-verified user-activation gate.** The panel cannot see clicks inside the iframe, so it tracks pointer/keyboard events targeting the iframe element and accepts a prompt only within a short window after such interaction. Plus a rate cap on accepted prompts. Both checks live in one pure, clock-injected module.
 - **Trust check is source identity, not origin.** The sandboxed iframe (no `allow-same-origin`) has an opaque origin, so the listener verifies `event.source` against the mounted iframe's content window and ignores everything else.
@@ -61,7 +61,7 @@ A good test exercises external behavior through the module's public interface �
 ## Out of Scope
 
 - Prompts carrying attachments, skill selections, model overrides, or any non-text payload.
-- Any injected helper script, declarative `data-prompt` wiring, or `window.cmdclaw` API inside the Agentic-App.
+- Any injected helper script, declarative `data-prompt` wiring, or `window.bap` API inside the Agentic-App.
 - Autonomous sends: prompts on load, timers, or background loops remain impossible; any future autonomous capability must be a new, explicitly approved mechanism, not a relaxation of the activation gate.
 - Serving multi-file Agentic-Apps (relative asset bundles); `output.html` remains a single self-contained document.
 - Surfaces other than the normal web chat routes (CLI, mobile-specific layouts, coworker-specific surfaces).

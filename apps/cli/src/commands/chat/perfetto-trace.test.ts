@@ -46,18 +46,18 @@ function buildArtifacts() {
 describe("chat perfetto trace export", () => {
   it("builds output paths under the current working directory", () => {
     const now = new Date("2026-04-07T12:34:56.789Z");
-    expect(buildPerfettoTraceDirectoryPath("/tmp/cmdclaw")).toBe("/tmp/cmdclaw/perfetto-traces");
+    expect(buildPerfettoTraceDirectoryPath("/tmp/bap")).toBe("/tmp/bap/perfetto-traces");
     expect(buildPerfettoTraceFilename(now)).toBe("2026-04-07T12-34-56.789Z.json");
     expect(
       buildPerfettoTraceOutputPath({
-        cwd: "/tmp/cmdclaw",
+        cwd: "/tmp/bap",
         now,
       }),
-    ).toBe("/tmp/cmdclaw/perfetto-traces/2026-04-07T12-34-56.789Z.json");
+    ).toBe("/tmp/bap/perfetto-traces/2026-04-07T12-34-56.789Z.json");
   });
 
   it("writes a one-shot Perfetto trace file", () => {
-    const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-chat-trace-"));
+    const rootDir = mkdtempSync(join(tmpdir(), "bap-chat-trace-"));
     const now = new Date("2026-04-07T12:34:56.789Z");
     const targetPath = join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.json");
 
@@ -100,7 +100,7 @@ describe("chat perfetto trace export", () => {
   });
 
   it("writes numbered sibling files when the timestamp path is already taken", () => {
-    const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-chat-trace-"));
+    const rootDir = mkdtempSync(join(tmpdir(), "bap-chat-trace-"));
     const now = new Date("2026-04-07T12:34:56.789Z");
 
     const first = exportPerfettoTraceForCompletedRun({
@@ -135,7 +135,7 @@ describe("chat perfetto trace export", () => {
   });
 
   it("skips export when timing timestamps are unavailable", () => {
-    const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-chat-trace-"));
+    const rootDir = mkdtempSync(join(tmpdir(), "bap-chat-trace-"));
     const targetPath = join(rootDir, "perfetto-traces", "2026-04-07T12-34-56.789Z.json");
 
     const result = exportPerfettoTraceForCompletedRun({

@@ -32,32 +32,31 @@
             "mode": "thresholds"
           },
           "mappings": [],
-          "max": 1,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
-                "value": 0.9
+                "color": "red",
+                "value": 1
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 0,
         "y": 0
       },
-      "id": 11,
+      "id": 1,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -82,12 +81,12 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "1 - (sum(increase(cmdclaw_slo_events_total{journey=\"global\",result=\"bad\"}[1d])) / clamp_min(sum(increase(cmdclaw_slo_events_total{journey=\"global\"}[1d])), 1))",
-          "legendFormat": "global 1d",
+          "expr": "sum(increase(bap_rpc_requests_total{status_code=~\"5..\"}[30d]))",
+          "legendFormat": "5xx requests",
           "refId": "A"
         }
       ],
-      "title": "Global 1d Availability",
+      "title": "5xx Requests, 30d",
       "type": "stat"
     },
     {
@@ -107,12 +106,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
-                "value": 0.9
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
               }
             ]
           },
@@ -121,12 +124,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 6,
         "y": 0
       },
-      "id": 12,
+      "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -151,12 +154,12 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "1 - (sum(increase(cmdclaw_slo_events_total{journey=\"global\",result=\"bad\"}[3d])) / clamp_min(sum(increase(cmdclaw_slo_events_total{journey=\"global\"}[3d])), 1))",
-          "legendFormat": "global 3d",
+          "expr": "sum(increase(bap_rpc_requests_total{status_code=~\"5..\"}[30d])) / clamp_min(sum(increase(bap_rpc_requests_total[30d])), 1)",
+          "legendFormat": "5xx rate",
           "refId": "A"
         }
       ],
-      "title": "Global 3d Availability",
+      "title": "5xx Rate, 30d",
       "type": "stat"
     },
     {
@@ -181,7 +184,7 @@
               },
               {
                 "color": "green",
-                "value": 0.9
+                "value": 0.99
               }
             ]
           },
@@ -190,12 +193,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 12,
         "y": 0
       },
-      "id": 13,
+      "id": 3,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -220,12 +223,12 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "1 - (sum(increase(cmdclaw_slo_events_total{journey=\"global\",result=\"bad\"}[7d])) / clamp_min(sum(increase(cmdclaw_slo_events_total{journey=\"global\"}[7d])), 1))",
-          "legendFormat": "global 7d",
+          "expr": "1 - (sum(increase(bap_rpc_requests_total{status_code=~\"5..\"}[30d])) / clamp_min(sum(increase(bap_rpc_requests_total[30d])), 1))",
+          "legendFormat": "availability",
           "refId": "A"
         }
       ],
-      "title": "Global 7d Availability",
+      "title": "RPC Availability, 30d",
       "type": "stat"
     },
     {
@@ -239,34 +242,29 @@
             "mode": "thresholds"
           },
           "mappings": [],
-          "max": 1,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 0.9
+                "value": null
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 18,
         "y": 0
       },
-      "id": 14,
+      "id": 4,
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
@@ -289,149 +287,13 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "1 - (sum(increase(cmdclaw_slo_events_total{journey=\"global\",result=\"bad\"}[30d])) / clamp_min(sum(increase(cmdclaw_slo_events_total{journey=\"global\"}[30d])), 1))",
-          "legendFormat": "global 30d",
+          "expr": "sum(increase(bap_rpc_requests_total[30d]))",
+          "legendFormat": "all requests",
           "refId": "A"
         }
       ],
-      "title": "Global 30d Availability",
+      "title": "Total RPC Requests, 30d",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 0.9
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 0,
-        "y": 5
-      },
-      "id": 15,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.1.7",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "min(1 - (sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\",result=\"bad\"}[$slo_window])) / clamp_min(sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\"}[$slo_window])), 1)))",
-          "legendFormat": "worst journey",
-          "refId": "A"
-        }
-      ],
-      "title": "Worst Journey Availability ($slo_window)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 16,
-        "x": 8,
-        "y": 5
-      },
-      "id": 16,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "12.1.7",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\"}[$slo_window]))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "{{journey}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Event Volume by Journey ($slo_window)",
-      "type": "table"
     },
     {
       "datasource": {
@@ -451,76 +313,7 @@
             "showPoints": "never",
             "spanNulls": true
           },
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 0.9
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 10
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "1 - (sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\",result=\"bad\"}[$slo_window])) / clamp_min(sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\"}[$slo_window])), 1))",
-          "legendFormat": "{{journey}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Availability by Journey ($slo_window)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "unit": "percentunit"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -528,9 +321,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 7
       },
-      "id": 3,
+      "id": 5,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -548,12 +341,21 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\",result=\"bad\"}[$slo_window])) / clamp_min(sum by (journey) (increase(cmdclaw_slo_events_total{journey!=\"global\"}[$slo_window])), 1)",
-          "legendFormat": "{{journey}}",
+          "expr": "sum(rate(bap_rpc_requests_total[5m]))",
+          "legendFormat": "all",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum(rate(bap_rpc_requests_total{status_code=~\"5..\"}[5m]))",
+          "legendFormat": "5xx",
+          "refId": "B"
         }
       ],
-      "title": "Error Rate by Journey ($slo_window)",
+      "title": "RPC Throughput vs 5xx",
       "type": "timeseries"
     },
     {
@@ -574,7 +376,8 @@
             "showPoints": "never",
             "spanNulls": true
           },
-          "unit": "short"
+          "min": 0,
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -582,9 +385,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 7
       },
-      "id": 4,
+      "id": 6,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -602,12 +405,12 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (journey) (rate(cmdclaw_slo_events_total{journey!=\"global\",result=\"bad\"}[$slo_window])) / clamp_min(sum by (journey) (rate(cmdclaw_slo_events_total{journey!=\"global\"}[$slo_window])), 1) / 0.10",
-          "legendFormat": "{{journey}}",
+          "expr": "sum(increase(bap_rpc_requests_total{status_code=~\"5..\"}[15m])) / clamp_min(sum(increase(bap_rpc_requests_total[15m])), 1)",
+          "legendFormat": "5xx rate",
           "refId": "A"
         }
       ],
-      "title": "Fast Error Budget Burn Rate ($slo_window)",
+      "title": "RPC 5xx Rate, 15m",
       "type": "timeseries"
     },
     {
@@ -642,12 +445,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 15
       },
-      "id": 5,
+      "id": 7,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -667,14 +470,14 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (journey, result) (increase(cmdclaw_slo_events_total{journey!=\"global\"}[$slo_window]))",
+          "expr": "topk(20, sum by (route, method, status_code) (increase(bap_rpc_requests_total{status_code=~\"5..\"}[30d])))",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{journey}} {{result}}",
+          "legendFormat": "{{method}} {{route}} {{status_code}}",
           "refId": "A"
         }
       ],
-      "title": "Event Counts ($slo_window)",
+      "title": "Top 5xx Routes, 30d",
       "type": "table"
     }
   ],
@@ -682,58 +485,20 @@
   "refresh": "30s",
   "schemaVersion": 41,
   "tags": [
-    "cmdclaw",
-    "slo"
+    "bap",
+    "sli",
+    "internal"
   ],
   "templating": {
-    "list": [
-      {
-        "current": {
-          "selected": false,
-          "text": "7d",
-          "value": "7d"
-        },
-        "hide": 0,
-        "includeAll": false,
-        "label": "SLO window",
-        "multi": false,
-        "name": "slo_window",
-        "options": [
-          {
-            "selected": false,
-            "text": "1d",
-            "value": "1d"
-          },
-          {
-            "selected": false,
-            "text": "3d",
-            "value": "3d"
-          },
-          {
-            "selected": true,
-            "text": "7d",
-            "value": "7d"
-          },
-          {
-            "selected": false,
-            "text": "30d",
-            "value": "30d"
-          }
-        ],
-        "query": "1d,3d,7d,30d",
-        "queryValue": "",
-        "skipUrlSync": false,
-        "type": "custom"
-      }
-    ]
+    "list": []
   },
   "time": {
-    "from": "now-7d",
+    "from": "now-30d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "CmdClaw SLOs",
-  "uid": "cmdclaw-slo",
-  "version": 4
+  "title": "Bap Internal RPC SLI",
+  "uid": "bap-internal-rpc-sli",
+  "version": 1
 }

@@ -14,13 +14,13 @@ function captureLogs() {
   setLoggerSinkForTest((level, record, message) => {
     records.push({ level, record, message });
   });
-  configureLoggerRuntime({ serviceName: "cmdclaw-test", env: "test" });
+  configureLoggerRuntime({ serviceName: "bap-test", env: "test" });
   return records;
 }
 
 afterEach(() => {
   setLoggerSinkForTest(null);
-  configureLoggerRuntime({ serviceName: "cmdclaw-test", env: "test", vectorLogUrl: null });
+  configureLoggerRuntime({ serviceName: "bap-test", env: "test", vectorLogUrl: null });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -86,7 +86,7 @@ describe("normalizeTelemetryAttributes", () => {
   it("normalizes emitted field names to dotted snake case", () => {
     expect(
       normalizeTelemetryAttributes({
-        cmdclaw: {
+        bap: {
           generationId: "gen-1",
           failurePhase: "runtime",
         },
@@ -94,7 +94,7 @@ describe("normalizeTelemetryAttributes", () => {
         elapsedMs: 123,
       }),
     ).toEqual({
-      cmdclaw: {
+      bap: {
         generation_id: "gen-1",
         failure_phase: "runtime",
       },
@@ -106,7 +106,7 @@ describe("normalizeTelemetryAttributes", () => {
   it("drops forbidden content and credential fields", () => {
     expect(
       normalizeTelemetryAttributes({
-        "cmdclaw.generation.id": "gen-1",
+        "bap.generation.id": "gen-1",
         prompt: "do secret work",
         authorization: "Bearer token",
         requestBody: { content: "raw body" },
@@ -117,7 +117,7 @@ describe("normalizeTelemetryAttributes", () => {
         },
       }),
     ).toEqual({
-      "cmdclaw.generation.id": "gen-1",
+      "bap.generation.id": "gen-1",
       safe_summary: {
         attachment_count: 2,
       },
@@ -237,12 +237,12 @@ describe("logger", () => {
       expect.objectContaining({
         "event.kind": "operational_log",
         event: "generation.preparing_stuck_detected",
-        "service.name": "cmdclaw-test",
+        "service.name": "bap-test",
         "deployment.environment": "test",
-        "cmdclaw.generation.id": "gen-1",
-        "cmdclaw.conversation.id": "conv-1",
-        "cmdclaw.user.id": "user-1",
-        "cmdclaw.telemetry.schema_version": "2026-05-22",
+        "bap.generation.id": "gen-1",
+        "bap.conversation.id": "conv-1",
+        "bap.user.id": "user-1",
+        "bap.telemetry.schema_version": "2026-05-22",
       }),
     );
     expect(records[0]?.record).not.toHaveProperty("app.event.name");
@@ -252,9 +252,9 @@ describe("logger", () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
     vi.stubGlobal("fetch", fetchMock);
     configureLoggerRuntime({
-      serviceName: "cmdclaw-worker",
+      serviceName: "bap-worker",
       env: "production",
-      vectorLogUrl: "http://cmdclaw-vector-prod:8686/logs",
+      vectorLogUrl: "http://bap-vector-prod:8686/logs",
     });
 
     logger.error(
@@ -267,7 +267,7 @@ describe("logger", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://cmdclaw-vector-prod:8686/logs",
+      "http://bap-vector-prod:8686/logs",
       expect.objectContaining({
         method: "POST",
         headers: {
@@ -279,15 +279,15 @@ describe("logger", () => {
     const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(body).toEqual(
       expect.objectContaining({
-        service: "cmdclaw-worker",
+        service: "bap-worker",
         env: "production",
         level: "error",
         message: "render failed",
-        "service.name": "cmdclaw-worker",
+        "service.name": "bap-worker",
         "deployment.environment": "production",
         "event.kind": "operational_log",
         event: "render.failed",
-        "cmdclaw.generation.id": "gen-1",
+        "bap.generation.id": "gen-1",
         err: expect.objectContaining({
           type: "Error",
           message: "template exploded",
@@ -306,7 +306,7 @@ describe("semantic log emission", () => {
 
     emitCanonicalServiceEvent({
       eventId: "event-1",
-      eventName: "cmdclaw.generation.terminal",
+      eventName: "bap.generation.terminal",
       operationName: "generation.terminal",
       outcome: "success",
       context: {
@@ -314,7 +314,7 @@ describe("semantic log emission", () => {
         generationId: "gen-1",
       },
       attributes: {
-        "cmdclaw.generation.id": "gen-1",
+        "bap.generation.id": "gen-1",
       },
     });
 
@@ -324,10 +324,10 @@ describe("semantic log emission", () => {
       expect.objectContaining({
         "event.kind": "canonical_service_event",
         "app.event.id": "event-1",
-        "app.event.name": "cmdclaw.generation.terminal",
+        "app.event.name": "bap.generation.terminal",
         "app.operation.name": "generation.terminal",
         "app.operation.outcome": "success",
-        "cmdclaw.generation.id": "gen-1",
+        "bap.generation.id": "gen-1",
         trace_id: "a".repeat(32),
       }),
     );
@@ -344,7 +344,7 @@ describe("semantic log emission", () => {
         generationId: "gen-2",
       },
       attributes: {
-        "cmdclaw.client.visible_error_code": "stream_closed",
+        "bap.client.visible_error_code": "stream_closed",
       },
     });
 
@@ -354,7 +354,7 @@ describe("semantic log emission", () => {
         "app.event.id": "client-event-1",
         "app.event.name": "generation.stream.error",
         "app.client_observation.type": "generation.stream.error",
-        "cmdclaw.client.visible_error_code": "stream_closed",
+        "bap.client.visible_error_code": "stream_closed",
         trace_id: "b".repeat(32),
       }),
     );

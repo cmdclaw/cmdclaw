@@ -13,11 +13,11 @@ const { startCloudAuthMock, isSelfHostedEditionMock, getSessionMock, getInstance
     getInstanceHealthStatusMock: vi.fn<VitestProcedure>(),
   }));
 
-vi.mock("@cmdclaw/core/server/control-plane/client", () => ({
+vi.mock("@bap/core/server/control-plane/client", () => ({
   startCloudAuth: startCloudAuthMock,
 }));
 
-vi.mock("@cmdclaw/core/server/edition", () => ({
+vi.mock("@bap/core/server/edition", () => ({
   isSelfHostedEdition: isSelfHostedEditionMock,
 }));
 

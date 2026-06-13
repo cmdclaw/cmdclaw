@@ -25,13 +25,13 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     insert: insertMock,
   },
 }));
 
-vi.mock("@cmdclaw/db/schema", () => ({
+vi.mock("@bap/db/schema", () => ({
   slackUserLink: {
     slackTeamId: "slackTeamId",
     slackUserId: "slackUserId",
@@ -58,7 +58,7 @@ describe("handleSlackLink", () => {
 
   it("returns 400 when slack params are missing", async () => {
     const response = await handleSlackLink(
-      new Request("https://cmdclaw.ai/api/slack/link?slackUserId=U123"),
+      new Request("https://heybap.com/api/slack/link?slackUserId=U123"),
     );
 
     expect(response.status).toBe(400);
@@ -86,7 +86,7 @@ describe("handleSlackLink", () => {
     getSessionMock.mockResolvedValue({ session: { userId: "user-1" } });
 
     const response = await handleSlackLink(
-      new Request("https://cmdclaw.ai/api/slack/link?slackUserId=U123&slackTeamId=T123"),
+      new Request("https://heybap.com/api/slack/link?slackUserId=U123&slackTeamId=T123"),
     );
 
     expect(response.status).toBe(200);

@@ -1,4 +1,4 @@
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
 import { describe, expect, it } from "vitest";
 import { normalizeGenerationError } from "./generation-errors";
 

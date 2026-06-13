@@ -24,7 +24,7 @@ export const Route = createFileRoute("/accounts")({
   beforeLoad: async ({ location }) => ({
     sessionContext: await requireSession(location.href),
   }),
-  head: () => ({ meta: [{ title: "Account - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Account - Bap" }] }),
   component: AccountsPage,
 });
 

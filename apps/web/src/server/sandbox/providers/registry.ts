@@ -1,4 +1,4 @@
-import type { SandboxProviderId } from "@cmdclaw/core/server/sandbox/core/types";
+import type { SandboxProviderId } from "@bap/core/server/sandbox/core/types";
 import type { SandboxProvider } from "./base";
 import { DaytonaProvider } from "./daytona";
 import { DockerProvider } from "./docker";

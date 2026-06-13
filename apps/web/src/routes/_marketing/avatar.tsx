@@ -22,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export const Route = createFileRoute("/_marketing/avatar")({
   head: () => ({
     meta: [
-      { title: "Coworker Avatar Playground · CmdClaw" },
+      { title: "Coworker Avatar Playground · Bap" },
       {
         name: "description",
         content:

@@ -1,4 +1,4 @@
-import { getCallbackBaseUrls } from "@cmdclaw/sandbox/plugins/integration-permissions";
+import { getCallbackBaseUrls } from "@bap/sandbox/plugins/integration-permissions";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("getCallbackBaseUrls", () => {
@@ -11,13 +11,13 @@ describe("getCallbackBaseUrls", () => {
     vi.stubEnv("APP_URL", "http://localhost:3000");
     vi.stubEnv(
       "E2B_CALLBACK_BASE_URL",
-      "https://localcan.baptistecolle.com/__worktrees/cmdclaw-5fd291f4",
+      "https://localcan.baptistecolle.com/__worktrees/bap-5fd291f4",
     );
-    vi.stubEnv("VITE_APP_URL", "https://cmdclaw.ai");
+    vi.stubEnv("VITE_APP_URL", "https://heybap.com");
 
     expect(getCallbackBaseUrls()).toEqual([
-      "https://localcan.baptistecolle.com/__worktrees/cmdclaw-5fd291f4",
-      "https://cmdclaw.ai",
+      "https://localcan.baptistecolle.com/__worktrees/bap-5fd291f4",
+      "https://heybap.com",
     ]);
   });
 

@@ -1,4 +1,4 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   coworker,
@@ -7,7 +7,7 @@ import {
   user,
   type GenerationExecutionPolicy,
   type SyntheticTrafficKind,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { IntegrationType } from "../../oauth/config";
 import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "../../../lib/chat-model-defaults";

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "cmdclaw",
+      "name": "bap",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@opentelemetry/api": "^1.9.0",
@@ -26,15 +26,15 @@
       },
     },
     "apps/cli": {
-      "name": "@cmdclaw/cli",
+      "name": "@bap/cli",
       "version": "0.1.0",
       "bin": {
-        "cmdclaw": "src/bin/cmdclaw.ts",
+        "bap": "src/bin/bap.ts",
       },
       "dependencies": {
-        "@cmdclaw/client": "workspace:*",
-        "@cmdclaw/core": "workspace:*",
-        "@cmdclaw/db": "workspace:*",
+        "@bap/client": "workspace:*",
+        "@bap/core": "workspace:*",
+        "@bap/db": "workspace:*",
         "@stricli/core": "^1.2.6",
         "drizzle-orm": "^0.45.1",
       },
@@ -46,16 +46,16 @@
       },
     },
     "apps/docs": {
-      "name": "@cmdclaw/docs",
+      "name": "@bap/docs",
       "version": "0.1.0",
     },
     "apps/mcp": {
-      "name": "@cmdclaw/mcp",
+      "name": "@bap/mcp",
       "version": "0.1.0",
       "dependencies": {
-        "@cmdclaw/client": "workspace:*",
-        "@cmdclaw/core": "workspace:*",
-        "@cmdclaw/message-format": "workspace:*",
+        "@bap/client": "workspace:*",
+        "@bap/core": "workspace:*",
+        "@bap/message-format": "workspace:*",
         "pdf-parse": "^2.4.5",
         "xmcp": "0.6.5",
         "zod": "^4.1.13",
@@ -68,11 +68,11 @@
       },
     },
     "apps/sandbox": {
-      "name": "@cmdclaw/sandbox",
+      "name": "@bap/sandbox",
       "version": "0.1.0",
       "dependencies": {
-        "@cmdclaw/db": "workspace:*",
-        "@cmdclaw/message-format": "workspace:*",
+        "@bap/db": "workspace:*",
+        "@bap/message-format": "workspace:*",
         "@daytonaio/sdk": "^0.186.0",
         "@opencode-ai/plugin": "^1.17.3",
         "@opencode-ai/sdk": "^1.16.2",
@@ -88,15 +88,15 @@
       },
     },
     "apps/web": {
-      "name": "@cmdclaw/web",
+      "name": "@bap/web",
       "version": "0.1.0",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.968.0",
-        "@cmdclaw/client": "workspace:*",
-        "@cmdclaw/core": "workspace:*",
-        "@cmdclaw/db": "workspace:*",
-        "@cmdclaw/message-format": "workspace:*",
-        "@cmdclaw/sandbox": "workspace:*",
+        "@bap/client": "workspace:*",
+        "@bap/core": "workspace:*",
+        "@bap/db": "workspace:*",
+        "@bap/message-format": "workspace:*",
+        "@bap/sandbox": "workspace:*",
         "@daytonaio/sdk": "^0.186.0",
         "@dicebear/collection": "^9.4.2",
         "@dicebear/core": "^9.4.2",
@@ -214,19 +214,19 @@
       },
     },
     "apps/worker": {
-      "name": "@cmdclaw/worker",
+      "name": "@bap/worker",
       "version": "0.1.0",
       "dependencies": {
-        "@cmdclaw/core": "workspace:*",
-        "@cmdclaw/db": "workspace:*",
-        "@cmdclaw/sandbox": "workspace:*",
+        "@bap/core": "workspace:*",
+        "@bap/db": "workspace:*",
+        "@bap/sandbox": "workspace:*",
       },
     },
     "apps/worktree": {
-      "name": "@cmdclaw/worktree",
+      "name": "@bap/worktree",
       "version": "0.1.0",
       "dependencies": {
-        "@cmdclaw/core": "workspace:*",
+        "@bap/core": "workspace:*",
         "better-call": "1.3.6",
         "dotenv": "^17.2.3",
         "pg": "^8.16.3",
@@ -238,17 +238,17 @@
       },
     },
     "apps/ws": {
-      "name": "@cmdclaw/ws",
+      "name": "@bap/ws",
       "version": "0.1.0",
       "dependencies": {
-        "@cmdclaw/core": "workspace:*",
+        "@bap/core": "workspace:*",
       },
     },
     "packages/client": {
-      "name": "@cmdclaw/client",
+      "name": "@bap/client",
       "version": "0.1.0",
       "dependencies": {
-        "@cmdclaw/core": "workspace:*",
+        "@bap/core": "workspace:*",
         "@orpc/client": "^1.13.2",
       },
       "devDependencies": {
@@ -259,18 +259,18 @@
       },
     },
     "packages/config": {
-      "name": "@cmdclaw/config",
+      "name": "@bap/config",
       "version": "0.1.0",
     },
     "packages/core": {
-      "name": "@cmdclaw/core",
+      "name": "@bap/core",
       "version": "0.1.0",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.968.0",
         "@aws-sdk/s3-request-presigner": "^3.968.0",
-        "@cmdclaw/db": "workspace:*",
-        "@cmdclaw/message-format": "workspace:*",
-        "@cmdclaw/sandbox": "workspace:*",
+        "@bap/db": "workspace:*",
+        "@bap/message-format": "workspace:*",
+        "@bap/sandbox": "workspace:*",
         "@daytonaio/sdk": "^0.186.0",
         "@google/generative-ai": "^0.24.1",
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -316,7 +316,7 @@
       },
     },
     "packages/db": {
-      "name": "@cmdclaw/db",
+      "name": "@bap/db",
       "version": "0.1.0",
       "dependencies": {
         "drizzle-orm": "^0.45.1",
@@ -329,7 +329,7 @@
       },
     },
     "packages/message-format": {
-      "name": "@cmdclaw/message-format",
+      "name": "@bap/message-format",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "^1.3.6",
@@ -522,31 +522,31 @@
 
     "@clack/prompts": ["@clack/prompts@1.0.0-alpha.6", "", { "dependencies": { "@clack/core": "1.0.0-alpha.6", "picocolors": "^1.0.0", "sisteransi": "^1.0.5" } }, "sha512-75NCtYOgDHVBE2nLdKPTDYOaESxO0GLAKC7INREp5VbS988Xua1u+588VaGlcvXiLc/kSwc25Cd+4PeTSpY6QQ=="],
 
-    "@cmdclaw/cli": ["@cmdclaw/cli@workspace:apps/cli"],
+    "@bap/cli": ["@bap/cli@workspace:apps/cli"],
 
-    "@cmdclaw/client": ["@cmdclaw/client@workspace:packages/client"],
+    "@bap/client": ["@bap/client@workspace:packages/client"],
 
-    "@cmdclaw/config": ["@cmdclaw/config@workspace:packages/config"],
+    "@bap/config": ["@bap/config@workspace:packages/config"],
 
-    "@cmdclaw/core": ["@cmdclaw/core@workspace:packages/core"],
+    "@bap/core": ["@bap/core@workspace:packages/core"],
 
-    "@cmdclaw/db": ["@cmdclaw/db@workspace:packages/db"],
+    "@bap/db": ["@bap/db@workspace:packages/db"],
 
-    "@cmdclaw/docs": ["@cmdclaw/docs@workspace:apps/docs"],
+    "@bap/docs": ["@bap/docs@workspace:apps/docs"],
 
-    "@cmdclaw/mcp": ["@cmdclaw/mcp@workspace:apps/mcp"],
+    "@bap/mcp": ["@bap/mcp@workspace:apps/mcp"],
 
-    "@cmdclaw/message-format": ["@cmdclaw/message-format@workspace:packages/message-format"],
+    "@bap/message-format": ["@bap/message-format@workspace:packages/message-format"],
 
-    "@cmdclaw/sandbox": ["@cmdclaw/sandbox@workspace:apps/sandbox"],
+    "@bap/sandbox": ["@bap/sandbox@workspace:apps/sandbox"],
 
-    "@cmdclaw/web": ["@cmdclaw/web@workspace:apps/web"],
+    "@bap/web": ["@bap/web@workspace:apps/web"],
 
-    "@cmdclaw/worker": ["@cmdclaw/worker@workspace:apps/worker"],
+    "@bap/worker": ["@bap/worker@workspace:apps/worker"],
 
-    "@cmdclaw/worktree": ["@cmdclaw/worktree@workspace:apps/worktree"],
+    "@bap/worktree": ["@bap/worktree@workspace:apps/worktree"],
 
-    "@cmdclaw/ws": ["@cmdclaw/ws@workspace:apps/ws"],
+    "@bap/ws": ["@bap/ws@workspace:apps/ws"],
 
     "@codemirror/autocomplete": ["@codemirror/autocomplete@6.20.2", "", { "dependencies": { "@codemirror/language": "^6.0.0", "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.17.0", "@lezer/common": "^1.0.0" } }, "sha512-G5FPkgIiLjOgZMjqVjvuKQ1rGPtHogLldJr33eFJdVLtmwY+giGrlv/ewljLz6b9BSQLkjxuwBc6g6omDM+YxQ=="],
 
@@ -3970,7 +3970,7 @@
 
     "@babel/helper-create-class-features-plugin/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
 
-    "@cmdclaw/web/autumn-js": ["autumn-js@1.2.28", "", { "dependencies": { "query-string": "^9.2.2", "rou3": "^0.6.1", "zod": "^4.0.0" }, "peerDependencies": { "better-auth": "^1.6.0", "better-call": "^1.0.12", "express": "^5.2.1", "hono": "^4.0.0", "next": "^14.0.0 || ^15.0.0 || ^16.0.0", "react": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["better-auth", "better-call", "express", "hono", "next", "react"] }, "sha512-NSvfseItww7VxJ1rec75ewrA6HeS9MUoV2J+DWpDBIp7y9grSwEUOnpTuIE2SKOrGTsUzwuCx2CATNkkGjphzg=="],
+    "@bap/web/autumn-js": ["autumn-js@1.2.28", "", { "dependencies": { "query-string": "^9.2.2", "rou3": "^0.6.1", "zod": "^4.0.0" }, "peerDependencies": { "better-auth": "^1.6.0", "better-call": "^1.0.12", "express": "^5.2.1", "hono": "^4.0.0", "next": "^14.0.0 || ^15.0.0 || ^16.0.0", "react": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["better-auth", "better-call", "express", "hono", "next", "react"] }, "sha512-NSvfseItww7VxJ1rec75ewrA6HeS9MUoV2J+DWpDBIp7y9grSwEUOnpTuIE2SKOrGTsUzwuCx2CATNkkGjphzg=="],
 
     "@daytonaio/sdk/@opentelemetry/otlp-exporter-base": ["@opentelemetry/otlp-exporter-base@0.217.0", "", { "dependencies": { "@opentelemetry/core": "2.7.1", "@opentelemetry/otlp-transformer": "0.217.0" }, "peerDependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-eYfqnB3UhKu/5frhd1R6+FprKygbhkomuaceMXDyzxbfXB9tKgZOVmjaJ02CkLA6Tdzumxl+e2H+vo2a8jiMPQ=="],
 

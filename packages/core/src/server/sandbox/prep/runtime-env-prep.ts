@@ -2,7 +2,7 @@ import { env } from "../../../env";
 import { resolvePublicCallbackBaseUrl } from "../../../lib/worktree-routing";
 import type { SandboxHandle } from "../core/types";
 
-const RUNTIME_ENV_DIR = "/app/.cmdclaw";
+const RUNTIME_ENV_DIR = "/app/.bap";
 const RUNTIME_ENV_JSON_PATH = `${RUNTIME_ENV_DIR}/runtime-env.json`;
 const RUNTIME_ENV_SH_PATH = `${RUNTIME_ENV_DIR}/runtime-env.sh`;
 

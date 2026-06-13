@@ -1,14 +1,14 @@
-import { buildCoworkerEditApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
-import { normalizeCoworkerUsername } from "@cmdclaw/core/server/services/coworker-metadata";
+import { buildCoworkerEditApplyEnvelope } from "@bap/core/lib/coworker-runtime-cli";
+import { normalizeCoworkerUsername } from "@bap/core/server/services/coworker-metadata";
 import {
   applyCoworkerEdit,
   type CoworkerEditApplyResult,
   coworkerBuilderEditSchema,
   resolveCoworkerBuilderContextByConversation,
-} from "@cmdclaw/core/server/services/coworker-builder-service";
-import { triggerCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
-import { db } from "@cmdclaw/db/client";
-import { coworker, user } from "@cmdclaw/db/schema";
+} from "@bap/core/server/services/coworker-builder-service";
+import { triggerCoworkerRun } from "@bap/core/server/services/coworker-service";
+import { db } from "@bap/db/client";
+import { coworker, user } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";

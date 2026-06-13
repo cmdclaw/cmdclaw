@@ -53,7 +53,7 @@ vi.mock("@/env", () => ({
 }));
 
 vi.mock("@/lib/trusted-origins", () => ({
-  getTrustedOrigins: vi.fn<VitestProcedure>(() => ["https://cmdclaw.ai"]),
+  getTrustedOrigins: vi.fn<VitestProcedure>(() => ["https://heybap.com"]),
 }));
 
 vi.mock("@/server/lib/credential-accounts", () => ({
@@ -79,10 +79,10 @@ vi.mock("@/server/orpc/routers/provider-auth", () => ({
   storeProviderTokens: storeProviderTokensMock,
 }));
 
-vi.mock("@cmdclaw/core/server/ai/subscription-providers", () => ({
+vi.mock("@bap/core/server/ai/subscription-providers", () => ({
   SUBSCRIPTION_PROVIDERS: {
     openai: {
-      redirectUri: "https://cmdclaw.ai/api/auth/provider/openai/callback",
+      redirectUri: "https://heybap.com/api/auth/provider/openai/callback",
       clientId: "client-id",
       clientSecret: "client-secret",
       usePKCE: false,
@@ -113,7 +113,7 @@ function getLocation(response: Response): string {
 
 function postMagicLinkResend(token = "abc123") {
   return handleMagicLinkResend(
-    new Request(`https://cmdclaw.ai/sign-in/${token}/resend`, { method: "POST" }),
+    new Request(`https://heybap.com/sign-in/${token}/resend`, { method: "POST" }),
     token,
   );
 }
@@ -134,11 +134,11 @@ describe("handleBetterAuth (/api/auth/**)", () => {
     );
 
     const response = await handleBetterAuth(
-      new Request("https://cmdclaw.ai/api/auth/callback/google?code=abc&state=def"),
+      new Request("https://heybap.com/api/auth/callback/google?code=abc&state=def"),
     );
 
     expect(response.status).toBe(307);
-    expect(getLocation(response)).toBe("https://cmdclaw.ai/invite-only?source=social-google");
+    expect(getLocation(response)).toBe("https://heybap.com/invite-only?source=social-google");
   });
 
   it("forwards the email from the invite-only error body when present", async () => {
@@ -154,12 +154,12 @@ describe("handleBetterAuth (/api/auth/**)", () => {
     );
 
     const response = await handleBetterAuth(
-      new Request("https://cmdclaw.ai/api/auth/callback/google?code=abc&state=def"),
+      new Request("https://heybap.com/api/auth/callback/google?code=abc&state=def"),
     );
 
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe(
-      "https://cmdclaw.ai/invite-only?source=social-google&email=alice%40example.com",
+      "https://heybap.com/invite-only?source=social-google&email=alice%40example.com",
     );
   });
 
@@ -173,13 +173,13 @@ describe("handleBetterAuth (/api/auth/**)", () => {
     authHandlerMock.mockResolvedValue(upstream);
 
     const response = await handleBetterAuth(
-      new Request("https://cmdclaw.ai/api/auth/get-session", {
-        headers: { origin: "https://cmdclaw.ai" },
+      new Request("https://heybap.com/api/auth/get-session", {
+        headers: { origin: "https://heybap.com" },
       }),
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("access-control-allow-origin")).toBe("https://cmdclaw.ai");
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://heybap.com");
     expect(response.headers.get("access-control-allow-credentials")).toBe("true");
     expect(response.headers.getSetCookie()).toEqual([
       "session=abc; Path=/; HttpOnly",
@@ -191,7 +191,7 @@ describe("handleBetterAuth (/api/auth/**)", () => {
     authHandlerMock.mockResolvedValue(new Response(null, { status: 200 }));
 
     const response = await handleBetterAuth(
-      new Request("https://cmdclaw.ai/api/auth/get-session", {
+      new Request("https://heybap.com/api/auth/get-session", {
         headers: { origin: "https://evil.example.com" },
       }),
     );
@@ -203,14 +203,14 @@ describe("handleBetterAuth (/api/auth/**)", () => {
 describe("handleBetterAuthOptions (CORS preflight)", () => {
   it("returns 204 with CORS headers for the request origin", () => {
     const response = handleBetterAuthOptions(
-      new Request("https://cmdclaw.ai/api/auth/sign-in", {
+      new Request("https://heybap.com/api/auth/sign-in", {
         method: "OPTIONS",
-        headers: { origin: "https://cmdclaw.ai" },
+        headers: { origin: "https://heybap.com" },
       }),
     );
 
     expect(response.status).toBe(204);
-    expect(response.headers.get("access-control-allow-origin")).toBe("https://cmdclaw.ai");
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://heybap.com");
     expect(response.headers.get("access-control-allow-methods")).toBe(
       "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     );
@@ -221,7 +221,7 @@ describe("handleMagicLinkConfirm (POST /sign-in/:token/confirm)", () => {
   beforeEach(() => {
     resolveMagicLinkPageStateMock.mockResolvedValue({
       status: "pending",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/onboarding",
       errorCallbackUrl: "/login?error=magic-link",
@@ -230,10 +230,10 @@ describe("handleMagicLinkConfirm (POST /sign-in/:token/confirm)", () => {
   });
 
   it("delegates pending tokens to Better Auth verification and marks them consumed", async () => {
-    authHandlerMock.mockResolvedValue(Response.redirect("https://cmdclaw.ai/chat", 302));
+    authHandlerMock.mockResolvedValue(Response.redirect("https://heybap.com/chat", 302));
 
     const response = await handleMagicLinkConfirm(
-      new Request("https://cmdclaw.ai/sign-in/abc123/confirm", {
+      new Request("https://heybap.com/sign-in/abc123/confirm", {
         method: "POST",
         headers: { cookie: "csrf=token" },
       }),
@@ -241,18 +241,18 @@ describe("handleMagicLinkConfirm (POST /sign-in/:token/confirm)", () => {
     );
 
     expect(response.status).toBe(302);
-    expect(getLocation(response)).toBe("https://cmdclaw.ai/chat");
+    expect(getLocation(response)).toBe("https://heybap.com/chat");
     expect(authHandlerMock).toHaveBeenCalledTimes(1);
     const delegatedRequest = authHandlerMock.mock.calls[0]?.[0] as Request;
     const delegatedUrl = new URL(delegatedRequest.url);
     expect(delegatedUrl.pathname).toBe("/api/auth/magic-link/verify");
     expect(delegatedUrl.searchParams.get("token")).toBe("abc123");
-    expect(delegatedUrl.searchParams.get("callbackURL")).toBe("https://cmdclaw.ai/chat");
+    expect(delegatedUrl.searchParams.get("callbackURL")).toBe("https://heybap.com/chat");
     expect(delegatedUrl.searchParams.get("newUserCallbackURL")).toBe(
-      "https://cmdclaw.ai/onboarding",
+      "https://heybap.com/onboarding",
     );
     expect(delegatedUrl.searchParams.get("errorCallbackURL")).toBe(
-      "https://cmdclaw.ai/login?error=magic-link",
+      "https://heybap.com/login?error=magic-link",
     );
     expect(delegatedRequest.headers.get("cookie")).toBe("csrf=token");
     expect(markMagicLinkRequestConsumedMock).toHaveBeenCalledWith("abc123");
@@ -260,10 +260,10 @@ describe("handleMagicLinkConfirm (POST /sign-in/:token/confirm)", () => {
 
   it("delegates complex MCP OAuth return paths as absolute URLs for Better Auth", async () => {
     const mcpAuthorizePath =
-      "/api/mcp/oauth/authorize?response_type=code&client_id=cmdclaw-mcp-client&redirect_uri=http%3A%2F%2Flocalhost%3A34567%2Fcallback&scope=cmdclaw+gmail&resource=https%3A%2F%2Fmcp.heybap.com%2Fbap";
+      "/api/mcp/oauth/authorize?response_type=code&client_id=bap-mcp-client&redirect_uri=http%3A%2F%2Flocalhost%3A34567%2Fcallback&scope=bap+gmail&resource=https%3A%2F%2Fmcp.heybap.com%2Fbap";
     resolveMagicLinkPageStateMock.mockResolvedValueOnce({
       status: "pending",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: mcpAuthorizePath,
       newUserCallbackUrl: mcpAuthorizePath,
       errorCallbackUrl: "/login?error=magic-link",
@@ -287,11 +287,11 @@ describe("handleMagicLinkConfirm (POST /sign-in/:token/confirm)", () => {
 
   it("does not mark the page state consumed when Better Auth rejects the token", async () => {
     authHandlerMock.mockResolvedValue(
-      Response.redirect("https://cmdclaw.ai/login?error=magic-link?error=INVALID_TOKEN", 302),
+      Response.redirect("https://heybap.com/login?error=magic-link?error=INVALID_TOKEN", 302),
     );
 
     await handleMagicLinkConfirm(
-      new Request("https://cmdclaw.ai/sign-in/abc123/confirm", { method: "POST" }),
+      new Request("https://heybap.com/sign-in/abc123/confirm", { method: "POST" }),
       "abc123",
     );
 
@@ -301,19 +301,19 @@ describe("handleMagicLinkConfirm (POST /sign-in/:token/confirm)", () => {
   it("redirects non-pending tokens back to the sign-in page", async () => {
     resolveMagicLinkPageStateMock.mockResolvedValueOnce({
       status: "expired",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
     });
 
     const response = await handleMagicLinkConfirm(
-      new Request("https://cmdclaw.ai/sign-in/abc123/confirm", { method: "POST" }),
+      new Request("https://heybap.com/sign-in/abc123/confirm", { method: "POST" }),
       "abc123",
     );
 
     expect(response.status).toBe(303);
-    expect(getLocation(response)).toBe("https://cmdclaw.ai/sign-in/abc123?error=expired");
+    expect(getLocation(response)).toBe("https://heybap.com/sign-in/abc123?error=expired");
     expect(authHandlerMock).not.toHaveBeenCalled();
   });
 });
@@ -322,7 +322,7 @@ describe("handleMagicLinkResend (POST /sign-in/:token/resend)", () => {
   beforeEach(() => {
     resolveMagicLinkPageStateMock.mockResolvedValue({
       status: "expired",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/onboarding",
       errorCallbackUrl: "/login?error=magic-link",
@@ -335,15 +335,15 @@ describe("handleMagicLinkResend (POST /sign-in/:token/resend)", () => {
     const response = await postMagicLinkResend();
 
     expect(response.status).toBe(303);
-    expect(getLocation(response)).toBe("https://cmdclaw.ai/sign-in/abc123?resent=1");
+    expect(getLocation(response)).toBe("https://heybap.com/sign-in/abc123?resent=1");
     const delegatedRequest = authHandlerMock.mock.calls[0]?.[0] as Request;
     expect(delegatedRequest.method).toBe("POST");
     expect(new URL(delegatedRequest.url).pathname).toBe("/api/auth/sign-in/magic-link");
     await expect(delegatedRequest.json()).resolves.toEqual({
-      email: "pilot@cmdclaw.ai",
-      callbackURL: "https://cmdclaw.ai/chat",
-      newUserCallbackURL: "https://cmdclaw.ai/onboarding",
-      errorCallbackURL: "https://cmdclaw.ai/login?error=magic-link",
+      email: "pilot@heybap.com",
+      callbackURL: "https://heybap.com/chat",
+      newUserCallbackURL: "https://heybap.com/onboarding",
+      errorCallbackURL: "https://heybap.com/login?error=magic-link",
     });
   });
 
@@ -359,7 +359,7 @@ describe("handleMagicLinkResend (POST /sign-in/:token/resend)", () => {
     const response = await postMagicLinkResend();
 
     expect(response.status).toBe(303);
-    expect(getLocation(response)).toBe("https://cmdclaw.ai/sign-in/abc123?error=invalid");
+    expect(getLocation(response)).toBe("https://heybap.com/sign-in/abc123?error=invalid");
     expect(authHandlerMock).not.toHaveBeenCalled();
   });
 });
@@ -372,23 +372,23 @@ describe("handleCheckEmail (/api/auth/check-email)", () => {
 
   it("returns approved emails with their password status", async () => {
     const response = await handleCheckEmail(
-      new Request("https://cmdclaw.ai/api/auth/check-email", {
+      new Request("https://heybap.com/api/auth/check-email", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "pilot@cmdclaw.ai" }),
+        body: JSON.stringify({ email: "pilot@heybap.com" }),
       }),
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ approved: true, hasPassword: true });
-    expect(hasCredentialPasswordByEmailMock).toHaveBeenCalledWith("pilot@cmdclaw.ai");
+    expect(hasCredentialPasswordByEmailMock).toHaveBeenCalledWith("pilot@heybap.com");
   });
 
   it("does not look up passwords for unapproved emails", async () => {
     isApprovedLoginEmailMock.mockResolvedValueOnce(false);
 
     const response = await handleCheckEmail(
-      new Request("https://cmdclaw.ai/api/auth/check-email", {
+      new Request("https://heybap.com/api/auth/check-email", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: "waitlist@example.com" }),
@@ -402,7 +402,7 @@ describe("handleCheckEmail (/api/auth/check-email)", () => {
 
   it("returns 400 for an invalid body", async () => {
     const response = await handleCheckEmail(
-      new Request("https://cmdclaw.ai/api/auth/check-email", {
+      new Request("https://heybap.com/api/auth/check-email", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "not-json",
@@ -423,21 +423,21 @@ describe("handlePasswordStart (/api/auth/password/start)", () => {
 
   it("sends a password reset for an approved user with a sanitized callback URL", async () => {
     const response = await handlePasswordStart(
-      new Request("https://cmdclaw.ai/api/auth/password/start", {
+      new Request("https://heybap.com/api/auth/password/start", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "pilot@cmdclaw.ai", callbackUrl: "/chat/123?tab=files" }),
+        body: JSON.stringify({ email: "pilot@heybap.com", callbackUrl: "/chat/123?tab=files" }),
       }),
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
-    expect(resolveOrCreateAuthUserByEmailMock).toHaveBeenCalledWith({ email: "pilot@cmdclaw.ai" });
+    expect(resolveOrCreateAuthUserByEmailMock).toHaveBeenCalledWith({ email: "pilot@heybap.com" });
     expect(requestPasswordResetMock).toHaveBeenCalledWith({
       body: {
-        email: "pilot@cmdclaw.ai",
+        email: "pilot@heybap.com",
         redirectTo:
-          "https://cmdclaw.ai/reset-password?callbackUrl=%2Fchat%2F123%3Ftab%3Dfiles&email=pilot%40cmdclaw.ai",
+          "https://heybap.com/reset-password?callbackUrl=%2Fchat%2F123%3Ftab%3Dfiles&email=pilot%40heybap.com",
       },
       headers: expect.any(Headers),
     });
@@ -447,7 +447,7 @@ describe("handlePasswordStart (/api/auth/password/start)", () => {
     isApprovedLoginEmailMock.mockResolvedValueOnce(false);
 
     const response = await handlePasswordStart(
-      new Request("https://cmdclaw.ai/api/auth/password/start", {
+      new Request("https://heybap.com/api/auth/password/start", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: "waitlist@example.com", callbackUrl: "/chat" }),
@@ -466,22 +466,22 @@ describe("handleNativeCallback (/api/auth/native-callback)", () => {
     getSessionMock.mockResolvedValueOnce({ session: { token: "sess-token" } });
 
     const response = await handleNativeCallback(
-      new Request("https://cmdclaw.ai/api/auth/native-callback?redirect=cmdclaw%3A%2F%2Fauth"),
+      new Request("https://heybap.com/api/auth/native-callback?redirect=bap%3A%2F%2Fauth"),
     );
 
     expect(response.status).toBe(307);
-    expect(getLocation(response)).toBe("cmdclaw://auth?token=sess-token");
+    expect(getLocation(response)).toBe("bap://auth?token=sess-token");
   });
 
   it("redirects with a no_session error when there is no session token", async () => {
     getSessionMock.mockResolvedValueOnce(null);
 
     const response = await handleNativeCallback(
-      new Request("https://cmdclaw.ai/api/auth/native-callback"),
+      new Request("https://heybap.com/api/auth/native-callback"),
     );
 
     expect(response.status).toBe(307);
-    expect(getLocation(response)).toBe("cmdclaw://auth/callback?error=no_session");
+    expect(getLocation(response)).toBe("bap://auth/callback?error=no_session");
   });
 });
 
@@ -506,13 +506,13 @@ describe("handleProviderCallback (/api/auth/provider/:provider/callback)", () =>
 
   it("rejects an unknown provider", async () => {
     const response = await handleProviderCallback(
-      new Request("https://cmdclaw.ai/api/auth/provider/unknown/callback?code=c&state=s"),
+      new Request("https://heybap.com/api/auth/provider/unknown/callback?code=c&state=s"),
       "unknown",
     );
 
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe(
-      "https://cmdclaw.ai/settings/subscriptions?provider_error=invalid_provider",
+      "https://heybap.com/settings/subscriptions?provider_error=invalid_provider",
     );
   });
 
@@ -521,13 +521,13 @@ describe("handleProviderCallback (/api/auth/provider/:provider/callback)", () =>
     getSessionMock.mockResolvedValueOnce({ user: { id: "intruder" } });
 
     const response = await handleProviderCallback(
-      new Request("https://cmdclaw.ai/api/auth/provider/openai/callback?code=c&state=s"),
+      new Request("https://heybap.com/api/auth/provider/openai/callback?code=c&state=s"),
       "openai",
     );
 
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe(
-      "https://cmdclaw.ai/settings/subscriptions?provider_error=auth_mismatch",
+      "https://heybap.com/settings/subscriptions?provider_error=auth_mismatch",
     );
     expect(storeProviderTokensMock).not.toHaveBeenCalled();
   });
@@ -543,13 +543,13 @@ describe("handleProviderCallback (/api/auth/provider/:provider/callback)", () =>
     );
 
     const response = await handleProviderCallback(
-      new Request("https://cmdclaw.ai/api/auth/provider/openai/callback?code=c&state=s"),
+      new Request("https://heybap.com/api/auth/provider/openai/callback?code=c&state=s"),
       "openai",
     );
 
     expect(response.status).toBe(307);
     expect(getLocation(response)).toBe(
-      "https://cmdclaw.ai/settings/subscriptions?provider_connected=openai",
+      "https://heybap.com/settings/subscriptions?provider_connected=openai",
     );
     expect(storeProviderTokensMock).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -368,7 +368,7 @@ vi.mock("../../env", () => ({
   env: {},
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
@@ -541,9 +541,9 @@ import {
   getEnabledIntegrationTypes,
 } from "../integrations/cli-env";
 import {
-  CMDCLAW_CHAT_AGENT_ID,
-  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
-  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
+  BAP_CHAT_AGENT_ID,
+  BAP_COWORKER_BUILDER_AGENT_ID,
+  BAP_COWORKER_RUNNER_AGENT_ID,
 } from "../prompts/opencode-agent-ids";
 import { composeOpencodePromptSpec } from "../prompts/opencode-runtime-prompt";
 import { getOrCreateConversationRuntime } from "../sandbox/core/orchestrator";
@@ -687,7 +687,7 @@ function deriveInterruptFromCtx(ctx: GenerationCtx): any | null {
       status: "pending",
       display: {
         title: pendingApproval.toolName ?? "Bash",
-        integration: pendingApproval.integration ?? "cmdclaw",
+        integration: pendingApproval.integration ?? "bap",
         operation: pendingApproval.operation ?? "unknown",
         command: pendingApproval.command,
         toolInput: pendingApproval.toolInput ?? {},
@@ -876,7 +876,7 @@ function createExecutorPreparationMock(input?: {
     revisionHash: "rev-1",
     sourceCount: 1,
     baseUrl: "http://127.0.0.1:8788",
-    homeDirectory: "/tmp/cmdclaw-executor/default",
+    homeDirectory: "/tmp/bap-executor/default",
     instructions: input?.instructions ?? "executor prompt",
     sessionMcpServers: input?.sessionMcpServers ?? [],
     finalize:
@@ -909,10 +909,10 @@ describe("generationManager transitions", () => {
     vi.mocked(composeOpencodePromptSpec).mockImplementation((input) => {
       const agentId =
         input.kind === "coworker_runner"
-          ? CMDCLAW_COWORKER_RUNNER_AGENT_ID
+          ? BAP_COWORKER_RUNNER_AGENT_ID
           : input.kind === "coworker_builder"
-            ? CMDCLAW_COWORKER_BUILDER_AGENT_ID
-            : CMDCLAW_CHAT_AGENT_ID;
+            ? BAP_COWORKER_BUILDER_AGENT_ID
+            : BAP_CHAT_AGENT_ID;
       return {
         agentId,
         systemPrompt: `mock system prompt for ${input.kind}`,
@@ -963,7 +963,7 @@ describe("generationManager transitions", () => {
             toolUseId: input.providerToolUseId,
             toolName: input.display.title,
             toolInput: input.display.toolInput ?? {},
-            integration: input.display.integration ?? "cmdclaw",
+            integration: input.display.integration ?? "bap",
             operation: input.display.operation ?? "unknown",
             command: input.display.command,
             requestedAt: interrupt.requestedAt.toISOString(),
@@ -1218,7 +1218,7 @@ describe("generationManager transitions", () => {
     mgr.activeGenerations.clear();
   });
 
-  it("formats cmdclaw question approvals from the questions payload", () => {
+  it("formats bap question approvals from the questions payload", () => {
     const request = {
       id: "que-1",
       sessionID: "ses-1",
@@ -1533,7 +1533,7 @@ describe("generationManager transitions", () => {
       status: "pending",
       display: {
         title: "Question",
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
         command: "Choose one",
         toolInput: {
@@ -1595,7 +1595,7 @@ describe("generationManager transitions", () => {
         toolName: "Question",
         toolInput: { id: "question-request-1" },
         requestedAt: new Date().toISOString(),
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
         command: "Choose one",
       },
@@ -1629,7 +1629,7 @@ describe("generationManager transitions", () => {
             tool_use_id: "question-1",
             tool_name: "Question",
             tool_input: { id: "question-request-1" },
-            integration: "cmdclaw",
+            integration: "bap",
             operation: "question",
             command: "Choose one",
             status: "approved",
@@ -1647,7 +1647,7 @@ describe("generationManager transitions", () => {
         toolName: "Question",
         toolInput: { id: "question-request-3" },
         requestedAt: new Date().toISOString(),
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
         command: "Choose one",
       },
@@ -1696,7 +1696,7 @@ describe("generationManager transitions", () => {
         toolName: "Question",
         toolInput: { id: "question-request-2" },
         requestedAt: new Date().toISOString(),
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
         command: "Choose one",
       },
@@ -1964,7 +1964,7 @@ describe("generationManager transitions", () => {
           type: "tool_use",
           id: "call-1",
           name: "question",
-          integration: "cmdclaw",
+          integration: "bap",
           operation: "question",
         }),
       ]),
@@ -1981,7 +1981,7 @@ describe("generationManager transitions", () => {
               : buildDefaultQuestionAnswers(request as any),
         },
         pendingApproval: expect.objectContaining({
-          integration: "cmdclaw",
+          integration: "bap",
           operation: "question",
         }),
       }),
@@ -4508,7 +4508,7 @@ describe("generationManager transitions", () => {
       expect.objectContaining({
         integrationEnvs: expect.objectContaining({
           ALLOWED_INTEGRATIONS: "github",
-          CMDCLAW_USER_TIMEZONE: "Europe/Dublin",
+          BAP_USER_TIMEZONE: "Europe/Dublin",
         }),
       }),
       expect.objectContaining({
@@ -4536,7 +4536,7 @@ describe("generationManager transitions", () => {
         filename?: string;
       }>;
     };
-    expect(promptArg.agent).toBe(CMDCLAW_CHAT_AGENT_ID);
+    expect(promptArg.agent).toBe(BAP_CHAT_AGENT_ID);
     expect(promptArg.system).toBe("mock system prompt for chat");
     expect(promptArg.parts).toEqual(
       expect.arrayContaining([
@@ -4625,10 +4625,10 @@ describe("generationManager transitions", () => {
     );
 
     const runtimeEnvWrite = execMock.mock.calls.find(
-      (call) => typeof call[0] === "string" && call[0].includes("/app/.cmdclaw/runtime-env.json"),
+      (call) => typeof call[0] === "string" && call[0].includes("/app/.bap/runtime-env.json"),
     )?.[0] as string | undefined;
     expect(runtimeEnvWrite).toBeTruthy();
-    expect(runtimeEnvWrite).toContain("/app/.cmdclaw/runtime-env.sh");
+    expect(runtimeEnvWrite).toContain("/app/.bap/runtime-env.sh");
     expect(runtimeEnvWrite).toContain("chmod 600");
   });
 
@@ -6476,7 +6476,7 @@ describe("generationManager transitions", () => {
       agent?: string;
       system?: string;
     };
-    expect(promptArg.agent).toBe(CMDCLAW_COWORKER_BUILDER_AGENT_ID);
+    expect(promptArg.agent).toBe(BAP_COWORKER_BUILDER_AGENT_ID);
     expect(promptArg.system).toBe("mock system prompt for coworker_builder");
     expect(finishSpy).toHaveBeenCalledWith(ctx, "completed");
   });
@@ -6553,7 +6553,7 @@ describe("generationManager transitions", () => {
       system?: string;
       parts?: Array<{ type: string; text?: string }>;
     };
-    expect(promptArg.agent).toBe(CMDCLAW_COWORKER_RUNNER_AGENT_ID);
+    expect(promptArg.agent).toBe(BAP_COWORKER_RUNNER_AGENT_ID);
     expect(promptArg.system).toBe("mock system prompt for coworker_runner");
     expect(vi.mocked(writeCoworkerDocumentsToSandbox)).toHaveBeenCalledWith(
       expect.anything(),
@@ -6931,7 +6931,7 @@ describe("generationManager transitions", () => {
     expect(promptMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionID: "session-1",
-        agent: CMDCLAW_CHAT_AGENT_ID,
+        agent: BAP_CHAT_AGENT_ID,
         system: "mock system prompt for chat",
         model: { providerID: "openai", modelID: "gpt-5.4" },
         parts: [
@@ -7009,7 +7009,7 @@ describe("generationManager transitions", () => {
     expect(promptMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionID: "session-1",
-        agent: CMDCLAW_CHAT_AGENT_ID,
+        agent: BAP_CHAT_AGENT_ID,
         system: "mock system prompt for chat",
         model: { providerID: "openai", modelID: "gpt-5.4" },
         parts: [
@@ -7046,7 +7046,7 @@ describe("generationManager transitions", () => {
       status: "accepted",
       display: {
         title: "question",
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
         toolInput: {
           questions: [
@@ -7133,7 +7133,7 @@ describe("generationManager transitions", () => {
     expect(promptMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionID: "session-1",
-        agent: CMDCLAW_COWORKER_BUILDER_AGENT_ID,
+        agent: BAP_COWORKER_BUILDER_AGENT_ID,
         system: "mock system prompt for coworker_builder",
         model: { providerID: "openai", modelID: "gpt-5.4" },
         parts: [

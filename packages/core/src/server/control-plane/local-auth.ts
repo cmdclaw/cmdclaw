@@ -1,6 +1,6 @@
 import { eq, lt } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { controlPlaneAuthState } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { controlPlaneAuthState } from "@bap/db/schema";
 
 const AUTH_STATE_TTL_MS = 10 * 60 * 1000;
 

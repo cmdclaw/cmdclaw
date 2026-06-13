@@ -1,6 +1,6 @@
-import { deleteFromS3, ensureBucket, uploadToS3 } from "@cmdclaw/core/server/storage/s3-client";
-import { db } from "@cmdclaw/db/client";
-import { coworker, coworkerDocument } from "@cmdclaw/db/schema";
+import { deleteFromS3, ensureBucket, uploadToS3 } from "@bap/core/server/storage/s3-client";
+import { db } from "@bap/db/client";
+import { coworker, coworkerDocument } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, count, eq } from "drizzle-orm";
 import { validateFileUpload } from "@/server/storage/validation";

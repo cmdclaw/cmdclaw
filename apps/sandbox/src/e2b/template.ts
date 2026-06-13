@@ -12,7 +12,7 @@ function shellQuote(value: string): string {
 const templateStartScript = [
   "set -euo pipefail",
   "cd /app",
-  "mkdir -p /app/.cmdclaw",
+  "mkdir -p /app/.bap",
   "export OPENCODE_CONFIG=/app/opencode.json",
   `opencode serve --hostname 0.0.0.0 --port ${OPENCODE_PORT} >/tmp/opencode.log 2>&1 &`,
   "opencode_pid=$!",

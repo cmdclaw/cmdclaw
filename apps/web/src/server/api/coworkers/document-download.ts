@@ -1,6 +1,6 @@
-import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
-import { db } from "@cmdclaw/db/client";
-import { coworker, coworkerDocument } from "@cmdclaw/db/schema";
+import { downloadFromS3 } from "@bap/core/server/storage/s3-client";
+import { db } from "@bap/db/client";
+import { coworker, coworkerDocument } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { requireActiveWorkspaceAccess } from "@/server/orpc/workspace-access";

@@ -1,11 +1,14 @@
-import { getTokensForIntegrations } from "@cmdclaw/core/server/integrations/cli-env";
-import { generationInterruptService } from "@cmdclaw/core/server/services/generation-interrupt-service";
-import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
-import { db } from "@cmdclaw/db/client";
-import { generation } from "@cmdclaw/db/schema";
+import { getTokensForIntegrations } from "@bap/core/server/integrations/cli-env";
+import { generationInterruptService } from "@bap/core/server/services/generation-interrupt-service";
+import { generationManager } from "@bap/core/server/services/generation-manager";
+import { db } from "@bap/db/client";
+import { generation } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { authorizeRuntimeTurn, buildRuntimeAuthErrorResponse } from "@/server/internal/runtime-auth";
+import {
+  authorizeRuntimeTurn,
+  buildRuntimeAuthErrorResponse,
+} from "@/server/internal/runtime-auth";
 
 const integrationEnum = z.enum([
   "google_gmail",

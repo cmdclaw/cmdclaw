@@ -1,9 +1,5 @@
 import type { ChangeEvent, MouseEvent } from "react";
-import {
-  BILLING_PLANS,
-  TOP_UP_CREDITS_PER_USD,
-  formatCredits,
-} from "@cmdclaw/core/lib/billing-plans";
+import { BILLING_PLANS, TOP_UP_CREDITS_PER_USD, formatCredits } from "@bap/core/lib/billing-plans";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { Check, ExternalLink, Loader2, Sparkles, Zap } from "lucide-react";
@@ -37,7 +33,7 @@ export const Route = createFileRoute("/settings/billing")({
       throw redirect({ to: "/settings" });
     }
   },
-  head: () => ({ meta: [{ title: "Billing - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Billing - Bap" }] }),
   component: BillingPage,
 });
 
@@ -312,7 +308,7 @@ function BillingPage() {
                   <div className="mt-5">
                     {plan.contactSales ? (
                       <Button asChild variant="outline" className="w-full" size="sm">
-                        <a href="mailto:hello@cmdclaw.ai?subject=CmdClaw%20Enterprise">
+                        <a href="mailto:hello@heybap.com?subject=Bap%20Enterprise">
                           <T>Contact sales</T>
                         </a>
                       </Button>

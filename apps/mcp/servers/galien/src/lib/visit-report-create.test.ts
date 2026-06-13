@@ -1,31 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
-  addCmdClawCommentMarker,
+  addBapCommentMarker,
   buildVisitReportCreateBody,
-  CMDCLAW_VISIT_REPORT_COMMENT_MARKER,
+  BAP_VISIT_REPORT_COMMENT_MARKER,
   GALIEN_VISIT_REPORT_CURRENT_VERSION,
   schema,
 } from "../tools/visit-report.create";
 import { validateGalienToolParams } from "./tool-helpers";
 
-describe("addCmdClawCommentMarker", () => {
+describe("addBapCommentMarker", () => {
   it("creates the comment when none is provided", () => {
-    expect(addCmdClawCommentMarker()).toBe(CMDCLAW_VISIT_REPORT_COMMENT_MARKER);
-    expect(addCmdClawCommentMarker("   ")).toBe(CMDCLAW_VISIT_REPORT_COMMENT_MARKER);
+    expect(addBapCommentMarker()).toBe(BAP_VISIT_REPORT_COMMENT_MARKER);
+    expect(addBapCommentMarker("   ")).toBe(BAP_VISIT_REPORT_COMMENT_MARKER);
   });
 
-  it("appends the CmdClaw marker to an existing comment", () => {
-    expect(addCmdClawCommentMarker("Discussed follow-up plan.")).toBe(
-      `Discussed follow-up plan.\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`,
+  it("appends the Bap marker to an existing comment", () => {
+    expect(addBapCommentMarker("Discussed follow-up plan.")).toBe(
+      `Discussed follow-up plan.\n\n${BAP_VISIT_REPORT_COMMENT_MARKER}`,
     );
   });
 
-  it("does not duplicate the CmdClaw marker", () => {
+  it("does not duplicate the Bap marker", () => {
     expect(
-      addCmdClawCommentMarker(
-        `Discussed follow-up plan.\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`,
+      addBapCommentMarker(
+        `Discussed follow-up plan.\n\n${BAP_VISIT_REPORT_COMMENT_MARKER}`,
       ),
-    ).toBe(`Discussed follow-up plan.\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`);
+    ).toBe(`Discussed follow-up plan.\n\n${BAP_VISIT_REPORT_COMMENT_MARKER}`);
   });
 });
 
@@ -72,7 +72,7 @@ describe("buildVisitReportCreateBody", () => {
       localisation: 1,
       pharmacySize: 1,
       averagePassagesPerDay: 1,
-      comment: `Rapport de visite de test\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`,
+      comment: `Rapport de visite de test\n\n${BAP_VISIT_REPORT_COMMENT_MARKER}`,
       version: GALIEN_VISIT_REPORT_CURRENT_VERSION,
     });
   });
@@ -115,7 +115,7 @@ describe("buildVisitReportCreateBody", () => {
       localisation: 1,
       pharmacySize: 1,
       averagePassagesPerDay: 1,
-      comment: `Rapport de visite de test\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`,
+      comment: `Rapport de visite de test\n\n${BAP_VISIT_REPORT_COMMENT_MARKER}`,
       version: "v5",
     });
   });
@@ -132,7 +132,7 @@ describe("buildVisitReportCreateBody", () => {
       }),
     ).toMatchObject({
       contactTypeId: 2,
-      comment: CMDCLAW_VISIT_REPORT_COMMENT_MARKER,
+      comment: BAP_VISIT_REPORT_COMMENT_MARKER,
       version: "v5",
     });
   });

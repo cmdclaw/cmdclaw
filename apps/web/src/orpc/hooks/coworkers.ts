@@ -1,4 +1,4 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
 import { useQuery as useZeroQuery } from "@rocicorp/zero/react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
@@ -8,7 +8,7 @@ import {
   mapZeroCoworkerRun,
   mapZeroCoworkerTags,
 } from "@/zero/coworker-data";
-import { useCmdClawZeroRuntime } from "@/zero/provider";
+import { useBapZeroRuntime } from "@/zero/provider";
 import { zeroQueries } from "@/zero/queries";
 import { client } from "../client";
 
@@ -37,7 +37,7 @@ function isActiveCoworkerRunStatus(status: string | null | undefined): boolean {
 }
 
 export function useCoworkerList(options?: { initialData?: CoworkerListData }) {
-  const zeroRuntime = useCmdClawZeroRuntime();
+  const zeroRuntime = useBapZeroRuntime();
   const [coworkers, details] = useZeroQuery(
     zeroRuntime.isReady ? zeroQueries.coworkerInventory.coworkers() : null,
   );
@@ -449,7 +449,7 @@ export function useCoworkerRuns(
     enabled?: boolean;
   },
 ) {
-  const zeroRuntime = useCmdClawZeroRuntime();
+  const zeroRuntime = useBapZeroRuntime();
   const enabled = (options?.enabled ?? true) && !!coworkerId;
   const [runs, details] = useZeroQuery(
     zeroRuntime.isReady && enabled && coworkerId
@@ -536,7 +536,7 @@ export function useGetOrCreateBuilderConversation() {
 // ========== COWORKER TAG HOOKS ==========
 
 export function useCoworkerFolderList() {
-  const zeroRuntime = useCmdClawZeroRuntime();
+  const zeroRuntime = useBapZeroRuntime();
   const [folders, details] = useZeroQuery(
     zeroRuntime.isReady ? zeroQueries.coworkerInventory.folders() : null,
   );
@@ -586,7 +586,7 @@ export function useMoveCoworkerToFolder() {
 }
 
 export function useCoworkerTagList(options?: { initialData?: CoworkerTagListData }) {
-  const zeroRuntime = useCmdClawZeroRuntime();
+  const zeroRuntime = useBapZeroRuntime();
   const [tags, details] = useZeroQuery(
     zeroRuntime.isReady ? zeroQueries.coworkerInventory.tags() : null,
   );

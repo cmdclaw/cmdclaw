@@ -2,25 +2,25 @@ import {
   getEnabledIntegrationTypes,
   getTokenEnvVarForIntegrationType,
   getTokensForIntegrations,
-} from "@cmdclaw/core/server/integrations/cli-env";
+} from "@bap/core/server/integrations/cli-env";
 import {
   ConnectedAccountResolutionError,
   resolveConnectedAccountCredential,
-} from "@cmdclaw/core/server/integrations/connected-account-resolution";
+} from "@bap/core/server/integrations/connected-account-resolution";
 import {
   getRemoteIntegrationCredentials,
   remoteIntegrationSourceSchema,
-} from "@cmdclaw/core/server/integrations/remote-integrations";
+} from "@bap/core/server/integrations/remote-integrations";
 import {
   getGalienCredentialForUser,
   getGalienWorkspaceAccessForUser,
-} from "@cmdclaw/core/server/galien/service";
+} from "@bap/core/server/galien/service";
 import {
   canUserUseModulrInWorkspace,
   getModulrWorkspaceConnection,
-} from "@cmdclaw/core/server/modulr/service";
-import { db } from "@cmdclaw/db/client";
-import { user } from "@cmdclaw/db/schema";
+} from "@bap/core/server/modulr/service";
+import { db } from "@bap/db/client";
+import { user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { isAuthorizedByServerSecret } from "@/server/internal/server-secret";
 

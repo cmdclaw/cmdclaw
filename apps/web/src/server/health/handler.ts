@@ -1,5 +1,5 @@
-import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
-import { db } from "@cmdclaw/db/client";
+import { buildRedisOptions } from "@bap/core/server/redis/connection-options";
+import { db } from "@bap/db/client";
 import { sql } from "drizzle-orm";
 import IORedis from "ioredis";
 import { env } from "@/env";

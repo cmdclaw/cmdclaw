@@ -1,5 +1,5 @@
 ---
-name: CmdClaw
+name: Bap
 description: Work-focused agent platform UI for running agents across connected company tools.
 colors:
   background: "oklch(1 0 0)"
@@ -114,13 +114,13 @@ components:
     padding: "1.25rem"
 ---
 
-# Design System: CmdClaw
+# Design System: Bap
 
 ## 1. Overview
 
 **Creative North Star: "The Operations Console"**
 
-CmdClaw is a product UI for people asking agents to act across real company systems. The interface should feel like a precise operations console: quiet, durable, and legible under repeated use. It is not a showpiece; it is a working surface for chat, coworker runs, approvals, connected identities, and runtime status.
+Bap is a product UI for people asking agents to act across real company systems. The interface should feel like a precise operations console: quiet, durable, and legible under repeated use. It is not a showpiece; it is a working surface for chat, coworker runs, approvals, connected identities, and runtime status.
 
 The current system is restrained by default: near-neutral surfaces, compact controls, thin borders, sparse shadows, and one warm rust brand accent for trust and action. The physical scene is a focused operator moving between conversations, inbox state, and integration settings on a laptop during the workday. Light mode is the primary posture because the app is used alongside documents, email, and admin tools; dark mode exists as an alternate state, not the brand.
 
@@ -141,7 +141,7 @@ The palette is a restrained neutral system with a warm rust command accent. Valu
 ### Primary
 
 - **Ink Command** (`primary`): The default action surface for core buttons and user chat bubbles. It is almost black but remains tokenized, never hard black.
-- **Rust Signal** (`brand`): The CmdClaw accent for branded actions, focus rings, selected sidebar state, and identity moments. Use it deliberately; the system gets weaker when every surface competes for attention.
+- **Rust Signal** (`brand`): The Bap accent for branded actions, focus rings, selected sidebar state, and identity moments. Use it deliberately; the system gets weaker when every surface competes for attention.
 - **Deep Rust** (`brand-dark`): Hover and pressed treatment for brand actions in light mode.
 
 ### Secondary
@@ -193,7 +193,7 @@ The palette is a restrained neutral system with a warm rust command accent. Valu
 
 ## 4. Elevation
 
-CmdClaw uses tonal layering first and shadow second. Most surfaces are flat at rest, separated by thin borders and subtle muted fills. Shadows appear on overlays, prompt inputs, login panels, and popovers where they support depth and focus.
+Bap uses tonal layering first and shadow second. Most surfaces are flat at rest, separated by thin borders and subtle muted fills. Shadows appear on overlays, prompt inputs, login panels, and popovers where they support depth and focus.
 
 ### Shadow Vocabulary
 

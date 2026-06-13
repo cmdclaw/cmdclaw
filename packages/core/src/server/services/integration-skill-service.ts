@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   customIntegration,
   integrationSkill,
@@ -9,7 +9,7 @@ import {
   integrationSkillPreference,
   integrationTypeEnum,
   type integrationSkillSourceEnum,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { resolveSkillsRoot } from "./skills-root";
 
 type SkillSource = (typeof integrationSkillSourceEnum.enumValues)[number];

@@ -430,6 +430,6 @@ export function getCoworkerCliSystemPrompt(): string {
     "To persist a file for future runs of a coworker, use `coworker upload-document <coworker-id> --file <sandbox-path> --json`.",
     "Do not guess coworker usernames. If a mention cannot be resolved exactly, explain the mismatch and stop.",
     "When multiple coworker mentions are present, invoke each coworker separately.",
-    "Always use `--json` for `coworker invoke` so CmdClaw can render a coworker invocation card in chat.",
+    "Always use `--json` for `coworker invoke` so Bap can render a coworker invocation card in chat.",
   ].join("\n");
 }

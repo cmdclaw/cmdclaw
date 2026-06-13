@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/env", () => ({
   env: {
-    APP_URL: "https://cmdclaw.ai",
-    VITE_APP_URL: "https://cmdclaw.ai",
+    APP_URL: "https://heybap.com",
+    VITE_APP_URL: "https://heybap.com",
   },
 }));
 
 vi.mock("@/lib/trusted-origins", () => ({
-  getTrustedOrigins: () => ["https://cmdclaw.ai", "https://app.cmdclaw.ai"],
+  getTrustedOrigins: () => ["https://heybap.com", "https://app.heybap.com"],
 }));
 
 import { hostedMcpOauthOptionsResponse, withHostedMcpOauthCors } from "./cors";
@@ -18,16 +18,16 @@ function makeRequest(origin: string | null): Request {
   if (origin !== null) {
     headers.set("origin", origin);
   }
-  return new Request("https://cmdclaw.ai/api/mcp/oauth/token", { method: "POST", headers });
+  return new Request("https://heybap.com/api/mcp/oauth/token", { method: "POST", headers });
 }
 
 describe("withHostedMcpOauthCors", () => {
   it("echoes a whitelisted origin and preserves the underlying response", () => {
     const base = Response.json({ ok: true }, { status: 201, headers: { "X-Test": "1" } });
-    const response = withHostedMcpOauthCors(makeRequest("https://app.cmdclaw.ai"), base);
+    const response = withHostedMcpOauthCors(makeRequest("https://app.heybap.com"), base);
 
     expect(response.status).toBe(201);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.cmdclaw.ai");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.heybap.com");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe(
       "Content-Type, Authorization, Accept",
@@ -51,18 +51,18 @@ describe("withHostedMcpOauthCors", () => {
       new Response(null, { status: 200 }),
     );
 
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://cmdclaw.ai");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://heybap.com");
   });
 
   it("falls back to the configured app origin when there is no origin header", () => {
     const response = withHostedMcpOauthCors(makeRequest(null), new Response(null, { status: 200 }));
 
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://cmdclaw.ai");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://heybap.com");
   });
 
   it("preserves the JSON body of the wrapped response", async () => {
     const response = withHostedMcpOauthCors(
-      makeRequest("https://cmdclaw.ai"),
+      makeRequest("https://heybap.com"),
       Response.json({ access_token: "abc" }),
     );
 
@@ -72,11 +72,11 @@ describe("withHostedMcpOauthCors", () => {
 
 describe("hostedMcpOauthOptionsResponse", () => {
   it("returns a 204 preflight with CORS headers for a whitelisted origin", () => {
-    const response = hostedMcpOauthOptionsResponse(makeRequest("https://app.cmdclaw.ai"));
+    const response = hostedMcpOauthOptionsResponse(makeRequest("https://app.heybap.com"));
 
     expect(response.status).toBe(204);
     expect(response.body).toBeNull();
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.cmdclaw.ai");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.heybap.com");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
   });
 
@@ -84,6 +84,6 @@ describe("hostedMcpOauthOptionsResponse", () => {
     const response = hostedMcpOauthOptionsResponse(makeRequest("https://evil.example.com"));
 
     expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://cmdclaw.ai");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://heybap.com");
   });
 });

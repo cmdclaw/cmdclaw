@@ -1,6 +1,6 @@
 # Daytona Snapshot Builder
 
-This folder contains Daytona snapshot builders for CmdClaw sandbox runtimes.
+This folder contains Daytona snapshot builders for Bap sandbox runtimes.
 
 ## Prerequisites
 
@@ -34,4 +34,4 @@ The builder now rewrites the local compose MinIO endpoint automatically for host
 
 ## Runtime selection
 
-When `DAYTONA_API_KEY` is set and `E2B_API_KEY` is not set, CmdClaw can select Daytona as the sandbox backend for direct mode generations.
+When `DAYTONA_API_KEY` is set and `E2B_API_KEY` is not set, Bap can select Daytona as the sandbox backend for direct mode generations.

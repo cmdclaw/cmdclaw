@@ -1,6 +1,6 @@
 # Runtime Diagnostic Snapshots Are Stored As Debug Artifacts
 
-CmdClaw stores full Runtime Diagnostic Snapshots as object-storage artifacts,
+Bap stores full Runtime Diagnostic Snapshots as object-storage artifacts,
 referenced from the Generation debug index and terminal Canonical Service Event.
 Runtime-boundary stalls such as `runtime_no_progress_after_prompt` and
 `runtime_progress_stalled` capture this artifact so operators can distinguish

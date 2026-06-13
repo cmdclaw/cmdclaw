@@ -3,7 +3,7 @@
 import {
   GENERATION_ERROR_PHASES,
   START_GENERATION_ERROR_CODES,
-} from "@cmdclaw/core/lib/generation-errors";
+} from "@bap/core/lib/generation-errors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as jestDomVitest from "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

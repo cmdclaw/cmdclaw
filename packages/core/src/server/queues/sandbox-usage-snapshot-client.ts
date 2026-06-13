@@ -2,7 +2,7 @@ import { Queue, type ConnectionOptions } from "bullmq";
 import { buildRedisOptions } from "../redis/connection-options";
 import { attachTraceContext } from "../utils/observability";
 
-const rawBaseQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
+const rawBaseQueueName = process.env.BULLMQ_QUEUE_NAME ?? "bap-default";
 export const sandboxUsageSnapshotQueueName = `${rawBaseQueueName.replaceAll(":", "-")}-sandbox-usage-snapshot`;
 export const sandboxUsageSnapshotRedisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 
@@ -42,14 +42,14 @@ export async function closeSandboxUsageSnapshotQueue(): Promise<void> {
 
 function patchQueueAdd(targetQueue: Queue<SnapshotJobPayload, unknown, string>): void {
   const queueWithPatchFlag = targetQueue as Queue<SnapshotJobPayload, unknown, string> & {
-    __cmdclawTracedAddPatched?: boolean;
+    __bapTracedAddPatched?: boolean;
   };
-  if (queueWithPatchFlag.__cmdclawTracedAddPatched) {
+  if (queueWithPatchFlag.__bapTracedAddPatched) {
     return;
   }
 
   const originalAdd = targetQueue.add.bind(targetQueue);
   targetQueue.add = ((name, data, opts) =>
     originalAdd(name, attachTraceContext(data), opts)) as typeof targetQueue.add;
-  queueWithPatchFlag.__cmdclawTracedAddPatched = true;
+  queueWithPatchFlag.__bapTracedAddPatched = true;
 }

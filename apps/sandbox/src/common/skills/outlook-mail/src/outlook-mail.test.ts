@@ -44,11 +44,11 @@ describe("outlook-mail CLI", () => {
   test("accepts account label option", () => {
     const result = runSkillCli(OUTLOOK_MAIL_CLI, ["--account", "work", "list"], {
       OUTLOOK_ACCESS_TOKEN: "test-token",
-      CMDCLAW_AVAILABLE_ACCOUNT_LABELS: "personal, work",
+      BAP_AVAILABLE_ACCOUNT_LABELS: "personal, work",
     });
 
     expect(result.status).toBe(1);
-    expect(result.combined).toContain("--account requires CMDCLAW_RUNTIME_CREDENTIALS_URL");
+    expect(result.combined).toContain("--account requires BAP_RUNTIME_CREDENTIALS_URL");
     expect(result.combined).toContain("Available account labels: personal, work");
   });
 

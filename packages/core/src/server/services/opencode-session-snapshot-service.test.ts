@@ -100,7 +100,7 @@ describe("opencode session snapshot service", () => {
   it.skipIf(!hasOpencode)(
     "round-trips OpenCode export/import and keeps duplicate imports idempotent",
     async () => {
-      const tempRoot = await mkdtemp(path.join(os.tmpdir(), "cmdclaw-opencode-"));
+      const tempRoot = await mkdtemp(path.join(os.tmpdir(), "bap-opencode-"));
       const homeDir = path.join(tempRoot, "home");
       const dataDir = path.join(tempRoot, "data");
       const configDir = path.join(tempRoot, "config");

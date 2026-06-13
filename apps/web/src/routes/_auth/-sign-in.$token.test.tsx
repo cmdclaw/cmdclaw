@@ -38,21 +38,21 @@ describe("/sign-in/$token page", () => {
   it("shows the valid token state with a continue button", async () => {
     await renderView({
       status: "pending",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
     });
 
     expect(screen.getByRole("heading", { name: "Confirm sign-in" })).not.toBeNull();
-    expect(screen.getByText("pilot@cmdclaw.ai")).not.toBeNull();
+    expect(screen.getByText("pilot@heybap.com")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Continue" })).not.toBeNull();
   });
 
   it("shows the expired token state with resend", async () => {
     await renderView({
       status: "expired",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -66,7 +66,7 @@ describe("/sign-in/$token page", () => {
   it("shows the already used state with resend", async () => {
     await renderView({
       status: "consumed",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -93,7 +93,7 @@ describe("/sign-in/$token page", () => {
     await renderView(
       {
         status: "consumed",
-        email: "pilot@cmdclaw.ai",
+        email: "pilot@heybap.com",
         callbackUrl: "/chat",
         newUserCallbackUrl: "/chat",
         errorCallbackUrl: "/login?error=magic-link",
@@ -101,14 +101,14 @@ describe("/sign-in/$token page", () => {
       { resent: "1" },
     );
 
-    expect(screen.getByText("We sent a new sign-in link to pilot@cmdclaw.ai.")).not.toBeNull();
+    expect(screen.getByText("We sent a new sign-in link to pilot@heybap.com.")).not.toBeNull();
   });
 
   it("shows an invite-only error when the email is not approved", async () => {
     await renderView(
       {
         status: "pending",
-        email: "pilot@cmdclaw.ai",
+        email: "pilot@heybap.com",
         callbackUrl: "/chat",
         newUserCallbackUrl: "/chat",
         errorCallbackUrl: "/login?error=magic-link",

@@ -1,4 +1,4 @@
-import type { TemplateIntegrationType } from "@cmdclaw/db/template-catalog";
+import type { TemplateIntegrationType } from "@bap/db/template-catalog";
 
 export type TemplateItem = {
   id: string;

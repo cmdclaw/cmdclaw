@@ -14,8 +14,8 @@ export const requestObservabilityMiddleware = createMiddleware({ type: "request"
     if (process.env.NODE_ENV === "production") {
       try {
         const { initializeObservabilityRuntime } =
-          await import("@cmdclaw/core/server/utils/observability");
-        initializeObservabilityRuntime("cmdclaw-web");
+          await import("@bap/core/server/utils/observability");
+        initializeObservabilityRuntime("bap-web");
       } catch (error) {
         console.error("[observability] Failed to ensure web observability runtime", error);
       }

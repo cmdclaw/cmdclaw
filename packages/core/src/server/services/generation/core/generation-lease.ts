@@ -6,17 +6,17 @@ const GENERATION_LEASE_TTL_MS = 120_000;
 
 function getLockRedis(): IORedis {
   const globalForLocks = globalThis as typeof globalThis & {
-    __cmdclawGenerationLockRedis?: IORedis;
+    __bapGenerationLockRedis?: IORedis;
   };
-  if (!globalForLocks.__cmdclawGenerationLockRedis) {
-    globalForLocks.__cmdclawGenerationLockRedis = new IORedis(
+  if (!globalForLocks.__bapGenerationLockRedis) {
+    globalForLocks.__bapGenerationLockRedis = new IORedis(
       buildRedisOptions(process.env.REDIS_URL ?? "redis://localhost:6379", {
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
       }),
     );
   }
-  return globalForLocks.__cmdclawGenerationLockRedis;
+  return globalForLocks.__bapGenerationLockRedis;
 }
 
 export class GenerationLeaseStore {

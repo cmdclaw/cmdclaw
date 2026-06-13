@@ -1,4 +1,4 @@
-import { parseBashCommand } from "@cmdclaw/core/server/ai/permission-checker";
+import { parseBashCommand } from "@bap/core/server/ai/permission-checker";
 
 export function resolveCliToolMetadata(toolUse: {
   toolName: string;

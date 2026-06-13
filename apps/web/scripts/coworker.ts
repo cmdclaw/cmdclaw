@@ -1,9 +1,9 @@
 import type { RouterClient } from "@orpc/server";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import { buildCoworkerEditApplyEnvelope } from "@cmdclaw/core/lib/coworker-runtime-cli";
-import { coworkerBuilderEditSchema } from "@cmdclaw/core/server/services/coworker-builder-service";
-import { db, closePool } from "@cmdclaw/db/client";
-import { conversation, coworkerRun } from "@cmdclaw/db/schema";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
+import { buildCoworkerEditApplyEnvelope } from "@bap/core/lib/coworker-runtime-cli";
+import { coworkerBuilderEditSchema } from "@bap/core/server/services/coworker-builder-service";
+import { db, closePool } from "@bap/db/client";
+import { conversation, coworkerRun } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { createReadStream, createWriteStream } from "node:fs";
 import { readFile } from "node:fs/promises";

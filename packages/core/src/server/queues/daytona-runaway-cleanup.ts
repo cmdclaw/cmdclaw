@@ -48,7 +48,7 @@ export function startDaytonaRunawayCleanupQueue() {
                 if (summary.stale > 0 || summary.stopFailed > 0 || summary.lookupFailed > 0) {
                   console.info("[worker] daytona runaway cleanup summary", summary);
                 }
-                recordCounter("cmdclaw_worker_jobs_total", 1, {
+                recordCounter("bap_worker_jobs_total", 1, {
                   ...attributes,
                   status: "ok",
                 });
@@ -63,7 +63,7 @@ export function startDaytonaRunawayCleanupQueue() {
                 if (summary.stopped > 0 || summary.deleted > 0 || summary.deleteFailed > 0) {
                   console.info("[worker] daytona stopped sandbox delete summary", summary);
                 }
-                recordCounter("cmdclaw_worker_jobs_total", 1, {
+                recordCounter("bap_worker_jobs_total", 1, {
                   ...attributes,
                   status: "ok",
                 });
@@ -72,14 +72,14 @@ export function startDaytonaRunawayCleanupQueue() {
 
               throw new Error(`No handler registered for Daytona cleanup job "${job.name}"`);
             } catch (error) {
-              recordCounter("cmdclaw_worker_jobs_total", 1, {
+              recordCounter("bap_worker_jobs_total", 1, {
                 ...attributes,
                 status: "error",
               });
               throw error;
             } finally {
               recordHistogram(
-                "cmdclaw_worker_job_duration_ms",
+                "bap_worker_job_duration_ms",
                 performance.now() - startedAt,
                 attributes,
               );

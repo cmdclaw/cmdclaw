@@ -10,8 +10,8 @@ import {
   removeGalienWorkspaceAccess,
   setGalienCredential,
   updateGalienWorkspaceAccessTargetEnv,
-} from "@cmdclaw/core/server/galien/service";
-import { user, workspace } from "@cmdclaw/db/schema";
+} from "@bap/core/server/galien/service";
+import { user, workspace } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";

@@ -1,6 +1,6 @@
 import path from "path";
-import { db } from "@cmdclaw/db/client";
-import { customIntegrationCredential } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { customIntegrationCredential } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { logger } from "../utils/observability";
 import type { SandboxHandle } from "../sandbox/core/types";

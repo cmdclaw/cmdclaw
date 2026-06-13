@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { integration } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { integration } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getUnipileAccount } from "@/server/integrations/unipile";
 

@@ -1,4 +1,4 @@
-import { listWorkspaceMcpServers } from "@cmdclaw/core/server/executor/workspace-sources";
+import { listWorkspaceMcpServers } from "@bap/core/server/executor/workspace-sources";
 import {
   addModulrWorkspaceAccess,
   canUserUseModulrInWorkspace,
@@ -9,8 +9,8 @@ import {
   removeModulrWorkspaceAccess,
   setModulrWorkspaceConnection,
   validateModulrWorkspaceConnection,
-} from "@cmdclaw/core/server/modulr/service";
-import { user, workspace } from "@cmdclaw/db/schema";
+} from "@bap/core/server/modulr/service";
+import { user, workspace } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import type { db as defaultDb } from "@cmdclaw/db/client";
-import { connectedIdentity, integration } from "@cmdclaw/db/schema";
+import type { db as defaultDb } from "@bap/db/client";
+import { connectedIdentity, integration } from "@bap/db/schema";
 import type { IntegrationType } from "../oauth/config";
 import {
   getReliableEmailFromMetadata,

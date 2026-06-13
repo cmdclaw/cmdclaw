@@ -16,11 +16,11 @@ vi.mock("@/lib/auth", () => ({
   auth: { api: { getSession: getSessionMock } },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: { update: updateMock },
 }));
 
-vi.mock("@cmdclaw/db/schema", () => ({
+vi.mock("@bap/db/schema", () => ({
   user: { id: "user.id", phoneNumber: "user.phoneNumber" },
 }));
 
@@ -35,7 +35,7 @@ describe("deletePhoneNumber", () => {
     getSessionMock.mockResolvedValue(null);
 
     const response = await deletePhoneNumber(
-      new Request("https://cmdclaw.ai/api/settings/phone-number", { method: "DELETE" }),
+      new Request("https://heybap.com/api/settings/phone-number", { method: "DELETE" }),
     );
 
     expect(response.status).toBe(401);
@@ -47,7 +47,7 @@ describe("deletePhoneNumber", () => {
     getSessionMock.mockResolvedValue({ user: { id: "user-123" } });
 
     const response = await deletePhoneNumber(
-      new Request("https://cmdclaw.ai/api/settings/phone-number", { method: "DELETE" }),
+      new Request("https://heybap.com/api/settings/phone-number", { method: "DELETE" }),
     );
 
     expect(response.status).toBe(200);

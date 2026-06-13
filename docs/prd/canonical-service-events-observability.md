@@ -2,13 +2,13 @@
 
 ## Problem Statement
 
-CmdClaw has JSON logs, OpenTelemetry metrics/traces, PostHog client analytics, and durable product state, but the operational story is fragmented. Debugging a Generation can require reading many log lines, checking traces separately, guessing which browser events matter, and manually joining request, worker, sandbox, and client-side symptoms.
+Bap has JSON logs, OpenTelemetry metrics/traces, PostHog client analytics, and durable product state, but the operational story is fragmented. Debugging a Generation can require reading many log lines, checking traces separately, guessing which browser events matter, and manually joining request, worker, sandbox, and client-side symptoms.
 
-The user wants CmdClaw to adopt the Observability Engineering-style model of wide, context-rich events: one authoritative operational record per service-owned operation, with enough structured dimensions to debug real incidents without copying sensitive product content into telemetry.
+The user wants Bap to adopt the Observability Engineering-style model of wide, context-rich events: one authoritative operational record per service-owned operation, with enough structured dimensions to debug real incidents without copying sensitive product content into telemetry.
 
 ## Solution
 
-CmdClaw will introduce **Canonical Service Events** as the authoritative observability record for service-owned operations and **Client Observations** as the first-party browser-side complement. Canonical Service Events will enrich trace spans and emit one final structured log event through the existing Vector, VictoriaLogs, VictoriaMetrics, and VictoriaTraces pipeline.
+Bap will introduce **Canonical Service Events** as the authoritative observability record for service-owned operations and **Client Observations** as the first-party browser-side complement. Canonical Service Events will enrich trace spans and emit one final structured log event through the existing Vector, VictoriaLogs, VictoriaMetrics, and VictoriaTraces pipeline.
 
 The first rollout focuses on the Generation path because it has the highest correlation pain: request lifecycle, streaming, durable terminal state, sandbox behavior, tool calls, interruptions, and browser-visible errors. The implementation will be staged through foundation, Generation instrumentation, client observation intake, and metric/query validation.
 
@@ -53,13 +53,13 @@ The first rollout focuses on the Generation path because it has the highest corr
 37. As a reliability engineer, I want low-cardinality terminal Generation metrics, so that SLOs can be built from stable dimensions.
 38. As a reliability engineer, I want failed Generations grouped by model provider, sandbox provider, failure phase, and normalized error code, so that incident triage starts from useful clusters.
 39. As a reliability engineer, I want retention and sampling policies that keep all server Canonical Service Events but selectively retain client success observations, so that signal stays useful without uncontrolled volume.
-40. As a future agent, I want stable field names and documented query patterns, so that I can diagnose CmdClaw without reading source code first.
+40. As a future agent, I want stable field names and documented query patterns, so that I can diagnose Bap without reading source code first.
 
 ## Implementation Decisions
 
 - Build a deep observability module that owns Canonical Service Event construction, schema normalization, denylist enforcement, span enrichment, and final structured log emission.
 - Canonical Service Events use a required common envelope plus operation-specific attributes.
-- Emitted telemetry uses OpenTelemetry-style dotted snake_case. Official semantic names are preferred when they fit; CmdClaw-specific fields live under `cmdclaw.*`.
+- Emitted telemetry uses OpenTelemetry-style dotted snake_case. Official semantic names are preferred when they fit; Bap-specific fields live under `bap.*`.
 - Keep backend-friendly correlation aliases such as `trace_id` and `span_id` in JSON logs when useful for VictoriaLogs and trace correlation.
 - A Canonical Service Event is emitted for each service-owned operation: RPC requests, webhooks, worker jobs, and the terminal Generation lifecycle.
 - Browser-originated telemetry is a Client Observation, not a Canonical Service Event.
@@ -74,7 +74,7 @@ The first rollout focuses on the Generation path because it has the highest corr
 - Terminal Generation outcome is product lifecycle outcome: completed, failed, cancelled, or timed out. It is separate from the outcome of the request that created or observed the Generation.
 - Terminal Generation events are reconstructed from durable lifecycle state at terminal emission time.
 - Request and worker events may use in-memory builders because they begin and end within one operation scope.
-- Every Canonical Service Event has a stable `cmdclaw.event.id`.
+- Every Canonical Service Event has a stable `bap.event.id`.
 - The terminal Generation event id is deterministic from the Generation, such as `generation:{generationId}:terminal`.
 - Client Observations carry a browser-generated client event id.
 - The first-party client observation endpoint requires the normal authenticated web session for user-linked telemetry.

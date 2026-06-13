@@ -1,4 +1,4 @@
-import { checkToolPermissions, parseBashCommand } from "@cmdclaw/core/server/ai/permission-checker";
+import { checkToolPermissions, parseBashCommand } from "@bap/core/server/ai/permission-checker";
 import { describe, expect, test } from "vitest";
 
 describe("parseBashCommand", () => {

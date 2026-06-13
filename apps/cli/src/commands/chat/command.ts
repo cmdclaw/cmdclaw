@@ -154,6 +154,6 @@ export const chatCommand = buildCommand({
     },
   },
   docs: {
-    brief: "Chat with CmdClaw",
+    brief: "Chat with Bap",
   },
 });

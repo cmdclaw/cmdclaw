@@ -1,21 +1,21 @@
-import { env } from "@cmdclaw/core/env";
-import { listOpencodeFreeModels } from "@cmdclaw/core/server/ai/opencode-models";
+import { env } from "@bap/core/env";
+import { listOpencodeFreeModels } from "@bap/core/server/ai/opencode-models";
 import {
   SUBSCRIPTION_PROVIDERS,
   isOAuthProviderConfig,
   type SubscriptionProviderID,
-} from "@cmdclaw/core/server/ai/subscription-providers";
+} from "@bap/core/server/ai/subscription-providers";
 import {
   disconnectCloudManagedProviderAuth,
   getCloudManagedProviderAuthStatus,
   getCloudManagedSubscriptionsUrl,
-} from "@cmdclaw/core/server/control-plane/client";
+} from "@bap/core/server/control-plane/client";
 import {
   storeProviderTokens as persistProviderTokens,
   storeSharedProviderTokens as persistSharedProviderTokens,
-} from "@cmdclaw/core/server/control-plane/subscription-providers";
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
-import { providerAuth } from "@cmdclaw/db/schema";
+} from "@bap/core/server/control-plane/subscription-providers";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
+import { providerAuth } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -98,7 +98,7 @@ async function requestOpenAIDeviceCode(config: {
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      "User-Agent": "opencode/cmdclaw",
+      "User-Agent": "opencode/bap",
     },
     body: JSON.stringify({ client_id: config.clientId }),
   });
@@ -254,7 +254,7 @@ const poll = protectedProcedure.input(pollProviderSchema).handler(async ({ input
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      "User-Agent": "opencode/cmdclaw",
+      "User-Agent": "opencode/bap",
     },
     body: JSON.stringify({
       device_auth_id: flowState.deviceAuthId,

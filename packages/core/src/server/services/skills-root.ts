@@ -1,4 +1,4 @@
-import { SANDBOX_SKILLS_ROOT } from "@cmdclaw/sandbox/paths";
+import { SANDBOX_SKILLS_ROOT } from "@bap/sandbox/paths";
 import { promises as fs } from "node:fs";
 
 let cachedSkillsRoot: string | null | undefined;

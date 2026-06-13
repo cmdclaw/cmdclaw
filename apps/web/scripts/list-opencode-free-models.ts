@@ -1,4 +1,4 @@
-import { listOpencodeFreeModels } from "@cmdclaw/core/server/ai/opencode-models";
+import { listOpencodeFreeModels } from "@bap/core/server/ai/opencode-models";
 
 function isJsonOutput(argv: string[]): boolean {
   return argv.includes("--json");

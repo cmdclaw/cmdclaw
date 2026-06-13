@@ -1,4 +1,4 @@
-import type { ContentPart, GenerationExecutionPolicy } from "@cmdclaw/db/schema";
+import type { ContentPart, GenerationExecutionPolicy } from "@bap/db/schema";
 import type { GenerationCompletionReason } from "../../lifecycle-policy";
 import type {
   GenerationEvent,

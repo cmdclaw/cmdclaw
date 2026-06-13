@@ -28,15 +28,15 @@ describe("Zero provider URLs", () => {
 
   it("falls back to same-origin app edge URLs on non-loopback hosts", async () => {
     const location = {
-      host: "staging.cmdclaw.ai",
-      hostname: "staging.cmdclaw.ai",
+      host: "staging.heybap.com",
+      hostname: "staging.heybap.com",
       port: "",
       protocol: "https:",
     };
 
-    expect(resolveZeroCacheURL(undefined, location)).toBe("https://staging.cmdclaw.ai/zero");
+    expect(resolveZeroCacheURL(undefined, location)).toBe("https://staging.heybap.com/zero");
     expect(resolveZeroQueryURL(undefined, location)).toBe(
-      "https://staging.cmdclaw.ai/api/zero/query",
+      "https://staging.heybap.com/api/zero/query",
     );
   });
 });
@@ -44,7 +44,7 @@ describe("Zero provider URLs", () => {
 describe("Zero storage identity", () => {
   it("isolates persisted state by user and workspace", () => {
     expect(buildZeroStorageKey({ userId: "user-1", workspaceId: "workspace-1" })).toBe(
-      "cmdclaw-web:user-1:workspace-1",
+      "bap-web:user-1:workspace-1",
     );
     expect(buildZeroStorageKey({ userId: "user-2", workspaceId: "workspace-1" })).not.toBe(
       buildZeroStorageKey({ userId: "user-1", workspaceId: "workspace-1" }),

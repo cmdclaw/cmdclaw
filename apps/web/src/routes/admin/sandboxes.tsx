@@ -38,7 +38,7 @@ import {
 } from "@/orpc/hooks/admin";
 
 export const Route = createFileRoute("/admin/sandboxes")({
-  head: () => ({ meta: [{ title: "Sandboxes - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Sandboxes - Bap" }] }),
   component: AdminSandboxesPage,
 });
 
@@ -109,9 +109,9 @@ function formatCredits(n: number): string {
 function getEnvBaseUrl(env: string | null): string {
   switch (env) {
     case "prod":
-      return "https://cmdclaw.ai";
+      return "https://heybap.com";
     case "staging":
-      return "https://staging.cmdclaw.ai";
+      return "https://staging.heybap.com";
     default:
       return "";
   }

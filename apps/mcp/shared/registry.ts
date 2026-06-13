@@ -18,9 +18,9 @@ export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
     slug: "bap",
     name: "Bap MCP",
     publicBasePath: "/bap",
-    internalTargetEnvVar: "CMDCLAW_BAP_MCP_TARGET",
+    internalTargetEnvVar: "BAP_BAP_MCP_TARGET",
     authStrategy: "oauth",
-    childRoot: "servers/cmdclaw",
+    childRoot: "servers/bap",
     installMetadata: {
       title: "Bap MCP",
       description: "Bap app tools",
@@ -30,7 +30,7 @@ export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
     slug: "gmail",
     name: "Gmail MCP",
     publicBasePath: "/gmail",
-    internalTargetEnvVar: "CMDCLAW_GMAIL_MCP_TARGET",
+    internalTargetEnvVar: "BAP_GMAIL_MCP_TARGET",
     authStrategy: "oauth",
     childRoot: "servers/gmail",
     installMetadata: {
@@ -42,7 +42,7 @@ export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
     slug: "galien",
     name: "Galien MCP",
     publicBasePath: "/galien",
-    internalTargetEnvVar: "CMDCLAW_GALIEN_MCP_TARGET",
+    internalTargetEnvVar: "BAP_GALIEN_MCP_TARGET",
     authStrategy: "oauth",
     childRoot: "servers/galien",
     installMetadata: {
@@ -54,7 +54,7 @@ export const MCP_SERVER_REGISTRY: Record<McpServerSlug, McpServerDefinition> = {
     slug: "modulr",
     name: "Modulr MCP",
     publicBasePath: "/modulr",
-    internalTargetEnvVar: "CMDCLAW_MODULR_MCP_TARGET",
+    internalTargetEnvVar: "BAP_MODULR_MCP_TARGET",
     authStrategy: "oauth",
     childRoot: "servers/modulr",
     installMetadata: {

@@ -1,16 +1,16 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { resolveDefaultChatModel } from "@cmdclaw/core/lib/chat-model-defaults";
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
-import { listOpencodeFreeModels } from "@cmdclaw/core/server/ai/opencode-models";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import { resolveDefaultChatModel } from "@bap/core/lib/chat-model-defaults";
+import { parseModelReference } from "@bap/core/lib/model-reference";
+import { listOpencodeFreeModels } from "@bap/core/server/ai/opencode-models";
 import {
   createRpcClient,
   defaultProfileStore,
   runChatSession,
   DEFAULT_SERVER_URL,
-  type CmdclawApiClient,
+  type BapApiClient,
   type DoneArtifactsData,
   type StatusChangeMetadata,
-} from "@cmdclaw/client";
+} from "@bap/client";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import readline from "node:readline";
@@ -372,7 +372,7 @@ function printApprovalDecisionMarker(
 
 async function waitForApprovalParkedMarker(
   stdout: NodeJS.WriteStream,
-  client: CmdclawApiClient,
+  client: BapApiClient,
   generationId: string,
   timeoutMs: number,
 ): Promise<void> {
@@ -486,7 +486,7 @@ async function collectQuestionApprovalAnswers(
   return collected;
 }
 
-async function printAuthenticatedUserDeferred(client: CmdclawApiClient): Promise<string> {
+async function printAuthenticatedUserDeferred(client: BapApiClient): Promise<string> {
   try {
     const me = await client.user.me();
     return `[auth] ${me.email} (${me.id})\n`;
@@ -495,7 +495,7 @@ async function printAuthenticatedUserDeferred(client: CmdclawApiClient): Promise
   }
 }
 
-async function hydrateProviderAvailability(client: CmdclawApiClient, state: ChatState) {
+async function hydrateProviderAvailability(client: BapApiClient, state: ChatState) {
   const [authStatus, freeModels] = await Promise.all([
     client.providerAuth.status(),
     client.providerAuth.freeModels(),
@@ -533,7 +533,7 @@ async function hydrateProviderAvailability(client: CmdclawApiClient, state: Chat
 }
 
 async function validatePersistedAssistantMessage(
-  client: CmdclawApiClient,
+  client: BapApiClient,
   conversationId: string,
   messageId: string,
   expected: { content: string; parts: Array<{ type: string }> },
@@ -569,7 +569,7 @@ async function validatePersistedAssistantMessage(
 
 async function runOneGeneration(
   stdout: NodeJS.WriteStream,
-  client: CmdclawApiClient,
+  client: BapApiClient,
   rl: readline.Interface | null,
   state: ChatState,
   target: ChatGenerationTarget,
@@ -892,7 +892,7 @@ async function runOneGeneration(
 
 async function runChatLoop(
   stdout: NodeJS.WriteStream,
-  client: CmdclawApiClient,
+  client: BapApiClient,
   rl: readline.Interface,
   state: ChatState,
 ): Promise<void> {
@@ -968,7 +968,7 @@ async function printAvailableModels(
   const userOpenAIAvailable = (state.connectedProviderIds ?? []).includes("openai");
   const sharedGeminiAvailable = (state.sharedConnectedProviderIds ?? []).includes("google");
 
-  stdout.write("CmdClaw Models:\n");
+  stdout.write("Bap Models:\n");
   stdout.write("- Claude Sonnet 4.6 (anthropic/claude-sonnet-4-6) [source=shared]\n");
   stdout.write("- GPT-5.5 (openai/gpt-5.5) [source=shared]\n");
   stdout.write("- GPT-5.4 (openai/gpt-5.4) [source=shared]\n");

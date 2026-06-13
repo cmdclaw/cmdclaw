@@ -5,7 +5,7 @@ status: proposed
 # Expose the Bap MCP Server as a hard-wired platform capability
 
 Every **Generation** — chat, coworker, or coworker run — gets the **Bap MCP
-Server** (`apps/mcp/servers/cmdclaw`) unconditionally. Its tools (run chats; list,
+Server** (`apps/mcp/servers/bap`) unconditionally. Its tools (run chats; list,
 create, and run coworkers; upload documents; add skills) let the agent operate
 Bap itself: a chat can build and trigger coworkers, a coworker can orchestrate
 other coworkers.
@@ -22,9 +22,9 @@ not seeded as a `workspaceMcpServer` row the way Galien and Modulr are.
 - **Identity:** calls act as the Generation's acting user — the chat **User**, or
   the **Coworker**'s owner for triggered runs. Auth reuses the managed-token
   pattern (`signManagedMcpToken`, short-lived, `{userId, workspaceId, internalKey}`
-  signed with `CMDCLAW_SERVER_SECRET`); the Bap MCP server accepts managed tokens
+  signed with `BAP_SERVER_SECRET`); the Bap MCP server accepts managed tokens
   alongside hosted OAuth with `audience: "bap"` and scope `bap`. Its public hosted
-  endpoint is `https://mcp.heybap.com/bap`; the old `/cmdclaw` path is deliberately
+  endpoint is `https://mcp.heybap.com/bap`; the old `/bap` path is deliberately
   not accepted. Runs and resources created this way are owned by the acting user
   and count against their quotas.
 - **Audit:** these calls are recorded as runtime-originated, not user-originated,

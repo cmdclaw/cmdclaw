@@ -24,9 +24,9 @@ self.addEventListener("push", (event) => {
         return;
       }
 
-      await self.registration.showNotification(payload.title || "CmdClaw", {
+      await self.registration.showNotification(payload.title || "Bap", {
         body: payload.body || "Your task is complete.",
-        tag: payload.tag || "cmdclaw-task-done",
+        tag: payload.tag || "bap-task-done",
         data: {
           url: payload.url || "/chat",
         },

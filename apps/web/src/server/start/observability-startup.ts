@@ -1,4 +1,4 @@
-import { initializeObservabilityRuntime } from "@cmdclaw/core/server/utils/observability";
+import { initializeObservabilityRuntime } from "@bap/core/server/utils/observability";
 
 export function initializeWebObservabilityAtStartup(): void {
   if (process.env.NODE_ENV !== "production") {
@@ -6,7 +6,7 @@ export function initializeWebObservabilityAtStartup(): void {
   }
 
   try {
-    initializeObservabilityRuntime("cmdclaw-web");
+    initializeObservabilityRuntime("bap-web");
   } catch (error) {
     console.error("[observability] Failed to initialize web observability runtime", error);
   }

@@ -57,7 +57,7 @@ export function formatWorktreeStackSlot(slot: number): string {
 }
 
 export function buildWorktreeHostPorts(slot: number): WorktreeHostPort[] {
-  const stack = buildWorktreeStackConfig("cmdclaw-slot", slot);
+  const stack = buildWorktreeStackConfig("bap-slot", slot);
 
   return [
     { name: "app", port: port(37, slot) },
@@ -75,44 +75,44 @@ export function buildSharedStackConfig(): SharedStackConfig {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
   };
 
-  const composeProjectName = process.env.CMDCLAW_COMPOSE_PROJECT?.trim() || "cmdclaw-local";
+  const composeProjectName = process.env.BAP_COMPOSE_PROJECT?.trim() || "bap-local";
 
   return {
     composeProjectName,
-    postgresPort: parsePort(process.env.CMDCLAW_POSTGRES_PORT, 5432),
-    redisPort: parsePort(process.env.CMDCLAW_REDIS_PORT, 6379),
-    minioApiPort: parsePort(process.env.CMDCLAW_MINIO_API_PORT, 9000),
-    minioConsolePort: parsePort(process.env.CMDCLAW_MINIO_CONSOLE_PORT, 9001),
-    grafanaPort: parsePort(process.env.CMDCLAW_GRAFANA_PORT, 3400),
-    alertmanagerPort: parsePort(process.env.CMDCLAW_ALERTMANAGER_PORT, 9093),
-    vectorOtelGrpcPort: parsePort(process.env.CMDCLAW_VECTOR_OTLP_GRPC_PORT, 4317),
-    vectorOtelHttpPort: parsePort(process.env.CMDCLAW_VECTOR_OTLP_HTTP_PORT, 4318),
-    vectorTracePort: parsePort(process.env.CMDCLAW_VECTOR_TRACES_PORT, 5318),
-    vectorLogPort: parsePort(process.env.CMDCLAW_VECTOR_LOG_PORT, 8686),
-    victoriaMetricsPort: parsePort(process.env.CMDCLAW_VICTORIA_METRICS_PORT, 8428),
-    victoriaLogsPort: parsePort(process.env.CMDCLAW_VICTORIA_LOGS_PORT, 9428),
-    victoriaTracesPort: parsePort(process.env.CMDCLAW_VICTORIA_TRACES_PORT, 10428),
-    vmalertPort: parsePort(process.env.CMDCLAW_VMALERT_PORT, 8880),
+    postgresPort: parsePort(process.env.BAP_POSTGRES_PORT, 5432),
+    redisPort: parsePort(process.env.BAP_REDIS_PORT, 6379),
+    minioApiPort: parsePort(process.env.BAP_MINIO_API_PORT, 9000),
+    minioConsolePort: parsePort(process.env.BAP_MINIO_CONSOLE_PORT, 9001),
+    grafanaPort: parsePort(process.env.BAP_GRAFANA_PORT, 3400),
+    alertmanagerPort: parsePort(process.env.BAP_ALERTMANAGER_PORT, 9093),
+    vectorOtelGrpcPort: parsePort(process.env.BAP_VECTOR_OTLP_GRPC_PORT, 4317),
+    vectorOtelHttpPort: parsePort(process.env.BAP_VECTOR_OTLP_HTTP_PORT, 4318),
+    vectorTracePort: parsePort(process.env.BAP_VECTOR_TRACES_PORT, 5318),
+    vectorLogPort: parsePort(process.env.BAP_VECTOR_LOG_PORT, 8686),
+    victoriaMetricsPort: parsePort(process.env.BAP_VICTORIA_METRICS_PORT, 8428),
+    victoriaLogsPort: parsePort(process.env.BAP_VICTORIA_LOGS_PORT, 9428),
+    victoriaTracesPort: parsePort(process.env.BAP_VICTORIA_TRACES_PORT, 10428),
+    vmalertPort: parsePort(process.env.BAP_VMALERT_PORT, 8880),
     postgresVolume:
-      process.env.CMDCLAW_POSTGRES_VOLUME || `${composeProjectName}_cmdclaw_postgres_data`,
+      process.env.BAP_POSTGRES_VOLUME || `${composeProjectName}_bap_postgres_data`,
     redisVolume:
-      process.env.CMDCLAW_REDIS_VOLUME || `${composeProjectName}_cmdclaw_redis_data`,
+      process.env.BAP_REDIS_VOLUME || `${composeProjectName}_bap_redis_data`,
     minioVolume:
-      process.env.CMDCLAW_MINIO_VOLUME || `${composeProjectName}_cmdclaw_minio_data`,
+      process.env.BAP_MINIO_VOLUME || `${composeProjectName}_bap_minio_data`,
     alertmanagerVolume:
-      process.env.CMDCLAW_ALERTMANAGER_VOLUME ||
-      `${composeProjectName}_cmdclaw_alertmanager_data`,
+      process.env.BAP_ALERTMANAGER_VOLUME ||
+      `${composeProjectName}_bap_alertmanager_data`,
     grafanaVolume:
-      process.env.CMDCLAW_GRAFANA_VOLUME || `${composeProjectName}_cmdclaw_grafana_data`,
+      process.env.BAP_GRAFANA_VOLUME || `${composeProjectName}_bap_grafana_data`,
     victoriaMetricsVolume:
-      process.env.CMDCLAW_VICTORIA_METRICS_VOLUME ||
-      `${composeProjectName}_cmdclaw_victoria_metrics_data`,
+      process.env.BAP_VICTORIA_METRICS_VOLUME ||
+      `${composeProjectName}_bap_victoria_metrics_data`,
     victoriaLogsVolume:
-      process.env.CMDCLAW_VICTORIA_LOGS_VOLUME ||
-      `${composeProjectName}_cmdclaw_victoria_logs_data`,
+      process.env.BAP_VICTORIA_LOGS_VOLUME ||
+      `${composeProjectName}_bap_victoria_logs_data`,
     victoriaTracesVolume:
-      process.env.CMDCLAW_VICTORIA_TRACES_VOLUME ||
-      `${composeProjectName}_cmdclaw_victoria_traces_data`,
+      process.env.BAP_VICTORIA_TRACES_VOLUME ||
+      `${composeProjectName}_bap_victoria_traces_data`,
   };
 }
 

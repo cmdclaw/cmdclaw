@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.BETTER_AUTH_SECRET ??= "test-better-auth-secret";
-process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/cmdclaw";
+process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/bap";
 process.env.REDIS_URL ??= "redis://localhost:6379";
 process.env.OPENAI_API_KEY ??= "test-openai-key";
 process.env.SANDBOX_DEFAULT ??= "docker";
@@ -29,7 +29,7 @@ vi.mock("@/server/session-principal-workspace", () => ({
   resolveSessionPrincipalWorkspaceId: resolveSessionPrincipalWorkspaceIdMock,
 }));
 
-vi.mock("@cmdclaw/core/server/edition", () => ({
+vi.mock("@bap/core/server/edition", () => ({
   isSelfHostedEdition: isSelfHostedEditionMock,
 }));
 
@@ -74,7 +74,7 @@ function mockSession(role: string | null = null) {
 describe("route guards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.CMDCLAW_INSTANCE_ROOT;
+    delete process.env.BAP_INSTANCE_ROOT;
     getRequestMock.mockReturnValue(new Request("http://localhost:3000/chat"));
     getRequestSessionMock.mockResolvedValue(null);
     resolveSessionPrincipalWorkspaceIdMock.mockResolvedValue("workspace-1");
@@ -110,7 +110,7 @@ describe("route guards", () => {
   });
 
   it("redirects unauthenticated protected routes to worktree auto-login when configured", async () => {
-    process.env.CMDCLAW_INSTANCE_ROOT = "/tmp/cmdclaw-worktree";
+    process.env.BAP_INSTANCE_ROOT = "/tmp/bap-worktree";
 
     await expect(requireSession("/chat?tab=latest")).rejects.toEqual({
       href: "/api/dev/worktree-auth?callbackUrl=%2Fchat%3Ftab%3Dlatest",

@@ -9,7 +9,7 @@ const { triggerCoworkerRunMock } = vi.hoisted(() => ({
   triggerCoworkerRunMock: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
+vi.mock("@bap/core/server/services/coworker-service", () => ({
   triggerCoworkerRun: triggerCoworkerRunMock,
 }));
 
@@ -26,7 +26,7 @@ function makeRequest(body: unknown, authorization?: string): Request {
   if (authorization !== undefined) {
     headers.set("authorization", authorization);
   }
-  return new Request("https://cmdclaw.ai/api/coworkers/trigger", {
+  return new Request("https://heybap.com/api/coworkers/trigger", {
     method: "POST",
     headers,
     body: JSON.stringify(body),

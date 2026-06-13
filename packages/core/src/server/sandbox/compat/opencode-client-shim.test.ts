@@ -30,14 +30,14 @@ describe("createRuntimeHarnessClientFromOpencodeClient", () => {
     const harness = createRuntimeHarnessClientFromOpencodeClient(client);
     await harness.prompt({
       sessionID: "session-1",
-      agent: "cmdclaw-chat",
+      agent: "bap-chat",
       parts: [{ type: "text", text: "hello" }],
       system: "runtime system prompt",
     });
 
     expect(promptMock).toHaveBeenCalledWith({
       sessionID: "session-1",
-      agent: "cmdclaw-chat",
+      agent: "bap-chat",
       parts: [{ type: "text", text: "hello" }],
       system: "runtime system prompt",
     });

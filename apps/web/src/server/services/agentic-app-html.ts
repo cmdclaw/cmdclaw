@@ -1,4 +1,4 @@
-import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
+import { downloadFromS3 } from "@bap/core/server/storage/s3-client";
 
 export const AGENTIC_APP_FILENAME = "output.html";
 export const AGENTIC_APP_MAX_BYTES = 2 * 1024 * 1024;

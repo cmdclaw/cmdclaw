@@ -1,4 +1,4 @@
-import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
+import { generationManager } from "@bap/core/server/services/generation-manager";
 import {
   conversation,
   coworkerRun,
@@ -9,7 +9,7 @@ import {
   inboxReadState,
   message,
   user,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -154,7 +154,7 @@ function normalizePendingApproval(
     toolUseId: interrupt.providerToolUseId,
     toolName: interrupt.display.title,
     toolInput: interrupt.display.toolInput ?? {},
-    integration: interrupt.display.integration ?? "cmdclaw",
+    integration: interrupt.display.integration ?? "bap",
     operation: interrupt.display.operation ?? "unknown",
     command: interrupt.display.command,
   };
@@ -233,7 +233,7 @@ async function ensureAdmin(context: AuthenticatedContext) {
 async function requireConversationAccessInActiveWorkspace(args: {
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   };
   conversationId: string;
   workspaceId: string;
@@ -261,7 +261,7 @@ async function requireConversationAccessInActiveWorkspace(args: {
 async function requireGenerationAccessInActiveWorkspace(args: {
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   };
   generationId: string;
   workspaceId: string;
@@ -739,7 +739,7 @@ const editApprovalAndResend = protectedProcedure
 
     const userMessage = buildEditedApprovalMessage({
       toolName: interrupt.display.title,
-      integration: interrupt.display.integration ?? "cmdclaw",
+      integration: interrupt.display.integration ?? "bap",
       operation: interrupt.display.operation ?? "unknown",
       originalToolInput: interrupt.display.toolInput ?? {},
       updatedToolInput: input.updatedToolInput,
@@ -777,7 +777,7 @@ const editApprovalAndResend = protectedProcedure
           message: userMessage,
           toolUseId: interrupt.providerToolUseId,
           toolName: interrupt.display.title,
-          integration: interrupt.display.integration ?? "cmdclaw",
+          integration: interrupt.display.integration ?? "bap",
           operation: interrupt.display.operation ?? "unknown",
           command: interrupt.display.command,
           originalToolInput: interrupt.display.toolInput ?? {},

@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 describe("Modulr tool imports", () => {
   it("does not load web app env while registering the download tool", async () => {
     vi.resetModules();
-    vi.doMock("@cmdclaw/core/env", () => {
+    vi.doMock("@bap/core/env", () => {
       throw new Error("download tool imported core env eagerly");
     });
 
     const tool = await import("../tools/modulr.download_document");
 
     expect(tool.metadata.name).toBe("modulr.download_document");
-    vi.doUnmock("@cmdclaw/core/env");
+    vi.doUnmock("@bap/core/env");
   });
 
   it("does not load pdf parsing while registering the read-text tool", async () => {

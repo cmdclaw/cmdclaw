@@ -28,7 +28,7 @@ import { useAdminWorkspaces } from "@/orpc/hooks/workspace";
 import { AppImage } from "./-lib/app-image";
 
 export const Route = createFileRoute("/admin/mcp")({
-  head: () => ({ meta: [{ title: "MCP Servers - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "MCP Servers - Bap" }] }),
   component: AdminMcpPage,
 });
 
@@ -427,7 +427,7 @@ function AdminMcpPage() {
           <div>
             <h2 className="text-xl font-semibold">MCP Servers</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Configure managed MCP servers that CmdClaw agents can use inside the active workspace.
+              Configure managed MCP servers that Bap agents can use inside the active workspace.
             </p>
           </div>
         </div>

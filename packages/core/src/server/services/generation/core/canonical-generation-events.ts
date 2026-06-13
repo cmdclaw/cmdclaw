@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { conversation, generation, message, type ContentPart } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation, generation, message, type ContentPart } from "@bap/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { parseModelReference } from "../../../../lib/model-reference";
 import {
@@ -227,14 +227,14 @@ function recordGenerationTerminalMetrics(args: {
   };
 
   recordCounter(
-    "cmdclaw_generation_terminal_total",
+    "bap_generation_terminal_total",
     1,
     labels,
     "Terminal Generation outcomes by bounded operational dimensions.",
   );
   if (args.durationMs !== undefined) {
     recordHistogram(
-      "cmdclaw_generation_terminal_duration_ms",
+      "bap_generation_terminal_duration_ms",
       args.durationMs,
       labels,
       "Terminal Generation duration in milliseconds.",
@@ -242,7 +242,7 @@ function recordGenerationTerminalMetrics(args: {
   }
   for (const toolCallMetric of args.toolCallMetrics) {
     recordHistogram(
-      "cmdclaw_generation_terminal_tool_calls",
+      "bap_generation_terminal_tool_calls",
       toolCallMetric.count,
       {
         ...labels,
@@ -254,19 +254,19 @@ function recordGenerationTerminalMetrics(args: {
     );
   }
   recordHistogram(
-    "cmdclaw_generation_terminal_input_tokens",
+    "bap_generation_terminal_input_tokens",
     args.inputTokens,
     labels,
     "Input token usage per terminal Generation.",
   );
   recordHistogram(
-    "cmdclaw_generation_terminal_output_tokens",
+    "bap_generation_terminal_output_tokens",
     args.outputTokens,
     labels,
     "Output token usage per terminal Generation.",
   );
   recordHistogram(
-    "cmdclaw_generation_terminal_total_tokens",
+    "bap_generation_terminal_total_tokens",
     args.inputTokens + args.outputTokens,
     labels,
     "Total token usage per terminal Generation.",
@@ -355,7 +355,7 @@ export async function emitGenerationTerminalCanonicalEvent(generationId: string)
   try {
     emitCanonicalServiceEvent({
       level: outcome === "failed" || outcome === "timed_out" ? "error" : "info",
-      eventName: "cmdclaw.generation.terminal",
+      eventName: "bap.generation.terminal",
       operationName: "generation.terminal",
       eventId: `generation:${generationId}:terminal`,
       outcome,
@@ -369,55 +369,55 @@ export async function emitGenerationTerminalCanonicalEvent(generationId: string)
         sessionId: genRecord.runtimeId ?? undefined,
       },
       attributes: {
-        "cmdclaw.generation.id": generationId,
-        "cmdclaw.conversation.id": genRecord.conversationId,
-        "cmdclaw.user.id": conv?.userId ?? undefined,
-        "cmdclaw.workspace.id": conv?.workspaceId ?? undefined,
-        "cmdclaw.generation.outcome": outcome,
-        "cmdclaw.generation.status": genRecord.status,
-        "cmdclaw.generation.completion_reason": genRecord.completionReason ?? UNKNOWN,
-        "cmdclaw.failure.phase": failurePhase,
-        "cmdclaw.error.normalized_code": normalizedErrorCode,
-        "cmdclaw.model.provider": modelProvider,
-        "cmdclaw.model.name": modelName,
-        "cmdclaw.sandbox.provider": sandboxProvider,
-        "cmdclaw.auth.source": authSource,
-        "cmdclaw.auto_approve.enabled": autoApproveEnabled,
-        "cmdclaw.skills.selected_count": selectedSkillCount,
-        "cmdclaw.attachments.count": attachmentCount,
-        "cmdclaw.sandbox.id": genRecord.sandboxId ?? undefined,
-        "cmdclaw.runtime.id": genRecord.runtimeId ?? undefined,
-        "cmdclaw.runtime.harness": genRecord.runtimeHarness ?? undefined,
-        "cmdclaw.runtime.protocol_version": genRecord.runtimeProtocolVersion ?? undefined,
-        "cmdclaw.runtime.diagnostic_snapshot.id":
+        "bap.generation.id": generationId,
+        "bap.conversation.id": genRecord.conversationId,
+        "bap.user.id": conv?.userId ?? undefined,
+        "bap.workspace.id": conv?.workspaceId ?? undefined,
+        "bap.generation.outcome": outcome,
+        "bap.generation.status": genRecord.status,
+        "bap.generation.completion_reason": genRecord.completionReason ?? UNKNOWN,
+        "bap.failure.phase": failurePhase,
+        "bap.error.normalized_code": normalizedErrorCode,
+        "bap.model.provider": modelProvider,
+        "bap.model.name": modelName,
+        "bap.sandbox.provider": sandboxProvider,
+        "bap.auth.source": authSource,
+        "bap.auto_approve.enabled": autoApproveEnabled,
+        "bap.skills.selected_count": selectedSkillCount,
+        "bap.attachments.count": attachmentCount,
+        "bap.sandbox.id": genRecord.sandboxId ?? undefined,
+        "bap.runtime.id": genRecord.runtimeId ?? undefined,
+        "bap.runtime.harness": genRecord.runtimeHarness ?? undefined,
+        "bap.runtime.protocol_version": genRecord.runtimeProtocolVersion ?? undefined,
+        "bap.runtime.diagnostic_snapshot.id":
           typeof runtimeDiagnosticSnapshot?.id === "string"
             ? runtimeDiagnosticSnapshot.id
             : undefined,
-        "cmdclaw.runtime.diagnostic_snapshot.storage_key":
+        "bap.runtime.diagnostic_snapshot.storage_key":
           typeof runtimeDiagnosticSnapshot?.storageKey === "string"
             ? runtimeDiagnosticSnapshot.storageKey
             : undefined,
-        "cmdclaw.runtime.diagnostic_snapshot.upload_succeeded":
+        "bap.runtime.diagnostic_snapshot.upload_succeeded":
           typeof runtimeDiagnosticSnapshot?.uploadSucceeded === "boolean"
             ? runtimeDiagnosticSnapshot.uploadSucceeded
             : undefined,
-        "cmdclaw.runtime.no_progress.timeout_ms":
+        "bap.runtime.no_progress.timeout_ms":
           typeof runtimeDiagnosticSnapshot?.timeoutMs === "number"
             ? runtimeDiagnosticSnapshot.timeoutMs
             : undefined,
-        "cmdclaw.runtime.progress_stall.stalled_ms":
+        "bap.runtime.progress_stall.stalled_ms":
           typeof runtimeDiagnosticSnapshot?.stalledMs === "number"
             ? runtimeDiagnosticSnapshot.stalledMs
             : undefined,
-        "cmdclaw.runtime.progress_stall.last_progress_at":
+        "bap.runtime.progress_stall.last_progress_at":
           typeof runtimeDiagnosticSnapshot?.lastRuntimeProgressAt === "string"
             ? runtimeDiagnosticSnapshot.lastRuntimeProgressAt
             : undefined,
-        "cmdclaw.runtime.progress_stall.last_progress_kind":
+        "bap.runtime.progress_stall.last_progress_kind":
           typeof runtimeDiagnosticSnapshot?.lastRuntimeProgressKind === "string"
             ? runtimeDiagnosticSnapshot.lastRuntimeProgressKind
             : undefined,
-        "cmdclaw.generation.duration_ms": durationMs,
+        "bap.generation.duration_ms": durationMs,
         "app.phase.sandbox_startup_ms": timing?.sandboxStartupDurationMs,
         "app.phase.sandbox_startup_mode": timing?.sandboxStartupMode,
         "app.phase.sandbox_connect_or_create_ms": phaseDurationsMs.sandboxConnectOrCreateMs,
@@ -458,16 +458,16 @@ export async function emitGenerationTerminalCanonicalEvent(generationId: string)
           phaseDurationsMs.generationToFirstVisibleOutputMs,
         "app.phase.model_stream_ms": phaseDurationsMs.modelStreamMs,
         "app.phase.post_processing_ms": phaseDurationsMs.postProcessingMs,
-        "cmdclaw.tool.call_count": toolSummary.toolCallCount,
-        "cmdclaw.tool.write_count": toolSummary.toolWriteCount,
-        "cmdclaw.tool.summary_json": JSON.stringify(toolSummary.summaries.slice(0, 25)),
-        "cmdclaw.approval.count": toolSummary.approvalCount,
-        "cmdclaw.auth_interrupt.count": toolSummary.authInterruptionCount,
-        "cmdclaw.usage.input_tokens": genRecord.inputTokens,
-        "cmdclaw.usage.output_tokens": genRecord.outputTokens,
-        "cmdclaw.usage.total_tokens": genRecord.inputTokens + genRecord.outputTokens,
-        "cmdclaw.generation.started_at": genRecord.startedAt,
-        "cmdclaw.generation.completed_at": genRecord.completedAt ?? undefined,
+        "bap.tool.call_count": toolSummary.toolCallCount,
+        "bap.tool.write_count": toolSummary.toolWriteCount,
+        "bap.tool.summary_json": JSON.stringify(toolSummary.summaries.slice(0, 25)),
+        "bap.approval.count": toolSummary.approvalCount,
+        "bap.auth_interrupt.count": toolSummary.authInterruptionCount,
+        "bap.usage.input_tokens": genRecord.inputTokens,
+        "bap.usage.output_tokens": genRecord.outputTokens,
+        "bap.usage.total_tokens": genRecord.inputTokens + genRecord.outputTokens,
+        "bap.generation.started_at": genRecord.startedAt,
+        "bap.generation.completed_at": genRecord.completedAt ?? undefined,
       },
     });
 

@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { useChatOverview } from "@/orpc/hooks/admin";
 
 export const Route = createFileRoute("/admin/chat-overview")({
-  head: () => ({ meta: [{ title: "Chat System Health - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Chat System Health - Bap" }] }),
   component: ChatOverviewPage,
 });
 

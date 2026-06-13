@@ -1,4 +1,4 @@
-name: ${CMDCLAW_COMPOSE_PROJECT:-cmdclaw-local}
+name: ${BAP_COMPOSE_PROJECT:-bap-local}
 
 services:
   database:
@@ -7,11 +7,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-${DB_PASSWORD:-}}
-      POSTGRES_DB: ${CMDCLAW_POSTGRES_DB:-cmdclaw}
+      POSTGRES_DB: ${BAP_POSTGRES_DB:-bap}
     ports:
-      - "${CMDCLAW_POSTGRES_PORT:-5432}:5432"
+      - "${BAP_POSTGRES_PORT:-5432}:5432"
     volumes:
-      - cmdclaw_postgres_data:/var/lib/postgresql/data
+      - bap_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -22,19 +22,19 @@ services:
   zero-cache:
     image: rocicorp/zero:1.6.2
     ports:
-      - "${CMDCLAW_ZERO_CACHE_PORT:-4848}:4848"
+      - "${BAP_ZERO_CACHE_PORT:-4848}:4848"
     stop_grace_period: 10m
     environment:
-      ZERO_UPSTREAM_DB: postgresql://postgres:${DATABASE_PASSWORD:-${DB_PASSWORD:-}}@database:5432/${CMDCLAW_POSTGRES_DB:-cmdclaw}
-      ZERO_CVR_DB: postgresql://postgres:${DATABASE_PASSWORD:-${DB_PASSWORD:-}}@database:5432/${CMDCLAW_POSTGRES_DB:-cmdclaw}
-      ZERO_CHANGE_DB: postgresql://postgres:${DATABASE_PASSWORD:-${DB_PASSWORD:-}}@database:5432/${CMDCLAW_POSTGRES_DB:-cmdclaw}
+      ZERO_UPSTREAM_DB: postgresql://postgres:${DATABASE_PASSWORD:-${DB_PASSWORD:-}}@database:5432/${BAP_POSTGRES_DB:-bap}
+      ZERO_CVR_DB: postgresql://postgres:${DATABASE_PASSWORD:-${DB_PASSWORD:-}}@database:5432/${BAP_POSTGRES_DB:-bap}
+      ZERO_CHANGE_DB: postgresql://postgres:${DATABASE_PASSWORD:-${DB_PASSWORD:-}}@database:5432/${BAP_POSTGRES_DB:-bap}
       ZERO_REPLICA_FILE: /data/replica.db
-      ZERO_ADMIN_PASSWORD: ${ZERO_ADMIN_PASSWORD:-cmdclaw-local-zero}
+      ZERO_ADMIN_PASSWORD: ${ZERO_ADMIN_PASSWORD:-bap-local-zero}
       ZERO_QUERY_URL: ${VITE_ZERO_QUERY_URL:-http://host.docker.internal:3000/api/zero/query}
       ZERO_QUERY_FORWARD_COOKIES: "true"
       ZERO_ENABLE_CRUD_MUTATIONS: "false"
     volumes:
-      - cmdclaw_zero_cache_data:/data
+      - bap_zero_cache_data:/data
     depends_on:
       database:
         condition: service_healthy
@@ -49,9 +49,9 @@ services:
   redis:
     image: redis:8-alpine
     ports:
-      - "${CMDCLAW_REDIS_PORT:-6379}:6379"
+      - "${BAP_REDIS_PORT:-6379}:6379"
     volumes:
-      - cmdclaw_redis_data:/data
+      - bap_redis_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -66,10 +66,10 @@ services:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-${S3_ACCESS_KEY_ID:-minioadmin}}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-${S3_SECRET_ACCESS_KEY:-minioadmin}}
     ports:
-      - "${CMDCLAW_MINIO_API_PORT:-9000}:9000"
-      - "${CMDCLAW_MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${BAP_MINIO_API_PORT:-9000}:9000"
+      - "${BAP_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - cmdclaw_minio_data:/data
+      - bap_minio_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -83,9 +83,9 @@ services:
       - "--storageDataPath=/victoria-metrics-data"
       - "--vmalert.proxyURL=http://vmalert:8880"
     ports:
-      - "${CMDCLAW_VICTORIA_METRICS_PORT:-8428}:8428"
+      - "${BAP_VICTORIA_METRICS_PORT:-8428}:8428"
     volumes:
-      - cmdclaw_victoria_metrics_data:/victoria-metrics-data
+      - bap_victoria_metrics_data:/victoria-metrics-data
     restart: unless-stopped
 
   victoria-logs:
@@ -93,9 +93,9 @@ services:
     command:
       - "--storageDataPath=/victoria-logs-data"
     ports:
-      - "${CMDCLAW_VICTORIA_LOGS_PORT:-9428}:9428"
+      - "${BAP_VICTORIA_LOGS_PORT:-9428}:9428"
     volumes:
-      - cmdclaw_victoria_logs_data:/victoria-logs-data
+      - bap_victoria_logs_data:/victoria-logs-data
     restart: unless-stopped
 
   victoria-traces:
@@ -103,9 +103,9 @@ services:
     command:
       - "--storageDataPath=/victoria-traces-data"
     ports:
-      - "${CMDCLAW_VICTORIA_TRACES_PORT:-10428}:10428"
+      - "${BAP_VICTORIA_TRACES_PORT:-10428}:10428"
     volumes:
-      - cmdclaw_victoria_traces_data:/victoria-traces-data
+      - bap_victoria_traces_data:/victoria-traces-data
     restart: unless-stopped
 
   vector:
@@ -114,10 +114,10 @@ services:
       - "--config"
       - "/etc/vector/vector.yaml"
     ports:
-      - "${CMDCLAW_VECTOR_OTLP_GRPC_PORT:-4317}:4317"
-      - "${CMDCLAW_VECTOR_OTLP_HTTP_PORT:-4318}:4318"
-      - "${CMDCLAW_VECTOR_TRACES_PORT:-5318}:5318"
-      - "${CMDCLAW_VECTOR_LOG_PORT:-8686}:8686"
+      - "${BAP_VECTOR_OTLP_GRPC_PORT:-4317}:4317"
+      - "${BAP_VECTOR_OTLP_HTTP_PORT:-4318}:4318"
+      - "${BAP_VECTOR_TRACES_PORT:-5318}:5318"
+      - "${BAP_VECTOR_LOG_PORT:-8686}:8686"
     volumes:
       - ./observability/vector.yaml:/etc/vector/vector.yaml:ro
     depends_on:
@@ -145,10 +145,10 @@ services:
     environment:
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
     ports:
-      - "${CMDCLAW_ALERTMANAGER_PORT:-9093}:9093"
+      - "${BAP_ALERTMANAGER_PORT:-9093}:9093"
     volumes:
       - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - cmdclaw_alertmanager_data:/alertmanager
+      - bap_alertmanager_data:/alertmanager
     restart: unless-stopped
 
   vmalert:
@@ -164,10 +164,10 @@ services:
       - "-rule.evalDelay=30s"
       - "-httpListenAddr=:8880"
     ports:
-      - "${CMDCLAW_VMALERT_PORT:-8880}:8880"
+      - "${BAP_VMALERT_PORT:-8880}:8880"
     volumes:
       - ./observability/vmalert:/etc/vmalert:ro
-      - cmdclaw_pyrra_slo_rules:/pyrra-rules:ro
+      - bap_pyrra_slo_rules:/pyrra-rules:ro
     depends_on:
       pyrra-slo-rules:
         condition: service_completed_successfully
@@ -192,7 +192,7 @@ services:
           --generic-rules
     volumes:
       - ../images/vmalert/pyrra/slos:/etc/pyrra/slos:ro
-      - cmdclaw_pyrra_slo_rules:/etc/prometheus/pyrra
+      - bap_pyrra_slo_rules:/etc/prometheus/pyrra
     restart: "no"
     depends_on:
       - victoria-metrics
@@ -205,11 +205,11 @@ services:
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       GF_PLUGINS_PREINSTALL_SYNC: victoriametrics-logs-datasource
     ports:
-      - "${CMDCLAW_GRAFANA_PORT:-3400}:3000"
+      - "${BAP_GRAFANA_PORT:-3400}:3000"
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
-      - cmdclaw_grafana_data:/var/lib/grafana
+      - bap_grafana_data:/var/lib/grafana
     depends_on:
       - victoria-metrics
       - victoria-logs
@@ -475,26 +475,26 @@ services:
       - vector
 
 volumes:
-  cmdclaw_postgres_data:
-    name: ${CMDCLAW_POSTGRES_VOLUME:-cmdclaw-local_cmdclaw_postgres_data}
-  cmdclaw_redis_data:
-    name: ${CMDCLAW_REDIS_VOLUME:-cmdclaw-local_cmdclaw_redis_data}
-  cmdclaw_minio_data:
-    name: ${CMDCLAW_MINIO_VOLUME:-cmdclaw-local_cmdclaw_minio_data}
-  cmdclaw_zero_cache_data:
-    name: ${CMDCLAW_ZERO_CACHE_VOLUME:-cmdclaw-local_cmdclaw_zero_cache_data}
-  cmdclaw_victoria_metrics_data:
-    name: ${CMDCLAW_VICTORIA_METRICS_VOLUME:-cmdclaw-local_cmdclaw_victoria_metrics_data}
-  cmdclaw_victoria_logs_data:
-    name: ${CMDCLAW_VICTORIA_LOGS_VOLUME:-cmdclaw-local_cmdclaw_victoria_logs_data}
-  cmdclaw_victoria_traces_data:
-    name: ${CMDCLAW_VICTORIA_TRACES_VOLUME:-cmdclaw-local_cmdclaw_victoria_traces_data}
-  cmdclaw_alertmanager_data:
-    name: ${CMDCLAW_ALERTMANAGER_VOLUME:-cmdclaw-local_cmdclaw_alertmanager_data}
-  cmdclaw_grafana_data:
-    name: ${CMDCLAW_GRAFANA_VOLUME:-cmdclaw-local_cmdclaw_grafana_data}
-  cmdclaw_pyrra_slo_rules:
-    name: ${CMDCLAW_PYRRA_SLO_RULES_VOLUME:-cmdclaw-local_cmdclaw_pyrra_slo_rules}
+  bap_postgres_data:
+    name: ${BAP_POSTGRES_VOLUME:-bap-local_bap_postgres_data}
+  bap_redis_data:
+    name: ${BAP_REDIS_VOLUME:-bap-local_bap_redis_data}
+  bap_minio_data:
+    name: ${BAP_MINIO_VOLUME:-bap-local_bap_minio_data}
+  bap_zero_cache_data:
+    name: ${BAP_ZERO_CACHE_VOLUME:-bap-local_bap_zero_cache_data}
+  bap_victoria_metrics_data:
+    name: ${BAP_VICTORIA_METRICS_VOLUME:-bap-local_bap_victoria_metrics_data}
+  bap_victoria_logs_data:
+    name: ${BAP_VICTORIA_LOGS_VOLUME:-bap-local_bap_victoria_logs_data}
+  bap_victoria_traces_data:
+    name: ${BAP_VICTORIA_TRACES_VOLUME:-bap-local_bap_victoria_traces_data}
+  bap_alertmanager_data:
+    name: ${BAP_ALERTMANAGER_VOLUME:-bap-local_bap_alertmanager_data}
+  bap_grafana_data:
+    name: ${BAP_GRAFANA_VOLUME:-bap-local_bap_grafana_data}
+  bap_pyrra_slo_rules:
+    name: ${BAP_PYRRA_SLO_RULES_VOLUME:-bap-local_bap_pyrra_slo_rules}
   daytona_db_data:
     name: ${DAYTONA_DB_VOLUME:-daytona_db_data}
   daytona_dex_data:

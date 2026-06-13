@@ -30,7 +30,7 @@ export const Route = createFileRoute("/settings/subscriptions")({
       typeof search.provider_connected === "string" ? search.provider_connected : undefined,
     provider_error: typeof search.provider_error === "string" ? search.provider_error : undefined,
   }),
-  head: () => ({ meta: [{ title: "Connected AI Account - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Connected AI Account - Bap" }] }),
   component: SubscriptionsPage,
 });
 
@@ -303,7 +303,7 @@ function SubscriptionsPage() {
         </h2>
         <p className="text-muted-foreground mt-1 text-sm">
           <T>
-            Connect your existing AI account to use provider-backed models without consuming CmdClaw
+            Connect your existing AI account to use provider-backed models without consuming Bap
             credits.
           </T>
         </p>

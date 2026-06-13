@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { providerAuth, sharedProviderAuth } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { providerAuth, sharedProviderAuth } from "@bap/db/schema";
 import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import {
   SUBSCRIPTION_PROVIDERS,

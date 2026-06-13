@@ -4,19 +4,19 @@ type VitestProcedure = Extract<
   NonNullable<Parameters<typeof vi.fn>[0]>,
   (...args: never[]) => unknown
 >;
-import { signModulrDocumentDownloadToken } from "@cmdclaw/core/server/modulr/download-token";
+import { signModulrDocumentDownloadToken } from "@bap/core/server/modulr/download-token";
 
 const { downloadFromS3Mock } = vi.hoisted(() => ({
   downloadFromS3Mock: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/env", () => ({
+vi.mock("@bap/core/env", () => ({
   env: {
     APP_SERVER_SECRET: "test-server-secret",
   },
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   downloadFromS3: downloadFromS3Mock,
 }));
 
@@ -52,7 +52,7 @@ describe("downloadModulrDocument (GET /api/modulr/documents/download)", () => {
     const token = signToken();
 
     const response = await downloadModulrDocument(
-      new Request(`https://cmdclaw.ai/api/modulr/documents/download?token=${token}`),
+      new Request(`https://heybap.com/api/modulr/documents/download?token=${token}`),
     );
 
     expect(response.status).toBe(200);
@@ -75,7 +75,7 @@ describe("downloadModulrDocument (GET /api/modulr/documents/download)", () => {
     });
 
     const response = await downloadModulrDocument(
-      new Request(`https://cmdclaw.ai/api/modulr/documents/download?token=${token}`),
+      new Request(`https://heybap.com/api/modulr/documents/download?token=${token}`),
     );
 
     expect(response.status).toBe(200);
@@ -86,7 +86,7 @@ describe("downloadModulrDocument (GET /api/modulr/documents/download)", () => {
 
   it("rejects requests without a token", async () => {
     const response = await downloadModulrDocument(
-      new Request("https://cmdclaw.ai/api/modulr/documents/download"),
+      new Request("https://heybap.com/api/modulr/documents/download"),
     );
 
     expect(response.status).toBe(400);
@@ -95,7 +95,7 @@ describe("downloadModulrDocument (GET /api/modulr/documents/download)", () => {
 
   it("rejects invalid or tampered tokens", async () => {
     const response = await downloadModulrDocument(
-      new Request("https://cmdclaw.ai/api/modulr/documents/download?token=not-a-valid-token"),
+      new Request("https://heybap.com/api/modulr/documents/download?token=not-a-valid-token"),
     );
 
     expect(response.status).toBe(401);
@@ -108,7 +108,7 @@ describe("downloadModulrDocument (GET /api/modulr/documents/download)", () => {
     });
 
     const response = await downloadModulrDocument(
-      new Request(`https://cmdclaw.ai/api/modulr/documents/download?token=${token}`),
+      new Request(`https://heybap.com/api/modulr/documents/download?token=${token}`),
     );
 
     expect(response.status).toBe(401);

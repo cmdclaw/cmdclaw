@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="apps/web/public/logo.png" alt="CmdClaw" width="80" />
+  <img src="apps/web/public/logo.png" alt="Bap" width="80" />
 </p>
 
-<h1 align="center">CmdClaw</h1>
+<h1 align="center">Bap</h1>
 
 <p align="center">
   The OS for AI Agents
 </p>
 
 <p align="center">
-  CmdClaw turns plain-English tasks into AI agents that run across your tools, ask for approval when needed, and surface work through an inbox.
+  Bap turns plain-English tasks into AI agents that run across your tools, ask for approval when needed, and surface work through an inbox.
 </p>
 
 <p align="center">
-  <a href="https://docs.cmdclaw.ai"><img src="https://img.shields.io/badge/docs-cmdclaw.ai-0f7acb?style=flat-square" alt="Docs" /></a>
+  <a href="https://docs.heybap.com"><img src="https://img.shields.io/badge/docs-heybap.com-0f7acb?style=flat-square" alt="Docs" /></a>
   <a href="https://discord.com/invite/NHQy8gXerd"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT License" /></a>
-  <a href="https://github.com/baptistecolle/cmdclaw/actions/workflows/ci-code-quality.yml"><img src="https://img.shields.io/github/actions/workflow/status/baptistecolle/cmdclaw/ci-code-quality.yml?branch=main&style=flat-square&label=ci" alt="CI" /></a>
+  <a href="https://github.com/baptistecolle/bap/actions/workflows/ci-code-quality.yml"><img src="https://img.shields.io/github/actions/workflow/status/baptistecolle/bap/ci-code-quality.yml?branch=main&style=flat-square&label=ci" alt="CI" /></a>
 </p>
 
 <p align="center">
@@ -30,20 +30,20 @@
 </p>
 
 <p align="center">
-  <a href="https://cmdclaw.ai">Website</a> &middot;
-  <a href="https://docs.cmdclaw.ai">Docs</a> &middot;
-  <a href="https://docs.cmdclaw.ai/self-hosting">Self-Hosting</a> &middot;
+  <a href="https://heybap.com">Website</a> &middot;
+  <a href="https://docs.heybap.com">Docs</a> &middot;
+  <a href="https://docs.heybap.com/self-hosting">Self-Hosting</a> &middot;
   <a href="https://discord.com/invite/NHQy8gXerd">Discord</a>
 </p>
 
-<!-- DO NOT DELETE: Regenerate this GIF from /Users/baptiste/Git/cmdclaw/apps/web with `bun scripts/export-readme-preview.ts` while the web app is running and /internal/readme-preview is reachable. -->
+<!-- DO NOT DELETE: Regenerate this GIF from /Users/baptiste/Git/bap/apps/web with `bun scripts/export-readme-preview.ts` while the web app is running and /internal/readme-preview is reachable. -->
 <p align="center">
-  <img src=".github/assets/readme/cmdclaw-agent-inbox.gif" alt="CmdClaw prompt-to-agent inbox workflow" width="100%" />
+  <img src=".github/assets/readme/bap-agent-inbox.gif" alt="Bap prompt-to-agent inbox workflow" width="100%" />
 </p>
 
-## What Is CmdClaw?
+## What Is Bap?
 
-CmdClaw is a platform for building and running AI agents across company tools. You can describe a workflow in plain English, launch from a template, or drive the same runtime through chat and the CLI.
+Bap is a platform for building and running AI agents across company tools. You can describe a workflow in plain English, launch from a template, or drive the same runtime through chat and the CLI.
 
 Agents can handle one-off tasks or recurring workflows, then escalate through approvals and auth requests in a shared inbox before they act on connected systems.
 
@@ -59,9 +59,9 @@ Agents can handle one-off tasks or recurring workflows, then escalate through ap
 
 - **Web app**: build, run, and monitor agents from the main product surface.
 - **CLI**: work with `chat`, `auth`, and `coworker` command groups from the terminal.
-- **MCP server**: expose CmdClaw capabilities to external agent and tool workflows.
+- **MCP server**: expose Bap capabilities to external agent and tool workflows.
 ```bash
-bun run cmdclaw -- --help
+bun run bap -- --help
 ```
 
 ## Quickstart
@@ -79,8 +79,8 @@ bun dev
 The same local Docker stack now also starts the observability backend. Once the app is running, you can query it directly over HTTP:
 
 ```bash
-curl -s http://127.0.0.1:9428/select/logsql/query -d 'query=service:cmdclaw-web OR service:cmdclaw-worker' -d 'limit=10'
-curl -s 'http://127.0.0.1:8428/api/v1/query?query=cmdclaw_rpc_requests_total'
+curl -s http://127.0.0.1:9428/select/logsql/query -d 'query=service:bap-web OR service:bap-worker' -d 'limit=10'
+curl -s 'http://127.0.0.1:8428/api/v1/query?query=bap_rpc_requests_total'
 curl -s http://127.0.0.1:10428/select/jaeger/api/services
 ```
 
@@ -91,19 +91,19 @@ open http://127.0.0.1:3400
 curl -s http://127.0.0.1:8428/api/v1/rules
 ```
 
-All of those observability ports are overrideable with `CMDCLAW_*_PORT` env vars, so separate worktrees can run their own local stack without host-port collisions.
+All of those observability ports are overrideable with `BAP_*_PORT` env vars, so separate worktrees can run their own local stack without host-port collisions.
 
 More setup guides:
 
-- [Quickstart](https://docs.cmdclaw.ai/quickstart)
-- [Self-hosting](https://docs.cmdclaw.ai/self-hosting)
-- [Integrations](https://docs.cmdclaw.ai/integrations/overview)
+- [Quickstart](https://docs.heybap.com/quickstart)
+- [Self-hosting](https://docs.heybap.com/self-hosting)
+- [Integrations](https://docs.heybap.com/integrations/overview)
 - [Worktrees](docs/worktree.md)
 
 ## Repo Structure
 
 ```text
-cmdclaw/
+bap/
 ├── apps/
 │   ├── web/       # TanStack Start web app
 │   ├── worker/    # BullMQ worker runtime
@@ -122,10 +122,10 @@ cmdclaw/
 
 ## Docs
 
-- [Docs home](https://docs.cmdclaw.ai)
-- [Quickstart](https://docs.cmdclaw.ai/quickstart)
-- [Self-hosting](https://docs.cmdclaw.ai/self-hosting)
-- [Integrations overview](https://docs.cmdclaw.ai/integrations/overview)
+- [Docs home](https://docs.heybap.com)
+- [Quickstart](https://docs.heybap.com/quickstart)
+- [Self-hosting](https://docs.heybap.com/self-hosting)
+- [Integrations overview](https://docs.heybap.com/integrations/overview)
 
 ## Contributing
 

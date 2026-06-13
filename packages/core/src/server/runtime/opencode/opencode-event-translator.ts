@@ -1,4 +1,4 @@
-import type { ContentPart } from "@cmdclaw/db/schema";
+import type { ContentPart } from "@bap/db/schema";
 import type {
   RuntimeEvent,
   RuntimePart,

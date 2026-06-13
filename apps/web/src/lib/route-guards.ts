@@ -1,4 +1,4 @@
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
 import { redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";

@@ -41,7 +41,7 @@ command = [
     "run",
     "--cwd",
     "../..",
-    "cmdclaw",
+    "bap",
     "--",
     "coworker",
     "build",

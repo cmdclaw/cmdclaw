@@ -1,6 +1,6 @@
 import { eq, and, sql } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { integration, integrationToken, customIntegrationCredential } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { integration, integrationToken, customIntegrationCredential } from "@bap/db/schema";
 import { decrypt } from "../lib/encryption";
 import { getOAuthConfig, type IntegrationType } from "../oauth/config";
 
@@ -251,7 +251,7 @@ async function refreshAccessToken(token: TokenWithMetadata): Promise<string> {
 
     // Reddit requires User-Agent header for all API calls
     if (token.type === "reddit") {
-      headers["User-Agent"] = "cmdclaw-app:v1.0.0 (by /u/cmdclaw-integration)";
+      headers["User-Agent"] = "bap-app:v1.0.0 (by /u/bap-integration)";
     }
 
     const now = new Date();

@@ -5,7 +5,7 @@ import {
 } from "./question-approval-utils";
 
 describe("question approval utils", () => {
-  it("parses question payloads from cmdclaw question approvals", () => {
+  it("parses question payloads from bap question approvals", () => {
     expect(
       parseQuestionRequestPayload({
         questions: [
@@ -35,7 +35,7 @@ describe("question approval utils", () => {
         toolUseId: "opencode-question-1",
         toolInput: { tool: { callID: "call-question-1" } },
         toolName: "Question",
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
       },
       {

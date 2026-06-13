@@ -9,7 +9,7 @@ import {
   normalizeCoworkerToolAccessMode,
   type CoworkerToolAccessMode,
 } from "../../lib/coworker-tool-policy";
-import { coworker } from "@cmdclaw/db/schema";
+import { coworker } from "@bap/db/schema";
 import { generateCoworkerMetadataOnFirstPromptFill } from "./coworker-metadata";
 import { syncCoworkerScheduleJob } from "./coworker-scheduler";
 import { logger } from "../utils/observability";

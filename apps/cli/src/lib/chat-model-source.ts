@@ -1,4 +1,4 @@
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import { parseModelReference } from "@bap/core/lib/model-reference";
 import {
   getProviderDisplayName,
   normalizeModelAuthSource,
@@ -6,7 +6,7 @@ import {
   providerSupportsAuthSource,
   resolveProviderAuthAvailability,
   type ProviderAuthSource,
-} from "@cmdclaw/core/lib/provider-auth-source";
+} from "@bap/core/lib/provider-auth-source";
 
 export type ResolvedCliModelSelection = {
   authSource: ProviderAuthSource | null;

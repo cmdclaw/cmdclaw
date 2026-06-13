@@ -33,7 +33,7 @@ describe("AuthRequestCard", () => {
 
     expect(screen.getByText("Connection Required")).toBeInTheDocument();
     expect(screen.getByText("Google Sheets authentication required")).toBeInTheDocument();
-    expect(screen.getByText(/cmdclaw/i)).toBeInTheDocument();
+    expect(screen.getByText(/bap/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^Connect$/i }));
     expect(onConnect).toHaveBeenCalledWith("google_sheets");

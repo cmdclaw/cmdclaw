@@ -30,7 +30,7 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/core/server/billing/service", () => ({
+vi.mock("@bap/core/server/billing/service", () => ({
   addWorkspaceMembers: vi.fn<VitestProcedure>(),
   attachPlanToOwner: (() => {
     attachPlanToOwnerMock = vi.fn<VitestProcedure>();

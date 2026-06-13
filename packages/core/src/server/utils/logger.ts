@@ -47,7 +47,7 @@ export type OperationalLogger = {
   error(fields: LogFields, message?: string): void;
 };
 
-const SERVICE_NAMESPACE = "cmdclaw";
+const SERVICE_NAMESPACE = "bap";
 const TELEMETRY_SCHEMA_VERSION = "2026-05-22";
 const MAX_SAFE_ARRAY_ITEMS = 25;
 const MAX_SAFE_STRING_LENGTH = 512;
@@ -60,7 +60,7 @@ const FORBIDDEN_FIELD_PATTERNS = [
 const SAFE_FIELD_PREFIXES = ["app.phase."] as const;
 
 let runtimeConfig: LoggerRuntimeConfig = {
-  serviceName: "cmdclaw",
+  serviceName: "bap",
   env: process.env.NODE_ENV ?? "development",
   vectorLogUrl: null,
 };
@@ -144,17 +144,17 @@ function normalizeFieldKey(rawKey: string): string {
     case "rpcProcedure":
       return "rpc.method";
     case "generationId":
-      return "cmdclaw.generation.id";
+      return "bap.generation.id";
     case "conversationId":
-      return "cmdclaw.conversation.id";
+      return "bap.conversation.id";
     case "sandboxId":
-      return "cmdclaw.sandbox.id";
+      return "bap.sandbox.id";
     case "sessionId":
-      return "cmdclaw.session.id";
+      return "bap.session.id";
     case "userId":
-      return "cmdclaw.user.id";
+      return "bap.user.id";
     case "workspaceId":
-      return "cmdclaw.workspace.id";
+      return "bap.workspace.id";
     default:
       return toDottedSnakeCase(rawKey);
   }
@@ -308,12 +308,12 @@ function buildRuntimeFields(service?: string): NormalizedLogRecord {
     "service.namespace": SERVICE_NAMESPACE,
     "service.version": process.env.npm_package_version ?? "0.1.0",
     "deployment.environment": runtimeConfig.env,
-    "cmdclaw.telemetry.schema_version": TELEMETRY_SCHEMA_VERSION,
-    "cmdclaw.deployment.id": process.env.RENDER_SERVICE_ID ?? process.env.CMDCLAW_DEPLOYMENT_ID,
-    "cmdclaw.deployment.commit_sha":
-      process.env.RENDER_GIT_COMMIT ?? process.env.CMDCLAW_COMMIT_SHA,
-    "cmdclaw.instance.id": process.env.CMDCLAW_INSTANCE_ID,
-    "cmdclaw.worktree.slot": process.env.CMDCLAW_WORKTREE_SLOT,
+    "bap.telemetry.schema_version": TELEMETRY_SCHEMA_VERSION,
+    "bap.deployment.id": process.env.RENDER_SERVICE_ID ?? process.env.BAP_DEPLOYMENT_ID,
+    "bap.deployment.commit_sha":
+      process.env.RENDER_GIT_COMMIT ?? process.env.BAP_COMMIT_SHA,
+    "bap.instance.id": process.env.BAP_INSTANCE_ID,
+    "bap.worktree.slot": process.env.BAP_WORKTREE_SLOT,
   };
 }
 
@@ -323,12 +323,12 @@ function normalizeLoggerContext(context: LoggerContext & LogFields): NormalizedL
     source: context.source,
     route: context.route,
     "rpc.method": context.rpcProcedure,
-    "cmdclaw.generation.id": context.generationId,
-    "cmdclaw.conversation.id": context.conversationId,
-    "cmdclaw.sandbox.id": context.sandboxId,
-    "cmdclaw.session.id": context.sessionId,
-    "cmdclaw.user.id": context.userId,
-    "cmdclaw.workspace.id": context.workspaceId,
+    "bap.generation.id": context.generationId,
+    "bap.conversation.id": context.conversationId,
+    "bap.sandbox.id": context.sandboxId,
+    "bap.session.id": context.sessionId,
+    "bap.user.id": context.userId,
+    "bap.workspace.id": context.workspaceId,
     ...context,
   });
 }

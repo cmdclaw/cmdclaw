@@ -12,7 +12,7 @@ const { killSandboxMock } = vi.hoisted(() => ({
   killSandboxMock: vi.fn(async () => undefined),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     select: selectMock,
   },

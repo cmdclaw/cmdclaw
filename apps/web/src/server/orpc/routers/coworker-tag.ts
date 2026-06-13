@@ -1,4 +1,4 @@
-import { coworkerTag, coworkerTagAssignment } from "@cmdclaw/db/schema";
+import { coworkerTag, coworkerTagAssignment } from "@bap/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";

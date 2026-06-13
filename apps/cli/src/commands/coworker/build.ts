@@ -1,5 +1,5 @@
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@cmdclaw/core/lib/coworker-tool-policy";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
+import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@bap/core/lib/coworker-tool-policy";
 import type { LocalContext } from "../../context";
 import chatCommand from "../chat/impl";
 import { getCoworkerRunner, splitCsv } from "./shared";

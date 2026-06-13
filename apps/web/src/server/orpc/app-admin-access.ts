@@ -1,4 +1,4 @@
-import { user } from "@cmdclaw/db/schema";
+import { user } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import type { AuthenticatedContext } from "./middleware";

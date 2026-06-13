@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 process.env.BETTER_AUTH_SECRET ??= "test-secret";
-process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/cmdclaw_test";
+process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/bap_test";
 process.env.REDIS_URL ??= "redis://localhost:6379";
 process.env.OPENAI_API_KEY ??= "test-openai-key";
 process.env.SANDBOX_DEFAULT ??= "docker";
@@ -28,7 +28,7 @@ vi.mock("@/server/internal/server-secret", () => ({
     request.headers.get("authorization") === "Bearer test-secret",
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/cli-env", () => ({
+vi.mock("@bap/core/server/integrations/cli-env", () => ({
   getEnabledIntegrationTypes: getEnabledIntegrationTypesMock,
   getTokenEnvVarForIntegrationType: (type: string) =>
     type === "google_gmail"
@@ -39,12 +39,12 @@ vi.mock("@cmdclaw/core/server/integrations/cli-env", () => ({
   getTokensForIntegrations: getTokensForIntegrationsMock,
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/connected-account-resolution", () => ({
+vi.mock("@bap/core/server/integrations/connected-account-resolution", () => ({
   ConnectedAccountResolutionError: class ConnectedAccountResolutionError extends Error {},
   resolveConnectedAccountCredential: vi.fn<() => Promise<unknown>>(),
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
+vi.mock("@bap/core/server/integrations/remote-integrations", () => {
   const remoteIntegrationTargetEnvSchema = z.enum(["staging", "prod"]);
   return {
     getRemoteIntegrationCredentials: getRemoteIntegrationCredentialsMock,
@@ -58,17 +58,17 @@ vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
   };
 });
 
-vi.mock("@cmdclaw/core/server/galien/service", () => ({
+vi.mock("@bap/core/server/galien/service", () => ({
   getGalienCredentialForUser: vi.fn<() => Promise<unknown>>(),
   getGalienWorkspaceAccessForUser: vi.fn<() => Promise<unknown>>(),
 }));
 
-vi.mock("@cmdclaw/core/server/modulr/service", () => ({
+vi.mock("@bap/core/server/modulr/service", () => ({
   canUserUseModulrInWorkspace: vi.fn<() => Promise<unknown>>(),
   getModulrWorkspaceConnection: vi.fn<() => Promise<unknown>>(),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       user: {
@@ -78,7 +78,7 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/schema", () => ({
+vi.mock("@bap/db/schema", () => ({
   user: {
     id: "user.id",
   },

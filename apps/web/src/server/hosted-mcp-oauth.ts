@@ -1,23 +1,23 @@
 import {
   getWorkspaceMembershipForUser,
   listWorkspacesForUser,
-} from "@cmdclaw/core/server/billing/service";
-import { canUserUseGalienInWorkspace } from "@cmdclaw/core/server/galien/service";
+} from "@bap/core/server/billing/service";
+import { canUserUseGalienInWorkspace } from "@bap/core/server/galien/service";
 import {
   type HostedMcpAudience,
   HOSTED_MCP_AUDIENCES,
   normalizeHostedMcpScopes,
   resolveHostedMcpIssuerUrl,
   signHostedMcpAccessToken,
-} from "@cmdclaw/core/server/hosted-mcp-oauth";
-import { canUserUseModulrInWorkspace } from "@cmdclaw/core/server/modulr/service";
-import { db } from "@cmdclaw/db/client";
+} from "@bap/core/server/hosted-mcp-oauth";
+import { canUserUseModulrInWorkspace } from "@bap/core/server/modulr/service";
+import { db } from "@bap/db/client";
 import {
   hostedMcpOauthAuthorizationCode,
   hostedMcpOauthClient,
   hostedMcpOauthGrant,
   hostedMcpOauthRefreshToken,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { env } from "@/env";

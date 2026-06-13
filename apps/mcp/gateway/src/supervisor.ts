@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:net";
 import path from "node:path";
-import { logger as telemetryLogger } from "@cmdclaw/core/server/utils/observability";
+import { logger as telemetryLogger } from "@bap/core/server/utils/observability";
 import { MCP_SERVER_REGISTRY, type McpServerSlug } from "../../shared/registry";
 
 const DEFAULT_CHILD_HOST = "127.0.0.1";

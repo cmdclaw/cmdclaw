@@ -6,7 +6,7 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 ## Purpose / Big Picture
 
-CmdClaw currently validates and invokes Galien against Galien preproduction only. After this change, an admin can grant Galien MCP access to a user and select whether that user uses Galien production or Galien preproduction in that workspace. New Galien access defaults to production, while preproduction remains available for test users. A user can store separate Galien credentials for production and preproduction, and runtime MCP calls use the same environment that was selected by the workspace access policy.
+Bap currently validates and invokes Galien against Galien preproduction only. After this change, an admin can grant Galien MCP access to a user and select whether that user uses Galien production or Galien preproduction in that workspace. New Galien access defaults to production, while preproduction remains available for test users. A user can store separate Galien credentials for production and preproduction, and runtime MCP calls use the same environment that was selected by the workspace access policy.
 
 The behavior is visible in three places: the admin MCP page shows an environment control for Galien access entries, the Galien connection flow validates credentials against the active workspace's selected environment, and Galien MCP tool requests use the API base URL returned by the web app's internal credential endpoint.
 
@@ -60,9 +60,9 @@ Implemented. Admins can select `prod` or `preprod` when adding Galien access and
 
 ## Context and Orientation
 
-The root `CONTEXT.md` defines two terms used by this plan. A **Galien Target Environment** is the Galien deployment selected by workspace access policy for a specific CmdClaw user in a specific workspace. A **Galien Credential** is the username and password a user stores for one Galien Target Environment.
+The root `CONTEXT.md` defines two terms used by this plan. A **Galien Target Environment** is the Galien deployment selected by workspace access policy for a specific Bap user in a specific workspace. A **Galien Credential** is the username and password a user stores for one Galien Target Environment.
 
-The database schema lives in `packages/db/src/schema.ts`. The existing `galien_workspace_access` table grants one email access to Galien inside one workspace. The existing `galien_credential` table stores one encrypted username/password per CmdClaw user. This plan changes that to one credential per user and target environment.
+The database schema lives in `packages/db/src/schema.ts`. The existing `galien_workspace_access` table grants one email access to Galien inside one workspace. The existing `galien_credential` table stores one encrypted username/password per Bap user. This plan changes that to one credential per user and target environment.
 
 The core Galien service lives in `packages/core/src/server/galien/service.ts`. It currently validates credentials against a hard-coded preproduction URL, lists and mutates access rows, and decrypts credentials for runtime.
 
@@ -92,7 +92,7 @@ Seventh, add focused tests. Service tests should cover URL selection for validat
 
 ## Concrete Steps
 
-Run commands from `/Users/baptiste/Git/cmdclaw`.
+Run commands from `/Users/baptiste/Git/bap`.
 
 Inspect the current state:
 

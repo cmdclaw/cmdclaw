@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@cmdclaw/db/client";
-import { conversationSessionSnapshot } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversationSessionSnapshot } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import {
   deleteFromS3,
@@ -335,7 +335,7 @@ export async function restoreConversationSessionSnapshot(input: {
   const buffer = await downloadFromS3(snapshot.storageKey);
   const normalizedSnapshot = normalizeOpencodeSessionSnapshotPayload(buffer.toString("utf8"));
   const tempFilePath =
-    input.tempFilePath ?? `/tmp/cmdclaw-opencode-session-${input.conversationId}.json`;
+    input.tempFilePath ?? `/tmp/bap-opencode-session-${input.conversationId}.json`;
 
   await input.sandbox.writeFile(tempFilePath, normalizedSnapshot.raw);
 

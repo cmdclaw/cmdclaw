@@ -4,13 +4,13 @@ import {
   listCloudManagedIntegrations,
   startCloudAccountLink,
   toggleCloudManagedIntegration,
-} from "@cmdclaw/core/server/control-plane/client";
-import { getCloudAccountLinkForUser } from "@cmdclaw/core/server/control-plane/local-links";
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
-import { normalizeAccountLabel } from "@cmdclaw/core/server/integrations/account-labels";
-import { assignConnectedIdentityForProviderAccount } from "@cmdclaw/core/server/integrations/connected-identities";
-import { encrypt, decrypt } from "@cmdclaw/core/server/lib/encryption";
-import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
+} from "@bap/core/server/control-plane/client";
+import { getCloudAccountLinkForUser } from "@bap/core/server/control-plane/local-links";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
+import { normalizeAccountLabel } from "@bap/core/server/integrations/account-labels";
+import { assignConnectedIdentityForProviderAccount } from "@bap/core/server/integrations/connected-identities";
+import { encrypt, decrypt } from "@bap/core/server/lib/encryption";
+import { getOAuthConfig, type IntegrationType } from "@bap/core/server/oauth/config";
 import {
   integration,
   integrationToken,
@@ -20,7 +20,7 @@ import {
   approvedLoginEmailAllowlist,
   googleIntegrationAccessAllowlist,
   user,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { createHash, randomBytes } from "crypto";
 import { and, eq, or } from "drizzle-orm";
@@ -837,7 +837,7 @@ const handleCallback = protectedProcedure
 
     // Reddit requires User-Agent header for all API calls
     if (stateData.type === "reddit") {
-      headers["User-Agent"] = "cmdclaw-app:v1.0.0 (by /u/cmdclaw-integration)";
+      headers["User-Agent"] = "bap-app:v1.0.0 (by /u/bap-integration)";
     }
 
     // GitHub needs Accept header

@@ -3,8 +3,8 @@ import type { IntegrationType } from "../oauth/config";
 import { env } from "../../env";
 import { resolvePublicCallbackBaseUrl } from "../../lib/worktree-routing";
 import { isSelfHostedEdition } from "../edition";
-import { db } from "@cmdclaw/db/client";
-import { connectedIdentity, integration, customIntegrationCredential } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { connectedIdentity, integration, customIntegrationCredential } from "@bap/db/schema";
 import { decrypt } from "../lib/encryption";
 import {
   getDelegatedRuntimeCredentials,

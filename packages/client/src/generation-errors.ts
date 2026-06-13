@@ -1,8 +1,8 @@
-import type { GenerationErrorPhase } from "@cmdclaw/core/lib/generation-errors";
+import type { GenerationErrorPhase } from "@bap/core/lib/generation-errors";
 import {
   DEFAULT_GENERATION_ERROR_MESSAGE,
   isGenerationErrorData,
-} from "@cmdclaw/core/lib/generation-errors";
+} from "@bap/core/lib/generation-errors";
 
 export type NormalizedGenerationError = {
   code: string;

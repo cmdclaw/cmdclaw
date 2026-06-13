@@ -1,7 +1,7 @@
 import {
-  CMDCLAW_CHAT_AGENT_ID,
-  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
-  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
+  BAP_CHAT_AGENT_ID,
+  BAP_COWORKER_BUILDER_AGENT_ID,
+  BAP_COWORKER_RUNNER_AGENT_ID,
 } from "../../../../packages/core/src/server/prompts/opencode-agent-ids";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { Sandbox } from "e2b";
@@ -60,16 +60,16 @@ describe.runIf(liveSandboxAgentsEnabled)("@live OpenCode agents", () => {
         expect(listed.error).toBeFalsy();
 
         const agents = listed.data ?? [];
-        const chat = agents.find((agent) => agent.name === CMDCLAW_CHAT_AGENT_ID);
-        const builder = agents.find((agent) => agent.name === CMDCLAW_COWORKER_BUILDER_AGENT_ID);
-        const runner = agents.find((agent) => agent.name === CMDCLAW_COWORKER_RUNNER_AGENT_ID);
+        const chat = agents.find((agent) => agent.name === BAP_CHAT_AGENT_ID);
+        const builder = agents.find((agent) => agent.name === BAP_COWORKER_BUILDER_AGENT_ID);
+        const runner = agents.find((agent) => agent.name === BAP_COWORKER_RUNNER_AGENT_ID);
 
         expect(chat?.mode).toBe("primary");
         expect(chat?.prompt).toContain("When drafting or sending email bodies");
         expect(builder?.mode).toBe("primary");
-        expect(builder?.prompt).toContain("You are CmdClaw's coworker builder agent.");
+        expect(builder?.prompt).toContain("You are Bap's coworker builder agent.");
         expect(runner?.mode).toBe("primary");
-        expect(runner?.prompt).toContain("You are CmdClaw's coworker runner agent.");
+        expect(runner?.prompt).toContain("You are Bap's coworker runner agent.");
         expect(runner?.prompt).toContain("without asking clarifying questions.");
 
         const created = await client.session.create({ title: "Agent smoke" });
@@ -78,7 +78,7 @@ describe.runIf(liveSandboxAgentsEnabled)("@live OpenCode agents", () => {
 
         const promptResult = await client.session.prompt({
           sessionID: created.data!.id,
-          agent: CMDCLAW_CHAT_AGENT_ID,
+          agent: BAP_CHAT_AGENT_ID,
           model: {
             providerID: "opencode",
             modelID: "glm-5-free",

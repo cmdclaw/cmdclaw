@@ -31,6 +31,6 @@ export const Route = createFileRoute("/toolbox/")({
       ...(error ? { error } : {}),
     };
   },
-  head: () => ({ meta: [{ title: "Toolbox - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Toolbox - Bap" }] }),
   component: ToolboxPage,
 });

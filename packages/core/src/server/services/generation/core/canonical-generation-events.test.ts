@@ -28,7 +28,7 @@ const {
   recordHistogramMock: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     update: dbUpdateMock,
     query: {
@@ -140,7 +140,7 @@ describe("Generation terminal canonical event", () => {
 
     expect(emitCanonicalServiceEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventName: "cmdclaw.generation.terminal",
+        eventName: "bap.generation.terminal",
         eventId: "generation:gen-1:terminal",
         outcome: "completed",
         context: expect.objectContaining({
@@ -150,31 +150,31 @@ describe("Generation terminal canonical event", () => {
           userId: "user-1",
         }),
         attributes: expect.objectContaining({
-          "cmdclaw.model.provider": "openai",
-          "cmdclaw.model.name": "openai/gpt-5",
-          "cmdclaw.auth.source": "user",
-          "cmdclaw.auto_approve.enabled": false,
-          "cmdclaw.skills.selected_count": 1,
-          "cmdclaw.attachments.count": 1,
+          "bap.model.provider": "openai",
+          "bap.model.name": "openai/gpt-5",
+          "bap.auth.source": "user",
+          "bap.auto_approve.enabled": false,
+          "bap.skills.selected_count": 1,
+          "bap.attachments.count": 1,
           "app.phase.agent_init_ms": 900,
           "app.phase.model_stream_ms": 2200,
-          "cmdclaw.tool.call_count": 2,
-          "cmdclaw.tool.write_count": 2,
-          "cmdclaw.approval.count": 1,
-          "cmdclaw.auth_interrupt.count": 0,
-          "cmdclaw.usage.input_tokens": 11,
-          "cmdclaw.usage.output_tokens": 13,
-          "cmdclaw.usage.total_tokens": 24,
-          "cmdclaw.failure.phase": "none",
+          "bap.tool.call_count": 2,
+          "bap.tool.write_count": 2,
+          "bap.approval.count": 1,
+          "bap.auth_interrupt.count": 0,
+          "bap.usage.input_tokens": 11,
+          "bap.usage.output_tokens": 13,
+          "bap.usage.total_tokens": 24,
+          "bap.failure.phase": "none",
         }),
       }),
     );
     const attributes = emitCanonicalServiceEventMock.mock.calls[0]?.[0]?.attributes;
-    expect(attributes).not.toHaveProperty("cmdclaw.generation.input_tokens");
-    expect(attributes).not.toHaveProperty("cmdclaw.generation.tool_call_count");
-    expect(attributes).not.toHaveProperty("cmdclaw.generation.phase_durations_ms");
-    expect(attributes["cmdclaw.tool.summary_json"]).toContain("gmail.read_latest");
-    expect(JSON.parse(attributes["cmdclaw.tool.summary_json"])).toEqual([
+    expect(attributes).not.toHaveProperty("bap.generation.input_tokens");
+    expect(attributes).not.toHaveProperty("bap.generation.tool_call_count");
+    expect(attributes).not.toHaveProperty("bap.generation.phase_durations_ms");
+    expect(attributes["bap.tool.summary_json"]).toContain("gmail.read_latest");
+    expect(JSON.parse(attributes["bap.tool.summary_json"])).toEqual([
       {
         integration_type: "gmail",
         tool_name: "gmail.read_latest",
@@ -202,31 +202,31 @@ describe("Generation terminal canonical event", () => {
       normalized_error_code: "none",
     };
     expect(recordHistogramMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_duration_ms",
+      "bap_generation_terminal_duration_ms",
       5000,
       terminalMetricLabels,
       "Terminal Generation duration in milliseconds.",
     );
     expect(recordHistogramMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_input_tokens",
+      "bap_generation_terminal_input_tokens",
       11,
       terminalMetricLabels,
       "Input token usage per terminal Generation.",
     );
     expect(recordHistogramMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_output_tokens",
+      "bap_generation_terminal_output_tokens",
       13,
       terminalMetricLabels,
       "Output token usage per terminal Generation.",
     );
     expect(recordHistogramMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_total_tokens",
+      "bap_generation_terminal_total_tokens",
       24,
       terminalMetricLabels,
       "Total token usage per terminal Generation.",
     );
     expect(recordHistogramMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_tool_calls",
+      "bap_generation_terminal_tool_calls",
       1,
       {
         ...terminalMetricLabels,
@@ -237,7 +237,7 @@ describe("Generation terminal canonical event", () => {
       "Tool call count per terminal Generation, grouped by bounded tool dimensions.",
     );
     expect(recordHistogramMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_tool_calls",
+      "bap_generation_terminal_tool_calls",
       1,
       {
         ...terminalMetricLabels,
@@ -248,7 +248,7 @@ describe("Generation terminal canonical event", () => {
       "Tool call count per terminal Generation, grouped by bounded tool dimensions.",
     );
     expect(recordHistogramMock).not.toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_tool_calls",
+      "bap_generation_terminal_tool_calls",
       2,
       terminalMetricLabels,
       "Tool call count per terminal Generation.",
@@ -316,18 +316,18 @@ describe("Generation terminal canonical event", () => {
       expect.objectContaining({
         outcome: "timed_out",
         attributes: expect.objectContaining({
-          "cmdclaw.generation.completion_reason": "runtime_progress_stalled",
-          "cmdclaw.failure.phase": "runtime",
-          "cmdclaw.error.normalized_code": "runtime_progress_stalled",
-          "cmdclaw.runtime.progress_stall.stalled_ms": 91_000,
-          "cmdclaw.runtime.progress_stall.last_progress_at":
+          "bap.generation.completion_reason": "runtime_progress_stalled",
+          "bap.failure.phase": "runtime",
+          "bap.error.normalized_code": "runtime_progress_stalled",
+          "bap.runtime.progress_stall.stalled_ms": 91_000,
+          "bap.runtime.progress_stall.last_progress_at":
             "2026-05-22T10:00:29.000Z",
-          "cmdclaw.runtime.progress_stall.last_progress_kind": "tool_result",
+          "bap.runtime.progress_stall.last_progress_kind": "tool_result",
         }),
       }),
     );
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_generation_terminal_total",
+      "bap_generation_terminal_total",
       1,
       expect.objectContaining({
         outcome: "timed_out",

@@ -5,8 +5,8 @@ import {
   extractEmailAddress,
   parseForwardingTargetFromEmail,
 } from "../../lib/email-forwarding";
-import { db } from "@cmdclaw/db/client";
-import { user, coworker, coworkerEmailAlias, coworkerRun } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { user, coworker, coworkerEmailAlias, coworkerRun } from "@bap/db/schema";
 import { triggerCoworkerRun } from "./coworker-service";
 
 const RESEND_EMAIL_RECEIVED_EVENT = "email.received";

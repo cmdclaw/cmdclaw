@@ -1,5 +1,5 @@
 import path from "path";
-import type { ContentPart } from "@cmdclaw/db/schema";
+import type { ContentPart } from "@bap/db/schema";
 import type { SandboxBackend } from "../../../sandbox/types";
 import {
   collectNewSandboxFiles,

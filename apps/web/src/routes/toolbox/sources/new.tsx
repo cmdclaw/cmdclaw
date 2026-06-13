@@ -18,6 +18,6 @@ export const Route = createFileRoute("/toolbox/sources/new")({
     const kind = typeof search.kind === "string" ? search.kind : undefined;
     return kind ? { kind } : {};
   },
-  head: () => ({ meta: [{ title: "Add MCP Server - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Add MCP Server - Bap" }] }),
   component: NewSourcePage,
 });

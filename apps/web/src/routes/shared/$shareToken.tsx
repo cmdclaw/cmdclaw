@@ -48,7 +48,7 @@ const loadSharedConversation = createServerFn({ method: "GET" })
 export const Route = createFileRoute("/shared/$shareToken")({
   loader: ({ params }) => loadSharedConversation({ data: params.shareToken }),
   head: ({ loaderData }) => ({
-    meta: [{ title: `${loaderData?.title ?? "Shared conversation"} | CmdClaw` }],
+    meta: [{ title: `${loaderData?.title ?? "Shared conversation"} | Bap` }],
   }),
   notFoundComponent: SharedConversationNotFound,
   component: SharedConversationPage,

@@ -1,6 +1,6 @@
 ## Problem Statement
 
-CmdClaw currently treats Galien as a single managed MCP integration, but Galien has separate production and preproduction deployments. Some users need to run Galien tools against preproduction while most users should run against production by default.
+Bap currently treats Galien as a single managed MCP integration, but Galien has separate production and preproduction deployments. Some users need to run Galien tools against preproduction while most users should run against production by default.
 
 Today the Galien integration is hard-coded to preproduction for credential validation and tool execution. This makes production the exception instead of the default, gives admins no explicit control over each user's **Galien Target Environment**, and risks validating or invoking Galien against the wrong deployment.
 
@@ -14,7 +14,7 @@ Prepared Linear issue:
 
 Admins can select each allowed user's **Galien Target Environment** from the Galien MCP access UI. New Galien access entries default to production. Admins can change an existing access entry between production and preproduction without removing access or deleting credentials.
 
-CmdClaw validates **Galien Credentials** against the selected **Galien Target Environment** for the active workspace. Runtime Galien MCP tool calls use the same target environment that the web app authorizes for that user and workspace.
+Bap validates **Galien Credentials** against the selected **Galien Target Environment** for the active workspace. Runtime Galien MCP tool calls use the same target environment that the web app authorizes for that user and workspace.
 
 **Galien Credentials** are stored per **User** and per **Galien Target Environment**. A credential validated against production is not assumed valid for preproduction, and a credential validated against preproduction is not assumed valid for production.
 

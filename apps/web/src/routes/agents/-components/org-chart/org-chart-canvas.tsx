@@ -177,7 +177,7 @@ export function OrgChartCanvas({
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const coworkerId = event.dataTransfer.getData("application/cmdclaw-coworker");
+      const coworkerId = event.dataTransfer.getData("application/bap-coworker");
       if (!coworkerId) {
         return;
       }

@@ -1,4 +1,4 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   coworker,
@@ -7,7 +7,7 @@ import {
   message,
   type ContentPart,
   type GenerationExecutionPolicy,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import {
   CUSTOM_SKILL_PREFIX,

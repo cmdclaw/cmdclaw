@@ -5,13 +5,13 @@ import {
   useParams as useTanStackParams,
   useRouterState,
 } from "@tanstack/react-router";
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
 import {
   CUSTOM_SKILL_PREFIX,
   type CoworkerToolAccessMode,
-} from "@cmdclaw/core/lib/coworker-tool-policy";
-import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@cmdclaw/core/lib/email-forwarding";
+} from "@bap/core/lib/coworker-tool-policy";
+import { EMAIL_FORWARDED_TRIGGER_TYPE } from "@bap/core/lib/email-forwarding";
 import { formatDistanceToNowStrict } from "date-fns";
 import { T, msg, useGT, useMessages } from "gt-react";
 import {
@@ -136,7 +136,7 @@ import { AppLink as Link } from "../-lib/app-link";
 const BASE_TRIGGERS = [
   { value: "manual", label: msg("Manual only") },
   { value: "schedule", label: msg("Run on a schedule") },
-  { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: msg("Email forwarded to CmdClaw") },
+  { value: EMAIL_FORWARDED_TRIGGER_TYPE, label: msg("Email forwarded to Bap") },
 ];
 
 const LEGACY_HIDDEN_TRIGGERS = [{ value: "gmail.new_email", label: msg("New Gmail email") }];

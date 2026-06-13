@@ -21,7 +21,7 @@ export type WorktreeSessionCookie = {
 };
 
 function getStorageStatePath(): string | null {
-  const instanceRoot = process.env.CMDCLAW_INSTANCE_ROOT?.trim();
+  const instanceRoot = process.env.BAP_INSTANCE_ROOT?.trim();
   if (!instanceRoot) {
     return null;
   }

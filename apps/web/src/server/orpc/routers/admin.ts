@@ -1,9 +1,5 @@
-import {
-  SCHEDULED_COWORKER_JOB_NAME,
-  buildQueueJobId,
-  getQueue,
-} from "@cmdclaw/core/server/queues";
-import { conversationRuntimeService } from "@cmdclaw/core/server/services/conversation-runtime-service";
+import { SCHEDULED_COWORKER_JOB_NAME, buildQueueJobId, getQueue } from "@bap/core/server/queues";
+import { conversationRuntimeService } from "@bap/core/server/services/conversation-runtime-service";
 import {
   approvedLoginEmailAllowlist,
   billingLedger,
@@ -15,7 +11,7 @@ import {
   message,
   sandboxUsageSnapshot,
   user,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { randomBytes } from "crypto";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -1072,8 +1068,8 @@ type UnifiedSandbox = {
 
 async function listSandboxesFromProvider(): Promise<UnifiedSandbox[]> {
   const [{ isE2BConfigured, listAllE2BSandboxes }, daytonaModule] = await Promise.all([
-    import("@cmdclaw/core/server/sandbox/e2b"),
-    import("@cmdclaw/core/server/sandbox/daytona"),
+    import("@bap/core/server/sandbox/e2b"),
+    import("@bap/core/server/sandbox/daytona"),
   ]);
 
   const results: UnifiedSandbox[] = [];
@@ -1125,10 +1121,10 @@ async function listSandboxesFromProvider(): Promise<UnifiedSandbox[]> {
 
 async function killSandboxInProvider(sandboxId: string, provider: "e2b" | "daytona") {
   if (provider === "daytona") {
-    const { killDaytonaSandboxById } = await import("@cmdclaw/core/server/sandbox/daytona");
+    const { killDaytonaSandboxById } = await import("@bap/core/server/sandbox/daytona");
     return killDaytonaSandboxById(sandboxId);
   }
-  const { killE2BSandboxById } = await import("@cmdclaw/core/server/sandbox/e2b");
+  const { killE2BSandboxById } = await import("@bap/core/server/sandbox/e2b");
   return killE2BSandboxById(sandboxId);
 }
 

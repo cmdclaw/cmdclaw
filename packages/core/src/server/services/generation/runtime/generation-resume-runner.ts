@@ -1,4 +1,4 @@
-import type { ContentPart } from "@cmdclaw/db/schema";
+import type { ContentPart } from "@bap/db/schema";
 import { limitToolResultContent } from "../../../runtime/runtime-driver";
 import { isRuntimeInterruptProvider } from "../../../runtime/runtime-decision-display";
 import {

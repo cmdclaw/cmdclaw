@@ -1,4 +1,4 @@
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
 import { normalizeGenerationError } from "./generation-errors";
 import {
   createGenerationRuntime,
@@ -7,7 +7,7 @@ import {
 import { runGenerationStream } from "./generation-stream";
 import type {
   AuthNeededData,
-  CmdclawApiClient,
+  BapApiClient,
   GenerationPendingApprovalData,
   GenerationResult,
   GenerationStartInput,
@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 type ChatRunOptions = {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   input?: GenerationStartInput;
   generationId?: string;
   signal?: AbortSignal;
@@ -35,7 +35,7 @@ type ChatRunOptions = {
   onToolResult?: (toolName: string, result: unknown, toolUseId?: string) => void | Promise<void>;
   onPendingApproval?: (
     data: GenerationPendingApprovalData,
-    client: CmdclawApiClient,
+    client: BapApiClient,
   ) => Promise<"handled" | "deferred">;
   onApprovalResult?: (
     toolUseId: string,
@@ -43,7 +43,7 @@ type ChatRunOptions = {
   ) => void | Promise<void>;
   onAuthNeeded?: (
     data: AuthNeededData,
-    client: CmdclawApiClient,
+    client: BapApiClient,
   ) => Promise<"handled" | "deferred">;
   onAuthResult?: (success: boolean, integrations?: string[]) => void | Promise<void>;
   onStatusChange?: (status: string, metadata?: StatusChangeMetadata) => void | Promise<void>;

@@ -7,7 +7,7 @@ const { conversationRuntimeFindFirstMock, dbUpdateMock, daytonaGetMock } = vi.ho
   daytonaGetMock: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       conversationRuntime: {

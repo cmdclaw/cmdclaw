@@ -512,7 +512,7 @@ export function AnimatedHowItWorksSection() {
             <T>From idea to production in minutes</T>
           </h2>
           <p className="text-muted-foreground mt-4 max-w-lg text-base leading-relaxed md:ml-auto">
-            <T>Describe what you need. CmdClaw builds it, secures it, and deploys it.</T>
+            <T>Describe what you need. Bap builds it, secures it, and deploys it.</T>
           </p>
         </motion.div>
 

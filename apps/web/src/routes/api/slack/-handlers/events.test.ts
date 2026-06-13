@@ -21,7 +21,7 @@ vi.mock("@/env", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/queues", () => ({
+vi.mock("@bap/core/server/queues", () => ({
   SLACK_EVENT_JOB_NAME: "slack-event",
   buildQueueJobId: buildQueueJobIdMock,
   getQueue: getQueueMock,
@@ -35,7 +35,7 @@ function sign(body: string, timestamp: string): string {
 }
 
 function makeRequest(body: string, headers: Record<string, string>) {
-  return new Request("https://cmdclaw.ai/api/slack/events", {
+  return new Request("https://heybap.com/api/slack/events", {
     method: "POST",
     headers,
     body,

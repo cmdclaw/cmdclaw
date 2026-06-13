@@ -73,7 +73,7 @@ describe("ToolApprovalCard", () => {
         toolUseId="question-1"
         toolName="question"
         toolInput={QUESTION_TOOL_INPUT}
-        integration="cmdclaw"
+        integration="bap"
         operation="question"
         onApprove={onApprove}
         onDeny={vi.fn<VitestProcedure>()}
@@ -96,7 +96,7 @@ describe("ToolApprovalCard", () => {
         toolUseId="question-2"
         toolName="question"
         toolInput={QUESTION_TOOL_INPUT}
-        integration="cmdclaw"
+        integration="bap"
         operation="question"
         command="Question: undefined"
         questionAnswers={APPROVED_QUESTION_ANSWERS}
@@ -119,7 +119,7 @@ describe("ToolApprovalCard", () => {
           toolUseId="wiz-1"
           toolName="question"
           toolInput={MULTI_QUESTION_TOOL_INPUT}
-          integration="cmdclaw"
+          integration="bap"
           operation="question"
           onApprove={vi.fn<VitestProcedure>()}
           onDeny={vi.fn<VitestProcedure>()}
@@ -143,7 +143,7 @@ describe("ToolApprovalCard", () => {
           toolUseId="wiz-2"
           toolName="question"
           toolInput={MULTI_QUESTION_TOOL_INPUT}
-          integration="cmdclaw"
+          integration="bap"
           operation="question"
           onApprove={onApprove}
           onDeny={vi.fn<VitestProcedure>()}
@@ -170,7 +170,7 @@ describe("ToolApprovalCard", () => {
           toolUseId="wiz-back"
           toolName="question"
           toolInput={MULTI_QUESTION_TOOL_INPUT}
-          integration="cmdclaw"
+          integration="bap"
           operation="question"
           onApprove={onApprove}
           onDeny={vi.fn<VitestProcedure>()}
@@ -200,7 +200,7 @@ describe("ToolApprovalCard", () => {
           toolUseId="wiz-3"
           toolName="question"
           toolInput={MULTI_QUESTION_TOOL_INPUT}
-          integration="cmdclaw"
+          integration="bap"
           operation="question"
           onApprove={onApprove}
           onDeny={vi.fn<VitestProcedure>()}
@@ -226,7 +226,7 @@ describe("ToolApprovalCard", () => {
       const props = {
         toolUseId: "wiz-refresh",
         toolName: "question",
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
         onApprove,
         onDeny: vi.fn<VitestProcedure>(),
@@ -262,7 +262,7 @@ describe("ToolApprovalCard", () => {
           toolUseId="readonly-question"
           toolName="question"
           toolInput={MULTI_QUESTION_TOOL_INPUT}
-          integration="cmdclaw"
+          integration="bap"
           operation="question"
           onApprove={onApprove}
           onDeny={onDeny}
@@ -286,7 +286,7 @@ describe("ToolApprovalCard", () => {
           toolUseId="wiz-4"
           toolName="question"
           toolInput={MULTI_QUESTION_TOOL_INPUT}
-          integration="cmdclaw"
+          integration="bap"
           operation="question"
           questionAnswers={MULTI_APPROVED_ANSWERS}
           onApprove={vi.fn<VitestProcedure>()}
@@ -309,7 +309,7 @@ describe("ToolApprovalCard", () => {
         toolUseId="coworker-1"
         toolName="Bash"
         toolInput={COWORKER_APPROVAL_TOOL_INPUT}
-        integration="cmdclaw"
+        integration="bap"
         operation="patch"
         command='coworker invoke --username linkedin-digest --message "Review this inbox" --json'
         onApprove={vi.fn<VitestProcedure>()}
@@ -320,7 +320,7 @@ describe("ToolApprovalCard", () => {
 
     expect(screen.getByText("Coworker")).toBeInTheDocument();
     expect(screen.getByText("invoke")).toBeInTheDocument();
-    expect(screen.queryByText("cmdclaw")).not.toBeInTheDocument();
+    expect(screen.queryByText("bap")).not.toBeInTheDocument();
     expect(screen.queryByText("patch")).not.toBeInTheDocument();
   });
 
@@ -330,7 +330,7 @@ describe("ToolApprovalCard", () => {
         toolUseId="agent-browser-1"
         toolName="Bash"
         toolInput={AGENT_BROWSER_APPROVAL_TOOL_INPUT}
-        integration="cmdclaw"
+        integration="bap"
         operation="patch"
         command="agent-browser screenshot --full /tmp/example.png"
         onApprove={vi.fn<VitestProcedure>()}
@@ -342,7 +342,7 @@ describe("ToolApprovalCard", () => {
     expect(screen.getByText("Browser")).toBeInTheDocument();
     expect(screen.getByText("screenshot")).toBeInTheDocument();
     expect(screen.getByAltText("Browser")).toBeInTheDocument();
-    expect(screen.queryByText("cmdclaw")).not.toBeInTheDocument();
+    expect(screen.queryByText("bap")).not.toBeInTheDocument();
     expect(screen.queryByText("patch")).not.toBeInTheDocument();
   });
 });

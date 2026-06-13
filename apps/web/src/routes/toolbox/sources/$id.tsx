@@ -24,6 +24,6 @@ export const Route = createFileRoute("/toolbox/sources/$id")({
       ...(oauthError ? { oauth_error: oauthError } : {}),
     };
   },
-  head: () => ({ meta: [{ title: "MCP Server - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "MCP Server - Bap" }] }),
   component: SourceDetailPage,
 });

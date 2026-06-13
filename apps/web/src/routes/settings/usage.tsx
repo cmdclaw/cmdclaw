@@ -1,9 +1,5 @@
 import type { ChangeEvent } from "react";
-import {
-  BILLING_PLANS,
-  TOP_UP_CREDITS_PER_USD,
-  formatCredits,
-} from "@cmdclaw/core/lib/billing-plans";
+import { BILLING_PLANS, TOP_UP_CREDITS_PER_USD, formatCredits } from "@bap/core/lib/billing-plans";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { Loader2 } from "lucide-react";
@@ -28,7 +24,7 @@ export const Route = createFileRoute("/settings/usage")({
       throw redirect({ to: "/settings" });
     }
   },
-  head: () => ({ meta: [{ title: "Usage - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Usage - Bap" }] }),
   component: UsagePage,
 });
 

@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { ensureWorkspaceForUser } from "@cmdclaw/core/server/billing/service";
-import { db } from "@cmdclaw/db/client";
-import { session, user } from "@cmdclaw/db/schema";
+import { ensureWorkspaceForUser } from "@bap/core/server/billing/service";
+import { db } from "@bap/db/client";
+import { session, user } from "@bap/db/schema";
 import { serializeSignedCookie } from "better-call";
 import { eq } from "drizzle-orm";
 import { env } from "@/env";
@@ -22,7 +22,7 @@ import { loadWorktreeSessionCookie } from "@/server/worktree-auto-login-storage"
  * `better-call` cookie serializer so the TanStack Start route files stay thin adapters.
  */
 
-const DEFAULT_DEV_AUTO_LOGIN_EMAIL = "cmdclaw@example.com";
+const DEFAULT_DEV_AUTO_LOGIN_EMAIL = "bap@example.com";
 const DEFAULT_DEV_AUTO_LOGIN_NAME = "Baptiste";
 const LOOPBACK_HOSTNAMES = new Set(["0.0.0.0", "127.0.0.1", "::1", "[::1]", "localhost"]);
 
@@ -194,7 +194,7 @@ async function createSessionCookie(userId: string, requestUrl: URL) {
     createdAt: now,
     updatedAt: now,
     ipAddress: "127.0.0.1",
-    userAgent: "cmdclaw-dev-auto-login",
+    userAgent: "bap-dev-auto-login",
   });
 
   const signedToken = (await serializeSignedCookie("", token, env.BETTER_AUTH_SECRET)).replace(

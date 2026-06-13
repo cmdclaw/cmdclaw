@@ -2,8 +2,8 @@ import type { Sandbox } from "e2b";
 import { lookup as mimeLookup } from "mime-types";
 import path from "path";
 import type { SandboxBackend } from "../sandbox/types";
-import { db } from "@cmdclaw/db/client";
-import { sandboxFile } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { sandboxFile } from "@bap/db/schema";
 import { uploadToS3, ensureBucket } from "../storage/s3-client";
 
 export interface SandboxFileUpload {

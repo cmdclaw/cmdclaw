@@ -22,7 +22,7 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       whatsappUserLink: {

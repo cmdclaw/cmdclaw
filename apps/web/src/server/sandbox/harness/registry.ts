@@ -1,4 +1,4 @@
-import type { RuntimeHarnessId } from "@cmdclaw/core/server/sandbox/core/types";
+import type { RuntimeHarnessId } from "@bap/core/server/sandbox/core/types";
 import type { RuntimeHarness } from "./base";
 import { AgentSdkHarness } from "./agent-sdk";
 import { OpencodeHarness } from "./opencode";

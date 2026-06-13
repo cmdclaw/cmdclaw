@@ -1,10 +1,10 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   conversationQueuedMessage,
   generation,
   type QueuedMessageAttachment,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   buildQueueJobId,

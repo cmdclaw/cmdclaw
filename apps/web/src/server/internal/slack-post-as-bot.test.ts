@@ -11,11 +11,11 @@ const { envMock } = vi.hoisted(() => ({
 
 vi.mock("@/env", () => ({ env: envMock }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: { query: {} },
 }));
 
-vi.mock("@cmdclaw/message-format", () => ({
+vi.mock("@bap/message-format", () => ({
   renderMessageToSlackPayload: (text: string) => ({ text, blocks: undefined }),
 }));
 

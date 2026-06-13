@@ -135,7 +135,7 @@ function isGoogleIntegrationType(type: string): type is GoogleIntegrationType {
 // ─── Route ─────────────────────────────────────────────────────────────────────
 
 export const Route = createFileRoute("/integrations/$type")({
-  head: () => ({ meta: [{ title: msg("Integration - CmdClaw") }] }),
+  head: () => ({ meta: [{ title: msg("Integration - Bap") }] }),
   component: IntegrationDetailPage,
 });
 

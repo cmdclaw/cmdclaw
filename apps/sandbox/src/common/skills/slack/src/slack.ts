@@ -1,6 +1,6 @@
 import { constants } from "fs";
 import { readFile, access } from "fs/promises";
-import { renderMessageToSlack, renderMessageToSlackPayload } from "@cmdclaw/message-format";
+import { renderMessageToSlack, renderMessageToSlackPayload } from "@bap/message-format";
 import { parseArgs } from "util";
 import { resolveConnectedAccountAccessToken } from "../../../lib/connected-account";
 

@@ -4,7 +4,7 @@ import { buildPerfettoTraceFromTiming } from "./perfetto-trace";
 describe("buildPerfettoTraceFromTiming", () => {
   it("builds Perfetto trace events from timing phases", () => {
     const result = buildPerfettoTraceFromTiming({
-      processName: "cmdclaw chat",
+      processName: "bap chat",
       threadName: "conversation conv-1",
       timing: {
         phaseDurationsMs: {

@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { magicLinkRequestState } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { magicLinkRequestState } from "@bap/db/schema";
 import { and, eq, lt } from "drizzle-orm";
 import {
   extractMagicLinkRedirectState,

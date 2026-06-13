@@ -19,7 +19,7 @@ function isLoopbackAppHostname(hostname: string): boolean {
 }
 
 export function isWorktreeAutoLoginConfigured(): boolean {
-  return Boolean(process.env.CMDCLAW_INSTANCE_ROOT?.trim());
+  return Boolean(process.env.BAP_INSTANCE_ROOT?.trim());
 }
 
 export function canUseWorktreeAutoLoginForRequest(input: Request | URL | string): boolean {

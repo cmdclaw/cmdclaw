@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-const CMDCLAW_RUNTIME_CONTEXT_PATH = "/tmp/cmdclaw-runtime-context.json";
+const BAP_RUNTIME_CONTEXT_PATH = "/tmp/bap-runtime-context.json";
 
 export interface RuntimeContextFile {
   runtimeId: string;
@@ -10,7 +10,7 @@ export interface RuntimeContextFile {
 }
 
 export async function readRuntimeContext(): Promise<RuntimeContextFile> {
-  const raw = await readFile(CMDCLAW_RUNTIME_CONTEXT_PATH, "utf8");
+  const raw = await readFile(BAP_RUNTIME_CONTEXT_PATH, "utf8");
   const parsed = JSON.parse(raw) as Partial<RuntimeContextFile>;
 
   if (
@@ -22,7 +22,7 @@ export async function readRuntimeContext(): Promise<RuntimeContextFile> {
     !Number.isInteger(parsed.turnSeq) ||
     parsed.turnSeq <= 0
   ) {
-    throw new Error(`Invalid runtime context file at ${CMDCLAW_RUNTIME_CONTEXT_PATH}`);
+    throw new Error(`Invalid runtime context file at ${BAP_RUNTIME_CONTEXT_PATH}`);
   }
 
   return {

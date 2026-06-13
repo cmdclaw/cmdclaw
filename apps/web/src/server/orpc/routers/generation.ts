@@ -1,19 +1,19 @@
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
-import { PROVIDER_AUTH_SOURCES } from "@cmdclaw/core/lib/provider-auth-source";
-import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
-import { evaluateSpawnRequest } from "@cmdclaw/core/server/services/generation/spawn-depth";
-import { isGenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
-import { startPendingCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
-import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
-import { listSelectablePlatformSkills } from "@cmdclaw/core/server/services/platform-skill-service";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
+import { parseModelReference } from "@bap/core/lib/model-reference";
+import { PROVIDER_AUTH_SOURCES } from "@bap/core/lib/provider-auth-source";
+import { generationManager } from "@bap/core/server/services/generation-manager";
+import { evaluateSpawnRequest } from "@bap/core/server/services/generation/spawn-depth";
+import { isGenerationStartError } from "@bap/core/server/services/generation-start-error";
+import { startPendingCoworkerRun } from "@bap/core/server/services/coworker-service";
+import { generationLifecyclePolicy } from "@bap/core/server/services/lifecycle-policy";
+import { listSelectablePlatformSkills } from "@bap/core/server/services/platform-skill-service";
 import {
   createTraceId,
   emitCanonicalServiceEvent,
   logger,
-} from "@cmdclaw/core/server/utils/observability";
-import { db } from "@cmdclaw/db/client";
-import { generation, conversation, coworkerRun, generationInterrupt } from "@cmdclaw/db/schema";
+} from "@bap/core/server/utils/observability";
+import { db } from "@bap/db/client";
+import { generation, conversation, coworkerRun, generationInterrupt } from "@bap/db/schema";
 import { eventIterator, ORPCError } from "@orpc/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -529,7 +529,7 @@ const startGeneration = protectedProcedure
         traceId: result.traceId,
       };
       emitCanonicalServiceEvent({
-        eventName: "cmdclaw.generation.start_rpc",
+        eventName: "bap.generation.start_rpc",
         operationName: "generation.start_rpc",
         eventId: `rpc:generation.start:${result.generationId}:${startedAt}`,
         outcome: "success",
@@ -538,19 +538,17 @@ const startGeneration = protectedProcedure
           "rpc.system": "orpc",
           "rpc.method": "generation.startGeneration",
           "http.route": "/api/rpc/generation/startGeneration",
-          "cmdclaw.generation.id": result.generationId,
-          "cmdclaw.conversation.id": result.conversationId,
-          "cmdclaw.user.id": context.user.id,
-          "cmdclaw.generation.request.elapsed_ms": Date.now() - startedAt,
-          "cmdclaw.model.provider": input.model
-            ? parseModelReference(input.model).providerID
-            : null,
-          "cmdclaw.sandbox.provider": input.sandboxProvider ?? "default",
-          "cmdclaw.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
-          "cmdclaw.generation.selected_platform_skill_count":
+          "bap.generation.id": result.generationId,
+          "bap.conversation.id": result.conversationId,
+          "bap.user.id": context.user.id,
+          "bap.generation.request.elapsed_ms": Date.now() - startedAt,
+          "bap.model.provider": input.model ? parseModelReference(input.model).providerID : null,
+          "bap.sandbox.provider": input.sandboxProvider ?? "default",
+          "bap.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
+          "bap.generation.selected_platform_skill_count":
             input.selectedPlatformSkillSlugs?.length ?? 0,
-          "cmdclaw.auth.source": context.authSource,
-          "cmdclaw.spawn.depth": spawnDepth ?? 0,
+          "bap.auth.source": context.authSource,
+          "bap.spawn.depth": spawnDepth ?? 0,
         },
       });
       logger.info({
@@ -562,7 +560,7 @@ const startGeneration = protectedProcedure
       return result;
     } catch (error) {
       emitCanonicalServiceEvent({
-        eventName: "cmdclaw.generation.start_rpc",
+        eventName: "bap.generation.start_rpc",
         operationName: "generation.start_rpc",
         eventId: `rpc:generation.start:failed:${context.user.id}:${startedAt}`,
         outcome: "failure",
@@ -574,17 +572,15 @@ const startGeneration = protectedProcedure
           "rpc.system": "orpc",
           "rpc.method": "generation.startGeneration",
           "http.route": "/api/rpc/generation/startGeneration",
-          "cmdclaw.conversation.id": input.conversationId,
-          "cmdclaw.user.id": context.user.id,
-          "cmdclaw.generation.request.elapsed_ms": Date.now() - startedAt,
-          "cmdclaw.failure.phase": GENERATION_ERROR_PHASES.START_RPC,
-          "cmdclaw.error.normalized_code": normalizeRpcErrorCode(error),
-          "cmdclaw.model.provider": input.model
-            ? parseModelReference(input.model).providerID
-            : null,
-          "cmdclaw.sandbox.provider": input.sandboxProvider ?? "default",
-          "cmdclaw.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
-          "cmdclaw.generation.selected_platform_skill_count":
+          "bap.conversation.id": input.conversationId,
+          "bap.user.id": context.user.id,
+          "bap.generation.request.elapsed_ms": Date.now() - startedAt,
+          "bap.failure.phase": GENERATION_ERROR_PHASES.START_RPC,
+          "bap.error.normalized_code": normalizeRpcErrorCode(error),
+          "bap.model.provider": input.model ? parseModelReference(input.model).providerID : null,
+          "bap.sandbox.provider": input.sandboxProvider ?? "default",
+          "bap.generation.file_attachment_count": input.fileAttachments?.length ?? 0,
+          "bap.generation.selected_platform_skill_count":
             input.selectedPlatformSkillSlugs?.length ?? 0,
         },
       });
@@ -833,7 +829,7 @@ const subscribeGeneration = protectedProcedure
       }
     } finally {
       emitCanonicalServiceEvent({
-        eventName: "cmdclaw.generation.subscribe_rpc",
+        eventName: "bap.generation.subscribe_rpc",
         operationName: "generation.subscribe_rpc",
         eventId: `rpc:generation.subscribe:${input.generationId}:${streamId}`,
         outcome: "success",
@@ -842,12 +838,12 @@ const subscribeGeneration = protectedProcedure
           "rpc.system": "orpc",
           "rpc.method": "generation.subscribeGeneration",
           "http.route": "/api/rpc/generation/subscribeGeneration",
-          "cmdclaw.generation.id": input.generationId,
-          "cmdclaw.conversation.id": access.generation.conversationId,
-          "cmdclaw.user.id": context.user.id,
-          "cmdclaw.generation.subscribe.state": "closed",
-          "cmdclaw.generation.subscribe.elapsed_ms": Date.now() - openedAt,
-          "cmdclaw.generation.subscribe.has_cursor": Boolean(input.cursor),
+          "bap.generation.id": input.generationId,
+          "bap.conversation.id": access.generation.conversationId,
+          "bap.user.id": context.user.id,
+          "bap.generation.subscribe.state": "closed",
+          "bap.generation.subscribe.elapsed_ms": Date.now() - openedAt,
+          "bap.generation.subscribe.has_cursor": Boolean(input.cursor),
           ...generationManager.getStreamCountersSnapshot(),
         },
       });

@@ -46,7 +46,7 @@ export function startSandboxUsageSnapshotQueue() {
                 if (summary.inserted > 0 || summary.failed > 0) {
                   console.info("[worker] sandbox usage snapshot summary", summary);
                 }
-                recordCounter("cmdclaw_worker_jobs_total", 1, {
+                recordCounter("bap_worker_jobs_total", 1, {
                   ...attributes,
                   status: "ok",
                 });
@@ -55,14 +55,14 @@ export function startSandboxUsageSnapshotQueue() {
 
               throw new Error(`No handler registered for sandbox usage snapshot job "${job.name}"`);
             } catch (error) {
-              recordCounter("cmdclaw_worker_jobs_total", 1, {
+              recordCounter("bap_worker_jobs_total", 1, {
                 ...attributes,
                 status: "error",
               });
               throw error;
             } finally {
               recordHistogram(
-                "cmdclaw_worker_job_duration_ms",
+                "bap_worker_job_duration_ms",
                 performance.now() - startedAt,
                 attributes,
               );

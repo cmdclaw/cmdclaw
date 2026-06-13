@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { generation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { generation } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { generationStreamExists } from "../../../redis/generation-event-bus";
 import {

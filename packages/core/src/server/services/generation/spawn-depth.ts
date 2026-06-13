@@ -18,7 +18,7 @@ export function evaluateSpawnRequest(callerSpawnDepth: number): SpawnRequestEval
       allowed: false,
       message:
         `Refused: this run is at Spawn Depth ${depth}, the maximum allowed (${MAX_SPAWN_DEPTH}). ` +
-        "Runs started through CmdClaw tools cannot spawn further runs. " +
+        "Runs started through Bap tools cannot spawn further runs. " +
         "Relay this to the user and suggest restructuring the coworker chain.",
     };
   }

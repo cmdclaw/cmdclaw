@@ -914,7 +914,7 @@ describe("ChatArea generation errors", () => {
       expect(mockStartGeneration).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: "conv-1",
-          content: "send a message on slack #experiment-cmdclaw-testing saying hi",
+          content: "send a message on slack #experiment-bap-testing saying hi",
           debugApprovalHotWaitMs: 7_000,
         }),
         expect.any(Object),
@@ -1119,7 +1119,7 @@ describe("ChatArea generation errors", () => {
             },
           ],
         },
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
       });
       callbacks.onStatusChange?.("approval_parked");
@@ -1182,7 +1182,7 @@ describe("ChatArea generation errors", () => {
             },
           ],
         },
-        integration: "cmdclaw",
+        integration: "bap",
         operation: "question",
       });
       callbacks.onStatusChange?.("approval_parked");

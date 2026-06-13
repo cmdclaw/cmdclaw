@@ -8,9 +8,9 @@ for tool in /app/.claude/skills/*/src/*.ts; do
   wrapper=~/.local/bin/"$name"
   cat > "$wrapper" << EOF
 #!/bin/bash
-if [ -f /app/.cmdclaw/runtime-env.sh ]; then
+if [ -f /app/.bap/runtime-env.sh ]; then
   # shellcheck disable=SC1091
-  source /app/.cmdclaw/runtime-env.sh
+  source /app/.bap/runtime-env.sh
 fi
 exec tsx $tool "\$@"
 EOF

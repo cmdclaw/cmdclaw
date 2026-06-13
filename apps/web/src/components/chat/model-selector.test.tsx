@@ -90,15 +90,15 @@ describe("ModelSelector", () => {
       />,
     );
 
-    expect(screen.getByText("CmdClaw Models")).toBeInTheDocument();
-    expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.5")).toBeDisabled();
-    expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4")).toBeDisabled();
-    expect(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4-mini")).toBeDisabled();
+    expect(screen.getByText("Bap Models")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-model-option-bap-openai/gpt-5.5")).toBeDisabled();
+    expect(screen.getByTestId("chat-model-option-bap-openai/gpt-5.4")).toBeDisabled();
+    expect(screen.getByTestId("chat-model-option-bap-openai/gpt-5.4-mini")).toBeDisabled();
     expect(
-      screen.getByTestId("chat-model-option-cmdclaw-google/gemini-3.1-pro-preview"),
+      screen.getByTestId("chat-model-option-bap-google/gemini-3.1-pro-preview"),
     ).toBeDisabled();
     expect(
-      screen.queryByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
+      screen.queryByTestId("chat-model-option-bap-anthropic/claude-sonnet-4-6"),
     ).not.toBeInTheDocument();
   });
 
@@ -115,9 +115,7 @@ describe("ModelSelector", () => {
       />,
     );
 
-    expect(
-      screen.getByTestId("chat-model-option-cmdclaw-anthropic/claude-sonnet-4-6"),
-    ).toBeEnabled();
+    expect(screen.getByTestId("chat-model-option-bap-anthropic/claude-sonnet-4-6")).toBeEnabled();
   });
 
   it("does not allow selecting shared GPT-5.4 when shared auth is unavailable", () => {
@@ -133,7 +131,7 @@ describe("ModelSelector", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4"));
+    fireEvent.click(screen.getByTestId("chat-model-option-bap-openai/gpt-5.4"));
 
     expect(onSelectionChange).not.toHaveBeenCalled();
   });
@@ -151,7 +149,7 @@ describe("ModelSelector", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.4"));
+    fireEvent.click(screen.getByTestId("chat-model-option-bap-openai/gpt-5.4"));
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       model: "openai/gpt-5.4",
@@ -172,7 +170,7 @@ describe("ModelSelector", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("chat-model-option-cmdclaw-openai/gpt-5.5"));
+    fireEvent.click(screen.getByTestId("chat-model-option-bap-openai/gpt-5.5"));
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       model: "openai/gpt-5.5",
@@ -193,7 +191,7 @@ describe("ModelSelector", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("chat-model-option-cmdclaw-google/gemini-3.1-pro-preview"));
+    fireEvent.click(screen.getByTestId("chat-model-option-bap-google/gemini-3.1-pro-preview"));
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       model: "google/gemini-3.1-pro-preview",

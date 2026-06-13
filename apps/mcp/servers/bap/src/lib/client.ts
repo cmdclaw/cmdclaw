@@ -1,5 +1,5 @@
 import type { ToolExtraArguments } from "xmcp";
-import { createRpcClient, DEFAULT_SERVER_URL } from "@cmdclaw/client";
+import { createRpcClient, DEFAULT_SERVER_URL } from "@bap/client";
 
 function resolveServerUrl(serverUrl?: string): string {
   return serverUrl || process.env.APP_SERVER_URL || DEFAULT_SERVER_URL;

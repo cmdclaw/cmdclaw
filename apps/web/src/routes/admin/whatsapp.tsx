@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AppImage } from "./-lib/app-image";
 
 export const Route = createFileRoute("/admin/whatsapp")({
-  head: () => ({ meta: [{ title: "WhatsApp Settings - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "WhatsApp Settings - Bap" }] }),
   component: AdminWhatsAppPage,
 });
 

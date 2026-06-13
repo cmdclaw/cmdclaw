@@ -1,6 +1,6 @@
 ---
 name: sync-skills-with-hermes
-description: Synchronize this repository's agent skills into ~/.hermes/skills as symlinks. Use when the user wants to sync, resync, install, or periodically refresh CmdClaw repo skills for Hermes.
+description: Synchronize this repository's agent skills into ~/.hermes/skills as symlinks. Use when the user wants to sync, resync, install, or periodically refresh Bap repo skills for Hermes.
 ---
 
 # Sync Skills With Hermes

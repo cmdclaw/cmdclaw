@@ -3,8 +3,8 @@ import { eq, asc, isNotNull } from "drizzle-orm";
 import { Sandbox } from "e2b";
 import { env } from "../../env";
 import { resolvePublicCallbackBaseUrl } from "../../lib/worktree-routing";
-import { db } from "@cmdclaw/db/client";
-import { message, conversation, conversationRuntime } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { message, conversation, conversationRuntime } from "@bap/db/schema";
 import type { ProviderAuthSource } from "../../lib/provider-auth-source";
 import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { resolvePreferredCommunitySkillsForUser } from "../services/integration-skill-service";
@@ -24,7 +24,7 @@ import {
 import { toRuntimeProviderAuthPayload } from "./provider-auth-runtime";
 
 // Use custom template with OpenCode pre-installed
-const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "cmdclaw-agent-dev";
+const TEMPLATE_NAME = env.E2B_DAYTONA_SANDBOX_NAME || "bap-agent-dev";
 const SANDBOX_TIMEOUT_MS = generationLifecyclePolicy.activeSandboxTimeoutMs;
 
 function resolveSandboxAppUrl(): string {

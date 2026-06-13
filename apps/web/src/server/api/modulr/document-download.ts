@@ -1,6 +1,6 @@
-import { env } from "@cmdclaw/core/env";
-import { verifyModulrDocumentDownloadToken } from "@cmdclaw/core/server/modulr/download-token";
-import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
+import { env } from "@bap/core/env";
+import { verifyModulrDocumentDownloadToken } from "@bap/core/server/modulr/download-token";
+import { downloadFromS3 } from "@bap/core/server/storage/s3-client";
 
 /**
  * Framework-neutral handler for `GET /api/modulr/documents/download`.

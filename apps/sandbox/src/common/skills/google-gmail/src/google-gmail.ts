@@ -4,7 +4,7 @@ import { buildRawEmail } from "./build-gmail-email";
 import { formatEmailDate } from "./format-email-date";
 
 const CLI_ARGS = process.argv.slice(2);
-const USER_TIMEZONE = process.env.CMDCLAW_USER_TIMEZONE?.trim();
+const USER_TIMEZONE = process.env.BAP_USER_TIMEZONE?.trim();
 let headers: Record<string, string> = {};
 
 const { positionals, values } = parseArgs({

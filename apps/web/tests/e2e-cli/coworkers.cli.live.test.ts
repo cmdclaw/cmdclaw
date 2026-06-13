@@ -26,7 +26,7 @@ describe.runIf(liveEnabled)("@live CLI coworkers", () => {
 
       const created = await runBunCommand([
         "run",
-        "cmdclaw",
+        "bap",
         "--",
         "coworker",
         "create",
@@ -44,7 +44,7 @@ describe.runIf(liveEnabled)("@live CLI coworkers", () => {
 
       const triggered = await runBunCommand([
         "run",
-        "cmdclaw",
+        "bap",
         "--",
         "coworker",
         "run",
@@ -57,7 +57,7 @@ describe.runIf(liveEnabled)("@live CLI coworkers", () => {
       const runId = requireMatch(triggered.stdout, /run id:\s+([^\s]+)/, triggered.stdout);
 
       const logs = await runBunCommand(
-        ["run", "cmdclaw", "--", "coworker", "logs", runId, "--watch", "--watch-interval", "2"],
+        ["run", "bap", "--", "coworker", "logs", runId, "--watch", "--watch-interval", "2"],
         Math.max(responseTimeoutMs, commandTimeoutMs),
       );
 

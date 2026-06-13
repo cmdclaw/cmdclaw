@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { conversation, conversationRuntime, generation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation, conversationRuntime, generation } from "@bap/db/schema";
 
 type ConversationRuntimeRecord = typeof conversationRuntime.$inferSelect;
 

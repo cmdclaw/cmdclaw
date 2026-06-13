@@ -1,6 +1,6 @@
-import { db } from "@cmdclaw/db/client";
-import { conversationRuntime, coworker, coworkerRun } from "@cmdclaw/db/schema";
-import { renderMessageToSlackPayload, type SlackBlock } from "@cmdclaw/message-format";
+import { db } from "@bap/db/client";
+import { conversationRuntime, coworker, coworkerRun } from "@bap/db/schema";
+import { renderMessageToSlackPayload, type SlackBlock } from "@bap/message-format";
 import { and, eq, inArray } from "drizzle-orm";
 import { env } from "@/env";
 

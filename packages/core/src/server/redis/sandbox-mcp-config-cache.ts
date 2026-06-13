@@ -14,14 +14,14 @@ const APPLIED_CONFIG_TTL_SECONDS = 60 * 60;
 
 function getRedisClient(): IORedis {
   const globalState = globalThis as typeof globalThis & {
-    __cmdclawSandboxMcpConfigCacheRedis?: IORedis;
+    __bapSandboxMcpConfigCacheRedis?: IORedis;
   };
-  if (!globalState.__cmdclawSandboxMcpConfigCacheRedis) {
-    globalState.__cmdclawSandboxMcpConfigCacheRedis = new IORedis(
+  if (!globalState.__bapSandboxMcpConfigCacheRedis) {
+    globalState.__bapSandboxMcpConfigCacheRedis = new IORedis(
       buildRedisOptions(REDIS_URL, REDIS_OPTIONS),
     );
   }
-  return globalState.__cmdclawSandboxMcpConfigCacheRedis;
+  return globalState.__bapSandboxMcpConfigCacheRedis;
 }
 
 function appliedConfigKey(sandboxId: string): string {

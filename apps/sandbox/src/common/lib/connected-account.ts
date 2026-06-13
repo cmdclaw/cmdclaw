@@ -33,8 +33,8 @@ function runtimeCredentialRequestHeaders(): Record<string, string> {
     "Content-Type": "application/json",
   };
   const bearer =
-    process.env.CMDCLAW_RUNTIME_CREDENTIAL_GRANT ??
-    process.env.CMDCLAW_SERVER_SECRET ??
+    process.env.BAP_RUNTIME_CREDENTIAL_GRANT ??
+    process.env.BAP_SERVER_SECRET ??
     process.env.SLACK_BOT_RELAY_SECRET;
   if (bearer) {
     headers.Authorization = `Bearer ${bearer}`;
@@ -43,7 +43,7 @@ function runtimeCredentialRequestHeaders(): Record<string, string> {
 }
 
 function parseRemoteIntegrationSource(): unknown {
-  const raw = process.env.CMDCLAW_REMOTE_INTEGRATION_SOURCE;
+  const raw = process.env.BAP_REMOTE_INTEGRATION_SOURCE;
   if (!raw) {
     return undefined;
   }
@@ -58,8 +58,8 @@ export async function resolveConnectedAccountAccessToken(
   options: ConnectedAccountCliOptions,
 ): Promise<string> {
   const accountLabel = options.accountLabel?.trim() || null;
-  const runtimeUrl = process.env.CMDCLAW_RUNTIME_CREDENTIALS_URL;
-  const userId = process.env.CMDCLAW_USER_ID;
+  const runtimeUrl = process.env.BAP_RUNTIME_CREDENTIALS_URL;
+  const userId = process.env.BAP_USER_ID;
 
   if (runtimeUrl && userId) {
     const response = await fetch(runtimeUrl, {
@@ -90,10 +90,10 @@ export async function resolveConnectedAccountAccessToken(
     throw new Error(`${options.fallbackEnvVar} environment variable required for this command`);
   }
   if (accountLabel) {
-    const labels = process.env.CMDCLAW_AVAILABLE_ACCOUNT_LABELS;
+    const labels = process.env.BAP_AVAILABLE_ACCOUNT_LABELS;
     const labelSuffix = labels ? ` Available account labels: ${labels}.` : "";
     throw new Error(
-      `--account requires CMDCLAW_RUNTIME_CREDENTIALS_URL for ${options.integrationType}.${labelSuffix}`,
+      `--account requires BAP_RUNTIME_CREDENTIALS_URL for ${options.integrationType}.${labelSuffix}`,
     );
   }
   return fallback;

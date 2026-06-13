@@ -8,7 +8,7 @@ function readAgent(agentFileName: string): string {
 
 describe("OpenCode agent definitions", () => {
   it("allows the question tool for chat and coworker builder agents", () => {
-    expect(readAgent("cmdclaw-chat.md")).toContain("permission:\n  question: allow");
-    expect(readAgent("cmdclaw-coworker-builder.md")).toContain("permission:\n  question: allow");
+    expect(readAgent("bap-chat.md")).toContain("permission:\n  question: allow");
+    expect(readAgent("bap-coworker-builder.md")).toContain("permission:\n  question: allow");
   });
 });

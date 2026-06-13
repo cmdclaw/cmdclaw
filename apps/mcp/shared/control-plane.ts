@@ -1,4 +1,4 @@
-import { resolveCmdclawAppUrl, requireServerSecret } from "./runtime";
+import { resolveBapAppUrl, requireServerSecret } from "./runtime";
 
 export async function getManagedIntegrationTokens(params: {
   userId: string;
@@ -13,7 +13,7 @@ export async function getManagedIntegrationTokens(params: {
   };
 }): Promise<Record<string, string>> {
   const response = await fetch(
-    new URL("/api/internal/mcp/runtime-credentials", resolveCmdclawAppUrl()),
+    new URL("/api/internal/mcp/runtime-credentials", resolveBapAppUrl()),
     {
       method: "POST",
       headers: {
@@ -45,7 +45,7 @@ export async function getManagedGalienCredentials(params: {
   galienUserId: number | null;
 }> {
   const response = await fetch(
-    new URL("/api/internal/mcp/galien-credentials", resolveCmdclawAppUrl()),
+    new URL("/api/internal/mcp/galien-credentials", resolveBapAppUrl()),
     {
       method: "POST",
       headers: {
@@ -82,7 +82,7 @@ export async function getManagedModulrCredentials(params: {
   baseUrl: string;
 }> {
   const response = await fetch(
-    new URL("/api/internal/mcp/modulr-credentials", resolveCmdclawAppUrl()),
+    new URL("/api/internal/mcp/modulr-credentials", resolveBapAppUrl()),
     {
       method: "POST",
       headers: {

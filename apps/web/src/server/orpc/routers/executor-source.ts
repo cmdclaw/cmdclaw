@@ -1,14 +1,14 @@
 import {
   resolveMcpEndpoint,
   startMcpOAuthAuthorization,
-} from "@cmdclaw/core/server/executor/mcp-oauth";
+} from "@bap/core/server/executor/mcp-oauth";
 import {
   computeWorkspaceMcpServerRevisionHash,
   listWorkspaceMcpServers,
   normalizeExecutorNamespace,
   setWorkspaceMcpServerCredential,
-} from "@cmdclaw/core/server/executor/workspace-sources";
-import { user, workspace, workspaceMcpServer, workspaceMcpAuthorization } from "@cmdclaw/db/schema";
+} from "@bap/core/server/executor/workspace-sources";
+import { user, workspace, workspaceMcpServer, workspaceMcpAuthorization } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";

@@ -1,15 +1,15 @@
-import { getResolvedProviderAuth } from "@cmdclaw/core/server/control-plane/subscription-providers";
+import { getResolvedProviderAuth } from "@bap/core/server/control-plane/subscription-providers";
 import {
   getCliEnvForUser,
   getEnabledIntegrationTypes,
   getTokensForIntegrations,
-} from "@cmdclaw/core/server/integrations/cli-env";
+} from "@bap/core/server/integrations/cli-env";
 import {
   ConnectedAccountResolutionError,
   resolveConnectedAccountCredential,
-} from "@cmdclaw/core/server/integrations/connected-account-resolution";
-import { db } from "@cmdclaw/db/client";
-import { providerAuth } from "@cmdclaw/db/schema";
+} from "@bap/core/server/integrations/connected-account-resolution";
+import { db } from "@bap/db/client";
+import { providerAuth } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { assertValidInstanceApiKey } from "@/server/control-plane/auth";
 

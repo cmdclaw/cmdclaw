@@ -1,5 +1,5 @@
-import { db as defaultDb } from "@cmdclaw/db/client";
-import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
+import { db as defaultDb } from "@bap/db/client";
+import { skill, skillDocument, skillFile } from "@bap/db/schema";
 import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {

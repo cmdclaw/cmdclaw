@@ -340,32 +340,32 @@ const processor: Processor<JobPayload, unknown, string> = async (job) => {
         try {
           const result = await handler(job);
           recordCounter(
-            "cmdclaw_worker_jobs_total",
+            "bap_worker_jobs_total",
             1,
             {
               ...attributes,
               status: "ok",
             },
-            "Count of BullMQ jobs processed by the CmdClaw worker.",
+            "Count of BullMQ jobs processed by the Bap worker.",
           );
           return result;
         } catch (error) {
           recordCounter(
-            "cmdclaw_worker_jobs_total",
+            "bap_worker_jobs_total",
             1,
             {
               ...attributes,
               status: "error",
             },
-            "Count of BullMQ jobs processed by the CmdClaw worker.",
+            "Count of BullMQ jobs processed by the Bap worker.",
           );
           throw error;
         } finally {
           recordHistogram(
-            "cmdclaw_worker_job_duration_ms",
+            "bap_worker_job_duration_ms",
             performance.now() - startedAt,
             attributes,
-            "Duration of BullMQ jobs processed by the CmdClaw worker.",
+            "Duration of BullMQ jobs processed by the Bap worker.",
           );
         }
       },
@@ -414,24 +414,24 @@ function registerQueueMetrics(): void {
   }
 
   registerObservableGauge(
-    "cmdclaw_bullmq_jobs",
+    "bap_bullmq_jobs",
     (observe) => {
       observe(queueMetricSnapshot.waiting, { queue: queueName, state: "waiting" });
       observe(queueMetricSnapshot.active, { queue: queueName, state: "active" });
       observe(queueMetricSnapshot.delayed, { queue: queueName, state: "delayed" });
       observe(queueMetricSnapshot.failed, { queue: queueName, state: "failed" });
     },
-    "Current BullMQ job counts by state for the primary CmdClaw queue.",
+    "Current BullMQ job counts by state for the primary Bap queue.",
   );
 
   registerObservableGauge(
-    "cmdclaw_bullmq_oldest_waiting_job_age_seconds",
+    "bap_bullmq_oldest_waiting_job_age_seconds",
     (observe) => {
       observe(queueMetricSnapshot.oldestWaitingAgeSeconds, {
         queue: queueName,
       });
     },
-    "Age in seconds of the oldest waiting BullMQ job on the primary CmdClaw queue.",
+    "Age in seconds of the oldest waiting BullMQ job on the primary Bap queue.",
   );
 
   queueMetricsRegistered = true;

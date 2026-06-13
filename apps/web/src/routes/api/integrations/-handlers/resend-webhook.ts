@@ -2,8 +2,8 @@ import {
   buildQueueJobId,
   EMAIL_FORWARDED_COWORKER_JOB_NAME,
   getQueue,
-} from "@cmdclaw/core/server/queues";
-import { type ResendEmailReceivedEvent } from "@cmdclaw/core/server/services/coworker-email-forwarding";
+} from "@bap/core/server/queues";
+import { type ResendEmailReceivedEvent } from "@bap/core/server/services/coworker-email-forwarding";
 import { Resend } from "resend";
 import { env } from "@/env";
 

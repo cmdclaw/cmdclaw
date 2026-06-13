@@ -1,4 +1,4 @@
-import { orgChartNode } from "@cmdclaw/db/schema";
+import { orgChartNode } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";

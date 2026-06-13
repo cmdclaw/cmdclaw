@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { db } from "@cmdclaw/db/client";
-import type { ContentPart } from "@cmdclaw/db/schema";
-import { coworkerRun, generation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import type { ContentPart } from "@bap/db/schema";
+import { coworkerRun, generation } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import type { RuntimePromptPart } from "../../../sandbox/core/types";
 import {
@@ -1018,7 +1018,7 @@ export class DecisionFlow {
     const approvalPart = this.buildApprovalContentPart({
       interrupt,
       decision: input.decision,
-      defaultIntegration: "cmdclaw",
+      defaultIntegration: "bap",
       defaultOperation: "question",
       questionAnswers: input.questionAnswers,
     });

@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { conversation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "../../../env";
 import { parseModelReference } from "../../../lib/model-reference";

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-06-01T19:25:38Z",
-  "title": "Design System: CmdClaw",
+  "title": "Design System: Bap",
   "extensions": {
     "colorMeta": {
       "background": {
@@ -165,7 +165,7 @@
       "kind": "custom",
       "refersTo": "prompt-bar",
       "description": "Signature rounded input dock for chat and automation prompts.",
-      "html": "<div class=\"ds-prompt\"><textarea aria-label=\"Message\" placeholder=\"Ask CmdClaw to work across your tools\"></textarea><div class=\"ds-prompt-actions\"><button aria-label=\"Add attachment\">+</button><button aria-label=\"Send message\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M5 12l7-7 7 7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></div></div>",
+      "html": "<div class=\"ds-prompt\"><textarea aria-label=\"Message\" placeholder=\"Ask Bap to work across your tools\"></textarea><div class=\"ds-prompt-actions\"><button aria-label=\"Add attachment\">+</button><button aria-label=\"Send message\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M5 12l7-7 7 7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></div></div>",
       "css": ".ds-prompt { overflow: hidden; border: 1px solid color-mix(in oklch, var(--border) 60%, transparent); border-radius: 1rem; background: color-mix(in oklch, rgb(250 250 249) 80%, transparent); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); font-family: var(--font-geist-sans); transition: box-shadow 200ms ease-out, border-color 200ms ease-out; } .ds-prompt:focus-within { border-color: color-mix(in oklch, var(--ring) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 25%, transparent); } .ds-prompt textarea { display: block; width: 100%; min-height: 88px; resize: none; border: 0; outline: 0; background: transparent; color: var(--foreground); padding: 1rem 1.25rem 0.5rem; font: 400 0.9375rem/1.625 var(--font-geist-sans); } .ds-prompt textarea::placeholder { color: color-mix(in oklch, var(--muted-foreground) 40%, transparent); } .ds-prompt-actions { display: flex; align-items: center; gap: 0.25rem; padding: 0 0.75rem 0.75rem; } .ds-prompt-actions button { width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: calc(0.625rem + 2px); background: transparent; color: var(--muted-foreground); transition: background 150ms ease-out, color 150ms ease-out; } .ds-prompt-actions button:hover { background: var(--muted); color: var(--foreground); } .ds-prompt-actions button:last-child { margin-left: auto; background: rgb(41 37 36); color: rgb(250 250 249); } .ds-prompt-actions button:last-child:hover { background: rgb(68 64 60); } .ds-prompt-actions svg { width: 1rem; height: 1rem; }"
     },
     {
@@ -187,7 +187,7 @@
   ],
   "narrative": {
     "northStar": "The Operations Console",
-    "overview": "CmdClaw is a product UI for people asking agents to act across real company systems. The interface should feel like a precise operations console: quiet, durable, and legible under repeated use. It is not a showpiece; it is a working surface for chat, coworker runs, approvals, connected identities, and runtime status.\n\nThe current system is restrained by default: near-neutral surfaces, compact controls, thin borders, sparse shadows, and one warm rust brand accent for trust and action. The physical scene is a focused operator moving between conversations, inbox state, and integration settings on a laptop during the workday. Light mode is the primary posture because the app is used alongside documents, email, and admin tools; dark mode exists as an alternate state, not the brand.\n\nThe product language in `CONTEXT.md` is exacting, and the UI should match that precision. Avoid vague SaaS gloss, theatrical AI gradients, oversized marketing composition inside the authenticated app, and any visual treatment that makes agent execution look decorative instead of accountable.",
+    "overview": "Bap is a product UI for people asking agents to act across real company systems. The interface should feel like a precise operations console: quiet, durable, and legible under repeated use. It is not a showpiece; it is a working surface for chat, coworker runs, approvals, connected identities, and runtime status.\n\nThe current system is restrained by default: near-neutral surfaces, compact controls, thin borders, sparse shadows, and one warm rust brand accent for trust and action. The physical scene is a focused operator moving between conversations, inbox state, and integration settings on a laptop during the workday. Light mode is the primary posture because the app is used alongside documents, email, and admin tools; dark mode exists as an alternate state, not the brand.\n\nThe product language in `CONTEXT.md` is exacting, and the UI should match that precision. Avoid vague SaaS gloss, theatrical AI gradients, oversized marketing composition inside the authenticated app, and any visual treatment that makes agent execution look decorative instead of accountable.",
     "keyCharacteristics": [
       "Dense but calm: more console than brochure.",
       "Tokenized neutral layers with one warm operational accent.",

@@ -25,11 +25,11 @@ export const Route = createFileRoute("/skills/community/$skillId")({
   head: ({ params }) => {
     const skill = COMMUNITY_SKILL_METADATA[params.skillId];
     if (!skill) {
-      return { meta: [{ title: "Skill not found | CmdClaw" }] };
+      return { meta: [{ title: "Skill not found | Bap" }] };
     }
     return {
       meta: [
-        { title: `${skill.title} | CmdClaw` },
+        { title: `${skill.title} | Bap` },
         { name: "description", content: skill.description },
       ],
     };

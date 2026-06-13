@@ -1,6 +1,6 @@
 # Releasing
 
-CmdClaw ships from `main`.
+Bap ships from `main`.
 
 Every push to `main` starts the `Release Main` workflow. The workflow deploys the
 same commit to staging, verifies staging, promotes that commit to production,

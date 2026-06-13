@@ -37,7 +37,7 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       conversation: {
@@ -50,7 +50,7 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/utils/observability", () => ({
+vi.mock("@bap/core/server/utils/observability", () => ({
   emitClientObservation: emitClientObservationMock,
 }));
 
@@ -95,11 +95,11 @@ describe("client observation intake", () => {
   beforeEach(async () => {
     vi.resetModules();
     const redisState = globalThis as typeof globalThis & {
-      cmdclawClientObservationRedis?: unknown;
-      cmdclawClientObservationRedisFactory?: () => unknown;
+      bapClientObservationRedis?: unknown;
+      bapClientObservationRedisFactory?: () => unknown;
     };
-    delete redisState.cmdclawClientObservationRedis;
-    redisState.cmdclawClientObservationRedisFactory = () => ({
+    delete redisState.bapClientObservationRedis;
+    redisState.bapClientObservationRedisFactory = () => ({
       pexpire: redisPexpireMock,
       set: redisSetMock,
       multi: () => {

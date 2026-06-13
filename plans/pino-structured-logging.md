@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 ## Purpose / Big Picture
 
-CmdClaw service logs currently pass through patched `console.*` calls and a custom HTTP export to Vector. That path loses native `Error` fields, so Render can show a useful error while VictoriaLogs receives `{}`. After this change, service-side Operational Logs, Canonical Service Events, and accepted Client Observations all emit structured JSON lines to stdout or stderr through a Pino-backed logger. Render and Vector ingest process output, while metrics and traces continue through OpenTelemetry exporters. A human can see this working by running the focused observability tests and by inspecting emitted log records: native `Error` instances include bounded message and stack details, Operational Logs use `event.kind="operational_log"` plus a dotted snake case `event`, and Canonical Service Events keep their canonical envelope.
+Bap service logs currently pass through patched `console.*` calls and a custom HTTP export to Vector. That path loses native `Error` fields, so Render can show a useful error while VictoriaLogs receives `{}`. After this change, service-side Operational Logs, Canonical Service Events, and accepted Client Observations all emit structured JSON lines to stdout or stderr through a Pino-backed logger. Render and Vector ingest process output, while metrics and traces continue through OpenTelemetry exporters. A human can see this working by running the focused observability tests and by inspecting emitted log records: native `Error` instances include bounded message and stack details, Operational Logs use `event.kind="operational_log"` plus a dotted snake case `event`, and Canonical Service Events keep their canonical envelope.
 
 ## Progress
 
@@ -52,22 +52,22 @@ Service call sites import and call `logServerEvent` in many files under `package
 
 ## Plan of Work
 
-First, create a logger facade in core server utilities. The facade will use Pino, but call sites will import the CmdClaw logger type and helpers rather than Pino directly. It will normalize field names, drop forbidden fields, bound strings, arrays, and stacks, serialize errors into Error Diagnostics, attach runtime fields and active trace/span identifiers, and emit Operational Logs with `event.kind="operational_log"` and dotted snake case `event` names. It will support child loggers with bound context and a test sink so behavior can be asserted without noisy test output.
+First, create a logger facade in core server utilities. The facade will use Pino, but call sites will import the Bap logger type and helpers rather than Pino directly. It will normalize field names, drop forbidden fields, bound strings, arrays, and stacks, serialize errors into Error Diagnostics, attach runtime fields and active trace/span identifiers, and emit Operational Logs with `event.kind="operational_log"` and dotted snake case `event` names. It will support child loggers with bound context and a test sink so behavior can be asserted without noisy test output.
 
 Second, refactor `packages/core/src/server/utils/observability.ts` so `initializeObservabilityRuntime` initializes service identity and OpenTelemetry metrics/traces only. Remove `patchConsole`, `buildConsolePayload`, `forwardLogPayload`, pending log exports, and the Vector `/logs` URL from runtime state. Preserve Vector URL resolution for metrics and traces. Make `emitCanonicalServiceEvent` and `emitClientObservation` write their normalized payloads through the logger transport while retaining span enrichment. Remove `logServerEvent` from the public API.
 
 Third, migrate service `logServerEvent` call sites. Each call becomes `logger.info`, `logger.warn`, or `logger.error` with a dotted snake case `event` and a useful human `msg`. Details and context should be merged into the logger record, with product pivots supplied explicitly. Do not promote generic log calls to Canonical Service Events during this pass unless the file already uses an explicit canonical API for that contract.
 
-Fourth, update tests. Add focused logger tests for `Error` serialization, nested error serialization, redaction, field normalization, Operational Log shape, child context, and absence of `cmdclaw.event.name` on Operational Logs. Update observability tests to prove Canonical Service Events and Client Observations keep their semantic envelopes and no app-side log `fetch` remains. Run focused tests, `bun run --cwd packages/core check`, and relevant web checks if the web router migration affects type checking.
+Fourth, update tests. Add focused logger tests for `Error` serialization, nested error serialization, redaction, field normalization, Operational Log shape, child context, and absence of `bap.event.name` on Operational Logs. Update observability tests to prove Canonical Service Events and Client Observations keep their semantic envelopes and no app-side log `fetch` remains. Run focused tests, `bun run --cwd packages/core check`, and relevant web checks if the web router migration affects type checking.
 
 ## Concrete Steps
 
-Work from `/Users/baptiste/Git/cmdclaw`.
+Work from `/Users/baptiste/Git/bap`.
 
 Run focused searches before migrating call sites:
 
     rg -n "logServerEvent\\(" packages/core apps/web
-    rg -n "forwardLogPayload|patchConsole|buildConsolePayload|CMDCLAW_VECTOR_LOG_URL" packages/core apps web
+    rg -n "forwardLogPayload|patchConsole|buildConsolePayload|BAP_VECTOR_LOG_URL" packages/core apps web
 
 After adding the logger facade and refactoring observability, run:
 
@@ -84,7 +84,7 @@ When validation passes, search again and expect no service runtime usage of the 
 
 ## Validation and Acceptance
 
-Acceptance comes from tests and searches. The focused observability tests must show that a native `Error` does not serialize as `{}`, that Operational Logs use `event.kind="operational_log"` and a dotted snake case `event`, that Operational Logs do not carry `cmdclaw.event.name`, that forbidden content is removed, and that explicit or child-bound context appears in emitted records. Canonical Service Event tests must show the canonical envelope still includes `cmdclaw.event.name`, `cmdclaw.event.id`, operation name, outcome, service fields, trace correlation, and span enrichment. Client Observation tests must show accepted observations keep their envelope and write through the same stdout log transport.
+Acceptance comes from tests and searches. The focused observability tests must show that a native `Error` does not serialize as `{}`, that Operational Logs use `event.kind="operational_log"` and a dotted snake case `event`, that Operational Logs do not carry `bap.event.name`, that forbidden content is removed, and that explicit or child-bound context appears in emitted records. Canonical Service Event tests must show the canonical envelope still includes `bap.event.name`, `bap.event.id`, operation name, outcome, service fields, trace correlation, and span enrichment. Client Observation tests must show accepted observations keep their envelope and write through the same stdout log transport.
 
 The code search `rg -n "logServerEvent\\(|forwardLogPayload|patchConsole|buildConsolePayload" packages/core apps/web` must return no production implementation references. `initializeObservabilityRuntime` must not patch `console.*` and must not configure an app-side `/logs` export. Metrics and traces must still resolve Vector endpoints and initialize through OpenTelemetry exporters.
 
@@ -117,7 +117,7 @@ Validation evidence captured during implementation:
     bun run check:web
     # Tasks 6 successful; oxlint found 0 warnings and 0 errors
 
-    rg -n "logServerEvent\\(|forwardLogPayload|patchConsole|buildConsolePayload|pendingLogExports|consolePatched|vectorLogUrl|CMDCLAW_VECTOR_LOG_URL" packages/core apps/web -g '!*.test.ts'
+    rg -n "logServerEvent\\(|forwardLogPayload|patchConsole|buildConsolePayload|pendingLogExports|consolePatched|vectorLogUrl|BAP_VECTOR_LOG_URL" packages/core apps/web -g '!*.test.ts'
     # no matches
 
     rg -n "from [\"']pino[\"']|require\\([\"']pino[\"']\\)" packages/core apps/web apps/worker apps/ws apps/mcp

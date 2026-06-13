@@ -336,7 +336,7 @@ export function SourceDetailPage() {
               </>
             ) : isManagedSource ? (
               <span className="text-muted-foreground text-xs">
-                <T>Managed by CmdClaw</T>
+                <T>Managed by Bap</T>
               </span>
             ) : null}
           </div>

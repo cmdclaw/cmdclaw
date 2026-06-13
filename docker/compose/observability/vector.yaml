@@ -67,15 +67,15 @@ transforms:
       } else {
         null
       }
-      .instanceId = if exists(.resources.cmdclaw_instance_id) && !is_null(.resources.cmdclaw_instance_id) {
-        .resources.cmdclaw_instance_id
+      .instanceId = if exists(.resources.bap_instance_id) && !is_null(.resources.bap_instance_id) {
+        .resources.bap_instance_id
       } else if exists(.instanceId) && !is_null(.instanceId) {
         .instanceId
       } else {
         null
       }
-      .worktreeSlot = if exists(.resources.cmdclaw_worktree_slot) && !is_null(.resources.cmdclaw_worktree_slot) {
-        .resources.cmdclaw_worktree_slot
+      .worktreeSlot = if exists(.resources.bap_worktree_slot) && !is_null(.resources.bap_worktree_slot) {
+        .resources.bap_worktree_slot
       } else if exists(.worktreeSlot) && !is_null(.worktreeSlot) {
         .worktreeSlot
       } else {

@@ -3,8 +3,8 @@ import {
   TOP_UP_CREDITS_PER_USD,
   TOP_UP_EXPIRY_MONTHS,
   type BillingPlanDefinition,
-} from "@cmdclaw/core/lib/billing-plans";
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
+} from "@bap/core/lib/billing-plans";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { T, msg, useGT, useMessages } from "gt-react";
@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_marketing/pricing")({
   },
   head: () => ({
     meta: [
-      { title: localizedText("Pricing · CmdClaw", { fr: "Tarifs · CmdClaw" }) },
+      { title: localizedText("Pricing · Bap", { fr: "Tarifs · Bap" }) },
       {
         name: "description",
         content: localizedText(
@@ -102,13 +102,13 @@ const PLAN_COPY = {
   free: {
     source: {
       name: "Free",
-      description: "Shared workspace for trying CmdClaw with manual top-ups.",
+      description: "Shared workspace for trying Bap with manual top-ups.",
       ctaLabel: "Start free",
       monthlyPriceLabel: "$0",
     },
     messages: {
       name: msg("Free"),
-      description: msg("Shared workspace for trying CmdClaw with manual top-ups."),
+      description: msg("Shared workspace for trying Bap with manual top-ups."),
       ctaLabel: msg("Start free"),
       monthlyPriceLabel: msg("$0"),
     },
@@ -229,7 +229,7 @@ function PlanCard({ plan }: { plan: BillingPlanDefinition }) {
             variant="outline"
             className="w-full border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-50"
           >
-            <a href="mailto:hello@cmdclaw.ai?subject=CmdClaw%20Enterprise">
+            <a href="mailto:hello@heybap.com?subject=Bap%20Enterprise">
               <T>Contact sales</T>
             </a>
           </Button>

@@ -86,13 +86,13 @@ export function InviteOnlyAccessClient({
       <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
         <div className="space-y-1 text-center">
           <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-            <T>CmdClaw</T>
+            <T>Bap</T>
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">
             <T>Request access</T>
           </h1>
           <p className="text-muted-foreground text-sm">
-            <T>CmdClaw is invite-only. Enter your email to request access.</T>
+            <T>Bap is invite-only. Enter your email to request access.</T>
           </p>
         </div>
 

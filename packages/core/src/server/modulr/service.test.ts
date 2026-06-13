@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { validateModulrWorkspaceConnection } from "./service";
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {},
 }));
 
-vi.mock("@cmdclaw/db/schema", () => ({
+vi.mock("@bap/db/schema", () => ({
   modulrWorkspaceAccess: {},
   workspaceAuthorization: {},
   workspaceMcpAuthorization: {},

@@ -5,7 +5,7 @@ import type {
   PendingApproval,
   PendingAuth,
   QueuedMessageAttachment,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import type { ProviderAuthSource } from "../../../lib/provider-auth-source";
 import type { RuntimePart } from "../../sandbox/core/types";
 import type { SandboxBackend } from "../../sandbox/types";

@@ -2,11 +2,11 @@
 
 All endpoints are the local observability stack (`docs/observability.md`):
 logs `http://127.0.0.1:9428`, traces (Jaeger API) `http://127.0.0.1:10428`,
-metrics `http://127.0.0.1:8428`, redis via `docker exec cmdclaw-local-redis-1`.
+metrics `http://127.0.0.1:8428`, redis via `docker exec bap-local-redis-1`.
 
 ## Baselines
 
-cmdclaw (capture generation id, phases, and a Chrome trace):
+bap (capture generation id, phases, and a Chrome trace):
 
 ```sh
 /usr/bin/time -p bun run cli chat -m "<prompt>" --timing --perfettoTrace [-q "<answer>"...]
@@ -33,7 +33,7 @@ Wall minus `end_to_end_total` ≈ CLI bootstrap + post-completion client work.
 
    ```sh
    curl -sG 'http://127.0.0.1:9428/select/logsql/query' \
-     --data-urlencode 'query=cmdclaw.generation.id:"<GEN_ID>"' --data-urlencode 'limit=1000'
+     --data-urlencode 'query=bap.generation.id:"<GEN_ID>"' --data-urlencode 'limit=1000'
    ```
 
    Sort by `_time`; gaps between consecutive stages are the suspects.
@@ -50,7 +50,7 @@ Wall minus `end_to_end_total` ≈ CLI bootstrap + post-completion client work.
    text→`done` tail:
 
    ```sh
-   docker exec cmdclaw-local-redis-1 redis-cli XRANGE "gen:stream:<GEN_ID>" - +
+   docker exec bap-local-redis-1 redis-cli XRANGE "gen:stream:<GEN_ID>" - +
    ```
 
    Read `createdAtMs` in each envelope. Model turn = `tool_result` → next
@@ -78,7 +78,7 @@ baked caches are missed.
 
 ## Ruling things out
 
-- **Prompt size:** cmdclaw per-turn input ≈ terminal event `cmdclaw.usage.input_tokens`
+- **Prompt size:** bap per-turn input ≈ terminal event `bap.usage.input_tokens`
   ÷ model calls. Native: `sqlite3 ~/.local/share/opencode/opencode.db "select
   json_extract(data,'$.tokens.input') from message"` (or the XDG data dir used for
   the run). If they're close (~13.5k/turn both as of mid-2026), prompt size is not the gap.

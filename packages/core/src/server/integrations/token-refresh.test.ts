@@ -74,7 +74,7 @@ const {
   };
 });
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
@@ -301,7 +301,7 @@ describe("token-refresh", () => {
 
     const redditRequest = captured[2];
     expect(redditRequest).toBeDefined();
-    expect(redditRequest!.headers.get("user-agent")).toContain("cmdclaw-app:v1.0.0");
+    expect(redditRequest!.headers.get("user-agent")).toContain("bap-app:v1.0.0");
   });
 
   it("throws when refresh fails", async () => {

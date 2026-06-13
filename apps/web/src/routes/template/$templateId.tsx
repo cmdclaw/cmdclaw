@@ -1,4 +1,4 @@
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate } from "@bap/db/template-catalog";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { T } from "gt-react";
@@ -31,11 +31,11 @@ export const Route = createFileRoute("/template/$templateId")({
   loader: ({ params }) => loadTemplateById({ data: params.templateId }),
   head: ({ loaderData }) => {
     if (!loaderData) {
-      return { meta: [{ title: "Template not found | CmdClaw" }] };
+      return { meta: [{ title: "Template not found | Bap" }] };
     }
     return {
       meta: [
-        { title: `${loaderData.title} | CmdClaw` },
+        { title: `${loaderData.title} | Bap` },
         { name: "description", content: loaderData.description },
       ],
     };

@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve as resolvePath } from "node:path";
 
 import { formatWorktreeStackSlot } from "./stack";
 
-const DEFAULT_SHARED_WORKTREE_ROOT = ".cmdclaw/worktrees";
+const DEFAULT_SHARED_WORKTREE_ROOT = ".bap/worktrees";
 export const SLOT_LEASE_STALE_GRACE_MS = 60_000;
 
 export type WorktreeSlotLease = {
@@ -83,7 +83,7 @@ export function buildWorktreeSlotLease(params: {
     slot: params.slot,
     instanceId: params.instanceId,
     repoRoot: params.repoRoot,
-    tool: params.tool?.trim() || "cmdclaw-worktree",
+    tool: params.tool?.trim() || "bap-worktree",
     hostname: hostname(),
     pid: params.pid ?? process.pid,
     createdAt: timestamp,

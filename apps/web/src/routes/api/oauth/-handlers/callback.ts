@@ -1,18 +1,18 @@
-import { exchangeMcpOAuthAuthorizationCode } from "@cmdclaw/core/server/executor/mcp-oauth";
+import { exchangeMcpOAuthAuthorizationCode } from "@bap/core/server/executor/mcp-oauth";
 import {
   computeWorkspaceMcpServerRevisionHash,
   setWorkspaceMcpServerOAuthCredential,
-} from "@cmdclaw/core/server/executor/workspace-sources";
-import { assignConnectedIdentityForProviderAccount } from "@cmdclaw/core/server/integrations/connected-identities";
-import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
-import { generationManager } from "@cmdclaw/core/server/services/generation-manager";
-import { db } from "@cmdclaw/db/client";
+} from "@bap/core/server/executor/workspace-sources";
+import { assignConnectedIdentityForProviderAccount } from "@bap/core/server/integrations/connected-identities";
+import { getOAuthConfig, type IntegrationType } from "@bap/core/server/oauth/config";
+import { generationManager } from "@bap/core/server/services/generation-manager";
+import { db } from "@bap/db/client";
 import {
   integration,
   integrationToken,
   workspaceMcpServer,
   workspaceMcpAuthorization,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";

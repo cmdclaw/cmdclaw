@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "CmdClaw",
+  "name": "Bap",
   "colors": {
     "primary": "#000000",
     "light": "#6B7280",
@@ -51,14 +51,14 @@
     "primary": {
       "type": "button",
       "label": "Open App",
-      "href": "https://cmdclaw.ai"
+      "href": "https://heybap.com"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/baptistecolle/cmdclaw",
+      "github": "https://github.com/baptistecolle/bap",
       "discord": "https://discord.com/invite/NHQy8gXerd",
-      "website": "https://cmdclaw.ai"
+      "website": "https://heybap.com"
     }
   }
 }

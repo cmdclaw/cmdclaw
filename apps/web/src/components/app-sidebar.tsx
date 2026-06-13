@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 
 type SessionData = Awaited<ReturnType<typeof authClient.getSession>>["data"];
 type SidebarMode = "user" | "admin";
-const SIDEBAR_MODE_STORAGE_KEY = "cmdclaw.sidebarMode";
+const SIDEBAR_MODE_STORAGE_KEY = "bap.sidebarMode";
 
 type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -412,7 +412,7 @@ export function AppSidebar({ initialPrincipal = null }: AppSidebarProps) {
         <div className="flex h-14 items-center justify-center">
           <AppLink
             href="/"
-            aria-label={t("CmdClaw home")}
+            aria-label={t("Bap home")}
             className="hover:bg-sidebar-accent focus-visible:ring-sidebar-ring/45 flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:ring-3 focus-visible:outline-none"
           >
             <AppImage src="/logo.png" alt="" width={24} height={24} className="object-contain" />

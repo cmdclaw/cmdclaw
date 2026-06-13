@@ -4,13 +4,9 @@ import {
   normalizeIntegrationSkillSlug,
   resolveIntegrationSkillForUser,
   validateIntegrationSkillFilePath,
-} from "@cmdclaw/core/server/services/integration-skill-service";
-import { db } from "@cmdclaw/db/client";
-import {
-  integrationSkill,
-  integrationSkillFile,
-  integrationSkillPreference,
-} from "@cmdclaw/db/schema";
+} from "@bap/core/server/services/integration-skill-service";
+import { db } from "@bap/db/client";
+import { integrationSkill, integrationSkillFile, integrationSkillPreference } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";

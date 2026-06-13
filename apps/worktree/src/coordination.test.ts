@@ -14,26 +14,26 @@ import {
 } from "./coordination";
 
 describe("worktree coordination helpers", () => {
-  test("resolves the shared coordination root under ~/.cmdclaw/worktrees", () => {
-    expect(resolveSharedWorktreeRoot("/Users/example")).toBe("/Users/example/.cmdclaw/worktrees");
+  test("resolves the shared coordination root under ~/.bap/worktrees", () => {
+    expect(resolveSharedWorktreeRoot("/Users/example")).toBe("/Users/example/.bap/worktrees");
   });
 
   test("derives deterministic slot lease paths", () => {
-    expect(resolveSharedWorktreeSlotLeasePath("/Users/example/.cmdclaw/worktrees", 2)).toBe(
-      "/Users/example/.cmdclaw/worktrees/locks/slot-02.json",
+    expect(resolveSharedWorktreeSlotLeasePath("/Users/example/.bap/worktrees", 2)).toBe(
+      "/Users/example/.bap/worktrees/locks/slot-02.json",
     );
   });
 
   test("derives deterministic shared instance paths", () => {
-    expect(resolveSharedWorktreeInstancesDir("/Users/example/.cmdclaw/worktrees")).toBe(
-      "/Users/example/.cmdclaw/worktrees/instances",
+    expect(resolveSharedWorktreeInstancesDir("/Users/example/.bap/worktrees")).toBe(
+      "/Users/example/.bap/worktrees/instances",
     );
     expect(
       resolveSharedWorktreeInstanceRoot(
-        "/Users/example/.cmdclaw/worktrees",
-        "cmdclaw-1234abcd",
+        "/Users/example/.bap/worktrees",
+        "bap-1234abcd",
       ),
-    ).toBe("/Users/example/.cmdclaw/worktrees/instances/cmdclaw-1234abcd");
+    ).toBe("/Users/example/.bap/worktrees/instances/bap-1234abcd");
   });
 
   test("resolves configured shared worktree roots from explicit or default values", () => {
@@ -43,7 +43,7 @@ describe("worktree coordination helpers", () => {
         homeDir: "/Users/example",
         explicitRoot: null,
       }),
-    ).toBe("/Users/example/.cmdclaw/worktrees");
+    ).toBe("/Users/example/.bap/worktrees");
 
     expect(
       resolveConfiguredSharedWorktreeRoot({
@@ -65,7 +65,7 @@ describe("worktree coordination helpers", () => {
   test("builds and refreshes slot lease records", () => {
     const lease = buildWorktreeSlotLease({
       slot: 2,
-      instanceId: "cmdclaw-1234abcd",
+      instanceId: "bap-1234abcd",
       repoRoot: "/tmp/worktree",
       pid: 42,
       now: new Date("2026-04-25T07:30:00.000Z"),
@@ -74,7 +74,7 @@ describe("worktree coordination helpers", () => {
     expect(lease).toMatchObject({
       version: 1,
       slot: 2,
-      instanceId: "cmdclaw-1234abcd",
+      instanceId: "bap-1234abcd",
       repoRoot: "/tmp/worktree",
       pid: 42,
       createdAt: "2026-04-25T07:30:00.000Z",
@@ -89,7 +89,7 @@ describe("worktree coordination helpers", () => {
   test("matches lease ownership by repo root and instance id", () => {
     const lease = buildWorktreeSlotLease({
       slot: 2,
-      instanceId: "cmdclaw-1234abcd",
+      instanceId: "bap-1234abcd",
       repoRoot: "/tmp/worktree",
       pid: 42,
       now: new Date("2026-04-25T07:30:00.000Z"),
@@ -97,14 +97,14 @@ describe("worktree coordination helpers", () => {
 
     expect(
       isWorktreeSlotLeaseOwnedByInstance(lease, {
-        instanceId: "cmdclaw-1234abcd",
+        instanceId: "bap-1234abcd",
         repoRoot: "/tmp/worktree",
       }),
     ).toBe(true);
 
     expect(
       isWorktreeSlotLeaseOwnedByInstance(lease, {
-        instanceId: "cmdclaw-1234abcd",
+        instanceId: "bap-1234abcd",
         repoRoot: "/tmp/other",
       }),
     ).toBe(false);

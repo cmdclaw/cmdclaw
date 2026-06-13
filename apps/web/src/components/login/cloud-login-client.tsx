@@ -158,10 +158,10 @@ export function CloudLoginClient({
     step === "initial"
       ? initialScreen === "getting-started"
         ? "Use an approved email to create an account."
-        : "CmdClaw is invite-only. Use an approved email to sign in."
+        : "Bap is invite-only. Use an approved email to sign in."
       : step === "password"
         ? passwordStepMode === "create"
-          ? "Create a password to finish setting up your CmdClaw account."
+          ? "Create a password to finish setting up your Bap account."
           : "Enter your password to continue."
         : step === "magic-link-sent"
           ? "Open the link we sent to continue."
@@ -369,7 +369,7 @@ export function CloudLoginClient({
       {/* Header */}
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          <T>CmdClaw</T>
+          <T>Bap</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm text-balance">{description}</p>

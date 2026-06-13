@@ -1,5 +1,5 @@
-import { db, closePool } from "@cmdclaw/db/client";
-import { session, user } from "@cmdclaw/db/schema";
+import { db, closePool } from "@bap/db/client";
+import { session, user } from "@bap/db/schema";
 import { serializeSignedCookie } from "better-call";
 import { eq } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";

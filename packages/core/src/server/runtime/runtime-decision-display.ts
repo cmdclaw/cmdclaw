@@ -8,7 +8,7 @@ import {
 } from "./runtime-driver";
 
 export const RUNTIME_INTERRUPT_PROVIDER = "runtime" as const;
-export const RUNTIME_CONTENT_INTEGRATION = "cmdclaw" as const;
+export const RUNTIME_CONTENT_INTEGRATION = "bap" as const;
 
 export type RuntimePendingApprovalDisplay = {
   toolUseId: string;

@@ -1,8 +1,8 @@
-import type { CloudAuthExchangePayload } from "@cmdclaw/core/server/control-plane/types";
-import { ensureWorkspaceForUser } from "@cmdclaw/core/server/billing/service";
-import { upsertCloudAccountLinkForUser } from "@cmdclaw/core/server/control-plane/local-links";
-import { db } from "@cmdclaw/db/client";
-import { cloudAccountLink, session, user } from "@cmdclaw/db/schema";
+import type { CloudAuthExchangePayload } from "@bap/core/server/control-plane/types";
+import { ensureWorkspaceForUser } from "@bap/core/server/billing/service";
+import { upsertCloudAccountLinkForUser } from "@bap/core/server/control-plane/local-links";
+import { db } from "@bap/db/client";
+import { cloudAccountLink, session, user } from "@bap/db/schema";
 import { serializeSignedCookie } from "better-call";
 import { eq } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -16,7 +16,7 @@ function getDefaultName(email: string, fallbackName: string | null) {
   }
 
   const [localPart] = email.split("@");
-  return localPart?.trim() || "CmdClaw User";
+  return localPart?.trim() || "Bap User";
 }
 
 function normalizeCookieValue(value: string) {

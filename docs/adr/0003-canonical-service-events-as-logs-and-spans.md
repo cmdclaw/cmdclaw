@@ -1,6 +1,6 @@
 # Canonical Service Events Are Logs And Spans
 
-CmdClaw records each service-owned operation with one in-memory Canonical Service Event builder that enriches the active trace span and emits one final structured log event. Logs remain the query surface for high-dimensional records in VictoriaLogs, while spans remain the causal timing surface in VictoriaTraces; building both from the same event prevents drift between log context and trace attributes.
+Bap records each service-owned operation with one in-memory Canonical Service Event builder that enriches the active trace span and emits one final structured log event. Logs remain the query surface for high-dimensional records in VictoriaLogs, while spans remain the causal timing surface in VictoriaTraces; building both from the same event prevents drift between log context and trace attributes.
 
 **Considered Options**
 

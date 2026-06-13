@@ -1,9 +1,6 @@
 // oxlint-disable jsx-a11y/control-has-associated-label
 
-import type {
-  TemplateCatalogTemplate,
-  TemplateIntegrationType,
-} from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@bap/db/template-catalog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { ArrowUp, Search, SlidersHorizontal } from "lucide-react";

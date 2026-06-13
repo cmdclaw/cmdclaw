@@ -1,4 +1,4 @@
-import { buildQueueJobId, SLACK_EVENT_JOB_NAME, getQueue } from "@cmdclaw/core/server/queues";
+import { buildQueueJobId, SLACK_EVENT_JOB_NAME, getQueue } from "@bap/core/server/queues";
 import { verifySlackSignature } from "@/lib/slack-signature";
 
 /**

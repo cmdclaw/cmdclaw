@@ -53,7 +53,7 @@ function slugify(value: string, separator: "-" | "_" = "-"): string {
 }
 
 function buildInstanceId(repoRoot: string): string {
-  const base = slugify(repoRoot.split("/").filter(Boolean).at(-1) ?? "cmdclaw");
+  const base = slugify(repoRoot.split("/").filter(Boolean).at(-1) ?? "bap");
   const hash = createHash("sha1").update(repoRoot).digest("hex").slice(0, 8);
   return `${base}-${hash}`;
 }
@@ -110,7 +110,7 @@ function resolveInstanceRoot(instanceId: string): string {
   const sharedRoot = resolveConfiguredSharedWorktreeRoot({
     cwd: process.cwd(),
     homeDir: process.env.HOME,
-    explicitRoot: process.env.CMDCLAW_SHARED_WORKTREE_ROOT,
+    explicitRoot: process.env.BAP_SHARED_WORKTREE_ROOT,
   });
   return resolveSharedWorktreeInstanceRoot(sharedRoot, instanceId);
 }
@@ -124,7 +124,7 @@ function buildProxyRequest(request: Request, target: URL, requestUrl: URL): Requ
   headers.set("host", target.host);
   headers.set("x-forwarded-host", requestUrl.host);
   headers.set("x-forwarded-proto", requestUrl.protocol.replace(":", ""));
-  headers.set("x-cmdclaw-localcan-proxy", "1");
+  headers.set("x-bap-localcan-proxy", "1");
   return new Request(target, {
     method: request.method,
     headers,

@@ -79,8 +79,8 @@ export function SelfhostControlPlaneGate() {
         </h2>
         <p className="text-muted-foreground mt-2 text-sm">
           <T>
-            This self-hosted deployment depends on the CmdClaw cloud control plane for account
-            links, provider auth, and runtime credentials.
+            This self-hosted deployment depends on the Bap cloud control plane for account links,
+            provider auth, and runtime credentials.
           </T>
         </p>
         <p className="text-muted-foreground mt-3 text-sm">{detail}</p>

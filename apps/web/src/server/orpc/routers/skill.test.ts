@@ -48,7 +48,7 @@ vi.mock("../workspace-access", () => ({
   requireActiveWorkspaceAccess: requireActiveWorkspaceAccessMock,
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   uploadToS3: uploadToS3Mock,
   deleteFromS3: deleteFromS3Mock,
   getPresignedDownloadUrl: getPresignedDownloadUrlMock,
@@ -56,7 +56,7 @@ vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
   ensureBucket: ensureBucketMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/workspace-skill-service", () => ({
+vi.mock("@bap/core/server/services/workspace-skill-service", () => ({
   buildAccessibleSkillWhere: vi.fn<VitestProcedure>(() => "accessible-where"),
   buildOwnedSkillWhere: vi.fn<VitestProcedure>(() => "owned-where"),
   copySkillToWorkspaceOwner: copySkillToWorkspaceOwnerMock,

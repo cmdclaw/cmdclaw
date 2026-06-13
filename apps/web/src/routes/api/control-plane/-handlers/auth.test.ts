@@ -38,7 +38,7 @@ vi.mock("@/server/control-plane/auth", () => ({
   requireCloudSession: requireCloudSessionMock,
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       user: {
@@ -52,12 +52,12 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/control-plane/client", () => ({
+vi.mock("@bap/core/server/control-plane/client", () => ({
   exchangeCloudAuth: exchangeCloudAuthMock,
   isControlPlaneEnabled: isControlPlaneEnabledMock,
 }));
 
-vi.mock("@cmdclaw/core/server/control-plane/local-auth", () => ({
+vi.mock("@bap/core/server/control-plane/local-auth", () => ({
   consumeControlPlaneAuthState: consumeControlPlaneAuthStateMock,
 }));
 

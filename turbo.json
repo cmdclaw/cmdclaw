@@ -22,7 +22,7 @@
         "app-bundle/**"
       ]
     },
-    "@cmdclaw/docs#build": {
+    "@bap/docs#build": {
       "outputs": []
     },
     "check": {

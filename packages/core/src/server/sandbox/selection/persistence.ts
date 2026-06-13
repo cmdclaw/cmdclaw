@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { RuntimeSelection } from "../core/types";
-import { db } from "@cmdclaw/db/client";
-import { conversation, generation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation, generation } from "@bap/db/schema";
 
 export async function persistGenerationRuntimeSelection(input: {
   generationId?: string;

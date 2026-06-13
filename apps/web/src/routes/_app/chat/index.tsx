@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_app/chat/")({
     return prefill ? { prefill } : {};
   },
   head: () => ({
-    meta: [{ title: "New chat | CmdClaw" }],
+    meta: [{ title: "New chat | Bap" }],
   }),
   component: NewChatPage,
 });

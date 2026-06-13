@@ -1,5 +1,5 @@
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import type { TemplateCatalogTemplate } from "@bap/db/template-catalog";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
 import { T } from "gt-react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

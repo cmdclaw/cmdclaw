@@ -1,5 +1,5 @@
 import type React from "react";
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
@@ -71,9 +71,9 @@ function getSelfHostedErrorMessage(error: string | undefined) {
     case "invalid_code":
       return "The cloud login code is invalid or has already been used. Try again.";
     case "account_conflict":
-      return "This local account is already linked to a different CmdClaw Cloud user.";
+      return "This local account is already linked to a different Bap Cloud user.";
     case "cloud_auth_unavailable":
-      return "CmdClaw Cloud could not complete the login handshake right now.";
+      return "Bap Cloud could not complete the login handshake right now.";
     case "missing_params":
       return "The cloud login callback was missing required parameters.";
     case "cloud_auth_not_available":
@@ -153,7 +153,7 @@ export const Route = createFileRoute("/_auth/login")({
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => resolveLoginPage({ data: deps }),
   head: () => ({
-    meta: [{ title: "Log in - CmdClaw" }],
+    meta: [{ title: "Log in - Bap" }],
   }),
   component: LoginPage,
 });
@@ -171,7 +171,7 @@ function LoginCard({
     <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          <T>CmdClaw</T>
+          <T>Bap</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
@@ -202,7 +202,7 @@ function LoginPage() {
     <div className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
       <LoginCard
         title={t("Log in")}
-        description="Authentication for this self-hosted instance is managed by CmdClaw Cloud."
+        description="Authentication for this self-hosted instance is managed by Bap Cloud."
       >
         {data.errorMessage ? (
           <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border p-3 text-sm">
@@ -224,19 +224,19 @@ function LoginPage() {
             {/* API endpoint, not a typed router route: a plain anchor performs the full
                 navigation the cloud-managed sign-in handshake requires. */}
             <a href={data.authStartUrl}>
-              <T>Continue with CmdClaw Cloud</T>
+              <T>Continue with Bap Cloud</T>
             </a>
           </Button>
         ) : (
           <Button className="w-full" disabled>
-            <T>Continue with CmdClaw Cloud</T>
+            <T>Continue with Bap Cloud</T>
           </Button>
         )}
 
         <p className="text-muted-foreground text-center text-xs">
           <T>
-            Sign in with Google, magic link, or email and password on CmdClaw Cloud, then return
-            here automatically.
+            Sign in with Google, magic link, or email and password on Bap Cloud, then return here
+            automatically.
           </T>
         </p>
       </LoginCard>

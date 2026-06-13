@@ -1,11 +1,11 @@
-import { isCloudEdition } from "@cmdclaw/core/server/edition";
-import { db } from "@cmdclaw/db/client";
-import { controlPlaneAuthRequest, controlPlaneLinkRequest } from "@cmdclaw/db/schema";
+import { isCloudEdition } from "@bap/core/server/edition";
+import { db } from "@bap/db/client";
+import { controlPlaneAuthRequest, controlPlaneLinkRequest } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "@/env";
 import { auth } from "@/lib/auth";
 
-const CONTROL_PLANE_INSTANCE_API_KEY_HEADER = "x-cmdclaw-instance-api-key";
+const CONTROL_PLANE_INSTANCE_API_KEY_HEADER = "x-bap-instance-api-key";
 const LINK_REQUEST_TTL_MS = 10 * 60 * 1000;
 
 export function assertCloudControlPlaneEnabled() {

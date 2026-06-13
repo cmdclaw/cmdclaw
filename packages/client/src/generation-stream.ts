@@ -1,8 +1,8 @@
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
 import { normalizeGenerationError, type NormalizedGenerationError } from "./generation-errors";
 import type {
   AuthNeededData,
-  CmdclawApiClient,
+  BapApiClient,
   DoneArtifactsData,
   GenerationApprovalData,
   GenerationPendingApprovalData,
@@ -48,7 +48,7 @@ export type GenerationCallbacks = {
 };
 
 type RunGenerationStreamParams = {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   input?: GenerationStartInput;
   generationId?: string;
   signal?: AbortSignal;
@@ -155,7 +155,7 @@ export async function runGenerationStream(
               toolUseId: event.providerToolUseId,
               toolName: event.display.title,
               toolInput: event.display.toolInput ?? {},
-              integration: event.display.integration ?? "cmdclaw",
+              integration: event.display.integration ?? "bap",
               operation: event.display.operation ?? "unknown",
               command: event.display.command,
             });
@@ -185,7 +185,7 @@ export async function runGenerationStream(
               toolUseId,
               toolName: event.display.title,
               toolInput: event.display.toolInput ?? {},
-              integration: event.display.integration ?? "cmdclaw",
+              integration: event.display.integration ?? "bap",
               operation: event.display.operation ?? "unknown",
               command: event.display.command,
               status: decision,

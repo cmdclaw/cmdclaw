@@ -103,8 +103,8 @@
     "packages/core/src/server/sandbox/opencode-session.ts:writeResolvedIntegrationSkillsToSandbox",
     "packages/core/src/server/sandbox/opencode-session.ts:getSkillsSystemPrompt",
     "packages/core/src/server/sandbox/opencode-session.ts:getIntegrationSkillsSystemPrompt",
-    "packages/core/src/server/sandbox/platform-mcp-server.ts:CMDCLAW_PLATFORM_MCP_SERVER_NAME",
-    "packages/core/src/server/sandbox/platform-mcp-server.ts:CMDCLAW_PLATFORM_MCP_INTERNAL_KEY",
+    "packages/core/src/server/sandbox/platform-mcp-server.ts:BAP_PLATFORM_MCP_SERVER_NAME",
+    "packages/core/src/server/sandbox/platform-mcp-server.ts:BAP_PLATFORM_MCP_INTERNAL_KEY",
     "packages/core/src/server/services/generation/decisions/decision-flow.ts:getRuntimeToolRefForInterrupt",
     "packages/core/src/server/services/generation/skills/integration-skill-drafts.ts:importIntegrationSkillDraftContent",
     "packages/core/src/server/services/runtime-diagnostic-snapshot-service.ts:buildRuntimeDiagnosticSnapshotStorageKey",
@@ -168,8 +168,8 @@
   ],
   "private_type_leaks": [],
   "unused_dependencies": [
-    "apps/worker/package.json:@cmdclaw/db",
-    "apps/worktree/package.json:@cmdclaw/core"
+    "apps/worker/package.json:@bap/db",
+    "apps/worktree/package.json:@bap/core"
   ],
   "unused_dev_dependencies": [
     "apps/web/package.json:@t3-oss/env-core",
@@ -271,7 +271,7 @@
     "design/generation-refactor/proposal-two/interfaces/types.ts:../../../../../packages/db/src/schema"
   ],
   "unlisted_dependencies": [
-    "@cmdclaw/__mocks__",
+    "@bap/__mocks__",
     "@rocicorp/__mocks__"
   ],
   "duplicate_exports": [

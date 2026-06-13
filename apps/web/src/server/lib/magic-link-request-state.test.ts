@@ -50,7 +50,7 @@ const {
   };
 });
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     delete: deleteMock,
     insert: insertMock,
@@ -89,16 +89,16 @@ describe("magic-link-request-state", () => {
   it("stores redirect targets keyed by a token hash", async () => {
     const requestState = await createMagicLinkRequestState({
       token: "abc123",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       verificationUrl:
-        "https://cmdclaw.ai/api/auth/magic-link/verify?token=abc123&callbackURL=%2Fchat&newUserCallbackURL=%2Fwelcome&errorCallbackURL=%2Flogin%3Ferror%3Dmagic-link",
+        "https://heybap.com/api/auth/magic-link/verify?token=abc123&callbackURL=%2Fchat&newUserCallbackURL=%2Fwelcome&errorCallbackURL=%2Flogin%3Ferror%3Dmagic-link",
     });
 
     expect(deleteMock).toHaveBeenCalledTimes(1);
     expect(insertMock).toHaveBeenCalledTimes(1);
     expect(insertValuesMock).toHaveBeenCalledWith({
       tokenHash: hashMagicLinkToken("abc123"),
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/welcome",
       errorCallbackUrl: "/login?error=magic-link",
@@ -108,7 +108,7 @@ describe("magic-link-request-state", () => {
     });
     expect(requestState).toMatchObject({
       tokenHash: hashMagicLinkToken("abc123"),
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/welcome",
       errorCallbackUrl: "/login?error=magic-link",
@@ -120,8 +120,8 @@ describe("magic-link-request-state", () => {
   it("cleans up rows only after the retention window", async () => {
     await createMagicLinkRequestState({
       token: "abc123",
-      email: "pilot@cmdclaw.ai",
-      verificationUrl: "https://cmdclaw.ai/api/auth/magic-link/verify?token=abc123",
+      email: "pilot@heybap.com",
+      verificationUrl: "https://heybap.com/api/auth/magic-link/verify?token=abc123",
     });
 
     expect(deleteMock).toHaveBeenCalledTimes(1);
@@ -133,7 +133,7 @@ describe("magic-link-request-state", () => {
   it("returns a stored row for a token", async () => {
     const row = {
       tokenHash: hashMagicLinkToken("abc123"),
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -150,7 +150,7 @@ describe("magic-link-request-state", () => {
   it("resolves a pending page state", async () => {
     findFirstMock.mockResolvedValue({
       tokenHash: hashMagicLinkToken("abc123"),
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -162,7 +162,7 @@ describe("magic-link-request-state", () => {
 
     await expect(resolveMagicLinkPageState("abc123")).resolves.toEqual({
       status: "pending",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -172,7 +172,7 @@ describe("magic-link-request-state", () => {
   it("resolves an expired page state", async () => {
     findFirstMock.mockResolvedValue({
       tokenHash: hashMagicLinkToken("abc123"),
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -184,7 +184,7 @@ describe("magic-link-request-state", () => {
 
     await expect(resolveMagicLinkPageState("abc123")).resolves.toEqual({
       status: "expired",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -194,7 +194,7 @@ describe("magic-link-request-state", () => {
   it("resolves a consumed page state", async () => {
     findFirstMock.mockResolvedValue({
       tokenHash: hashMagicLinkToken("abc123"),
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",
@@ -206,7 +206,7 @@ describe("magic-link-request-state", () => {
 
     await expect(resolveMagicLinkPageState("abc123")).resolves.toEqual({
       status: "consumed",
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       callbackUrl: "/chat",
       newUserCallbackUrl: "/chat",
       errorCallbackUrl: "/login?error=magic-link",

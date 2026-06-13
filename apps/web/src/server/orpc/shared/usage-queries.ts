@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { conversation, coworker, coworkerRun, generation, workspace } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation, coworker, coworkerRun, generation, workspace } from "@bap/db/schema";
 import { inArray, sql } from "drizzle-orm";
 
 type UsageType = "chat" | "coworker_builder" | "coworker_runner";

@@ -1,6 +1,6 @@
 # Observability
 
-CmdClaw’s local observability stack is built for direct machine querying.
+Bap’s local observability stack is built for direct machine querying.
 
 ## Stack
 
@@ -28,7 +28,7 @@ parameter.
 
 ## Canonical Service Events
 
-CmdClaw treats one context-rich `canonical_service_event` as the authoritative
+Bap treats one context-rich `canonical_service_event` as the authoritative
 observability record for each service-owned operation, such as an RPC request,
 webhook, worker job, or Generation lifecycle step. The event is built once,
 enriches the active trace span, and is emitted as one structured JSON log so
@@ -69,7 +69,7 @@ error code, phase timing, and route or procedure identifiers. If raw content is
 needed during debugging, observability should identify the authorized product
 record to inspect rather than duplicating that content into telemetry.
 Operational Logs follow the same safety boundary. Pino may provide the logging
-engine, JSON output, and standard error serialization, but CmdClaw-owned
+engine, JSON output, and standard error serialization, but Bap-owned
 normalization and redaction remain responsible for emitted field names, bounded
 values, correlation fields, and forbidden-content removal before any log line is
 written.
@@ -82,14 +82,14 @@ forbidden content.
 Telemetry attribute names use OpenTelemetry-style dotted snake_case. Prefer
 official semantic convention names such as `service.name`,
 `deployment.environment`, `http.route`, and `rpc.method` when they fit. Use the
-`cmdclaw.*` namespace for product-specific attributes such as
-`cmdclaw.event.kind`, `cmdclaw.operation.type`, `cmdclaw.generation.id`,
-`cmdclaw.conversation.id`, `cmdclaw.duration_ms`, and
-`cmdclaw.outcome`. TypeScript code may use camelCase internally, but emitted
+`bap.*` namespace for product-specific attributes such as
+`bap.event.kind`, `bap.operation.type`, `bap.generation.id`,
+`bap.conversation.id`, `bap.duration_ms`, and
+`bap.outcome`. TypeScript code may use camelCase internally, but emitted
 telemetry is normalized to the canonical attribute names. JSON logs may retain
 backend-friendly correlation aliases such as `trace_id` and `span_id`.
 Operational Logs use `event.kind="operational_log"` and a dotted snake case
-`event` field for the diagnostic event name. `cmdclaw.event.name` is reserved
+`event` field for the diagnostic event name. `bap.event.name` is reserved
 for Canonical Service Events and Client Observations.
 Shared runtime fields and active trace/span identifiers may be added
 automatically by the logging runtime. Product pivots such as Generation,
@@ -117,7 +117,7 @@ browser streams emit client observations; neither owns the terminal Generation
 record. This prevents duplicate terminal events when multiple clients subscribe,
 streams reconnect, or recovery paths resume a Generation.
 
-Every Canonical Service Event has a stable `cmdclaw.event.id` for deduplication.
+Every Canonical Service Event has a stable `bap.event.id` for deduplication.
 Request and worker operation events may use a per-operation identifier. The
 terminal Generation event uses a deterministic identity derived from the
 Generation, such as `generation:{generationId}:terminal`, so recovery paths and
@@ -133,14 +133,14 @@ non-blocking success response so observability failures do not break the UI.
 The terminal Generation event must include the core event envelope, runtime
 configuration, lifecycle timing, tool and interruption summaries, usage and
 error classification, and deployment identity. Required attributes include
-`cmdclaw.generation.id`, `cmdclaw.conversation.id`, `cmdclaw.user.id`,
-`cmdclaw.workspace.id`, `cmdclaw.model.provider`, `cmdclaw.model.name`,
-`cmdclaw.sandbox.provider`, `cmdclaw.auth.source`,
-`cmdclaw.auto_approve.enabled`, `cmdclaw.skills.selected_count`,
-`cmdclaw.attachments.count`, phase timing fields under `cmdclaw.phase.*`,
-tool and interruption counters under `cmdclaw.tool.*`, `cmdclaw.approval.*`,
-and `cmdclaw.auth_interrupt.*`, usage fields under `cmdclaw.usage.*`, and
-safe error fields under `cmdclaw.error.*` and `cmdclaw.failure.phase`.
+`bap.generation.id`, `bap.conversation.id`, `bap.user.id`,
+`bap.workspace.id`, `bap.model.provider`, `bap.model.name`,
+`bap.sandbox.provider`, `bap.auth.source`,
+`bap.auto_approve.enabled`, `bap.skills.selected_count`,
+`bap.attachments.count`, phase timing fields under `bap.phase.*`,
+tool and interruption counters under `bap.tool.*`, `bap.approval.*`,
+and `bap.auth_interrupt.*`, usage fields under `bap.usage.*`, and
+safe error fields under `bap.error.*` and `bap.failure.phase`.
 
 Terminal Generation events are reconstructed from durable lifecycle state at
 terminal emission time. In-memory builders may enrich request and worker
@@ -164,7 +164,7 @@ error code. Fields should be normalized rather than embedded in human prose.
 
 The first rollout slice is complete only when telemetry queries prove the
 system works. A local or staging Generation should be queryable by
-`cmdclaw.generation.id` and show the start RPC Canonical Service Event,
+`bap.generation.id` and show the start RPC Canonical Service Event,
 subscribe RPC Canonical Service Event, terminal Generation Canonical Service
 Event, and related client observations. The same run should be queryable by
 `trace_id` to inspect server span/log correlation. Failure queries should group
@@ -195,12 +195,12 @@ For browser journeys that should emit client observations, add
 require one by default.
 
 Query the wide logs by Generation id. The result should include
-`cmdclaw.generation.start_rpc`, `cmdclaw.generation.subscribe_rpc`,
-`cmdclaw.generation.terminal`, and `event.kind="client_observation"` rows.
+`bap.generation.start_rpc`, `bap.generation.subscribe_rpc`,
+`bap.generation.terminal`, and `event.kind="client_observation"` rows.
 
 ```bash
 curl -G 'http://127.0.0.1:9428/select/logsql/query' \
-  --data-urlencode "query=cmdclaw.generation.id:${GENERATION_ID}" \
+  --data-urlencode "query=bap.generation.id:${GENERATION_ID}" \
   --data-urlencode 'limit=200'
 ```
 
@@ -224,13 +224,13 @@ Group terminal failures by bounded dimensions:
 
 ```bash
 curl -G 'http://127.0.0.1:9428/select/logsql/query' \
-  --data-urlencode 'query=cmdclaw.event.name:cmdclaw.generation.terminal cmdclaw.generation.outcome:(failed OR timed_out)' \
+  --data-urlencode 'query=bap.event.name:bap.generation.terminal bap.generation.outcome:(failed OR timed_out)' \
   --data-urlencode 'limit=1000'
 ```
 
 When inspecting the returned rows, group by
-`cmdclaw.model.provider`, `cmdclaw.sandbox.provider`,
-`cmdclaw.failure.phase`, and `cmdclaw.error.normalized_code`.
+`bap.model.provider`, `bap.sandbox.provider`,
+`bap.failure.phase`, and `bap.error.normalized_code`.
 
 Check low-cardinality metrics. None of these metrics should include user,
 workspace, conversation, Generation, trace, sandbox id, route URL, file name, or
@@ -238,7 +238,7 @@ raw error message labels.
 
 ```bash
 curl -G 'http://127.0.0.1:8428/api/v1/query' \
-  --data-urlencode 'query=sum by (outcome, model_provider, sandbox_provider, failure_phase, normalized_error_code) (cmdclaw_generation_terminal_total)'
+  --data-urlencode 'query=sum by (outcome, model_provider, sandbox_provider, failure_phase, normalized_error_code) (bap_generation_terminal_total)'
 ```
 
 Confirm forbidden content is absent from the canonical rows by checking that
@@ -259,7 +259,7 @@ Typical flow:
 
 ## Main Endpoints
 
-These host ports are configurable via `CMDCLAW_*_PORT` env vars in local worktrees.
+These host ports are configurable via `BAP_*_PORT` env vars in local worktrees.
 
 - Metrics: `http://127.0.0.1:8428`
 - Logs: `http://127.0.0.1:9428`
@@ -269,12 +269,12 @@ These host ports are configurable via `CMDCLAW_*_PORT` env vars in local worktre
 
 ## SLO Metrics
 
-The local and hosted stacks include CmdClaw SLO rules generated from Pyrra YAML
+The local and hosted stacks include Bap SLO rules generated from Pyrra YAML
 and shown through Grafana. Pyrra is used only as rule/dashboard tooling; there
 is no separate Pyrra UI in the local or hosted stack.
 
-Live service telemetry is the source of truth for new SLO events. CmdClaw emits
-`cmdclaw_slo_events_total` from the authoritative terminal owner for each SLO
+Live service telemetry is the source of truth for new SLO events. Bap emits
+`bap_slo_events_total` from the authoritative terminal owner for each SLO
 Journey, with bounded labels:
 
 - `journey`: `chat`, `coworker_builder`, `coworker_run`, or `global`
@@ -347,8 +347,8 @@ bun run --cwd apps/web slo:backfill:prod
 ```
 
 The backfill reads `DATABASE_URL_PROD` with SELECT-only queries and imports
-hourly cumulative samples for `cmdclaw_slo_events_total` into VictoriaMetrics.
-The SLO dashboard is available in Grafana as `CmdClaw SLOs`.
+hourly cumulative samples for `bap_slo_events_total` into VictoriaMetrics.
+The SLO dashboard is available in Grafana as `Bap SLOs`.
 
 Hosted backfill should be run explicitly for staging and production after the
 live SLO emission deploy has been verified. Each hosted run should target the
@@ -435,14 +435,14 @@ Metrics:
 
 ```bash
 curl -s --get 'http://127.0.0.1:8428/api/v1/query' \
-  --data-urlencode 'query=max(cmdclaw_runtime_up{service_name="cmdclaw-web"})'
+  --data-urlencode 'query=max(bap_runtime_up{service_name="bap-web"})'
 ```
 
 Logs:
 
 ```bash
 curl -s http://127.0.0.1:9428/select/logsql/query \
-  -d 'query=service:cmdclaw-web OR service:cmdclaw-worker' \
+  -d 'query=service:bap-web OR service:bap-worker' \
   -d 'limit=20'
 ```
 
@@ -462,7 +462,7 @@ curl -s http://127.0.0.1:8428/api/v1/rules
 
 When debugging a local issue:
 
-1. Check `cmdclaw_runtime_up` and queue metrics in `VictoriaMetrics`.
+1. Check `bap_runtime_up` and queue metrics in `VictoriaMetrics`.
 2. Check recent logs in `VictoriaLogs`.
 3. If the issue crosses web and worker boundaries, inspect traces in `VictoriaTraces`.
 4. Make the code change, restart the app, rerun the workload, and query again.

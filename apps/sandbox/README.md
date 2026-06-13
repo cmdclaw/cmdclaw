@@ -1,6 +1,6 @@
 # Sandbox Workspace
 
-This workspace owns CmdClaw sandbox runtime assets and sandbox build tooling.
+This workspace owns Bap sandbox runtime assets and sandbox build tooling.
 
 Common commands:
 

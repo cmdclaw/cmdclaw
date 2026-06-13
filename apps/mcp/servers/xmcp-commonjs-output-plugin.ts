@@ -1,4 +1,4 @@
-const PLUGIN_NAME = "CmdclawXmcpCommonJsOutputPlugin";
+const PLUGIN_NAME = "BapXmcpCommonJsOutputPlugin";
 
 export function addCommonJsPackageBoundary(config: any) {
   const plugin = {

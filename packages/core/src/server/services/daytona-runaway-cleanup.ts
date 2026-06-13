@@ -1,12 +1,12 @@
 import { Daytona } from "@daytonaio/sdk";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   conversationRuntime,
   coworkerRun,
   coworkerRunEvent,
   generation,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDaytonaClientConfig } from "../sandbox/daytona";
 import {

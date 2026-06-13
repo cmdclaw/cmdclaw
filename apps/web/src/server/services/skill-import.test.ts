@@ -1,4 +1,4 @@
-import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
+import { skill, skillDocument, skillFile } from "@bap/db/schema";
 import { zipSync, strToU8 } from "fflate";
 import { Buffer } from "node:buffer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,13 +16,13 @@ const { ensureBucketMock, generateStorageKeyMock, uploadToS3Mock, resolveUniqueS
     resolveUniqueSkillNameMock: vi.fn<VitestProcedure>(),
   }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   ensureBucket: ensureBucketMock,
   generateStorageKey: generateStorageKeyMock,
   uploadToS3: uploadToS3Mock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/workspace-skill-service", () => ({
+vi.mock("@bap/core/server/services/workspace-skill-service", () => ({
   resolveUniqueSkillNameInWorkspace: resolveUniqueSkillNameMock,
 }));
 

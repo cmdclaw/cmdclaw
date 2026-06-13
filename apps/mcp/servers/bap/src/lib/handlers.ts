@@ -1,13 +1,13 @@
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
 import {
   createCoworkerRunner,
   runChatSession,
-  type CmdclawApiClient,
+  type BapApiClient,
   type CoworkerRunStatus,
-} from "@cmdclaw/client";
+} from "@bap/client";
 
 export async function handleChatRun(params: {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   message: string;
   conversationId?: string;
   model?: string;
@@ -30,7 +30,7 @@ export async function handleChatRun(params: {
   return result;
 }
 
-export async function handleCoworkerList(client: CmdclawApiClient) {
+export async function handleCoworkerList(client: BapApiClient) {
   const runner = createCoworkerRunner(client);
   return {
     status: "completed" as const,
@@ -38,7 +38,7 @@ export async function handleCoworkerList(client: CmdclawApiClient) {
   };
 }
 
-export async function handleCoworkerGet(client: CmdclawApiClient, reference: string) {
+export async function handleCoworkerGet(client: BapApiClient, reference: string) {
   const runner = createCoworkerRunner(client);
   return {
     status: "completed" as const,
@@ -47,7 +47,7 @@ export async function handleCoworkerGet(client: CmdclawApiClient, reference: str
 }
 
 export async function handleCoworkerCreate(params: {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   name?: string;
   trigger?: string;
   prompt?: string;
@@ -115,7 +115,7 @@ export async function handleCoworkerCreate(params: {
 }
 
 export async function handleCoworkerRun(params: {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   reference: string;
   payload?: unknown;
   userInput?: string;
@@ -132,7 +132,7 @@ export async function handleCoworkerRun(params: {
 }
 
 export async function handleCoworkerUploadDocument(params: {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   reference: string;
   files: Array<{
     filename: string;
@@ -162,7 +162,7 @@ export async function handleCoworkerUploadDocument(params: {
   };
 }
 
-export async function handleCoworkerLogs(client: CmdclawApiClient, runId: string) {
+export async function handleCoworkerLogs(client: BapApiClient, runId: string) {
   const runner = createCoworkerRunner(client);
   return {
     status: "completed" as const,
@@ -171,7 +171,7 @@ export async function handleCoworkerLogs(client: CmdclawApiClient, runId: string
 }
 
 export async function handleCoworkerRuns(params: {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   cursor?: string;
   limit?: number;
   status?: CoworkerRunStatus;
@@ -191,7 +191,7 @@ export async function handleCoworkerRuns(params: {
 }
 
 export async function handleSkillAdd(params: {
-  client: CmdclawApiClient;
+  client: BapApiClient;
   files: Array<{
     path: string;
     mimeType?: string;

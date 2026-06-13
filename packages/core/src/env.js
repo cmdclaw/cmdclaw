@@ -92,7 +92,7 @@ export const env = createEnv({
     AWS_DEFAULT_REGION: z.string().default("us-east-1"),
     AWS_ACCESS_KEY_ID: z.string(),
     AWS_SECRET_ACCESS_KEY: z.string(),
-    AWS_S3_BUCKET_NAME: z.string().default("cmdclaw-documents"),
+    AWS_S3_BUCKET_NAME: z.string().default("bap-documents"),
     AWS_S3_FORCE_PATH_STYLE: z
       .string()
       .transform((v) => v === "true")
@@ -116,8 +116,8 @@ export const env = createEnv({
     LINEAR_FAILURE_ALERT_LABELS: z.string().optional(),
     // Community Integration Repo
     COMMUNITY_REPO_GITHUB_TOKEN: z.string().optional(),
-    COMMUNITY_REPO_OWNER: z.string().default("cmdclaw-community"),
-    COMMUNITY_REPO_NAME: z.string().default("cmdclaw-community-integrations"),
+    COMMUNITY_REPO_OWNER: z.string().default("bap-community"),
+    COMMUNITY_REPO_NAME: z.string().default("bap-community-integrations"),
     WEB_PUSH_VAPID_SUBJECT: z.string().optional(),
     WEB_PUSH_VAPID_PUBLIC_KEY: z.string().optional(),
     WEB_PUSH_VAPID_PRIVATE_KEY: z.string().optional(),

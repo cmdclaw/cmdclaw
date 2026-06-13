@@ -1,9 +1,9 @@
 import {
   buildUserForwardingAddress,
   EMAIL_FORWARDED_TRIGGER_TYPE,
-} from "@cmdclaw/core/lib/email-forwarding";
-import { ensureWorkspaceForUser } from "@cmdclaw/core/server/billing/service";
-import { user, coworker } from "@cmdclaw/db/schema";
+} from "@bap/core/lib/email-forwarding";
+import { ensureWorkspaceForUser } from "@bap/core/server/billing/service";
+import { user, coworker } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";

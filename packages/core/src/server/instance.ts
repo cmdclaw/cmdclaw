@@ -4,11 +4,11 @@ function normalizeInstanceEnv(value: string | undefined): string | null {
 }
 
 export function getInstanceId(): string | null {
-  return normalizeInstanceEnv(process.env.CMDCLAW_INSTANCE_ID);
+  return normalizeInstanceEnv(process.env.BAP_INSTANCE_ID);
 }
 
 export function getRedisNamespace(): string {
-  const explicit = normalizeInstanceEnv(process.env.CMDCLAW_REDIS_NAMESPACE);
+  const explicit = normalizeInstanceEnv(process.env.BAP_REDIS_NAMESPACE);
   if (explicit) {
     return explicit.endsWith(":") ? explicit : `${explicit}:`;
   }

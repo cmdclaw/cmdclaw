@@ -10,12 +10,12 @@ const routes = buildRouteMap({
     coworker: coworkerRoutes,
   },
   docs: {
-    brief: "CmdClaw CLI",
+    brief: "Bap CLI",
   },
 });
 
 export const app = buildApplication(routes, {
-  name: "cmdclaw",
+  name: "bap",
   versionInfo: {
     currentVersion: "0.1.0",
   },

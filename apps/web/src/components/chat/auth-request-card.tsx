@@ -144,7 +144,7 @@ export function AuthRequestCard({
                     )}
                     <span className="text-sm">
                       <span className="font-medium">
-                        <T>CmdClaw</T>
+                        <T>Bap</T>
                       </span>{" "}
                       <T>needs access to</T> <span className="font-medium">{displayName}</span>
                     </span>

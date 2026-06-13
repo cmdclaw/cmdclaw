@@ -8,7 +8,7 @@ The user wants coworkers to support a flexible, free-text first human reply befo
 
 ## Solution
 
-CmdClaw will add a coworker setting that requires user input before execution. When enabled and no trusted CmdClaw-owned user input is already present, any trigger creates a **Pending Start** instead of starting a **Generation**. A Pending Start creates a coworker run with status `needs_user_input`, creates a coworker conversation, and writes a coworker-authored assistant-style message containing the configured **User Input Prompt**. No model or sandbox work starts yet.
+Bap will add a coworker setting that requires user input before execution. When enabled and no trusted Bap-owned user input is already present, any trigger creates a **Pending Start** instead of starting a **Generation**. A Pending Start creates a coworker run with status `needs_user_input`, creates a coworker conversation, and writes a coworker-authored assistant-style message containing the configured **User Input Prompt**. No model or sandbox work starts yet.
 
 The User answers through the normal chat prompt area. The first non-empty reply, or a reply with attachments, starts the existing pending coworker run. The started Generation receives model input built from the current coworker instructions, the original trigger payload, and trusted `userInput`. The visible coworker question remains conversation history, but is intentionally excluded from model context. This decision is recorded in ADR 0004.
 
@@ -84,7 +84,7 @@ The coworker builder can enable or disable the requirement and generate the User
 - The normal coworker editor exposes a switch and text field for the same settings.
 - Add `needs_user_input` to coworker run statuses.
 - The user-facing inbox label for `needs_user_input` is "Needs your input".
-- A trigger for a coworker with `requiresUserInput` creates a Pending Start when no trusted CmdClaw-owned user input is supplied.
+- A trigger for a coworker with `requiresUserInput` creates a Pending Start when no trusted Bap-owned user input is supplied.
 - Pending Starts are represented as coworker run rows with status `needs_user_input`, original `triggerPayload`, no `generationId`, and a linked conversation.
 - Pending Starts create a user-facing conversation before any Generation exists.
 - The first visible message in that conversation is a coworker-runner-authored assistant-style message containing the `userInputPrompt` snapshot.
@@ -100,7 +100,7 @@ The coworker builder can enable or disable the requirement and generate the User
 - Multiple trigger events create multiple Pending Starts. No broad coworker-level dedupe is added for v1.
 - Each Pending Start snapshots the original trigger payload and User Input Prompt when it is created.
 - When a Pending Start starts, use current coworker instructions/tool settings, plus the pending run's original trigger context and prompt snapshot.
-- Direct CmdClaw-owned human input paths can start immediately by providing trusted user input.
+- Direct Bap-owned human input paths can start immediately by providing trusted user input.
 - Trusted user input paths are web chat reply to a Pending Start, inbox coworker composer typed by a logged-in User, and authenticated CLI `--user-input`.
 - Raw webhook, schedule, email-forwarding, X DM, and generic trigger payload fields are not trusted user input, even if they contain a `userInput` property.
 - Trusted `userInput` is a separate internal parameter, not read from arbitrary trigger payload.

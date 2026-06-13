@@ -11,8 +11,8 @@
 import type { ServerWebSocket } from "bun";
 import { eq } from "drizzle-orm";
 import type { DaemonMessage, DaemonResponse } from "../sandbox/types";
-import { db } from "@cmdclaw/db/client";
-import { device } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { device } from "@bap/db/schema";
 import { verifyDeviceToken } from "../services/device-auth";
 import { isStatelessServerlessRuntime } from "../utils/runtime-platform";
 

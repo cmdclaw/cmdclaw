@@ -13,7 +13,7 @@ const runtimePackageJson = JSON.stringify({
   name: "sandbox-runtime",
   private: true,
   dependencies: {
-    "@cmdclaw/message-format": "file:./packages/message-format",
+    "@bap/message-format": "file:./packages/message-format",
     "@opencode-ai/plugin": OPENCODE_PLUGIN_VERSION,
   },
 });

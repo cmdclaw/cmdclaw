@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { integration, integrationToken, coworker, coworkerRun } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { integration, integrationToken, coworker, coworkerRun } from "@bap/db/schema";
 import { getValidAccessToken } from "../integrations/token-refresh";
 import { buildQueueJobId, X_DM_COWORKER_JOB_NAME, getQueue } from "../queues/queue-client";
 

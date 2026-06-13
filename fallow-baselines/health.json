@@ -80,7 +80,7 @@
         "count": 2
       }
     },
-    "apps/mcp/servers/cmdclaw/src/lib/client.ts": {
+    "apps/mcp/servers/bap/src/lib/client.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -2458,7 +2458,7 @@
     "packages/core/src/server/runtime/opencode/opencode-recovery-runner.ts:complexity",
     "apps/web/src/components/prompt-bar.tsx:complexity",
     "apps/web/src/components/inbox/inbox-item.tsx:complexity",
-    "apps/mcp/servers/cmdclaw/src/lib/client.ts:high impact",
+    "apps/mcp/servers/bap/src/lib/client.ts:high impact",
     "apps/web/src/server/control-plane/return-path.ts:high impact",
     "apps/web/src/components/ui/dual-panel-workspace.tsx:complexity",
     "apps/web/src/components/chat/browser-json-storage.ts:high impact",

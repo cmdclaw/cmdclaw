@@ -18,7 +18,7 @@ vi.mock("@/env", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
+vi.mock("@bap/core/server/integrations/remote-integrations", () => {
   const remoteIntegrationTypeSchema = z.enum([
     "google_gmail",
     "outlook",

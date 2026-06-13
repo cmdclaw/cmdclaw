@@ -22,7 +22,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlanDefinition> = {
   free: {
     id: "free",
     name: "Free",
-    description: "Shared workspace for trying CmdClaw with manual top-ups.",
+    description: "Shared workspace for trying Bap with manual top-ups.",
     monthlyPriceUsd: 0,
     monthlyPriceLabel: "$0",
     includedCredits: 0,

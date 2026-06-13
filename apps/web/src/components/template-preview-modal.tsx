@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate } from "@bap/db/template-catalog";
 import { T, useGT } from "gt-react";
 import { Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";

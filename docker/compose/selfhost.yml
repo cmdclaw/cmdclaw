@@ -1,18 +1,18 @@
-name: cmdclaw-selfhost
+name: bap-selfhost
 
 services:
   database:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: cmdclaw
+      POSTGRES_DB: bap
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
-      - cmdclaw_postgres_data:/var/lib/postgresql/data
+      - bap_postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d cmdclaw"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bap"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - cmdclaw_redis_data:/data
+      - bap_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -37,7 +37,7 @@ services:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     volumes:
-      - cmdclaw_minio_data:/data
+      - bap_minio_data:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -45,7 +45,7 @@ services:
       retries: 10
 
   migrate:
-    image: ${CMDCLAW_WORKER_IMAGE:-ghcr.io/baptistecolle/cmdclaw-worker:main}
+    image: ${BAP_WORKER_IMAGE:-ghcr.io/baptistecolle/bap-worker:main}
     env_file:
       - ../../.env.selfhost
     depends_on:
@@ -59,7 +59,7 @@ services:
     restart: "no"
 
   app:
-    image: ${CMDCLAW_APP_IMAGE:-ghcr.io/baptistecolle/cmdclaw-web:main}
+    image: ${BAP_APP_IMAGE:-ghcr.io/baptistecolle/bap-web:main}
     env_file:
       - ../../.env.selfhost
     depends_on:
@@ -87,7 +87,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   worker:
-    image: ${CMDCLAW_WORKER_IMAGE:-ghcr.io/baptistecolle/cmdclaw-worker:main}
+    image: ${BAP_WORKER_IMAGE:-ghcr.io/baptistecolle/bap-worker:main}
     env_file:
       - ../../.env.selfhost
     depends_on:
@@ -102,6 +102,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
-  cmdclaw_postgres_data:
-  cmdclaw_redis_data:
-  cmdclaw_minio_data:
+  bap_postgres_data:
+  bap_redis_data:
+  bap_minio_data:

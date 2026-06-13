@@ -1,4 +1,4 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
 import type { AttachmentData } from "@/components/prompt-bar";
 import { client } from "@/orpc/client";
 

@@ -27,7 +27,7 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       coworkerDocument: {
@@ -40,7 +40,7 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   downloadFromS3: downloadFromS3Mock,
 }));
 
@@ -73,7 +73,7 @@ describe("downloadCoworkerDocument (GET /api/coworkers/documents/:id/download)",
     downloadFromS3Mock.mockResolvedValue(bytes);
 
     const response = await downloadCoworkerDocument(
-      new Request("https://cmdclaw.ai/api/coworkers/documents/doc-1/download"),
+      new Request("https://heybap.com/api/coworkers/documents/doc-1/download"),
       "doc-1",
     );
 
@@ -104,7 +104,7 @@ describe("downloadCoworkerDocument (GET /api/coworkers/documents/:id/download)",
     downloadFromS3Mock.mockResolvedValue(Buffer.from("pdf"));
 
     const response = await downloadCoworkerDocument(
-      new Request("https://cmdclaw.ai/api/coworkers/documents/doc-1/download"),
+      new Request("https://heybap.com/api/coworkers/documents/doc-1/download"),
       "doc-1",
     );
 
@@ -118,7 +118,7 @@ describe("downloadCoworkerDocument (GET /api/coworkers/documents/:id/download)",
     getSessionMock.mockResolvedValue(null);
 
     const response = await downloadCoworkerDocument(
-      new Request("https://cmdclaw.ai/api/coworkers/documents/doc-1/download"),
+      new Request("https://heybap.com/api/coworkers/documents/doc-1/download"),
       "doc-1",
     );
 
@@ -138,7 +138,7 @@ describe("downloadCoworkerDocument (GET /api/coworkers/documents/:id/download)",
     coworkerFindFirstMock.mockResolvedValue(null);
 
     const response = await downloadCoworkerDocument(
-      new Request("https://cmdclaw.ai/api/coworkers/documents/doc-1/download"),
+      new Request("https://heybap.com/api/coworkers/documents/doc-1/download"),
       "doc-1",
     );
 
@@ -151,7 +151,7 @@ describe("downloadCoworkerDocument (GET /api/coworkers/documents/:id/download)",
     coworkerDocumentFindFirstMock.mockResolvedValue(undefined);
 
     const response = await downloadCoworkerDocument(
-      new Request("https://cmdclaw.ai/api/coworkers/documents/missing/download"),
+      new Request("https://heybap.com/api/coworkers/documents/missing/download"),
       "missing",
     );
 

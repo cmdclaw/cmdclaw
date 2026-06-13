@@ -3,7 +3,7 @@ import { useQuery as useZeroQuery } from "@rocicorp/zero/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { mapZeroConversationDetail, mapZeroConversationList } from "@/zero/chat-data";
-import { useCmdClawZeroRuntime } from "@/zero/provider";
+import { useBapZeroRuntime } from "@/zero/provider";
 import { zeroQueries } from "@/zero/queries";
 import { client } from "../client";
 
@@ -83,7 +83,7 @@ export function useConversationList(options?: {
   initialData?: ConversationListData;
   limit?: number;
 }) {
-  const zeroRuntime = useCmdClawZeroRuntime();
+  const zeroRuntime = useBapZeroRuntime();
   const limit = options?.limit ?? 50;
   const initialData = options?.initialData;
   const [conversations, details] = useZeroQuery(
@@ -142,7 +142,7 @@ export function useConversationList(options?: {
 }
 
 export function useConversation(id: string | undefined) {
-  const zeroRuntime = useCmdClawZeroRuntime();
+  const zeroRuntime = useBapZeroRuntime();
   const [conversation, details] = useZeroQuery(
     zeroRuntime.isReady && id ? zeroQueries.conversations.byId({ id }) : null,
   );

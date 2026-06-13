@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { handleOpenApi } from "./handler";
 
 describe("handleOpenApi", () => {
-  it("returns 200 JSON with the CmdClaw OpenAPI document", async () => {
+  it("returns 200 JSON with the Bap OpenAPI document", async () => {
     const res = await handleOpenApi();
 
     expect(res.status).toBe(200);
@@ -17,9 +17,9 @@ describe("handleOpenApi", () => {
 
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info).toEqual({
-      title: "CmdClaw API",
+      title: "Bap API",
       version: "0.1.0",
-      description: "API for CmdClaw server",
+      description: "API for Bap server",
     });
     expect(spec.servers).toEqual([{ url: "/api/rpc" }]);
     // The product API exposes routes; the document should not be empty.

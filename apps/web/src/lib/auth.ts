@@ -1,7 +1,7 @@
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
-import { trackSignupFromSession } from "@cmdclaw/core/server/services/user-telemetry";
-import { db } from "@cmdclaw/db/client";
-import { authSchema, user as userTable } from "@cmdclaw/db/schema";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
+import { trackSignupFromSession } from "@bap/core/server/services/user-telemetry";
+import { db } from "@bap/db/client";
+import { authSchema, user as userTable } from "@bap/db/schema";
 import { autumn } from "autumn-js/better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -84,7 +84,7 @@ const socialProviders = isSelfHostedEdition()
     };
 
 export const auth = betterAuth({
-  appName: "CmdClaw",
+  appName: "Bap",
   baseURL: {
     allowedHosts: betterAuthAllowedHosts,
     fallback: appUrl,
@@ -100,9 +100,9 @@ export const auth = betterAuth({
         const emailContent = buildPasswordResetEmailPayload(url, user.email);
 
         await resend.emails.send({
-          from: `CmdClaw <${env.EMAIL_FROM}>`,
+          from: `Bap <${env.EMAIL_FROM}>`,
           to: user.email,
-          subject: `Set your CmdClaw password | ${new Date().toISOString().slice(0, 19).replace("T", " ")}`,
+          subject: `Set your Bap password | ${new Date().toISOString().slice(0, 19).replace("T", " ")}`,
           html: emailContent.html,
           text: emailContent.text,
         });
@@ -173,9 +173,9 @@ export const auth = betterAuth({
           const emailContent = buildMagicLinkEmailPayload(signInUrl, email);
 
           await resend.emails.send({
-            from: `CmdClaw <${env.EMAIL_FROM}>`,
+            from: `Bap <${env.EMAIL_FROM}>`,
             to: email,
-            subject: `Sign in to CmdClaw | ${new Date().toISOString().slice(0, 19).replace("T", " ")}`,
+            subject: `Sign in to Bap | ${new Date().toISOString().slice(0, 19).replace("T", " ")}`,
             html: emailContent.html,
             text: emailContent.text,
           });

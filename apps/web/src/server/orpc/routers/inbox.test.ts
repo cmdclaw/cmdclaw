@@ -136,7 +136,7 @@ vi.mock("../workspace-access", () => ({
   })),
 }));
 
-vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
+vi.mock("@bap/core/server/services/generation-manager", () => ({
   generationManager: generationManagerMock,
 }));
 

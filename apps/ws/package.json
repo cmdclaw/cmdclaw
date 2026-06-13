@@ -1,5 +1,5 @@
 {
-  "name": "@cmdclaw/ws",
+  "name": "@bap/ws",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,6 +11,6 @@
     "check": "bunx tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@cmdclaw/core": "workspace:*"
+    "@bap/core": "workspace:*"
   }
 }

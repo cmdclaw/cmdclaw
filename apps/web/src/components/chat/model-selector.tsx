@@ -1,8 +1,8 @@
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import { parseModelReference } from "@bap/core/lib/model-reference";
 import {
   getEmptyProviderAuthAvailability,
   type ProviderAuthSource,
-} from "@cmdclaw/core/lib/provider-auth-source";
+} from "@bap/core/lib/provider-auth-source";
 import { T } from "gt-react";
 import { Check, ChevronDown, Lock } from "lucide-react";
 import { useCallback } from "react";
@@ -75,7 +75,7 @@ function sortModels<T extends ModelOption>(models: T[]): T[] {
   return models.toSorted((a, b) => compareModelNames(a.name, b.name));
 }
 
-const CMDCLAW_MODELS: ModelOption[] = [
+const BAP_MODELS: ModelOption[] = [
   {
     authSource: "shared",
     id: "openai/gpt-5.5",
@@ -122,7 +122,7 @@ const PERSONAL_CHATGPT_MODELS: ModelOption[] = [
   },
 ];
 
-const USER_VISIBLE_CMDCLAW_MODELS = CMDCLAW_MODELS.filter((model) => !model.adminOnly);
+const USER_VISIBLE_BAP_MODELS = BAP_MODELS.filter((model) => !model.adminOnly);
 const SORTED_PERSONAL_CHATGPT_MODELS = sortModels(PERSONAL_CHATGPT_MODELS);
 
 type Props = {
@@ -178,7 +178,7 @@ function ModelSection({
     return (
       <DropdownMenuItem
         key={`${model.authSource ?? "none"}-${model.id}`}
-        data-testid={`chat-model-option-${model.authSource === "user" ? "user" : "cmdclaw"}-${model.id}`}
+        data-testid={`chat-model-option-${model.authSource === "user" ? "user" : "bap"}-${model.id}`}
         data-model-id={model.id}
         data-auth-source={model.authSource ?? ""}
         disabled={isLocked}
@@ -200,8 +200,8 @@ export function ModelSelector({
   disabled,
 }: Props) {
   const { isAdmin } = useIsAdmin();
-  const visibleCmdClawModels = isAdmin ? CMDCLAW_MODELS : USER_VISIBLE_CMDCLAW_MODELS;
-  const allModels = [...CMDCLAW_MODELS, ...PERSONAL_CHATGPT_MODELS];
+  const visibleBapModels = isAdmin ? BAP_MODELS : USER_VISIBLE_BAP_MODELS;
+  const allModels = [...BAP_MODELS, ...PERSONAL_CHATGPT_MODELS];
   const currentModel =
     allModels.find(
       (model) => model.id === selectedModel && model.authSource === selectedAuthSource,
@@ -228,10 +228,10 @@ export function ModelSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel>
-          <T>CmdClaw Models</T>
+          <T>Bap Models</T>
         </DropdownMenuLabel>
         <ModelSection
-          models={visibleCmdClawModels}
+          models={visibleBapModels}
           selectedModel={selectedModel}
           selectedAuthSource={selectedAuthSource}
           providerAvailability={providerAvailability}

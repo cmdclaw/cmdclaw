@@ -1,6 +1,6 @@
 import { count, eq } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { session, user, userDailyActivity } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { session, user, userDailyActivity } from "@bap/db/schema";
 import { captureUserActiveToday, captureUserSignedUp } from "./posthog";
 import { postSignupSlackNotification } from "./telemetry-slack";
 

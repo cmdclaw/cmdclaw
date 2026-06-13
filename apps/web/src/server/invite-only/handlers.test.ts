@@ -16,7 +16,7 @@ vi.mock("@/server/lib/approved-login-emails", () => ({
   isApprovedLoginEmail: isApprovedLoginEmailMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/telemetry-slack", () => ({
+vi.mock("@bap/core/server/services/telemetry-slack", () => ({
   postInviteOnlyAccessRequestSlackNotification: postInviteOnlyAccessRequestSlackNotificationMock,
 }));
 
@@ -31,11 +31,11 @@ describe("POST /api/invite-only/request-access", () => {
 
   it("posts a Slack notification for a valid request", async () => {
     const response = await handleInviteOnlyRequestAccess(
-      new Request("https://cmdclaw.ai/api/invite-only/request-access", {
+      new Request("https://heybap.com/api/invite-only/request-access", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          referer: "https://cmdclaw.ai/invite-only?source=magic-link",
+          referer: "https://heybap.com/invite-only?source=magic-link",
         },
         body: JSON.stringify({
           email: "waitlist@example.com",
@@ -50,7 +50,7 @@ describe("POST /api/invite-only/request-access", () => {
       email: "waitlist@example.com",
       source: "magic-link",
       occurredAt: expect.any(Date),
-      referrer: "https://cmdclaw.ai/invite-only?source=magic-link",
+      referrer: "https://heybap.com/invite-only?source=magic-link",
     });
   });
 
@@ -58,7 +58,7 @@ describe("POST /api/invite-only/request-access", () => {
     isApprovedLoginEmailMock.mockResolvedValueOnce(true);
 
     const response = await handleInviteOnlyRequestAccess(
-      new Request("https://cmdclaw.ai/api/invite-only/request-access", {
+      new Request("https://heybap.com/api/invite-only/request-access", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -76,7 +76,7 @@ describe("POST /api/invite-only/request-access", () => {
 
   it("defaults source and referrer when omitted", async () => {
     const response = await handleInviteOnlyRequestAccess(
-      new Request("https://cmdclaw.ai/api/invite-only/request-access", {
+      new Request("https://heybap.com/api/invite-only/request-access", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -100,7 +100,7 @@ describe("POST /api/invite-only/request-access", () => {
     postInviteOnlyAccessRequestSlackNotificationMock.mockResolvedValueOnce(false);
 
     const response = await handleInviteOnlyRequestAccess(
-      new Request("https://cmdclaw.ai/api/invite-only/request-access", {
+      new Request("https://heybap.com/api/invite-only/request-access", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -119,7 +119,7 @@ describe("POST /api/invite-only/request-access", () => {
 
   it("rejects invalid email payloads", async () => {
     const response = await handleInviteOnlyRequestAccess(
-      new Request("https://cmdclaw.ai/api/invite-only/request-access", {
+      new Request("https://heybap.com/api/invite-only/request-access", {
         method: "POST",
         headers: {
           "content-type": "application/json",

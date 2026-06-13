@@ -31,7 +31,7 @@ function SidebarCard({
 
   const handleDragStart = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
-      e.dataTransfer.setData("application/cmdclaw-coworker", coworker.id);
+      e.dataTransfer.setData("application/bap-coworker", coworker.id);
       e.dataTransfer.effectAllowed = "move";
     },
     [coworker.id],

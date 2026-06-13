@@ -1,12 +1,12 @@
 import { and, desc, eq } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   generation,
   generationInterrupt,
   type GenerationInterruptDisplay,
   type GenerationInterruptResponsePayload,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 
 export type GenerationInterruptKind =
   | "plugin_write"

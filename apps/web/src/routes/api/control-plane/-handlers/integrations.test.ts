@@ -25,7 +25,7 @@ vi.mock("@/server/control-plane/auth", () => ({
   requireCloudSession: requireCloudSessionMock,
 }));
 
-vi.mock("@cmdclaw/core/server/oauth/config", () => ({
+vi.mock("@bap/core/server/oauth/config", () => ({
   getOAuthConfig: getOAuthConfigMock,
 }));
 
@@ -33,7 +33,7 @@ vi.mock("@/server/integrations/unipile", () => ({
   generateLinkedInAuthUrl: generateLinkedInAuthUrlMock,
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {},
 }));
 

@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { coworker, coworkerRun } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { coworker, coworkerRun } from "@bap/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { logger, recordCounter } from "../utils/observability";
 import {
@@ -46,7 +46,7 @@ export type CoworkerRunSloTerminalFacts = {
 export function recordSloMetricSamples(samples: SloMetricSample[]): void {
   for (const sample of samples) {
     recordCounter(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       {
         journey: sample.journey,
@@ -182,4 +182,4 @@ export async function emitPreGenerationCoworkerRunFailureSloEvent(input: {
   });
 }
 
-export type { SloReplayJourney } from "@cmdclaw/db/schema";
+export type { SloReplayJourney } from "@bap/db/schema";

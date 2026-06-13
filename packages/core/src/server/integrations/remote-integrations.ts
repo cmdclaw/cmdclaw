@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { integration, integrationToken, user } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { integration, integrationToken, user } from "@bap/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "../../env";
@@ -74,8 +74,8 @@ type RemoteTargetConfig = {
 };
 
 const REMOTE_INTEGRATION_TARGET_BASE_URLS: Record<RemoteIntegrationTargetEnv, string> = {
-  staging: "https://staging.cmdclaw.ai",
-  prod: "https://cmdclaw.ai",
+  staging: "https://staging.heybap.com",
+  prod: "https://heybap.com",
 };
 
 function isRemoteIntegrationSupportedType(

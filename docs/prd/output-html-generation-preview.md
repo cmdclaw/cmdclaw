@@ -2,13 +2,13 @@
 
 ## Problem Statement
 
-Users can ask a **Generation** to create an HTML page, but CmdClaw currently treats generated sandbox files as downloadable attachments only. If the agent creates `output.html`, the User has to notice the file chip, download it, and open it outside the chat surface to inspect the result. That breaks the chat workflow for UI prototypes, reports, dashboards, and other HTML outputs that are meant to be viewed immediately.
+Users can ask a **Generation** to create an HTML page, but Bap currently treats generated sandbox files as downloadable attachments only. If the agent creates `output.html`, the User has to notice the file chip, download it, and open it outside the chat surface to inspect the result. That breaks the chat workflow for UI prototypes, reports, dashboards, and other HTML outputs that are meant to be viewed immediately.
 
 The user wants normal chat to support an opt-in right-side preview pane that displays the newest generated `output.html` inside the chat page. The preview should feel like the collapsible right panel used in the coworker editor, while preserving the existing transcript and download behavior.
 
 ## Solution
 
-CmdClaw will add an opt-in **Generation Output Preview** capability to `ChatArea`. When enabled by the normal chat routes, the chat page will render a collapsible right-side panel using the existing dual-panel workspace pattern. The left panel remains the conversation; the right panel displays the latest generated `output.html` in a sandboxed iframe.
+Bap will add an opt-in **Generation Output Preview** capability to `ChatArea`. When enabled by the normal chat routes, the chat page will render a collapsible right-side panel using the existing dual-panel workspace pattern. The left panel remains the conversation; the right panel displays the latest generated `output.html` in a sandboxed iframe.
 
 The runtime file collection path will treat a sandbox file named exactly `output.html` as a special presence-based output. It will auto-collect that file after a completed **Generation** even when the assistant does not mention it in the final answer, and it will use the existing sandbox file storage model. The preview will fetch authenticated HTML text from the web app and render it with iframe `srcDoc`; the existing sandbox file download flow remains available for downloading the raw file.
 
@@ -16,7 +16,7 @@ The first rollout enables this only on normal chat pages. Other chat surfaces ca
 
 ## User Stories
 
-1. As a User, I want `output.html` to appear in chat when a Generation creates it, so that I can inspect the result without leaving CmdClaw.
+1. As a User, I want `output.html` to appear in chat when a Generation creates it, so that I can inspect the result without leaving Bap.
 2. As a User, I want the preview to appear in a right-side panel, so that I can see the conversation and the generated page together.
 3. As a User, I want the preview panel to be collapsible, so that I can recover the full chat width when I do not need the output.
 4. As a User, I want the preview panel to behave like the coworker editor panel, so that the layout feels familiar.
@@ -31,7 +31,7 @@ The first rollout enables this only on normal chat pages. Other chat surfaces ca
 13. As a User, I want a compact failure state when preview loading fails, so that I understand the preview cannot be displayed.
 14. As a User, I want files too large to preview to remain downloadable, so that large outputs are not lost.
 15. As a User, I want the preview to render scripts when the generated HTML needs interactivity, so that prototypes and dashboards work.
-16. As a User, I want the generated page isolated from CmdClaw, so that untrusted HTML cannot access app data.
+16. As a User, I want the generated page isolated from Bap, so that untrusted HTML cannot access app data.
 17. As a User, I want `output.html` to be self-contained, so that the preview does not depend on missing relative files.
 18. As a User, I want normal chat to opt in first, so that other chat surfaces do not change unexpectedly.
 19. As a developer, I want `output.html` collection to use the existing sandbox file storage model, so that the feature does not introduce a second artifact system.
@@ -43,7 +43,7 @@ The first rollout enables this only on normal chat pages. Other chat surfaces ca
 25. As a developer, I want the `output.html` check to be narrow and bounded, so that text-only turns do not perform broad file artifact work.
 26. As a developer, I want preview content served by an authenticated app route, so that ownership and workspace access are enforced before rendering.
 27. As a developer, I want the iframe to use `srcDoc` rather than a presigned S3 URL, so that the preview stays isolated from app origin and storage URLs.
-28. As a developer, I want a tight iframe sandbox policy, so that generated scripts can run without same-origin access to CmdClaw.
+28. As a developer, I want a tight iframe sandbox policy, so that generated scripts can run without same-origin access to Bap.
 29. As a developer, I want preview HTML capped below the general sandbox file limit, so that large generated pages do not freeze the browser.
 30. As a developer, I want the general sandbox file limit to remain unchanged, so that download behavior is not narrowed by preview constraints.
 31. As a developer, I want preview support controlled by a `ChatArea` opt-in, so that each chat caller can decide when to expose the right panel.
@@ -100,7 +100,7 @@ The first rollout enables this only on normal chat pages. Other chat surfaces ca
 - Files above the preview cap remain downloadable through the existing download flow.
 - The preview API should return enough structured error information for the UI to distinguish too-large, not-found, and generic load failures.
 - Render preview content with iframe `srcDoc`.
-- The iframe sandbox should allow scripts and forms, but must not allow same-origin access to CmdClaw.
+- The iframe sandbox should allow scripts and forms, but must not allow same-origin access to Bap.
 - Do not sanitize or rewrite generated HTML for v1; iframe isolation is the safety boundary.
 - Do not support relative assets in v1. `output.html` must be self-contained, with CSS, JavaScript, and small images inlined when needed.
 - Keep the existing presigned download URL path for downloading raw sandbox files.

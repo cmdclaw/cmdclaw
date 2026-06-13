@@ -10,7 +10,7 @@ const { downloadFromS3Mock } = vi.hoisted(() => ({
   downloadFromS3Mock: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   downloadFromS3: downloadFromS3Mock,
 }));
 

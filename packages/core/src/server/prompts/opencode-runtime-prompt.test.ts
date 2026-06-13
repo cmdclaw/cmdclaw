@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CoworkerBuilderContext } from "../services/coworker-builder-service";
 import {
-  CMDCLAW_CHAT_AGENT_ID,
-  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
-  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
+  BAP_CHAT_AGENT_ID,
+  BAP_COWORKER_BUILDER_AGENT_ID,
+  BAP_COWORKER_RUNNER_AGENT_ID,
 } from "./opencode-agent-ids";
 import { composeOpencodePromptSpec } from "./opencode-runtime-prompt";
 
@@ -30,7 +30,7 @@ describe("composeOpencodePromptSpec", () => {
       userTimezone: "Europe/Dublin",
     });
 
-    expect(result.agentId).toBe(CMDCLAW_CHAT_AGENT_ID);
+    expect(result.agentId).toBe(BAP_CHAT_AGENT_ID);
     expect(result.sections.map((section) => section.key)).toEqual([
       "base_system",
       "file_sharing",
@@ -63,7 +63,7 @@ describe("composeOpencodePromptSpec", () => {
       userTimezone: "America/New_York",
     });
 
-    expect(result.agentId).toBe(CMDCLAW_COWORKER_BUILDER_AGENT_ID);
+    expect(result.agentId).toBe(BAP_COWORKER_BUILDER_AGENT_ID);
     expect(result.sections.map((section) => section.key)).toContain("user_timezone");
     expect(result.systemPrompt).toContain("America/New_York");
     expect(result.sections.map((section) => section.key)).toContain("coworker_builder_runtime");
@@ -87,7 +87,7 @@ describe("composeOpencodePromptSpec", () => {
       userTimezone: "Asia/Tokyo",
     });
 
-    expect(result.agentId).toBe(CMDCLAW_COWORKER_RUNNER_AGENT_ID);
+    expect(result.agentId).toBe(BAP_COWORKER_RUNNER_AGENT_ID);
     expect(result.sections.map((section) => section.key)).toContain("user_timezone");
     expect(result.systemPrompt).toContain("Asia/Tokyo");
     expect(result.sections.map((section) => section.key)).toContain("coworker_execution");

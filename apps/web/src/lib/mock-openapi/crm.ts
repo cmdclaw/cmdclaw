@@ -281,7 +281,7 @@ export function buildMockCrmOpenApiDocument(origin: string) {
   return {
     openapi: "3.1.0",
     info: {
-      title: "CmdClaw Mock CRM API",
+      title: "Bap Mock CRM API",
       version: "1.0.0",
       description: "Fixture-backed CRM API used to test executor OpenAPI imports and calls.",
     },

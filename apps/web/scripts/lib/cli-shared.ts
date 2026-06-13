@@ -12,19 +12,19 @@ export type ChatConfig = {
   token: string;
 };
 
-const CMDCLAW_DIR = join(homedir(), ".cmdclaw");
-const PROFILES_DIR = join(CMDCLAW_DIR, "profiles");
+const BAP_DIR = join(homedir(), ".bap");
+const PROFILES_DIR = join(BAP_DIR, "profiles");
 
 export const DEFAULT_SERVER_URL = "http://localhost:3000";
 
-export function ensureCmdClawDir(): void {
-  if (!existsSync(CMDCLAW_DIR)) {
-    mkdirSync(CMDCLAW_DIR, { recursive: true });
+export function ensureBapDir(): void {
+  if (!existsSync(BAP_DIR)) {
+    mkdirSync(BAP_DIR, { recursive: true });
   }
 }
 
 function ensureProfilesDir(): void {
-  ensureCmdClawDir();
+  ensureBapDir();
   if (!existsSync(PROFILES_DIR)) {
     mkdirSync(PROFILES_DIR, { recursive: true });
   }

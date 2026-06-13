@@ -54,7 +54,7 @@ vi.mock("@/orpc/provider", () => ({
 }));
 
 vi.mock("@/zero/provider", () => ({
-  CmdClawZeroProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  BapZeroProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 afterEach(() => {
@@ -87,9 +87,9 @@ describe("AppRootShell", () => {
   });
 
   it("uses the configured public app URL when present", async () => {
-    mocks.env.VITE_APP_URL = "https://app.cmdclaw.com";
+    mocks.env.VITE_APP_URL = "https://app.bap.com";
     const { getAutumnBetterAuthUrl } = await import("./app-root-shell");
 
-    expect(getAutumnBetterAuthUrl()).toBe("https://app.cmdclaw.com");
+    expect(getAutumnBetterAuthUrl()).toBe("https://app.bap.com");
   });
 });

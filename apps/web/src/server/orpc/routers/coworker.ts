@@ -1,49 +1,49 @@
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import { isAdminOnlyChatModel } from "@cmdclaw/core/lib/chat-model-policy";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
+import { isAdminOnlyChatModel } from "@bap/core/lib/chat-model-policy";
 import {
   COWORKER_AVAILABLE_INTEGRATION_TYPES,
   COWORKER_TOOL_ACCESS_MODES,
   normalizeCoworkerAllowedSkillSlugs,
   normalizeCoworkerToolAccessMode,
   type CoworkerToolAccessMode,
-} from "@cmdclaw/core/lib/coworker-tool-policy";
+} from "@bap/core/lib/coworker-tool-policy";
 import {
   buildCoworkerForwardingAddress,
   EMAIL_FORWARDED_TRIGGER_TYPE,
   generateCoworkerAliasLocalPart,
-} from "@cmdclaw/core/lib/email-forwarding";
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+} from "@bap/core/lib/email-forwarding";
+import { parseModelReference } from "@bap/core/lib/model-reference";
 import {
   normalizeModelAuthSource,
   providerSupportsAuthSource,
   type ProviderAuthSource,
-} from "@cmdclaw/core/lib/provider-auth-source";
+} from "@bap/core/lib/provider-auth-source";
 import {
   listConfiguredRemoteIntegrationTargets,
   remoteIntegrationSourceSchema,
   remoteIntegrationTargetEnvSchema,
   searchRemoteIntegrationUsers,
-} from "@cmdclaw/core/server/integrations/remote-integrations";
+} from "@bap/core/server/integrations/remote-integrations";
 import {
   applyCoworkerEdit,
   coworkerBuilderEditSchema,
-} from "@cmdclaw/core/server/services/coworker-builder-service";
+} from "@bap/core/server/services/coworker-builder-service";
 import {
   generateCoworkerMetadataOnFirstPromptFill,
   normalizeAndEnsureUniqueCoworkerUsername,
-} from "@cmdclaw/core/server/services/coworker-metadata";
+} from "@bap/core/server/services/coworker-metadata";
 import {
   removeCoworkerScheduleJob,
   syncCoworkerScheduleJob,
-} from "@cmdclaw/core/server/services/coworker-scheduler";
+} from "@bap/core/server/services/coworker-scheduler";
 import {
   reconcileStaleCoworkerRunsForCoworker,
   reconcileStaleCoworkerRunsForCoworkers,
   triggerCoworkerRun,
-} from "@cmdclaw/core/server/services/coworker-service";
-import { evaluateSpawnRequest } from "@cmdclaw/core/server/services/generation/spawn-depth";
-import { generationLifecyclePolicy } from "@cmdclaw/core/server/services/lifecycle-policy";
-import { downloadFromS3, ensureBucket, uploadToS3 } from "@cmdclaw/core/server/storage/s3-client";
+} from "@bap/core/server/services/coworker-service";
+import { evaluateSpawnRequest } from "@bap/core/server/services/generation/spawn-depth";
+import { generationLifecyclePolicy } from "@bap/core/server/services/lifecycle-policy";
+import { downloadFromS3, ensureBucket, uploadToS3 } from "@bap/core/server/storage/s3-client";
 import {
   conversation,
   generation,
@@ -57,7 +57,7 @@ import {
   coworkerTagAssignment,
   sandboxFile,
   workspaceMcpServer,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -607,7 +607,7 @@ async function resolveCoworkerUsername(params: {
 async function requireOwnedCoworkerInActiveWorkspace(
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
     workspaceId?: string | null;
   },
   coworkerId: string,
@@ -635,7 +635,7 @@ async function requireOwnedCoworkerInActiveWorkspace(
 
 async function requireAdminUser(context: {
   user: { id: string };
-  db: typeof import("@cmdclaw/db/client").db;
+  db: typeof import("@bap/db/client").db;
 }) {
   const dbUser = await context.db.query.user.findFirst({
     where: eq(user.id, context.user.id),
@@ -655,7 +655,7 @@ async function requireAdminUser(context: {
 async function copyCoworkerDocuments(params: {
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   };
   sourceCoworkerId: string;
   targetCoworkerId: string;
@@ -670,7 +670,7 @@ async function copyCoworkerDocuments(params: {
     documents.map(async (document) => {
       const contentBase64 = (await downloadFromS3(document.storageKey)).toString("base64");
       await uploadCoworkerDocument({
-        database: params.context.db as typeof import("@cmdclaw/db/client").db,
+        database: params.context.db as typeof import("@bap/db/client").db,
         userId: params.targetUserId,
         coworkerId: params.targetCoworkerId,
         filename: document.filename,
@@ -694,7 +694,7 @@ function generateImportedArtifactStorageKey(params: {
 async function createBuilderConversationForImportedArtifacts(params: {
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   };
   workspaceId: string;
   coworkerId: string;
@@ -732,7 +732,7 @@ async function createBuilderConversationForImportedArtifacts(params: {
 async function importCoworkerArtifacts(params: {
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   };
   workspaceId: string;
   coworkerId: string;
@@ -1614,7 +1614,7 @@ const uploadDocument = protectedProcedure
   .handler(async ({ input, context }) => {
     await requireOwnedCoworkerInActiveWorkspace(context, input.coworkerId);
     return uploadCoworkerDocument({
-      database: context.db as typeof import("@cmdclaw/db/client").db,
+      database: context.db as typeof import("@bap/db/client").db,
       userId: context.user.id,
       coworkerId: input.coworkerId,
       filename: input.filename,
@@ -1642,7 +1642,7 @@ const deleteDocument = protectedProcedure
 
     await requireOwnedCoworkerInActiveWorkspace(context, existingDocument.coworkerId);
     return deleteCoworkerDocument({
-      database: context.db as typeof import("@cmdclaw/db/client").db,
+      database: context.db as typeof import("@bap/db/client").db,
       userId: context.user.id,
       documentId: input.id,
     });
@@ -2831,7 +2831,7 @@ const importDefinition = protectedProcedure
     await Promise.all(
       definition.documents.map((document) =>
         uploadCoworkerDocument({
-          database: context.db as typeof import("@cmdclaw/db/client").db,
+          database: context.db as typeof import("@bap/db/client").db,
           userId: context.user.id,
           coworkerId,
           filename: document.filename,

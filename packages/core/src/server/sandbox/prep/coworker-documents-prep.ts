@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { coworkerDocument } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { coworkerDocument } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import path from "path";
 import { downloadFromS3 } from "../../storage/s3-client";

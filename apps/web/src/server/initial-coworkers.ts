@@ -1,15 +1,15 @@
 import {
   normalizeCoworkerAllowedSkillSlugs,
   normalizeCoworkerToolAccessMode,
-} from "@cmdclaw/core/lib/coworker-tool-policy";
-import { db } from "@cmdclaw/db/client";
+} from "@bap/core/lib/coworker-tool-policy";
+import { db } from "@bap/db/client";
 import {
   coworker,
   coworkerRun,
   coworkerTag,
   coworkerTagAssignment,
   generation,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 
 const INITIAL_COWORKER_LIMIT = 36;

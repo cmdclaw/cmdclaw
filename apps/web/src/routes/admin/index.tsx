@@ -23,7 +23,7 @@ import {
 import { getImpersonationErrorMessage } from "./-lib/impersonation-errors";
 
 export const Route = createFileRoute("/admin/")({
-  head: () => ({ meta: [{ title: "User Management - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "User Management - Bap" }] }),
   component: AdminPage,
 });
 

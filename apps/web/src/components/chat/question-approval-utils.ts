@@ -30,7 +30,7 @@ export function isQuestionApprovalRequest(input: {
 }): boolean {
   return (
     (input.operation === "question" || input.toolName.toLowerCase() === "question") &&
-    input.integration.toLowerCase() === "cmdclaw"
+    input.integration.toLowerCase() === "bap"
   );
 }
 

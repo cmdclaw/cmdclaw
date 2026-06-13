@@ -1,9 +1,9 @@
 import { getCoworkerCliSystemPrompt } from "../../lib/coworker-runtime-cli";
 import type { CoworkerBuilderContext } from "../services/coworker-builder-service";
 import {
-  CMDCLAW_CHAT_AGENT_ID,
-  CMDCLAW_COWORKER_BUILDER_AGENT_ID,
-  CMDCLAW_COWORKER_RUNNER_AGENT_ID,
+  BAP_CHAT_AGENT_ID,
+  BAP_COWORKER_BUILDER_AGENT_ID,
+  BAP_COWORKER_RUNNER_AGENT_ID,
 } from "./opencode-agent-ids";
 
 export type ResolvedPromptSection = {
@@ -48,7 +48,7 @@ export type OpencodePromptCompositionInput =
   | CoworkerBuilderPromptInput
   | CoworkerRunnerPromptInput;
 
-const BASE_SYSTEM_PROMPT = "You are CmdClaw, an AI agent that helps do work.";
+const BASE_SYSTEM_PROMPT = "You are Bap, an AI agent that helps do work.";
 
 const FILE_SHARING_SECTION = [
   "## File Sharing",
@@ -217,7 +217,7 @@ function composeChatPrompt(input: ChatPromptInput): ResolvedPromptSpec {
   appendSection(sections, "integration_skill_drafts", buildIntegrationSkillDraftSection());
   appendSection(sections, "memory", input.memoryInstructions);
 
-  return finalizePrompt(CMDCLAW_CHAT_AGENT_ID, sections);
+  return finalizePrompt(BAP_CHAT_AGENT_ID, sections);
 }
 
 function composeCoworkerBuilderPrompt(input: CoworkerBuilderPromptInput): ResolvedPromptSpec {
@@ -243,7 +243,7 @@ function composeCoworkerBuilderPrompt(input: CoworkerBuilderPromptInput): Resolv
     buildCoworkerBuilderRuntimeSection(input.builderCoworkerContext),
   );
 
-  return finalizePrompt(CMDCLAW_COWORKER_BUILDER_AGENT_ID, sections);
+  return finalizePrompt(BAP_COWORKER_BUILDER_AGENT_ID, sections);
 }
 
 function composeCoworkerRunnerPrompt(input: CoworkerRunnerPromptInput): ResolvedPromptSpec {
@@ -264,7 +264,7 @@ function composeCoworkerRunnerPrompt(input: CoworkerRunnerPromptInput): Resolved
   appendSection(sections, "memory", input.memoryInstructions);
   appendSection(sections, "coworker_execution", buildCoworkerExecutionSection(input));
 
-  return finalizePrompt(CMDCLAW_COWORKER_RUNNER_AGENT_ID, sections);
+  return finalizePrompt(BAP_COWORKER_RUNNER_AGENT_ID, sections);
 }
 
 export function composeOpencodePromptSpec(

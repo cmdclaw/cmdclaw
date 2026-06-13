@@ -32,5 +32,5 @@ export async function createManagedGmailClient(extra?: ToolExtraArguments) {
     throw new Error("Gmail integration is not connected for this user.");
   }
 
-  return createGmailClient(accessToken, process.env.CMDCLAW_USER_TIMEZONE?.trim());
+  return createGmailClient(accessToken, process.env.BAP_USER_TIMEZONE?.trim());
 }

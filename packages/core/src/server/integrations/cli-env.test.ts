@@ -8,7 +8,7 @@ const { getValidTokensForUserMock, getValidCustomTokensMock, findIntegrationMock
   findCustomCredsMock: vi.fn(),
   }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       integration: {
@@ -69,14 +69,14 @@ describe("getTokensForIntegrations", () => {
     vi.resetModules();
     vi.stubEnv(
       "E2B_CALLBACK_BASE_URL",
-      "https://localcan.baptistecolle.com/__worktrees/cmdclaw-a07527aa",
+      "https://localcan.baptistecolle.com/__worktrees/bap-a07527aa",
     );
     const { getCliEnvForUser } = await import("./cli-env");
 
     const env = await getCliEnvForUser("user-1");
 
     expect(env.SLACK_BOT_RELAY_URL).toBe(
-      "https://localcan.baptistecolle.com/__worktrees/cmdclaw-a07527aa/api/internal/slack/post-as-bot",
+      "https://localcan.baptistecolle.com/__worktrees/bap-a07527aa/api/internal/slack/post-as-bot",
     );
   });
 });

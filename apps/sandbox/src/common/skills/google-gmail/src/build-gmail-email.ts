@@ -113,7 +113,7 @@ function buildEmailSource(params: {
     ].join("\r\n");
   }
 
-  const boundary = `cmdclaw-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+  const boundary = `bap-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
   const sections = [
     ...headers,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,

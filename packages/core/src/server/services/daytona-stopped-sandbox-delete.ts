@@ -1,6 +1,6 @@
 import { Daytona } from "@daytonaio/sdk";
-import { db } from "@cmdclaw/db/client";
-import { conversationRuntime, generation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversationRuntime, generation } from "@bap/db/schema";
 import { and, inArray, isNotNull } from "drizzle-orm";
 import {
   getDaytonaClientConfig,

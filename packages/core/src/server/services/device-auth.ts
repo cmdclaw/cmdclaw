@@ -3,8 +3,8 @@
  */
 
 import { and, eq, gt } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { device, session } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { device, session } from "@bap/db/schema";
 
 /**
  * Verify a Better Auth bearer token and resolve the device.

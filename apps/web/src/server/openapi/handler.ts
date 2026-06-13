@@ -15,9 +15,9 @@ const generator = new OpenAPIGenerator({
 export async function handleOpenApi(): Promise<Response> {
   const spec = await generator.generate(appRouter, {
     info: {
-      title: "CmdClaw API",
+      title: "Bap API",
       version: "0.1.0",
-      description: "API for CmdClaw server",
+      description: "API for Bap server",
     },
     servers: [{ url: "/api/rpc" }],
   });

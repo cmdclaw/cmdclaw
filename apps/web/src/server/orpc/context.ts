@@ -2,13 +2,13 @@ import type { Session, User } from "better-auth";
 import {
   type HostedMcpAudience,
   verifyHostedMcpAccessToken,
-} from "@cmdclaw/core/server/hosted-mcp-oauth";
+} from "@bap/core/server/hosted-mcp-oauth";
 import {
   type ManagedMcpTokenClaims,
   verifyManagedMcpToken,
-} from "@cmdclaw/core/server/managed-mcp-auth";
-import { db } from "@cmdclaw/db/client";
-import { user as userTable } from "@cmdclaw/db/schema";
+} from "@bap/core/server/managed-mcp-auth";
+import { db } from "@bap/db/client";
+import { user as userTable } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 
@@ -44,7 +44,7 @@ export type ORPCContext = {
   workspaceId: string | null;
 };
 
-const CMDCLAW_MANAGED_INTERNAL_KEY = "bap";
+const BAP_MANAGED_INTERNAL_KEY = "bap";
 
 export function resolveManagedMcpClaims(
   headers: Headers,
@@ -63,7 +63,7 @@ export function resolveManagedMcpClaims(
     throw new Error("Managed MCP secret is not configured.");
   }
   const claims = verifyManagedMcpToken(token, secret, nowSeconds);
-  if (claims.internalKey !== CMDCLAW_MANAGED_INTERNAL_KEY) {
+  if (claims.internalKey !== BAP_MANAGED_INTERNAL_KEY) {
     throw new Error("Managed MCP token is not valid for the Bap API.");
   }
   // Fail closed: the platform server always mints a spawn depth. A Bap token

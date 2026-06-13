@@ -25,12 +25,12 @@ describe("get_clients_by_client_id_appointments", () => {
     const bearerToken = "Bearer header.payload.signature";
     const requests: string[] = [];
 
-    process.env.APP_SERVER_URL = "https://cmdclaw.example";
+    process.env.APP_SERVER_URL = "https://bap.example";
     process.env.APP_SERVER_SECRET = "server-secret";
     globalThis.fetch = vi.fn(async (input, init) => {
       requests.push(String(input));
 
-      if (String(input) === "https://cmdclaw.example/api/internal/mcp/galien-credentials") {
+      if (String(input) === "https://bap.example/api/internal/mcp/galien-credentials") {
         expect(init?.headers).toMatchObject({
           Authorization: "Bearer server-secret",
         });
@@ -82,7 +82,7 @@ describe("get_clients_by_client_id_appointments", () => {
         authInfo: {
           extra: {
             audience: "galien",
-            userId: "cmdclaw-user-id",
+            userId: "bap-user-id",
             workspaceId: "workspace-id",
           },
         },

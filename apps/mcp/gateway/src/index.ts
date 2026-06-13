@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { initializeObservabilityRuntime } from "@cmdclaw/core/server/utils/observability";
+import { initializeObservabilityRuntime } from "@bap/core/server/utils/observability";
 import { shouldProxyAppAuthFlowPath } from "./app-auth-proxy";
 import { resolveGatewayPublicOrigin } from "./public-origin";
 import { matchProtectedResourceMetadataRequest, routeMcpRequest } from "./router";
@@ -307,7 +307,7 @@ async function main() {
               ),
               targets: Object.fromEntries(
                 Object.entries(routingEnv).filter(
-                  ([key]) => key.startsWith("CMDCLAW_") && key.endsWith("_MCP_TARGET"),
+                  ([key]) => key.startsWith("BAP_") && key.endsWith("_MCP_TARGET"),
                 ),
               ),
             }),

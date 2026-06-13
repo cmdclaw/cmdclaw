@@ -58,7 +58,7 @@ export function getApprovalLocalResolutionKeys(approval: {
     approval.integration &&
     approval.operation &&
     (approval.operation === "question" || approval.toolName.toLowerCase() === "question") &&
-    approval.integration === "cmdclaw"
+    approval.integration === "bap"
   ) {
     try {
       keys.push(`question:${JSON.stringify(approval.toolInput)}`);

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const RUNTIME_ENV_JSON_PATH = "/app/.cmdclaw/runtime-env.json";
+const RUNTIME_ENV_JSON_PATH = "/app/.bap/runtime-env.json";
 
 let loadedKeys = new Set<string>();
 

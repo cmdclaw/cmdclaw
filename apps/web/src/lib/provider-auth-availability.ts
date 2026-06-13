@@ -1,8 +1,8 @@
-import { MODEL_PROVIDER_IDS, type ModelProviderID } from "@cmdclaw/core/lib/model-reference";
+import { MODEL_PROVIDER_IDS, type ModelProviderID } from "@bap/core/lib/model-reference";
 import {
   resolveProviderAuthAvailability,
   type ProviderAuthAvailability,
-} from "@cmdclaw/core/lib/provider-auth-source";
+} from "@bap/core/lib/provider-auth-source";
 
 export type ProviderAuthAvailabilityByProvider = Partial<
   Record<ModelProviderID, ProviderAuthAvailability>

@@ -107,7 +107,7 @@ function slugify(value: string, separator: "-" | "_" = "-"): string {
 }
 
 function buildInstanceId(path: string): string {
-  const base = slugify(path.split("/").at(-1) ?? "cmdclaw");
+  const base = slugify(path.split("/").at(-1) ?? "bap");
   const hash = createHash("sha1").update(path).digest("hex").slice(0, 8);
   return `${base}-${hash}`;
 }
@@ -121,7 +121,7 @@ function loadEnvFile(path: string | null): Record<string, string> {
 }
 
 function resolveSharedEnvFile(): string | null {
-  const explicit = process.env.CMDCLAW_ENV_FILE?.trim();
+  const explicit = process.env.BAP_ENV_FILE?.trim();
   if (explicit && existsSync(explicit)) {
     return explicit;
   }
@@ -149,7 +149,7 @@ function resolveSharedEnvFile(): string | null {
 }
 
 function resolveWorktreeEnvFile(): string | null {
-  const explicitRoot = process.env.CMDCLAW_INSTANCE_ROOT?.trim();
+  const explicitRoot = process.env.BAP_INSTANCE_ROOT?.trim();
   if (explicitRoot) {
     const candidate = join(explicitRoot, "instance.env");
     if (existsSync(candidate)) {
@@ -180,7 +180,7 @@ function buildBaseEnv(): { env: NodeJS.ProcessEnv; worktreeEnvFile: string | nul
 }
 
 function hasWorktreeContext(baseEnv: NodeJS.ProcessEnv, worktreeEnvFile: string | null): boolean {
-  return worktreeEnvFile !== null || Boolean(baseEnv.CMDCLAW_INSTANCE_ROOT?.trim());
+  return worktreeEnvFile !== null || Boolean(baseEnv.BAP_INSTANCE_ROOT?.trim());
 }
 
 export function buildRecordModeEnv(
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
         {
           ...baseEnv,
           PLAYWRIGHT_SKIP_WEBSERVER: "1",
-          PLAYWRIGHT_BASE_URL: "https://cmdclaw.ai",
+          PLAYWRIGHT_BASE_URL: "https://heybap.com",
         },
         [
           "tests/e2e/auth-smoke.e2e.ts",
@@ -306,27 +306,27 @@ async function main(): Promise<void> {
       await runAuth({
         ...baseEnv,
         PLAYWRIGHT_SKIP_WEBSERVER: "1",
-        PLAYWRIGHT_BASE_URL: "https://cmdclaw.ai",
+        PLAYWRIGHT_BASE_URL: "https://heybap.com",
       });
       await runPlaywright({
         ...baseEnv,
         E2E_LIVE: "1",
         PLAYWRIGHT_SKIP_WEBSERVER: "1",
-        PLAYWRIGHT_BASE_URL: "https://cmdclaw.ai",
+        PLAYWRIGHT_BASE_URL: "https://heybap.com",
       });
       return;
     case "prod-monitor":
       await runAuth({
         ...baseEnv,
         PLAYWRIGHT_SKIP_WEBSERVER: "1",
-        PLAYWRIGHT_BASE_URL: "https://cmdclaw.ai",
+        PLAYWRIGHT_BASE_URL: "https://heybap.com",
       });
       await runPlaywright(
         {
           ...baseEnv,
           E2E_LIVE: "1",
           PLAYWRIGHT_SKIP_WEBSERVER: "1",
-          PLAYWRIGHT_BASE_URL: "https://cmdclaw.ai",
+          PLAYWRIGHT_BASE_URL: "https://heybap.com",
           PLAYWRIGHT_HTML_OPEN: "never",
           PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report/monitor",
           PLAYWRIGHT_JSON_OUTPUT_NAME: "test-results/monitor/results.json",
@@ -339,7 +339,7 @@ async function main(): Promise<void> {
         {
           ...baseEnv,
           PLAYWRIGHT_SKIP_WEBSERVER: "1",
-          PLAYWRIGHT_BASE_URL: "https://cmdclaw.ai",
+          PLAYWRIGHT_BASE_URL: "https://heybap.com",
           PLAYWRIGHT_HTML_OPEN: "never",
           PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report/monitor",
           PLAYWRIGHT_JSON_OUTPUT_NAME: "test-results/monitor/results.json",

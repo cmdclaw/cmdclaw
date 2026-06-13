@@ -1,12 +1,12 @@
 import type {
   ProviderAuthAvailability,
   ProviderAuthSource,
-} from "@cmdclaw/core/lib/provider-auth-source";
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+} from "@bap/core/lib/provider-auth-source";
+import { parseModelReference } from "@bap/core/lib/model-reference";
 import {
   normalizeModelAuthSource,
   resolveDefaultProviderAuthSourceForAvailability,
-} from "@cmdclaw/core/lib/provider-auth-source";
+} from "@bap/core/lib/provider-auth-source";
 import type { ProviderAuthAvailabilityByProvider } from "./provider-auth-availability";
 import { normalizeChatModelReference } from "./chat-model-reference";
 

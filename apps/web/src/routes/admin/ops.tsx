@@ -13,7 +13,7 @@ import {
 import { useResetOnboarding } from "@/orpc/hooks/user";
 
 export const Route = createFileRoute("/admin/ops")({
-  head: () => ({ meta: [{ title: "Ops - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Ops - Bap" }] }),
   component: AdminOpsPage,
 });
 

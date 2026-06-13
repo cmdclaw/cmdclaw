@@ -21,7 +21,7 @@ vi.mock("@/env", () => ({
 import { handleReport } from "./handler";
 
 function jsonRequest(body: unknown) {
-  return new Request("https://cmdclaw.ai/api/report", {
+  return new Request("https://heybap.com/api/report", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -81,7 +81,7 @@ describe("handleReport", () => {
         Response.json({ ok: true, channels: [{ id: "C1", name: "bugs" }] }),
       ) as unknown as typeof fetch;
 
-    const request = new Request("https://cmdclaw.ai/api/report", {
+    const request = new Request("https://heybap.com/api/report", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "not-json",
@@ -152,7 +152,7 @@ describe("handleReport", () => {
     const formData = new FormData();
     formData.append("message", "with attachment");
     formData.append("attachment", new File([fileContents], "trace.txt", { type: "text/plain" }));
-    const request = new Request("https://cmdclaw.ai/api/report", {
+    const request = new Request("https://heybap.com/api/report", {
       method: "POST",
       body: formData,
     });

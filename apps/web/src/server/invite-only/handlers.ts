@@ -1,4 +1,4 @@
-import { postInviteOnlyAccessRequestSlackNotification } from "@cmdclaw/core/server/services/telemetry-slack";
+import { postInviteOnlyAccessRequestSlackNotification } from "@bap/core/server/services/telemetry-slack";
 import { z } from "zod";
 import { isApprovedLoginEmail } from "@/server/lib/approved-login-emails";
 

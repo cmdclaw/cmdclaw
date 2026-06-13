@@ -41,7 +41,7 @@ export const Route = createFileRoute("/_auth/invite-only")({
   validateSearch: validateInviteOnlySearch,
   beforeLoad: () => guardInviteOnly(),
   head: () => ({
-    meta: [{ title: "Request access - CmdClaw" }],
+    meta: [{ title: "Request access - Bap" }],
   }),
   component: InviteOnlyPage,
 });

@@ -1,6 +1,6 @@
 import { authenticateHostedMcpRequest, sendUnauthorizedMcpResponse } from "../../../shared/auth";
 
-export default async function cmdclawMiddleware(req: any, res: any, next: () => void) {
+export default async function bapMiddleware(req: any, res: any, next: () => void) {
   try {
     req.auth = await authenticateHostedMcpRequest({
       req,

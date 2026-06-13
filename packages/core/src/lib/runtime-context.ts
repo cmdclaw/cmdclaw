@@ -1,4 +1,4 @@
-export const CMDCLAW_RUNTIME_CONTEXT_PATH = "/tmp/cmdclaw-runtime-context.json";
+export const BAP_RUNTIME_CONTEXT_PATH = "/tmp/bap-runtime-context.json";
 
 export type RuntimeContextFile = {
   runtimeId: string;

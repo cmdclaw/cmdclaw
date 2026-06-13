@@ -1,5 +1,5 @@
 {
-  "name": "@cmdclaw/worker",
+  "name": "@bap/worker",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -7,13 +7,13 @@
     "dev": "bun --watch --env-file=../../.env index.ts",
     "dev:selfhost": "bun --watch --env-file=../../.env.selfhost index.ts",
     "start": "bun --env-file=../../.env index.ts",
-    "bundle": "rm -rf dist && bun build index.ts --target bun --outdir dist --external cpu-features --external '@cmdclaw/sandbox/*'",
+    "bundle": "rm -rf dist && bun build index.ts --target bun --outdir dist --external cpu-features --external '@bap/sandbox/*'",
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@cmdclaw/core": "workspace:*",
-    "@cmdclaw/db": "workspace:*",
-    "@cmdclaw/sandbox": "workspace:*"
+    "@bap/core": "workspace:*",
+    "@bap/db": "workspace:*",
+    "@bap/sandbox": "workspace:*"
   }
 }

@@ -1,4 +1,4 @@
-import type { ContentPart } from "@cmdclaw/db/schema";
+import type { ContentPart } from "@bap/db/schema";
 import { parseBashCommand } from "../../../ai/permission-checker";
 import type { GenerationEvent } from "../types";
 

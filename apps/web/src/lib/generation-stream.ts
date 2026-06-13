@@ -1,6 +1,6 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
 import type { RouterClient } from "@orpc/server";
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
 import { reportClientObservation } from "@/lib/client-observations";
 import { normalizeGenerationError, type NormalizedGenerationError } from "@/lib/generation-errors";
 import type { AppRouter } from "../server/orpc";
@@ -296,7 +296,7 @@ export async function runGenerationStream(
               toolUseId: event.providerToolUseId,
               toolName: event.display.title,
               toolInput: event.display.toolInput ?? {},
-              integration: event.display.integration ?? "cmdclaw",
+              integration: event.display.integration ?? "bap",
               operation: event.display.operation ?? "unknown",
               command: event.display.command,
             });
@@ -326,7 +326,7 @@ export async function runGenerationStream(
               toolUseId,
               toolName: event.display.title,
               toolInput: event.display.toolInput ?? {},
-              integration: event.display.integration ?? "cmdclaw",
+              integration: event.display.integration ?? "bap",
               operation: event.display.operation ?? "unknown",
               command: event.display.command,
               status: decision,

@@ -38,7 +38,7 @@ function validateResetPasswordSearch(search: Record<string, unknown>): ResetPass
 export const Route = createFileRoute("/_auth/reset-password")({
   validateSearch: validateResetPasswordSearch,
   head: () => ({
-    meta: [{ title: "Set your password - CmdClaw" }],
+    meta: [{ title: "Set your password - Bap" }],
   }),
   component: ResetPasswordPage,
 });
@@ -56,7 +56,7 @@ function PasswordResetCard({
     <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          <T>CmdClaw</T>
+          <T>Bap</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
@@ -202,7 +202,7 @@ export function ResetPasswordView({
             ? "This password link expired. Request a new one from the login page."
             : isInvalidToken
               ? "Request a new password email from the login page."
-              : "Choose a password for your invite-only CmdClaw account."
+              : "Choose a password for your invite-only Bap account."
         }
       >
         {error ? (

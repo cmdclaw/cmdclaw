@@ -1,9 +1,9 @@
 // oxlint-disable eslint/no-underscore-dangle
 
 import { useNavigate } from "@tanstack/react-router";
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
-import { type CoworkerToolAccessMode } from "@cmdclaw/core/lib/coworker-tool-policy";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
+import { type CoworkerToolAccessMode } from "@bap/core/lib/coworker-tool-policy";
 import { T, msg, useGT, useMessages } from "gt-react";
 import {
   Activity,

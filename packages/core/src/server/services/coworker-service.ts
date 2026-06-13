@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import type { IntegrationType } from "../oauth/config";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   customIntegrationCredential,
@@ -11,7 +11,7 @@ import {
   coworkerRun,
   coworkerRunEvent,
   workspaceMcpServer,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import {
   normalizeCoworkerAllowedSkillSlugs,
   normalizeCoworkerToolAccessMode,

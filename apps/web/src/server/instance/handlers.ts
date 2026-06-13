@@ -1,5 +1,5 @@
-import { startCloudAuth } from "@cmdclaw/core/server/control-plane/client";
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
+import { startCloudAuth } from "@bap/core/server/control-plane/client";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 import { sanitizeReturnPath } from "@/server/control-plane/return-path";
@@ -14,11 +14,7 @@ import { getInstanceHealthStatus } from "@/server/instance/health";
  * route guard.
  */
 
-function buildLoginRedirect(
-  requestUrl: string,
-  callbackUrl: string,
-  error: string,
-): Response {
+function buildLoginRedirect(requestUrl: string, callbackUrl: string, error: string): Response {
   const loginUrl = buildRequestAwareUrl("/login", requestUrl);
   loginUrl.searchParams.set("callbackUrl", callbackUrl);
   loginUrl.searchParams.set("error", error);

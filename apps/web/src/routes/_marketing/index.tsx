@@ -17,12 +17,12 @@ import { fetchLandingData } from "./-landing-data";
  */
 
 const isSelfHostedEdition = env.VITE_APP_EDITION === "selfhost";
-const siteUrl = env.VITE_APP_URL ?? "https://cmdclaw.ai";
+const siteUrl = env.VITE_APP_URL ?? "https://heybap.com";
 const logoUrl = `${siteUrl.replace(/\/$/, "")}/logo.png`;
 
-const title = isSelfHostedEdition ? "CmdClaw Self-hosted" : "CmdClaw";
+const title = isSelfHostedEdition ? "Bap Self-hosted" : "Bap";
 const description = isSelfHostedEdition
-  ? "Your self-hosted CmdClaw deployment"
+  ? "Your self-hosted Bap deployment"
   : "Turn plain-English tasks into AI coworkers that run across your tools. Handle one-off work instantly or automate recurring workflows for your team.";
 
 export const Route = createFileRoute("/_marketing/")({
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/_marketing/")({
       { property: "og:title", content: title },
       { property: "og:description", content: description },
       { property: "og:url", content: siteUrl },
-      { property: "og:site_name", content: "CmdClaw" },
+      { property: "og:site_name", content: "Bap" },
       { property: "og:type", content: "website" },
       { property: "og:image", content: logoUrl },
       { name: "twitter:card", content: "summary_large_image" },

@@ -14,8 +14,8 @@
  * Attach mode reconnects to an existing Daytona sandbox without creating a new one.
  */
 
-import { closePool, db } from "@cmdclaw/db/client";
-import * as schema from "@cmdclaw/db/schema";
+import { closePool, db } from "@bap/db/client";
+import * as schema from "@bap/db/schema";
 import { Daytona } from "@daytonaio/sdk";
 import * as dotenvConfig from "dotenv/config";
 import { and, eq } from "drizzle-orm";
@@ -32,7 +32,7 @@ const DEFAULT_WORKDIR = "/app";
 const COMMAND_TIMEOUT_MS = 60 * 1000;
 const START_TIMEOUT_SECONDS = 60;
 export const DEFAULT_CREATE_USER_EMAIL =
-  process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() || "cmdclaw@example.com";
+  process.env.BAP_DEFAULT_USER_EMAIL?.trim() || "bap@example.com";
 export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "github" | "airtable";
@@ -477,7 +477,7 @@ async function runInteractiveCommandWithPty(sandbox: DaytonaSandbox, cmd: string
   };
 
   const pty = await sandbox.process.createPty({
-    id: `cmdclaw-${Date.now()}`,
+    id: `bap-${Date.now()}`,
     cwd: DEFAULT_WORKDIR,
     envs: buildPtyEnvs(),
     cols,

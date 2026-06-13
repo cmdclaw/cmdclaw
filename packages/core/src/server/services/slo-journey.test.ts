@@ -20,7 +20,7 @@ const {
   recordCounterMock: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     update: dbUpdateMock,
     query: {
@@ -109,13 +109,13 @@ describe("SLO Journey classification", () => {
     ]);
 
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       { journey: "coworker_run", result: "bad", traffic: "synthetic" },
       expect.any(String),
     );
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       { journey: "global", result: "bad", traffic: "synthetic" },
       expect.any(String),
@@ -134,7 +134,7 @@ describe("SLO Journey classification", () => {
 
     expect(recordCounterMock).toHaveBeenCalledTimes(2);
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       { journey: "coworker_run", result: "bad", traffic: "synthetic" },
       expect.any(String),
@@ -168,7 +168,7 @@ describe("SLO Journey classification", () => {
 
     expect(coworkerFindFirstMock).not.toHaveBeenCalled();
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       { journey: "coworker_run", result: "good", traffic: "synthetic" },
       expect.any(String),
@@ -186,7 +186,7 @@ describe("SLO Journey classification", () => {
     });
 
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       { journey: "coworker_builder", result: "good", traffic: "real" },
       expect.any(String),
@@ -235,7 +235,7 @@ describe("SLO Journey classification", () => {
       expect.objectContaining({ source: "coworker-service", userId: "user-1" }),
     );
     expect(recordCounterMock).toHaveBeenCalledWith(
-      "cmdclaw_slo_events_total",
+      "bap_slo_events_total",
       1,
       { journey: "coworker_run", result: "bad", traffic: "real" },
       expect.any(String),

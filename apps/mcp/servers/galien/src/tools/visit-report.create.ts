@@ -6,7 +6,7 @@ import { getManagedGalienToolCredentials } from "../lib/galien-auth";
 import { galienIsoDateTimeSchema, validateGalienToolParams } from "../lib/tool-helpers";
 
 export const GALIEN_VISIT_REPORT_CURRENT_VERSION = "v5";
-export const CMDCLAW_VISIT_REPORT_COMMENT_MARKER = "(made by CmdClaw)";
+export const BAP_VISIT_REPORT_COMMENT_MARKER = "(made by Bap)";
 
 export const schema = {
   clientId: z.number().int().describe("Galien client/pharmacy id, for example 14."),
@@ -52,19 +52,19 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export function addCmdClawCommentMarker(comment?: string) {
+export function addBapCommentMarker(comment?: string) {
   const existingComment = comment ?? "";
   const trimmedComment = existingComment.trim();
 
   if (!trimmedComment) {
-    return CMDCLAW_VISIT_REPORT_COMMENT_MARKER;
+    return BAP_VISIT_REPORT_COMMENT_MARKER;
   }
 
-  if (existingComment.includes(CMDCLAW_VISIT_REPORT_COMMENT_MARKER)) {
+  if (existingComment.includes(BAP_VISIT_REPORT_COMMENT_MARKER)) {
     return existingComment;
   }
 
-  return `${existingComment.trimEnd()}\n\n${CMDCLAW_VISIT_REPORT_COMMENT_MARKER}`;
+  return `${existingComment.trimEnd()}\n\n${BAP_VISIT_REPORT_COMMENT_MARKER}`;
 }
 
 export function buildVisitReportCreateBody(params: VisitReportCreateParams) {
@@ -75,7 +75,7 @@ export function buildVisitReportCreateBody(params: VisitReportCreateParams) {
   return {
     ...defaultFields,
     ...params,
-    comment: addCmdClawCommentMarker(params.comment),
+    comment: addBapCommentMarker(params.comment),
     version: GALIEN_VISIT_REPORT_CURRENT_VERSION,
   };
 }

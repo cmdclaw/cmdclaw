@@ -195,7 +195,7 @@ function isGeneratedWorktreeEnvFile(path: string): boolean {
 }
 
 function resolveSharedEnvFile(repoRoot: string): string {
-  const explicit = process.env.CMDCLAW_ENV_FILE?.trim();
+  const explicit = process.env.BAP_ENV_FILE?.trim();
   if (explicit && existsSync(explicit) && !isGeneratedWorktreeEnvFile(explicit)) {
     return explicit;
   }
@@ -220,7 +220,7 @@ function resolveSharedEnvFile(repoRoot: string): string {
   }
 
   fail(
-    "Unable to find a shared .env file. Put one in the main checkout or another linked checkout, or set CMDCLAW_ENV_FILE to a non-generated env file.",
+    "Unable to find a shared .env file. Put one in the main checkout or another linked checkout, or set BAP_ENV_FILE to a non-generated env file.",
   );
 }
 
@@ -256,20 +256,20 @@ function slugify(value: string, separator: "-" | "_" = "-"): string {
 }
 
 function buildInstanceId(repoRoot: string): string {
-  const base = slugify(repoRoot.split("/").filter(Boolean).at(-1) ?? "cmdclaw");
+  const base = slugify(repoRoot.split("/").filter(Boolean).at(-1) ?? "bap");
   const hash = createHash("sha1").update(repoRoot).digest("hex").slice(0, 8);
   return `${base}-${hash}`;
 }
 
 function buildDatabaseName(instanceId: string): string {
-  const prefix = "cmdclaw_";
+  const prefix = "bap_";
   const suffix = slugify(instanceId, "_");
   const maxLength = 63;
   return `${prefix}${suffix}`.slice(0, maxLength);
 }
 
 function buildDatabaseUser(instanceId: string): string {
-  const prefix = "cmdclaw_";
+  const prefix = "bap_";
   const suffix = slugify(`${instanceId}_user`, "_");
   return `${prefix}${suffix}`.slice(0, 63);
 }
@@ -309,7 +309,7 @@ function isDatabaseConnectionError(error: unknown): error is Error & { code: str
 }
 
 function buildQueueName(instanceId: string): string {
-  return `cmdclaw-${slugify(instanceId)}`;
+  return `bap-${slugify(instanceId)}`;
 }
 
 function buildRedisNamespace(instanceId: string): string {
@@ -321,7 +321,7 @@ function buildRedisUser(instanceId: string): string {
 }
 
 function buildMinioBucketName(instanceId: string): string {
-  return `cmdclaw-${slugify(instanceId)}`.slice(0, 63);
+  return `bap-${slugify(instanceId)}`.slice(0, 63);
 }
 
 function buildMinioAccessKeyId(instanceId: string): string {
@@ -505,7 +505,7 @@ function resolveCliProfilePath(serverUrl: string): string {
     fail("HOME is not set, unable to persist CLI auth profile.");
   }
 
-  return join(home, ".cmdclaw", "profiles", `chat-config.${profileSlugForServerUrl(serverUrl)}.json`);
+  return join(home, ".bap", "profiles", `chat-config.${profileSlugForServerUrl(serverUrl)}.json`);
 }
 
 function saveCliProfile(serverUrl: string, token: string): void {
@@ -535,7 +535,7 @@ function resolveSharedWorktreeRootPath(): string {
     return resolveConfiguredSharedWorktreeRoot({
       cwd: process.cwd(),
       homeDir: process.env.HOME,
-      explicitRoot: process.env.CMDCLAW_SHARED_WORKTREE_ROOT,
+      explicitRoot: process.env.BAP_SHARED_WORKTREE_ROOT,
     });
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
@@ -612,7 +612,7 @@ function migrateLegacyInstanceRoot(repoRoot: string): string {
 }
 
 function resolveRecognizedWorktreeRoots(): string[] {
-  const configured = process.env.CMDCLAW_WORKTREE_STATUS_PATHS?.trim();
+  const configured = process.env.BAP_WORKTREE_STATUS_PATHS?.trim();
   if (configured) {
     return configured
       .split(",")
@@ -1054,7 +1054,7 @@ function resolvePostgresPassword(): string {
 }
 
 function resolveSharedRedisAdminPassword(): string {
-  return process.env.CMDCLAW_SHARED_REDIS_ADMIN_PASSWORD?.trim() || "cmdclaw-redis-admin";
+  return process.env.BAP_SHARED_REDIS_ADMIN_PASSWORD?.trim() || "bap-redis-admin";
 }
 
 function resolveSharedMinioRootCredentials(): { accessKeyId: string; secretAccessKey: string } {
@@ -1313,7 +1313,7 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
       viteAppUrl: process.env.VITE_APP_URL,
       nodeEnv: process.env.NODE_ENV,
     }),
-    CMDCLAW_SERVER_URL: instanceAppUrl,
+    BAP_SERVER_URL: instanceAppUrl,
     PLAYWRIGHT_PORT: String(metadata.appPort),
     PLAYWRIGHT_BASE_URL: instanceAppUrl,
     E2E_AUTH_STATE_PATH: join(instanceRuntimeDir, "playwright", "user.json"),
@@ -1328,43 +1328,43 @@ function buildDerivedEnv(metadata: InstanceMetadata): DerivedEnv {
     AWS_S3_BUCKET_NAME: metadata.minioBucketName,
     AWS_S3_FORCE_PATH_STYLE: process.env.AWS_S3_FORCE_PATH_STYLE ?? "true",
     BULLMQ_QUEUE_NAME: metadata.queueName,
-    CMDCLAW_INSTANCE_ID: metadata.instanceId,
-    CMDCLAW_INSTANCE_ROOT: metadata.instanceRoot,
-    CMDCLAW_REDIS_NAMESPACE: metadata.redisNamespace,
-    CMDCLAW_WORKTREE_ID: metadata.instanceId,
-    CMDCLAW_WORKTREE_SLOT: formatWorktreeStackSlot(metadata.stackSlot),
-    CMDCLAW_COMPOSE_PROJECT: sharedStack.composeProjectName,
+    BAP_INSTANCE_ID: metadata.instanceId,
+    BAP_INSTANCE_ROOT: metadata.instanceRoot,
+    BAP_REDIS_NAMESPACE: metadata.redisNamespace,
+    BAP_WORKTREE_ID: metadata.instanceId,
+    BAP_WORKTREE_SLOT: formatWorktreeStackSlot(metadata.stackSlot),
+    BAP_COMPOSE_PROJECT: sharedStack.composeProjectName,
     COMPOSE_PROJECT_NAME: sharedStack.composeProjectName,
-    CMDCLAW_POSTGRES_PORT: String(sharedStack.postgresPort),
-    CMDCLAW_REDIS_PORT: String(sharedStack.redisPort),
-    CMDCLAW_MINIO_API_PORT: String(sharedStack.minioApiPort),
-    CMDCLAW_MINIO_CONSOLE_PORT: String(sharedStack.minioConsolePort),
-    CMDCLAW_OTEL_GRPC_PORT: String(sharedStack.vectorOtelGrpcPort),
-    CMDCLAW_OTEL_HTTP_PORT: String(sharedStack.vectorOtelHttpPort),
-    CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(sharedStack.vectorOtelGrpcPort),
-    CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(sharedStack.vectorOtelHttpPort),
-    CMDCLAW_VECTOR_TRACES_PORT: String(sharedStack.vectorTracePort),
-    CMDCLAW_VECTOR_LOG_PORT: String(sharedStack.vectorLogPort),
-    CMDCLAW_VECTOR_LOG_URL: `http://127.0.0.1:${sharedStack.vectorLogPort}/logs`,
-    CMDCLAW_VECTOR_METRICS_URL: `http://127.0.0.1:${sharedStack.vectorOtelHttpPort}/v1/metrics`,
-    CMDCLAW_VECTOR_TRACES_URL: `http://127.0.0.1:${sharedStack.vectorTracePort}/v1/traces`,
-    CMDCLAW_VICTORIA_METRICS_PORT: String(sharedStack.victoriaMetricsPort),
-    CMDCLAW_VICTORIA_LOGS_PORT: String(sharedStack.victoriaLogsPort),
-    CMDCLAW_VICTORIA_TRACES_PORT: String(sharedStack.victoriaTracesPort),
-    CMDCLAW_VICTORIA_METRICS_URL: `http://127.0.0.1:${sharedStack.victoriaMetricsPort}`,
-    CMDCLAW_VICTORIA_LOGS_URL: `http://127.0.0.1:${sharedStack.victoriaLogsPort}`,
-    CMDCLAW_VICTORIA_TRACES_URL: `http://127.0.0.1:${sharedStack.victoriaTracesPort}`,
-    CMDCLAW_ALERTMANAGER_PORT: String(sharedStack.alertmanagerPort),
-    CMDCLAW_VMALERT_PORT: String(sharedStack.vmalertPort),
-    CMDCLAW_GRAFANA_PORT: String(sharedStack.grafanaPort),
-    CMDCLAW_POSTGRES_VOLUME: sharedStack.postgresVolume,
-    CMDCLAW_REDIS_VOLUME: sharedStack.redisVolume,
-    CMDCLAW_MINIO_VOLUME: sharedStack.minioVolume,
-    CMDCLAW_VICTORIA_METRICS_VOLUME: sharedStack.victoriaMetricsVolume,
-    CMDCLAW_VICTORIA_LOGS_VOLUME: sharedStack.victoriaLogsVolume,
-    CMDCLAW_VICTORIA_TRACES_VOLUME: sharedStack.victoriaTracesVolume,
-    CMDCLAW_ALERTMANAGER_VOLUME: sharedStack.alertmanagerVolume,
-    CMDCLAW_GRAFANA_VOLUME: sharedStack.grafanaVolume,
+    BAP_POSTGRES_PORT: String(sharedStack.postgresPort),
+    BAP_REDIS_PORT: String(sharedStack.redisPort),
+    BAP_MINIO_API_PORT: String(sharedStack.minioApiPort),
+    BAP_MINIO_CONSOLE_PORT: String(sharedStack.minioConsolePort),
+    BAP_OTEL_GRPC_PORT: String(sharedStack.vectorOtelGrpcPort),
+    BAP_OTEL_HTTP_PORT: String(sharedStack.vectorOtelHttpPort),
+    BAP_VECTOR_OTLP_GRPC_PORT: String(sharedStack.vectorOtelGrpcPort),
+    BAP_VECTOR_OTLP_HTTP_PORT: String(sharedStack.vectorOtelHttpPort),
+    BAP_VECTOR_TRACES_PORT: String(sharedStack.vectorTracePort),
+    BAP_VECTOR_LOG_PORT: String(sharedStack.vectorLogPort),
+    BAP_VECTOR_LOG_URL: `http://127.0.0.1:${sharedStack.vectorLogPort}/logs`,
+    BAP_VECTOR_METRICS_URL: `http://127.0.0.1:${sharedStack.vectorOtelHttpPort}/v1/metrics`,
+    BAP_VECTOR_TRACES_URL: `http://127.0.0.1:${sharedStack.vectorTracePort}/v1/traces`,
+    BAP_VICTORIA_METRICS_PORT: String(sharedStack.victoriaMetricsPort),
+    BAP_VICTORIA_LOGS_PORT: String(sharedStack.victoriaLogsPort),
+    BAP_VICTORIA_TRACES_PORT: String(sharedStack.victoriaTracesPort),
+    BAP_VICTORIA_METRICS_URL: `http://127.0.0.1:${sharedStack.victoriaMetricsPort}`,
+    BAP_VICTORIA_LOGS_URL: `http://127.0.0.1:${sharedStack.victoriaLogsPort}`,
+    BAP_VICTORIA_TRACES_URL: `http://127.0.0.1:${sharedStack.victoriaTracesPort}`,
+    BAP_ALERTMANAGER_PORT: String(sharedStack.alertmanagerPort),
+    BAP_VMALERT_PORT: String(sharedStack.vmalertPort),
+    BAP_GRAFANA_PORT: String(sharedStack.grafanaPort),
+    BAP_POSTGRES_VOLUME: sharedStack.postgresVolume,
+    BAP_REDIS_VOLUME: sharedStack.redisVolume,
+    BAP_MINIO_VOLUME: sharedStack.minioVolume,
+    BAP_VICTORIA_METRICS_VOLUME: sharedStack.victoriaMetricsVolume,
+    BAP_VICTORIA_LOGS_VOLUME: sharedStack.victoriaLogsVolume,
+    BAP_VICTORIA_TRACES_VOLUME: sharedStack.victoriaTracesVolume,
+    BAP_ALERTMANAGER_VOLUME: sharedStack.alertmanagerVolume,
+    BAP_GRAFANA_VOLUME: sharedStack.grafanaVolume,
     PGHOST: databaseUrl.hostname,
     PGPORT: databaseUrl.port,
     PGDATABASE: databaseUrl.pathname.replace(/^\//, ""),
@@ -1401,30 +1401,30 @@ function buildSharedComposeEnv(repoRoot: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...readSharedEnvValues(repoRoot),
-    CMDCLAW_COMPOSE_PROJECT: shared.composeProjectName,
+    BAP_COMPOSE_PROJECT: shared.composeProjectName,
     COMPOSE_PROJECT_NAME: shared.composeProjectName,
-    CMDCLAW_POSTGRES_PORT: String(shared.postgresPort),
-    CMDCLAW_REDIS_PORT: String(shared.redisPort),
-    CMDCLAW_MINIO_API_PORT: String(shared.minioApiPort),
-    CMDCLAW_MINIO_CONSOLE_PORT: String(shared.minioConsolePort),
-    CMDCLAW_GRAFANA_PORT: String(shared.grafanaPort),
-    CMDCLAW_ALERTMANAGER_PORT: String(shared.alertmanagerPort),
-    CMDCLAW_VECTOR_OTLP_GRPC_PORT: String(shared.vectorOtelGrpcPort),
-    CMDCLAW_VECTOR_OTLP_HTTP_PORT: String(shared.vectorOtelHttpPort),
-    CMDCLAW_VECTOR_TRACES_PORT: String(shared.vectorTracePort),
-    CMDCLAW_VECTOR_LOG_PORT: String(shared.vectorLogPort),
-    CMDCLAW_VICTORIA_METRICS_PORT: String(shared.victoriaMetricsPort),
-    CMDCLAW_VICTORIA_LOGS_PORT: String(shared.victoriaLogsPort),
-    CMDCLAW_VICTORIA_TRACES_PORT: String(shared.victoriaTracesPort),
-    CMDCLAW_VMALERT_PORT: String(shared.vmalertPort),
-    CMDCLAW_POSTGRES_VOLUME: shared.postgresVolume,
-    CMDCLAW_REDIS_VOLUME: shared.redisVolume,
-    CMDCLAW_MINIO_VOLUME: shared.minioVolume,
-    CMDCLAW_GRAFANA_VOLUME: shared.grafanaVolume,
-    CMDCLAW_ALERTMANAGER_VOLUME: shared.alertmanagerVolume,
-    CMDCLAW_VICTORIA_METRICS_VOLUME: shared.victoriaMetricsVolume,
-    CMDCLAW_VICTORIA_LOGS_VOLUME: shared.victoriaLogsVolume,
-    CMDCLAW_VICTORIA_TRACES_VOLUME: shared.victoriaTracesVolume,
+    BAP_POSTGRES_PORT: String(shared.postgresPort),
+    BAP_REDIS_PORT: String(shared.redisPort),
+    BAP_MINIO_API_PORT: String(shared.minioApiPort),
+    BAP_MINIO_CONSOLE_PORT: String(shared.minioConsolePort),
+    BAP_GRAFANA_PORT: String(shared.grafanaPort),
+    BAP_ALERTMANAGER_PORT: String(shared.alertmanagerPort),
+    BAP_VECTOR_OTLP_GRPC_PORT: String(shared.vectorOtelGrpcPort),
+    BAP_VECTOR_OTLP_HTTP_PORT: String(shared.vectorOtelHttpPort),
+    BAP_VECTOR_TRACES_PORT: String(shared.vectorTracePort),
+    BAP_VECTOR_LOG_PORT: String(shared.vectorLogPort),
+    BAP_VICTORIA_METRICS_PORT: String(shared.victoriaMetricsPort),
+    BAP_VICTORIA_LOGS_PORT: String(shared.victoriaLogsPort),
+    BAP_VICTORIA_TRACES_PORT: String(shared.victoriaTracesPort),
+    BAP_VMALERT_PORT: String(shared.vmalertPort),
+    BAP_POSTGRES_VOLUME: shared.postgresVolume,
+    BAP_REDIS_VOLUME: shared.redisVolume,
+    BAP_MINIO_VOLUME: shared.minioVolume,
+    BAP_GRAFANA_VOLUME: shared.grafanaVolume,
+    BAP_ALERTMANAGER_VOLUME: shared.alertmanagerVolume,
+    BAP_VICTORIA_METRICS_VOLUME: shared.victoriaMetricsVolume,
+    BAP_VICTORIA_LOGS_VOLUME: shared.victoriaLogsVolume,
+    BAP_VICTORIA_TRACES_VOLUME: shared.victoriaTracesVolume,
   };
 }
 
@@ -1534,7 +1534,7 @@ function runSharedServiceCommand(
       "--env-file",
       resolveSharedEnvFile(repoRoot),
       "-p",
-      env.CMDCLAW_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
+      env.BAP_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName,
       "-f",
       "docker/compose/dev.yml",
       "exec",
@@ -1592,7 +1592,7 @@ function isDockerComposeServiceRunning(projectName: string, service: string): bo
 
 function ensureSharedInfraRunning(repoRoot: string): void {
   const env = buildSharedComposeEnv(repoRoot);
-  const projectName = env.CMDCLAW_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName;
+  const projectName = env.BAP_COMPOSE_PROJECT ?? buildSharedStackConfig().composeProjectName;
   const services = [
     "database",
     "redis",
@@ -1662,7 +1662,7 @@ async function dockerDownInstance(): Promise<void> {
 
 function resolveSourceRepoRoot(targetRepoRoot: string): string | null {
   const explicit =
-    process.env.CMDCLAW_WORKTREE_SOURCE_TREE_PATH?.trim() || process.env.CODEX_SOURCE_TREE_PATH?.trim();
+    process.env.BAP_WORKTREE_SOURCE_TREE_PATH?.trim() || process.env.CODEX_SOURCE_TREE_PATH?.trim();
   if (explicit && explicit !== targetRepoRoot) {
     return explicit;
   }
@@ -1912,7 +1912,7 @@ function assertWorktreeWebStartAllowed(metadata: InstanceMetadata): void {
 }
 
 function resolveSourceDatabaseUrl(targetRepoRoot: string): string | null {
-  const explicit = process.env.CMDCLAW_WORKTREE_SOURCE_DATABASE_URL?.trim();
+  const explicit = process.env.BAP_WORKTREE_SOURCE_DATABASE_URL?.trim();
   if (explicit) {
     return explicit;
   }
@@ -2089,7 +2089,7 @@ async function syncCliProfileFromLocalSession(metadata: InstanceMetadata): Promi
 }
 
 async function resolveBootstrapSourceUser(sourceClient: PgClient): Promise<SourceUserRecord | null> {
-  const explicitEmail = process.env.CMDCLAW_WORKTREE_DEV_USER_EMAIL?.trim();
+  const explicitEmail = process.env.BAP_WORKTREE_DEV_USER_EMAIL?.trim();
   if (explicitEmail) {
     const result = await sourceClient.query<SourceUserRecord>(
       `select id, email from "user" where lower(email) = lower($1) limit 1`,
@@ -2180,7 +2180,7 @@ function writeDerivedEnvFile(metadata: InstanceMetadata): void {
   const envFile = resolveWorktreeEnvFile(metadata.repoRoot);
   if (existsSync(envFile) && !isGeneratedWorktreeEnvFile(envFile)) {
     fail(
-      `Refusing to overwrite non-generated env file at ${envFile}. Run worktree commands from an isolated worktree, or move the shared env file and set CMDCLAW_ENV_FILE.`,
+      `Refusing to overwrite non-generated env file at ${envFile}. Run worktree commands from an isolated worktree, or move the shared env file and set BAP_ENV_FILE.`,
     );
   }
 
@@ -2557,7 +2557,7 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
       const sourceUser = await resolveBootstrapSourceUser(sourceClient);
       if (!sourceUser) {
         fail(
-          "Unable to resolve a source developer user. Set CMDCLAW_WORKTREE_DEV_USER_EMAIL or make sure the source worktree has a recent session.",
+          "Unable to resolve a source developer user. Set BAP_WORKTREE_DEV_USER_EMAIL or make sure the source worktree has a recent session.",
         );
       }
 
@@ -2792,7 +2792,7 @@ async function bootstrapDeveloperUser(metadata: InstanceMetadata): Promise<void>
               created_at: new Date(),
               updated_at: new Date(),
               ip_address: "127.0.0.1",
-              user_agent: "cmdclaw-worktree-bootstrap",
+              user_agent: "bap-worktree-bootstrap",
               user_id: sourceUser.id,
               impersonated_by: null,
             },

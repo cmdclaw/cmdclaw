@@ -39,7 +39,7 @@ export function toRuntimeProviderAuthPayload(
       auth: {
         type: "oauth",
         access: auth.accessToken,
-        // Keep OpenAI refresh in CmdClaw so rotated refresh tokens are always
+        // Keep OpenAI refresh in Bap so rotated refresh tokens are always
         // persisted centrally instead of being stranded inside sandboxes.
         refresh: "",
         expires: Date.now() + HOST_MANAGED_OPENAI_RUNTIME_TTL_MS,

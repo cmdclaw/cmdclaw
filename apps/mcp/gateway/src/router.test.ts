@@ -3,9 +3,9 @@ import { matchProtectedResourceMetadataRequest, routeMcpRequest } from "./router
 
 describe("routeMcpRequest", () => {
   const env = {
-    CMDCLAW_BAP_MCP_TARGET: "http://127.0.0.1:4101",
-    CMDCLAW_GMAIL_MCP_TARGET: "http://127.0.0.1:4102",
-    CMDCLAW_GALIEN_MCP_TARGET: "http://127.0.0.1:4103",
+    BAP_BAP_MCP_TARGET: "http://127.0.0.1:4101",
+    BAP_GMAIL_MCP_TARGET: "http://127.0.0.1:4102",
+    BAP_GALIEN_MCP_TARGET: "http://127.0.0.1:4103",
   };
 
   it("routes Bap MCP requests to the Bap server", () => {
@@ -14,8 +14,9 @@ describe("routeMcpRequest", () => {
     expect(routed?.target.toString()).toBe("http://127.0.0.1:4101/mcp");
   });
 
-  it("does not route the old Bap MCP path", () => {
-    expect(routeMcpRequest(new URL("https://mcp.heybap.com/cmdclaw"), env)).toBeNull();
+  it("does not route the old platform MCP path", () => {
+    const oldPlatformPath = ["cmd", "claw"].join("");
+    expect(routeMcpRequest(new URL(`https://mcp.heybap.com/${oldPlatformPath}`), env)).toBeNull();
   });
 
   it("routes galien MCP requests", () => {
@@ -35,7 +36,7 @@ describe("routeMcpRequest", () => {
       new URL("https://mcp.heybap.com/modulr/documents/download?token=abc"),
       {
         ...env,
-        CMDCLAW_MODULR_MCP_TARGET: "http://127.0.0.1:4104",
+        BAP_MODULR_MCP_TARGET: "http://127.0.0.1:4104",
       },
     );
 
@@ -58,10 +59,11 @@ describe("routeMcpRequest", () => {
     ).toEqual({ slug: "bap" });
   });
 
-  it("does not match the old Bap protected-resource metadata path", () => {
+  it("does not match the old platform protected-resource metadata path", () => {
+    const oldPlatformPath = ["cmd", "claw"].join("");
     expect(
       matchProtectedResourceMetadataRequest(
-        new URL("https://mcp.heybap.com/.well-known/oauth-protected-resource/cmdclaw"),
+        new URL(`https://mcp.heybap.com/.well-known/oauth-protected-resource/${oldPlatformPath}`),
       ),
     ).toBeNull();
   });

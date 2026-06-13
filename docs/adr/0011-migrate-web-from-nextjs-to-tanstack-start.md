@@ -1,6 +1,6 @@
 # Migrate Web from Next.js to TanStack Start
 
-CmdClaw will migrate `apps/web` from Next.js to TanStack Start on Vite as a Big Bang refactor, replacing the Next App Router tree with a single TanStack route tree in `apps/web/src/routes`. We will keep the public URL and API contract stable, keep Render as the production host, and run the TanStack Start Node/Nitro output instead of `next start`.
+Bap will migrate `apps/web` from Next.js to TanStack Start on Vite as a Big Bang refactor, replacing the Next App Router tree with a single TanStack route tree in `apps/web/src/routes`. We will keep the public URL and API contract stable, keep Render as the production host, and run the TanStack Start Node/Nitro output instead of `next start`.
 
 The migration should align with TanStack Start's model rather than preserving Next semantics. Route ownership moves to file-based TanStack routes, shells become pathless layout routes, protected page groups use route `beforeLoad` auth gates, metadata moves to route `head`, and app-level 404/error behavior uses TanStack route boundaries. We will not add compatibility wrappers for `next/link`, `next/navigation`, `next/image`, or Next route handlers; call sites should move directly to TanStack Router, platform-native assets, and standard `Request`/`Response` handlers.
 

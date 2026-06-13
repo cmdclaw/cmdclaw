@@ -10,7 +10,7 @@ describe("profile store", () => {
   });
 
   it("saves, loads, and clears per-server profiles", () => {
-    const rootDir = mkdtempSync(join(tmpdir(), "cmdclaw-profile-store-"));
+    const rootDir = mkdtempSync(join(tmpdir(), "bap-profile-store-"));
     const store = createFsProfileStore({ rootDir });
 
     store.save({
@@ -23,7 +23,7 @@ describe("profile store", () => {
       token: "token-1",
     });
 
-    expect(store.load("https://cmdclaw.ai")).toBeNull();
+    expect(store.load("https://heybap.com")).toBeNull();
 
     store.clear("http://localhost:3000");
     expect(store.load("http://localhost:3000")).toBeNull();

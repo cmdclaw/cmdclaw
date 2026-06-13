@@ -8,7 +8,7 @@ import {
   type BillingOwnerType,
   type BillingPlanId,
 } from "../../lib/billing-plans";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   billingLedger,
   billingTopUp,
@@ -19,7 +19,7 @@ import {
   user,
   workspace,
   workspaceMember,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { getAutumnClient } from "./autumn";
 import { calculateCredits } from "./credit-calculator";
 import { isSelfHostedEdition } from "../edition";

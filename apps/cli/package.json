@@ -1,23 +1,23 @@
 {
-  "name": "@cmdclaw/cli",
+  "name": "@bap/cli",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "cmdclaw": "src/bin/cmdclaw.ts"
+    "bap": "src/bin/bap.ts"
   },
   "scripts": {
-    "dev": "bun --watch --env-file=../../.env src/bin/cmdclaw.ts",
-    "start": "bun --env-file=../../.env src/bin/cmdclaw.ts",
+    "dev": "bun --watch --env-file=../../.env src/bin/bap.ts",
+    "start": "bun --env-file=../../.env src/bin/bap.ts",
     "build": "bunx tsc --noEmit -p tsconfig.json",
     "check": "bunx tsc --noEmit -p tsconfig.json",
     "test": "bun run test:unit",
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@cmdclaw/client": "workspace:*",
-    "@cmdclaw/core": "workspace:*",
-    "@cmdclaw/db": "workspace:*",
+    "@bap/client": "workspace:*",
+    "@bap/core": "workspace:*",
+    "@bap/db": "workspace:*",
     "@stricli/core": "^1.2.6",
     "drizzle-orm": "^0.45.1"
   },

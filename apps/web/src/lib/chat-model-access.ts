@@ -1,10 +1,10 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { isAdminOnlyChatModel } from "@cmdclaw/core/lib/chat-model-policy";
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import { isAdminOnlyChatModel } from "@bap/core/lib/chat-model-policy";
+import { parseModelReference } from "@bap/core/lib/model-reference";
 import {
   normalizeModelAuthSource,
   resolveProviderAuthAvailability,
-} from "@cmdclaw/core/lib/provider-auth-source";
+} from "@bap/core/lib/provider-auth-source";
 import type { ProviderAuthAvailabilityByProvider } from "./provider-auth-availability";
 
 const PROVIDER_MODEL_IDS_FOR_NEW_CHAT = new Map<string, Set<string>>([

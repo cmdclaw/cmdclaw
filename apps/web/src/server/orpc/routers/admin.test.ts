@@ -52,7 +52,7 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/core/server/queues", () => ({
+vi.mock("@bap/core/server/queues", () => ({
   SCHEDULED_COWORKER_JOB_NAME: "coworker:scheduled-trigger",
   buildQueueJobId: vi.fn<VitestProcedure>((parts: Array<string | number>) => parts.join("-")),
   getQueue: getQueueMock,

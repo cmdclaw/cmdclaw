@@ -1,24 +1,24 @@
 import {
   createRpcClient,
   defaultProfileStore,
-  type CmdclawApiClient,
-  type CmdclawProfile,
-} from "@cmdclaw/client";
-import { closePool, db } from "@cmdclaw/db/client";
-import { session, user } from "@cmdclaw/db/schema";
+  type BapApiClient,
+  type BapProfile,
+} from "@bap/client";
+import { closePool, db } from "@bap/db/client";
+import { session, user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { resolveServerUrl } from "./client";
 
-const DEFAULT_CHAT_AUTH_EMAIL = "cmdclaw@example.com";
+const DEFAULT_CHAT_AUTH_EMAIL = "bap@example.com";
 const DEFAULT_CHAT_AUTH_NAME = "Baptiste";
-const DEFAULT_CLIENT_ID = "cmdclaw-cli";
+const DEFAULT_CLIENT_ID = "bap-cli";
 
 type AuthenticatedClient = {
   serverUrl: string;
-  profile: CmdclawProfile;
-  client: CmdclawApiClient;
+  profile: BapProfile;
+  client: BapApiClient;
 };
 
 type LoginOptions = {
@@ -63,7 +63,7 @@ async function readResponseErrorSnippet(res: Response): Promise<string> {
   return normalized.slice(0, 240);
 }
 
-async function loginWithRemoteTestSession(serverUrl: string): Promise<CmdclawProfile> {
+async function loginWithRemoteTestSession(serverUrl: string): Promise<BapProfile> {
   const secret = process.env.APP_SERVER_SECRET?.trim();
   if (!secret) {
     throw new Error("APP_SERVER_SECRET is required for remote test login.");
@@ -155,10 +155,10 @@ function isUnauthorizedError(error: unknown): boolean {
 }
 
 function getLoginInstruction(serverUrl: string): string {
-  return `Run 'bun run cmdclaw -- auth login --server ${serverUrl}' first.`;
+  return `Run 'bun run bap -- auth login --server ${serverUrl}' first.`;
 }
 
-async function bootstrapLocalProfileAndClose(serverUrl: string): Promise<CmdclawProfile> {
+async function bootstrapLocalProfileAndClose(serverUrl: string): Promise<BapProfile> {
   try {
     return await bootstrapLocalProfile(serverUrl);
   } finally {
@@ -166,7 +166,7 @@ async function bootstrapLocalProfileAndClose(serverUrl: string): Promise<Cmdclaw
   }
 }
 
-async function bootstrapLocalProfile(serverUrl: string): Promise<CmdclawProfile> {
+async function bootstrapLocalProfile(serverUrl: string): Promise<BapProfile> {
   const now = new Date();
   const email =
     process.env.CHAT_AUTH_EMAIL ||
@@ -217,7 +217,7 @@ async function bootstrapLocalProfile(serverUrl: string): Promise<CmdclawProfile>
     createdAt: now,
     updatedAt: now,
     ipAddress: "127.0.0.1",
-    userAgent: "cmdclaw-cli-auth-bootstrap",
+    userAgent: "bap-cli-auth-bootstrap",
   });
 
   const profile = { serverUrl, token };
@@ -228,14 +228,14 @@ async function bootstrapLocalProfile(serverUrl: string): Promise<CmdclawProfile>
 async function loginWithDeviceCode(
   serverUrl: string,
   options: LoginOptions = {},
-): Promise<CmdclawProfile> {
+): Promise<BapProfile> {
   console.log(`\nAuthenticating with ${serverUrl}\n`);
 
   const res = await fetch(`${serverUrl}/api/auth/device/code`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_id: process.env.CMDCLAW_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
+      client_id: process.env.BAP_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
     }),
   });
 
@@ -279,7 +279,7 @@ async function loginWithDeviceCode(
       body: JSON.stringify({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: data.device_code,
-        client_id: process.env.CMDCLAW_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
+        client_id: process.env.BAP_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
       }),
     });
 
@@ -319,7 +319,7 @@ export async function login(
   serverUrlInput?: string,
   token?: string,
   options: LoginOptions = {},
-): Promise<CmdclawProfile> {
+): Promise<BapProfile> {
   const serverUrl = resolveServerUrl(serverUrlInput);
 
   if (token) {
@@ -395,7 +395,7 @@ export async function ensureAuthenticatedClient(params?: {
 export async function authStatus(serverUrlInput?: string): Promise<{
   serverUrl: string;
   configPath: string;
-  profile: CmdclawProfile | null;
+  profile: BapProfile | null;
   user: { id: string; email: string } | null;
 }> {
   const serverUrl = resolveServerUrl(serverUrlInput);

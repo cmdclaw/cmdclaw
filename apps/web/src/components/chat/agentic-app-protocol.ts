@@ -1,5 +1,5 @@
-export const AGENTIC_APP_PROMPT_TYPE = "cmdclaw:agentic-app-prompt";
-export const AGENTIC_APP_PROMPT_RESULT_TYPE = "cmdclaw:agentic-app-prompt-result";
+export const AGENTIC_APP_PROMPT_TYPE = "bap:agentic-app-prompt";
+export const AGENTIC_APP_PROMPT_RESULT_TYPE = "bap:agentic-app-prompt-result";
 export const AGENTIC_APP_PROMPT_VERSION = 1;
 
 export type AgenticAppPromptRejectionReason = "rate_limited" | "no_user_activation" | "invalid";

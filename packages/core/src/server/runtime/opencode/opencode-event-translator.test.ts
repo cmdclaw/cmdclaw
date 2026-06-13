@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ContentPart } from "@cmdclaw/db/schema";
+import type { ContentPart } from "@bap/db/schema";
 import type { RuntimePart } from "../../sandbox/core/types";
 import { OpenCodeEventTranslator, type OpenCodeTrackedEvent } from "./opencode-event-translator";
 

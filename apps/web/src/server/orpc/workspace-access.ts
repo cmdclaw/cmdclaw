@@ -1,9 +1,9 @@
 import {
   getWorkspaceMembershipForUser,
   requireActiveWorkspaceForUser,
-} from "@cmdclaw/core/server/billing/service";
-import { db } from "@cmdclaw/db/client";
-import { workspace as workspaceTable } from "@cmdclaw/db/schema";
+} from "@bap/core/server/billing/service";
+import { db } from "@bap/db/client";
+import { workspace as workspaceTable } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 

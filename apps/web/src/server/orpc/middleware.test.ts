@@ -6,7 +6,7 @@ type VitestProcedure = Extract<
   (...args: never[]) => unknown
 >;
 
-vi.mock("@cmdclaw/core/server/services/user-telemetry", () => ({
+vi.mock("@bap/core/server/services/user-telemetry", () => ({
   recordUserActiveToday: vi.fn<VitestProcedure>(),
 }));
 

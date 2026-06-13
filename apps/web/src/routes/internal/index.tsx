@@ -11,7 +11,7 @@ import { Eye, Wrench } from "lucide-react";
  */
 export const Route = createFileRoute("/internal/")({
   head: () => ({
-    meta: [{ title: "Internal Tools · CmdClaw" }],
+    meta: [{ title: "Internal Tools · Bap" }],
   }),
   component: InternalPage,
 });

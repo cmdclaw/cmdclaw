@@ -1,4 +1,4 @@
-import { coworker, coworkerFolder } from "@cmdclaw/db/schema";
+import { coworker, coworkerFolder } from "@bap/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "../middleware";

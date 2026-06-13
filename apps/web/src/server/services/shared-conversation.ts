@@ -1,6 +1,6 @@
-import { getPresignedDownloadUrl } from "@cmdclaw/core/server/storage/s3-client";
-import { db } from "@cmdclaw/db/client";
-import { conversation, message } from "@cmdclaw/db/schema";
+import { getPresignedDownloadUrl } from "@bap/core/server/storage/s3-client";
+import { db } from "@bap/db/client";
+import { conversation, message } from "@bap/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import type { PersistedConversationMessage } from "@/components/chat/persisted-message-mapper";
 

@@ -60,15 +60,15 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/core/server/services/memory-service", () => ({
+vi.mock("@bap/core/server/services/memory-service", () => ({
   writeSessionTranscriptFromConversation: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/services/opencode-session-snapshot-service", () => ({
+vi.mock("@bap/core/server/services/opencode-session-snapshot-service", () => ({
   clearConversationSessionSnapshot: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   downloadFromS3: downloadFromS3Mock,
 }));
 

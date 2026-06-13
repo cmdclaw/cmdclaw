@@ -1,7 +1,7 @@
-import { getEditionCapabilities, type CmdclawEdition } from "../lib/edition";
+import { getEditionCapabilities, type BapEdition } from "../lib/edition";
 
-function resolveEdition(): CmdclawEdition {
-  return process.env.CMDCLAW_EDITION === "selfhost" ? "selfhost" : "cloud";
+function resolveEdition(): BapEdition {
+  return process.env.BAP_EDITION === "selfhost" ? "selfhost" : "cloud";
 }
 
 export const edition = resolveEdition();

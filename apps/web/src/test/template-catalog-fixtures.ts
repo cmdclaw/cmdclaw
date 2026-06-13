@@ -1,4 +1,4 @@
-import type { TemplateCatalog, TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalog, TemplateCatalogTemplate } from "@bap/db/template-catalog";
 
 export const callFollowUpTemplate: TemplateCatalogTemplate = {
   id: "call-follow-up",

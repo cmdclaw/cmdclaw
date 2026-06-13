@@ -23,7 +23,7 @@ function SupportLayout() {
       <header className="border-b">
         <div className="container flex h-14 items-center px-4">
           <Link to="/" className="text-sm font-medium">
-            <T>CmdClaw</T>
+            <T>Bap</T>
           </Link>
         </div>
       </header>
@@ -33,7 +33,7 @@ function SupportLayout() {
       <footer className="border-t px-4 py-6">
         <div className="text-muted-foreground flex flex-col items-center gap-4 text-center text-sm md:flex-row md:justify-between md:text-left">
           <p>
-            <T>&copy;</T> {new Date().getFullYear()} <T>CmdClaw. All rights reserved.</T>
+            <T>&copy;</T> {new Date().getFullYear()} <T>Bap. All rights reserved.</T>
           </p>
           <nav className="flex gap-4">
             <Link to="/pricing" className="hover:underline">

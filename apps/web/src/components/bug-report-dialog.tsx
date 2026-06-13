@@ -43,7 +43,7 @@ export function BugReportDialog({ open, onOpenChange }: BugReportDialogProps) {
             <T>Bug report</T>
           </DialogTitle>
           <DialogDescription>
-            <T>Send a message to the CmdClaw team.</T>
+            <T>Send a message to the Bap team.</T>
           </DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">

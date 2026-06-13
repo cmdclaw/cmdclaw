@@ -1,4 +1,4 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   coworkerRun,
@@ -7,7 +7,7 @@ import {
   sandboxFile,
   type ContentPart,
   type MessageTiming,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { trackGenerationBilling } from "../../../billing/service";
 import { captureGenerationFailureAlert } from "../../failure-alert-service";

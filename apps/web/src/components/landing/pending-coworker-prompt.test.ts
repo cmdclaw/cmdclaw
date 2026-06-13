@@ -38,10 +38,10 @@ describe("pending-coworker-prompt", () => {
   });
 
   it("clears malformed payloads", () => {
-    globalThis.localStorage?.setItem("cmdclaw.pendingCoworkerPrompt", "{bad json");
+    globalThis.localStorage?.setItem("bap.pendingCoworkerPrompt", "{bad json");
 
     expect(readPendingCoworkerPrompt()).toBeNull();
-    expect(globalThis.localStorage?.getItem("cmdclaw.pendingCoworkerPrompt")).toBeNull();
+    expect(globalThis.localStorage?.getItem("bap.pendingCoworkerPrompt")).toBeNull();
   });
 
   it("expires old prompts", () => {
@@ -52,7 +52,7 @@ describe("pending-coworker-prompt", () => {
     vi.setSystemTime(new Date("2026-03-12T12:11:00.000Z"));
 
     expect(readPendingCoworkerPrompt()).toBeNull();
-    expect(globalThis.localStorage?.getItem("cmdclaw.pendingCoworkerPrompt")).toBeNull();
+    expect(globalThis.localStorage?.getItem("bap.pendingCoworkerPrompt")).toBeNull();
 
     vi.useRealTimers();
   });

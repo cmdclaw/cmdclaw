@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { CmdclawProfile, CmdclawProfileStore } from "./types";
+import type { BapProfile, BapProfileStore } from "./types";
 
 export const DEFAULT_SERVER_URL = "http://localhost:3000";
 
 function buildRootDir(rootDir?: string): string {
-  return rootDir ?? join(homedir(), ".cmdclaw");
+  return rootDir ?? join(homedir(), ".bap");
 }
 
 function buildProfilesDir(rootDir?: string): string {
@@ -31,7 +31,7 @@ export function profileSlugForServerUrl(serverUrl: string): string {
   }
 }
 
-export function createFsProfileStore(options?: { rootDir?: string }): CmdclawProfileStore {
+export function createFsProfileStore(options?: { rootDir?: string }): BapProfileStore {
   const rootDir = buildRootDir(options?.rootDir);
   const profilesDir = buildProfilesDir(options?.rootDir);
 
@@ -39,19 +39,19 @@ export function createFsProfileStore(options?: { rootDir?: string }): CmdclawPro
     getConfigPathForServerUrl(serverUrl: string): string {
       return join(profilesDir, `chat-config.${profileSlugForServerUrl(serverUrl)}.json`);
     },
-    load(serverUrl = process.env.APP_SERVER_URL || DEFAULT_SERVER_URL): CmdclawProfile | null {
+    load(serverUrl = process.env.APP_SERVER_URL || DEFAULT_SERVER_URL): BapProfile | null {
       try {
         const configPath = join(profilesDir, `chat-config.${profileSlugForServerUrl(serverUrl)}.json`);
         if (!existsSync(configPath)) {
           return null;
         }
         const raw = readFileSync(configPath, "utf-8");
-        return JSON.parse(raw) as CmdclawProfile;
+        return JSON.parse(raw) as BapProfile;
       } catch {
         return null;
       }
     },
-    save(config: CmdclawProfile): void {
+    save(config: BapProfile): void {
       ensureDir(rootDir);
       ensureDir(profilesDir);
       const configPath = join(

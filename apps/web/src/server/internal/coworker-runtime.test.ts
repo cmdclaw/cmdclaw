@@ -22,7 +22,7 @@ vi.mock("@/server/services/coworker-document", () => ({
   uploadCoworkerDocument: uploadCoworkerDocumentMock,
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       coworker: {
@@ -36,11 +36,11 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
+vi.mock("@bap/core/server/services/coworker-service", () => ({
   triggerCoworkerRun: triggerCoworkerRunMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-metadata", () => ({
+vi.mock("@bap/core/server/services/coworker-metadata", () => ({
   normalizeCoworkerUsername: (value: string) =>
     value
       .toLowerCase()
@@ -51,10 +51,10 @@ vi.mock("@cmdclaw/core/server/services/coworker-metadata", () => ({
       .replace(/^-+|-+$/g, ""),
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
+vi.mock("@bap/core/server/services/coworker-builder-service", async () => {
   const actual = await vi.importActual<
-    typeof import("@cmdclaw/core/server/services/coworker-builder-service")
-  >("@cmdclaw/core/server/services/coworker-builder-service");
+    typeof import("@bap/core/server/services/coworker-builder-service")
+  >("@bap/core/server/services/coworker-builder-service");
   return {
     ...actual,
     resolveCoworkerBuilderContextByConversation: resolveCoworkerBuilderContextByConversationMock,

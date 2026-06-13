@@ -3,7 +3,7 @@ import { T } from "gt-react";
 
 export const Route = createFileRoute("/_marketing/upload")({
   head: () => ({
-    meta: [{ title: "Upload · CmdClaw" }, { name: "description", content: "Upload tools." }],
+    meta: [{ title: "Upload · Bap" }, { name: "description", content: "Upload tools." }],
   }),
   component: UploadPage,
 });

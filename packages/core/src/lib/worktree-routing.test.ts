@@ -29,31 +29,31 @@ describe("worktree-routing", () => {
   it("builds worktree-scoped public callback urls", () => {
     expect(
       buildWorktreePublicCallbackBaseUrl({
-        instanceId: "cmdclaw-a07527aa",
+        instanceId: "bap-a07527aa",
         appUrl: "http://127.0.0.1:3711",
         nodeEnv: "development",
       }),
-    ).toBe("https://localcan.baptistecolle.com/__worktrees/cmdclaw-a07527aa");
+    ).toBe("https://localcan.baptistecolle.com/__worktrees/bap-a07527aa");
   });
 
   it("preserves existing public base paths when adding worktree routing", () => {
     expect(
       buildWorktreePublicCallbackBaseUrl({
-        instanceId: "cmdclaw-a07527aa",
-        callbackBaseUrl: "https://example.com/cmdclaw",
+        instanceId: "bap-a07527aa",
+        callbackBaseUrl: "https://example.com/bap",
       }),
-    ).toBe("https://example.com/cmdclaw/__worktrees/cmdclaw-a07527aa");
+    ).toBe("https://example.com/bap/__worktrees/bap-a07527aa");
   });
 
   it("matches worktree public routes and strips the prefix", () => {
-    expect(matchWorktreePublicRoute("/__worktrees/cmdclaw-a07527aa/api/internal/runtime")).toEqual(
+    expect(matchWorktreePublicRoute("/__worktrees/bap-a07527aa/api/internal/runtime")).toEqual(
       {
-        instanceId: "cmdclaw-a07527aa",
+        instanceId: "bap-a07527aa",
         forwardedPath: "/api/internal/runtime",
       },
     );
-    expect(matchWorktreePublicRoute("/__worktrees/cmdclaw-a07527aa")).toEqual({
-      instanceId: "cmdclaw-a07527aa",
+    expect(matchWorktreePublicRoute("/__worktrees/bap-a07527aa")).toEqual({
+      instanceId: "bap-a07527aa",
       forwardedPath: "/",
     });
   });

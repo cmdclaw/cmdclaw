@@ -749,7 +749,7 @@ export function ToolApprovalCard({
         )}
         {isQuestionRequest ? (
           <span className="font-medium">
-            <T>CmdClaw wants to ask a question</T>
+            <T>Bap wants to ask a question</T>
           </span>
         ) : (
           <>

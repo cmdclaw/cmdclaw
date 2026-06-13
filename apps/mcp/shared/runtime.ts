@@ -1,4 +1,4 @@
-export function resolveCmdclawAppUrl(): string {
+export function resolveBapAppUrl(): string {
   const appUrl =
     process.env.APP_SERVER_URL?.trim() ||
     process.env.APP_URL?.trim() ||

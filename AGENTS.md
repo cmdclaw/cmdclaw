@@ -7,7 +7,7 @@ This repository is organized into several top-level folders. Each folder can hav
 - `apple/` - macOS and iOS SwiftUI applications.
 - `packages/` - Shared workspace packages such as config, core, and db.
 - `infra/` - Infrastructure and deployment - Infrastructure as Code.
-- `skills/` - Skills for CmdClaw agent to use.
+- `skills/` - Skills for Bap agent to use.
 - `docs/` - Repository documentation. Check these docs when working in the related area:
   - `docs/observability.md` - Observability and telemetry guidance.
   - `docs/testing.md` - Testing guidance and expectations.

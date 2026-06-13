@@ -1,8 +1,8 @@
-import { clientObservationSchema } from "@cmdclaw/core/lib/client-observation";
-import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
-import { emitClientObservation } from "@cmdclaw/core/server/utils/observability";
-import { db } from "@cmdclaw/db/client";
-import { conversation, generation } from "@cmdclaw/db/schema";
+import { clientObservationSchema } from "@bap/core/lib/client-observation";
+import { buildRedisOptions } from "@bap/core/server/redis/connection-options";
+import { emitClientObservation } from "@bap/core/server/utils/observability";
+import { db } from "@bap/db/client";
+import { conversation, generation } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import IORedis from "ioredis";
 import { z } from "zod";
@@ -31,21 +31,21 @@ const LOW_VALUE_SUCCESS_SAMPLE_RATE = 0.25;
 type ClientObservationRedis = Pick<IORedis, "multi" | "pexpire" | "set">;
 
 const redisState = globalThis as typeof globalThis & {
-  cmdclawClientObservationRedis?: ClientObservationRedis;
-  cmdclawClientObservationRedisFactory?: () => ClientObservationRedis;
+  bapClientObservationRedis?: ClientObservationRedis;
+  bapClientObservationRedisFactory?: () => ClientObservationRedis;
 };
 
 function getClientObservationRedis(): ClientObservationRedis {
-  if (redisState.cmdclawClientObservationRedisFactory) {
-    return redisState.cmdclawClientObservationRedisFactory();
+  if (redisState.bapClientObservationRedisFactory) {
+    return redisState.bapClientObservationRedisFactory();
   }
-  redisState.cmdclawClientObservationRedis ??= new IORedis(
+  redisState.bapClientObservationRedis ??= new IORedis(
     buildRedisOptions(process.env.REDIS_URL ?? "redis://localhost:6379", {
       maxRetriesPerRequest: 1,
       enableReadyCheck: false,
     }),
   );
-  return redisState.cmdclawClientObservationRedis;
+  return redisState.bapClientObservationRedis;
 }
 
 function getClientIp(request: Request): string {
@@ -260,19 +260,19 @@ export async function handleClientObservations(request: Request): Promise<Respon
         sessionId,
       },
       attributes: {
-        "cmdclaw.client_observation.type": observation.eventType,
-        "cmdclaw.client.event_id": observation.eventId,
-        "cmdclaw.user.id": sessionData.user.id,
-        "cmdclaw.workspace.id": access.workspace.id,
-        "cmdclaw.generation.id": observation.generationId,
-        "cmdclaw.conversation.id": resolvedConversationId,
-        "cmdclaw.trace.id": resolvedTraceId,
-        "cmdclaw.client.stream_attempt": observation.streamAttempt,
-        "cmdclaw.client.elapsed_ms": observation.elapsedMs,
-        "cmdclaw.client.visible_error_code": observation.visibleErrorCode,
-        "cmdclaw.client.close_reason": observation.closeReason,
-        "cmdclaw.client.page_visibility": observation.pageVisibility,
-        "cmdclaw.client.online": observation.online,
+        "bap.client_observation.type": observation.eventType,
+        "bap.client.event_id": observation.eventId,
+        "bap.user.id": sessionData.user.id,
+        "bap.workspace.id": access.workspace.id,
+        "bap.generation.id": observation.generationId,
+        "bap.conversation.id": resolvedConversationId,
+        "bap.trace.id": resolvedTraceId,
+        "bap.client.stream_attempt": observation.streamAttempt,
+        "bap.client.elapsed_ms": observation.elapsedMs,
+        "bap.client.visible_error_code": observation.visibleErrorCode,
+        "bap.client.close_reason": observation.closeReason,
+        "bap.client.page_visibility": observation.pageVisibility,
+        "bap.client.online": observation.online,
       },
     });
   }

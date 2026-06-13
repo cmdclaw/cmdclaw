@@ -7,8 +7,8 @@ import { BugReportForm } from "@/components/bug-report-form";
 export const Route = createFileRoute("/_marketing/bug-report")({
   head: () => ({
     meta: [
-      { title: "Bug report · CmdClaw" },
-      { name: "description", content: "Send a message to the CmdClaw team." },
+      { title: "Bug report · Bap" },
+      { name: "description", content: "Send a message to the Bap team." },
     ],
   }),
   component: BugReportPage,
@@ -36,7 +36,7 @@ function BugReportPage() {
             <T>Bug report</T>
           </h1>
           <p className="text-muted-foreground text-sm">
-            <T>Send a message to the CmdClaw team.</T>
+            <T>Send a message to the Bap team.</T>
           </p>
         </div>
       </div>

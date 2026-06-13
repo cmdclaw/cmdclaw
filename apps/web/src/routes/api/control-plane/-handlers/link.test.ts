@@ -27,12 +27,12 @@ const {
   requireCloudSessionMock: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/control-plane/client", () => ({
+vi.mock("@bap/core/server/control-plane/client", () => ({
   exchangeCloudAccountLink: exchangeCloudAccountLinkMock,
   getCloudManagedIntegrationConnectUrl: getCloudManagedIntegrationConnectUrlMock,
 }));
 
-vi.mock("@cmdclaw/core/server/control-plane/local-links", () => ({
+vi.mock("@bap/core/server/control-plane/local-links", () => ({
   consumeCloudAccountLinkState: consumeCloudAccountLinkStateMock,
   upsertCloudAccountLinkForUser: upsertCloudAccountLinkForUserMock,
 }));
@@ -52,7 +52,7 @@ vi.mock("@/server/control-plane/auth", () => ({
   requireCloudSession: requireCloudSessionMock,
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {},
 }));
 

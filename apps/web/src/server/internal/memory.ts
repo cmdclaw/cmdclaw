@@ -1,4 +1,4 @@
-import { getSandboxStateDurable } from "@cmdclaw/core/server/sandbox/e2b";
+import { getSandboxStateDurable } from "@bap/core/server/sandbox/e2b";
 import {
   type MemoryFileType,
   readMemoryFile,
@@ -6,9 +6,9 @@ import {
   searchMemoryWithSessions,
   syncMemoryToSandbox,
   writeMemoryEntry,
-} from "@cmdclaw/core/server/services/memory-service";
-import { db } from "@cmdclaw/db/client";
-import { conversation } from "@cmdclaw/db/schema";
+} from "@bap/core/server/services/memory-service";
+import { db } from "@bap/db/client";
+import { conversation } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "@/env";

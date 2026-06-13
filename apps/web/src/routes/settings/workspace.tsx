@@ -15,7 +15,7 @@ import {
 } from "@/orpc/hooks/workspace";
 
 export const Route = createFileRoute("/settings/workspace")({
-  head: () => ({ meta: [{ title: "Workspace Settings - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Workspace Settings - Bap" }] }),
   component: WorkspaceSettingsPage,
 });
 

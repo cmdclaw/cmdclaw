@@ -10,11 +10,11 @@ import type {
 import { createControlPlaneAuthState } from "./local-auth";
 import { createCloudAccountLinkState, getCloudAccountLinkForUser } from "./local-links";
 
-const INSTANCE_API_KEY_HEADER = "x-cmdclaw-instance-api-key";
+const INSTANCE_API_KEY_HEADER = "x-bap-instance-api-key";
 
 function requireControlPlaneConfig() {
-  const baseUrl = process.env.CMDCLAW_CLOUD_API_BASE_URL;
-  const instanceApiKey = process.env.CMDCLAW_CLOUD_INSTANCE_API_KEY;
+  const baseUrl = process.env.BAP_CLOUD_API_BASE_URL;
+  const instanceApiKey = process.env.BAP_CLOUD_INSTANCE_API_KEY;
 
   if (!baseUrl || !instanceApiKey) {
     throw new Error("Cloud control plane is not configured");

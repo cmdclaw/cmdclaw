@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { providerAuth } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { providerAuth } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { assertValidInstanceApiKey } from "@/server/control-plane/auth";
 

@@ -17,7 +17,7 @@ export const Route = createFileRoute("/prototype/coworker/info/$slug")({
   validateSearch: (search: Record<string, unknown>): { run?: string } => ({
     run: typeof search.run === "string" ? search.run : undefined,
   }),
-  head: () => ({ meta: [{ title: "Coworker info prototype | CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Coworker info prototype | Bap" }] }),
   component: PrototypeCoworkerInfoRoute,
 });
 

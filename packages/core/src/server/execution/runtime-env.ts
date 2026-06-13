@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { user } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "../../env";
 import type { IntegrationType } from "../oauth/config";
@@ -26,7 +26,7 @@ export function buildRuntimeEnvSourcedCommand(params: {
   const workdir = params.workdir?.trim() || "/app";
   const script = [
     "set -o allexport",
-    "[ ! -f /app/.cmdclaw/runtime-env.sh ] || . /app/.cmdclaw/runtime-env.sh",
+    "[ ! -f /app/.bap/runtime-env.sh ] || . /app/.bap/runtime-env.sh",
     "set +o allexport",
     `cd ${escapeShellArg(workdir)}`,
     params.command,
@@ -101,7 +101,7 @@ export async function resolveRuntimeEnvironmentForTurn(
     filteredCliEnv.ALLOWED_INTEGRATIONS = input.allowedIntegrations.join(",");
   }
   if (dbUser?.timezone) {
-    filteredCliEnv.CMDCLAW_USER_TIMEZONE = dbUser.timezone;
+    filteredCliEnv.BAP_USER_TIMEZONE = dbUser.timezone;
   }
 
   return {
@@ -111,11 +111,11 @@ export async function resolveRuntimeEnvironmentForTurn(
     sandboxRuntimeEnv: {
       ...filteredCliEnv,
       APP_URL: resolveSandboxRuntimeAppUrl(),
-      CMDCLAW_RUNTIME_CREDENTIALS_URL: `${resolveSandboxRuntimeAppUrl().replace(/\/$/, "")}/api/internal/mcp/runtime-credentials`,
-      CMDCLAW_REMOTE_INTEGRATION_SOURCE: input.remoteIntegrationSource
+      BAP_RUNTIME_CREDENTIALS_URL: `${resolveSandboxRuntimeAppUrl().replace(/\/$/, "")}/api/internal/mcp/runtime-credentials`,
+      BAP_REMOTE_INTEGRATION_SOURCE: input.remoteIntegrationSource
         ? JSON.stringify(input.remoteIntegrationSource)
         : undefined,
-      CMDCLAW_USER_ID: input.userId,
+      BAP_USER_ID: input.userId,
       APP_SERVER_SECRET: env.APP_SERVER_SECRET || "",
       CONVERSATION_ID: input.conversationId,
     },

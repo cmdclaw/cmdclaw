@@ -52,11 +52,11 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/integration-skill-service", () => ({
+vi.mock("@bap/core/server/services/integration-skill-service", () => ({
   createCommunityIntegrationSkill: createCommunityIntegrationSkillMock,
   getOfficialIntegrationSkillIndex: getOfficialIntegrationSkillIndexMock,
   normalizeIntegrationSkillSlug: normalizeIntegrationSkillSlugMock,

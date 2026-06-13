@@ -1,4 +1,4 @@
-import type { ClientObservationPayload } from "@cmdclaw/core/lib/client-observation";
+import type { ClientObservationPayload } from "@bap/core/lib/client-observation";
 
 function getBrowserState(): Pick<ClientObservationPayload, "pageVisibility" | "online"> {
   if (typeof document === "undefined" || typeof navigator === "undefined") {

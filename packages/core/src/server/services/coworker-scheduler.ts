@@ -1,7 +1,7 @@
 import type { RepeatOptions } from "bullmq";
 import { and, eq } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { coworker } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { coworker } from "@bap/db/schema";
 import {
   SCHEDULED_COWORKER_JOB_NAME,
   getQueue,

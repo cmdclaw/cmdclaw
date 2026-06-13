@@ -7,7 +7,7 @@ import {
   saveConfig,
 } from "./lib/cli-shared";
 
-const DEFAULT_CHAT_AUTH_EMAIL = "cmdclaw@example.com";
+const DEFAULT_CHAT_AUTH_EMAIL = "bap@example.com";
 const DEFAULT_CHAT_AUTH_NAME = "Baptiste";
 
 function isLocalServerUrl(serverUrl: string): boolean {
@@ -45,8 +45,8 @@ async function main(): Promise<void> {
   try {
     const [{ auth }, dbModule, schemaModule] = await Promise.all([
       import("@/lib/auth"),
-      import("@cmdclaw/db/client"),
-      import("@cmdclaw/db/schema"),
+      import("@bap/db/client"),
+      import("@bap/db/schema"),
     ]);
 
     const { db } = dbModule;

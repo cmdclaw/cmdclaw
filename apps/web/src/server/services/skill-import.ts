@@ -1,11 +1,7 @@
-import type { db as database } from "@cmdclaw/db/client";
-import { resolveUniqueSkillNameInWorkspace } from "@cmdclaw/core/server/services/workspace-skill-service";
-import {
-  ensureBucket,
-  generateStorageKey,
-  uploadToS3,
-} from "@cmdclaw/core/server/storage/s3-client";
-import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
+import type { db as database } from "@bap/db/client";
+import { resolveUniqueSkillNameInWorkspace } from "@bap/core/server/services/workspace-skill-service";
+import { ensureBucket, generateStorageKey, uploadToS3 } from "@bap/core/server/storage/s3-client";
+import { skill, skillDocument, skillFile } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { lookup as lookupMimeType } from "mime-types";
 import { Buffer } from "node:buffer";

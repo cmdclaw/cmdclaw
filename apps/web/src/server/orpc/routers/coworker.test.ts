@@ -57,26 +57,26 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
+vi.mock("@bap/core/server/services/coworker-service", () => ({
   reconcileStaleCoworkerRunsForCoworker: reconcileStaleCoworkerRunsForCoworkerMock,
   reconcileStaleCoworkerRunsForCoworkers: reconcileStaleCoworkerRunsForCoworkersMock,
   triggerCoworkerRun: triggerCoworkerRunMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-scheduler", () => ({
+vi.mock("@bap/core/server/services/coworker-scheduler", () => ({
   syncCoworkerScheduleJob: syncCoworkerScheduleJobMock,
   removeCoworkerScheduleJob: removeCoworkerScheduleJobMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-metadata", () => ({
+vi.mock("@bap/core/server/services/coworker-metadata", () => ({
   generateCoworkerMetadataOnFirstPromptFill: generateCoworkerMetadataOnFirstPromptFillMock,
   normalizeAndEnsureUniqueCoworkerUsername: normalizeAndEnsureUniqueCoworkerUsernameMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-builder-service", async () => {
+vi.mock("@bap/core/server/services/coworker-builder-service", async () => {
   const actual = await vi.importActual<
-    typeof import("@cmdclaw/core/server/services/coworker-builder-service")
-  >("@cmdclaw/core/server/services/coworker-builder-service");
+    typeof import("@bap/core/server/services/coworker-builder-service")
+  >("@bap/core/server/services/coworker-builder-service");
   return {
     ...actual,
     applyCoworkerEdit: applyCoworkerEditMock,
@@ -88,14 +88,14 @@ vi.mock("@/server/services/coworker-document", () => ({
   uploadCoworkerDocument: uploadCoworkerDocumentMock,
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   downloadFromS3: downloadFromS3Mock,
   ensureBucket: ensureBucketMock,
   getPresignedDownloadUrl: getPresignedDownloadUrlMock,
   uploadToS3: uploadToS3Mock,
 }));
 
-vi.mock("@cmdclaw/core/server/integrations/remote-integrations", () => {
+vi.mock("@bap/core/server/integrations/remote-integrations", () => {
   return {
     listConfiguredRemoteIntegrationTargets: listConfiguredRemoteIntegrationTargetsMock,
     searchRemoteIntegrationUsers: searchRemoteIntegrationUsersMock,

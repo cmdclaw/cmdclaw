@@ -2,7 +2,7 @@ import {
   SANDBOX_COMMON_ROOT as COMMON_TEMPLATE_ROOT,
   SANDBOX_DOCKER_RUNTIME_DOCKERFILE as DOCKERFILE_RUNTIME_ABSOLUTE,
   SANDBOX_TEMPLATE_ROOT as TEMPLATE_ROOT,
-} from "@cmdclaw/sandbox/paths";
+} from "@bap/sandbox/paths";
 import type { Headers as TarHeader } from "tar-stream";
 import Dockerode from "dockerode";
 import { spawn } from "node:child_process";
@@ -215,7 +215,7 @@ export function isDockerLikelyConfigured(): boolean {
 
 export async function ensureDockerRuntimeImage(docker = createDockerClient()): Promise<string> {
   const templateHash = await computeTemplateHash();
-  const imageTag = `cmdclaw-agent-runtime:${templateHash}`;
+  const imageTag = `bap-agent-runtime:${templateHash}`;
 
   const existing = await docker.listImages({
     filters: {

@@ -1,9 +1,9 @@
 import {
   GENERATION_ERROR_PHASES,
   START_GENERATION_ERROR_CODES,
-} from "@cmdclaw/core/lib/generation-errors";
-import { GenerationStartError } from "@cmdclaw/core/server/services/generation-start-error";
-import { emitCanonicalServiceEvent } from "@cmdclaw/core/server/utils/observability";
+} from "@bap/core/lib/generation-errors";
+import { GenerationStartError } from "@bap/core/server/services/generation-start-error";
+import { emitCanonicalServiceEvent } from "@bap/core/server/utils/observability";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type VitestProcedure = Extract<
@@ -88,19 +88,19 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
+vi.mock("@bap/core/server/services/generation-manager", () => ({
   generationManager: generationManagerMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/coworker-service", () => ({
+vi.mock("@bap/core/server/services/coworker-service", () => ({
   startPendingCoworkerRun: startPendingCoworkerRunMock,
 }));
 
-vi.mock("@cmdclaw/core/server/utils/observability", () => ({
+vi.mock("@bap/core/server/utils/observability", () => ({
   emitCanonicalServiceEvent: vi.fn<VitestProcedure>(),
   logServerEvent: vi.fn<VitestProcedure>(),
   createTraceId: vi.fn<VitestProcedure>(() => "trace-test"),
@@ -468,15 +468,15 @@ describe("generationRouter", () => {
     });
     expect(emitCanonicalServiceEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventName: "cmdclaw.generation.start_rpc",
+        eventName: "bap.generation.start_rpc",
         outcome: "failure",
         attributes: expect.objectContaining({
-          "cmdclaw.failure.phase": GENERATION_ERROR_PHASES.START_RPC,
+          "bap.failure.phase": GENERATION_ERROR_PHASES.START_RPC,
         }),
       }),
     );
     expect(vi.mocked(emitCanonicalServiceEvent).mock.calls[0]?.[0]?.attributes).not.toHaveProperty(
-      "cmdclaw.generation.failure_phase",
+      "bap.generation.failure_phase",
     );
   });
 
@@ -612,11 +612,11 @@ describe("generationRouter", () => {
     expect(emitCanonicalServiceEvent).toHaveBeenCalledTimes(1);
     expect(emitCanonicalServiceEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventName: "cmdclaw.generation.subscribe_rpc",
+        eventName: "bap.generation.subscribe_rpc",
         operationName: "generation.subscribe_rpc",
         eventId: "rpc:generation.subscribe:gen-1:trace-123",
         attributes: expect.objectContaining({
-          "cmdclaw.generation.subscribe.state": "closed",
+          "bap.generation.subscribe.state": "closed",
         }),
       }),
     );

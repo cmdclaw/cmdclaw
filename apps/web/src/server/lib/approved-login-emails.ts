@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { approvedLoginEmailAllowlist } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { approvedLoginEmailAllowlist } from "@bap/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { getAdminEmails, normalizeAdminEmail, shouldGrantAdminRole } from "@/lib/admin-emails";
 

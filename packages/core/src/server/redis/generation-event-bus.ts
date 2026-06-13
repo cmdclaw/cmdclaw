@@ -39,14 +39,14 @@ function streamKey(generationId: string): string {
 
 function getRedisClient(): IORedis {
   const globalState = globalThis as typeof globalThis & {
-    __cmdclawGenerationEventBusRedis?: IORedis;
+    __bapGenerationEventBusRedis?: IORedis;
   };
-  if (!globalState.__cmdclawGenerationEventBusRedis) {
-    globalState.__cmdclawGenerationEventBusRedis = new IORedis(
+  if (!globalState.__bapGenerationEventBusRedis) {
+    globalState.__bapGenerationEventBusRedis = new IORedis(
       buildRedisOptions(REDIS_URL, REDIS_OPTIONS),
     );
   }
-  return globalState.__cmdclawGenerationEventBusRedis;
+  return globalState.__bapGenerationEventBusRedis;
 }
 
 function parseEnvelope(raw: string): GenerationStreamEnvelope | null {

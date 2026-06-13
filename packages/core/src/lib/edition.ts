@@ -1,7 +1,7 @@
-export type CmdclawEdition = "cloud" | "selfhost";
+export type BapEdition = "cloud" | "selfhost";
 
 export type EditionCapabilities = {
-  edition: CmdclawEdition;
+  edition: BapEdition;
   hasBilling: boolean;
   hasSupportAdmin: boolean;
   hasInstanceAdmin: boolean;
@@ -30,6 +30,6 @@ const SELFHOST_CAPABILITIES: EditionCapabilities = {
   requiresCloudControlPlane: true,
 };
 
-export function getEditionCapabilities(edition: CmdclawEdition): EditionCapabilities {
+export function getEditionCapabilities(edition: BapEdition): EditionCapabilities {
   return edition === "selfhost" ? SELFHOST_CAPABILITIES : CLOUD_CAPABILITIES;
 }

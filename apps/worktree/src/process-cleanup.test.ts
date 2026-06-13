@@ -12,19 +12,19 @@ describe("worktree process cleanup", () => {
         pid: 10,
         ppid: 1,
         command:
-          "bun --env-file /Users/dev/.codex/worktrees/abcd/cmdclaw/.env vite dev --host 0.0.0.0 --port 3718",
+          "bun --env-file /Users/dev/.codex/worktrees/abcd/bap/.env vite dev --host 0.0.0.0 --port 3718",
       },
       {
         pid: 11,
         ppid: 10,
         command:
-          "node /Users/dev/.codex/worktrees/abcd/cmdclaw/apps/web/node_modules/.bin/vite dev --host 0.0.0.0 --port 3718",
+          "node /Users/dev/.codex/worktrees/abcd/bap/apps/web/node_modules/.bin/vite dev --host 0.0.0.0 --port 3718",
       },
       {
         pid: 12,
         ppid: 11,
         command:
-          "node /Users/dev/.codex/worktrees/abcd/cmdclaw/apps/web/node_modules/vite/bin/vite.js --host 0.0.0.0 --port 3718",
+          "node /Users/dev/.codex/worktrees/abcd/bap/apps/web/node_modules/vite/bin/vite.js --host 0.0.0.0 --port 3718",
       },
     ];
 
@@ -42,25 +42,25 @@ describe("worktree process cleanup", () => {
         pid: 20,
         ppid: 1,
         command:
-          "bun --env-file /Users/dev/.codex/worktrees/tracked/cmdclaw/.env vite dev --host 0.0.0.0 --port 3701",
+          "bun --env-file /Users/dev/.codex/worktrees/tracked/bap/.env vite dev --host 0.0.0.0 --port 3701",
       },
       {
         pid: 21,
         ppid: 20,
         command:
-          "node /Users/dev/.codex/worktrees/tracked/cmdclaw/apps/web/node_modules/.bin/vite dev --host 0.0.0.0 --port 3701",
+          "node /Users/dev/.codex/worktrees/tracked/bap/apps/web/node_modules/.bin/vite dev --host 0.0.0.0 --port 3701",
       },
       {
         pid: 22,
         ppid: 21,
         command:
-          "node /Users/dev/.codex/worktrees/tracked/cmdclaw/apps/web/node_modules/vite/bin/vite.js --host 0.0.0.0 --port 3701",
+          "node /Users/dev/.codex/worktrees/tracked/bap/apps/web/node_modules/vite/bin/vite.js --host 0.0.0.0 --port 3701",
       },
       {
         pid: 30,
         ppid: 1,
         command:
-          "bun --env-file /Users/dev/.codex/worktrees/orphan/cmdclaw/.env vite dev --host 0.0.0.0 --port 3702",
+          "bun --env-file /Users/dev/.codex/worktrees/orphan/bap/.env vite dev --host 0.0.0.0 --port 3702",
       },
     ];
 
@@ -79,13 +79,13 @@ describe("worktree process cleanup", () => {
         pid: 40,
         ppid: 1,
         command:
-          "bun --env-file /Users/dev/Git/cmdclaw/.env vite dev --host 0.0.0.0 --port 3000",
+          "bun --env-file /Users/dev/Git/bap/.env vite dev --host 0.0.0.0 --port 3000",
       },
       {
         pid: 41,
         ppid: 40,
         command:
-          "node /Users/dev/Git/cmdclaw/apps/web/node_modules/.bin/vite dev --host 0.0.0.0 --port 3000",
+          "node /Users/dev/Git/bap/apps/web/node_modules/.bin/vite dev --host 0.0.0.0 --port 3000",
       },
     ];
 
@@ -102,17 +102,17 @@ describe("worktree process cleanup", () => {
       {
         pid: 50,
         ppid: 1,
-        command: "bun --env-file /Users/dev/.codex/worktrees/old/cmdclaw/.env index.ts",
+        command: "bun --env-file /Users/dev/.codex/worktrees/old/bap/.env index.ts",
       },
       {
         pid: 51,
         ppid: 1,
-        command: "bun --env-file /Users/dev/.codex/worktrees/old/cmdclaw/.env index.ts",
+        command: "bun --env-file /Users/dev/.codex/worktrees/old/bap/.env index.ts",
       },
       {
         pid: 60,
         ppid: 1,
-        command: "bun --env-file /Users/dev/Git/cmdclaw/.env index.ts",
+        command: "bun --env-file /Users/dev/Git/bap/.env index.ts",
       },
     ];
 

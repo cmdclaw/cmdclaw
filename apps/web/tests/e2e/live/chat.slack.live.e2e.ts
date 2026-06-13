@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
-import { getValidTokensForUser } from "@cmdclaw/core/server/integrations/token-refresh";
-import { closePool, db } from "@cmdclaw/db/client";
-import { user } from "@cmdclaw/db/schema";
+import { getValidTokensForUser } from "@bap/core/server/integrations/token-refresh";
+import { closePool, db } from "@bap/db/client";
+import { user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -30,7 +30,7 @@ const expectedUserEmail =
   process.env.E2E_TEST_EMAIL?.trim() ||
   process.env.APP_DEFAULT_USER_EMAIL?.trim() ||
   "playwright@example.com";
-const sourceChannelName = "experiment-cmdclaw-testing";
+const sourceChannelName = "experiment-bap-testing";
 const targetChannelName = "e2e-slack-testing";
 const echoPrefix = "test message: the previous message is:";
 

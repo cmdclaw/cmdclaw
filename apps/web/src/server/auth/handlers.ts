@@ -2,7 +2,7 @@ import {
   SUBSCRIPTION_PROVIDERS,
   isOAuthProviderConfig,
   type SubscriptionProviderID,
-} from "@cmdclaw/core/server/ai/subscription-providers";
+} from "@bap/core/server/ai/subscription-providers";
 import { z } from "zod";
 import { env } from "@/env";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
@@ -207,11 +207,11 @@ function withMagicLinkRedirectParams(
 }
 
 /**
- * POST `/sign-in/:token/confirm` — explicit confirmation step for CmdClaw magic links.
+ * POST `/sign-in/:token/confirm` — explicit confirmation step for Bap magic links.
  *
  * The public email link lands on a first-party confirmation page. This handler delegates
  * verification/session-cookie work to Better Auth's existing magic-link endpoint, then marks
- * CmdClaw's page-state row consumed only after Better Auth accepts the token.
+ * Bap's page-state row consumed only after Better Auth accepts the token.
  */
 export async function handleMagicLinkConfirm(request: Request, token: string): Promise<Response> {
   const state = await resolveMagicLinkPageState(token);
@@ -362,7 +362,7 @@ export async function handlePasswordStart(request: Request): Promise<Response> {
  */
 export async function handleNativeCallback(request: Request): Promise<Response> {
   const searchParams = new URL(request.url).searchParams;
-  const redirect = searchParams.get("redirect") || "cmdclaw://auth/callback";
+  const redirect = searchParams.get("redirect") || "bap://auth/callback";
 
   try {
     const cookieHeader = request.headers.get("cookie");

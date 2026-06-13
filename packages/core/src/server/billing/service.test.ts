@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.BETTER_AUTH_SECRET ??= "test-better-auth-secret";
-process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/cmdclaw";
+process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/bap";
 process.env.REDIS_URL ??= "redis://localhost:6379";
 process.env.OPENAI_API_KEY ??= "test-openai-key";
 process.env.ANTHROPIC_API_KEY ??= "test-anthropic-key";
@@ -30,7 +30,7 @@ var balancesCreateMock: ReturnType<typeof vi.fn>;
 var autumnCheckMock: ReturnType<typeof vi.fn>;
 var insertMock: ReturnType<typeof vi.fn>;
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: (() => {
     userFindFirstMock = vi.fn();
     billingTopUpFindManyMock = vi.fn();

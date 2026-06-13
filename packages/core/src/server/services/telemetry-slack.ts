@@ -118,7 +118,7 @@ export function buildSignupSlackMessage(params: {
   occurredAt: Date;
 }): string {
   const lines = [
-    "New CmdClaw signup",
+    "New Bap signup",
     "",
     `Email: ${params.email}`,
     `Method: ${params.signupMethod ?? "unknown"}`,

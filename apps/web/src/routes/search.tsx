@@ -19,7 +19,7 @@ export const Route = createFileRoute("/search")({
   beforeLoad: async ({ location }) => ({
     sessionContext: await requireSession(location.href),
   }),
-  head: () => ({ meta: [{ title: "Search - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Search - Bap" }] }),
   component: SearchPage,
 });
 

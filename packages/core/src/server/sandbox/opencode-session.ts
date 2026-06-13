@@ -3,8 +3,8 @@ import type Dockerode from "dockerode";
 import { asc, eq } from "drizzle-orm";
 import type { ObservabilityContext } from "../utils/observability";
 import { env } from "../../env";
-import { db } from "@cmdclaw/db/client";
-import { conversationRuntime, message, type ContentPart } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversationRuntime, message, type ContentPart } from "@bap/db/schema";
 import {
   canConnectDockerDaemon,
   createDockerClient,
@@ -53,7 +53,7 @@ import { conversationRuntimeService } from "../services/conversation-runtime-ser
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import type { RuntimeMcpServer } from "./core/types";
 
-const DEFAULT_DAYTONA_SNAPSHOT = "cmdclaw-agent-dev";
+const DEFAULT_DAYTONA_SNAPSHOT = "bap-agent-dev";
 const DAYTONA_CREATE_TIMEOUT_SECONDS = 30;
 const DAYTONA_CREATE_MAX_ATTEMPTS = 2;
 const DAYTONA_CREATE_RETRY_DELAY_MS = 1_000;
@@ -163,9 +163,9 @@ function buildSandboxBootstrapEnv(config: OpenCodeSessionConfig): Record<string,
 
 function buildDaytonaSandboxLabels(config: OpenCodeSessionConfig): Record<string, string> {
   return {
-    "cmdclaw-conversation-id": config.conversationId,
-    ...(config.generationId ? { "cmdclaw-generation-id": config.generationId } : {}),
-    ...(config.userId ? { "cmdclaw-user-id": config.userId } : {}),
+    "bap-conversation-id": config.conversationId,
+    ...(config.generationId ? { "bap-generation-id": config.generationId } : {}),
+    ...(config.userId ? { "bap-user-id": config.userId } : {}),
   };
 }
 
@@ -483,7 +483,7 @@ async function getOrCreateDockerSandbox(
 
   onLifecycle?.("sandbox_creating", {
     conversationId: config.conversationId,
-    template: "cmdclaw-agent-runtime",
+    template: "bap-agent-runtime",
   });
 
   const imageTag = await ensureDockerRuntimeImage(docker);
@@ -847,7 +847,7 @@ async function getOrCreateDockerSandboxInit(
 
   onLifecycle?.("sandbox_creating", {
     conversationId: config.conversationId,
-    template: "cmdclaw-agent-runtime",
+    template: "bap-agent-runtime",
   });
 
   const imageTag = await ensureDockerRuntimeImage(docker);

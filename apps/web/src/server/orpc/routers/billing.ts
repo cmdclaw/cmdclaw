@@ -1,4 +1,4 @@
-import { BILLING_PLANS, type BillingPlanId } from "@cmdclaw/core/lib/billing-plans";
+import { BILLING_PLANS, type BillingPlanId } from "@bap/core/lib/billing-plans";
 import {
   addWorkspaceMembers,
   adminJoinWorkspace,
@@ -17,9 +17,9 @@ import {
   openBillingPortalForOwner,
   renameWorkspace,
   setActiveWorkspace,
-} from "@cmdclaw/core/server/billing/service";
-import { isSelfHostedEdition } from "@cmdclaw/core/server/edition";
-import { user, workspace } from "@cmdclaw/db/schema";
+} from "@bap/core/server/billing/service";
+import { isSelfHostedEdition } from "@bap/core/server/edition";
+import { user, workspace } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -41,7 +41,7 @@ function assertCloudWorkspaceManagementEnabled() {
   }
 }
 
-async function getDbRole(userId: string, db: typeof import("@cmdclaw/db/client").db) {
+async function getDbRole(userId: string, db: typeof import("@bap/db/client").db) {
   const dbUser = await db.query.user.findFirst({
     where: eq(user.id, userId),
     columns: { role: true },
@@ -51,7 +51,7 @@ async function getDbRole(userId: string, db: typeof import("@cmdclaw/db/client")
 
 async function resolveRequestedOwner(params: {
   userId: string;
-  db: typeof import("@cmdclaw/db/client").db;
+  db: typeof import("@bap/db/client").db;
   ownerType: "user" | "workspace";
   workspaceId?: string;
 }) {

@@ -263,7 +263,7 @@ export function MessageItem({
             toolUseId: part.id,
             toolName: part.name,
             toolInput: part.input,
-            integration: part.integration ?? "cmdclaw",
+            integration: part.integration ?? "bap",
             operation: part.operation ?? "question",
             status: "approved",
             questionAnswers: parseQuestionAnswersFromResult(part.result),

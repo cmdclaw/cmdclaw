@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { sandboxUsageSnapshot } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { sandboxUsageSnapshot } from "@bap/db/schema";
 import { SANDBOX_CREDITS_PER_MINUTE } from "../../lib/billing-plans";
 import { isDaytonaConfigured, listAllDaytonaSandboxes } from "../sandbox/daytona";
 import {

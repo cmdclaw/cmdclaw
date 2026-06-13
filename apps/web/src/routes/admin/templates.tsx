@@ -1,7 +1,4 @@
-import type {
-  TemplateCatalogTemplate,
-  TemplateIntegrationType,
-} from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@bap/db/template-catalog";
 import type { ChangeEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Loader2, Star, Trash2, Upload } from "lucide-react";
@@ -20,7 +17,7 @@ import {
 import { AppImage } from "./-lib/app-image";
 
 export const Route = createFileRoute("/admin/templates")({
-  head: () => ({ meta: [{ title: "Template Catalog - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Template Catalog - Bap" }] }),
   component: AdminTemplatesPage,
 });
 

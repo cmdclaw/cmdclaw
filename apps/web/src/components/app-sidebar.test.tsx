@@ -115,7 +115,7 @@ describe("AppSidebar", () => {
   });
 
   it("shows user navigation in user view", async () => {
-    window.localStorage.setItem("cmdclaw.sidebarMode", "user");
+    window.localStorage.setItem("bap.sidebarMode", "user");
 
     render(<AppSidebar />);
 

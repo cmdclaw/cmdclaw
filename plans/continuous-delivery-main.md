@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 ## Purpose / Big Picture
 
-CmdClaw should deploy automatically when a change lands on `main`. A successful release should deploy staging, verify it, promote the same commit to production, verify production, and leave a readable release history. If production verification fails after production services were updated, the workflow should quickly roll Render services back to their previous successful deploys. Database changes are handled with forward-compatible migrations rather than automatic destructive rollback.
+Bap should deploy automatically when a change lands on `main`. A successful release should deploy staging, verify it, promote the same commit to production, verify production, and leave a readable release history. If production verification fails after production services were updated, the workflow should quickly roll Render services back to their previous successful deploys. Database changes are handled with forward-compatible migrations rather than automatic destructive rollback.
 
 After this work, a user can push to `main` and observe the `Release Main` GitHub Actions workflow deploying staging and production. A successful run creates a tag using the existing production release format, such as `v2026.5.17` or `v2026.5.17-2`.
 
@@ -31,7 +31,7 @@ After this work, a user can push to `main` and observe the `Release Main` GitHub
   Evidence: Render API docs list `POST /v1/services/{serviceId}/deploys` with `commitId`, and `POST /v1/services/{serviceId}/rollback` with `deployId`.
 
 - Observation: `render.yaml` already sets `SANDBOX_DEFAULT=daytona` and stable Daytona snapshot names for staging and production.
-  Evidence: `cmdclaw-web-staging`, `cmdclaw-worker-staging`, `cmdclaw-web-prod`, and `cmdclaw-worker-prod` all set `SANDBOX_DEFAULT` to `daytona` and `E2B_DAYTONA_SANDBOX_NAME` to the environment snapshot name.
+  Evidence: `bap-web-staging`, `bap-worker-staging`, `bap-web-prod`, and `bap-worker-prod` all set `SANDBOX_DEFAULT` to `daytona` and `E2B_DAYTONA_SANDBOX_NAME` to the environment snapshot name.
 
 ## Decision Log
 
@@ -44,7 +44,7 @@ After this work, a user can push to `main` and observe the `Release Main` GitHub
   Date/Author: 2026-05-17 / Codex.
 
 - Decision: Do not expose `DAYTONA_SNAPSHOT_STAGING` or `DAYTONA_SNAPSHOT_PROD` in the GitHub workflow.
-  Rationale: The release pipeline should use the standard snapshot names automatically: `cmdclaw-agent-staging` and `cmdclaw-agent-prod`.
+  Rationale: The release pipeline should use the standard snapshot names automatically: `bap-agent-staging` and `bap-agent-prod`.
   Date/Author: 2026-05-17 / Codex.
 
 - Decision: Use generic Render secret names inside the `staging` and `prod` GitHub environments.
@@ -75,7 +75,7 @@ The implementation now has an automatic release workflow and reusable deployment
 
 The repository uses Bun and GitHub Actions. `RELEASING.md` documents release operations. `.github/workflows/db-push.yml` applies database schema changes with `bun run db:push`. `apps/sandbox/package.json` has Daytona build commands named `daytona:build:staging` and `daytona:build:prod`. `apps/web/package.json` has live verification commands, including `test:e2e:cli:live`.
 
-Render is the deployment target for Next.js web, worker, and MCP services. The service definitions live in `render.yaml`. The relevant service names are `cmdclaw-web-staging`, `cmdclaw-worker-staging`, `cmdclaw-mcp-staging`, `cmdclaw-web-prod`, `cmdclaw-worker-prod`, and `cmdclaw-mcp-prod`.
+Render is the deployment target for Next.js web, worker, and MCP services. The service definitions live in `render.yaml`. The relevant service names are `bap-web-staging`, `bap-worker-staging`, `bap-mcp-staging`, `bap-web-prod`, `bap-worker-prod`, and `bap-mcp-prod`.
 
 ## Plan of Work
 
@@ -113,7 +113,7 @@ The TypeScript helper scripts must typecheck. The release workflow should be vis
 
 Render deploy by commit is safe to retry. If a deploy fails, the workflow exits non-zero. Render rollback reuses a previous deploy artifact. Database schema changes are not automatically reversed; releases should use forward-compatible migration patterns so previous code can run after new additive schema changes.
 
-If a Daytona snapshot build fails, rerun the workflow after fixing credentials or Daytona availability. The Daytona build scripts replace existing stable snapshot names, so the environment continues using `cmdclaw-agent-staging` or `cmdclaw-agent-prod`. The GitHub workflow intentionally does not pass snapshot name override secrets.
+If a Daytona snapshot build fails, rerun the workflow after fixing credentials or Daytona availability. The Daytona build scripts replace existing stable snapshot names, so the environment continues using `bap-agent-staging` or `bap-agent-prod`. The GitHub workflow intentionally does not pass snapshot name override secrets.
 
 ## Artifacts and Notes
 
@@ -154,7 +154,7 @@ ID through the Render API. It requires `RENDER_API_KEY`.
       "cases": [
         {
           "name": "short descriptive name",
-          "command": ["bun", "run", "cmdclaw", "--", "chat", "--message", "hello", "--no-validate"]
+          "command": ["bun", "run", "bap", "--", "chat", "--message", "hello", "--no-validate"]
         }
       ]
     }

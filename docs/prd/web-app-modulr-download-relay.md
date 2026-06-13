@@ -4,16 +4,16 @@ Suggested Linear label/status: `ready-for-agent`
 
 ## Problem Statement
 
-When an agent downloads a **Modulr Customer Document**, CmdClaw currently creates a short-lived stored file and returns a download URL hosted by the MCP gateway. In production, this made the runtime path brittle: the externally hosted runtime sandbox and the **User** should only need to reach the canonical CmdClaw app host, while object storage remains private infrastructure reachable only by CmdClaw services.
+When an agent downloads a **Modulr Customer Document**, Bap currently creates a short-lived stored file and returns a download URL hosted by the MCP gateway. In production, this made the runtime path brittle: the externally hosted runtime sandbox and the **User** should only need to reach the canonical Bap app host, while object storage remains private infrastructure reachable only by Bap services.
 
 ## Solution
 
-Make the web app host (`cmdclaw.ai` in production, `staging.cmdclaw.ai` in staging, and the configured app URL locally) the canonical public relay for every **Modulr Download Artifact**. The Modulr MCP tool will continue to fetch the document from Modulr and create the short-lived artifact in private object storage, but it will return an app-hosted download URL. The web app route will verify the signed short-lived token, enforce that the storage key matches the claimed workspace scope, read the artifact from private object storage, and stream it to the caller.
+Make the web app host (`heybap.com` in production, `staging.heybap.com` in staging, and the configured app URL locally) the canonical public relay for every **Modulr Download Artifact**. The Modulr MCP tool will continue to fetch the document from Modulr and create the short-lived artifact in private object storage, but it will return an app-hosted download URL. The web app route will verify the signed short-lived token, enforce that the storage key matches the claimed workspace scope, read the artifact from private object storage, and stream it to the caller.
 
 ## User Stories
 
-1. As a User, I want Modulr document download links to use `cmdclaw.ai`, so that downloaded files come from the product host I already trust.
-2. As a User, I want staging Modulr document download links to use `staging.cmdclaw.ai`, so that staging behavior matches the deployed staging app.
+1. As a User, I want Modulr document download links to use `heybap.com`, so that downloaded files come from the product host I already trust.
+2. As a User, I want staging Modulr document download links to use `staging.heybap.com`, so that staging behavior matches the deployed staging app.
 3. As a User, I want local or worktree Modulr document download links to use the configured app URL, so that local testing exercises the same boundary as production.
 4. As a User, I want a Modulr document download link returned by the assistant to open directly, so that I can retrieve the file without knowing about MCP infrastructure.
 5. As a User, I want downloaded Modulr documents to preserve their filename and MIME type, so that my operating system opens them correctly.
@@ -22,9 +22,9 @@ Make the web app host (`cmdclaw.ai` in production, `staging.cmdclaw.ai` in stagi
 8. As a support agent, I want `modulr.download_document` to return a direct app-hosted URL, so that I do not need to manually transform MCP-hosted URLs.
 9. As a support agent, I want the tool result to include document title, filename, MIME type, size, resource URI, and download URL, so that I can report what was downloaded.
 10. As a support agent, I do not want the tool result to expose private object-storage keys, so that implementation details do not become part of the agent-facing contract.
-11. As a runtime sandbox, I want to fetch downloads only from the CmdClaw app host, so that I do not require direct access to private object storage.
+11. As a runtime sandbox, I want to fetch downloads only from the Bap app host, so that I do not require direct access to private object storage.
 12. As a runtime sandbox, I want returned URLs to avoid MCP infrastructure hosts, so that allowlists can focus on the canonical app host.
-13. As an operator, I want the MCP server to keep creating **Modulr Download Artifacts**, so that Modulr access and private object-storage writes stay inside CmdClaw infrastructure.
+13. As an operator, I want the MCP server to keep creating **Modulr Download Artifacts**, so that Modulr access and private object-storage writes stay inside Bap infrastructure.
 14. As an operator, I want the web app to own the public download relay, so that user-facing file serving is centralized.
 15. As an operator, I want the MCP gateway to stop serving Modulr download routes, so that there is only one public relay boundary.
 16. As an operator, I want signed tokens to carry the storage locator opaquely, so that the web app can stream the artifact without a database lookup.
@@ -32,7 +32,7 @@ Make the web app host (`cmdclaw.ai` in production, `staging.cmdclaw.ai` in stagi
 18. As an operator, I want token-only authorization to remain supported, so that assistant-rendered links can be opened directly by browsers and download managers.
 19. As an operator, I want token validation to keep enforcing expiry and signature checks, so that the route remains safe without requiring a logged-in session.
 20. As a developer, I want `APP_URL` or the equivalent configured app URL to determine the download host, so that MCP and app host concerns do not get mixed.
-21. As a developer, I want `CMDCLAW_MCP_BASE_URL` to remain only the MCP endpoint host, so that source registration and download relay concerns stay separate.
+21. As a developer, I want `BAP_MCP_BASE_URL` to remain only the MCP endpoint host, so that source registration and download relay concerns stay separate.
 22. As a developer, I want the web download route to keep streaming from private object storage, so that the behavior remains compatible with existing **Modulr Download Artifacts**.
 23. As a developer, I want the shared Modulr download token contract to stay small and explicit, so that both the MCP tool and web route can be tested in isolation.
 24. As a developer, I want the MCP gateway duplicate download code removed, so that future changes do not drift between gateway and web implementations.
@@ -45,7 +45,7 @@ Make the web app host (`cmdclaw.ai` in production, `staging.cmdclaw.ai` in stagi
 - The web app is the canonical public relay for **Modulr Download Artifacts**.
 - The Modulr MCP server remains responsible for fetching bytes from Modulr and writing the short-lived artifact to private object storage during `modulr.download_document`.
 - The MCP tool builds the returned download URL from the configured app URL, not the MCP base URL.
-- The production URL must resolve under `cmdclaw.ai`; the staging URL must resolve under `staging.cmdclaw.ai`; local and worktree environments use the configured app URL with the existing public callback fallback behavior where needed.
+- The production URL must resolve under `heybap.com`; the staging URL must resolve under `staging.heybap.com`; local and worktree environments use the configured app URL with the existing public callback fallback behavior where needed.
 - The MCP gateway no longer exposes the Modulr document download route.
 - The web app download route remains token-only and does not require a logged-in web session.
 - The signed token remains shared between MCP and web and includes safe routing metadata: storage key, filename, MIME type, workspace id, document id, size, and expiry.

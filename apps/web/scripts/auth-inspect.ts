@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   );
 
   if (!token) {
-    console.error("\nNo token found. Run `bun run cmdclaw -- auth login` first.");
+    console.error("\nNo token found. Run `bun run bap -- auth login` first.");
     process.exit(1);
   }
 

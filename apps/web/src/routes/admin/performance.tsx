@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { usePerformanceDashboard } from "@/orpc/hooks/admin";
 
 export const Route = createFileRoute("/admin/performance")({
-  head: () => ({ meta: [{ title: "Performance - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Performance - Bap" }] }),
   component: PerformanceDashboardPage,
 });
 

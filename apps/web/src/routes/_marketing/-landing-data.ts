@@ -1,4 +1,4 @@
-import type { TemplateCatalogTemplate } from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate } from "@bap/db/template-catalog";
 import { redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";

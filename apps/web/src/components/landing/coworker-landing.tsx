@@ -1,10 +1,7 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import type {
-  TemplateCatalogTemplate,
-  TemplateIntegrationType,
-} from "@cmdclaw/db/template-catalog";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@bap/db/template-catalog";
 import type { ChangeEvent, FormEvent } from "react";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
 import { ClientOnly, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { ArrowUp, ChevronDown, Globe2 } from "lucide-react";
@@ -986,7 +983,7 @@ export function CoworkerLanding({
                   className="bg-white px-8 text-slate-950 shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-slate-100"
                 >
                   <a
-                    href="https://cal.com/hyperstack/try-cmdclaw"
+                    href="https://cal.com/hyperstack/try-bap"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -996,7 +993,7 @@ export function CoworkerLanding({
               </div>
               <div className="mt-6 flex items-center justify-center">
                 <a
-                  href="https://github.com/baptistecolle/cmdclaw"
+                  href="https://github.com/baptistecolle/bap"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-300"
@@ -1020,14 +1017,14 @@ export function CoworkerLanding({
               {/* Brand */}
               <div className="max-w-xs">
                 <p className="text-foreground text-sm font-semibold">
-                  <T>CmdClaw</T>
+                  <T>Bap</T>
                 </p>
                 <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
                   <T>AI coworkers that connect to your tools and automate work across your team.</T>
                 </p>
                 <div className="mt-4 flex items-center gap-3">
                   <a
-                    href="https://github.com/baptistecolle/cmdclaw"
+                    href="https://github.com/baptistecolle/bap"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-muted-foreground hover:text-foreground transition-colors"
@@ -1059,7 +1056,7 @@ export function CoworkerLanding({
                   </p>
                   <nav className="text-muted-foreground flex flex-col gap-2 text-xs">
                     <a
-                      href="https://docs.cmdclaw.ai/"
+                      href="https://docs.heybap.com/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-foreground transition-colors"
@@ -1099,7 +1096,7 @@ export function CoworkerLanding({
             {/* Bottom line */}
             <div className="border-border/40 text-muted-foreground/60 mt-10 flex flex-col gap-4 border-t pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <T>&copy;</T> {new Date().getFullYear()} <T>CmdClaw. All rights reserved.</T>
+                <T>&copy;</T> {new Date().getFullYear()} <T>Bap. All rights reserved.</T>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground text-xs font-medium">

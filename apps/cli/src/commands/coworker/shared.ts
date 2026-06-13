@@ -1,4 +1,4 @@
-import { createCoworkerRunner } from "@cmdclaw/client";
+import { createCoworkerRunner } from "@bap/client";
 import { ensureAuthenticatedClient } from "../../lib/auth";
 
 export async function getCoworkerRunner(params?: { server?: string; token?: string }) {

@@ -380,7 +380,7 @@ export function buildPerfettoTraceFromTiming(args: {
 
   const pid = args.pid ?? 1;
   const baseTid = args.tid ?? 1;
-  const processName = args.processName ?? "cmdclaw";
+  const processName = args.processName ?? "bap";
   const traceEvents: PerfettoTraceEvent[] = [
     {
       name: "process_name",
@@ -420,7 +420,7 @@ export function buildPerfettoTraceFromTiming(args: {
     const durationMs = Math.max(0, span.endMs - span.startMs);
     traceEvents.push({
       name: spec.name,
-      cat: "cmdclaw",
+      cat: "bap",
       ph: "X",
       pid,
       tid: trackTidMap.get(spec.track) ?? baseTid,

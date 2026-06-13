@@ -31,8 +31,8 @@ export const Route = createFileRoute("/_marketing/templates")({
   loader: () => loadTemplateCatalog(),
   head: () => ({
     meta: [
-      { title: "Templates · CmdClaw" },
-      { name: "description", content: "Browse CmdClaw coworker templates." },
+      { title: "Templates · Bap" },
+      { name: "description", content: "Browse Bap coworker templates." },
     ],
   }),
   component: TemplatesPage,

@@ -8,7 +8,7 @@ The governing product requirements are in `docs/prd/agentic-app-prompts.md`. The
 
 ## Purpose / Big Picture
 
-CmdClaw agents can already produce a file named `output.html` inside their sandbox; the web app renders it next to the conversation in a sandboxed iframe. Today that page is read-only: a button inside it does nothing. After this change, a generated page can contain buttons or forms that send a real user message back into the conversation — clicking "Send the email" in the page is the same as typing "Send the email" into the composer. The page does this by calling `parent.postMessage` with a small versioned JSON envelope; the chat panel verifies the message came from the rendered iframe, checks that a human actually interacted with the page (so a hostile page cannot fire prompts on load or in a loop), rate-caps accepted prompts, sends the text through the existing composer path, and posts an acknowledgement back to the page so its buttons can show "Sent" or an error state.
+Bap agents can already produce a file named `output.html` inside their sandbox; the web app renders it next to the conversation in a sandboxed iframe. Today that page is read-only: a button inside it does nothing. After this change, a generated page can contain buttons or forms that send a real user message back into the conversation — clicking "Send the email" in the page is the same as typing "Send the email" into the composer. The page does this by calling `parent.postMessage` with a small versioned JSON envelope; the chat panel verifies the message came from the rendered iframe, checks that a human actually interacted with the page (so a hostile page cannot fire prompts on load or in a loop), rate-caps accepted prompts, sends the text through the existing composer path, and posts an acknowledgement back to the page so its buttons can show "Sent" or an error state.
 
 To see it working: run the web app, open a chat whose latest Generation produced an `output.html` containing a button that posts the envelope, click the button, and watch a new user message appear in the transcript and a new Generation start. The concept is also renamed across the codebase from "output HTML preview" to "Agentic-App" with no aliases.
 
@@ -67,7 +67,7 @@ To see it working: run the web app, open a chat whose latest Generation produced
 
 ## Context and Orientation
 
-CmdClaw is a monorepo. The pieces this plan touches:
+Bap is a monorepo. The pieces this plan touches:
 
 - `apps/web` — the TanStack Start web app (Bun + Vite + React). Chat UI lives in `apps/web/src/components/chat/`. Server-side RPC ("oRPC") routers live in `apps/web/src/server/orpc/routers/`, with thin service modules in `apps/web/src/server/services/`. Client hooks wrapping oRPC live in `apps/web/src/orpc/hooks/`.
 - `apps/sandbox/src/common/skills/` — markdown "skills" baked into the agent sandbox image at `/app/.claude/skills` (see `apps/sandbox/src/daytona/image.ts`, the `addLocalDir` call). Each skill is a directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`) and instructions the agent reads on demand.
@@ -80,8 +80,8 @@ Two coworker info pages (`apps/web/src/routes/agents/-components/coworker-info-p
 
 The wire protocol (ADR 0014, frozen, append-only):
 
-    page -> panel:  { "type": "cmdclaw:agentic-app-prompt", "version": 1, "prompt": "<text>" }
-    panel -> page:  { "type": "cmdclaw:agentic-app-prompt-result", "version": 1,
+    page -> panel:  { "type": "bap:agentic-app-prompt", "version": 1, "prompt": "<text>" }
+    panel -> page:  { "type": "bap:agentic-app-prompt-result", "version": 1,
                       "status": "sent" | "rejected",
                       "reason": "rate_limited" | "no_user_activation" | "invalid" (optional) }
 
@@ -115,11 +115,11 @@ Expected: pass, proving the rename did not change server behavior and the chat a
 
 Acceptance, phrased as behavior (mirrors PRD user stories):
 
-1. Unit: `parseAgenticAppPromptMessage` accepts `{type:"cmdclaw:agentic-app-prompt", version:1, prompt:"hi", extra:"x"}` (extra fields tolerated) and returns kind `prompt`; returns `ignored` for `version: 2`, a different `type`, or non-object data; returns `invalid` for a v1 envelope with `prompt: ""` or `prompt: 42`.
+1. Unit: `parseAgenticAppPromptMessage` accepts `{type:"bap:agentic-app-prompt", version:1, prompt:"hi", extra:"x"}` (extra fields tolerated) and returns kind `prompt`; returns `ignored` for `version: 2`, a different `type`, or non-object data; returns `invalid` for a v1 envelope with `prompt: ""` or `prompt: 42`.
 2. Unit: the gate rejects with `no_user_activation` before any engagement even when focused, and when engaged but unfocused; accepts when engaged + focused; a second accept within 1000 ms and a seventh within 60 s are `rate_limited`.
-3. Component (jsdom): a `MessageEvent` whose `source` is not the panel iframe's `contentWindow` produces no send and no ack; after `pointerdown` on the panel and focusing the iframe, a valid envelope calls `onSendPrompt("...")` once and posts `{type:"cmdclaw:agentic-app-prompt-result", version:1, status:"sent"}` to the iframe window; without engagement the ack is `rejected`/`no_user_activation`.
+3. Component (jsdom): a `MessageEvent` whose `source` is not the panel iframe's `contentWindow` produces no send and no ack; after `pointerdown` on the panel and focusing the iframe, a valid envelope calls `onSendPrompt("...")` once and posts `{type:"bap:agentic-app-prompt-result", version:1, status:"sent"}` to the iframe window; without engagement the ack is `rejected`/`no_user_activation`.
 4. Rename completeness: `git grep -iE "outputhtmlpreview|output-html-preview|output-preview-selection|enableOutputPreview|previewSandboxOutputHtml" -- apps/web/src` prints nothing.
-5. Manual end-to-end (when a dev server and sandbox are available): start the web app, open a chat, have a Generation produce an `output.html` whose button runs `parent.postMessage({type:"cmdclaw:agentic-app-prompt",version:1,prompt:"Send the weekly email"},"*")`; clicking the button makes "Send the weekly email" appear as a user message and a Generation start; reloading the page and not touching the panel while the page tries to auto-fire on load produces no message.
+5. Manual end-to-end (when a dev server and sandbox are available): start the web app, open a chat, have a Generation produce an `output.html` whose button runs `parent.postMessage({type:"bap:agentic-app-prompt",version:1,prompt:"Send the weekly email"},"*")`; clicking the button makes "Send the weekly email" appear as a user message and a Generation start; reloading the page and not touching the panel while the page tries to auto-fire on load produces no message.
 
 ## Idempotence and Recovery
 
@@ -134,11 +134,11 @@ The example the SKILL.md teaches (indented, single self-contained page):
       const btn = document.getElementById("send");
       btn.addEventListener("click", () => {
         btn.disabled = true;
-        parent.postMessage({ type: "cmdclaw:agentic-app-prompt", version: 1, prompt: "Send the weekly email" }, "*");
+        parent.postMessage({ type: "bap:agentic-app-prompt", version: 1, prompt: "Send the weekly email" }, "*");
       });
       window.addEventListener("message", (event) => {
         const data = event.data;
-        if (!data || data.type !== "cmdclaw:agentic-app-prompt-result") return;
+        if (!data || data.type !== "bap:agentic-app-prompt-result") return;
         btn.textContent = data.status === "sent" ? "Sent ✓" : "Failed: " + (data.reason ?? "try again");
         btn.disabled = data.status === "sent";
       });
@@ -150,8 +150,8 @@ No new dependencies. End-state interfaces (all in `apps/web` unless noted):
 
 In `src/components/chat/agentic-app-protocol.ts`:
 
-    export const AGENTIC_APP_PROMPT_TYPE = "cmdclaw:agentic-app-prompt";
-    export const AGENTIC_APP_PROMPT_RESULT_TYPE = "cmdclaw:agentic-app-prompt-result";
+    export const AGENTIC_APP_PROMPT_TYPE = "bap:agentic-app-prompt";
+    export const AGENTIC_APP_PROMPT_RESULT_TYPE = "bap:agentic-app-prompt-result";
     export const AGENTIC_APP_PROMPT_VERSION = 1;
     export type AgenticAppPromptRejectionReason = "rate_limited" | "no_user_activation" | "invalid";
     export type ParsedAgenticAppPromptMessage =

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { SANDBOX_COMMON_ROOT } from "@cmdclaw/sandbox/paths";
+import { SANDBOX_COMMON_ROOT } from "@bap/sandbox/paths";
 import type { SandboxHandle } from "../core/types";
 import { resolvePreferredCommunitySkillsForUser } from "../../services/integration-skill-service";
 import { listAccessibleEnabledSkillsForUser } from "../../services/workspace-skill-service";

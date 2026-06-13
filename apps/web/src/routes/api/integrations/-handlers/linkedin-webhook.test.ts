@@ -14,7 +14,7 @@ const { findFirstMock, insertValuesMock, updateSetMock, updateWhereMock, getUnip
     getUnipileAccountMock: vi.fn<VitestProcedure>(),
   }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: { integration: { findFirst: findFirstMock } },
     insert: () => ({ values: insertValuesMock }),
@@ -22,7 +22,7 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/schema", () => ({
+vi.mock("@bap/db/schema", () => ({
   integration: { userId: "userId", type: "type", id: "id", providerAccountId: "providerAccountId" },
 }));
 
@@ -32,7 +32,7 @@ vi.mock("@/server/integrations/unipile", () => ({
 
 import { handleLinkedInWebhook } from "./linkedin-webhook";
 
-function makeRequest(body: unknown, url = "https://cmdclaw.ai/api/integrations/linkedin/webhook") {
+function makeRequest(body: unknown, url = "https://heybap.com/api/integrations/linkedin/webhook") {
   return new Request(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -94,7 +94,7 @@ describe("handleLinkedInWebhook", () => {
             account_type: "LINKEDIN",
           },
         },
-        "https://cmdclaw.ai/api/integrations/linkedin/webhook?userId=user-42",
+        "https://heybap.com/api/integrations/linkedin/webhook?userId=user-42",
       ),
     );
 
@@ -124,7 +124,7 @@ describe("handleLinkedInWebhook", () => {
             account_type: "LINKEDIN",
           },
         },
-        "https://cmdclaw.ai/api/integrations/linkedin/webhook?userId=user-42",
+        "https://heybap.com/api/integrations/linkedin/webhook?userId=user-42",
       ),
     );
 
@@ -149,7 +149,7 @@ describe("handleLinkedInWebhook", () => {
   });
 
   it("returns 500 when JSON parsing fails", async () => {
-    const badRequest = new Request("https://cmdclaw.ai/api/integrations/linkedin/webhook", {
+    const badRequest = new Request("https://heybap.com/api/integrations/linkedin/webhook", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "not json",

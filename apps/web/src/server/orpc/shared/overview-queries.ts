@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { coworker, coworkerRun, workspace } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { coworker, coworkerRun, workspace } from "@bap/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 type CoworkerOverviewResult = {

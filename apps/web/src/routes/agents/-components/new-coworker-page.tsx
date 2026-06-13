@@ -1,4 +1,4 @@
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
 import { useNavigate } from "@tanstack/react-router";
 import { T } from "gt-react";
 import { Loader2 } from "lucide-react";

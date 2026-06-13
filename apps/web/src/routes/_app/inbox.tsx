@@ -47,7 +47,7 @@ export const Route = createFileRoute("/_app/inbox")({
     };
   },
   head: () => ({
-    meta: [{ title: "Inbox | CmdClaw" }],
+    meta: [{ title: "Inbox | Bap" }],
   }),
   component: InboxPage,
 });

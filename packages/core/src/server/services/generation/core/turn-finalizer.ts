@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { message, type MessageTiming } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { message, type MessageTiming } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../../../utils/observability";
 import { getSandboxSlotManager } from "../../sandbox-slot-manager";

@@ -51,7 +51,7 @@ const DEFAULT_QUESTION_SECONDS = "5";
 const DEFAULT_RUNTIME_SECONDS = "30";
 
 const PROMPTS: Record<DebugScenarioKey, string> = {
-  approval: "send a message on slack #experiment-cmdclaw-testing saying hi",
+  approval: "send a message on slack #experiment-bap-testing saying hi",
   auth: "Use the Notion integration to list my first 5 Notion databases by name. Do not use any other source.",
   question:
     "Use the question tool exactly once with header 'Pick', question 'Choose one', and options 'Alpha' and 'Beta'. After I answer, respond exactly as SELECTED=<answer>.",

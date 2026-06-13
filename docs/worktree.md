@@ -8,7 +8,7 @@ This repo has a dedicated worktree flow for running isolated app processes with 
 
 ## When to use it
 
-Use a worktree when you want to run multiple copies of CmdClaw side by side without port collisions between:
+Use a worktree when you want to run multiple copies of Bap side by side without port collisions between:
 
 - the web app
 - the worker
@@ -27,7 +27,7 @@ Each worktree gets:
 - its own Redis ACL user and Redis key namespace on the shared Redis server
 - its own MinIO bucket and MinIO credentials on the shared MinIO server
 - a 2-digit stack slot used to derive worktree-only ports such as `37xx`, `47xx`, and optional Daytona ports
-- shared observability endpoints, with telemetry labeled by `CMDCLAW_INSTANCE_ID`, `CMDCLAW_WORKTREE_ID`, and `CMDCLAW_WORKTREE_SLOT`
+- shared observability endpoints, with telemetry labeled by `BAP_INSTANCE_ID`, `BAP_WORKTREE_ID`, and `BAP_WORKTREE_SLOT`
 
 Example:
 
@@ -43,13 +43,13 @@ From inside the worktree:
 bun run worktree:setup
 ```
 
-This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it reuses the repo-global `cmdclaw-local` shared infrastructure (starting the missing shared services there only when needed), provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
+This fails fast if Docker is not installed or the Docker daemon is not running. Otherwise it reuses the repo-global `bap-local` shared infrastructure (starting the missing shared services there only when needed), provisions the worktree-specific Postgres, Redis, and MinIO credentials, writes the generated `.env`, and starts the web, worker, and WS processes for that worktree.
 
 If ten other worktree web servers are already running, `worktree:setup` fails before launching another web dev process.
 
 Each worktree writes a computed `.env` file at the repo root. That file is the authoritative runtime env for worktree commands and normal repo scripts inside that worktree, including `worktree:setup`, `worktree:dev`, and `bun run cli ...`.
 
-Per-worktree state no longer lives inside the repo checkout. Metadata, process tracking, logs, and runtime artifacts now live under `~/.cmdclaw/worktrees/instances/<instanceId>`, which prevents Turbopack from watching a repo-local `.worktrees` directory and recompiling whenever worktree state changes.
+Per-worktree state no longer lives inside the repo checkout. Metadata, process tracking, logs, and runtime artifacts now live under `~/.bap/worktrees/instances/<instanceId>`, which prevents Turbopack from watching a repo-local `.worktrees` directory and recompiling whenever worktree state changes.
 
 ## Start only the Docker stack
 
@@ -59,7 +59,7 @@ If you only want Docker without starting the app processes:
 bun run worktree:docker-up
 ```
 
-This reuses the repo-global `cmdclaw-local` shared stateful services and shared observability services for the current worktree.
+This reuses the repo-global `bap-local` shared stateful services and shared observability services for the current worktree.
 
 There is no longer a `docker/compose/worktree-observability.yml` flow. Worktrees always target the shared observability services defined in `docker/compose/dev.yml`.
 
@@ -85,7 +85,7 @@ bun run worktree:env
 
 `worktree:status` shows the instance id, stack slot, app URL, database name, the shared Docker project, and the derived local addresses for shared stateful services and shared observability endpoints.
 
-It also shows the exact `.env` path currently backing the worktree, plus the shared instance root under `~/.cmdclaw/worktrees/instances/<instanceId>`.
+It also shows the exact `.env` path currently backing the worktree, plus the shared instance root under `~/.bap/worktrees/instances/<instanceId>`.
 
 `worktree:env` prints the full derived environment for the worktree, including the worktree-scoped `DATABASE_URL`, `REDIS_URL`, `AWS_ENDPOINT_URL`, the shared Vector and Victoria URLs, and the worktree identity labels used to filter telemetry.
 

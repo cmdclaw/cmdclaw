@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCmdclawArgv } from "./argv";
+import { normalizeBapArgv } from "./argv";
 
-describe("normalizeCmdclawArgv", () => {
-  it("defaults bare cmdclaw to chat", () => {
-    expect(normalizeCmdclawArgv([])).toEqual(["chat"]);
+describe("normalizeBapArgv", () => {
+  it("defaults bare bap to chat", () => {
+    expect(normalizeBapArgv([])).toEqual(["chat"]);
   });
 
   it("routes bare chat flags through chat", () => {
-    expect(normalizeCmdclawArgv(["--message", "hi"])).toEqual(["chat", "--message", "hi"]);
+    expect(normalizeBapArgv(["--message", "hi"])).toEqual(["chat", "--message", "hi"]);
   });
 
   it("normalizes documented kebab-case chat flags", () => {
     expect(
-      normalizeCmdclawArgv([
+      normalizeBapArgv([
         "chat",
         "--auto-approve",
         "--no-validate",
@@ -47,6 +47,6 @@ describe("normalizeCmdclawArgv", () => {
   });
 
   it("preserves explicit top-level commands", () => {
-    expect(normalizeCmdclawArgv(["coworker", "list"])).toEqual(["coworker", "list"]);
+    expect(normalizeBapArgv(["coworker", "list"])).toEqual(["coworker", "list"]);
   });
 });

@@ -23,5 +23,5 @@
     "integration-permissions",
     "memory"
   ],
-  "default_agent": "cmdclaw-chat"
+  "default_agent": "bap-chat"
 }

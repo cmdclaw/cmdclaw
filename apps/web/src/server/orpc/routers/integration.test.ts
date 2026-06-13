@@ -39,7 +39,7 @@ vi.mock("../middleware", () => ({
   protectedProcedure: createProcedureStub(),
 }));
 
-vi.mock("@cmdclaw/core/server/oauth/config", () => ({
+vi.mock("@bap/core/server/oauth/config", () => ({
   getOAuthConfig: getOAuthConfigMock,
 }));
 
@@ -49,7 +49,7 @@ vi.mock("@/server/integrations/unipile", () => ({
   getUnipileAccount: getUnipileAccountMock,
 }));
 
-vi.mock("@cmdclaw/core/server/lib/encryption", () => ({
+vi.mock("@bap/core/server/lib/encryption", () => ({
   encrypt: encryptMock,
   decrypt: decryptMock,
 }));
@@ -465,7 +465,7 @@ describe("integrationRouter", () => {
     });
 
     expect(headers?.get("authorization")).toMatch(/^Basic /);
-    expect(headers?.get("user-agent")).toContain("cmdclaw-app");
+    expect(headers?.get("user-agent")).toContain("bap-app");
     expect(body?.get("client_id")).toBeNull();
     expect(body?.get("client_secret")).toBeNull();
     expect(body?.get("code_verifier")).toBe("pkce-verifier");

@@ -5,7 +5,7 @@ to a deep module, not to a file-per-method split.
 
 ## Generation Turn
 
-A user-visible CmdClaw turn. A turn starts from chat or coworker input, runs a
+A user-visible Bap turn. A turn starts from chat or coworker input, runs a
 runtime, streams product events, and eventually completes, fails, pauses, or is
 cancelled.
 

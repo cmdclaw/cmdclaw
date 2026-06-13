@@ -1,6 +1,6 @@
-import { getOAuthConfig } from "@cmdclaw/core/server/oauth/config";
-import { db } from "@cmdclaw/db/client";
-import { integration } from "@cmdclaw/db/schema";
+import { getOAuthConfig } from "@bap/core/server/oauth/config";
+import { db } from "@bap/db/client";
+import { integration } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";

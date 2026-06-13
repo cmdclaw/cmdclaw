@@ -44,7 +44,7 @@ export const Route = createFileRoute("/_auth/sign-in/$token")({
   validateSearch: validateSignInTokenSearch,
   loader: ({ params }) => loadMagicLinkState({ data: params.token }),
   head: () => ({
-    meta: [{ title: "Sign in - CmdClaw" }],
+    meta: [{ title: "Sign in - Bap" }],
   }),
   component: SignInTokenPage,
 });
@@ -62,7 +62,7 @@ function SignInCard({
     <div className="bg-card mx-auto flex w-full max-w-lg flex-col gap-6 rounded-2xl border p-6 shadow-sm">
       <div className="space-y-1 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          <T>CmdClaw</T>
+          <T>Bap</T>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>

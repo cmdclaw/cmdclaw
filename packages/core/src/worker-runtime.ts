@@ -1,4 +1,4 @@
-import { closePool } from "@cmdclaw/db/client";
+import { closePool } from "@bap/db/client";
 import {
   buildQueueJobId,
   CONVERSATION_LOADING_CLEANUP_JOB_NAME,

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { env } from "../../env";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   workspaceMcpServer,
   workspaceMcpAuthorization,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getValidTokensForUser } from "../integrations/token-refresh";
 import { canUserUseGalienInWorkspace, getGalienAccessStatus } from "../galien/service";

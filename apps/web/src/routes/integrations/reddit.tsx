@@ -3,7 +3,7 @@ import { useGT } from "gt-react";
 import { AdminComingSoonPage } from "@/components/integrations/admin-coming-soon-page";
 
 export const Route = createFileRoute("/integrations/reddit")({
-  head: () => ({ meta: [{ title: "Reddit - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Reddit - Bap" }] }),
   component: RedditIntegrationPage,
 });
 

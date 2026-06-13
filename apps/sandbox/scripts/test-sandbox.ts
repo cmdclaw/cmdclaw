@@ -14,8 +14,8 @@
  * Attach mode reconnects to an existing E2B sandbox without creating a new one.
  */
 
-import { closePool, db } from "@cmdclaw/db/client";
-import * as schema from "@cmdclaw/db/schema";
+import { closePool, db } from "@bap/db/client";
+import * as schema from "@bap/db/schema";
 import * as dotenvConfig from "dotenv/config";
 import { and, eq } from "drizzle-orm";
 import { Sandbox } from "e2b";
@@ -26,7 +26,7 @@ void dotenvConfig;
 const TEMPLATE_NAME = process.env.E2B_DAYTONA_SANDBOX_NAME || "bap-agent-dev";
 const SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
 export const DEFAULT_CREATE_USER_EMAIL =
-  process.env.CMDCLAW_DEFAULT_USER_EMAIL?.trim() || "cmdclaw@example.com";
+  process.env.BAP_DEFAULT_USER_EMAIL?.trim() || "bap@example.com";
 export const DEFAULT_CREATE_WORKSPACE_SLUG = "concentrix-c1e27b8c";
 
 type IntegrationType = "google_gmail" | "slack" | "notion" | "github" | "airtable";

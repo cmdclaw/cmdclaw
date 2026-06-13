@@ -80,7 +80,7 @@ describe("CloudLoginClient", () => {
 
     expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument();
     expect(
-      screen.getByText("CmdClaw is invite-only. Use an approved email to sign in."),
+      screen.getByText("Bap is invite-only. Use an approved email to sign in."),
     ).toBeInTheDocument();
   });
 
@@ -104,7 +104,7 @@ describe("CloudLoginClient", () => {
     render(<CloudLoginClient callbackUrl="/chat" />);
 
     fireEvent.change(screen.getByLabelText("Email"), {
-      target: { value: "pilot@cmdclaw.ai" },
+      target: { value: "pilot@heybap.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Password" }));
 
@@ -115,7 +115,7 @@ describe("CloudLoginClient", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          email: "pilot@cmdclaw.ai",
+          email: "pilot@heybap.com",
         }),
       });
     });
@@ -129,7 +129,7 @@ describe("CloudLoginClient", () => {
 
     await waitFor(() => {
       expect(mocks.signInEmail).toHaveBeenCalledWith({
-        email: "pilot@cmdclaw.ai",
+        email: "pilot@heybap.com",
         password: "hunter2hunter2",
         callbackURL: "/chat",
       });
@@ -159,7 +159,7 @@ describe("CloudLoginClient", () => {
     render(<CloudLoginClient callbackUrl="/chat" />);
 
     fireEvent.change(screen.getByLabelText("Email"), {
-      target: { value: "pilot@cmdclaw.ai" },
+      target: { value: "pilot@heybap.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Password" }));
 
@@ -176,7 +176,7 @@ describe("CloudLoginClient", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          email: "pilot@cmdclaw.ai",
+          email: "pilot@heybap.com",
         }),
       });
       expect(mocks.fetchMock).toHaveBeenNthCalledWith(2, "/api/auth/password/start", {
@@ -185,7 +185,7 @@ describe("CloudLoginClient", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          email: "pilot@cmdclaw.ai",
+          email: "pilot@heybap.com",
           callbackUrl: "/chat",
         }),
       });
@@ -199,13 +199,13 @@ describe("CloudLoginClient", () => {
     render(<CloudLoginClient callbackUrl="/chat" />);
 
     fireEvent.change(screen.getByLabelText("Email"), {
-      target: { value: "pilot@cmdclaw.ai" },
+      target: { value: "pilot@heybap.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Magic link" }));
 
     await waitFor(() => {
       expect(mocks.signInMagicLink).toHaveBeenCalledWith({
-        email: "pilot@cmdclaw.ai",
+        email: "pilot@heybap.com",
         callbackURL: "/chat",
         newUserCallbackURL: "/chat",
         errorCallbackURL: "/login?error=magic-link",

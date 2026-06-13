@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import OpenAI from "openai";
 import { env } from "../../env";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   conversationRuntime,
@@ -15,7 +15,7 @@ import {
   sessionTranscript,
   sessionTranscriptChunk,
   type ContentPart,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { getResolvedProviderAuth } from "../control-plane/subscription-providers";
 import { SESSION_BOUNDARY_PREFIX } from "./session-constants";
 import { generateConversationTitle } from "../utils/generate-title";
@@ -68,8 +68,8 @@ const DEFAULT_CHUNK_OVERLAP = 80;
 const DEFAULT_SEARCH_LIMIT = 8;
 const DEFAULT_SCORE_THRESHOLD = 0.35;
 
-const MEMORY_BASE_PATH = "/app/cmdclaw";
-const SESSION_BASE_PATH = "/app/cmdclaw/sessions";
+const MEMORY_BASE_PATH = "/app/bap";
+const SESSION_BASE_PATH = "/app/bap/sessions";
 
 function getMemoryBasePath(): string {
   return MEMORY_BASE_PATH;

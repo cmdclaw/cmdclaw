@@ -1,10 +1,10 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   modulrWorkspaceAccess,
   workspaceMcpServer,
   workspaceMcpAuthorization,
   workspaceMember,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { decrypt, encrypt } from "../utils/encryption";
 

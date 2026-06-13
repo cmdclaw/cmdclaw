@@ -4,7 +4,7 @@ import { attachTraceContext } from "../utils/observability";
 
 export type QueueJobPayload = Record<string, unknown> & { coworkerId?: string };
 
-const rawQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
+const rawQueueName = process.env.BULLMQ_QUEUE_NAME ?? "bap-default";
 export const queueName = rawQueueName.replaceAll(":", "-");
 export const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const redisOptions = {
@@ -47,16 +47,16 @@ let queue: Queue<QueueJobPayload, unknown, string> | null = null;
 
 function patchQueueAdd(targetQueue: Queue<QueueJobPayload, unknown, string>): void {
   const queueWithPatchFlag = targetQueue as Queue<QueueJobPayload, unknown, string> & {
-    __cmdclawTracedAddPatched?: boolean;
+    __bapTracedAddPatched?: boolean;
   };
-  if (queueWithPatchFlag.__cmdclawTracedAddPatched) {
+  if (queueWithPatchFlag.__bapTracedAddPatched) {
     return;
   }
 
   const originalAdd = targetQueue.add.bind(targetQueue);
   targetQueue.add = ((name, data, opts) =>
     originalAdd(name, attachTraceContext(data), opts)) as typeof targetQueue.add;
-  queueWithPatchFlag.__cmdclawTracedAddPatched = true;
+  queueWithPatchFlag.__bapTracedAddPatched = true;
 }
 
 export const getQueue = (): Queue<QueueJobPayload, unknown, string> => {

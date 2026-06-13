@@ -1,8 +1,8 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   failureAlertGroup,
   failureAlertOccurrence,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { env } from "../../env";
 

@@ -34,7 +34,7 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       integration: {
@@ -47,7 +47,7 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/oauth/config", () => ({
+vi.mock("@bap/core/server/oauth/config", () => ({
   getOAuthConfig: getOAuthConfigMock,
 }));
 

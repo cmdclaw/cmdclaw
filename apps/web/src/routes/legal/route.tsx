@@ -18,7 +18,7 @@ function LegalLayout() {
       <header className="border-b">
         <div className="container flex h-14 items-center px-4">
           <Link to="/" className="text-sm font-medium">
-            CmdClaw
+            Bap
           </Link>
         </div>
       </header>
@@ -27,7 +27,7 @@ function LegalLayout() {
       </main>
       <footer className="border-t py-6">
         <div className="text-muted-foreground container flex flex-col items-center gap-4 px-4 text-center text-sm md:flex-row md:justify-between md:text-left">
-          <p>&copy; {new Date().getFullYear()} CmdClaw. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Bap. All rights reserved.</p>
           <nav className="flex gap-4">
             <Link to="/pricing" className="hover:underline">
               Pricing

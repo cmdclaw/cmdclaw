@@ -1,4 +1,4 @@
-import { templateCatalogSchema } from "@cmdclaw/db/template-catalog";
+import { templateCatalogSchema } from "@bap/db/template-catalog";
 import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

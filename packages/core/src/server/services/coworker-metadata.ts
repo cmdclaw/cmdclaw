@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { and, eq, ne } from "drizzle-orm";
-import { coworker } from "@cmdclaw/db/schema";
+import { coworker } from "@bap/db/schema";
 
 const COWORKER_USERNAME_MAX_LENGTH = 64;
 const COWORKER_DESCRIPTION_MAX_LENGTH = 280;

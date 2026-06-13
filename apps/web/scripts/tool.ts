@@ -1,10 +1,10 @@
-import { env } from "@cmdclaw/core/env";
-import { getCliEnvForUser } from "@cmdclaw/core/server/integrations/cli-env";
+import { env } from "@bap/core/env";
+import { getCliEnvForUser } from "@bap/core/server/integrations/cli-env";
 import {
   getRemoteIntegrationCredentials,
   searchRemoteIntegrationUsers,
-} from "@cmdclaw/core/server/integrations/remote-integrations";
-import { SANDBOX_SKILLS_ROOT } from "@cmdclaw/sandbox/paths";
+} from "@bap/core/server/integrations/remote-integrations";
+import { SANDBOX_SKILLS_ROOT } from "@bap/sandbox/paths";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { DEFAULT_SERVER_URL, createRpcClient, loadConfig } from "./lib/cli-shared";
@@ -223,7 +223,7 @@ async function resolveCliEnv(
   const config = loadConfig(serverUrl);
   if (!config?.token) {
     throw new Error(
-      `Missing CLI auth token for ${serverUrl}. Run: bun run cmdclaw -- auth login --server ${serverUrl}`,
+      `Missing CLI auth token for ${serverUrl}. Run: bun run bap -- auth login --server ${serverUrl}`,
     );
   }
 
@@ -250,15 +250,15 @@ async function resolveCliEnv(
       userId: me.id,
       cliEnv: {
         ...credentials.tokens,
-        CMDCLAW_REMOTE_INTEGRATION_SOURCE: JSON.stringify({
+        BAP_REMOTE_INTEGRATION_SOURCE: JSON.stringify({
           ...remoteIntegrationSource,
           requestedByUserId: me.id,
           requestedByEmail: me.email ?? null,
           remoteUserEmail: remoteIntegrationSource.remoteUserEmail ?? credentials.remoteUserEmail,
         }),
-        CMDCLAW_RUNTIME_CREDENTIALS_URL: `${serverUrl.replace(/\/$/, "")}/api/internal/mcp/runtime-credentials`,
+        BAP_RUNTIME_CREDENTIALS_URL: `${serverUrl.replace(/\/$/, "")}/api/internal/mcp/runtime-credentials`,
         APP_SERVER_SECRET: env.APP_SERVER_SECRET || "",
-        CMDCLAW_USER_ID: me.id,
+        BAP_USER_ID: me.id,
       },
     };
   }

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { verifyModulrDocumentDownloadToken } from "@cmdclaw/core/server/modulr/download-token";
+import { verifyModulrDocumentDownloadToken } from "@bap/core/server/modulr/download-token";
 
 const mocks = vi.hoisted(() => ({
   env: {
-    APP_URL: "https://cmdclaw.ai",
+    APP_URL: "https://heybap.com",
     VITE_APP_URL: undefined,
     E2B_CALLBACK_BASE_URL: undefined,
     APP_MCP_BASE_URL: "https://cmdclaw-mcp-prod.onrender.com",
@@ -16,11 +16,11 @@ const mocks = vi.hoisted(() => ({
   createManagedModulrClientMock: vi.fn(),
 }));
 
-vi.mock("@cmdclaw/core/env", () => ({
+vi.mock("@bap/core/env", () => ({
   env: mocks.env,
 }));
 
-vi.mock("@cmdclaw/core/server/storage/s3-client", () => ({
+vi.mock("@bap/core/server/storage/s3-client", () => ({
   ensureBucket: mocks.ensureBucketMock,
   uploadToS3: mocks.uploadToS3Mock,
 }));
@@ -61,9 +61,9 @@ describe("modulr.download_document", () => {
     const structured = result.structuredContent;
 
     expect(structured.downloadUrl).toMatch(
-      /^https:\/\/cmdclaw\.ai\/api\/modulr\/documents\/download\?token=/,
+      /^https:\/\/heybap\.com\/api\/modulr\/documents\/download\?token=/,
     );
-    expect(structured.downloadUrl).not.toContain("cmdclaw-mcp-prod");
+    expect(structured.downloadUrl).not.toContain("bap-mcp-prod");
     expect(structured).not.toHaveProperty("storageKey");
 
     const token = new URL(structured.downloadUrl).searchParams.get("token");

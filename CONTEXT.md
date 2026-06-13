@@ -1,6 +1,6 @@
-# CmdClaw
+# Bap
 
-CmdClaw is a platform for building and running agents across connected company tools. This language guide keeps product terms precise across CLI, web, runtime, and integration code.
+Bap is a platform for building and running agents across connected company tools. This language guide keeps product terms precise across CLI, web, runtime, and integration code.
 
 ## Language
 
@@ -9,7 +9,7 @@ One credential-bearing connection for one **Integration Type** under a **Connect
 _Avoid_: account, provider account, integration account
 
 **Connected Identity**:
-The internal grouping for related **Connected Accounts** that should share one user-facing **Account Label**. Each **Connected Account** belongs to one **Connected Identity** and one **Integration Type**; a **Connected Identity** has at most one **Connected Account** for a given **Integration Type**. CmdClaw can group accounts into a **Connected Identity** automatically when they share a reliable email identity, including across providers; users can correct edge cases by moving a **Connected Account** between labels. Removing or moving one **Connected Account** does not remove the **Connected Identity** while other **Connected Accounts** still belong to it.
+The internal grouping for related **Connected Accounts** that should share one user-facing **Account Label**. Each **Connected Account** belongs to one **Connected Identity** and one **Integration Type**; a **Connected Identity** has at most one **Connected Account** for a given **Integration Type**. Bap can group accounts into a **Connected Identity** automatically when they share a reliable email identity, including across providers; users can correct edge cases by moving a **Connected Account** between labels. Removing or moving one **Connected Account** does not remove the **Connected Identity** while other **Connected Accounts** still belong to it.
 _Avoid_: provider, account, label
 
 **Provider Identity**:
@@ -17,11 +17,11 @@ The stable identity reported by the external provider for a **Connected Identity
 _Avoid_: provider account
 
 **Email Identity**:
-A reliable email address reported by a provider and used as the default grouping signal for **Connected Identities**. When multiple providers report the same reliable **Email Identity**, CmdClaw treats them as the same common-case **Connected Identity** unless the user later separates them.
+A reliable email address reported by a provider and used as the default grouping signal for **Connected Identities**. When multiple providers report the same reliable **Email Identity**, Bap treats them as the same common-case **Connected Identity** unless the user later separates them.
 _Avoid_: display email
 
 **Integration Type**:
-A supported tool category that CmdClaw can connect to, such as Gmail, Slack, GitHub, or Salesforce. An **Integration Type** can have many **Connected Accounts** for a single **User**.
+A supported tool category that Bap can connect to, such as Gmail, Slack, GitHub, or Salesforce. An **Integration Type** can have many **Connected Accounts** for a single **User**.
 _Avoid_: tool, provider, app
 
 **Account Label**:
@@ -37,7 +37,7 @@ One command execution against an **Integration Type** during a conversation. A *
 _Avoid_: run, call
 
 **Workspace MCP Server**:
-A workspace-owned MCP server made available to agent runtimes for **Tool Invocations**. CmdClaw treats MCP as the integration runtime boundary; managed integrations and custom MCP endpoints are both represented as **Workspace MCP Servers**.
+A workspace-owned MCP server made available to agent runtimes for **Tool Invocations**. Bap treats MCP as the integration runtime boundary; managed integrations and custom MCP endpoints are both represented as **Workspace MCP Servers**.
 _Avoid_: Executor source, OpenAPI source, tool catalog source
 
 **Toolbox**:
@@ -45,7 +45,7 @@ The user-facing set of tools or integrations selected for a chat or coworker **G
 _Avoid_: Executor sources, source picker
 
 **Workspace MCP Authorization**:
-The CmdClaw-owned credential or grant that allows a **Workspace MCP Server** to be used for a specific **User** or workspace policy. CmdClaw remains the authority for this authorization even when OpenCode performs the runtime MCP connection.
+The Bap-owned credential or grant that allows a **Workspace MCP Server** to be used for a specific **User** or workspace policy. Bap remains the authority for this authorization even when OpenCode performs the runtime MCP connection.
 _Avoid_: OpenCode auth, Executor auth, local token store
 
 **Workspace MCP Server Allowlist**:
@@ -57,7 +57,7 @@ A Bap-owned MCP server that is present in every **Generation** unconditionally. 
 _Avoid_: built-in integration, default tool, hidden server
 
 **Bap MCP Server**:
-The **Platform MCP Server** that exposes Bap's own capabilities — running chats, listing, creating, and running **Coworkers**, uploading documents, and adding skills — so a **Generation** can operate Bap itself. Calls through the **Bap MCP Server** act as the **Generation**'s acting user (the chat **User**, or the **Coworker**'s owner) and are recorded as runtime-originated, not user-originated. Its public hosted endpoint is `https://mcp.heybap.com/bap`; the old `/cmdclaw` hosted path is not part of the public contract.
+The **Platform MCP Server** that exposes Bap's own capabilities — running chats, listing, creating, and running **Coworkers**, uploading documents, and adding skills — so a **Generation** can operate Bap itself. Calls through the **Bap MCP Server** act as the **Generation**'s acting user (the chat **User**, or the **Coworker**'s owner) and are recorded as runtime-originated, not user-originated. Its public hosted endpoint is `https://mcp.heybap.com/bap`; the old `/bap` hosted path is not part of the public contract.
 _Avoid_: self MCP, management API, internal tools
 
 **Runtime-Originated Run**:
@@ -69,7 +69,7 @@ The number of **Runtime-Originated Run** hops between a **User**- or trigger-ini
 _Avoid_: recursion level, nesting limit, loop guard
 
 **Canonical Service Event**:
-One authoritative, context-rich observability record emitted by a CmdClaw service-owned operation. HTTP requests, worker jobs, and generation lifecycle work each produce their own **Canonical Service Event**; browser-originated telemetry is a **Client Observation**, not an authoritative service event. **Canonical Service Events** use a required common envelope, operation-specific fields, and are correlated by trace id with **Generation** and conversation identifiers as domain pivots when available.
+One authoritative, context-rich observability record emitted by a Bap service-owned operation. HTTP requests, worker jobs, and generation lifecycle work each produce their own **Canonical Service Event**; browser-originated telemetry is a **Client Observation**, not an authoritative service event. **Canonical Service Events** use a required common envelope, operation-specific fields, and are correlated by trace id with **Generation** and conversation identifiers as domain pivots when available.
 _Avoid_: wide event, canonical log line, request log
 
 **Telemetry Version**:
@@ -105,7 +105,7 @@ A user-configured agent that can start a **Generation** from a manual, scheduled
 _Avoid_: bot, automation, worker
 
 **Coworker Avatar**:
-The visual identity shown for a **Coworker** in CmdClaw surfaces.
+The visual identity shown for a **Coworker** in Bap surfaces.
 _Avoid_: agent avatar, profile picture, icon
 
 **Start Message**:
@@ -113,7 +113,7 @@ A free-text message a **User** provides before a **Coworker** starts a **Generat
 _Avoid_: launch payload, run prompt, parameter form, initial message
 
 **Pending Start**:
-A waiting state for a **Coworker** trigger where CmdClaw has created the user-facing conversation and asked for a **Start Message**, but no **Generation** has started yet.
+A waiting state for a **Coworker** trigger where Bap has created the user-facing conversation and asked for a **Start Message**, but no **Generation** has started yet.
 _Avoid_: paused generation, pending run, pre-run
 
 **Needs User Input**:
@@ -169,16 +169,16 @@ A stopped provider sandbox retained temporarily after a platform-suspect **Gener
 _Avoid_: preserved sandbox, sandbox dump, kept sandbox
 
 **Local Runtime**:
-A user-owned runtime used for local development where a **Generation** connects to the developer's own shared OpenCode server instead of a CmdClaw-owned sandbox. A **Local Runtime** is single-tenant by assumption, uses one OpenCode session per CmdClaw conversation, and is not a production execution environment.
+A user-owned runtime used for local development where a **Generation** connects to the developer's own shared OpenCode server instead of a Bap-owned sandbox. A **Local Runtime** is single-tenant by assumption, uses one OpenCode session per Bap conversation, and is not a production execution environment.
 _Avoid_: local sandbox, local Daytona, local run
 
 **User**:
-A person authenticated into CmdClaw. A **User** owns the set of **Connected Accounts** available to their CLI and agent runs.
+A person authenticated into Bap. A **User** owns the set of **Connected Accounts** available to their CLI and agent runs.
 _Avoid_: account
 
 **Modulr Customer**:
-A customer record in Modulr that belongs to one of CmdClaw's customers and can be looked up to gather business context for an agent conversation.
-_Avoid_: client, account, CmdClaw customer
+A customer record in Modulr that belongs to one of Bap's customers and can be looked up to gather business context for an agent conversation.
+_Avoid_: client, account, Bap customer
 
 **Modulr Customer Email Match**:
 The lookup that resolves an inbound sender email to a **Modulr Customer**, first through the customer's own email addresses and then through contact email addresses associated with the customer.
@@ -197,11 +197,11 @@ The MCP resource that exposes the bytes of a selected **Modulr Customer Document
 _Avoid_: download response, inline file
 
 **Modulr Download Artifact**:
-A short-lived CmdClaw-owned file artifact created from a selected **Modulr Customer Document** so the **User** can retrieve it through CmdClaw without the runtime sandbox needing direct object-storage access.
+A short-lived Bap-owned file artifact created from a selected **Modulr Customer Document** so the **User** can retrieve it through Bap without the runtime sandbox needing direct object-storage access.
 _Avoid_: sandbox S3 file, externally hosted download, direct bucket link
 
 **Modulr Workspace Connection**:
-A workspace-owned Modulr integration connection for one broker/company database. CmdClaw derives short-lived Modulr bearer tokens from this connection when invoking Modulr MCP tools.
+A workspace-owned Modulr integration connection for one broker/company database. Bap derives short-lived Modulr bearer tokens from this connection when invoking Modulr MCP tools.
 _Avoid_: Modulr user account, bearer credential
 
 **Galien Target Environment**:
@@ -215,7 +215,7 @@ _Avoid_: shared Galien login, global Galien credential
 ## Flagged Ambiguities
 
 **account**:
-Use **Connected Account** for an external provider identity. Use **User** for the authenticated CmdClaw person; the database also has a Better Auth `account` table, so plain "account" is ambiguous.
+Use **Connected Account** for an external provider identity. Use **User** for the authenticated Bap person; the database also has a Better Auth `account` table, so plain "account" is ambiguous.
 
 **source**:
 Use **Workspace MCP Server** for an MCP endpoint exposed to agent runtimes. Do not use "source" as a product term for integration runtime configuration.
@@ -234,4 +234,4 @@ Domain expert: "Yes. The user has two Connected Identities, `personal` and `work
 
 Developer: "What happens if the user reconnects work@gmail.com?"
 
-Domain expert: "Because it is the same Provider Identity, CmdClaw refreshes the work Gmail Connected Account instead of creating a duplicate."
+Domain expert: "Because it is the same Provider Identity, Bap refreshes the work Gmail Connected Account instead of creating a duplicate."

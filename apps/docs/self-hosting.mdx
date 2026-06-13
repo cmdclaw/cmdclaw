@@ -1,6 +1,6 @@
 ---
 title: "Self-Hosting"
-description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redis."
+description: "Deploy your own Bap instance with Docker, PostgreSQL, and Redis."
 ---
 
 ## Prerequisites
@@ -14,8 +14,8 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
 <Steps>
   <Step title="Clone the repository">
     ```bash
-    git clone https://github.com/baptistecolle/cmdclaw.git
-    cd cmdclaw
+    git clone https://github.com/baptistecolle/bap.git
+    cd bap
     ```
   </Step>
   <Step title="Install dependencies">
@@ -41,8 +41,8 @@ description: "Deploy your own CmdClaw instance with Docker, PostgreSQL, and Redi
     - `REDIS_URL` -- Redis connection string
     - `ANTHROPIC_API_KEY` -- For Claude
     - `BETTER_AUTH_SECRET` -- Authentication secret
-    - `CMDCLAW_CLOUD_API_BASE_URL` -- CmdClaw Cloud base URL for delegated login
-    - `CMDCLAW_CLOUD_INSTANCE_API_KEY` -- Shared control-plane instance key
+    - `BAP_CLOUD_API_BASE_URL` -- Bap Cloud base URL for delegated login
+    - `BAP_CLOUD_INSTANCE_API_KEY` -- Shared control-plane instance key
   </Step>
   <Step title="Set up the database">
     Push the schema to your database:
@@ -81,17 +81,17 @@ Fill in at least:
 - `APP_URL`
 - `BETTER_AUTH_SECRET`
 - `ENCRYPTION_KEY`
-- `CMDCLAW_SERVER_SECRET`
-- `CMDCLAW_CLOUD_API_BASE_URL`
-- `CMDCLAW_CLOUD_INSTANCE_API_KEY`
+- `BAP_SERVER_SECRET`
+- `BAP_CLOUD_API_BASE_URL`
+- `BAP_CLOUD_INSTANCE_API_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
 Optionally pin the image tags in `/.env.selfhost`:
 
 ```env
-CMDCLAW_APP_IMAGE=ghcr.io/baptistecolle/cmdclaw-web:main
-CMDCLAW_WORKER_IMAGE=ghcr.io/baptistecolle/cmdclaw-worker:main
+BAP_APP_IMAGE=ghcr.io/baptistecolle/bap-web:main
+BAP_WORKER_IMAGE=ghcr.io/baptistecolle/bap-worker:main
 ```
 
 Then pull, migrate, and start:
@@ -104,8 +104,8 @@ docker compose -f docker/compose/selfhost.yml --env-file .env.selfhost up -d
 
 Then open `http://localhost:8114`.
 
-Self-hosted end-user login is delegated to CmdClaw Cloud. Configure the same
-`CMDCLAW_CLOUD_INSTANCE_API_KEY` on the cloud deployment and on each self-hosted deployment
+Self-hosted end-user login is delegated to Bap Cloud. Configure the same
+`BAP_CLOUD_INSTANCE_API_KEY` on the cloud deployment and on each self-hosted deployment
 that should trust it.
 
 - Set `E2B_API_KEY` and `E2B_DAYTONA_SANDBOX_NAME` to use E2B cloud sandboxes.
@@ -117,7 +117,7 @@ that should trust it.
 
 ## Background worker
 
-CmdClaw uses BullMQ for generation execution and background jobs. Chat and coworker runs are
+Bap uses BullMQ for generation execution and background jobs. Chat and coworker runs are
 executed by the worker, so start it in a separate terminal:
 
 ```bash

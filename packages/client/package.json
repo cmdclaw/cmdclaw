@@ -1,5 +1,5 @@
 {
-  "name": "@cmdclaw/client",
+  "name": "@bap/client",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -21,7 +21,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@cmdclaw/core": "workspace:*",
+    "@bap/core": "workspace:*",
     "@orpc/client": "^1.13.2"
   },
   "devDependencies": {

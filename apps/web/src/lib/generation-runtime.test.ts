@@ -88,7 +88,7 @@ describe("GenerationRuntime tool result matching", () => {
         questions: [{ header: "Next Task", question: "What would you like to work on right now?" }],
       },
       toolUseId: "question-tool-1",
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
     });
     runtime.handleApproval({
@@ -97,7 +97,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Next Task", question: "What would you like to work on right now?" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       status: "approved",
       questionAnswers: [["Review code changes"]],
@@ -127,7 +127,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Output format", question: "What should the output look like?" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
     });
 
@@ -138,7 +138,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Output format", question: "What should the output look like?" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       status: "approved",
       questionAnswers: [["Plain Hi"]],
@@ -167,7 +167,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "First", question: "Pick one" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
     });
     runtime.handlePendingApproval({
@@ -179,7 +179,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Updated", question: "Pick one" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
     });
 
@@ -208,7 +208,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Choose", question: "Pick one" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
     });
     runtime.handleApproval({
@@ -218,7 +218,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Choose", question: "Pick one" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       status: "approved",
       questionAnswers: [["Yes"]],
@@ -232,7 +232,7 @@ describe("GenerationRuntime tool result matching", () => {
       toolInput: {
         questions: [{ header: "Choose", question: "Pick one" }],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
     });
 

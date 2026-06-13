@@ -25,7 +25,7 @@ vi.mock("resend", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/queues", () => ({
+vi.mock("@bap/core/server/queues", () => ({
   EMAIL_FORWARDED_COWORKER_JOB_NAME: "email-forwarded-coworker",
   buildQueueJobId: buildQueueJobIdMock,
   getQueue: getQueueMock,
@@ -36,7 +36,7 @@ import { handleResendWebhook } from "./resend-webhook";
 const RAW_BODY = '{"type":"email.received","data":{"email_id":"email-123"}}';
 
 function makeRequest(body: string, headers: Record<string, string>) {
-  return new Request("https://cmdclaw.ai/api/integrations/resend/webhook", {
+  return new Request("https://heybap.com/api/integrations/resend/webhook", {
     method: "POST",
     headers,
     body,

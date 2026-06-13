@@ -66,7 +66,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(rate(cmdclaw_rpc_requests_total[5m]))",
+          "expr": "sum(rate(bap_rpc_requests_total[5m]))",
           "legendFormat": "all rpc",
           "refId": "A"
         },
@@ -75,7 +75,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(rate(cmdclaw_rpc_requests_total{status_code=~\"5..\"}[5m]))",
+          "expr": "sum(rate(bap_rpc_requests_total{status_code=~\"5..\"}[5m]))",
           "legendFormat": "rpc 5xx",
           "refId": "B"
         }
@@ -128,7 +128,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(rate(cmdclaw_worker_jobs_total{status=\"ok\"}[5m]))",
+          "expr": "sum(rate(bap_worker_jobs_total{status=\"ok\"}[5m]))",
           "legendFormat": "jobs ok",
           "refId": "A"
         },
@@ -137,7 +137,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(rate(cmdclaw_worker_jobs_total{status=\"error\"}[5m]))",
+          "expr": "sum(rate(bap_worker_jobs_total{status=\"error\"}[5m]))",
           "legendFormat": "jobs error",
           "refId": "B"
         }
@@ -190,7 +190,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(cmdclaw_runtime_up{service_name=\"cmdclaw-web\"})",
+          "expr": "max(bap_runtime_up{service_name=\"bap-web\"})",
           "legendFormat": "web",
           "refId": "A"
         },
@@ -199,7 +199,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(cmdclaw_runtime_up{service_name=\"cmdclaw-worker\"})",
+          "expr": "max(bap_runtime_up{service_name=\"bap-worker\"})",
           "legendFormat": "worker",
           "refId": "B"
         }
@@ -252,7 +252,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(cmdclaw_bullmq_jobs{state=\"waiting\"})",
+          "expr": "max(bap_bullmq_jobs{state=\"waiting\"})",
           "legendFormat": "waiting",
           "refId": "A"
         },
@@ -261,7 +261,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(cmdclaw_bullmq_jobs{state=\"active\"})",
+          "expr": "max(bap_bullmq_jobs{state=\"active\"})",
           "legendFormat": "active",
           "refId": "B"
         },
@@ -270,7 +270,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(cmdclaw_bullmq_jobs{state=\"delayed\"})",
+          "expr": "max(bap_bullmq_jobs{state=\"delayed\"})",
           "legendFormat": "delayed",
           "refId": "C"
         }
@@ -324,7 +324,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(cmdclaw_bullmq_oldest_waiting_job_age_seconds)",
+          "expr": "max(bap_bullmq_oldest_waiting_job_age_seconds)",
           "legendFormat": "oldest waiting job",
           "refId": "A"
         }
@@ -407,7 +407,7 @@
   "refresh": "30s",
   "schemaVersion": 41,
   "tags": [
-    "cmdclaw",
+    "bap",
     "observability",
     "local"
   ],
@@ -419,7 +419,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "CmdClaw Local Observability",
-  "uid": "cmdclaw-local-observability",
+  "title": "Bap Local Observability",
+  "uid": "bap-local-observability",
   "version": 1
 }

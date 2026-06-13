@@ -3,15 +3,15 @@ import {
   buildOwnedSkillWhere,
   copySkillToWorkspaceOwner,
   resolveUniqueSkillNameInWorkspace,
-} from "@cmdclaw/core/server/services/workspace-skill-service";
+} from "@bap/core/server/services/workspace-skill-service";
 import {
   deleteFromS3,
   ensureBucket,
   generateStorageKey,
   getPresignedDownloadUrl,
   uploadToS3,
-} from "@cmdclaw/core/server/storage/s3-client";
-import { skill, skillDocument, skillFile } from "@cmdclaw/db/schema";
+} from "@bap/core/server/storage/s3-client";
+import { skill, skillDocument, skillFile } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { and, count, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -97,7 +97,7 @@ function formatSkillSummary(
 async function requireOwnedSkillInActiveWorkspace(
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   },
   skillId: string,
 ) {
@@ -119,7 +119,7 @@ async function requireOwnedSkillInActiveWorkspace(
 async function requireReadableSkillInActiveWorkspace(
   context: {
     user: { id: string };
-    db: typeof import("@cmdclaw/db/client").db;
+    db: typeof import("@bap/db/client").db;
   },
   skillId: string,
 ) {

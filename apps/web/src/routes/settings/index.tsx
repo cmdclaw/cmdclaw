@@ -17,7 +17,7 @@ import { authClient } from "@/lib/auth-client";
 import { useCurrentUser, useSetUserTimezone } from "@/orpc/hooks/user";
 
 export const Route = createFileRoute("/settings/")({
-  head: () => ({ meta: [{ title: "General Settings - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "General Settings - Bap" }] }),
   component: SettingsPage,
 });
 

@@ -2,22 +2,22 @@ import {
   DEFAULT_SERVER_URL,
   createRpcClient,
   defaultProfileStore,
-  type CmdclawApiClient,
-  type CmdclawProfile,
-} from "@cmdclaw/client";
+  type BapApiClient,
+  type BapProfile,
+} from "@bap/client";
 
 export function resolveServerUrl(serverUrl?: string): string {
   return serverUrl || process.env.APP_SERVER_URL || DEFAULT_SERVER_URL;
 }
 
-function loadStoredProfile(serverUrl?: string): CmdclawProfile | null {
+function loadStoredProfile(serverUrl?: string): BapProfile | null {
   return defaultProfileStore.load(resolveServerUrl(serverUrl));
 }
 
 function createAuthenticatedClient(params?: {
   serverUrl?: string;
   token?: string;
-}): { serverUrl: string; profile: CmdclawProfile; client: CmdclawApiClient } {
+}): { serverUrl: string; profile: BapProfile; client: BapApiClient } {
   const serverUrl = resolveServerUrl(params?.serverUrl);
   const profile =
     params?.token !== undefined
@@ -26,7 +26,7 @@ function createAuthenticatedClient(params?: {
 
   if (!profile?.token) {
     throw new Error(
-      `Not authenticated for ${serverUrl}. Run 'bun run cmdclaw -- auth login --server ${serverUrl}' first.`,
+      `Not authenticated for ${serverUrl}. Run 'bun run bap -- auth login --server ${serverUrl}' first.`,
     );
   }
 

@@ -1,6 +1,6 @@
-import { getOAuthConfig, type IntegrationType } from "@cmdclaw/core/server/oauth/config";
-import { db } from "@cmdclaw/db/client";
-import { integration } from "@cmdclaw/db/schema";
+import { getOAuthConfig, type IntegrationType } from "@bap/core/server/oauth/config";
+import { db } from "@bap/db/client";
+import { integration } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { buildRequestAwareUrl, getRequestAwareOrigin } from "@/lib/request-aware-url";
 import { assertCloudControlPlaneEnabled, requireCloudSession } from "@/server/control-plane/auth";

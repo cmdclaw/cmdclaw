@@ -1,10 +1,7 @@
-import {
-  exchangeCloudAuth,
-  isControlPlaneEnabled,
-} from "@cmdclaw/core/server/control-plane/client";
-import { consumeControlPlaneAuthState } from "@cmdclaw/core/server/control-plane/local-auth";
-import { db } from "@cmdclaw/db/client";
-import { controlPlaneAuthRequest, user } from "@cmdclaw/db/schema";
+import { exchangeCloudAuth, isControlPlaneEnabled } from "@bap/core/server/control-plane/client";
+import { consumeControlPlaneAuthState } from "@bap/core/server/control-plane/local-auth";
+import { db } from "@bap/db/client";
+import { controlPlaneAuthRequest, user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { INVITE_ONLY_LOGIN_ERROR } from "@/lib/admin-emails";
 import { buildRequestAwareUrl } from "@/lib/request-aware-url";

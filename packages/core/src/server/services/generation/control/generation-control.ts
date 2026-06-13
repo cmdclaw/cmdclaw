@@ -1,4 +1,4 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   coworker,
   coworkerRun,
@@ -6,7 +6,7 @@ import {
   type ContentPart,
   type GenerationExecutionPolicy,
   type PendingApproval,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import type { IntegrationType } from "../../../oauth/config";
 import { normalizeCoworkerAllowedSkillSlugs } from "../../../../lib/coworker-tool-policy";
@@ -221,7 +221,7 @@ export class GenerationControl {
       toolInput: interrupt.display.toolInput ?? {},
       requestedAt: interrupt.requestedAt.toISOString(),
       expiresAt: interrupt.expiresAt?.toISOString(),
-      integration: interrupt.display.integration ?? "cmdclaw",
+      integration: interrupt.display.integration ?? "bap",
       operation: interrupt.display.operation ?? "unknown",
       command: interrupt.display.command,
     };

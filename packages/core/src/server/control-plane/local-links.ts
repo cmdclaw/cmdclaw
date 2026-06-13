@@ -1,6 +1,6 @@
 import { and, eq, lt } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { cloudAccountLink, cloudAccountLinkState } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { cloudAccountLink, cloudAccountLinkState } from "@bap/db/schema";
 
 const LINK_STATE_TTL_MS = 10 * 60 * 1000;
 

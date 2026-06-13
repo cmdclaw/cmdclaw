@@ -1,4 +1,4 @@
-import { createRpcClient, defaultProfileStore } from "@cmdclaw/client";
+import { createRpcClient, defaultProfileStore } from "@bap/client";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ export const transientRetryCount = Number(process.env.E2E_TRANSIENT_RETRY_COUNT 
 export const transientRetryDelayMs = Number(process.env.E2E_TRANSIENT_RETRY_DELAY_MS ?? "2000");
 export const productionLiveTarget = (() => {
   try {
-    return new URL(defaultServerUrl).hostname === "cmdclaw.ai";
+    return new URL(defaultServerUrl).hostname === "heybap.com";
   } catch {
     return false;
   }
@@ -45,9 +45,9 @@ export const optionalProdFixtureTestsEnabled =
 export const expectedUserEmail =
   process.env.E2E_TEST_EMAIL?.trim() ||
   process.env.APP_DEFAULT_USER_EMAIL?.trim() ||
-  "cmdclaw@example.com";
+  "bap@example.com";
 export const expectedGmailAccountLabel = process.env.E2E_GMAIL_ACCOUNT_LABEL ?? "baptiste";
-export const sourceChannelName = "experiment-cmdclaw-testing";
+export const sourceChannelName = "experiment-bap-testing";
 export const targetChannelName = process.env.E2E_SLACK_TARGET_CHANNEL ?? "ops-e2e-slack-testing";
 export const echoPrefix = "test message: the previous message is:";
 
@@ -91,7 +91,7 @@ afterEach(async () => {
 });
 
 export function buildCliCommandArgs(...args: string[]): string[] {
-  return ["run", "--cwd", repoRoot, "cmdclaw", "--", ...args];
+  return ["run", "--cwd", repoRoot, "bap", "--", ...args];
 }
 
 export function trackCliOutput(text: string): void {
@@ -261,7 +261,7 @@ export function assertExitOk(result: CommandResult, label: string): void {
 
 export async function ensureCliAuth(): Promise<void> {
   const authResult = await runBunCommand(buildCliCommandArgs("auth", "login"), 120_000);
-  assertExitOk(authResult, "bun run --cwd ../.. cmdclaw -- auth login");
+  assertExitOk(authResult, "bun run --cwd ../.. bap -- auth login");
 }
 
 export async function withIntegrationTokensTemporarilyRemoved<T>(args: {
@@ -298,7 +298,7 @@ export function getCliClient() {
   const config = defaultProfileStore.load(serverUrl);
   if (!config?.token) {
     throw new Error(
-      `Missing CLI auth token for ${serverUrl}. Run: bun run --cwd ../.. cmdclaw -- auth login --server ${serverUrl}`,
+      `Missing CLI auth token for ${serverUrl}. Run: bun run --cwd ../.. bap -- auth login --server ${serverUrl}`,
     );
   }
   return createRpcClient(serverUrl, config.token);

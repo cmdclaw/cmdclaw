@@ -1,7 +1,4 @@
-import type {
-  TemplateCatalogTemplate,
-  TemplateIntegrationType,
-} from "@cmdclaw/db/template-catalog";
+import type { TemplateCatalogTemplate, TemplateIntegrationType } from "@bap/db/template-catalog";
 import { T } from "gt-react";
 import { ArrowRight, Check, Link2, Play, Share2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";

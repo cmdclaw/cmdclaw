@@ -4,8 +4,8 @@ import { signManagedMcpToken } from "../managed-mcp-auth";
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import type { RuntimeMcpServer } from "./core/types";
 
-export const CMDCLAW_PLATFORM_MCP_SERVER_NAME = "bap";
-export const CMDCLAW_PLATFORM_MCP_INTERNAL_KEY = "bap";
+export const BAP_PLATFORM_MCP_SERVER_NAME = "bap";
+export const BAP_PLATFORM_MCP_INTERNAL_KEY = "bap";
 
 // The platform token is minted once at generation start and embedded as a static
 // Authorization header for the whole turn (it is re-minted each generation when the
@@ -19,7 +19,7 @@ export const PLATFORM_MCP_TOKEN_TTL_SECONDS =
 // Platform MCP Server (see CONTEXT.md / ADR-0013): hard-wired into every
 // generation, never represented as a workspaceMcpServer row and never part of
 // the Workspace MCP Server Allowlist.
-export function buildCmdclawPlatformMcpServer(input: {
+export function buildBapPlatformMcpServer(input: {
   userId: string;
   workspaceId: string;
   spawnDepth: number;
@@ -32,7 +32,7 @@ export function buildCmdclawPlatformMcpServer(input: {
     {
       userId: input.userId,
       workspaceId: input.workspaceId,
-      internalKey: CMDCLAW_PLATFORM_MCP_INTERNAL_KEY,
+      internalKey: BAP_PLATFORM_MCP_INTERNAL_KEY,
       spawnDepth: input.spawnDepth,
       exp: nowSeconds + PLATFORM_MCP_TOKEN_TTL_SECONDS,
     },
@@ -41,7 +41,7 @@ export function buildCmdclawPlatformMcpServer(input: {
 
   return {
     type: "http",
-    name: CMDCLAW_PLATFORM_MCP_SERVER_NAME,
+    name: BAP_PLATFORM_MCP_SERVER_NAME,
     url: new URL("/bap", input.baseUrl).toString(),
     headers: [{ name: "Authorization", value: `Bearer ${token}` }],
   };
@@ -51,7 +51,7 @@ export type PlatformMcpServerResolution =
   | { server: RuntimeMcpServer }
   | { server: null; warning: { serverName: string; message: string } };
 
-export async function resolveCmdclawPlatformMcpServer(input: {
+export async function resolveBapPlatformMcpServer(input: {
   userId: string;
   workspaceId?: string | null;
   spawnDepth: number;
@@ -62,7 +62,7 @@ export async function resolveCmdclawPlatformMcpServer(input: {
     return {
       server: null,
       warning: {
-        serverName: CMDCLAW_PLATFORM_MCP_SERVER_NAME,
+        serverName: BAP_PLATFORM_MCP_SERVER_NAME,
         message:
           "Bap tools are unavailable: platform MCP server is not configured (APP_MCP_BASE_URL / APP_SERVER_SECRET).",
       },
@@ -72,7 +72,7 @@ export async function resolveCmdclawPlatformMcpServer(input: {
   try {
     const workspaceId = input.workspaceId ?? (await requireActiveWorkspaceForUser(input.userId)).id;
     return {
-      server: buildCmdclawPlatformMcpServer({
+      server: buildBapPlatformMcpServer({
         userId: input.userId,
         workspaceId,
         spawnDepth: input.spawnDepth,
@@ -84,7 +84,7 @@ export async function resolveCmdclawPlatformMcpServer(input: {
     return {
       server: null,
       warning: {
-        serverName: CMDCLAW_PLATFORM_MCP_SERVER_NAME,
+        serverName: BAP_PLATFORM_MCP_SERVER_NAME,
         message: `Bap tools are unavailable: ${
           error instanceof Error ? error.message : "failed to resolve workspace"
         }`,

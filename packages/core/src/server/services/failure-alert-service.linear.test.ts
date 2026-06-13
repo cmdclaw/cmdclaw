@@ -1,4 +1,4 @@
-import { failureAlertGroup, failureAlertOccurrence } from "@cmdclaw/db/schema";
+import { failureAlertGroup, failureAlertOccurrence } from "@bap/db/schema";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { syncFailureAlertGroupToLinear as syncFailureAlertGroupToLinearType } from "./failure-alert-linear-sync-service";
 
@@ -9,7 +9,7 @@ const { dbMock } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
@@ -116,7 +116,7 @@ function createLinearFetchRecorder() {
             issue: {
               id: "linear-issue-1",
               identifier: "OPS-123",
-              url: "https://linear.app/cmdclaw/issue/OPS-123/test",
+              url: "https://linear.app/bap/issue/OPS-123/test",
             },
           },
         },
@@ -142,7 +142,7 @@ function configureLinearEnv() {
   delete process.env.LINEAR_TEAM_ID;
   process.env.LINEAR_TEAM_KEY = "OPS";
   process.env.LINEAR_FAILURE_ALERT_ENV = "prod";
-  process.env.APP_URL = "https://app.cmdclaw.test";
+  process.env.APP_URL = "https://app.bap.test";
 }
 
 describe("failure alert Linear sync", () => {
@@ -175,7 +175,7 @@ describe("failure alert Linear sync", () => {
       expect.objectContaining({
         linearIssueId: "linear-issue-1",
         linearIssueIdentifier: "OPS-123",
-        linearIssueUrl: "https://linear.app/cmdclaw/issue/OPS-123/test",
+        linearIssueUrl: "https://linear.app/bap/issue/OPS-123/test",
       }),
     );
   }, 10_000);

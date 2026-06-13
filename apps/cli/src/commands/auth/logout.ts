@@ -1,4 +1,4 @@
-import { defaultProfileStore } from "@cmdclaw/client";
+import { defaultProfileStore } from "@bap/client";
 import type { LocalContext } from "../../context";
 import { resolveServerUrl } from "../../lib/client";
 

@@ -11,7 +11,7 @@ import { ReadmePreviewDemo } from "./-readme-preview-demo";
  */
 export const Route = createFileRoute("/internal/readme-preview")({
   head: () => ({
-    meta: [{ title: "README Preview · CmdClaw" }],
+    meta: [{ title: "README Preview · Bap" }],
   }),
   component: ReadmePreviewPage,
 });

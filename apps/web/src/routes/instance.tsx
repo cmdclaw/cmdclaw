@@ -29,7 +29,7 @@ export const Route = createFileRoute("/instance")({
   loader: () => fetchInstanceHealth(),
   head: () => ({
     meta: [
-      { title: "Instance · CmdClaw" },
+      { title: "Instance · Bap" },
       {
         name: "description",
         content: "Deployment health and control-plane status for this self-hosted instance.",

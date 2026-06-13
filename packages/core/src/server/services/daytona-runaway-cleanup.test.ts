@@ -70,7 +70,7 @@ const { cancelInterruptsForGenerationMock } = vi.hoisted(() => ({
   cancelInterruptsForGenerationMock: vi.fn(async () => undefined),
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 

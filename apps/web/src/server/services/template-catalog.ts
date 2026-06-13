@@ -1,13 +1,13 @@
-import { db } from "@cmdclaw/db/client";
-import { templateCatalog } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { templateCatalog } from "@bap/db/schema";
 import {
   parseTemplateCatalogJson,
   type TemplateCatalog,
   type TemplateCatalogTemplate,
-} from "@cmdclaw/db/template-catalog";
+} from "@bap/db/template-catalog";
 import { eq, inArray } from "drizzle-orm";
 
-type Database = typeof import("@cmdclaw/db/client").db;
+type Database = typeof import("@bap/db/client").db;
 
 function toTemplateRecord(row: typeof templateCatalog.$inferSelect): TemplateCatalogTemplate {
   return {

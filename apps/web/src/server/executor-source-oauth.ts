@@ -1,4 +1,4 @@
-import type { McpOAuthSession } from "@cmdclaw/core/server/executor/mcp-oauth";
+import type { McpOAuthSession } from "@bap/core/server/executor/mcp-oauth";
 import { consumePending, getPending, storePending } from "@/server/ai/pending-oauth";
 
 const WORKSPACE_MCP_SERVER_OAUTH_PROVIDER_PREFIX = "workspace_mcp_server:";

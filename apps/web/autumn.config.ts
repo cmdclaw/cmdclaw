@@ -3,7 +3,7 @@ import {
   BILLING_ORG_SUPPORT_FEATURE_ID,
   BILLING_PLANS,
   BILLING_SANDBOX_FEATURE_ID,
-} from "@cmdclaw/core/lib/billing-plans";
+} from "@bap/core/lib/billing-plans";
 import { feature, featureItem, priceItem, product } from "atmn";
 
 export const llmCredits = feature({

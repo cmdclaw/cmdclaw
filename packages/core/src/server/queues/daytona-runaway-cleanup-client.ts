@@ -2,7 +2,7 @@ import { Queue, type ConnectionOptions } from "bullmq";
 import { buildRedisOptions } from "../redis/connection-options";
 import { attachTraceContext } from "../utils/observability";
 
-const rawBaseQueueName = process.env.BULLMQ_QUEUE_NAME ?? "cmdclaw-default";
+const rawBaseQueueName = process.env.BULLMQ_QUEUE_NAME ?? "bap-default";
 export const daytonaRunawayCleanupQueueName = `${rawBaseQueueName.replaceAll(":", "-")}-daytona-runaway-cleanup`;
 export const daytonaRunawayCleanupRedisUrl =
   process.env.REDIS_URL ?? "redis://localhost:6379";
@@ -48,9 +48,9 @@ export async function closeDaytonaRunawayCleanupQueue(): Promise<void> {
 
 function patchQueueAdd(targetQueue: Queue<CleanupJobPayload, unknown, string>): void {
   const queueWithPatchFlag = targetQueue as Queue<CleanupJobPayload, unknown, string> & {
-    __cmdclawTracedAddPatched?: boolean;
+    __bapTracedAddPatched?: boolean;
   };
-  if (queueWithPatchFlag.__cmdclawTracedAddPatched) {
+  if (queueWithPatchFlag.__bapTracedAddPatched) {
     return;
   }
 
@@ -60,5 +60,5 @@ function patchQueueAdd(targetQueue: Queue<CleanupJobPayload, unknown, string>): 
     data,
     opts,
   ) => originalAdd(name, attachTraceContext(data), opts)) as typeof targetQueue.add;
-  queueWithPatchFlag.__cmdclawTracedAddPatched = true;
+  queueWithPatchFlag.__bapTracedAddPatched = true;
 }

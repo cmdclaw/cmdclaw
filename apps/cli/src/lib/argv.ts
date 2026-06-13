@@ -20,7 +20,7 @@ const KEBAB_FLAG_ALIASES = new Map<string, string>([
   ["--no-validate", "--noValidate"],
 ]);
 
-export function normalizeCmdclawArgv(argv: string[]): string[] {
+export function normalizeBapArgv(argv: string[]): string[] {
   const normalizedFlags = argv.map((arg) => KEBAB_FLAG_ALIASES.get(arg) ?? arg);
   if (normalizedFlags.length === 0) {
     return ["chat"];

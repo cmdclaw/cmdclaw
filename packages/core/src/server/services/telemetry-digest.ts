@@ -1,6 +1,6 @@
 import { and, asc, count, eq, gte, lt } from "drizzle-orm";
-import { db } from "@cmdclaw/db/client";
-import { user, userDailyActivity } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { user, userDailyActivity } from "@bap/db/schema";
 import { DAILY_TELEMETRY_DIGEST_JOB_NAME, getQueue } from "../queues/queue-client";
 import { postMessageToOpsTelemetryChannel } from "./telemetry-slack";
 
@@ -187,7 +187,7 @@ export async function getDailyTelemetryDigestSummary(now = new Date()): Promise<
 
 export function buildDailyTelemetryDigestMessage(summary: DailyTelemetryDigestSummary): string {
   const lines = [
-    `CmdClaw daily ops digest for ${summary.activityDate}`,
+    `Bap daily ops digest for ${summary.activityDate}`,
     "",
     `App URL domain: ${summary.appUrlDomain ?? "not configured"}${
       summary.appUrlSource ? ` (${summary.appUrlSource})` : ""

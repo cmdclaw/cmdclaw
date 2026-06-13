@@ -15,8 +15,8 @@ function sanitizeFilename(value: string) {
 
 async function resolveDownloadBaseUrl(): Promise<string> {
   const [{ env }, { resolvePublicCallbackBaseUrl }] = await Promise.all([
-    import("@cmdclaw/core/env"),
-    import("@cmdclaw/core/lib/worktree-routing"),
+    import("@bap/core/env"),
+    import("@bap/core/lib/worktree-routing"),
   ]);
   const baseUrl = resolvePublicCallbackBaseUrl({
     callbackBaseUrl: env.E2B_CALLBACK_BASE_URL,
@@ -25,7 +25,7 @@ async function resolveDownloadBaseUrl(): Promise<string> {
     nodeEnv: env.NODE_ENV,
   });
   if (!baseUrl) {
-    throw new Error("Unable to resolve CmdClaw app URL for Modulr document downloads.");
+    throw new Error("Unable to resolve Bap app URL for Modulr document downloads.");
   }
   return baseUrl;
 }
@@ -43,7 +43,7 @@ export const schema = {
 export const metadata: ToolMetadata = {
   name: "modulr.download_document",
   description:
-    "Download a Modulr document into CmdClaw storage and return a direct downloadable URL.",
+    "Download a Modulr document into Bap storage and return a direct downloadable URL.",
   annotations: {
     title: "Download document",
     readOnlyHint: true,
@@ -74,9 +74,9 @@ export default async function downloadDocument(
 
   const [{ env }, { signModulrDocumentDownloadToken }, { ensureBucket, uploadToS3 }] =
     await Promise.all([
-      import("@cmdclaw/core/env"),
-      import("@cmdclaw/core/server/modulr/download-token"),
-      import("@cmdclaw/core/server/storage/s3-client"),
+      import("@bap/core/env"),
+      import("@bap/core/server/modulr/download-token"),
+      import("@bap/core/server/storage/s3-client"),
     ]);
   await ensureBucket();
   await uploadToS3(storageKey, body, document.mimeType);
@@ -99,7 +99,7 @@ export default async function downloadDocument(
       {
         type: "text" as const,
         text: [
-          `Downloaded ${filename} from Modulr and stored it in CmdClaw storage.`,
+          `Downloaded ${filename} from Modulr and stored it in Bap storage.`,
           `Download URL: ${downloadUrl}`,
         ].join("\n"),
       },

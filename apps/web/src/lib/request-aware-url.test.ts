@@ -54,7 +54,7 @@ describe("request-aware-url", () => {
   it("ignores non-Bap public origin headers", () => {
     const request = new Request("https://cmdclaw-web-prod.onrender.com/api/mcp/oauth/authorize", {
       headers: {
-        "x-cmdclaw-public-origin": "https://cmdclaw.ai",
+        "x-bap-public-origin": "https://evil.example.com",
       },
     });
 

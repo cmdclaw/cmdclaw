@@ -24,7 +24,7 @@ function getPasswordResetLogoUrl(): string {
     }
   }
 
-  return "https://cmdclaw.ai/logo.png";
+  return "https://heybap.com/logo.png";
 }
 
 export function buildPasswordResetEmailPayload(
@@ -40,7 +40,7 @@ export function buildPasswordResetEmailPayload(
   const safeLogoUrl = escapeHtml(getPasswordResetLogoUrl());
 
   return {
-    text: `CMDCLAW PASSWORD SETUP
+    text: `BAP PASSWORD SETUP
 
 A password setup or reset was requested for ${email}.
 
@@ -49,7 +49,7 @@ Set or reset your password: ${resetUrl}
 For your safety:
 - This link opens on ${resetPageUrl.hostname.replace(/^www\./, "")}
 - It expires in 1 hour
-- CmdClaw will never ask for your password by email
+- Bap will never ask for your password by email
 
 If you didn't request this email, you can safely ignore it.`,
     html: `
@@ -66,8 +66,8 @@ If you didn't request this email, you can safely ignore it.`,
         <table role="presentation" style="max-width: 480px; width: 100%; border-collapse: collapse; background-color: #ffffff; border: 2px solid #B33A3A; border-radius: 12px; overflow: hidden;">
           <tr>
             <td align="center" style="padding: 44px 40px 0 40px;">
-              <img src="${safeLogoUrl}" alt="CmdClaw" width="40" height="40" style="display: block; width: 40px; height: 40px; margin: 0 auto 10px auto;">
-              <p style="margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #B33A3A;">CmdClaw</p>
+              <img src="${safeLogoUrl}" alt="Bap" width="40" height="40" style="display: block; width: 40px; height: 40px; margin: 0 auto 10px auto;">
+              <p style="margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #B33A3A;">Bap</p>
             </td>
           </tr>
           <tr>
@@ -79,7 +79,7 @@ If you didn't request this email, you can safely ignore it.`,
           </tr>
           <tr>
             <td style="padding: 0 40px;">
-              <h1 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #1c1917; text-align: center; line-height: 1.3;">Set your CmdClaw password</h1>
+              <h1 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #1c1917; text-align: center; line-height: 1.3;">Set your Bap password</h1>
               <p style="margin: 0 0 8px 0; font-size: 15px; color: #57534e; line-height: 1.6; text-align: center;">A password setup or reset was requested for<br><strong style="color: #1c1917;">${safeEmail}</strong></p>
               <p style="margin: 0 0 32px 0; font-size: 14px; color: #a8a29e; line-height: 1.6; text-align: center;">This link expires in 1 hour.</p>
               <table role="presentation" style="margin: 0 auto 32px auto; border-collapse: collapse;">

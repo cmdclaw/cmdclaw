@@ -10,7 +10,7 @@ if (!TOKEN && !IS_HELP_REQUEST) {
   process.exit(1);
 }
 
-const USER_AGENT = "cmdclaw-app:v1.0.0 (by /u/cmdclaw-integration)";
+const USER_AGENT = "bap-app:v1.0.0 (by /u/bap-integration)";
 
 const headers = {
   Authorization: `Bearer ${TOKEN}`,

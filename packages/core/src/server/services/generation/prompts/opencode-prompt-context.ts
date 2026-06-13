@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { user } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { buildMemorySystemPrompt } from "../../../sandbox/prep/memory-prep";
 import {

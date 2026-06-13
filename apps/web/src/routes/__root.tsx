@@ -44,15 +44,13 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       {
-        title: isSelfHost
-          ? localizedText("CmdClaw Self-hosted", { fr: "CmdClaw auto-hébergé" })
-          : "CmdClaw",
+        title: isSelfHost ? localizedText("Bap Self-hosted", { fr: "Bap auto-hébergé" }) : "Bap",
       },
       {
         name: "description",
         content: isSelfHost
-          ? localizedText("Your self-hosted CmdClaw deployment", {
-              fr: "Votre déploiement CmdClaw auto-hébergé",
+          ? localizedText("Your self-hosted Bap deployment", {
+              fr: "Votre déploiement Bap auto-hébergé",
             })
           : localizedText("Your AI Assistant", { fr: "Votre assistant IA" }),
       },

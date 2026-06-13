@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { galienCredential, galienWorkspaceAccess, user, workspaceMember } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { galienCredential, galienWorkspaceAccess, user, workspaceMember } from "@bap/db/schema";
 import { and, eq } from "drizzle-orm";
 import { decrypt, encrypt } from "../utils/encryption";
 

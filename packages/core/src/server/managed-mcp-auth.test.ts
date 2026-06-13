@@ -54,7 +54,7 @@ describe("managed MCP auth", () => {
       {
         userId: "user-1",
         workspaceId: "ws-1",
-        internalKey: "cmdclaw",
+        internalKey: "bap",
         exp: 2_000_000_000,
         spawnDepth: 2,
       },
@@ -62,7 +62,7 @@ describe("managed MCP auth", () => {
     );
 
     expect(verifyManagedMcpToken(token, "test-secret", 1_900_000_000)).toMatchObject({
-      internalKey: "cmdclaw",
+      internalKey: "bap",
       spawnDepth: 2,
     });
   });
@@ -73,7 +73,7 @@ describe("managed MCP auth", () => {
         {
           userId: "user-1",
           workspaceId: "ws-1",
-          internalKey: "cmdclaw",
+          internalKey: "bap",
           exp: 2_000_000_000,
           spawnDepth,
         },
@@ -88,13 +88,13 @@ describe("managed MCP auth", () => {
 
   it("fails closed when the secret is empty", () => {
     const token = signManagedMcpToken(
-      { userId: "user-1", workspaceId: "ws-1", internalKey: "cmdclaw", exp: 2_000_000_000 },
+      { userId: "user-1", workspaceId: "ws-1", internalKey: "bap", exp: 2_000_000_000 },
       "test-secret",
     );
     expect(() => verifyManagedMcpToken(token, "", 1_900_000_000)).toThrow(/without a secret/i);
     expect(() =>
       signManagedMcpToken(
-        { userId: "user-1", workspaceId: "ws-1", internalKey: "cmdclaw", exp: 2_000_000_000 },
+        { userId: "user-1", workspaceId: "ws-1", internalKey: "bap", exp: 2_000_000_000 },
         "",
       ),
     ).toThrow(/without a secret/i);

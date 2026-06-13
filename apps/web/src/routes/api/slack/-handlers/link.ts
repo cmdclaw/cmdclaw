@@ -1,12 +1,12 @@
-import { db } from "@cmdclaw/db/client";
-import { slackUserLink } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { slackUserLink } from "@bap/db/schema";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl } from "@/lib/request-aware-url";
 
 /**
  * Framework-neutral handler for `GET /api/slack/link`.
  *
- * Slack link flow: associates a Slack user/team with the authenticated CmdClaw
+ * Slack link flow: associates a Slack user/team with the authenticated Bap
  * account, then renders a small confirmation HTML page. API authorization (the
  * Better Auth session check) lives here, not in any page route guard.
  *
@@ -60,7 +60,7 @@ export async function handleSlackLink(request: Request): Promise<Response> {
 <html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
 <div style="text-align:center">
 <h1>Account linked!</h1>
-<p>You can now use @cmdclaw in Slack. Head back to your workspace and try it out.</p>
+<p>You can now use @bap in Slack. Head back to your workspace and try it out.</p>
 </div>
 </body></html>`,
     {

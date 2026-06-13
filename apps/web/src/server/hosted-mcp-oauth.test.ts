@@ -48,7 +48,7 @@ vi.mock("@/env", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       hostedMcpOauthRefreshToken: {
@@ -66,20 +66,20 @@ vi.mock("@cmdclaw/db/client", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/core/server/billing/service", () => ({
+vi.mock("@bap/core/server/billing/service", () => ({
   getWorkspaceMembershipForUser: vi.fn<VitestProcedure>(),
   listWorkspacesForUser: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/galien/service", () => ({
+vi.mock("@bap/core/server/galien/service", () => ({
   canUserUseGalienInWorkspace: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/modulr/service", () => ({
+vi.mock("@bap/core/server/modulr/service", () => ({
   canUserUseModulrInWorkspace: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/hosted-mcp-oauth", () => ({
+vi.mock("@bap/core/server/hosted-mcp-oauth", () => ({
   HOSTED_MCP_AUDIENCES: ["gmail", "bap", "galien", "modulr"],
   normalizeHostedMcpScopes: (value: string[] | string | null | undefined) =>
     Array.isArray(value) ? value : (value ?? "").split(/\s+/).filter(Boolean),

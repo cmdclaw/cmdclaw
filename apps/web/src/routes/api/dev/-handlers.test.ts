@@ -36,11 +36,11 @@ vi.mock("@/env", () => ({
   env: envMock,
 }));
 
-vi.mock("@cmdclaw/core/server/billing/service", () => ({
+vi.mock("@bap/core/server/billing/service", () => ({
   ensureWorkspaceForUser: ensureWorkspaceForUserMock,
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: {
     query: {
       user: {
@@ -122,7 +122,7 @@ describe("handleDevAutoLogin (GET /api/dev/auto-login)", () => {
     envMock.APP_DEV_AUTO_LOGIN = "1";
 
     const response = await handleDevAutoLogin(
-      new Request("https://cmdclaw.ai/api/dev/auto-login?callbackUrl=%2Fagents"),
+      new Request("https://heybap.com/api/dev/auto-login?callbackUrl=%2Fagents"),
     );
 
     expect(response.status).toBe(404);
@@ -149,7 +149,7 @@ describe("handleDevAutoLogin (GET /api/dev/auto-login)", () => {
     expect(insertValuesMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "user-1",
-        userAgent: "cmdclaw-dev-auto-login",
+        userAgent: "bap-dev-auto-login",
       }),
     );
     expect(setCookieHeader(response)).toContain("better-auth.session_token=signed-session%2Fvalue");
@@ -159,7 +159,7 @@ describe("handleDevAutoLogin (GET /api/dev/auto-login)", () => {
 describe("handleDevWorktreeAuth (GET /api/dev/worktree-auth)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.CMDCLAW_INSTANCE_ROOT;
+    delete process.env.BAP_INSTANCE_ROOT;
     existsSyncMock.mockReturnValue(false);
   });
 
@@ -175,7 +175,7 @@ describe("handleDevWorktreeAuth (GET /api/dev/worktree-auth)", () => {
   });
 
   it("sets the bootstrapped session cookie and redirects back to the callback", () => {
-    process.env.CMDCLAW_INSTANCE_ROOT = "/tmp/cmdclaw-worktree";
+    process.env.BAP_INSTANCE_ROOT = "/tmp/bap-worktree";
     existsSyncMock.mockReturnValue(true);
     readFileSyncMock.mockReturnValue(
       JSON.stringify({

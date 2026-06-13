@@ -2,7 +2,7 @@
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-This plan follows the ExecPlan instructions from `/Users/baptiste/Git/cmdclaw/.agents/skills/execplan/SKILL.md`.
+This plan follows the ExecPlan instructions from `/Users/baptiste/Git/bap/.agents/skills/execplan/SKILL.md`.
 
 ## Purpose / Big Picture
 
@@ -13,7 +13,7 @@ The result is observable by searching the changed workflows for direct `${{ ... 
 ## Progress
 
 - [x] (2026-05-22T19:35:32Z) Read the Bastion report from `/Users/baptiste/Downloads/bastion-high-code-security-issues.md`.
-- [x] (2026-05-22T19:35:32Z) Ran `bun run worktree:status` from `/Users/baptiste/Git/cmdclaw`; the repository is not currently in a worktree.
+- [x] (2026-05-22T19:35:32Z) Ran `bun run worktree:status` from `/Users/baptiste/Git/bap`; the repository is not currently in a worktree.
 - [x] (2026-05-22T19:35:32Z) Inspected the affected workflow and Docker compose files and confirmed there are no nested `AGENTS.md` files under `.github` or `docker`.
 - [x] (2026-05-22T19:35:32Z) Created this self-contained execution plan.
 - [x] (2026-05-22T19:45:00Z) Replaced direct GitHub expression interpolation inside affected `run:` steps with intermediate environment variables.
@@ -84,7 +84,7 @@ Third, validate the changes. Run a text search that fails if direct `${{ inputs.
 
 ## Concrete Steps
 
-Work from `/Users/baptiste/Git/cmdclaw`.
+Work from `/Users/baptiste/Git/bap`.
 
 Edit the workflow files listed in Context and Orientation. For each edited shell step, use this pattern:
 
@@ -107,10 +107,10 @@ Edit the Daytona files:
 
 Then run:
 
-    cd /Users/baptiste/Git/cmdclaw
+    cd /Users/baptiste/Git/bap
     git diff --check
-    docker compose --env-file .env -f docker/compose/dev.yml config >/tmp/cmdclaw-compose-default.yml
-    DAYTONA_DEX_PASSWORD_HASH='compose-config-placeholder-not-a-bcrypt-hash' docker compose --env-file .env -f docker/compose/dev.yml --profile daytona config >/tmp/cmdclaw-daytona-compose.yml
+    docker compose --env-file .env -f docker/compose/dev.yml config >/tmp/bap-compose-default.yml
+    DAYTONA_DEX_PASSWORD_HASH='compose-config-placeholder-not-a-bcrypt-hash' docker compose --env-file .env -f docker/compose/dev.yml --profile daytona config >/tmp/bap-daytona-compose.yml
     go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/verify-observability.yml .github/workflows/db-push.yml .github/workflows/render-rollback.yml .github/workflows/render-deploy.yml .github/workflows/verify-deployment.yml .github/workflows/render-observability-deploy.yml .github/workflows/daytona-sandbox.yml .github/workflows/e2b-sandbox.yml .github/workflows/staging-deploy.yml .github/workflows/create-release-tag.yml .github/workflows/prod-release.yml .github/workflows/release-main.yml
 
 If the compose command fails because local `.env` is missing unrelated variables, rerun with the minimum required environment values documented by the error and record the failure in `Surprises & Discoveries`.
@@ -131,10 +131,10 @@ Validation completed on 2026-05-22:
     $ <targeted awk search for direct inputs/github/needs interpolation inside workflow run blocks>
     # passed with no output
 
-    $ docker compose --env-file .env -f docker/compose/dev.yml config >/tmp/cmdclaw-compose-default.yml
+    $ docker compose --env-file .env -f docker/compose/dev.yml config >/tmp/bap-compose-default.yml
     # passed with no output
 
-    $ DAYTONA_DEX_PASSWORD_HASH='compose-config-placeholder-not-a-bcrypt-hash' docker compose --env-file .env -f docker/compose/dev.yml --profile daytona config >/tmp/cmdclaw-daytona-compose.yml
+    $ DAYTONA_DEX_PASSWORD_HASH='compose-config-placeholder-not-a-bcrypt-hash' docker compose --env-file .env -f docker/compose/dev.yml --profile daytona config >/tmp/bap-daytona-compose.yml
     # passed with no output
 
     $ rg -n '\$2[aby]\$' docker/compose/daytona/dex/config.yaml

@@ -77,7 +77,7 @@ function isLoopbackHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-function resolveCmdClawLogoUrl(redirectUrl: string): string {
+function resolveBapLogoUrl(redirectUrl: string): string {
   const baseUrlCandidates = [
     process.env.APP_URL?.trim(),
     process.env.VITE_APP_URL?.trim(),
@@ -99,7 +99,7 @@ function resolveCmdClawLogoUrl(redirectUrl: string): string {
     }
   }
 
-  return "https://cmdclaw.ai/logo.png";
+  return "https://heybap.com/logo.png";
 }
 
 export function buildMcpOAuthClientMetadata(redirectUrl: string) {
@@ -108,8 +108,8 @@ export function buildMcpOAuthClientMetadata(redirectUrl: string) {
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: "none",
-    client_name: "CmdClaw",
-    logo_uri: resolveCmdClawLogoUrl(redirectUrl),
+    client_name: "Bap",
+    logo_uri: resolveBapLogoUrl(redirectUrl),
   };
 }
 
@@ -302,7 +302,7 @@ export async function ensureValidMcpOAuthCredential(input: {
     get clientMetadata() {
       return buildMcpOAuthClientMetadata(currentCredential.metadata.redirectUri);
     },
-    state: () => `cmdclaw-executor-source-${crypto.randomUUID()}`,
+    state: () => `bap-executor-source-${crypto.randomUUID()}`,
     clientInformation: () =>
       currentCredential.metadata.clientInformation as OAuthClientInformationMixed | undefined,
     saveClientInformation: (clientInformation) => {

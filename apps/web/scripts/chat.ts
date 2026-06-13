@@ -1,8 +1,8 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
 import type { RouterClient } from "@orpc/server";
-import { resolveDefaultChatModel } from "@cmdclaw/core/lib/chat-model-defaults";
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
-import { listOpencodeFreeModels } from "@cmdclaw/core/server/ai/opencode-models";
+import { resolveDefaultChatModel } from "@bap/core/lib/chat-model-defaults";
+import { parseModelReference } from "@bap/core/lib/model-reference";
+import { listOpencodeFreeModels } from "@bap/core/server/ai/opencode-models";
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream, existsSync, readFileSync } from "node:fs";
 import { basename, resolve, extname } from "node:path";
@@ -54,7 +54,7 @@ type Args = {
   validatePersistence: boolean;
 };
 
-const DEFAULT_CLIENT_ID = "cmdclaw-cli";
+const DEFAULT_CLIENT_ID = "bap-cli";
 const AUTH_INTEGRATION_TYPES = [
   "google_gmail",
   "google_calendar",
@@ -291,7 +291,7 @@ async function authenticate(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client_id: process.env.CMDCLAW_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
+        client_id: process.env.BAP_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
       }),
     });
 
@@ -337,7 +337,7 @@ async function authenticate(
         body: JSON.stringify({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
           device_code: deviceCode,
-          client_id: process.env.CMDCLAW_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
+          client_id: process.env.BAP_CLI_CLIENT_ID || DEFAULT_CLIENT_ID,
         }),
       });
 
@@ -1020,7 +1020,7 @@ async function main(): Promise<void> {
   try {
     const hydrated = await hydrateProviderAvailability(client, args);
     freeModels = hydrated.freeModels;
-    const overrideModel = args.model ?? process.env.CMDCLAW_CHAT_MODEL;
+    const overrideModel = args.model ?? process.env.BAP_CHAT_MODEL;
     if (overrideModel?.trim()) {
       const trimmedOverride = overrideModel.trim();
       parseModelReference(trimmedOverride);
@@ -1107,7 +1107,7 @@ async function printAvailableModels(
 ): Promise<void> {
   try {
     const freeModels = prefetchedFreeModels ?? (await listOpencodeFreeModels());
-    console.log("CmdClaw Models:");
+    console.log("Bap Models:");
     console.log("- Claude Sonnet 4.6 (anthropic/claude-sonnet-4-6) [source=shared]");
     const sharedOpenAIAvailable = (args.sharedConnectedProviderIds ?? []).includes("openai");
     console.log(

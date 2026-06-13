@@ -9,11 +9,11 @@ const currentFilename = fileURLToPath(import.meta.url);
 const currentDirname = dirname(currentFilename);
 const repoRoot = resolve(currentDirname, "../../..");
 const outputDir = resolve(repoRoot, ".github/assets/readme");
-const mp4Path = join(outputDir, "cmdclaw-agent-inbox.mp4");
-const gifPath = join(outputDir, "cmdclaw-agent-inbox.gif");
-const posterPath = join(outputDir, "cmdclaw-agent-inbox.png");
+const mp4Path = join(outputDir, "bap-agent-inbox.mp4");
+const gifPath = join(outputDir, "bap-agent-inbox.gif");
+const posterPath = join(outputDir, "bap-agent-inbox.png");
 const previewUrl =
-  process.env.CMDCLAW_README_PREVIEW_URL ?? "http://127.0.0.1:3000/internal/readme-preview";
+  process.env.BAP_README_PREVIEW_URL ?? "http://127.0.0.1:3000/internal/readme-preview";
 
 const width = 1440;
 const height = 900;
@@ -54,7 +54,7 @@ async function waitForPreview(page: Page) {
 
 async function main() {
   await mkdir(outputDir, { recursive: true });
-  const tempRoot = await mkdtemp(join(tmpdir(), "cmdclaw-readme-preview-"));
+  const tempRoot = await mkdtemp(join(tmpdir(), "bap-readme-preview-"));
   const framesDir = join(tempRoot, "frames");
   await mkdir(framesDir, { recursive: true });
 

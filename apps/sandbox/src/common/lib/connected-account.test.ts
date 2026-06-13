@@ -11,8 +11,8 @@ describe("connected account sandbox helper", () => {
 
   it("falls back to the legacy token env when no runtime resolver is configured", async () => {
     process.env.GMAIL_ACCESS_TOKEN = "legacy-token";
-    delete process.env.CMDCLAW_RUNTIME_CREDENTIALS_URL;
-    delete process.env.CMDCLAW_USER_ID;
+    delete process.env.BAP_RUNTIME_CREDENTIALS_URL;
+    delete process.env.BAP_USER_ID;
 
     await expect(
       resolveConnectedAccountAccessToken({
@@ -24,9 +24,9 @@ describe("connected account sandbox helper", () => {
 
   it("requires the runtime resolver when --account is provided", async () => {
     process.env.GMAIL_ACCESS_TOKEN = "legacy-token";
-    process.env.CMDCLAW_AVAILABLE_ACCOUNT_LABELS = "personal, work";
-    delete process.env.CMDCLAW_RUNTIME_CREDENTIALS_URL;
-    delete process.env.CMDCLAW_USER_ID;
+    process.env.BAP_AVAILABLE_ACCOUNT_LABELS = "personal, work";
+    delete process.env.BAP_RUNTIME_CREDENTIALS_URL;
+    delete process.env.BAP_USER_ID;
 
     await expect(
       resolveConnectedAccountAccessToken({
@@ -59,11 +59,11 @@ describe("connected account sandbox helper", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
-    process.env.CMDCLAW_RUNTIME_CREDENTIALS_URL =
+    process.env.BAP_RUNTIME_CREDENTIALS_URL =
       "https://app.example.com/api/internal/mcp/runtime-credentials";
-    process.env.CMDCLAW_USER_ID = "local-user-1";
-    process.env.CMDCLAW_SERVER_SECRET = "test-secret";
-    process.env.CMDCLAW_REMOTE_INTEGRATION_SOURCE = JSON.stringify({
+    process.env.BAP_USER_ID = "local-user-1";
+    process.env.BAP_SERVER_SECRET = "test-secret";
+    process.env.BAP_REMOTE_INTEGRATION_SOURCE = JSON.stringify({
       targetEnv: "prod",
       remoteUserId: "remote-user-1",
       requestedByUserId: "admin-1",

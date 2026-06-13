@@ -10,9 +10,9 @@ type Args = {
 };
 
 const REQUIRED_GENERATION_EVENTS = new Set([
-  "cmdclaw.generation.start_rpc",
-  "cmdclaw.generation.subscribe_rpc",
-  "cmdclaw.generation.terminal",
+  "bap.generation.start_rpc",
+  "bap.generation.subscribe_rpc",
+  "bap.generation.terminal",
 ]);
 
 function readArgs(argv: string[]): Args {
@@ -99,8 +99,8 @@ function findTraceId(rows: JsonRecord[]): string | undefined {
   for (const row of rows) {
     const traceId =
       getStringField(row, "trace_id") ??
-      getStringField(row, "cmdclaw.trace.id") ??
-      getStringField(row, "cmdclaw_trace_id");
+      getStringField(row, "bap.trace.id") ??
+      getStringField(row, "bap_trace_id");
     if (traceId) {
       return traceId;
     }
@@ -156,13 +156,13 @@ async function queryMetric(baseUrl: string, query: string): Promise<JsonRecord[]
 async function validate(args: Args): Promise<void> {
   const generationRows = await queryLogs(
     args.logsUrl,
-    `cmdclaw.generation.id:${args.generationId}`,
+    `bap.generation.id:${args.generationId}`,
   );
   const eventNames = new Set(
     generationRows
       .map(
         (row) =>
-          getStringField(row, "cmdclaw.event.name") ?? getStringField(row, "cmdclaw_event_name"),
+          getStringField(row, "bap.event.name") ?? getStringField(row, "bap_event_name"),
       )
       .filter((value): value is string => typeof value === "string"),
   );
@@ -198,7 +198,7 @@ async function validate(args: Args): Promise<void> {
 
   const metricRows = await queryMetric(
     args.metricsUrl,
-    "sum by (outcome, model_provider, sandbox_provider, failure_phase, normalized_error_code) (cmdclaw_generation_terminal_total)",
+    "sum by (outcome, model_provider, sandbox_provider, failure_phase, normalized_error_code) (bap_generation_terminal_total)",
   );
   if (metricRows.length === 0) {
     throw new Error("Terminal Generation metrics query returned no rows");

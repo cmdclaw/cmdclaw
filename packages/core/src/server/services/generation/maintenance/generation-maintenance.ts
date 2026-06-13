@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { coworkerRun, generation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { coworkerRun, generation } from "@bap/db/schema";
 import { and, eq, inArray, isNull, lt } from "drizzle-orm";
 import { logger } from "../../../utils/observability";
 import { generationInterruptService } from "../../generation-interrupt-service";

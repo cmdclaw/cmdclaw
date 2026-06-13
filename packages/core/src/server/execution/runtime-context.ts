@@ -1,5 +1,5 @@
 import path from "path";
-import { CMDCLAW_RUNTIME_CONTEXT_PATH, type RuntimeContextFile } from "../../lib/runtime-context";
+import { BAP_RUNTIME_CONTEXT_PATH, type RuntimeContextFile } from "../../lib/runtime-context";
 import { syncRuntimeEnvToSandbox } from "../sandbox/prep/runtime-env-prep";
 
 function escapeShellArg(value: string): string {
@@ -16,7 +16,7 @@ export async function writeRuntimeContextToSandbox(
   runtimeContext: RuntimeContextFile,
 ): Promise<void> {
   const payload = Buffer.from(JSON.stringify(runtimeContext, null, 2), "utf8").toString("base64");
-  const targetPath = CMDCLAW_RUNTIME_CONTEXT_PATH;
+  const targetPath = BAP_RUNTIME_CONTEXT_PATH;
   const targetDir = path.posix.dirname(targetPath);
   const tempPath = `${targetPath}.next`;
   const command = [

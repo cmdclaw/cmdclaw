@@ -10,7 +10,7 @@ Read inbox emails, get email content, count unread emails, find people contacts,
 ## Environment Variables
 
 - `OUTLOOK_ACCESS_TOKEN` - Fallback Microsoft OAuth2 access token with Outlook Mail and People scopes, including draft creation and contact lookup support
-- `CMDCLAW_RUNTIME_CREDENTIALS_URL` and `CMDCLAW_USER_ID` - Resolve a selected Connected Account when `--account <label>` is used
+- `BAP_RUNTIME_CREDENTIALS_URL` and `BAP_USER_ID` - Resolve a selected Connected Account when `--account <label>` is used
 
 ## Commands
 

@@ -1,5 +1,5 @@
-import { closePool, db } from "@cmdclaw/db/client";
-import { conversation, slackConversation, slackUserLink, user } from "@cmdclaw/db/schema";
+import { closePool, db } from "@bap/db/client";
+import { conversation, slackConversation, slackUserLink, user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { createHmac, randomUUID } from "node:crypto";
 import { expect, test } from "./live-fixtures";

@@ -8,29 +8,29 @@ import {
 } from "./stack";
 
 const SHARED_STACK_ENV_KEYS = [
-  "CMDCLAW_COMPOSE_PROJECT",
-  "CMDCLAW_POSTGRES_PORT",
-  "CMDCLAW_REDIS_PORT",
-  "CMDCLAW_MINIO_API_PORT",
-  "CMDCLAW_MINIO_CONSOLE_PORT",
-  "CMDCLAW_GRAFANA_PORT",
-  "CMDCLAW_ALERTMANAGER_PORT",
-  "CMDCLAW_VECTOR_OTLP_GRPC_PORT",
-  "CMDCLAW_VECTOR_OTLP_HTTP_PORT",
-  "CMDCLAW_VECTOR_TRACES_PORT",
-  "CMDCLAW_VECTOR_LOG_PORT",
-  "CMDCLAW_VICTORIA_METRICS_PORT",
-  "CMDCLAW_VICTORIA_LOGS_PORT",
-  "CMDCLAW_VICTORIA_TRACES_PORT",
-  "CMDCLAW_VMALERT_PORT",
-  "CMDCLAW_POSTGRES_VOLUME",
-  "CMDCLAW_REDIS_VOLUME",
-  "CMDCLAW_MINIO_VOLUME",
-  "CMDCLAW_ALERTMANAGER_VOLUME",
-  "CMDCLAW_GRAFANA_VOLUME",
-  "CMDCLAW_VICTORIA_METRICS_VOLUME",
-  "CMDCLAW_VICTORIA_LOGS_VOLUME",
-  "CMDCLAW_VICTORIA_TRACES_VOLUME",
+  "BAP_COMPOSE_PROJECT",
+  "BAP_POSTGRES_PORT",
+  "BAP_REDIS_PORT",
+  "BAP_MINIO_API_PORT",
+  "BAP_MINIO_CONSOLE_PORT",
+  "BAP_GRAFANA_PORT",
+  "BAP_ALERTMANAGER_PORT",
+  "BAP_VECTOR_OTLP_GRPC_PORT",
+  "BAP_VECTOR_OTLP_HTTP_PORT",
+  "BAP_VECTOR_TRACES_PORT",
+  "BAP_VECTOR_LOG_PORT",
+  "BAP_VICTORIA_METRICS_PORT",
+  "BAP_VICTORIA_LOGS_PORT",
+  "BAP_VICTORIA_TRACES_PORT",
+  "BAP_VMALERT_PORT",
+  "BAP_POSTGRES_VOLUME",
+  "BAP_REDIS_VOLUME",
+  "BAP_MINIO_VOLUME",
+  "BAP_ALERTMANAGER_VOLUME",
+  "BAP_GRAFANA_VOLUME",
+  "BAP_VICTORIA_METRICS_VOLUME",
+  "BAP_VICTORIA_LOGS_VOLUME",
+  "BAP_VICTORIA_TRACES_VOLUME",
 ] as const;
 
 describe("worktree stack config", () => {
@@ -41,16 +41,16 @@ describe("worktree stack config", () => {
   });
 
   test("derives deterministic docker ports and names from the slot", () => {
-    expect(buildWorktreeStackConfig("cmdclaw-a1b2c3d4", 7)).toEqual({
+    expect(buildWorktreeStackConfig("bap-a1b2c3d4", 7)).toEqual({
       slot: 7,
       slotLabel: "07",
       daytonaApiPort: 3307,
       daytonaProxyPort: 4007,
       daytonaSshGatewayPort: 2207,
       daytonaDexPort: 5507,
-      daytonaDbVolume: "cmdclaw-a1b2c3d4_daytona_db_data",
-      daytonaDexVolume: "cmdclaw-a1b2c3d4_daytona_dex_data",
-      daytonaRegistryVolume: "cmdclaw-a1b2c3d4_daytona_registry_data",
+      daytonaDbVolume: "bap-a1b2c3d4_daytona_db_data",
+      daytonaDexVolume: "bap-a1b2c3d4_daytona_dex_data",
+      daytonaRegistryVolume: "bap-a1b2c3d4_daytona_registry_data",
     });
   });
 
@@ -76,7 +76,7 @@ describe("worktree stack config", () => {
       }
 
       expect(buildSharedStackConfig()).toEqual({
-        composeProjectName: "cmdclaw-local",
+        composeProjectName: "bap-local",
         postgresPort: 5432,
         redisPort: 6379,
         minioApiPort: 9000,
@@ -91,14 +91,14 @@ describe("worktree stack config", () => {
         victoriaLogsPort: 9428,
         victoriaTracesPort: 10428,
         vmalertPort: 8880,
-        postgresVolume: "cmdclaw-local_cmdclaw_postgres_data",
-        redisVolume: "cmdclaw-local_cmdclaw_redis_data",
-        minioVolume: "cmdclaw-local_cmdclaw_minio_data",
-        alertmanagerVolume: "cmdclaw-local_cmdclaw_alertmanager_data",
-        grafanaVolume: "cmdclaw-local_cmdclaw_grafana_data",
-        victoriaMetricsVolume: "cmdclaw-local_cmdclaw_victoria_metrics_data",
-        victoriaLogsVolume: "cmdclaw-local_cmdclaw_victoria_logs_data",
-        victoriaTracesVolume: "cmdclaw-local_cmdclaw_victoria_traces_data",
+        postgresVolume: "bap-local_bap_postgres_data",
+        redisVolume: "bap-local_bap_redis_data",
+        minioVolume: "bap-local_bap_minio_data",
+        alertmanagerVolume: "bap-local_bap_alertmanager_data",
+        grafanaVolume: "bap-local_bap_grafana_data",
+        victoriaMetricsVolume: "bap-local_bap_victoria_metrics_data",
+        victoriaLogsVolume: "bap-local_bap_victoria_logs_data",
+        victoriaTracesVolume: "bap-local_bap_victoria_traces_data",
       });
     } finally {
       for (const key of SHARED_STACK_ENV_KEYS) {
@@ -114,6 +114,6 @@ describe("worktree stack config", () => {
 
   test("rejects out-of-range slots", () => {
     expect(() => formatWorktreeStackSlot(0)).toThrow("between 1 and 99");
-    expect(() => buildWorktreeStackConfig("cmdclaw-a1b2c3d4", 100)).toThrow("between 1 and 99");
+    expect(() => buildWorktreeStackConfig("bap-a1b2c3d4", 100)).toThrow("between 1 and 99");
   });
 });

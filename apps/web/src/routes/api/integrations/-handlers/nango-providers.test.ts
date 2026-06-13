@@ -16,7 +16,7 @@ vi.mock("@/lib/auth", () => ({
 import { handleNangoProviders } from "./nango-providers";
 
 function makeRequest() {
-  return new Request("https://cmdclaw.ai/api/integrations/nango/providers", {
+  return new Request("https://heybap.com/api/integrations/nango/providers", {
     method: "GET",
   });
 }

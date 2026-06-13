@@ -5,7 +5,7 @@ import { useAdminCoworkerOverview } from "@/orpc/hooks/admin";
 import { useAdminWorkspaces } from "@/orpc/hooks/workspace";
 
 export const Route = createFileRoute("/admin/coworker-overview")({
-  head: () => ({ meta: [{ title: "Coworker Overview - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Coworker Overview - Bap" }] }),
   component: AdminCoworkerOverviewPage,
 });
 

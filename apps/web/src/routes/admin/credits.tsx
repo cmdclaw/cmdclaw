@@ -1,5 +1,5 @@
 import type { ChangeEvent, MouseEvent } from "react";
-import { TOP_UP_CREDITS_PER_USD, formatCredits } from "@cmdclaw/core/lib/billing-plans";
+import { TOP_UP_CREDITS_PER_USD, formatCredits } from "@bap/core/lib/billing-plans";
 import { createFileRoute } from "@tanstack/react-router";
 import { ChevronDown, Loader2, Plus, Search, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { useAdminBillingUserOverview, useAdminManualBillingTopUp } from "@/orpc/hooks/billing";
 
 export const Route = createFileRoute("/admin/credits")({
-  head: () => ({ meta: [{ title: "Credits - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Credits - Bap" }] }),
   component: AdminCreditsPage,
 });
 

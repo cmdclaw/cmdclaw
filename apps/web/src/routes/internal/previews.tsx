@@ -12,7 +12,7 @@ import { PREVIEW_MOCK_DATA } from "@/components/chat/previews/mock-data";
  */
 export const Route = createFileRoute("/internal/previews")({
   head: () => ({
-    meta: [{ title: "Component Previews · CmdClaw" }],
+    meta: [{ title: "Component Previews · Bap" }],
   }),
   component: PreviewsPage,
 });

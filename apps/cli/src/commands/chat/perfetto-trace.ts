@@ -1,4 +1,4 @@
-import { buildPerfettoTraceFromTiming, type DoneArtifactsData } from "@cmdclaw/client";
+import { buildPerfettoTraceFromTiming, type DoneArtifactsData } from "@bap/client";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -55,7 +55,7 @@ export function exportPerfettoTraceForCompletedRun(args: {
   | { status: "skipped"; reason: "missing_phase_timestamps" } {
   const result = buildPerfettoTraceFromTiming({
     timing: args.artifacts?.timing,
-    processName: "cmdclaw chat",
+    processName: "bap chat",
     threadName: `conversation ${args.conversationId} generation ${args.generationId}`,
   });
 

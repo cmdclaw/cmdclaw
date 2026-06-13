@@ -4,7 +4,7 @@
 
 - `agentsdk` runtime path is wired directly through `sandbox-agent` SDK (no OpenCode client fallback in runtime/bridge).
 - Session streaming events are mapped for `agent_message_chunk`, `tool_call`, and `tool_call_update`.
-- Permission requests from SDK (`session/request_permission`) are surfaced to CmdClaw approval flow.
+- Permission requests from SDK (`session/request_permission`) are surfaced to Bap approval flow.
 
 ## Still Not Working
 

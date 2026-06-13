@@ -1,11 +1,11 @@
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   coworkerRunEvent,
   generation,
   message,
   type ContentPart,
   type MessageTiming,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import {
   generationStreamExists,

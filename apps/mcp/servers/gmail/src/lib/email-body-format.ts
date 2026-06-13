@@ -1,1 +1,1 @@
-export { prepareEmailHtmlBody } from "@cmdclaw/message-format";
+export { prepareEmailHtmlBody } from "@bap/message-format";

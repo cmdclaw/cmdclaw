@@ -1,5 +1,5 @@
 import type {
-  CmdclawApiClient,
+  BapApiClient,
   CoworkerCreateInput,
   CoworkerCreateResult,
   CoworkerDetails,
@@ -14,7 +14,7 @@ export function isCoworkerUsernameReference(value: string): boolean {
 }
 
 export async function resolveCoworkerReference(
-  client: CmdclawApiClient,
+  client: BapApiClient,
   reference: string,
 ): Promise<string> {
   const trimmed = reference.trim();
@@ -40,7 +40,7 @@ export async function resolveCoworkerReference(
   return matched.id;
 }
 
-export function createCoworkerRunner(client: CmdclawApiClient) {
+export function createCoworkerRunner(client: BapApiClient) {
   return {
     async resolveReference(reference: string): Promise<string> {
       return resolveCoworkerReference(client, reference);

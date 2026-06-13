@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { verifyManagedMcpToken } from "../managed-mcp-auth";
 import { generationLifecyclePolicy } from "../services/lifecycle-policy";
 import {
-  buildCmdclawPlatformMcpServer,
+  buildBapPlatformMcpServer,
   PLATFORM_MCP_TOKEN_TTL_SECONDS,
 } from "./platform-mcp-server";
 
 describe("bap platform MCP server", () => {
   it("builds an http server entry pointing at the gateway /bap path", () => {
-    const server = buildCmdclawPlatformMcpServer({
+    const server = buildBapPlatformMcpServer({
       userId: "user-1",
       workspaceId: "ws-1",
       spawnDepth: 0,
@@ -25,7 +25,7 @@ describe("bap platform MCP server", () => {
   });
 
   it("signs a managed token carrying the acting user, workspace, and spawn depth", () => {
-    const server = buildCmdclawPlatformMcpServer({
+    const server = buildBapPlatformMcpServer({
       userId: "user-1",
       workspaceId: "ws-1",
       spawnDepth: 2,
@@ -58,7 +58,7 @@ describe("bap platform MCP server", () => {
   });
 
   it("rejects verification with the wrong secret", () => {
-    const server = buildCmdclawPlatformMcpServer({
+    const server = buildBapPlatformMcpServer({
       userId: "user-1",
       workspaceId: "ws-1",
       spawnDepth: 0,

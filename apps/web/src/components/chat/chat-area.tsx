@@ -2,8 +2,8 @@ import {
   DEFAULT_CONNECTED_CHATGPT_MODEL,
   resolveDefaultChatModel,
   shouldMigrateLegacyDefaultModel,
-} from "@cmdclaw/core/lib/chat-model-defaults";
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+} from "@bap/core/lib/chat-model-defaults";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { T, msg, useGT, useMessages } from "gt-react";
@@ -395,7 +395,7 @@ function buildRunDeadlineResumeSegment(
           },
         ],
       },
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       status: "pending",
     },

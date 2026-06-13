@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { providerOauthState } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { providerOauthState } from "@bap/db/schema";
 import { eq, lt } from "drizzle-orm";
 
 /**

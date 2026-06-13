@@ -1,8 +1,8 @@
-import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
-import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@cmdclaw/core/lib/coworker-tool-policy";
-import { SLO_CONCRETE_JOURNEYS } from "@cmdclaw/core/server/services/slo-journey-classification";
-import { closePool, db as localDb } from "@cmdclaw/db/client";
-import { coworker, coworkerRun, generation, sloReplayRun, user } from "@cmdclaw/db/schema";
+import type { IntegrationType } from "@bap/core/server/oauth/config";
+import { COWORKER_AVAILABLE_INTEGRATION_TYPES } from "@bap/core/lib/coworker-tool-policy";
+import { SLO_CONCRETE_JOURNEYS } from "@bap/core/server/services/slo-journey-classification";
+import { closePool, db as localDb } from "@bap/db/client";
+import { coworker, coworkerRun, generation, sloReplayRun, user } from "@bap/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import process from "node:process";
@@ -616,9 +616,8 @@ async function executeReplayCandidate(
         throw new Error(`Local coworker not found for ${candidate.coworkerId}`);
       }
 
-      const { triggerCoworkerRun } = await import("@cmdclaw/core/server/services/coworker-service");
-      const { generationManager } =
-        await import("@cmdclaw/core/server/services/generation-manager");
+      const { triggerCoworkerRun } = await import("@bap/core/server/services/coworker-service");
+      const { generationManager } = await import("@bap/core/server/services/generation-manager");
       const result = await triggerCoworkerRun({
         coworkerId: candidate.coworkerId,
         triggerPayload: { source: "slo_replay" },
@@ -651,8 +650,7 @@ async function executeReplayCandidate(
       if (!candidate.firstUserMessage) {
         throw new Error("Source generation is missing a first user message");
       }
-      const { generationManager } =
-        await import("@cmdclaw/core/server/services/generation-manager");
+      const { generationManager } = await import("@bap/core/server/services/generation-manager");
       const result = await generationManager.startGeneration({
         content: candidate.firstUserMessage,
         model: candidate.model ?? undefined,

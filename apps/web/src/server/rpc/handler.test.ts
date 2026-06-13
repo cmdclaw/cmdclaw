@@ -30,7 +30,7 @@ vi.mock("@/server/orpc/context", () => ({
   createORPCContext: (...args: unknown[]) => createContextMock(...args),
 }));
 
-vi.mock("@cmdclaw/core/server/utils/observability", () => ({
+vi.mock("@bap/core/server/utils/observability", () => ({
   extractHttpTraceContext: () => undefined,
   recordCounter: vi.fn<VitestProcedure>(),
   recordHistogram: vi.fn<VitestProcedure>(),
@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 function rpcRequest(path = "/api/rpc/foo", init?: RequestInit): Request {
-  return new Request(`https://cmdclaw.ai${path}`, { method: "POST", ...init });
+  return new Request(`https://heybap.com${path}`, { method: "POST", ...init });
 }
 
 describe("withNoStore", () => {

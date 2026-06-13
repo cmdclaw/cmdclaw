@@ -9,8 +9,8 @@ import { T } from "gt-react";
 export const Route = createFileRoute("/support/")({
   head: () => ({
     meta: [
-      { title: "Support - CmdClaw" },
-      { name: "description", content: "Get help and support for CmdClaw" },
+      { title: "Support - Bap" },
+      { name: "description", content: "Get help and support for Bap" },
     ],
   }),
   component: SupportPage,
@@ -29,10 +29,10 @@ function SupportPage() {
       </div>
 
       <a
-        href="mailto:baptiste@cmdclaw.ai"
+        href="mailto:baptiste@heybap.com"
         className="text-primary text-lg font-medium hover:underline"
       >
-        <T>baptiste@cmdclaw.ai</T>
+        <T>baptiste@heybap.com</T>
       </a>
     </div>
   );

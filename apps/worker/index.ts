@@ -1,6 +1,6 @@
-import { initializeObservabilityRuntime } from "@cmdclaw/core/server/utils/observability";
-import { startWorkerRuntime } from "@cmdclaw/core/worker-runtime";
+import { initializeObservabilityRuntime } from "@bap/core/server/utils/observability";
+import { startWorkerRuntime } from "@bap/core/worker-runtime";
 
-initializeObservabilityRuntime("cmdclaw-worker");
+initializeObservabilityRuntime("bap-worker");
 
 void startWorkerRuntime();

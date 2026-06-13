@@ -37,7 +37,7 @@ export const Route = createFileRoute("/onboarding/integrations")({
       { title: "Connect your tools" },
       {
         name: "description",
-        content: "Connect your apps so CmdClaw can help with email, calendar, and documents.",
+        content: "Connect your apps so Bap can help with email, calendar, and documents.",
       },
     ],
   }),

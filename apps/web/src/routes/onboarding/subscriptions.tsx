@@ -17,7 +17,7 @@ export const Route = createFileRoute("/onboarding/subscriptions")({
       { title: "Bring your AI subscription" },
       {
         name: "description",
-        content: "Connect your existing AI account to unlock additional models on CmdClaw.",
+        content: "Connect your existing AI account to unlock additional models on Bap.",
       },
     ],
   }),
@@ -82,7 +82,7 @@ function DeviceFlowPanel({
       </div>
 
       <p className="text-muted-foreground mt-2 text-sm">
-        <T>Open the verification page below and paste this code to authorize CmdClaw.</T>
+        <T>Open the verification page below and paste this code to authorize Bap.</T>
       </p>
 
       <div className="bg-muted/60 mt-4 flex items-center justify-between rounded-xl px-3 py-3 sm:px-5 sm:py-4">
@@ -352,8 +352,7 @@ function OnboardingSubscriptionsPage() {
         </h1>
         <p className="text-muted-foreground">
           <T>
-            Connect your existing AI account to unlock additional models at no extra cost on
-            CmdClaw.
+            Connect your existing AI account to unlock additional models at no extra cost on Bap.
           </T>
         </p>
       </div>

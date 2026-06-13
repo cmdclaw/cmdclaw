@@ -1,13 +1,13 @@
 import {
   exchangeCloudAccountLink,
   getCloudManagedIntegrationConnectUrl,
-} from "@cmdclaw/core/server/control-plane/client";
+} from "@bap/core/server/control-plane/client";
 import {
   consumeCloudAccountLinkState,
   upsertCloudAccountLinkForUser,
-} from "@cmdclaw/core/server/control-plane/local-links";
-import { db } from "@cmdclaw/db/client";
-import { controlPlaneLinkRequest } from "@cmdclaw/db/schema";
+} from "@bap/core/server/control-plane/local-links";
+import { db } from "@bap/db/client";
+import { controlPlaneLinkRequest } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { buildRequestAwareUrl } from "@/lib/request-aware-url";

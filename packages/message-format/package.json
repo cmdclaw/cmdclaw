@@ -1,5 +1,5 @@
 {
-  "name": "@cmdclaw/message-format",
+  "name": "@bap/message-format",
   "private": true,
   "version": "0.1.0",
   "type": "module",

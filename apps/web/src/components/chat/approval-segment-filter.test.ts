@@ -116,7 +116,7 @@ describe("filterLocallyResolvedPendingApprovalSegments", () => {
       interruptId: "interrupt-question-1",
       toolUseId: "tool-question-1",
       toolName: "question",
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       toolInput: {
         questions: [
@@ -148,7 +148,7 @@ describe("filterLocallyResolvedPendingApprovalSegments", () => {
       interruptId: "interrupt-question-1",
       toolUseId: "tool-question-1",
       toolName: "question",
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       toolInput: {
         questions: [{ header: "Current task", question: "Pick one", options: [] }],
@@ -159,7 +159,7 @@ describe("filterLocallyResolvedPendingApprovalSegments", () => {
       interruptId: "interrupt-question-2",
       toolUseId: "tool-question-2",
       toolName: "question",
-      integration: "cmdclaw",
+      integration: "bap",
       operation: "question",
       toolInput: {
         questions: [{ header: "Next task", question: "Pick another", options: [] }],

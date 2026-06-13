@@ -4,11 +4,11 @@ Suggested Linear label/status: `ready-for-agent`
 
 ## Problem Statement
 
-CmdClaw's current workspace integration runtime is built around Executor, a separate daemon and tool catalog abstraction that does not match the foundation CmdClaw wants long term. This creates extra runtime preparation, duplicated MCP concepts, Executor-specific product language, OpenAPI support that CmdClaw no longer wants, and a wrapper tool path that hides OpenCode's native MCP capabilities.
+Bap's current workspace integration runtime is built around Executor, a separate daemon and tool catalog abstraction that does not match the foundation Bap wants long term. This creates extra runtime preparation, duplicated MCP concepts, Executor-specific product language, OpenAPI support that Bap no longer wants, and a wrapper tool path that hides OpenCode's native MCP capabilities.
 
 ## Solution
 
-Remove Executor as a product and runtime foundation in a Big Bang refactor. CmdClaw will model workspace runtime integrations as **Workspace MCP Servers**, keep **Workspace MCP Authorization** owned by CmdClaw, and configure allowlisted servers through OpenCode's native MCP support before each **Generation**. The **Toolbox** remains the user-facing selection surface, while OpenCode exposes only successfully connected MCP tools to the model.
+Remove Executor as a product and runtime foundation in a Big Bang refactor. Bap will model workspace runtime integrations as **Workspace MCP Servers**, keep **Workspace MCP Authorization** owned by Bap, and configure allowlisted servers through OpenCode's native MCP support before each **Generation**. The **Toolbox** remains the user-facing selection surface, while OpenCode exposes only successfully connected MCP tools to the model.
 
 ## User Stories
 
@@ -19,8 +19,8 @@ Remove Executor as a product and runtime foundation in a Big Bang refactor. CmdC
 5. As a coworker owner, I want each coworker run to use the coworker's current Toolbox configuration, so that changed tool access takes effect on the next Generation.
 6. As a coworker owner, I want removed tools to be disconnected before a reused session starts, so that old MCP access does not leak into later runs.
 7. As a workspace admin, I want managed integrations and custom MCP endpoints represented by the same Workspace MCP Server model, so that access policy is consistent.
-8. As a workspace admin, I want CmdClaw to continue owning Workspace MCP Authorization, so that credentials, grants, revocation, and policy remain durable product state.
-9. As a workspace admin, I want OpenCode to own only the per-generation MCP connection attempt, so that runtime behavior uses OpenCode's MCP support without moving auth state out of CmdClaw.
+8. As a workspace admin, I want Bap to continue owning Workspace MCP Authorization, so that credentials, grants, revocation, and policy remain durable product state.
+9. As a workspace admin, I want OpenCode to own only the per-generation MCP connection attempt, so that runtime behavior uses OpenCode's MCP support without moving auth state out of Bap.
 10. As a workspace admin, I want custom OpenAPI/Executor sources removed, so that unsupported source formats do not remain as confusing product options.
 11. As a developer, I want non-MCP future integrations wrapped as first-party MCP servers, so that MCP remains the single runtime integration boundary.
 12. As a developer, I want no generic replacement discovery catalog, so that the refactor does not recreate Executor under a different name.
@@ -59,7 +59,7 @@ Remove Executor as a product and runtime foundation in a Big Bang refactor. CmdC
 - Remove Executor daemon bootstrap, config writing, source refresh, secret injection, and OAuth reconcile code paths.
 - Remove Executor package installation and trust steps from sandbox images and sandbox debug scripts.
 - Replace Executor preparation metrics and trace spans with MCP reconciliation metrics that describe server resolution, state reconciliation, connection attempts, and warning creation.
-- Keep Toolbox UI selectable based on CmdClaw access policy. Do not pre-hide servers just because a runtime connection may fail.
+- Keep Toolbox UI selectable based on Bap access policy. Do not pre-hide servers just because a runtime connection may fail.
 - Use user-facing copy such as "tools" or "integrations" in Toolbox surfaces, while technical/admin surfaces can say "MCP server".
 - Treat Runtime Warnings as visible product state, distinct from Operational Logs.
 - Redact credentials and headers in logs, warnings, traces, and diagnostics.
@@ -89,7 +89,7 @@ Remove Executor as a product and runtime foundation in a Big Bang refactor. CmdC
 - Adding a new generic discovery/search catalog for tools.
 - Supporting OpenAPI sources directly.
 - Automatically converting custom Executor/OpenAPI sources into MCP servers.
-- Moving CmdClaw-owned Workspace MCP Authorization into OpenCode's local auth store.
+- Moving Bap-owned Workspace MCP Authorization into OpenCode's local auth store.
 - Merging hosted MCP OAuth with outbound Workspace MCP Authorization.
 - Building new first-party MCP wrappers for future non-MCP integrations.
 - Changing unrelated coworker behavior beyond Toolbox and Workspace MCP Server Allowlist semantics.

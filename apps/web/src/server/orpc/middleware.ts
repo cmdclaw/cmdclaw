@@ -1,5 +1,5 @@
 import type { Session, User } from "better-auth";
-import { recordUserActiveToday } from "@cmdclaw/core/server/services/user-telemetry";
+import { recordUserActiveToday } from "@bap/core/server/services/user-telemetry";
 import { os, ORPCError } from "@orpc/server";
 import type { ORPCContext } from "./context";
 

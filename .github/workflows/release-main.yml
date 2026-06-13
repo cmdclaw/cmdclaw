@@ -435,7 +435,7 @@ jobs:
 
           payload="$(jq -n \
             --arg channel "#ops-alerts" \
-            --arg text "CmdClaw release failed for ${COMMIT_SHA}: ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
+            --arg text "Bap release failed for ${COMMIT_SHA}: ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
             '{channel: $channel, text: $text}')"
 
           response="$(curl --fail --show-error --silent \

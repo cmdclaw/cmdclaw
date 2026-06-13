@@ -1,5 +1,5 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@cmdclaw/core/lib/chat-model-defaults";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import { DEFAULT_CONNECTED_CHATGPT_MODEL } from "@bap/core/lib/chat-model-defaults";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { normalizeChatModelSelection } from "@/lib/chat-model-selection";

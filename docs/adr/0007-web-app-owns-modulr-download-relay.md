@@ -1,6 +1,6 @@
 # Web App Owns Modulr Download Relay
 
-CmdClaw serves **Modulr Download Artifacts** through the web app host (`APP_URL`) rather than the MCP gateway, so the externally hosted runtime sandbox and the **User** receive normal `cmdclaw.ai` or `staging.cmdclaw.ai` download links without direct object-storage access. The Modulr MCP server still creates the short-lived artifact because it can access Modulr and CmdClaw private object storage, but the public relay boundary belongs to the app server and is authorized by a short-lived signed token whose storage key must match the claimed workspace scope.
+Bap serves **Modulr Download Artifacts** through the web app host (`APP_URL`) rather than the MCP gateway, so the externally hosted runtime sandbox and the **User** receive normal `heybap.com` or `staging.heybap.com` download links without direct object-storage access. The Modulr MCP server still creates the short-lived artifact because it can access Modulr and Bap private object storage, but the public relay boundary belongs to the app server and is authorized by a short-lived signed token whose storage key must match the claimed workspace scope.
 
 **Considered Options**
 
@@ -10,4 +10,4 @@ CmdClaw serves **Modulr Download Artifacts** through the web app host (`APP_URL`
 
 **Consequences**
 
-The MCP gateway does not expose Modulr document download routes. New Modulr download links are app-hosted, and object storage remains a private infrastructure dependency used only by CmdClaw services.
+The MCP gateway does not expose Modulr document download routes. New Modulr download links are app-hosted, and object storage remains a private infrastructure dependency used only by Bap services.

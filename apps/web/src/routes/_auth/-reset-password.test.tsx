@@ -9,9 +9,8 @@ void jestDomVitest;
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn<(path: string) => void>(),
   resetPassword: vi.fn<(input: { token: string; newPassword: string }) => Promise<object>>(),
-  signInEmail: vi.fn<
-    (input: { email: string; password: string; callbackURL: string }) => Promise<object>
-  >(),
+  signInEmail:
+    vi.fn<(input: { email: string; password: string; callbackURL: string }) => Promise<object>>(),
 }));
 
 // Replace Better Auth's client with deterministic stubs; the view drives it directly.
@@ -49,7 +48,7 @@ describe("/reset-password", () => {
   });
 
   it("resets the password and redirects to the callbackUrl", async () => {
-    renderView({ token: "token-1", callbackUrl: "/chat", email: "pilot@cmdclaw.ai" });
+    renderView({ token: "token-1", callbackUrl: "/chat", email: "pilot@heybap.com" });
 
     fireEvent.change(screen.getByLabelText("New password"), {
       target: { value: "new-password-123" },
@@ -66,7 +65,7 @@ describe("/reset-password", () => {
       });
     });
     expect(mocks.signInEmail).toHaveBeenCalledWith({
-      email: "pilot@cmdclaw.ai",
+      email: "pilot@heybap.com",
       password: "new-password-123",
       callbackURL: "/chat",
     });

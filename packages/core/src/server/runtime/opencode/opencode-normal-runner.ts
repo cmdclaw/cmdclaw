@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { conversation } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "../../../env";
 import { splitCoworkerAllowedSkillSlugs } from "../../../lib/coworker-tool-policy";
@@ -50,7 +50,7 @@ import type {
 import type { OpenCodeTurnEventBridge } from "./opencode-turn-events";
 import { captureRuntimeNoProgressDiagnosticSnapshot } from "../../services/runtime-diagnostic-snapshot-service";
 import { resolveWorkspaceMcpServersForGeneration } from "../../executor/workspace-sources";
-import { resolveCmdclawPlatformMcpServer } from "../../sandbox/platform-mcp-server";
+import { resolveBapPlatformMcpServer } from "../../sandbox/platform-mcp-server";
 
 const OPENCODE_EARLY_STREAM_REATTACH_ATTEMPTS = 2;
 const OPENCODE_EARLY_STREAM_REATTACH_WAIT_MS = 8_000;
@@ -668,7 +668,7 @@ export class OpenCodeNormalRunner {
             }),
             // Platform MCP Server (ADR-0013): hard-wired into every generation,
             // independent of the Workspace MCP Server Allowlist.
-            resolveCmdclawPlatformMcpServer({
+            resolveBapPlatformMcpServer({
               userId: ctx.userId,
               workspaceId: ctx.workspaceId,
               spawnDepth: ctx.spawnDepth,
@@ -768,7 +768,7 @@ export class OpenCodeNormalRunner {
       });
       emitCanonicalServiceEvent({
         level: runtimeMcpWarnings.length > 0 ? "warn" : "info",
-        eventName: "cmdclaw.workspace_mcp.reconciliation",
+        eventName: "bap.workspace_mcp.reconciliation",
         operationName: "workspace_mcp.reconcile",
         eventId: `generation:${ctx.id}:workspace_mcp_reconcile`,
         outcome: runtimeMcpWarnings.length > 0 ? "degraded" : "connected",
@@ -782,13 +782,13 @@ export class OpenCodeNormalRunner {
           sessionId,
         },
         attributes: {
-          "cmdclaw.generation.id": ctx.id,
-          "cmdclaw.conversation.id": ctx.conversationId,
-          "cmdclaw.workspace.id": ctx.workspaceId ?? undefined,
-          "cmdclaw.workspace_mcp.requested_count": resolvedWorkspaceMcpServerNames.length,
-          "cmdclaw.workspace_mcp.warning_count": runtimeMcpWarnings.length,
-          "cmdclaw.workspace_mcp.requested_servers": resolvedWorkspaceMcpServerNames,
-          "cmdclaw.workspace_mcp.warning_servers": workspaceMcpWarningNames,
+          "bap.generation.id": ctx.id,
+          "bap.conversation.id": ctx.conversationId,
+          "bap.workspace.id": ctx.workspaceId ?? undefined,
+          "bap.workspace_mcp.requested_count": resolvedWorkspaceMcpServerNames.length,
+          "bap.workspace_mcp.warning_count": runtimeMcpWarnings.length,
+          "bap.workspace_mcp.requested_servers": resolvedWorkspaceMcpServerNames,
+          "bap.workspace_mcp.warning_servers": workspaceMcpWarningNames,
         },
       });
 

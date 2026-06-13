@@ -4,7 +4,7 @@ import {
   remoteIntegrationCredentialsResponseSchema,
   remoteIntegrationTypeSchema,
   remoteIntegrationUserSummarySchema,
-} from "@cmdclaw/core/server/integrations/remote-integrations";
+} from "@bap/core/server/integrations/remote-integrations";
 import { z } from "zod";
 import { isAuthorizedByServerSecret } from "@/server/internal/server-secret";
 

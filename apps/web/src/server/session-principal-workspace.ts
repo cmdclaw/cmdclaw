@@ -1,6 +1,6 @@
-import { ensureWorkspaceForUser } from "@cmdclaw/core/server/billing/service";
-import { db } from "@cmdclaw/db/client";
-import { user as userTable } from "@cmdclaw/db/schema";
+import { ensureWorkspaceForUser } from "@bap/core/server/billing/service";
+import { db } from "@bap/db/client";
+import { user as userTable } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function resolveSessionPrincipalWorkspaceId(userId: string): Promise<string> {

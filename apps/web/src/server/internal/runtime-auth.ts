@@ -1,7 +1,7 @@
 import {
   type AuthorizedRuntimeContext,
   conversationRuntimeService,
-} from "@cmdclaw/core/server/services/conversation-runtime-service";
+} from "@bap/core/server/services/conversation-runtime-service";
 
 /**
  * Framework-neutral runtime-turn authorization for the internal coworker/runtime callback

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installs the managed-WAF skip rule needed for CmdClaw routes that accept
+# Installs the managed-WAF skip rule needed for Bap routes that accept
 # arbitrary user-authored code or markdown. Requires a Cloudflare API token with
 # Zone Rulesets edit access.
 
 : "${CLOUDFLARE_API_TOKEN:?Set CLOUDFLARE_API_TOKEN with Zone Rulesets edit access}"
-: "${CLOUDFLARE_ZONE_ID:?Set CLOUDFLARE_ZONE_ID for the cmdclaw.ai zone}"
+: "${CLOUDFLARE_ZONE_ID:?Set CLOUDFLARE_ZONE_ID for the heybap.com zone}"
 
-RULE_REF="${RULE_REF:-cmdclaw-api-content-write-waf-skip}"
-RULE_DESCRIPTION="${RULE_DESCRIPTION:-CmdClaw: skip managed WAF for content-write RPCs}"
+RULE_REF="${RULE_REF:-bap-api-content-write-waf-skip}"
+RULE_DESCRIPTION="${RULE_DESCRIPTION:-Bap: skip managed WAF for content-write RPCs}"
 PHASE="http_request_firewall_managed"
 API_BASE="https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}"
 
-HOSTS="${CLOUDFLARE_WAF_SKIP_HOSTS:-staging.cmdclaw.ai cmdclaw.ai}"
+HOSTS="${CLOUDFLARE_WAF_SKIP_HOSTS:-staging.heybap.com heybap.com}"
 PATHS="${CLOUDFLARE_WAF_SKIP_PATHS:-/api/rpc/skill/updateFile /api/rpc/skill/addFile}"
 
 build_set() {

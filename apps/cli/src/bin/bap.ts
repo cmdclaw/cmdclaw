@@ -5,15 +5,15 @@ import {
   recordHistogram,
   shutdownObservabilityRuntime,
   startActiveServerSpan,
-} from "@cmdclaw/core/server/utils/observability";
+} from "@bap/core/server/utils/observability";
 import { run } from "@stricli/core";
 import { app } from "../app";
 import { buildContext } from "../context";
-import { normalizeCmdclawArgv } from "../lib/argv";
+import { normalizeBapArgv } from "../lib/argv";
 
-initializeObservabilityRuntime("cmdclaw-cli");
+initializeObservabilityRuntime("bap-cli");
 
-const normalizedArgv = normalizeCmdclawArgv(process.argv.slice(2));
+const normalizedArgv = normalizeBapArgv(process.argv.slice(2));
 const startedAt = performance.now();
 const commandAttributes = {
   primary_command: normalizedArgv[0] ?? "root",
@@ -30,31 +30,31 @@ try {
       try {
         await run(app, normalizedArgv, buildContext(process));
         recordCounter(
-          "cmdclaw_cli_invocations_total",
+          "bap_cli_invocations_total",
           1,
           {
             ...commandAttributes,
             status: "ok",
           },
-          "Count of CmdClaw CLI invocations by command and status.",
+          "Count of Bap CLI invocations by command and status.",
         );
       } catch (error) {
         recordCounter(
-          "cmdclaw_cli_invocations_total",
+          "bap_cli_invocations_total",
           1,
           {
             ...commandAttributes,
             status: "error",
           },
-          "Count of CmdClaw CLI invocations by command and status.",
+          "Count of Bap CLI invocations by command and status.",
         );
         throw error;
       } finally {
         recordHistogram(
-          "cmdclaw_cli_invocation_duration_ms",
+          "bap_cli_invocation_duration_ms",
           performance.now() - startedAt,
           commandAttributes,
-          "Duration of CmdClaw CLI invocations.",
+          "Duration of Bap CLI invocations.",
         );
       }
     },

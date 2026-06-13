@@ -32,7 +32,7 @@ const ssrExternalPackages = ["dockerode", "docker-modem", "ssh2", "cpu-features"
 
 // Self-host dev runs on 3001 via `dev:selfhost`, everything else stays on 3000.
 const devPort =
-	process.env.CMDCLAW_EDITION === "selfhost" ? SELF_HOST_PORT : DEFAULT_PORT;
+	process.env.BAP_EDITION === "selfhost" ? SELF_HOST_PORT : DEFAULT_PORT;
 
 function isNodeModulesPath(value: string | undefined): boolean {
 	return value !== undefined && nodeModulesPathPattern.test(value);
@@ -120,7 +120,7 @@ export default defineConfig(({ isSsrBuild }) => ({
 			],
 		},
 	},
-	// Dev only: Vite's esbuild dep pre-bundling crawls from routes into the @cmdclaw/core
+	// Dev only: Vite's esbuild dep pre-bundling crawls from routes into the @bap/core
 	// workspace source and hits server-only code that the production Rollup build externalizes
 	// for SSR. Two failure modes to keep out of esbuild:
 	//  1. @tanstack/start-server-core uses virtual `#tanstack-*` entries only the Vite plugin

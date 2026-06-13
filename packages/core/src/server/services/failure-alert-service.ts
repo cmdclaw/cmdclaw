@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { db } from "@cmdclaw/db/client";
+import { db } from "@bap/db/client";
 import {
   conversation,
   coworkerRun,
@@ -8,7 +8,7 @@ import {
   generation,
   user,
   type FailureAlertKind,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { buildQueueJobId, FAILURE_ALERT_LINEAR_SYNC_JOB_NAME, getQueue } from "../queues/queue-client";
 

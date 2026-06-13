@@ -5,7 +5,7 @@ import { useAdminUsageDashboard } from "@/orpc/hooks/admin";
 import { useAdminWorkspaces } from "@/orpc/hooks/workspace";
 
 export const Route = createFileRoute("/admin/usage")({
-  head: () => ({ meta: [{ title: "Usage - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Usage - Bap" }] }),
   component: AdminUsagePage,
 });
 

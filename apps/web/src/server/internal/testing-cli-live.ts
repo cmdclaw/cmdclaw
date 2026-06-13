@@ -1,13 +1,13 @@
 import {
   computeWorkspaceMcpServerRevisionHash,
   setWorkspaceMcpServerCredential,
-} from "@cmdclaw/core/server/executor/workspace-sources";
+} from "@bap/core/server/executor/workspace-sources";
 import {
   getValidConnectedAccountTokensForUser,
   getValidTokensForUser,
-} from "@cmdclaw/core/server/integrations/token-refresh";
-import type { IntegrationType } from "@cmdclaw/core/server/oauth/config";
-import { db } from "@cmdclaw/db/client";
+} from "@bap/core/server/integrations/token-refresh";
+import type { IntegrationType } from "@bap/core/server/oauth/config";
+import { db } from "@bap/db/client";
 import {
   type ContentPart,
   conversation,
@@ -21,7 +21,7 @@ import {
   workspaceMcpAuthorization,
   workspaceMcpServer,
   workspaceMember,
-} from "@cmdclaw/db/schema";
+} from "@bap/db/schema";
 import { Daytona } from "@daytonaio/sdk";
 import { and, desc, eq, inArray, like, or } from "drizzle-orm";
 import { z } from "zod";

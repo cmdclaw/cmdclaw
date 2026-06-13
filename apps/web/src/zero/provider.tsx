@@ -8,13 +8,13 @@ import { resolveZeroCacheURL, resolveZeroQueryURL, type BrowserLocation } from "
 import { schema } from "./schema";
 import { buildZeroStorageKey } from "./storage-key";
 
-type CmdClawZeroProviderProps = {
+type BapZeroProviderProps = {
   children: ReactNode;
   hasSession: boolean;
   principal?: SessionPrincipal | null;
 };
 
-type CmdClawZeroRuntime = {
+type BapZeroRuntime = {
   error: Error | null;
   isReady: boolean;
   isResolvingWorkspace: boolean;
@@ -22,7 +22,7 @@ type CmdClawZeroRuntime = {
   workspaceId: string;
 };
 
-const CmdClawZeroRuntimeContext = createContext<CmdClawZeroRuntime>({
+const BapZeroRuntimeContext = createContext<BapZeroRuntime>({
   error: null,
   isReady: false,
   isResolvingWorkspace: false,
@@ -30,7 +30,7 @@ const CmdClawZeroRuntimeContext = createContext<CmdClawZeroRuntime>({
   workspaceId: "",
 });
 
-const DISABLED_SERVER_ZERO = { clientID: "cmdclaw-ssr-disabled-zero" } as never;
+const DISABLED_SERVER_ZERO = { clientID: "bap-ssr-disabled-zero" } as never;
 
 function toError(value: unknown): Error {
   return value instanceof Error ? value : new Error("Failed to initialize Zero workspace context");
@@ -48,15 +48,11 @@ export function getZeroQueryURL(): string | undefined {
   return resolveZeroQueryURL(env.VITE_ZERO_QUERY_URL, getBrowserLocation());
 }
 
-export function useCmdClawZeroRuntime(): CmdClawZeroRuntime {
-  return useContext(CmdClawZeroRuntimeContext);
+export function useBapZeroRuntime(): BapZeroRuntime {
+  return useContext(BapZeroRuntimeContext);
 }
 
-export function CmdClawZeroProvider({
-  children,
-  hasSession,
-  principal = null,
-}: CmdClawZeroProviderProps) {
+export function BapZeroProvider({ children, hasSession, principal = null }: BapZeroProviderProps) {
   const userId = hasSession ? (principal?.userId ?? null) : null;
   const principalWorkspaceId = hasSession ? (principal?.activeWorkspaceId ?? "") : "";
   const currentUser = useCurrentUser({ enabled: Boolean(userId && !principalWorkspaceId) });
@@ -73,7 +69,7 @@ export function CmdClawZeroProvider({
           userId,
           workspaceId,
         })
-      : "cmdclaw-web:anonymous";
+      : "bap-web:anonymous";
   const zero = useMemo(
     () =>
       canCreateZero
@@ -103,15 +99,15 @@ export function CmdClawZeroProvider({
 
   if (!zero) {
     return (
-      <CmdClawZeroRuntimeContext.Provider value={runtime}>
+      <BapZeroRuntimeContext.Provider value={runtime}>
         <ZeroContext.Provider value={DISABLED_SERVER_ZERO}>{children}</ZeroContext.Provider>
-      </CmdClawZeroRuntimeContext.Provider>
+      </BapZeroRuntimeContext.Provider>
     );
   }
 
   return (
-    <CmdClawZeroRuntimeContext.Provider value={runtime}>
+    <BapZeroRuntimeContext.Provider value={runtime}>
       <ZeroProvider zero={zero}>{children}</ZeroProvider>
-    </CmdClawZeroRuntimeContext.Provider>
+    </BapZeroRuntimeContext.Provider>
   );
 }

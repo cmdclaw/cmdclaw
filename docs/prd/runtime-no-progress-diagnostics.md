@@ -2,13 +2,13 @@
 
 ## Problem Statement
 
-CmdClaw can leave a **Generation** looking active even when the runtime has stopped making meaningful progress. In the observed production incidents, one chat **Generation** reached the runtime boundary, sent the prompt, received only transport-level connection activity, then waited until the 15-minute run deadline. Another **Generation** entered an interruption path and later appeared stuck to the user because reconnecting clients saw no useful stream activity.
+Bap can leave a **Generation** looking active even when the runtime has stopped making meaningful progress. In the observed production incidents, one chat **Generation** reached the runtime boundary, sent the prompt, received only transport-level connection activity, then waited until the 15-minute run deadline. Another **Generation** entered an interruption path and later appeared stuck to the user because reconnecting clients saw no useful stream activity.
 
 This makes production failures hard to debug. Operators can see repeated stream subscription timeouts, but they cannot quickly distinguish a long-running model turn from a **Dormant Generation**, and by the time the run ends the sandbox/runtime state needed for root-cause analysis may already be gone.
 
 ## Solution
 
-CmdClaw should enforce a lifecycle invariant: every non-terminal **Generation** must either show **Runtime Progress** or be a **Waiting Generation** backed by durable human action. A post-prompt runtime turn that produces no **Runtime Progress** within 90 seconds should fail terminally with a precise normalized code, capture a redacted **Runtime Diagnostic Snapshot**, and surface clear user/admin feedback.
+Bap should enforce a lifecycle invariant: every non-terminal **Generation** must either show **Runtime Progress** or be a **Waiting Generation** backed by durable human action. A post-prompt runtime turn that produces no **Runtime Progress** within 90 seconds should fail terminally with a precise normalized code, capture a redacted **Runtime Diagnostic Snapshot**, and surface clear user/admin feedback.
 
 Normal users should see: "The runtime stopped responding before producing any output. Please retry."
 
@@ -32,7 +32,7 @@ Admin and operator surfaces should show the actual failure code, phase, runtime 
 14. As an operator, I want safe runtime identifiers recorded, so that I can correlate the failure with runtime logs and sandbox provider state.
 15. As an operator, I want the runtime harness and protocol version recorded, so that failures can be grouped by runtime implementation.
 16. As an operator, I want model and auth source recorded through existing telemetry conventions, so that provider-specific failures are visible.
-17. As an operator, I want a safe OpenCode session state summary, so that I can tell whether CmdClaw subscribed to the wrong stream or the runtime never started the turn.
+17. As an operator, I want a safe OpenCode session state summary, so that I can tell whether Bap subscribed to the wrong stream or the runtime never started the turn.
 18. As an operator, I want a safe runtime log tail, so that I can see recent runtime errors without storing prompts, model output, credentials, or file contents.
 19. As an operator, I want one failure code for this specific no-progress mode, so that alerts and dashboards do not collapse it into generic runtime errors.
 20. As an operator, I want normal production failures to tear down sandboxes after diagnostics are captured, so that failures do not leak resources.

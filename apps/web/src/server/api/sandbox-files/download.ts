@@ -1,6 +1,6 @@
-import { downloadFromS3 } from "@cmdclaw/core/server/storage/s3-client";
-import { db } from "@cmdclaw/db/client";
-import { sandboxFile } from "@cmdclaw/db/schema";
+import { downloadFromS3 } from "@bap/core/server/storage/s3-client";
+import { db } from "@bap/db/client";
+import { sandboxFile } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { createHmac, timingSafeEqual } from "node:crypto";
 

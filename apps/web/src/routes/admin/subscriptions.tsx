@@ -14,7 +14,7 @@ import {
 import { AppImage } from "./-lib/app-image";
 
 export const Route = createFileRoute("/admin/subscriptions")({
-  head: () => ({ meta: [{ title: "Shared CmdClaw Models - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "Shared Bap Models - Bap" }] }),
   component: AdminSubscriptionsPage,
 });
 
@@ -69,7 +69,7 @@ function AdminSubscriptionsPage() {
 
           if (result.status === "connected") {
             await refetch();
-            toast.success("Shared GPT-5.4 connected to CmdClaw Models.");
+            toast.success("Shared GPT-5.4 connected to Bap Models.");
             setDeviceFlow(null);
             return;
           }
@@ -113,7 +113,7 @@ function AdminSubscriptionsPage() {
   const handleDisconnectOpenAI = useCallback(async () => {
     try {
       await disconnectProvider.mutateAsync("openai");
-      toast.success("Shared GPT-5.4 disconnected from CmdClaw Models.");
+      toast.success("Shared GPT-5.4 disconnected from Bap Models.");
     } catch (error) {
       console.error("Failed to disconnect shared provider:", error);
       toast.error("Failed to disconnect. Please try again.");
@@ -134,7 +134,7 @@ function AdminSubscriptionsPage() {
       });
       setGeminiApiKey("");
       await refetch();
-      toast.success("Shared Gemini connected to CmdClaw Models.");
+      toast.success("Shared Gemini connected to Bap Models.");
     } catch (error) {
       console.error("Failed to save shared Gemini API key:", error);
       toast.error("Failed to save Gemini API key. Please try again.");
@@ -144,7 +144,7 @@ function AdminSubscriptionsPage() {
   const handleDisconnectGemini = useCallback(async () => {
     try {
       await disconnectProvider.mutateAsync("google");
-      toast.success("Shared Gemini disconnected from CmdClaw Models.");
+      toast.success("Shared Gemini disconnected from Bap Models.");
     } catch (error) {
       console.error("Failed to disconnect shared Gemini provider:", error);
       toast.error("Failed to disconnect Gemini. Please try again.");
@@ -190,10 +190,10 @@ function AdminSubscriptionsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Shared CmdClaw Models</h2>
+        <h2 className="text-xl font-semibold">Shared Bap Models</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Claude Sonnet 4.6 is built into CmdClaw Models. Connect shared ChatGPT access to add
-          GPT-5.4 and GPT-5.4 Mini for every user in the shared model selector.
+          Claude Sonnet 4.6 is built into Bap Models. Connect shared ChatGPT access to add GPT-5.4
+          and GPT-5.4 Mini for every user in the shared model selector.
         </p>
       </div>
 
@@ -211,7 +211,7 @@ function AdminSubscriptionsPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold">CmdClaw Models</h3>
+                <h3 className="text-base font-semibold">Bap Models</h3>
                 {isConnected ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -221,7 +221,7 @@ function AdminSubscriptionsPage() {
               </div>
               <p className="text-muted-foreground mt-1 text-sm">
                 Claude Sonnet 4.6 is always available. Connecting ChatGPT here unlocks GPT-5.4 and
-                GPT-5.4 Mini in CmdClaw Models for all users.
+                GPT-5.4 Mini in Bap Models for all users.
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {["Claude Sonnet 4.6", "GPT-5.4", "GPT-5.4 Mini"].map((model) => (
@@ -235,7 +235,7 @@ function AdminSubscriptionsPage() {
               </div>
               <p className="text-muted-foreground mt-3 text-xs">
                 GPT-5.4 and GPT-5.4 Mini use the shared ChatGPT connection. Claude Sonnet 4.6 is
-                CmdClaw-managed.
+                Bap-managed.
               </p>
             </div>
           </div>
@@ -271,7 +271,7 @@ function AdminSubscriptionsPage() {
             <p className="text-sm font-medium">Finish shared ChatGPT connection</p>
             <p className="text-muted-foreground mt-1 text-sm">
               Open the verification page and approve ChatGPT access so GPT-5.4 and GPT-5.4 Mini
-              become available in CmdClaw Models.
+              become available in Bap Models.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button variant="outline" onClick={handleOpenVerificationPage}>
@@ -303,7 +303,7 @@ function AdminSubscriptionsPage() {
               </div>
               <p className="text-muted-foreground mt-1 text-sm">
                 Save a shared Gemini API key here to unlock Gemini 3.1 Pro Preview for every user in
-                CmdClaw chat.
+                Bap chat.
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <span className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-[11px] font-medium">

@@ -1,4 +1,4 @@
-import { signManagedMcpToken } from "@cmdclaw/core/server/managed-mcp-auth";
+import { signManagedMcpToken } from "@bap/core/server/managed-mcp-auth";
 import { describe, expect, it } from "vitest";
 import { resolveManagedMcpClaims } from "./context";
 

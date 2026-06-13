@@ -1,4 +1,4 @@
-import { parseModelReference } from "@cmdclaw/core/lib/model-reference";
+import { parseModelReference } from "@bap/core/lib/model-reference";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -40,8 +40,8 @@ type ProfileState = {
   updatedAt?: string;
 };
 
-const CMDCLAW_DIR = join(homedir(), ".cmdclaw");
-const PROFILES_DIR = join(CMDCLAW_DIR, "profiles");
+const BAP_DIR = join(homedir(), ".bap");
+const PROFILES_DIR = join(BAP_DIR, "profiles");
 
 function printHelp(): void {
   console.log("\nUsage: bun run profiler [options]\n");
@@ -60,7 +60,7 @@ function parseArgs(argv: string[]): Args {
   const args: Args = {
     serverUrl: process.env.APP_SERVER_URL || DEFAULT_SERVER_URL,
     message: "hi",
-    model: process.env.CMDCLAW_CHAT_MODEL || "openai/gpt-5.2-codex",
+    model: process.env.BAP_CHAT_MODEL || "openai/gpt-5.2-codex",
     runs: 3,
     warmups: 1,
     autoApprove: true,
@@ -133,8 +133,8 @@ function getProfileStatePath(serverUrl: string): string {
 }
 
 function ensureProfilesDir(): void {
-  if (!existsSync(CMDCLAW_DIR)) {
-    mkdirSync(CMDCLAW_DIR, { recursive: true });
+  if (!existsSync(BAP_DIR)) {
+    mkdirSync(BAP_DIR, { recursive: true });
   }
   if (!existsSync(PROFILES_DIR)) {
     mkdirSync(PROFILES_DIR, { recursive: true });
@@ -439,7 +439,7 @@ async function main(): Promise<void> {
   const config = loadConfig(args.serverUrl);
   if (!config?.token) {
     console.error(
-      `[profiler] missing CLI auth token for ${args.serverUrl}. Run: bun run cmdclaw -- auth login --server ${args.serverUrl}`,
+      `[profiler] missing CLI auth token for ${args.serverUrl}. Run: bun run bap -- auth login --server ${args.serverUrl}`,
     );
     process.exit(1);
   }

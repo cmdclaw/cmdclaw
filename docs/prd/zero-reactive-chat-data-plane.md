@@ -4,9 +4,9 @@ Suggested Linear label/status: `ready-for-agent`
 
 ## Problem Statement
 
-CmdClaw's web chat and coworker surfaces feel slower than they should because core lists still depend on request/response reads and React Query invalidation for data that users expect to appear instantly. The recent chat list, conversation existence checks, persisted conversation messages, coworker list, **Coworker** run list, coworker folders, and coworker tags are central to the app's perceived speed: if those surfaces wait on network round trips or manual refetch timing, the app does not feel like a local-first agent workspace.
+Bap's web chat and coworker surfaces feel slower than they should because core lists still depend on request/response reads and React Query invalidation for data that users expect to appear instantly. The recent chat list, conversation existence checks, persisted conversation messages, coworker list, **Coworker** run list, coworker folders, and coworker tags are central to the app's perceived speed: if those surfaces wait on network round trips or manual refetch timing, the app does not feel like a local-first agent workspace.
 
-The user wants CmdClaw to adopt Rocicorp Zero so the web app has a faster, Linear-style local reactive feel. The desired direction is already captured in ADR-0012: Zero becomes the web reactive **data plane** for an explicitly scoped table slice, while oRPC remains the **control plane** for imperative, secret-bearing, and long-running actions.
+The user wants Bap to adopt Rocicorp Zero so the web app has a faster, Linear-style local reactive feel. The desired direction is already captured in ADR-0012: Zero becomes the web reactive **data plane** for an explicitly scoped table slice, while oRPC remains the **control plane** for imperative, secret-bearing, and long-running actions.
 
 The immediate implementation should be a real vertical slice, not only Docker wiring. The first slice should make the chat and coworker inventory experience measurably more local and reactive while preserving the existing **Generation** stream model, Better Auth session model, oRPC writes, and security boundaries around sensitive runtime state.
 
@@ -22,30 +22,30 @@ Long term, production auth should follow ADR-0012: a short-lived Better Auth-bac
 
 ## User Stories
 
-1. As a CmdClaw User, I want the recent chat list to appear immediately after opening the app, so that CmdClaw feels fast.
-2. As a CmdClaw User, I want recent chat rows to update reactively when titles, pinned state, status, or message counts change, so that the sidebar does not feel stale.
-3. As a CmdClaw User, I want opening a recent conversation to render persisted messages from local synced state, so that returning to a conversation feels instant.
-4. As a CmdClaw User, I want new persisted messages to appear without manually refreshing, so that finished **Generations** show up naturally.
-5. As a CmdClaw User, I want the chat list to keep working after a brief network interruption, so that local state still makes the app usable.
-6. As a CmdClaw User, I want synced chat data to be stored locally in my browser, so that the app can feel local-first for recent work.
-7. As a CmdClaw User, I want local synced data to be scoped to my authenticated identity, so that another User on the same browser does not see my replica.
-8. As a CmdClaw User, I want logging out or switching users to clear or isolate the local chat replica, so that data does not cross account boundaries.
-9. As a CmdClaw User, I want the active chat route to continue showing "Conversation not found" only when I genuinely cannot access that conversation, so that access errors remain clear.
-10. As a CmdClaw User, I want conversation rename and pin actions to continue working, so that adopting Zero does not remove existing chat controls.
-11. As a CmdClaw User, I want delete/archive actions to continue working, so that the recent chat list stays manageable.
-12. As a CmdClaw User, I want read/unread state to continue working, so that I can identify conversations with unseen results.
-13. As a CmdClaw User, I want chat copy/share controls to keep working, so that existing collaboration flows are preserved.
-14. As a CmdClaw User, I want active **Generation** streaming to remain token-granular, so that in-progress model output does not regress.
-15. As a CmdClaw User, I want approvals and authentication waits to keep using the existing live runtime flow, so that interactive **Generations** still work.
-16. As a CmdClaw User, I want queued messages to continue using the existing queue behavior, so that sending follow-up instructions during a run remains reliable.
-17. As a CmdClaw User, I want the coworker list to appear immediately after opening the coworker area, so that managing coworkers feels fast.
-18. As a CmdClaw User, I want coworker names, descriptions, status, pinned state, and basic trigger metadata to update reactively, so that the coworker list reflects current workspace state.
-19. As a CmdClaw User, I want coworker list reads to use the same local synced feel as recent chats, so that the main app surfaces are consistent.
-20. As a CmdClaw User, I want coworker folders to update reactively, so that organizing coworkers feels instant.
-21. As a CmdClaw User, I want coworker tags and tag assignments to update reactively, so that filtering and scanning coworkers stays current.
-22. As a CmdClaw User, I want the **Coworker** run list to update reactively, so that I can see recent run status changes without manual refresh.
-23. As a CmdClaw User, I want run list rows to show safe summary fields such as status, timestamps, coworker identity, and conversation links, so that I can navigate runs without exposing sensitive runtime details.
-24. As a CmdClaw User, I want coworker creation, editing, triggering, folder/tag mutations, and run detail actions to keep using existing reliable flows, so that Zero adoption does not change command semantics.
+1. As a Bap User, I want the recent chat list to appear immediately after opening the app, so that Bap feels fast.
+2. As a Bap User, I want recent chat rows to update reactively when titles, pinned state, status, or message counts change, so that the sidebar does not feel stale.
+3. As a Bap User, I want opening a recent conversation to render persisted messages from local synced state, so that returning to a conversation feels instant.
+4. As a Bap User, I want new persisted messages to appear without manually refreshing, so that finished **Generations** show up naturally.
+5. As a Bap User, I want the chat list to keep working after a brief network interruption, so that local state still makes the app usable.
+6. As a Bap User, I want synced chat data to be stored locally in my browser, so that the app can feel local-first for recent work.
+7. As a Bap User, I want local synced data to be scoped to my authenticated identity, so that another User on the same browser does not see my replica.
+8. As a Bap User, I want logging out or switching users to clear or isolate the local chat replica, so that data does not cross account boundaries.
+9. As a Bap User, I want the active chat route to continue showing "Conversation not found" only when I genuinely cannot access that conversation, so that access errors remain clear.
+10. As a Bap User, I want conversation rename and pin actions to continue working, so that adopting Zero does not remove existing chat controls.
+11. As a Bap User, I want delete/archive actions to continue working, so that the recent chat list stays manageable.
+12. As a Bap User, I want read/unread state to continue working, so that I can identify conversations with unseen results.
+13. As a Bap User, I want chat copy/share controls to keep working, so that existing collaboration flows are preserved.
+14. As a Bap User, I want active **Generation** streaming to remain token-granular, so that in-progress model output does not regress.
+15. As a Bap User, I want approvals and authentication waits to keep using the existing live runtime flow, so that interactive **Generations** still work.
+16. As a Bap User, I want queued messages to continue using the existing queue behavior, so that sending follow-up instructions during a run remains reliable.
+17. As a Bap User, I want the coworker list to appear immediately after opening the coworker area, so that managing coworkers feels fast.
+18. As a Bap User, I want coworker names, descriptions, status, pinned state, and basic trigger metadata to update reactively, so that the coworker list reflects current workspace state.
+19. As a Bap User, I want coworker list reads to use the same local synced feel as recent chats, so that the main app surfaces are consistent.
+20. As a Bap User, I want coworker folders to update reactively, so that organizing coworkers feels instant.
+21. As a Bap User, I want coworker tags and tag assignments to update reactively, so that filtering and scanning coworkers stays current.
+22. As a Bap User, I want the **Coworker** run list to update reactively, so that I can see recent run status changes without manual refresh.
+23. As a Bap User, I want run list rows to show safe summary fields such as status, timestamps, coworker identity, and conversation links, so that I can navigate runs without exposing sensitive runtime details.
+24. As a Bap User, I want coworker creation, editing, triggering, folder/tag mutations, and run detail actions to keep using existing reliable flows, so that Zero adoption does not change command semantics.
 25. As a workspace member, I want losing workspace membership to remove my access quickly, so that workspace data is not exposed through stale local auth.
 26. As a workspace admin, I want workspace membership changes to govern Zero reads, so that Zero follows the same workspace access model as oRPC.
 27. As a developer, I want a real Zero vertical slice in chat, coworker list, run list, folder, and tag reads, so that the implementation validates the product path rather than only infrastructure.
@@ -179,7 +179,7 @@ Long term, production auth should follow ADR-0012: a short-lived Better Auth-bac
 
 ## Out of Scope
 
-- Replacing oRPC as CmdClaw's control plane.
+- Replacing oRPC as Bap's control plane.
 - Moving **Generation** streaming from SSE + Redis to Zero.
 - Syncing the `generation` table.
 - Syncing provider tokens, OAuth credentials, sandbox ids, pending auth/debug data, raw diagnostic data, file storage keys, or other sensitive runtime state.

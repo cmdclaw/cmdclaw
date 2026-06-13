@@ -1,12 +1,12 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
 import type { RuntimeAssistantMessage } from "./generation-runtime";
 
-export type CmdclawProfile = {
+export type BapProfile = {
   serverUrl: string;
   token: string;
 };
 
-export type CmdclawUser = {
+export type BapUser = {
   id: string;
   email: string;
 };
@@ -462,9 +462,9 @@ export type ConversationDetails = {
   messages: ConversationMessage[];
 };
 
-export interface CmdclawApiClient {
+export interface BapApiClient {
   user: {
-    me(): Promise<CmdclawUser>;
+    me(): Promise<BapUser>;
   };
   providerAuth: {
     status(): Promise<ProviderAuthStatus>;
@@ -545,10 +545,10 @@ export interface CmdclawApiClient {
   };
 }
 
-export interface CmdclawProfileStore {
+export interface BapProfileStore {
   getConfigPathForServerUrl(serverUrl: string): string;
-  load(serverUrl?: string): CmdclawProfile | null;
-  save(config: CmdclawProfile): void;
+  load(serverUrl?: string): BapProfile | null;
+  save(config: BapProfile): void;
   clear(serverUrl?: string): void;
 }
 

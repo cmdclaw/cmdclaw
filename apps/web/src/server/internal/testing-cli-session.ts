@@ -1,11 +1,11 @@
-import { db } from "@cmdclaw/db/client";
-import { session, user } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { session, user } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { isAuthorizedByServerSecret } from "@/server/internal/server-secret";
 
-const DEFAULT_TEST_EMAIL = "cmdclaw@example.com";
+const DEFAULT_TEST_EMAIL = "bap@example.com";
 const DEFAULT_TEST_NAME = "Baptiste";
 
 const requestSchema = z.object({
@@ -78,7 +78,7 @@ export async function handleCliSession(request: Request): Promise<Response> {
     createdAt: now,
     updatedAt: now,
     ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1",
-    userAgent: request.headers.get("user-agent") ?? "cmdclaw-cli-test-auth",
+    userAgent: request.headers.get("user-agent") ?? "bap-cli-test-auth",
   });
 
   return Response.json({

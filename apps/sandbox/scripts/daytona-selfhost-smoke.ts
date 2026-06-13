@@ -24,7 +24,7 @@ const DEFAULT_RUNTIME_BATCHES = 4;
 const DEFAULT_RUNTIME_CONCURRENCY = 4;
 const DEFAULT_RUNTIME_HOLD_MS = 5_000;
 const DEFAULT_RUNTIME_READY_TIMEOUT_MS = 30_000;
-const DEFAULT_CMDCLAW_DAYTONA_SNAPSHOT = "bap-agent-dev";
+const DEFAULT_BAP_DAYTONA_SNAPSHOT = "bap-agent-dev";
 
 loadEnv({ path: ENV_PATH });
 
@@ -163,7 +163,7 @@ function getRuntimeSnapshot(): string {
   const snapshot = (
     process.env.DAYTONA_SELFHOST_SMOKE_RUNTIME_SNAPSHOT ??
     process.env.E2B_DAYTONA_SANDBOX_NAME ??
-    DEFAULT_CMDCLAW_DAYTONA_SNAPSHOT
+    DEFAULT_BAP_DAYTONA_SNAPSHOT
   ).trim();
   assert(snapshot.length > 0, "DAYTONA_SELFHOST_SMOKE_RUNTIME_SNAPSHOT must not be empty.");
   return snapshot;
@@ -288,7 +288,7 @@ async function listByRunLabel(
 ): Promise<DaytonaSandboxStateSnapshot[]> {
   const sandboxes: DaytonaSandboxStateSnapshot[] = [];
   for await (const sandbox of daytona.list({
-    labels: { "cmdclaw-run-id": runId },
+    labels: { "bap-run-id": runId },
     limit: LIST_PAGE_SIZE,
   })) {
     sandboxes.push(sandbox);
@@ -436,7 +436,7 @@ async function runBasicSmoke(args: {
   const creationResults = await Promise.allSettled(
     Array.from({ length: sandboxCount }, (_, index) =>
       daytona.create({
-        name: `cmdclaw-daytona-smoke-${String(index + 1).padStart(3, "0")}-${runId}`,
+        name: `bap-daytona-smoke-${String(index + 1).padStart(3, "0")}-${runId}`,
         labels,
       }),
     ),
@@ -574,7 +574,7 @@ async function runRuntimeSmoke(args: {
 
     const batchResults = await Promise.allSettled(
       Array.from({ length: concurrency }, async (_, slotIndex) => {
-        const sandboxName = `cmdclaw-daytona-runtime-${String(batchNumber).padStart(2, "0")}-${String(slotIndex + 1).padStart(2, "0")}-${runId}`;
+        const sandboxName = `bap-daytona-runtime-${String(batchNumber).padStart(2, "0")}-${String(slotIndex + 1).padStart(2, "0")}-${runId}`;
         let sandbox: DaytonaSandboxHandle;
         try {
           sandbox = (await daytona.create({
@@ -664,9 +664,9 @@ async function main() {
   const mode = getSmokeMode();
   const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const labels = {
-    "cmdclaw-experiment": "daytona-selfhost-smoke",
-    "cmdclaw-smoke-mode": mode,
-    "cmdclaw-run-id": runId,
+    "bap-experiment": "daytona-selfhost-smoke",
+    "bap-smoke-mode": mode,
+    "bap-run-id": runId,
   };
 
   const daytona = new Daytona(getDaytonaConfig());

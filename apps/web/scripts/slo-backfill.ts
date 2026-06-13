@@ -6,7 +6,7 @@ import {
   type SloMetricJourney,
   type SloResult,
   type SloTraffic,
-} from "@cmdclaw/core/server/services/slo-journey-classification";
+} from "@bap/core/server/services/slo-journey-classification";
 import { Pool } from "pg";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -265,14 +265,14 @@ function escapeLabelValue(value: string): string {
 
 export function renderPrometheusImportRows(samples: SloSample[]): string {
   const lines = [
-    "# TYPE cmdclaw_slo_events_total counter",
+    "# TYPE bap_slo_events_total counter",
     ...samples.map((sample) => {
       const labels = [
         `journey="${escapeLabelValue(sample.journey)}"`,
         `result="${escapeLabelValue(sample.result)}"`,
         `traffic="${escapeLabelValue(sample.traffic ?? "real")}"`,
       ].join(",");
-      return `cmdclaw_slo_events_total{${labels}} ${sample.value} ${sample.timestampMs}`;
+      return `bap_slo_events_total{${labels}} ${sample.value} ${sample.timestampMs}`;
     }),
   ];
 
@@ -320,7 +320,7 @@ async function run(): Promise<void> {
     const eventCount = rawBuckets.reduce((total, bucket) => total + parseCount(bucket.count), 0);
     console.log(
       [
-        `Imported CmdClaw SLO backfill into VictoriaMetrics.`,
+        `Imported Bap SLO backfill into VictoriaMetrics.`,
         `window=${window.from.toISOString()}..${window.toExclusive.toISOString()}`,
         `events=${eventCount}`,
         `samples=${samples.length}`,

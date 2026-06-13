@@ -2,15 +2,15 @@
 
 ## Problem Statement
 
-CmdClaw currently loses important error details in telemetry because service logs are reconstructed from patched `console.*` calls and forwarded to Vector with custom JSON serialization. Native `Error` objects often become `{}` in the telemetry log payload even when Render shows the full error message and stack in platform logs.
+Bap currently loses important error details in telemetry because service logs are reconstructed from patched `console.*` calls and forwarded to Vector with custom JSON serialization. Native `Error` objects often become `{}` in the telemetry log payload even when Render shows the full error message and stack in platform logs.
 
 The current logging path also blurs distinct observability concepts. **Canonical Service Events** are authoritative service-owned operation records, **Client Observations** are browser-originated evidence, and **Operational Logs** are process-level diagnostics. A generic middle layer makes it too easy to treat all of them as the same kind of telemetry.
 
-The user wants the final form, not a compatibility band-aid: Pino should own structured JSON logging mechanics, CmdClaw should own safety and observability semantics, and service runtimes should not intercept `console.*`.
+The user wants the final form, not a compatibility band-aid: Pino should own structured JSON logging mechanics, Bap should own safety and observability semantics, and service runtimes should not intercept `console.*`.
 
 ## Solution
 
-CmdClaw will replace the service logging path with a Pino-backed structured logger that emits JSON lines to stdout or stderr. Render and Vector will ingest process output into VictoriaLogs. Application code will not send log records to Vector with per-log HTTP requests.
+Bap will replace the service logging path with a Pino-backed structured logger that emits JSON lines to stdout or stderr. Render and Vector will ingest process output into VictoriaLogs. Application code will not send log records to Vector with per-log HTTP requests.
 
 The implementation will preserve the existing semantic APIs for **Canonical Service Events**, **Client Observations**, metrics, and traces. **Operational Logs** will use a separate logger API and will not be treated as authoritative operation records. Existing generic service log calls will become **Operational Logs** by default unless an authoritative canonical contract already exists in documentation or tests.
 
@@ -24,7 +24,7 @@ The final implementation will remove console interception from service runtimes,
 4. As an operator, I want Operational Logs to be JSON lines on stdout or stderr, so that Render and Vector can ingest logs without application-side log export calls.
 5. As an operator, I want Operational Logs to include `event.kind="operational_log"`, so that I can distinguish diagnostics from authoritative service records.
 6. As an operator, I want Operational Logs to use a dotted snake case `event` field, so that diagnostic events can be queried consistently.
-7. As an operator, I want `cmdclaw.event.name` reserved for Canonical Service Events and Client Observations, so that query results do not mix semantic records with process diagnostics.
+7. As an operator, I want `bap.event.name` reserved for Canonical Service Events and Client Observations, so that query results do not mix semantic records with process diagnostics.
 8. As an operator, I want runtime fields such as service name, environment, deployment id, commit sha, and Telemetry Version on every emitted record, so that incidents can be tied to a deployed process.
 9. As an operator, I want trace id and span id attached automatically when active, so that logs and traces remain correlated.
 10. As an operator, I want Generation, conversation, User, workspace, sandbox, route, and RPC procedure identifiers on relevant records, so that high-cardinality debugging remains possible in logs.
@@ -32,8 +32,8 @@ The final implementation will remove console interception from service runtimes,
 12. As an operator, I want accepted Client Observations to keep their allowlisted event contract, so that browser-originated evidence remains safe and queryable.
 13. As an operator, I want Canonical Service Events to keep their common envelope and span enrichment, so that existing Generation observability remains coherent.
 14. As an engineer, I want a shared logger facade instead of direct Pino imports across the codebase, so that safety, naming, and future transport changes stay localized.
-15. As an engineer, I want Pino to handle JSON formatting, levels, timestamps, and standard error serialization, so that CmdClaw does not reimplement logging mechanics.
-16. As an engineer, I want CmdClaw-owned normalization before emission, so that forbidden fields are removed and values are bounded.
+15. As an engineer, I want Pino to handle JSON formatting, levels, timestamps, and standard error serialization, so that Bap does not reimplement logging mechanics.
+16. As an engineer, I want Bap-owned normalization before emission, so that forbidden fields are removed and values are bounded.
 17. As an engineer, I want all log fields to follow the existing observability safety boundary, so that credentials, cookies, tokens, prompts, model output, request bodies, tool payloads, file contents, document bodies, and email bodies are not emitted.
 18. As an engineer, I want product pivots supplied explicitly or through child loggers, so that log context remains visible and intentional.
 19. As an engineer, I want runtime and trace context added automatically, so that repeated boilerplate does not hide application logic.
@@ -75,13 +75,13 @@ The final implementation will remove console interception from service runtimes,
 - Do not treat browser `console.*` as server telemetry; browser-originated evidence remains **Client Observations**.
 - Use `event.kind="operational_log"` for Operational Logs.
 - Use a dotted snake case `event` field for Operational Log event names.
-- Reserve `cmdclaw.event.name` for Canonical Service Events and Client Observations.
+- Reserve `bap.event.name` for Canonical Service Events and Client Observations.
 - Add runtime fields and active trace/span identifiers automatically.
 - Require product pivots such as Generation, conversation, User, workspace, and sandbox identifiers to be supplied explicitly at the call site or through scoped child loggers.
 - Provide a shared logger facade; application code should not import Pino directly.
 - The logger facade is a deep module with a small public surface: emit levelled Operational Logs, create child loggers with bound context, serialize Error Diagnostics, normalize fields, and flush where needed.
 - Pino owns JSON output, levels, timestamps, and standard error serialization.
-- CmdClaw owns field naming, forbidden-field removal, value bounding, correlation fields, and Error Diagnostic normalization.
+- Bap owns field naming, forbidden-field removal, value bounding, correlation fields, and Error Diagnostic normalization.
 - Server-side Error Diagnostics may include bounded stack traces by default.
 - Normalized error fields should include safe values such as error name, message, stack, normalized code, category, provider, upstream status, and cause summary when available.
 - Redaction and normalization must enforce the observability forbidden-content list.
@@ -101,8 +101,8 @@ The final implementation will remove console interception from service runtimes,
 - Normalization tests should prove string length, stack length, array size, and nested object bounds are enforced.
 - Context tests should prove runtime fields and active trace/span identifiers are added automatically.
 - Context tests should prove explicit product pivots and child logger bindings are preserved.
-- Operational Log tests should prove `event.kind="operational_log"` and dotted snake case `event` are emitted, without `cmdclaw.event.name`.
-- Canonical Service Event tests should prove the canonical envelope still includes `cmdclaw.event.name`, stable event id, outcome, operation fields, trace correlation, and span enrichment.
+- Operational Log tests should prove `event.kind="operational_log"` and dotted snake case `event` are emitted, without `bap.event.name`.
+- Canonical Service Event tests should prove the canonical envelope still includes `bap.event.name`, stable event id, outcome, operation fields, trace correlation, and span enrichment.
 - Client Observation tests should prove accepted observations keep their allowlisted contract and are emitted through the shared stdout log transport.
 - Transport tests should prove no app-side log `fetch` to Vector remains.
 - Runtime initialization tests should prove OpenTelemetry metrics/traces still initialize without console patching.

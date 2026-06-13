@@ -50,7 +50,7 @@ const dbMock = {
 const startCoworkerGenerationMock = vi.fn();
 const FIXED_NOW_MS = Date.parse("2026-02-12T12:00:00.000Z");
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 

@@ -104,19 +104,19 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
-vi.mock("@cmdclaw/core/server/oauth/config", () => ({
+vi.mock("@bap/core/server/oauth/config", () => ({
   getOAuthConfig: getOAuthConfigMock,
 }));
 
-vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
+vi.mock("@bap/core/server/executor/mcp-oauth", () => ({
   exchangeMcpOAuthAuthorizationCode: exchangeMcpOAuthAuthorizationCodeMock,
 }));
 
-vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
+vi.mock("@bap/core/server/executor/workspace-sources", () => ({
   computeWorkspaceMcpServerRevisionHash: computeWorkspaceMcpServerRevisionHashMock,
   setWorkspaceMcpServerOAuthCredential: setWorkspaceMcpServerOAuthCredentialMock,
 }));
@@ -129,7 +129,7 @@ vi.mock("@/server/executor-source-oauth", () => ({
   consumeWorkspaceMcpServerOAuthPending: consumeWorkspaceMcpServerOAuthPendingMock,
 }));
 
-vi.mock("@cmdclaw/core/server/services/generation-manager", () => ({
+vi.mock("@bap/core/server/services/generation-manager", () => ({
   generationManager: {
     submitAuthResult: submitAuthResultMock,
     submitAuthResultByInterrupt: submitAuthResultByInterruptMock,

@@ -13,7 +13,7 @@ type WhatsAppStatus = {
 };
 
 export const Route = createFileRoute("/integrations/whatsapp")({
-  head: () => ({ meta: [{ title: "WhatsApp - CmdClaw" }] }),
+  head: () => ({ meta: [{ title: "WhatsApp - Bap" }] }),
   component: WhatsAppIntegrationPage,
 });
 

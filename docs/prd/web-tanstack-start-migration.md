@@ -4,7 +4,7 @@ Suggested Linear label/status: `ready-for-agent`
 
 ## Problem Statement
 
-CmdClaw's web app currently runs on Next.js App Router, but the desired long-term direction is TanStack Start on Vite. The migration is not just a package swap: the web app contains public marketing pages, authenticated product routes, Better Auth flows, oRPC APIs, OAuth callbacks, webhook endpoints, binary download relays, service worker assets, Render deployment configuration, and live CLI/E2E workflows that all depend on the current URL contract.
+Bap's web app currently runs on Next.js App Router, but the desired long-term direction is TanStack Start on Vite. The migration is not just a package swap: the web app contains public marketing pages, authenticated product routes, Better Auth flows, oRPC APIs, OAuth callbacks, webhook endpoints, binary download relays, service worker assets, Render deployment configuration, and live CLI/E2E workflows that all depend on the current URL contract.
 
 The problem is to move the web runtime to TanStack Start without preserving Next.js as a hidden compatibility layer, while keeping existing user, operator, CLI, OAuth, and deployment behavior intact.
 
@@ -16,8 +16,8 @@ The migration should align with TanStack Start best practices for v1 rather than
 
 ## User Stories
 
-1. As a CmdClaw User, I want the web app URLs I already use to keep working, so that the framework migration is invisible to my daily workflow.
-2. As a CmdClaw User, I want public pages such as landing, pricing, legal, support, templates, shared conversations, and magic-link sign-in pages to keep rendering correctly, so that onboarding and external links do not break.
+1. As a Bap User, I want the web app URLs I already use to keep working, so that the framework migration is invisible to my daily workflow.
+2. As a Bap User, I want public pages such as landing, pricing, legal, support, templates, shared conversations, and magic-link sign-in pages to keep rendering correctly, so that onboarding and external links do not break.
 3. As an authenticated User, I want protected pages to redirect me to login when my session is missing, so that access control stays consistent.
 4. As an authenticated User, I want successful login to return me to the page I originally requested, so that protected route redirects remain ergonomic.
 5. As a User in a local worktree, I want dev auto-login behavior to keep working, so that browser testing stays fast.
@@ -71,7 +71,7 @@ The migration should align with TanStack Start best practices for v1 rather than
 - Move protected page auth to TanStack route `beforeLoad` guards rather than a recreated global Next proxy.
 - Model route access levels explicitly: general protected session routes, support-admin/cloud routes, and self-host instance routes.
 - Keep API and oRPC authorization inside endpoint handlers. Page route guards must not be treated as API authorization.
-- Remove the old injected `x-cmdclaw-pathname` and `x-cmdclaw-return-path` header contract. Derive pathname and search from TanStack route location or standard `Request` objects.
+- Remove the old injected `x-bap-pathname` and `x-bap-return-path` header contract. Derive pathname and search from TanStack route location or standard `Request` objects.
 - Keep request-aware origin handling for Render/internal host normalization, because that solves a real host problem independent of Next.js.
 - Keep Better Auth as the authentication system.
 - Replace Better Auth's Next integration with the TanStack Start integration, including TanStack Start cookies as the final auth plugin.
@@ -164,7 +164,7 @@ The migration should align with TanStack Start best practices for v1 rather than
 
 ## Further Notes
 
-This document is an engineering migration spec, not a product feature PRD. The user-facing goal is continuity: CmdClaw should feel like the same product while the framework foundation changes.
+This document is an engineering migration spec, not a product feature PRD. The user-facing goal is continuity: Bap should feel like the same product while the framework foundation changes.
 
 ADR-0011 records the architectural rationale. This spec records the preservation contracts, implementation boundaries, and acceptance gates required for another agent or reviewer to execute the Big Bang migration.
 

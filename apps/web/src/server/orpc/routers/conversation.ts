@@ -1,6 +1,6 @@
-import { writeSessionTranscriptFromConversation } from "@cmdclaw/core/server/services/memory-service";
-import { clearConversationSessionSnapshot } from "@cmdclaw/core/server/services/opencode-session-snapshot-service";
-import { conversation, message, messageAttachment, sandboxFile } from "@cmdclaw/db/schema";
+import { writeSessionTranscriptFromConversation } from "@bap/core/server/services/memory-service";
+import { clearConversationSessionSnapshot } from "@bap/core/server/services/opencode-session-snapshot-service";
+import { conversation, message, messageAttachment, sandboxFile } from "@bap/db/schema";
 import { ORPCError } from "@orpc/server";
 import { eq, desc, and, isNull, asc, sql, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -623,7 +623,7 @@ const downloadAttachment = protectedProcedure
       throw new ORPCError("NOT_FOUND", { message: "Attachment not found" });
     }
 
-    const { getPresignedDownloadUrl } = await import("@cmdclaw/core/server/storage/s3-client");
+    const { getPresignedDownloadUrl } = await import("@bap/core/server/storage/s3-client");
     const url = await getPresignedDownloadUrl(attachment.storageKey);
 
     return {

@@ -37,7 +37,7 @@ const dbMock = {
   transaction: vi.fn(async (callback: (tx: typeof txMock) => Promise<unknown>) => await callback(txMock)),
 };
 
-vi.mock("@cmdclaw/db/client", () => ({
+vi.mock("@bap/db/client", () => ({
   db: dbMock,
 }));
 
@@ -56,7 +56,7 @@ vi.mock("./client", () => ({
 }));
 
 process.env.BETTER_AUTH_SECRET ??= "test-secret";
-process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/cmdclaw_test";
+process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/bap_test";
 process.env.REDIS_URL ??= "redis://localhost:6379";
 process.env.OPENAI_API_KEY ??= "test-openai-key";
 process.env.SANDBOX_DEFAULT ??= "e2b";

@@ -1,4 +1,4 @@
-import { triggerCoworkerRun } from "@cmdclaw/core/server/services/coworker-service";
+import { triggerCoworkerRun } from "@bap/core/server/services/coworker-service";
 import { env } from "@/env";
 
 /**

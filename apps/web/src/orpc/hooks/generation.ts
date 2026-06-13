@@ -1,5 +1,5 @@
-import type { ProviderAuthSource } from "@cmdclaw/core/lib/provider-auth-source";
-import { GENERATION_ERROR_PHASES } from "@cmdclaw/core/lib/generation-errors";
+import type { ProviderAuthSource } from "@bap/core/lib/provider-auth-source";
+import { GENERATION_ERROR_PHASES } from "@bap/core/lib/generation-errors";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { normalizeGenerationError } from "@/lib/generation-errors";

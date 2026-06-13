@@ -37,14 +37,14 @@ vi.mock("../workspace-access", () => ({
   requireActiveWorkspaceAdmin: requireActiveWorkspaceAdminMock,
 }));
 
-vi.mock("@cmdclaw/core/server/executor/workspace-sources", () => ({
+vi.mock("@bap/core/server/executor/workspace-sources", () => ({
   computeWorkspaceMcpServerRevisionHash: vi.fn<VitestProcedure>(() => "hash"),
   listWorkspaceMcpServers: vi.fn<VitestProcedure>(() => []),
   normalizeExecutorNamespace: vi.fn<VitestProcedure>((value: string) => value),
   setWorkspaceMcpServerCredential: vi.fn<VitestProcedure>(),
 }));
 
-vi.mock("@cmdclaw/core/server/executor/mcp-oauth", () => ({
+vi.mock("@bap/core/server/executor/mcp-oauth", () => ({
   resolveMcpEndpoint: vi.fn<VitestProcedure>(
     ({
       endpoint,

@@ -2,13 +2,13 @@
 
 ## Problem Statement
 
-CmdClaw can leave a **Generation** waiting until the full run deadline even after the runtime has already made **Runtime Progress** and then stopped. In the diagnosed production chat, OpenCode completed an initial assistant step, ran one `executor_execute` tool call, received a normal tool result, created a second assistant continuation message with zero parts and zero tokens, then stayed silent until CmdClaw aborted the prompt at the 15-minute deadline.
+Bap can leave a **Generation** waiting until the full run deadline even after the runtime has already made **Runtime Progress** and then stopped. In the diagnosed production chat, OpenCode completed an initial assistant step, ran one `executor_execute` tool call, received a normal tool result, created a second assistant continuation message with zero parts and zero tokens, then stayed silent until Bap aborted the prompt at the 15-minute deadline.
 
 From the user's perspective, this looks like a fast query becoming inexplicably stuck. From the operator's perspective, the terminal state is misleading: the **Generation** parks as `run_deadline` instead of failing fast as a runtime-boundary stall, and the most useful diagnostic evidence is only available if someone manually recovers the OpenCode session snapshot.
 
 ## Solution
 
-CmdClaw should treat "progress happened, then stopped" as a first-class runtime failure: **Runtime Progress Stall**. A **Generation** that has observed **Runtime Progress** but then receives no further **Runtime Progress** for 90 seconds should fail terminally with `runtime_progress_stalled`, capture a redacted **Runtime Diagnostic Snapshot**, abort the OpenCode session, and archive the diagnostic sandbox when eligible.
+Bap should treat "progress happened, then stopped" as a first-class runtime failure: **Runtime Progress Stall**. A **Generation** that has observed **Runtime Progress** but then receives no further **Runtime Progress** for 90 seconds should fail terminally with `runtime_progress_stalled`, capture a redacted **Runtime Diagnostic Snapshot**, abort the OpenCode session, and archive the diagnostic sandbox when eligible.
 
 The fix should also tighten the domain model by renaming the persisted and in-memory "last runtime event" concept to **Last Runtime Progress**. Transport events, empty assistant message creation, session setup, cache work, and stream reconnects must not keep a **Dormant Generation** alive.
 
@@ -131,7 +131,7 @@ Suggested Linear label/status: `ready-for-agent`.
 - This PRD follows the glossary terms **Generation**, **Runtime Progress**, **Last Runtime Progress**, **Runtime Progress Stall**, **Dormant Generation**, **Waiting Generation**, **Runtime Diagnostic Snapshot**, **Archived Diagnostic Sandbox**, and **Canonical Service Event**.
 - The diagnosed production conversation was `ef60d5d2-69b8-4316-949f-04b140a1e6de`.
 - The relevant generation was `5d61e8de-e4d7-46b2-8f67-dd9ad6c785c4`.
-- The OpenCode session snapshot showed a completed first assistant tool step followed by a second assistant message with zero parts, zero tokens, and `MessageAbortedError` only after CmdClaw aborted at the 15-minute deadline.
+- The OpenCode session snapshot showed a completed first assistant tool step followed by a second assistant message with zero parts, zero tokens, and `MessageAbortedError` only after Bap aborted at the 15-minute deadline.
 - The snapshot was stored as an OpenCode session snapshot, not as a **Runtime Diagnostic Snapshot**. This PRD ensures future similar failures produce the runtime diagnostic artifact automatically.
 - ADR 0004 records the Runtime Diagnostic Snapshot storage pattern and has been updated to include progress stalls.
 - ADR 0005 records archived diagnostic sandbox eligibility and has been updated to include progress stalls.

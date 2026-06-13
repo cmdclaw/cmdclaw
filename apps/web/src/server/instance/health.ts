@@ -2,12 +2,12 @@ import { HeadBucketCommand } from "@aws-sdk/client-s3";
 import {
   getControlPlaneHealth,
   isControlPlaneEnabled,
-} from "@cmdclaw/core/server/control-plane/client";
-import { editionCapabilities } from "@cmdclaw/core/server/edition";
-import { buildRedisOptions } from "@cmdclaw/core/server/redis/connection-options";
-import { isE2BConfigured } from "@cmdclaw/core/server/sandbox/e2b";
-import { BUCKET_NAME, getS3Client } from "@cmdclaw/core/server/storage/s3-client";
-import { db } from "@cmdclaw/db/client";
+} from "@bap/core/server/control-plane/client";
+import { editionCapabilities } from "@bap/core/server/edition";
+import { buildRedisOptions } from "@bap/core/server/redis/connection-options";
+import { isE2BConfigured } from "@bap/core/server/sandbox/e2b";
+import { BUCKET_NAME, getS3Client } from "@bap/core/server/storage/s3-client";
+import { db } from "@bap/db/client";
 import { sql } from "drizzle-orm";
 import IORedis from "ioredis";
 import { env } from "@/env";

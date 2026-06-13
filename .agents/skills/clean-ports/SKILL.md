@@ -17,4 +17,4 @@ To clean a specific set of ports, prefix with `PORTS`, for example:
 PORTS="3000 4097" bash -lc 'for port in $PORTS; do pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"; [ -z "$pids" ] && continue; echo "port $port: stopping $pids"; kill $pids 2>/dev/null || true; sleep 0.5; pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"; [ -n "$pids" ] && { echo "port $port: force stopping $pids"; kill -9 $pids 2>/dev/null || true; }; done'
 ```
 
-If asking for tmux, do not create a new session; attach to the existing `cmdclaw` one.
+If asking for tmux, do not create a new session; attach to the existing `bap` one.

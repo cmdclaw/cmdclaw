@@ -1,5 +1,5 @@
-import { db } from "@cmdclaw/db/client";
-import { conversation, generation, message, messageAttachment } from "@cmdclaw/db/schema";
+import { db } from "@bap/db/client";
+import { conversation, generation, message, messageAttachment } from "@bap/db/schema";
 import { eq } from "drizzle-orm";
 import type { IntegrationType } from "../../oauth/config";
 import type { RuntimeToolRef } from "../../runtime/runtime-driver";
@@ -1093,12 +1093,12 @@ class GenerationManager {
 
 // Stable singleton across dev hot-reloads/module re-evaluation.
 const globalForGenerationManager = globalThis as typeof globalThis & {
-  __cmdclawGenerationManager?: GenerationManager;
+  __bapGenerationManager?: GenerationManager;
 };
 
 export const generationManager =
-  globalForGenerationManager.__cmdclawGenerationManager ?? new GenerationManager();
+  globalForGenerationManager.__bapGenerationManager ?? new GenerationManager();
 
 if (process.env.NODE_ENV !== "production") {
-  globalForGenerationManager.__cmdclawGenerationManager = generationManager;
+  globalForGenerationManager.__bapGenerationManager = generationManager;
 }
